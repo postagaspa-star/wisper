@@ -120,11 +120,16 @@
     <h2>The problem</h2>
     <p>
       A heating and photovoltaic technician spends the day on site with gloves on
-      and both hands busy. Then there is the work report: client, job,
-      description, hours, kilometres, expenses. It takes five or ten minutes,
-      which is not the problem. The problem is that it is boring, it is the same
-      every single day, and nobody wants to do it after eight hours on a roof.
-      So it gets filled in late, from memory, or not at all.
+      and both hands busy. Then the report has to be filed: client, job,
+      description, hours, kilometres, expenses.
+    </p>
+    <p>
+      The interesting part is <em>when</em> it happens. Back at the office, near
+      closing time, at the end of a day that started at seven, by someone who is
+      tired and wants to go home. It is a form, filled in by hand, one field
+      after another, and nothing about it is automatic. So it gets rushed, or
+      written from memory two days later, or forgotten, and the office spends the
+      next morning chasing it.
     </p>
     <p class="grigio">
       This is not a hypothetical user. It is the daily routine at my father's
@@ -285,12 +290,38 @@
 
 <section>
   <div class="wrap">
-    <h2>Next</h2>
-    <p class="grigio">
-      Offline queue with automatic retry · one account per technician · a real
-      token on the spreadsheet endpoint · a server holding the model key · the
-      client's signature on delivery · photo and receipt attachments.
+    <h2>Where it goes</h2>
+    <p>
+      A spreadsheet is where this starts, not where it ends. The next step is
+      writing into the system a firm already runs, an ERP like Odoo, so the
+      report lands as a timesheet entry against the right job instead of a row
+      somebody copies over by hand.
     </p>
+    <ul class="avvisi">
+      <li>
+        <strong>Signatures.</strong>
+        <span>
+          The surveyor's is signed once and kept in Drive. The client signs on
+          the phone there and then, offered only when the job is being closed,
+          because a signature on unfinished work means nothing.
+        </span>
+      </li>
+      <li>
+        <strong>Receipts, read by the phone.</strong>
+        <span>
+          Photograph it, OCR it, attach it to the expense. Right now an expense
+          is a number somebody said out loud and the accountant takes it on
+          trust.
+        </span>
+      </li>
+      <li>
+        <strong>Then the plumbing.</strong>
+        <span>
+          Offline queue with automatic retry, one account per technician, a real
+          token on the spreadsheet endpoint, a server holding the model key.
+        </span>
+      </li>
+    </ul>
   </div>
 </section>
 

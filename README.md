@@ -18,11 +18,15 @@ My father runs a technical firm in northern Italy. I have been building software
 for its clients for the past few months, which is how I ended up watching this
 particular problem from close up.
 
-His technicians spend the day on site with gloves on and both hands busy. In the
-evening they still have to file the report: client, job, what they did, hours,
-kilometres, expenses, whether the work is finished. It is not hard, it is boring
-and repetitive, and nobody wants to do it after eight hours on a roof, so it gets
-done late and from memory.
+His technicians spend the day on site with gloves on and both hands busy. Then
+the report has to be filed: client, job, what they did, hours, kilometres,
+expenses, whether the work is finished.
+
+The interesting part is when it happens. Back at the office, near closing time,
+at the end of a day that started at seven, by someone who is tired and wants to
+go home. It is a form, filled in by hand, one field after another, and nothing
+about it is automatic. So it gets rushed, or written from memory two days later,
+or forgotten, and the office spends the next morning chasing it.
 
 The constraint was fixed before any code existed: gloves, dirty hands, a ladder.
 Anything that needs a screen has already lost.
@@ -138,6 +142,26 @@ it and anyone could pull it back out. Gemini keys cannot be locked to an Android
 package the way Maps keys can, so the only real fix is a server holding the key
 and the app asking that server. That server is not built yet, so the app is
 source only and you build it with your own key.
+
+## Where it goes
+
+A spreadsheet is where this starts, not where it ends. The next step is writing
+into the system a firm already runs, an ERP like Odoo, so the report lands as a
+timesheet entry against the right job instead of a row somebody copies over by
+hand.
+
+Then the two things a report is actually used for.
+
+**Signatures.** The surveyor's is signed once and kept in Drive. The client signs
+on the phone there and then, offered only when the job is being closed, because a
+signature on unfinished work means nothing.
+
+**Receipts.** Photograph it, read it with OCR, attach it to the expense. Right
+now an expense is a number somebody said out loud and the accountant takes it on
+trust.
+
+Before any of that, the offline queue, one account per technician, a real token
+on the spreadsheet endpoint, and a server holding the model key.
 
 ## How this was built
 
