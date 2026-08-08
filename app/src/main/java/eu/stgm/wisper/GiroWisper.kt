@@ -12,8 +12,10 @@ import eu.stgm.wisper.cervello.Azione
 import eu.stgm.wisper.cervello.CervelloGemini
 import eu.stgm.wisper.cervello.RispostaWisper
 import eu.stgm.wisper.rapportino.Anagrafiche
+import eu.stgm.wisper.rapportino.DoveSono
 import eu.stgm.wisper.rapportino.PonteFoglio
 import eu.stgm.wisper.rapportino.Rapportino
+import eu.stgm.wisper.rapportino.Vicinanza
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -104,6 +106,7 @@ class GiroWisper(
     private val trascrittore = Trascrittore(ctx, registro)
     private val cervello = CervelloGemini()
     private val ponte = PonteFoglio()
+    private val dove = DoveSono(ctx)
     private val beep = ToneGenerator(AudioManager.STREAM_NOTIFICATION, 70)
 
     private val wake = RilevatoreWake(
@@ -296,13 +299,56 @@ class GiroWisper(
         // dice "riprendiamo": chi torna dopo un minuto non si ricorda a che
         // punto era, e "dimmi pure" lo costringe a ricostruirselo da solo.
         // Ripetere la domanda rimette tutti e due sullo stesso punto.
-        val apertura = when {
-            _rapportino.value != Rapportino() && ultimaFrase.isNotBlank() -> "Dicevo: $ultimaFrase"
-            _rapportino.value != Rapportino() -> "Riprendiamo da dove eravamo. Dimmi pure."
-            saluto -> "Ehi, ciao $NOME_UTENTE. Che cos'hai fatto oggi?"
-            else -> "Dimmi, $NOME_UTENTE."
+        // Se il rapportino e' gia' avviato si riprende il filo e basta: la
+        // posizione a quel punto non serve piu', il cantiere lo sappiamo.
+        if (_rapportino.value != Rapportino()) {
+            val ripresa = if (ultimaFrase.isNotBlank()) "Dicevo: $ultimaFrase"
+            else "Riprendiamo da dove eravamo. Dimmi pure."
+            rispondi(ripresa) { ascolta() }
+            return
         }
-        rispondi(apertura) { ascolta() }
+
+        // Rapportino nuovo: prima di chiedere, si guarda dove siamo.
+        scope.launch {
+            val qui = try {
+                dove.commessaQui(_anagrafiche.value)
+            } catch (e: Exception) {
+                registro("posizione_errore", e.message ?: "sconosciuto")
+                null
+            }
+            rispondi(aperturaPer(qui, saluto)) { ascolta() }
+        }
+    }
+
+    /**
+     * La frase di apertura, che cambia a seconda di quello che il telefono sa.
+     *
+     * Se siamo su un cantiere riconosciuto, cliente e commessa vengono
+     * PROPOSTI, non dati per scontati: la domanda finisce sempre con "e'
+     * corretto?", e se il tecnico dice di no si ricomincia normalmente. La
+     * posizione e' un indizio forte, non una prova: si puo' essere in ufficio
+     * a compilare il rapportino di ieri.
+     */
+    private fun aperturaPer(qui: Vicinanza?, saluto: Boolean): String {
+        if (qui == null) {
+            return if (saluto) "Ehi, ciao $NOME_UTENTE. Che cos'hai fatto oggi?"
+            else "Dimmi, $NOME_UTENTE."
+        }
+
+        // I dati proposti si scrivono subito nella scheda, cosi' si vedono
+        // mentre Wisper li dice. Se il tecnico smentisce, li corregge parlando.
+        _rapportino.value = _rapportino.value.aggiorna(
+            Rapportino(cliente = qui.cliente.nome, commessa = qui.commessa.id)
+        )
+
+        val saluti = if (saluto) "Ehi, ciao $NOME_UTENTE. " else ""
+        return if (qui.soloQuesta) {
+            saluti + "Ho visto che sei nel cantiere di ${qui.cliente.nome}, " +
+                "e qui hai aperta solo ${qui.commessa.descrizione}. È corretto?"
+        } else {
+            saluti + "Ho visto che sei nel cantiere di ${qui.cliente.nome}, " +
+                "ma qui ha più di un lavoro aperto. Su quale hai lavorato?"
+        }
     }
 
     private fun azzera() {

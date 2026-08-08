@@ -129,6 +129,14 @@ class CervelloGemini(
         val richiesta = Request.Builder()
             .url("$BASE$modello:generateContent")
             .header("x-goog-api-key", chiave)
+            // Queste due dicono a Google da quale app arriva la chiamata, e
+            // sono quello che permette di legare la chiave a questa app sola.
+            // Le librerie ufficiali le mandano da sole; chiamando l'API a mano
+            // vanno messe, altrimenti restringere la chiave nella console
+            // blocca anche noi. Chi estrae la chiave dall'APK non se ne fa
+            // niente: puo' copiare le intestazioni, ma non la firma.
+            .header("X-Android-Package", PACCHETTO)
+            .header("X-Android-Cert", IMPRONTA)
             .post(corpo.toRequestBody("application/json".toMediaType()))
             .build()
 
@@ -392,6 +400,11 @@ class CervelloGemini(
 
     private companion object {
         const val BASE = "https://generativelanguage.googleapis.com/v1beta/models/"
+
+        const val PACCHETTO = "eu.stgm.wisper"
+
+        /** SHA-1 della chiave di firma, senza i due punti e in maiuscolo. */
+        const val IMPRONTA = "108BA9BFDF0C37AC1E408E88B494A6F4478D7169"
 
         // Misurati sul campo il 07/08 su una conversazione intera:
         // flash-lite 1,4 s a battuta, 2.5-flash 2,0 s.
