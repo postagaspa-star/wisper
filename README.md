@@ -2,18 +2,27 @@
 
 An Android app that lets an industrial technician file the daily work report by
 talking, without ever touching the phone. You say "Wisper", you tell it about
-your day, the fields fill themselves in on screen, you say "confermo", and the
-row lands in the company spreadsheet.
+your day, the fields fill themselves in on screen, you say "confermo" (I
+confirm), and the row lands in the company spreadsheet.
 
-It speaks Italian, because that is who it was built for.
+It speaks Italian, because that is who it was built for. The labels follow the
+phone's language, so the screenshots below are the English ones.
 
-| At rest | Half a sentence in | The whole day |
+**The ball tells you whose turn it is.** It is the only thing on screen for most
+of a conversation, and with the phone on a workbench you read it from a metre
+away, out of the corner of your eye.
+
+| White, at rest | Blue, Wisper talking | Yellow, your turn |
 |---|---|---|
-| ![](docs/immagini/1-ascolto.png) | ![](docs/immagini/3-domanda.png) | ![](docs/immagini/2-scheda.png) |
-| Waiting for the wake word. Nothing has been touched. | A dash is a field Wisper does not know yet, and it asks for one thing at a time. | Client, job, address, hours, kilometres, expenses, and whether the job closes. |
+| ![](docs/immagini/1-riposo.png) | ![](docs/immagini/2-parla.png) | ![](docs/immagini/3-ascolta.png) |
+| Waiting for the wake word. Nothing has been touched, and nothing is being sent anywhere. | Waves run from the pole down to the equator while it speaks. Say "Wisper" over it and it stops. | The microphone is yours. The ball breathes with what it hears. |
 
-The labels follow the phone's language. Wisper still speaks Italian, because
-the technicians it was built for do.
+Then the card appears and fills itself in while you keep talking.
+
+| Half a sentence in | The whole day |
+|---|---|
+| ![](docs/immagini/4-domanda.png) | ![](docs/immagini/5-scheda.png) |
+| A dash is a field Wisper does not have yet, and it asks for one thing at a time. Here: *"Ho segnato tre ore e mezza per Rossi Impianti, ma quale commessa hai seguito?"* (I have put down three and a half hours for Rossi Impianti, but which job were you on?) | Client, job, address, hours, kilometres, expenses, and whether the job closes. *"Il lavoro è chiuso, confermi?"* (The job is closed, do you confirm?) |
 
 ## Why it exists
 
@@ -37,14 +46,18 @@ Anything that needs a screen has already lost.
 ## One turn, end to end
 
 Wake word, beep, then you talk. The model pulls the fields out of ordinary
-speech; "tre ore e mezza" becomes 3.5, "mezza giornata" becomes 4, "esse pi
-emme" becomes SPM Srl. Corrections work mid sentence: say "no, aspetta, erano
-due ore" and it changes. When you are done it reads the whole report back, you
-confirm, and it saves.
+speech: "tre ore e mezza" (three and a half hours) becomes 3.5, "mezza giornata"
+(half a day) becomes 4, "esse pi emme" (the letters S P M, said out loud)
+becomes SPM Srl. Corrections work mid sentence: say "no, aspetta, erano due ore"
+(no, hang on, it was two hours) and it changes. When you are done it reads the
+whole report back, you confirm, and it saves.
 
 It also lists a client's open jobs on request, telling them apart by where they
-are; creates new clients and jobs by voice and says so out loud; and closes a job
-in the company sheet when you say the work is finished, so it stops being offered
+are rather than by code, since a technician says "quella di via Roma" (the one
+on via Roma) and never "M004". It creates new clients and jobs by voice and says
+so out loud: "ok, aggiungo Bianchi Termoidraulica come nuovo cliente" (ok, I am
+adding Bianchi Termoidraulica as a new client). And it closes a job in the
+company sheet when you say the work is finished, so it stops being offered
 tomorrow.
 
 ## The two rules
@@ -65,6 +78,15 @@ finished speaking" and "the job is finished", and the model kept closing jobs
 that had just been declared open. Prompting did not fix it; a rule in the code
 did. Things that must never be wrong do not get asked of a model politely.
 
+It came back a third time with the job itself. Told "la commessa è la
+manutenzione della caldaia" (the job is the boiler maintenance), which is not in
+the sheet, the model settled for the closest job that was, and then said out
+loud the name I had used rather than the one it had stored. So the model now
+also reports the job in the technician's own words, and the code checks the two
+share a word: "quella dei pannelli a Fara" (the one with the panels at Fara) and
+"FV Fara Vicentino" share Fara and are the same job, while boiler maintenance
+shares nothing and is a new one, opened and announced.
+
 ## Sharing the microphone
 
 A wake word means holding the microphone open forever, and on Android the
@@ -74,7 +96,8 @@ video, calls, the Google assistant, all of it silently broken, and by us.
 
 The rule now is one line. Wisper listens when the screen is off, or when Wisper
 is the app you are looking at. Use the phone for anything else, or take a call,
-and it steps aside on its own and says so in its notification.
+and it steps aside on its own and says why in its notification: "In pausa, stai
+usando il telefono" (Paused, you are using the phone).
 
 Those two situations never overlap. The case Wisper exists for is a technician
 with the phone in his pocket and his hands busy, which is screen off. Every case
@@ -174,10 +197,11 @@ refuse to do, using it until something felt wrong, and directing the fix.
 
 Several features exist because I used it and it annoyed me. It used to keep
 listening after I turned the screen off and picked up other people's
-conversations. It closed a job in the sheet when I said "ho finito", meaning I
-had finished speaking. It read me a summary I already knew with no way to cut it
-short. None of those came out of automated testing; they came out of being the
-person holding the phone.
+conversations. It closed a job in the sheet when I said "ho finito" (I have
+finished), meaning I had finished speaking. It read me a summary I already knew
+with no way to cut it short. It held the microphone so tightly that nothing else
+on the phone could record. None of those came out of automated testing; they
+came out of being the person holding the phone.
 
 Field feedback from Manuel Gasparotto, Studio Tecnico GM, the surveyor whose
 technicians this was built for.
