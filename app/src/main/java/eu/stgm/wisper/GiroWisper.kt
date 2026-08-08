@@ -787,19 +787,44 @@ class GiroWisper(
      * modello e si guadagna che quel che si sente e quel che si salva escono
      * dallo stesso posto.
      *
-     * Se il modello aveva gia' detto il nome giusto non si tocca niente: e' il
-     * caso normale, e riscriverlo lo peggiorerebbe.
+     * Se il modello stava gia' parlando della commessa giusta non si tocca
+     * niente, ed e' il caso normale: riscrivere la sua frase costa la conferma
+     * di tutto il resto — ore, chilometri, spese — che su quel turno sparirebbe.
+     *
+     * "Parlava della commessa giusta" non vuol dire averne ripetuto il nome
+     * lettera per lettera. "FV Fara Vicentino" detto da una persona diventa
+     * "la commessa a Fara Vicentino", ed e' la stessa cosa. Basta una parola
+     * riconoscibile in comune: chi ha capito il lavoro sbagliato non ne
+     * azzecca nessuna, come "manutenzione caldaia" contro "FV Fara Vicentino".
      */
     private fun conLaCommessaGiusta(frase: String, prima: String?): String {
         val r = _rapportino.value
         val codice = r.commessa ?: return frase
         if (codice == prima) return frase
         val vera = _anagrafiche.value.descrizioneCommessa(codice) ?: return frase
-        if (frase.contains(vera, ignoreCase = true)) return frase
+        if (parlaDi(frase, vera)) return frase
 
         registro("commessa_rinominata", "il modello la chiamava altrimenti, è $vera")
         val poi = r.domandaSuCosaManca()?.let { "$it." } ?: "Altro, o salvo?"
         return "Ho segnato $vera. $poi"
+    }
+
+    /**
+     * Se la frase nomina davvero quel lavoro, anche detto con parole sue.
+     *
+     * Si guardano solo le parole abbastanza lunghe da distinguere qualcosa:
+     * "FV" e "di" starebbero in qualunque frase e direbbero il falso. Sotto le
+     * quattro lettere non si decide niente.
+     */
+    private fun parlaDi(frase: String, descrizione: String): Boolean {
+        val f = frase.lowercase()
+        val parole = descrizione.lowercase()
+            .split(Regex("[^\\p{L}\\p{N}]+"))
+            .filter { it.length >= 4 }
+        // Una descrizione fatta solo di sigle non ha appigli: meglio dirla noi
+        // per intero che fidarsi.
+        if (parole.isEmpty()) return false
+        return parole.any { f.contains(it) }
     }
 
     private fun rispondi(frase: String, poi: () -> Unit) {
