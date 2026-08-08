@@ -62,8 +62,17 @@ class ServizioAscolto : Service() {
         _giro.value = giroLocale
 
         // La notifica racconta lo stato: in ascolto, sto capendo, sto parlando.
+        // A ogni cambio di fase si ricontrolla anche di chi debba essere il
+        // microfono: appena una conversazione finisce puo' darsi che vada
+        // ceduto a un'altra app che nel frattempo e' passata davanti.
         scope.launch {
-            giroLocale.fase.collect { aggiornaNotifica(it) }
+            giroLocale.fase.collect { aggiornaNotifica(it); rivaluta("fase") }
+        }
+
+        // Chi e' davanti agli occhi dell'utente. Se non e' Wisper, il microfono
+        // non e' suo.
+        scope.launch {
+            WisperApp.davanti.collect { rivaluta("davanti") }
         }
 
         // Schermo spento a meta' conversazione = "ho finito". Si chiude il giro
@@ -72,27 +81,124 @@ class ServizioAscolto : Service() {
         // Attenzione: NON spegne la parola magica — dire "Wisper" a schermo
         // spento deve continuare a funzionare, e' il senso del progetto.
         ContextCompat.registerReceiver(
-            this, schermoSpento, IntentFilter(Intent.ACTION_SCREEN_OFF),
+            this, schermo,
+            IntentFilter(Intent.ACTION_SCREEN_OFF).apply { addAction(Intent.ACTION_SCREEN_ON) },
             ContextCompat.RECEIVER_NOT_EXPORTED,
         )
+
+        // Le telefonate non si vedono dallo schermo: durante una chiamata lo
+        // schermo e' spento, perche' hai il telefono contro l'orecchio.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            audio.addOnModeChangedListener(mainExecutor, ascoltaModo)
+        }
+
+        rivaluta("avvio")
     }
 
-    private val schermoSpento = object : android.content.BroadcastReceiver() {
-        override fun onReceive(c: Context?, i: Intent?) = giroLocale.interrompi()
+    private val audio by lazy { getSystemService(android.media.AudioManager::class.java) }
+
+    private val ascoltaModo = android.media.AudioManager.OnModeChangedListener { rivaluta("modo audio") }
+
+    private val schermo = object : android.content.BroadcastReceiver() {
+        override fun onReceive(c: Context?, i: Intent?) {
+            if (i?.action == Intent.ACTION_SCREEN_OFF) giroLocale.interrompi()
+            rivaluta("schermo")
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent?.action == AZIONE_PARLA) giroLocale.apriAMano()
+        when (intent?.action) {
+            AZIONE_PARLA -> giroLocale.apriAMano()
+            AZIONE_PAUSA -> { aMano = true; rivaluta("pausa a mano") }
+            AZIONE_RIPRENDI -> { aMano = false; rivaluta("ripresa a mano") }
+        }
         // START_STICKY: se Android lo uccide per fare spazio, lo riavvia.
         return START_STICKY
     }
 
     override fun onDestroy() {
-        runCatching { unregisterReceiver(schermoSpento) }
+        runCatching { unregisterReceiver(schermo) }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            runCatching { audio.removeOnModeChangedListener(ascoltaModo) }
+        }
         _giro.value = null
         giroLocale.spegni()
         scope.cancel()
         super.onDestroy()
+    }
+
+    // ------------------------------------------------- di chi e' il microfono
+
+    /** Messo in pausa dall'utente col pulsante nella notifica. */
+    private var aMano = false
+
+    /** L'ultimo motivo per cui si e' ceduto, per scriverlo nella notifica. */
+    private var motivoCessione: String? = null
+
+    private val mano = android.os.Handler(android.os.Looper.getMainLooper())
+    private val ricontrollo = Runnable { applica(motivoAttuale(), "ricontrollo") }
+
+    /**
+     * Il motivo per cui in questo istante il microfono non dovrebbe essere di
+     * Wisper, oppure null se puo' tenerselo.
+     *
+     * LA REGOLA, in una riga: Wisper ascolta a schermo spento, oppure quando
+     * e' lui l'app che stai guardando. Se stai usando il telefono per altro, o
+     * sei in chiamata, si fa da parte.
+     *
+     * Perche' proprio questa. Il caso per cui Wisper esiste e' il tecnico col
+     * telefono in tasca e le mani occupate: schermo spento, e li' deve sentire.
+     * Tutti i casi in cui rubava il microfono agli altri — un vocale su
+     * WhatsApp, un video, l'assistente di Google — hanno invece lo schermo
+     * acceso e un'altra app davanti. Le due situazioni non si sovrappongono
+     * mai, quindi la regola non toglie niente a nessuna delle due.
+     *
+     * Le chiamate stanno a parte perche' hanno lo schermo spento esattamente
+     * come la tasca: si riconoscono dal modo audio del sistema, non da li'.
+     *
+     * Mentre una conversazione e' in corso non si cede per "un'altra app
+     * davanti": o Wisper e' davanti, o l'utente e' passato ad altro e allora
+     * gli basta spegnere lo schermo, che chiude gia' tutto.
+     */
+    private fun motivoAttuale(): String? {
+        val schermoAcceso = getSystemService(android.os.PowerManager::class.java).isInteractive
+        val alTelefono = audio.mode != android.media.AudioManager.MODE_NORMAL
+        val altrove = schermoAcceso &&
+            !WisperApp.davanti.value &&
+            giroLocale.fase.value == Fase.RIPOSO
+        return when {
+            aMano -> "l'hai messo in pausa"
+            alTelefono -> "sei in chiamata"
+            altrove -> ALTROVE
+            else -> null
+        }
+    }
+
+    private fun rivaluta(perche: String) {
+        mano.removeCallbacks(ricontrollo)
+        val motivo = motivoAttuale()
+
+        // Svegliandosi da solo, Wisper accende lo schermo e POI porta avanti la
+        // propria schermata. Nel mezzo c'e' un istante identico a "l'utente sta
+        // usando un'altra app", e cedendo subito Wisper si ammazzerebbe appena
+        // sveglio. Un secondo di pazienza distingue le due cose e non costa
+        // niente: nessuno registra un vocale entro un secondo dall'aver aperto
+        // WhatsApp. Riprendersi il microfono invece e' sempre immediato.
+        if (motivo == ALTROVE && motivoCessione == null) {
+            mano.postDelayed(ricontrollo, ATTESA_ALTROVE)
+            return
+        }
+        applica(motivo, perche)
+    }
+
+    private fun applica(motivo: String?, perche: String) {
+        if (motivo == motivoCessione) return
+        motivoCessione = motivo
+
+        if (motivo != null) giroLocale.cediMicrofono("$motivo ($perche)")
+        else giroLocale.riprendiMicrofono(perche)
+
+        aggiornaNotifica(giroLocale.fase.value)
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -123,7 +229,17 @@ class ServizioAscolto : Service() {
             Intent(this, ServizioAscolto::class.java).setAction(AZIONE_PARLA),
             PendingIntent.FLAG_IMMUTABLE,
         )
-        val testo = when (fase) {
+        val interruttore = PendingIntent.getService(
+            this, 3,
+            Intent(this, ServizioAscolto::class.java)
+                .setAction(if (aMano) AZIONE_RIPRENDI else AZIONE_PAUSA),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+
+        // Quando il microfono e' di qualcun altro va detto, e va detto perche':
+        // una notifica che dice "In ascolto" mentre non ascolta e' una bugia,
+        // e sarebbe l'unica cosa che l'utente ha per capire cosa sta succedendo.
+        val testo = motivoCessione?.let { "In pausa, $it" } ?: when (fase) {
             Fase.RIPOSO -> "In ascolto — di' «Wisper»"
             Fase.ASCOLTO -> "Ti sto ascoltando"
             Fase.PENSA -> "Sto capendo…"
@@ -139,6 +255,7 @@ class ServizioAscolto : Service() {
             .setOnlyAlertOnce(true)
             .setSilent(true)
             .addAction(0, "Parla", parla)
+            .addAction(0, if (aMano) "Riprendi" else "Pausa", interruttore)
             .build()
     }
 
@@ -202,6 +319,11 @@ class ServizioAscolto : Service() {
         private const val ID_NOTIFICA = 1
         private const val ID_SVEGLIA = 2
         const val AZIONE_PARLA = "eu.stgm.wisper.PARLA"
+        const val AZIONE_PAUSA = "eu.stgm.wisper.PAUSA"
+        const val AZIONE_RIPRENDI = "eu.stgm.wisper.RIPRENDI"
+
+        private const val ALTROVE = "stai usando il telefono"
+        private const val ATTESA_ALTROVE = 1_200L
 
         /**
          * Il giro vive nel servizio, non nella schermata. La schermata lo

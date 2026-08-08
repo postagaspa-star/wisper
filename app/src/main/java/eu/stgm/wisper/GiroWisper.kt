@@ -179,8 +179,61 @@ class GiroWisper(
         // guardare metterebbe Vosk e il trascrittore sullo stesso microfono —
         // e due padroni non danno errore, danno silenzio.
         wake.prepara { ok ->
-            if (ok && _fase.value == Fase.RIPOSO) wake.ascolta()
+            if (ok && _fase.value == Fase.RIPOSO) riprendiOrecchio()
         }
+    }
+
+    // ------------------------------------------------------- il microfono e' di tutti
+
+    /**
+     * Vero quando Wisper si e' fatto da parte per lasciare il microfono a
+     * qualcun altro.
+     *
+     * PERCHE' ESISTE, ed e' il difetto piu' grosso che questo progetto abbia
+     * avuto. Vosk tiene il microfono aperto in permanenza, ed e' l'unico modo
+     * di sentire una parola magica senza un chip apposta come quello che usa
+     * Google. Solo che su Android il microfono e' di chi se lo prende: con un
+     * servizio in primo piano acceso h24, Wisper vinceva sempre e le altre app
+     * del telefono restavano mute. Un messaggio vocale su WhatsApp, un video,
+     * una telefonata: tutto rotto, e per colpa nostra.
+     *
+     * Chi decide quando cedere non e' questa classe ma [ServizioAscolto], che
+     * e' l'unico posto da cui si vedono lo schermo e le telefonate. Qui c'e'
+     * solo l'interruttore.
+     */
+    private var sospeso = false
+
+    /** Molla il microfono e chiude quello che c'era in corso. */
+    fun cediMicrofono(motivo: String) {
+        main.post {
+            if (sospeso) return@post
+            sospeso = true
+            registro("microfono_ceduto", motivo)
+            interrompi()
+            wake.pausa()
+        }
+    }
+
+    /** Si riprende il microfono, se nel frattempo non lo usa nessun altro. */
+    fun riprendiMicrofono(motivo: String) {
+        main.post {
+            if (!sospeso) return@post
+            sospeso = false
+            registro("microfono_ripreso", motivo)
+            if (_fase.value == Fase.RIPOSO) wake.ascolta()
+        }
+    }
+
+    /**
+     * L'unico modo consentito di riaccendere l'orecchio.
+     *
+     * Ogni punto del giro che finisce torna a Vosk, e ognuno di quei punti
+     * deve rispettare la sospensione: bastava un solo `wake.ascolta()` diretto
+     * a fine conversazione per riprendersi il microfono di soppiatto mentre
+     * l'utente stava telefonando.
+     */
+    private fun riprendiOrecchio() {
+        if (!sospeso) wake.ascolta()
     }
 
     fun spegni() {
@@ -285,6 +338,12 @@ class GiroWisper(
      */
     private fun apriConversazione(saluto: Boolean) {
         if (_fase.value != Fase.RIPOSO) return
+        // Se il microfono e' di qualcun altro non glielo si strappa di mano,
+        // nemmeno quando a chiedere e' il pulsante "Parla" della notifica.
+        if (sospeso) {
+            registro("apertura_rifiutata", "microfono ceduto")
+            return
+        }
         wake.pausa()                    // handoff: il microfono passa al trascrittore
         silenziDiFila = 0
         onSveglia()
@@ -722,7 +781,7 @@ class GiroWisper(
         // non entra. Lo si da' a Vosk, che cosi' puo' sentire l'interruzione.
         // Nessun rischio che si attivi da solo: Wisper il proprio nome non lo
         // pronuncia mai.
-        wake.ascolta()
+        riprendiOrecchio()
 
         voce.parla(frase) { main.post(poi) }
     }
@@ -731,6 +790,6 @@ class GiroWisper(
         _fase.value = Fase.RIPOSO
         _trascrizione.value = ""
         trascrittore.ferma()
-        wake.ascolta()                  // handoff inverso: il microfono torna a Vosk
+        riprendiOrecchio()              // handoff inverso: il microfono torna a Vosk
     }
 }

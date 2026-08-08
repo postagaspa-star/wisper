@@ -53,6 +53,23 @@ finished speaking" and "the job is finished", and the model kept closing jobs
 that had just been declared open. Prompting did not fix it; a rule in the code
 did. Things that must never be wrong do not get asked of a model politely.
 
+## Sharing the microphone
+
+A wake word means holding the microphone open forever, and on Android the
+microphone belongs to whoever grabbed it. With a foreground service running all
+day, Wisper won every time and the rest of the phone went deaf: voice notes,
+video, calls, the Google assistant, all of it silently broken, and by us.
+
+The rule now is one line. Wisper listens when the screen is off, or when Wisper
+is the app you are looking at. Use the phone for anything else, or take a call,
+and it steps aside on its own and says so in its notification.
+
+Those two situations never overlap. The case Wisper exists for is a technician
+with the phone in his pocket and his hands busy, which is screen off. Every case
+where it used to steal the microphone had the screen on and another app in front.
+Calls are handled separately, because a phone against your ear has the screen off
+just like a pocket does; those are read from the system audio mode.
+
 ## Stack
 
 Kotlin, native Android, minSdk 26, Jetpack Compose. Vosk for the wake word,
