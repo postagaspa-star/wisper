@@ -7,6 +7,11 @@ row lands in the company spreadsheet.
 
 It speaks Italian, because that is who it was built for.
 
+| At rest | Filling in | Job resolved |
+|---|---|---|
+| ![](docs/immagini/1-ascolto.png) | ![](docs/immagini/2-scheda.png) | ![](docs/immagini/3-riepilogo.png) |
+| Waiting for the wake word. Nothing has been touched. | The fields appear while you talk. A dash means Wisper does not know yet, and it will ask. | Everything it has, including which job and where. |
+
 ## Why it exists
 
 My father runs a technical firm in northern Italy. I have been building software

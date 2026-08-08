@@ -51,6 +51,34 @@ data class Rapportino(
         }
 
     /**
+     * Cosa manca, detto come lo direbbe una persona invece che col nome del
+     * campo. Un posto solo, perche' queste parole servono in due punti — il
+     * riepilogo finale e le domande a meta' strada — e se divergessero Wisper
+     * chiamerebbe la stessa cosa in due modi nella stessa conversazione.
+     *
+     * Le spese stanno qui ma non fra i campi obbligatori: chiederle e' giusto,
+     * pretenderle no.
+     */
+    val mancanzeParlate: List<String>
+        get() = buildList {
+            if (descrizione.isNullOrBlank()) add("che lavoro hai fatto")
+            if (ore == null) add("quanto è durato")
+            if (km == null) add("i chilometri")
+            if (spese == null) add("le spese")
+            if (statoCommessa == null) add("se il lavoro è finito")
+        }
+
+    /**
+     * "Mi devi ancora dire i chilometri e se il lavoro è finito", oppure null.
+     *
+     * Il verbo e' scelto perche' regge tutti i pezzi senza sgrammaticature:
+     * "mi manca" andrebbe accordato al plurale, "mi devi dire" no.
+     */
+    fun domandaSuCosaManca(): String? =
+        mancanzeParlate.takeIf { it.isNotEmpty() }
+            ?.let { "Mi devi ancora dire ${unisci(it)}" }
+
+    /**
      * Applica solo i campi valorizzati: un campo null NON cancella quello che
      * c'era. Serve perche' l'AI manda solo cio' che ha appena capito, non
      * tutto il rapportino ogni volta.
@@ -119,12 +147,7 @@ data class Rapportino(
         //    Sparpagliarle fra le altre le fa sembrare piu' gravi di quello che
         //    sono e riempie la frase di avversative; raccolte qui si sente in
         //    un colpo cosa manca e si risponde una volta.
-        val mancano = mutableListOf<String>()
-        if (descrizione.isNullOrBlank()) mancano += "che lavoro hai fatto"
-        if (ore == null) mancano += "quanto è durato"
-        if (km == null) mancano += "i chilometri"
-        if (spese == null) mancano += "le spese"
-        if (statoCommessa == null) mancano += "se il lavoro è finito"
+        val mancano = mancanzeParlate
         if (mancano.isNotEmpty()) frasi += "Non mi hai però detto ${unisci(mancano)}"
 
         // Ogni frase comincia con la maiuscola: i pezzi vengono costruiti in

@@ -521,10 +521,12 @@ class GiroWisper(
             val patch =
                 if (turnoDiChiusura) risposta.dati.copy(statoCommessa = null)
                 else risposta.dati
+            val commessaPrima = _rapportino.value.commessa
             _rapportino.value = _rapportino.value.aggiorna(patch)
 
             when (risposta.azione) {
-                Azione.AGGIORNA -> rispondi(risposta.frase) { ascolta() }
+                Azione.AGGIORNA ->
+                    rispondi(conLaCommessaGiusta(risposta.frase, commessaPrima)) { ascolta() }
 
                 // Il riepilogo finale NON lo scrive il modello: lo costruiamo
                 // dai campi. E' l'unico punto in cui il tecnico da' l'ok a
@@ -765,6 +767,39 @@ class GiroWisper(
                 registro("commessa_non_aggiornata", e.message ?: "sconosciuto")
             }
         }
+    }
+
+    /**
+     * Se in questo turno e' cambiata la commessa, la frase deve chiamarla col
+     * nome che ha davvero nel foglio.
+     *
+     * Trovato sul telefono l'08/08. Dicendo "la commessa e' la manutenzione
+     * della caldaia", che nel foglio non esiste, il modello ha assegnato
+     * l'unica commessa aperta di quel cliente — scelta ragionevole, e' l'unica
+     * possibile — ma poi ha detto ad alta voce il nome che avevo pronunciato
+     * io, non quello che aveva scritto. Sullo schermo c'era "FV Fara
+     * Vicentino", nelle orecchie "manutenzione caldaia".
+     *
+     * E' lo stesso difetto dei chilometri annunciati e mai salvati, e fa male
+     * per lo stesso motivo: il tecnico non sta guardando lo schermo, sente
+     * confermare una cosa e ci crede. Quindi quando la commessa cambia la
+     * frase la scriviamo qui, dai campi. Si perde la scorrevolezza del
+     * modello e si guadagna che quel che si sente e quel che si salva escono
+     * dallo stesso posto.
+     *
+     * Se il modello aveva gia' detto il nome giusto non si tocca niente: e' il
+     * caso normale, e riscriverlo lo peggiorerebbe.
+     */
+    private fun conLaCommessaGiusta(frase: String, prima: String?): String {
+        val r = _rapportino.value
+        val codice = r.commessa ?: return frase
+        if (codice == prima) return frase
+        val vera = _anagrafiche.value.descrizioneCommessa(codice) ?: return frase
+        if (frase.contains(vera, ignoreCase = true)) return frase
+
+        registro("commessa_rinominata", "il modello la chiamava altrimenti, è $vera")
+        val poi = r.domandaSuCosaManca()?.let { "$it." } ?: "Altro, o salvo?"
+        return "Ho segnato $vera. $poi"
     }
 
     private fun rispondi(frase: String, poi: () -> Unit) {
