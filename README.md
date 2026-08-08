@@ -9,6 +9,7 @@ It speaks Italian, because that is who it was built for. The labels follow the
 phone's language, so the screenshots below are the English ones.
 
 One person, two days, sixteen years old. Built for NGN Hacks 2026.
+**[postagaspa-star.github.io/wisper](https://postagaspa-star.github.io/wisper/)**
 
 | One sentence, spoken with gloves on | Half a sentence in |
 |---|---|
