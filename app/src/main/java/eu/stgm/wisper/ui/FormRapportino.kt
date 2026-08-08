@@ -33,6 +33,9 @@ import eu.stgm.wisper.R
 import eu.stgm.wisper.rapportino.Rapportino
 import eu.stgm.wisper.rapportino.StatoCommessa
 import kotlinx.coroutines.delay
+import java.text.DecimalFormat
+import java.text.DecimalFormatSymbols
+import java.util.Locale
 
 /**
  * Il rapportino che si compila da solo mentre il tecnico parla.
@@ -257,8 +260,12 @@ private fun RigaCampo(
 }
 
 /** "4.0" -> "4", "3.5" -> "3,5". Nel form si legge come lo scriverebbe a mano. */
+// Il separatore decimale lo decide la lingua del telefono, non io: scriverci
+// sempre la virgola faceva comparire "3,5" in mezzo a una scheda inglese, dove
+// non sembra una scelta ma un difetto.
 private fun formatta(n: Double): String =
-    if (n % 1.0 == 0.0) n.toInt().toString() else n.toString().replace('.', ',')
+    if (n % 1.0 == 0.0) n.toInt().toString()
+    else DecimalFormat("0.#", DecimalFormatSymbols(Locale.getDefault())).format(n)
 
 // Stessa palette di sempre: nero, bianco, giallo, blu. CartaAlta e CartaBassa
 // non sono colori nuovi, sono lo stesso nero schiarito quel tanto che basta a

@@ -8,21 +8,21 @@ confirm), and the row lands in the company spreadsheet.
 It speaks Italian, because that is who it was built for. The labels follow the
 phone's language, so the screenshots below are the English ones.
 
-**The ball tells you whose turn it is.** It is the only thing on screen for most
-of a conversation, and with the phone on a workbench you read it from a metre
-away, out of the corner of your eye.
+One person, two days, sixteen years old. Built for NGN Hacks 2026.
+
+| One sentence, spoken with gloves on | Half a sentence in |
+|---|---|
+| ![](docs/immagini/5-scheda.png) | ![](docs/immagini/4-domanda.png) |
+| Client, job, the address of the site, hours, kilometres, expenses, and whether the job closes. WORK DONE reads *"Sostituzione pompa di circolazione impianto fotovoltaico"*: replaced the circulation pump on the photovoltaic system. The line underneath is Wisper asking *"Il lavoro è chiuso, confermi?"* (The job is closed, do you confirm?) | A dash is a field Wisper does not have yet, and it asks for one thing at a time rather than reading a list. Here: *"Ho segnato tre ore e mezza per Rossi Impianti, ma quale commessa hai seguito?"* (I have put down three and a half hours for Rossi Impianti, but which job were you on?) |
+
+**Before the card, there is only the ball**, and its colour is how you know whose
+turn it is. You read it from a metre away, out of the corner of your eye, which
+is the only kind of reading available to someone holding a wrench.
 
 | White, at rest | Blue, Wisper talking | Yellow, your turn |
 |---|---|---|
 | ![](docs/immagini/1-riposo.png) | ![](docs/immagini/2-parla.png) | ![](docs/immagini/3-ascolta.png) |
-| Waiting for the wake word. Nothing has been touched, and nothing is being sent anywhere. | Waves run from the pole down to the equator while it speaks. Say "Wisper" over it and it stops. | The microphone is yours. The ball breathes with what it hears. |
-
-Then the card appears and fills itself in while you keep talking.
-
-| Half a sentence in | The whole day |
-|---|---|
-| ![](docs/immagini/4-domanda.png) | ![](docs/immagini/5-scheda.png) |
-| A dash is a field Wisper does not have yet, and it asks for one thing at a time. Here: *"Ho segnato tre ore e mezza per Rossi Impianti, ma quale commessa hai seguito?"* (I have put down three and a half hours for Rossi Impianti, but which job were you on?) | Client, job, address, hours, kilometres, expenses, and whether the job closes. *"Il lavoro è chiuso, confermi?"* (The job is closed, do you confirm?) |
+| Waiting for the wake word. Nothing has been touched, and nothing is being sent anywhere. | Wisper is talking. Say "Wisper" over the top of it and it stops mid sentence. | Your turn. The microphone icon is there because a colour has to be learned and a microphone does not. |
 
 ## Why it exists
 
@@ -45,8 +45,16 @@ Anything that needs a screen has already lost.
 
 ## One turn, end to end
 
-Wake word, beep, then you talk. The model pulls the fields out of ordinary
-speech: "tre ore e mezza" (three and a half hours) becomes 3.5, "mezza giornata"
+Open it standing in a client's yard and it goes first, because the phone already
+knows where it is: *"Ho visto che sei nel cantiere di Rossi Impianti, e qui hai
+aperta solo FV Fara Vicentino. È corretto?"* (I see you are on Rossi Impianti's
+site, and the only job open here is FV Fara Vicentino. Is that right?) It uses
+the last known location rather than waiting for a fresh fix, because a fresh fix
+means standing still for thirty seconds and in a plant room it never arrives. It
+proposes and never assumes: you might be at the office writing up yesterday.
+
+Otherwise: wake word, beep, then you talk. The model pulls the fields out of
+ordinary speech: "tre ore e mezza" (three and a half hours) becomes 3.5, "mezza giornata"
 (half a day) becomes 4, "esse pi emme" (the letters S P M, said out loud)
 becomes SPM Srl. Corrections work mid sentence: say "no, aspetta, erano due ore"
 (no, hang on, it was two hours) and it changes. When you are done it reads the
@@ -203,17 +211,19 @@ on the spreadsheet endpoint, and a server holding the model key.
 
 ## How this was built
 
-I ship products with AI. The product and design calls are mine, the code is
-Claude's. My job here was deciding what the app should do and what it should
-refuse to do, using it until something felt wrong, and directing the fix.
-
 Several features exist because I used it and it annoyed me. It used to keep
 listening after I turned the screen off and picked up other people's
 conversations. It closed a job in the sheet when I said "ho finito" (I have
 finished), meaning I had finished speaking. It read me a summary I already knew
 with no way to cut it short. It held the microphone so tightly that nothing else
-on the phone could record. None of those came out of automated testing; they
-came out of being the person holding the phone.
+on the phone could record. It once told me it had put the hours against a job it
+had not put them against. None of those came out of automated testing; they came
+out of being the person holding the phone, and each one is a rule in the code
+now rather than a polite instruction to a model.
+
+That is the part of this that is mine. I ship products with AI: the product and
+design calls are mine, the code is Claude's. My job here was deciding what the
+app should do, what it should refuse to do, and what it must never get wrong.
 
 Field feedback from Manuel Gasparotto, Studio Tecnico GM, the surveyor whose
 technicians this was built for.

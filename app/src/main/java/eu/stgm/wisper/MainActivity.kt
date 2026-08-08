@@ -70,6 +70,19 @@ class MainActivity : ComponentActivity() {
     private val chiediNotifiche =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
 
+    /**
+     * La posizione, che serve a riconoscere in quale cantiere ti trovi.
+     *
+     * Si chiede DOPO il microfono e non insieme: senza microfono Wisper non
+     * esiste, senza posizione fa solo una domanda in piu'. Chiederli in blocco
+     * al primo avvio e' il modo migliore per farseli negare tutti e due.
+     *
+     * Se lo neghi non si rompe niente: [DoveSono] risponde null e Wisper apre
+     * chiedendo, come ha sempre fatto.
+     */
+    private val chiediPosizione =
+        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -85,6 +98,23 @@ class MainActivity : ComponentActivity() {
         ) == PackageManager.PERMISSION_GRANTED
 
         if (!permessoMicrofono) chiediMicrofono.launch(Manifest.permission.RECORD_AUDIO)
+
+        // Senza questa richiesta il permesso non arriva mai da solo, e
+        // riconoscere il cantiere dalla posizione — che e' scritto nel README e
+        // sul sito — semplicemente non succedeva su nessun telefono appena
+        // installato: DoveSono.permesso restava falso per sempre e Wisper
+        // ripiegava in silenzio sul saluto generico.
+        if (!ContextCompat.checkSelfPermission(
+                this, Manifest.permission.ACCESS_COARSE_LOCATION,
+            ).let { it == PackageManager.PERMISSION_GRANTED }
+        ) {
+            chiediPosizione.launch(
+                arrayOf(
+                    Manifest.permission.ACCESS_COARSE_LOCATION,
+                    Manifest.permission.ACCESS_FINE_LOCATION,
+                )
+            )
+        }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             ContextCompat.checkSelfPermission(

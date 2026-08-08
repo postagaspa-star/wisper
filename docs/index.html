@@ -67,6 +67,9 @@
   .tecnico .chi{color:var(--grigio)}
   .wisper .chi{color:var(--blu)}
   .parlato .frase{font-size:17px}
+  /* La traduzione sta sotto e piu' in piccolo: chi legge l'italiano non la
+     vede, chi non lo legge non resta fuori. */
+  .reso{font-size:14px;color:var(--grigio);font-style:italic;margin-top:2px}
 
   .avvisi li{
     list-style:none;padding:16px 0;border-bottom:1px solid var(--bordo)
@@ -103,7 +106,7 @@
       <circle cx="50" cy="50" r="3.4" fill="#F2F4F7"/>
     </svg>
 
-    <p class="occhiello">NGN Hacks 2026</p>
+    <p class="occhiello">NGN Hacks 2026 · one person, two days, sixteen years old</p>
     <h1>Wisper</h1>
     <p class="sottotitolo" style="margin-left:auto;margin-right:auto">
       An Android app that lets an industrial field technician file the daily
@@ -170,22 +173,27 @@
       <div class="tecnico">
         <p class="chi">Technician</p>
         <p class="frase">“Sono andato da Rossi per la manutenzione della caldaia, quattro ore e trenta chilometri.”</p>
+        <p class="reso">I was at Rossi's for the boiler service, four hours and thirty kilometres.</p>
       </div>
       <div class="wisper">
         <p class="chi">Wisper</p>
         <p class="frase">“Segnato Rossi Impianti, quattro ore e trenta chilometri. Altro, o salvo?”</p>
+        <p class="reso">Rossi Impianti, four hours and thirty kilometres, noted. Anything else, or shall I save?</p>
       </div>
       <div class="tecnico">
         <p class="chi">Technician</p>
         <p class="frase">“No aspetta, scusa, erano tre ore non quattro.”</p>
+        <p class="reso">No wait, sorry, it was three hours not four.</p>
       </div>
       <div class="wisper">
         <p class="chi">Wisper</p>
         <p class="frase">“Corretto, tre ore segnate.”</p>
+        <p class="reso">Corrected, three hours noted.</p>
       </div>
     </div>
     <p class="grigio" style="font-size:15px">
-      The app speaks Italian, because that is who it was built for.
+      The app speaks Italian, because that is who it was built for. The English
+      under each line is a translation, not something the app says.
     </p>
   </div>
 </section>
