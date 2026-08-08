@@ -52,6 +52,11 @@ becomes SPM Srl. Corrections work mid sentence: say "no, aspetta, erano due ore"
 (no, hang on, it was two hours) and it changes. When you are done it reads the
 whole report back, you confirm, and it saves.
 
+Why not just send a voice note, since the phone already records one hands free.
+Because a voice note does not file anything: it moves the typing from the
+technician to whoever plays it back at the office, and nobody can invoice against
+an audio file. Wisper produces the row itself, against the right job.
+
 It also lists a client's open jobs on request, telling them apart by where they
 are rather than by code, since a technician says "quella di via Roma" (the one
 on via Roma) and never "M004". It creates new clients and jobs by voice and says
@@ -156,8 +161,15 @@ permissions per technician.
 anyone holding it can append a row.
 
 **It needs a connection to understand you.** The wake word is fully offline, the
-reasoning and the save are not. On a site with no signal Wisper wakes up and
-cannot yet hold the report for later. That queue is the next thing to build.
+reasoning and the save are not. It does not fail silently, though: it says so out
+loud, and a half filled report is never thrown away, so saying "Wisper" again
+when the signal comes back repeats the last question and carries on from there.
+What is missing is the queue that would save it for you unattended, and that is
+the next thing to build.
+
+**Only two people have used it.** Me, and my father for fifteen minutes at lunch,
+which is where three of the features here came from. No technician has run a
+whole day on it yet.
 
 **Noise degrades accuracy.** Published Italian speech recognition benchmarks sit
 around 3% word error, measured on clean studio audio. On a real building site,
