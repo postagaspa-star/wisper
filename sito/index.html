@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Wisper — hands-free work reports for field technicians</title>
+<title>Wisper, work reports by voice for field technicians</title>
 <meta name="description" content="An Android app that lets industrial technicians dictate their daily work report without ever touching the phone. Built for NGN Hacks 2026.">
 <style>
   :root{
@@ -110,8 +110,8 @@
       work report <em>without ever touching the phone</em>.
     </p>
 
-    <a class="scarica" id="download" href="#" >⬇ Download the APK</a>
-    <p class="sotto-bottone">Android 8 or newer · ~68&nbsp;MB · install from unknown sources</p>
+    <a class="scarica" id="download" href="https://github.com/postagaspa-star/wisper">See the source on GitHub</a>
+    <p class="sotto-bottone">Kotlin, native Android 8 or newer · there is no APK to download, and the reason is further down</p>
   </div>
 </header>
 
@@ -120,14 +120,16 @@
     <h2>The problem</h2>
     <p>
       A heating and photovoltaic technician spends the day on site with gloves on
-      and both hands busy. The work report — client, job, description, hours,
-      kilometres, expenses — gets filled in at the end of the day, reluctantly,
-      and often badly.
+      and both hands busy. Then there is the work report: client, job,
+      description, hours, kilometres, expenses. It takes five or ten minutes,
+      which is not the problem. The problem is that it is boring, it is the same
+      every single day, and nobody wants to do it after eight hours on a roof.
+      So it gets filled in late, from memory, or not at all.
     </p>
     <p class="grigio">
       This is not a hypothetical user. It is the daily routine at my father's
-      technical firm, where I build software for industrial clients. I have
-      watched this problem from close up for years.
+      technical firm, where I build software for industrial clients, and where I
+      have been watching this problem from close up for the past few months.
     </p>
   </div>
 </section>
@@ -147,7 +149,7 @@
         <h3>Just talk</h3>
         <p class="grigio">
           The fields fill themselves in on screen while you speak. Correct
-          anything out loud — “no, three hours” — and it updates.
+          anything out loud, “no, three hours”, and it updates.
         </p>
       </li>
       <li>
@@ -185,31 +187,35 @@
 
 <section>
   <div class="wrap">
-    <h2>Installing it</h2>
+    <h2>On site, it goes first</h2>
     <ol class="passi">
       <li>
-        <h3>Download the APK</h3>
-        <p class="grigio">The button above. The file is hosted on GitHub.</p>
-      </li>
-      <li>
-        <h3>Allow the install</h3>
+        <h3>It knows where you are</h3>
         <p class="grigio">
-          Android will ask permission to install from an unknown source, and
-          Play Protect will warn that the app is unrecognised. That is expected
-          for any app distributed outside the Play Store — tap
-          <em>Install anyway</em>.
+          Open it standing in a client's yard and it opens the conversation
+          itself: “I see you are at Rossi's, and the only job open here is the
+          Fara Vicentino photovoltaic. Is that right?” It proposes, it never
+          assumes; you might be at the office writing up yesterday.
         </p>
       </li>
       <li>
-        <h3>Grant the microphone</h3>
+        <h3>It tells jobs apart the way you do</h3>
         <p class="grigio">
-          On first launch it asks for the microphone and unpacks the offline
-          speech model. This takes a few seconds, once.
+          Ask what is open for a client and it answers by place, not by code,
+          because a technician says “the one in via Roma” and never “M004”.
+        </p>
+      </li>
+      <li>
+        <h3>It keeps the sheet tidy</h3>
+        <p class="grigio">
+          New clients and new jobs get created by voice, and it says out loud
+          when it does it. Say the work is finished and the job closes in the
+          company sheet, so tomorrow it is not offered again.
         </p>
       </li>
     </ol>
     <div class="nota">
-      <b>Source code:</b> the full project is public on GitHub, including the
+      <b>Source code:</b> the whole project is public on GitHub, including the
       Google Apps Script that writes to the spreadsheet.
     </div>
   </div>
@@ -217,7 +223,7 @@
 
 <section>
   <div class="wrap">
-    <h2>What it is not — yet</h2>
+    <h2>What it is not, yet</h2>
     <p class="grigio" style="margin-bottom:18px">
       This was built in a weekend hackathon. These limits are real and known,
       and are listed here rather than discovered later.
@@ -228,7 +234,7 @@
         <span>
           There is no login and no accounts: the app writes to one spreadsheet,
           the owner's. A production version needs authentication, one workspace
-          per company, and per-technician permissions.
+          per company, and permissions for each technician.
         </span>
       </li>
       <li>
@@ -249,17 +255,19 @@
       <li>
         <strong>Noise degrades accuracy.</strong>
         <span>
-          Published Italian speech-recognition benchmarks (~3% word error) are
-          measured on clean studio audio. On a real building site, expect
+          Published Italian speech recognition benchmarks, around 3% word error,
+          are measured on clean studio audio. On a real building site, expect
           meaningfully worse. This is the honest weak point of the whole idea.
         </span>
       </li>
       <li>
-        <strong>The API key ships inside the APK.</strong>
+        <strong>There is no APK to download, on purpose.</strong>
         <span>
-          Acceptable for a sideloaded demo, not for distribution. Production
-          would route model calls through a server the app never authenticates
-          against directly.
+          The model key would travel inside it and anyone could pull it back
+          out. Gemini keys cannot be locked to an Android package the way Maps
+          keys can, so the only real fix is a server holding the key and the app
+          asking that server. That server is not built yet, so the project is
+          source only and you build it with your own key.
         </span>
       </li>
     </ul>
@@ -270,9 +278,9 @@
   <div class="wrap">
     <h2>Next</h2>
     <p class="grigio">
-      Offline queue with automatic retry · multi-user accounts · client
-      signature capture · PDF export · photo and receipt attachments ·
-      launching from the lock screen with the screen off.
+      Offline queue with automatic retry · one account per technician · a real
+      token on the spreadsheet endpoint · a server holding the model key · the
+      client's signature on delivery · photo and receipt attachments.
     </p>
   </div>
 </section>

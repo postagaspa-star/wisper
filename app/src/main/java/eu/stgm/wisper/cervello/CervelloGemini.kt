@@ -129,12 +129,15 @@ class CervelloGemini(
         val richiesta = Request.Builder()
             .url("$BASE$modello:generateContent")
             .header("x-goog-api-key", chiave)
-            // Queste due dicono a Google da quale app arriva la chiamata, e
-            // sono quello che permette di legare la chiave a questa app sola.
-            // Le librerie ufficiali le mandano da sole; chiamando l'API a mano
-            // vanno messe, altrimenti restringere la chiave nella console
-            // blocca anche noi. Chi estrae la chiave dall'APK non se ne fa
-            // niente: puo' copiare le intestazioni, ma non la firma.
+            // Queste due dicono a Google da quale app arriva la chiamata, ed e'
+            // quello che mandano da sole le librerie ufficiali.
+            //
+            // ATTENZIONE, non sono una protezione. Per le chiavi Gemini la
+            // console non offre la restrizione "app Android" che c'e' per Maps:
+            // ci sono solo IP e siti web, che a un'app non servono. Quindi una
+            // chiave dentro l'APK resta estraibile, punto. L'unico rimedio vero
+            // e' un server che tiene la chiave e a cui l'app chiede; finche'
+            // non esiste, l'APK non si pubblica.
             .header("X-Android-Package", PACCHETTO)
             .header("X-Android-Cert", IMPRONTA)
             .post(corpo.toRequestBody("application/json".toMediaType()))

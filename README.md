@@ -42,7 +42,7 @@ they never overlap. Two clients on one microphone do not throw an error on
 Android, they return silence, and you spend the afternoon debugging the network
 instead.
 
-**What you hear is what gets saved.** The final read-back is built from the
+**What you hear is what gets saved.** The final read back is built from the
 stored fields, not written by the model. Earlier it would announce "forty
 kilometres" with the kilometres field empty, and on a work report that is the
 worst thing that can happen: the technician is not looking at the screen, he
@@ -60,7 +60,7 @@ running entirely on the device: until the word is heard no audio leaves the
 phone and no connection is needed. Android's own recogniser for dictation,
 Gemini over REST for the reasoning, with a fixed response schema so the model
 has to return the report fields and cannot drift into prose. System
-text-to-speech for the voice, with the Italian voice chosen by measuring the
+text to speech for the voice, with the Italian voice chosen by measuring the
 available ones instead of taking the default.
 
 The whole loop lives in a foreground service, so it keeps listening with the app
@@ -111,9 +111,11 @@ cannot yet hold the report for later. That queue is the next thing to build.
 around 3% word error, measured on clean studio audio. On a real building site,
 expect meaningfully worse. This is the honest weak point of the whole idea.
 
-**The API key ships inside the APK.** Acceptable for a sideloaded demo, not for
-distribution. Restrict the key to the app's package and signing fingerprint
-before handing the APK to anyone.
+**There is no APK to download, on purpose.** The model key would travel inside
+it and anyone could pull it back out. Gemini keys cannot be locked to an Android
+package the way Maps keys can, so the only real fix is a server holding the key
+and the app asking that server. That server is not built yet, so the app is
+source only and you build it with your own key.
 
 ## How this was built
 
