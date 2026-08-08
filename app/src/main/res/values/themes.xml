@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Tema minimo: niente ActionBar, sfondo nero fisso.
+         Tutto l'aspetto vero lo fa Compose; questo serve solo a evitare il
+         lampo bianco all'avvio e la barra grigia standard di Android. -->
+    <style name="Theme.Wisper" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/nero</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+    </style>
+</resources>

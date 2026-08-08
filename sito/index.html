@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wisper — hands-free work reports for field technicians</title>
+<meta name="description" content="An Android app that lets industrial technicians dictate their daily work report without ever touching the phone. Built for NGN Hacks 2026.">
+<style>
+  :root{
+    --nero:#07080A; --carta:#0E1014; --bordo:#1D212A;
+    --bianco:#F2F4F7; --grigio:#8B93A3;
+    --giallo:#FFC53D; --blu:#3D8BFF;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    background:var(--nero); color:var(--bianco);
+    font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:720px;margin:0 auto;padding:0 24px}
+  section{padding:56px 0;border-bottom:1px solid var(--bordo)}
+  section:last-of-type{border-bottom:none}
+
+  /* --- palla di puntini, la stessa dell'app --- */
+  .palla{display:block;margin:0 auto 28px;width:132px;height:132px}
+  .palla circle{fill:var(--giallo)}
+
+  h1{font-size:clamp(34px,7vw,52px);line-height:1.08;letter-spacing:-.02em;font-weight:800}
+  h1 em{font-style:normal;color:var(--giallo)}
+  .occhiello{
+    text-transform:uppercase;letter-spacing:.18em;font-size:11px;
+    color:var(--grigio);font-weight:700;margin-bottom:14px
+  }
+  .sottotitolo{color:var(--grigio);font-size:19px;margin-top:18px;max-width:34em}
+  h2{font-size:13px;text-transform:uppercase;letter-spacing:.16em;color:var(--grigio);margin-bottom:22px;font-weight:700}
+  h3{font-size:17px;margin-bottom:6px;font-weight:650}
+  p+p{margin-top:12px}
+  .grigio{color:var(--grigio)}
+
+  header{padding:72px 0 56px;text-align:center;border-bottom:1px solid var(--bordo)}
+
+  .scarica{
+    display:inline-flex;align-items:center;gap:10px;
+    background:var(--giallo);color:#000;text-decoration:none;
+    font-weight:700;font-size:17px;padding:15px 28px;border-radius:12px;
+    margin-top:32px;transition:transform .15s ease
+  }
+  .scarica:hover{transform:translateY(-2px)}
+  .sotto-bottone{font-size:13px;color:var(--grigio);margin-top:12px}
+
+  ol.passi{list-style:none;counter-reset:p}
+  ol.passi li{
+    counter-increment:p;position:relative;padding-left:46px;margin-bottom:24px
+  }
+  ol.passi li::before{
+    content:counter(p);position:absolute;left:0;top:-1px;
+    width:30px;height:30px;border-radius:50%;
+    border:1px solid var(--bordo);color:var(--giallo);
+    display:grid;place-items:center;font-size:13px;font-weight:700
+  }
+
+  .parlato{
+    border-left:2px solid var(--bordo);padding-left:18px;margin:22px 0;
+  }
+  .parlato p{margin:0 0 10px}
+  .chi{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--grigio)}
+  .tecnico .chi{color:var(--grigio)}
+  .wisper .chi{color:var(--blu)}
+  .parlato .frase{font-size:17px}
+
+  .avvisi li{
+    list-style:none;padding:16px 0;border-bottom:1px solid var(--bordo)
+  }
+  .avvisi li:last-child{border-bottom:none}
+  .avvisi strong{display:block;margin-bottom:3px}
+  .avvisi span{color:var(--grigio);font-size:15px}
+
+  .nota{
+    background:var(--carta);border:1px solid var(--bordo);border-radius:12px;
+    padding:18px 20px;font-size:15px;color:var(--grigio);margin-top:24px
+  }
+  .nota b{color:var(--bianco)}
+
+  footer{padding:44px 0 72px;color:var(--grigio);font-size:14px;text-align:center}
+  a{color:var(--giallo)}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <!-- la stessa palla dell'app, ferma -->
+    <svg class="palla" viewBox="0 0 100 100" aria-hidden="true">
+      <circle cx="50" cy="14" r="2.6"/><circle cx="68" cy="19" r="2.9"/>
+      <circle cx="80" cy="33" r="3.1"/><circle cx="85" cy="50" r="3.2"/>
+      <circle cx="80" cy="67" r="3.1"/><circle cx="68" cy="81" r="2.9"/>
+      <circle cx="50" cy="86" r="2.6"/><circle cx="32" cy="81" r="2.4"/>
+      <circle cx="20" cy="67" r="2.2"/><circle cx="15" cy="50" r="2.1"/>
+      <circle cx="20" cy="33" r="2.2"/><circle cx="32" cy="19" r="2.4"/>
+      <circle cx="50" cy="30" r="2.8"/><circle cx="66" cy="40" r="3"/>
+      <circle cx="66" cy="60" r="3"/><circle cx="50" cy="70" r="2.8"/>
+      <circle cx="34" cy="60" r="2.4"/><circle cx="34" cy="40" r="2.4"/>
+      <circle cx="50" cy="50" r="3.4" fill="#F2F4F7"/>
+    </svg>
+
+    <p class="occhiello">NGN Hacks 2026</p>
+    <h1>Wisper</h1>
+    <p class="sottotitolo" style="margin-left:auto;margin-right:auto">
+      An Android app that lets an industrial field technician file the daily
+      work report <em>without ever touching the phone</em>.
+    </p>
+
+    <a class="scarica" id="download" href="#" >⬇ Download the APK</a>
+    <p class="sotto-bottone">Android 8 or newer · ~68&nbsp;MB · install from unknown sources</p>
+  </div>
+</header>
+
+<section>
+  <div class="wrap">
+    <h2>The problem</h2>
+    <p>
+      A heating and photovoltaic technician spends the day on site with gloves on
+      and both hands busy. The work report — client, job, description, hours,
+      kilometres, expenses — gets filled in at the end of the day, reluctantly,
+      and often badly.
+    </p>
+    <p class="grigio">
+      This is not a hypothetical user. It is the daily routine at my father's
+      technical firm, where I build software for industrial clients. I have
+      watched this problem from close up for years.
+    </p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>How it works</h2>
+    <ol class="passi">
+      <li>
+        <h3>Say “Wisper”</h3>
+        <p class="grigio">
+          The wake word runs entirely on the phone. Until it is heard,
+          no audio leaves the device and no connection is needed.
+        </p>
+      </li>
+      <li>
+        <h3>Just talk</h3>
+        <p class="grigio">
+          The fields fill themselves in on screen while you speak. Correct
+          anything out loud — “no, three hours” — and it updates.
+        </p>
+      </li>
+      <li>
+        <h3>Say “confermo”</h3>
+        <p class="grigio">
+          Wisper reads the report back, you confirm, and the row lands in the
+          company Google Sheet. The phone is never touched.
+        </p>
+      </li>
+    </ol>
+
+    <div class="parlato">
+      <div class="tecnico">
+        <p class="chi">Technician</p>
+        <p class="frase">“Sono andato da Rossi per la manutenzione della caldaia, quattro ore e trenta chilometri.”</p>
+      </div>
+      <div class="wisper">
+        <p class="chi">Wisper</p>
+        <p class="frase">“Segnato Rossi Impianti, quattro ore e trenta chilometri. Altro, o salvo?”</p>
+      </div>
+      <div class="tecnico">
+        <p class="chi">Technician</p>
+        <p class="frase">“No aspetta, scusa, erano tre ore non quattro.”</p>
+      </div>
+      <div class="wisper">
+        <p class="chi">Wisper</p>
+        <p class="frase">“Corretto, tre ore segnate.”</p>
+      </div>
+    </div>
+    <p class="grigio" style="font-size:15px">
+      The app speaks Italian, because that is who it was built for.
+    </p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>Installing it</h2>
+    <ol class="passi">
+      <li>
+        <h3>Download the APK</h3>
+        <p class="grigio">The button above. The file is hosted on GitHub.</p>
+      </li>
+      <li>
+        <h3>Allow the install</h3>
+        <p class="grigio">
+          Android will ask permission to install from an unknown source, and
+          Play Protect will warn that the app is unrecognised. That is expected
+          for any app distributed outside the Play Store — tap
+          <em>Install anyway</em>.
+        </p>
+      </li>
+      <li>
+        <h3>Grant the microphone</h3>
+        <p class="grigio">
+          On first launch it asks for the microphone and unpacks the offline
+          speech model. This takes a few seconds, once.
+        </p>
+      </li>
+    </ol>
+    <div class="nota">
+      <b>Source code:</b> the full project is public on GitHub, including the
+      Google Apps Script that writes to the spreadsheet.
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>What it is not — yet</h2>
+    <p class="grigio" style="margin-bottom:18px">
+      This was built in a weekend hackathon. These limits are real and known,
+      and are listed here rather than discovered later.
+    </p>
+    <ul class="avvisi">
+      <li>
+        <strong>Single user.</strong>
+        <span>
+          There is no login and no accounts: the app writes to one spreadsheet,
+          the owner's. A production version needs authentication, one workspace
+          per company, and per-technician permissions.
+        </span>
+      </li>
+      <li>
+        <strong>The spreadsheet endpoint is unprotected.</strong>
+        <span>
+          The bridge to Google Sheets is a public Apps Script URL. Anyone
+          holding it could write a row. In production it needs a real token.
+        </span>
+      </li>
+      <li>
+        <strong>It needs a connection to understand you.</strong>
+        <span>
+          The wake word is fully offline, but the reasoning and the save are
+          not. On a site with no signal, Wisper wakes up but cannot yet queue
+          the report for later. That queue is the next thing to build.
+        </span>
+      </li>
+      <li>
+        <strong>Noise degrades accuracy.</strong>
+        <span>
+          Published Italian speech-recognition benchmarks (~3% word error) are
+          measured on clean studio audio. On a real building site, expect
+          meaningfully worse. This is the honest weak point of the whole idea.
+        </span>
+      </li>
+      <li>
+        <strong>The API key ships inside the APK.</strong>
+        <span>
+          Acceptable for a sideloaded demo, not for distribution. Production
+          would route model calls through a server the app never authenticates
+          against directly.
+        </span>
+      </li>
+    </ul>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>Next</h2>
+    <p class="grigio">
+      Offline queue with automatic retry · multi-user accounts · client
+      signature capture · PDF export · photo and receipt attachments ·
+      launching from the lock screen with the screen off.
+    </p>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <p>Built for <a href="https://ngn-hacks-2026.devpost.com/">NGN Hacks 2026</a> · Andrea Gasparotto</p>
+  </div>
+</footer>
+
+</body>
+</html>

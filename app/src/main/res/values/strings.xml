@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Wisper</string>
+    <string name="canale_ascolto">Ascolto</string>
+    <string name="canale_sveglia">Apertura a comando vocale</string>
+</resources>

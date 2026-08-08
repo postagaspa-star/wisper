@@ -1,0 +1,690 @@
+package eu.stgm.wisper
+
+import android.content.Context
+import android.media.AudioManager
+import android.media.ToneGenerator
+import android.os.Handler
+import android.os.Looper
+import eu.stgm.wisper.ascolto.RilevatoreWake
+import eu.stgm.wisper.ascolto.Trascrittore
+import eu.stgm.wisper.ascolto.Voce
+import eu.stgm.wisper.cervello.Azione
+import eu.stgm.wisper.cervello.CervelloGemini
+import eu.stgm.wisper.cervello.RispostaWisper
+import eu.stgm.wisper.rapportino.Anagrafiche
+import eu.stgm.wisper.rapportino.PonteFoglio
+import eu.stgm.wisper.rapportino.Rapportino
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+
+/** Dove si trova il giro in questo momento. Guida la palla e il form. */
+enum class Fase { RIPOSO, ASCOLTO, PENSA, PARLA, SALVA }
+
+private const val SILENZI_PRIMA_DI_CHIUDERE = 3
+
+/**
+ * Chi sta usando Wisper. Fisso, perche' oggi l'app e' a utente singolo: scrive
+ * su un foglio solo, quello del suo proprietario. Quando diventera' multi-utente
+ * questo nome arrivera' dall'account, insieme al foglio giusto e ai permessi.
+ * E' uno dei limiti dichiarati apertamente nella presentazione.
+ */
+private const val NOME_UTENTE = "Andrea"
+
+/**
+ * Frasi che vogliono dire "ho finito di parlare", non "ho finito il lavoro".
+ * Solo se dette da sole o quasi: dentro una frase piu' lunga "ho finito" torna
+ * a essere un dato vero.
+ */
+private val CHIUSURE_DISCORSO = listOf(
+    "ho finito", "basta", "basta cosi", "basta così", "e tutto", "è tutto",
+    "niente", "no niente", "nient altro", "nient'altro", "stop", "fine",
+    "va bene cosi", "va bene così", "ok cosi", "ok così",
+)
+
+/**
+ * Il giro completo di Wisper, dalla parola magica alla riga sul foglio.
+ *
+ *   RIPOSO   Vosk aspetta "Wisper"
+ *     |      sente -> Vosk molla il microfono, beep
+ *   ASCOLTO  il riconoscitore di Android trascrive quello che detti
+ *     |
+ *   PENSA    Gemini estrae i campi e decide cosa rispondere
+ *     |
+ *   PARLA    la voce risponde -> si torna ad ASCOLTO senza ridire la parola
+ *     |      magica, perche' una conversazione non si riapre ogni volta
+ *   SALVA    solo quando confermi: la riga parte verso il foglio
+ *     |
+ *   RIPOSO   Vosk riprende il microfono
+ *
+ * DUE REGOLE DELLA CASA, e valgono per ogni riga di questo file.
+ *
+ * 1. UN SOLO PADRONE DEL MICROFONO. Vosk oppure il trascrittore, mai insieme.
+ *    Due client sullo stesso microfono non danno errore: danno silenzio, e si
+ *    finisce a cercare il guasto nella rete per due ore.
+ *
+ * 2. OGNI GIRO SI CHIUDE CON UNA FRASE. Errore di rete, silenzio, foglio
+ *    irraggiungibile: si dice sempre qualcosa. Chi ha le mani sporche e non
+ *    guarda lo schermo non ha nessun altro modo di sapere cos'e' successo, e
+ *    un fallimento silenzioso e' un fallimento invisibile.
+ */
+class GiroWisper(
+    private val ctx: Context,
+    private val scope: CoroutineScope,
+    private val registro: (String, String) -> Unit = { _, _ -> },
+    /**
+     * Chiamata quando si apre una conversazione. Serve al servizio per portare
+     * la schermata davanti: il giro funziona anche senza, perche' e' tutta
+     * voce, ma se nessuno guarda non si vedono i campi riempirsi.
+     */
+    private val onSveglia: () -> Unit = {},
+) {
+
+    private val _fase = MutableStateFlow(Fase.RIPOSO)
+    val fase: StateFlow<Fase> = _fase.asStateFlow()
+
+    private val _rapportino = MutableStateFlow(Rapportino())
+    val rapportino: StateFlow<Rapportino> = _rapportino.asStateFlow()
+
+    /** Quello che Wisper sta dicendo: sotto il form, e per chi guarda il video. */
+    private val _messaggio = MutableStateFlow("")
+    val messaggio: StateFlow<String> = _messaggio.asStateFlow()
+
+    /** Le parole del tecnico mentre le sta ancora dicendo. */
+    private val _trascrizione = MutableStateFlow("")
+    val trascrizione: StateFlow<String> = _trascrizione.asStateFlow()
+
+    private val _anagrafiche = MutableStateFlow(Anagrafiche())
+    val anagrafiche: StateFlow<Anagrafiche> = _anagrafiche.asStateFlow()
+
+    private val main = Handler(Looper.getMainLooper())
+    private val voce = Voce(ctx, registro)
+    private val trascrittore = Trascrittore(ctx, registro)
+    private val cervello = CervelloGemini()
+    private val ponte = PonteFoglio()
+    private val beep = ToneGenerator(AudioManager.STREAM_NOTIFICATION, 70)
+
+    private val wake = RilevatoreWake(
+        ctx = ctx,
+        registro = registro,
+        // Tutto quello che Vosk crede di sentire finisce nei log. Senza, quando
+        // la parola magica non scatta non si distingue fra "non sente niente",
+        // "sente ma trascrive un'altra cosa" e "il microfono non e' suo".
+        onSentito = { testo -> registro("sento", testo) },
+        onWake = {
+            main.post {
+                // Se Wisper sta parlando, "Wisper" vuol dire "zitto, parlo io".
+                // Chi ha le mani occupate non ha altro modo di fermarlo, e
+                // stare ad ascoltare un riepilogo che gia' conosce e' il modo
+                // piu' veloce per far sembrare lenta un'app che non lo e'.
+                if (_fase.value == Fase.PARLA) interrompiIlParlato()
+                else apriConversazione(saluto = false)
+            }
+        },
+    )
+
+    /**
+     * Silenzi di fila prima di chiudere il giro. Con quattro secondi di attesa
+     * a tentativo, sono circa dodici secondi di pausa concessi: il tempo di
+     * guardare un impianto e ricordarsi i chilometri.
+     */
+    private var silenziDiFila = 0
+
+    /**
+     * Numero della conversazione in corso. Interrompere lo incrementa, e ogni
+     * risposta che torna da Gemini controlla di appartenere ancora a quella
+     * giusta prima di applicarsi.
+     *
+     * Senza, spegnendo lo schermo mentre il cervello sta pensando la risposta
+     * arrivava lo stesso qualche secondo dopo, faceva parlare Wisper e
+     * riaccendeva il microfono: sembrava che l'app "restasse sempre in ascolto"
+     * ignorando lo spegnimento.
+     */
+    private var conversazione = 0
+
+    /** L'ultima cosa detta da Wisper: serve a riprendere il filo, ripetendola. */
+    private var ultimaFrase = ""
+
+    /**
+     * Se l'ultima frase era il riepilogo finale. Non si deduce dalle parole:
+     * il riepilogo dice "il lavoro resta aperto" e finisce con "e' tutto
+     * corretto?", quindi a cercarlo per parole chiave sembra la domanda sullo
+     * stato del lavoro — e disattivava la protezione proprio quando serviva.
+     * Questo riepilogo lo scrivo io, quindi lo so per certo invece di indovinarlo.
+     */
+    private var ultimaEraRiepilogo = false
+
+    // ---------------------------------------------------------------- avvio
+
+    fun avvia() {
+        scope.launch {
+            _anagrafiche.value = ponte.caricaAnagrafiche()
+            registro(
+                "anagrafiche",
+                "${_anagrafiche.value.clienti.size} clienti, ${_anagrafiche.value.commesse.size} commesse",
+            )
+        }
+        // Il servizio parte all'accensione dell'app e resta acceso: qui si
+        // mette solo in ascolto della parola magica, senza aprire niente.
+        // La conversazione la apre chi arriva: la voce, o la schermata.
+        //
+        // Il controllo sulla fase NON e' pignoleria: il modello ci mette un
+        // paio di secondi a caricarsi, e in quel tempo la schermata puo' avere
+        // gia' aperto una conversazione. Accendere qui l'orecchio senza
+        // guardare metterebbe Vosk e il trascrittore sullo stesso microfono —
+        // e due padroni non danno errore, danno silenzio.
+        wake.prepara { ok ->
+            if (ok && _fase.value == Fase.RIPOSO) wake.ascolta()
+        }
+    }
+
+    fun spegni() {
+        wake.spegni()
+        trascrittore.ferma()
+        voce.spegni()
+        beep.release()
+    }
+
+    /** Aprendo l'app: c'e' tempo per il saluto intero, sei fermo a guardarla. */
+    fun apriAMano() = apriConversazione(saluto = true)
+
+    /**
+     * Chiude subito la conversazione e torna ad aspettare la parola magica.
+     *
+     * Serve quando l'utente spegne lo schermo a meta' giro: e' un gesto che
+     * vuol dire "ho finito". Senza, il riconoscitore resta acceso e si mangia
+     * quello che dicono gli altri nella stanza, riempiendo il rapportino di
+     * parole a caso. Il rapportino a meta' NON si butta: si riprende dicendo
+     * di nuovo "Wisper".
+     */
+    fun interrompi() {
+        main.post(
+            Runnable {
+                if (_fase.value == Fase.RIPOSO) return@Runnable
+                registro("interrotto", _fase.value.name)
+                conversazione++          // le risposte gia' in volo diventano vecchie
+                voce.zitta()
+                trascrittore.ferma()
+                _trascrizione.value = ""
+                chiudiGiro()
+            }
+        )
+    }
+
+    /**
+     * Botola di collaudo: inietta una frase come se il microfono l'avesse
+     * sentita, saltando solo la trascrizione.
+     *
+     * Serve perche' tutto il resto del giro — il cervello, i campi che si
+     * riempiono, la voce, la riga che parte verso il foglio — si puo' provare
+     * dal computer via adb, mentre il microfono richiede per forza una persona
+     * che parli. Cosi' l'unica incognita che resta da provare a voce e' il
+     * passaggio del microfono, invece di tutta la catena.
+     *
+     * Attiva solo nelle build di prova: [MainActivity] la registra sotto
+     * BuildConfig.DEBUG.
+     *
+     *   adb shell am broadcast -a eu.stgm.wisper.DETTA --es testo "sono da Rossi tre ore"
+     */
+    /** Collaudo: genera un campione audio per ogni voce italiana del telefono. */
+    fun campionaVoci() {
+        main.post {
+            voce.campionaVoci(
+                frase = "Segnato Rossi Impianti, manutenzione caldaia, tre ore e mezza " +
+                    "e cinquanta chilometri. Altro, o salvo?",
+                cartella = java.io.File(ctx.getExternalFilesDir(null), "voci"),
+            ) { file -> registro("campioni", "${file.size} file scritti") }
+        }
+    }
+
+    /** Collaudo: impone una voce per nome, per confrontarle dal vivo. */
+    fun imponiVoce(nome: String) = main.post { voce.imponiVoce(nome) }
+
+    fun simulaDetto(testo: String) {
+        main.post {
+            when (_fase.value) {
+                Fase.RIPOSO -> {
+                    wake.pausa()
+                    silenziDiFila = 0
+                    suDetto(Trascrittore.Esito.TESTO, testo)
+                }
+                Fase.ASCOLTO -> {
+                    trascrittore.ferma()
+                    suDetto(Trascrittore.Esito.TESTO, testo)
+                }
+                // A meta' di un pensiero o di una frase si aspetta: iniettare
+                // adesso creerebbe due giri sovrapposti.
+                else -> registro("simulazione_scartata", _fase.value.name)
+            }
+        }
+    }
+
+    // ------------------------------------------------------------- il giro
+
+    /**
+     * Apre la conversazione. NON azzera il rapportino in corso.
+     *
+     * Sembra un dettaglio ed e' la differenza fra un giocattolo e uno strumento:
+     * il tecnico si ferma a pensare, un camion copre la voce, qualcuno lo chiama.
+     * Il giro si chiude da solo dopo due silenzi, e se ripartendo si buttasse
+     * via il lavoro fatto, meta' rapportino sparirebbe senza che nessuno lo
+     * abbia chiesto. Si riprende da dove si era rimasti; si riparte da zero
+     * solo dopo un salvataggio riuscito o se e' lui a dire di ricominciare.
+     */
+    /**
+     * @param saluto se aprire col saluto intero o con due parole.
+     *        Chiamando "Wisper" a mani occupate, tre secondi di convenevoli
+     *        prima di poter parlare sono tre secondi di troppo: si dice il
+     *        minimo e si apre subito il microfono. Aprendo l'app invece sei
+     *        fermo a guardarla, e il saluto ci sta.
+     */
+    private fun apriConversazione(saluto: Boolean) {
+        if (_fase.value != Fase.RIPOSO) return
+        wake.pausa()                    // handoff: il microfono passa al trascrittore
+        silenziDiFila = 0
+        onSveglia()
+        beep.startTone(ToneGenerator.TONE_PROP_ACK, 120)
+
+        // Wisper parla per primo. Chiamando per nome e facendo una domanda
+        // aperta si toglie di mezzo il problema del "e adesso cosa dico": il
+        // tecnico non deve ricordarsi nessuna formula, risponde e basta.
+        // Se invece si sta riprendendo un rapportino a meta', il saluto
+        // sarebbe fuori luogo: si dice dove eravamo rimasti.
+        // Riprendendo un rapportino a meta' si RIPETE l'ultima domanda, non si
+        // dice "riprendiamo": chi torna dopo un minuto non si ricorda a che
+        // punto era, e "dimmi pure" lo costringe a ricostruirselo da solo.
+        // Ripetere la domanda rimette tutti e due sullo stesso punto.
+        val apertura = when {
+            _rapportino.value != Rapportino() && ultimaFrase.isNotBlank() -> "Dicevo: $ultimaFrase"
+            _rapportino.value != Rapportino() -> "Riprendiamo da dove eravamo. Dimmi pure."
+            saluto -> "Ehi, ciao $NOME_UTENTE. Che cos'hai fatto oggi?"
+            else -> "Dimmi, $NOME_UTENTE."
+        }
+        rispondi(apertura) { ascolta() }
+    }
+
+    private fun azzera() {
+        _rapportino.value = Rapportino()
+        cervello.ricomincia()
+        _messaggio.value = ""
+    }
+
+    /**
+     * Wisper smette di parlare e passa la parola, subito.
+     *
+     * Il "poi" della frase interrotta non parte: [Voce.zitta] scarta le
+     * richiamate, quindi il giro non prosegue per conto suo. Da qui in avanti
+     * comanda quello che dira' il tecnico.
+     */
+    private fun interrompiIlParlato() {
+        registro("interrotto_a_voce", "")
+        voce.zitta()
+        beep.startTone(ToneGenerator.TONE_PROP_ACK, 90)
+        ascolta()
+    }
+
+    private fun ascolta() {
+        // Il microfono torna al trascrittore: durante il parlato lo teneva
+        // Vosk, per poter sentire l'interruzione.
+        wake.pausa()
+        _fase.value = Fase.ASCOLTO
+        _trascrizione.value = ""
+        trascrittore.avvia(
+            onParziale = { _trascrizione.value = it },
+            onEsito = { esito, testo -> main.post { suDetto(esito, testo) } },
+        )
+    }
+
+    private fun suDetto(esito: Trascrittore.Esito, testo: String?) {
+        _trascrizione.value = ""
+
+        // Il microfono si e' guastato davvero: questo si dice, perche' chi non
+        // guarda lo schermo non ha altro modo di accorgersene.
+        if (esito == Trascrittore.Esito.GUASTO) {
+            rispondi("Ho un problema col microfono.") { chiudiGiro() }
+            return
+        }
+
+        // Silenzio: NON e' un errore, e' una pausa. Non si commenta.
+        // Chi si e' fermato a pensare lo sa gia' di essersi fermato, e sentirsi
+        // dire "non ho sentito" mentre si guarda un impianto e' solo fastidio.
+        // Si riprova in silenzio, e dopo qualche giro si chiude senza dire
+        // niente: la palla che torna bianca e' gia' la risposta.
+        if (esito == Trascrittore.Esito.SILENZIO || testo.isNullOrBlank()) {
+            silenziDiFila++
+            if (silenziDiFila >= SILENZI_PRIMA_DI_CHIUDERE) {
+                chiudiGiro()
+            } else {
+                ascolta()
+            }
+            return
+        }
+        silenziDiFila = 0
+
+        if (!cervello.configurato) {
+            rispondi("Non ho la chiave per capire quello che dici.") { chiudiGiro() }
+            return
+        }
+
+        _fase.value = Fase.PENSA
+        val mia = conversazione
+        scope.launch {
+            val risposta = try {
+                cervello.elabora(testo, _anagrafiche.value, _rapportino.value)
+            } catch (e: Exception) {
+                registro("cervello_errore", e.message ?: e.javaClass.simpleName)
+                if (mia == conversazione) {
+                    rispondi("Non riesco a collegarmi. Riprova fra un attimo.") { chiudiGiro() }
+                }
+                return@launch
+            }
+
+            // Nel frattempo l'utente puo' aver spento lo schermo: la risposta
+            // e' di una conversazione che non esiste piu' e va buttata, non
+            // pronunciata.
+            if (mia != conversazione) {
+                registro("risposta_scartata", "conversazione chiusa nel frattempo")
+                return@launch
+            }
+
+            // I campi si aggiornano PRIMA di parlare: cosi' chi guarda vede
+            // comparire il dato e poi sente la conferma, non il contrario.
+            //
+            // "Ho finito" in italiano vuol dire due cose: ho finito di parlare
+            // e ho finito il lavoro. Il modello sceglieva la seconda e chiudeva
+            // commesse che il tecnico aveva appena dichiarato aperte.
+            //
+            // Due controlli, non uno: ci sono cascato scegliendone uno per volta.
+            //  - sulle PAROLE, perche' "no ho finito" a volte il modello lo
+            //    classifica "aggiorna" e un controllo sull'azione non scatta;
+            //  - sull'AZIONE, perche' "si confermo salva" non e' una frase di
+            //    chiusura riconoscibile a parole, ma e' comunque un turno in cui
+            //    non si stanno dando dati nuovi.
+            // Su un campo che cambia lo stato del foglio, due reti sono giuste.
+            // ...con un'eccezione: se Wisper aveva APPENA chiesto se il lavoro
+            // e' finito, allora "ho finito" e' la risposta a quella domanda e
+            // vale davvero. Le stesse parole cambiano senso a seconda di cosa
+            // e' stato chiesto un attimo prima — bloccarle sempre significava
+            // non poter piu' rispondere.
+            val turnoDiChiusura = !hoAppenaChiestoLoStato() && (
+                risposta.azione == Azione.CONFERMA ||
+                    risposta.azione == Azione.SALVA ||
+                    chiudeIlDiscorso(testo)
+                )
+            val patch =
+                if (turnoDiChiusura) risposta.dati.copy(statoCommessa = null)
+                else risposta.dati
+            _rapportino.value = _rapportino.value.aggiorna(patch)
+
+            when (risposta.azione) {
+                Azione.AGGIORNA -> rispondi(risposta.frase) { ascolta() }
+
+                // Il riepilogo finale NON lo scrive il modello: lo costruiamo
+                // dai campi. E' l'unico punto in cui il tecnico da' l'ok a
+                // qualcosa che non puo' vedere, quindi cio' che sente deve
+                // venire dalla stessa fonte di cio' che verra' salvato.
+                Azione.CONFERMA -> {
+                    val r = _rapportino.value
+                    val commessa = _anagrafiche.value.descrizioneCommessa(r.commessa)
+                    ultimaEraRiepilogo = true
+                    rispondi(r.riletturaAdAltaVoce(commessa)) { ascolta() }
+                }
+                Azione.ANNULLA -> {
+                    azzera()
+                    rispondi(risposta.frase) { ascolta() }
+                }
+                Azione.CREA_CLIENTE -> creaCliente(risposta)
+                Azione.CREA_COMMESSA -> creaCommessa(risposta)
+                Azione.SALVA -> salva(risposta.frase)
+            }
+        }
+    }
+
+    // ---------------------------------------------- anagrafiche dettate a voce
+
+    /**
+     * Crea un cliente nuovo nel foglio mentre si parla, e lo imposta sul
+     * rapportino in corso.
+     *
+     * Le anagrafiche vengono ricaricate subito dopo: servono al cervello per
+     * riconoscere quel nome nelle frasi successive. Senza, il tecnico lo
+     * creerebbe e poi Wisper non saprebbe piu' chi e'.
+     */
+    private suspend fun creaCliente(risposta: RispostaWisper) {
+        val nome = risposta.nuovoNome
+        if (nome.isNullOrBlank()) {
+            rispondi("Non ho capito il nome del cliente.") { ascolta() }
+            return
+        }
+        _fase.value = Fase.SALVA
+        _messaggio.value = "Creo il cliente…"
+        try {
+            val creato = ponte.creaCliente(nome)
+            _anagrafiche.value = ponte.caricaAnagrafiche()
+            _rapportino.value = _rapportino.value.aggiorna(Rapportino(cliente = creato.nome))
+            registro("cliente_creato", "${creato.id} ${creato.nome}")
+            annunciate += "${creato.nome} come nuovo cliente"
+            // L'annuncio lo scrivo io, non il modello: aggiungere una riga
+            // all'anagrafica dell'azienda va detto sempre e con le stesse
+            // parole, non "se al modello viene in mente".
+            rispondi("Ok, aggiungo ${creato.nome} come nuovo cliente. ${risposta.frase}") {
+                ascolta()
+            }
+        } catch (e: Exception) {
+            registro("cliente_non_creato", e.message ?: "sconosciuto")
+            rispondi("Non sono riuscito a creare il cliente sul foglio.") { ascolta() }
+        }
+    }
+
+    private suspend fun creaCommessa(risposta: RispostaWisper) {
+        val desc = risposta.nuovoNome
+        if (desc.isNullOrBlank()) {
+            rispondi("Non ho capito che commessa vuoi aprire.") { ascolta() }
+            return
+        }
+        // La commessa nasce sotto un cliente: senza, non si sa dove metterla.
+        val idCliente = _anagrafiche.value.clienti
+            .firstOrNull { it.nome.equals(_rapportino.value.cliente?.trim(), ignoreCase = true) }
+            ?.id
+        if (idCliente.isNullOrBlank()) {
+            rispondi("Prima dimmi per quale cliente, poi apro la commessa.") { ascolta() }
+            return
+        }
+        _fase.value = Fase.SALVA
+        _messaggio.value = "Apro la commessa…"
+        try {
+            val creata = ponte.creaCommessa(idCliente, desc)
+            _anagrafiche.value = ponte.caricaAnagrafiche()
+            _rapportino.value = _rapportino.value.aggiorna(Rapportino(commessa = creata.id))
+            registro("commessa_creata", "${creata.id} ${creata.descrizione}")
+            annunciate += "${creata.descrizione} come nuova commessa"
+            rispondi("Ok, aggiungo ${creata.descrizione} come nuova commessa. ${risposta.frase}") {
+                ascolta()
+            }
+        } catch (e: Exception) {
+            registro("commessa_non_creata", e.message ?: "sconosciuto")
+            rispondi("Non sono riuscito ad aprire la commessa sul foglio.") { ascolta() }
+        }
+    }
+
+    private fun salva(fraseDiChiusura: String) {
+        _fase.value = Fase.SALVA
+        _messaggio.value = "Salvo…"
+        scope.launch {
+            try {
+                // Rete di sicurezza: se il rapportino nomina un cliente o una
+                // commessa che nel foglio non esistono, si creano PRIMA di
+                // salvare. Senza, la riga finirebbe nel foglio con un nome
+                // scritto a mano e l'anagrafica non imparerebbe niente: domani
+                // Wisper non lo riconoscerebbe ancora.
+                val (r, aggiunte) = creaCioCheManca(_rapportino.value)
+                _rapportino.value = r
+
+                val id = ponte.salva(r)
+                registro("salvato", id)
+
+                // Appena la riga e' scritta si parla. Tutto il resto — cambiare
+                // lo stato della commessa, ricaricare l'anagrafica — sono altri
+                // due viaggi di rete, e farli PRIMA di rispondere lasciava il
+                // tecnico ad aspettare in silenzio per secondi, chiedendosi se
+                // avesse funzionato. Il dato che conta e' gia' al sicuro.
+                // Le aggiunte all'anagrafica si dicono: sono modifiche al foglio
+                // dell'azienda, non dettagli. Se Wisper le ha gia' annunciate
+                // durante la conversazione non si ripetono.
+                val avviso = aggiunte.filterNot { annunciate.contains(it) }
+                    .joinToString("") { " Ho aggiunto anche $it." }
+                rispondi(fraseDiChiusura + avviso) { azzera(); chiudiGiro() }
+
+                // Il rapportino racconta la giornata, questo cambia il mondo:
+                // va fatto, ma non davanti a nessuno che aspetta.
+                aggiornaStatoCommessa(r)
+            } catch (e: Exception) {
+                registro("salvataggio_fallito", e.message ?: "sconosciuto")
+                // Non si dice mai "salvato" se non e' vero: e' l'unica cosa che
+                // il tecnico non puo' verificare da solo con le mani occupate.
+                rispondi(
+                    "Attenzione: non sono riuscito a salvare sul foglio. Il rapportino resta qui."
+                ) { chiudiGiro() }
+            }
+        }
+    }
+
+    /**
+     * Vero se la frase e' solo un modo per dire "ho finito di parlare".
+     *
+     * Sono le frasi in cui "finito" si riferisce al DISCORSO, non al lavoro:
+     * corte, senza altri dati dentro. Se il tecnico dice "ho finito il lavoro,
+     * non devo tornarci" la frase e' piu' lunga e non ricade qui — quello e'
+     * un dato vero e va scritto.
+     */
+    /**
+     * Vero se l'ultima cosa detta da Wisper era la domanda sullo stato del
+     * lavoro. Si riconosce dalle parole, perche' la domanda la formula il
+     * modello e cambia ogni volta: "l'hai finito o ci devi tornare?",
+     * "il lavoro e' concluso?", "ci devi tornare?".
+     */
+    private fun hoAppenaChiestoLoStato(): Boolean {
+        if (ultimaEraRiepilogo) return false
+        val f = ultimaFrase.lowercase(java.util.Locale.ITALIAN)
+        if (!f.contains("?")) return false
+        return listOf("finito", "tornarci", "tornare", "concluso", "chiuso", "aperto")
+            .any { f.contains(it) }
+    }
+
+    private fun chiudeIlDiscorso(testo: String): Boolean {
+        val pulito = testo.lowercase(java.util.Locale.ITALIAN)
+            .replace(Regex("[^a-zàèéìòù ]"), " ")
+            .replace(Regex(" +"), " ")
+            .trim()
+        if (pulito.split(' ').size > 4) return false
+        return CHIUSURE_DISCORSO.any { pulito == it || pulito.endsWith(" $it") }
+    }
+
+    /** Cio' che Wisper ha gia' annunciato di aver aggiunto, per non ripeterlo. */
+    private val annunciate = mutableSetOf<String>()
+
+    /**
+     * Crea nel foglio il cliente e la commessa che il rapportino nomina ma che
+     * l'anagrafica non conosce, e restituisce il rapportino con i nomi e i
+     * codici veri.
+     *
+     * L'ordine conta: prima il cliente, perche' una commessa senza un cliente
+     * a cui appartenere non si puo' creare.
+     *
+     * @return il rapportino aggiornato e l'elenco di cio' che e' stato aggiunto.
+     */
+    private suspend fun creaCioCheManca(iniziale: Rapportino): Pair<Rapportino, List<String>> {
+        var r = iniziale
+        val aggiunte = mutableListOf<String>()
+        val note = _anagrafiche.value
+
+        val nomeCliente = r.cliente?.trim()
+        var idCliente = note.clienti
+            .firstOrNull { it.nome.equals(nomeCliente, ignoreCase = true) }?.id
+
+        if (!nomeCliente.isNullOrBlank() && idCliente == null) {
+            runCatching { ponte.creaCliente(nomeCliente) }
+                .onSuccess { creato ->
+                    idCliente = creato.id
+                    r = r.copy(cliente = creato.nome)
+                    aggiunte += "${creato.nome} come nuovo cliente"
+                    registro("cliente_creato", "${creato.id} ${creato.nome}")
+                }
+                .onFailure { registro("cliente_non_creato", it.message ?: "sconosciuto") }
+        }
+
+        // La commessa che non corrisponde a nessun codice noto e' una commessa
+        // nuova, e cio' che il tecnico ha detto ne e' la descrizione.
+        val commessa = r.commessa?.trim()
+        val codiceNoto = note.commesse.any { it.id.equals(commessa, ignoreCase = true) }
+        if (!commessa.isNullOrBlank() && !codiceNoto && !idCliente.isNullOrBlank()) {
+            runCatching { ponte.creaCommessa(idCliente!!, commessa) }
+                .onSuccess { creata ->
+                    r = r.copy(commessa = creata.id)
+                    aggiunte += "${creata.descrizione} come nuova commessa"
+                    registro("commessa_creata", "${creata.id} ${creata.descrizione}")
+                }
+                .onFailure { registro("commessa_non_creata", it.message ?: "sconosciuto") }
+        }
+
+        if (aggiunte.isNotEmpty()) {
+            runCatching { _anagrafiche.value = ponte.caricaAnagrafiche() }
+        }
+        return r to aggiunte
+    }
+
+    /**
+     * Allinea lo STATO della commessa nel foglio a quanto detto dal tecnico.
+     * Gira in sottofondo, dopo che Wisper ha gia' risposto: se fallisce non si
+     * perde niente di importante, e alla prossima conversazione l'anagrafica
+     * viene comunque riletta.
+     */
+    private fun aggiornaStatoCommessa(r: Rapportino) {
+        val codice = r.commessa
+        val stato = r.statoCommessa
+        if (codice.isNullOrBlank() || stato == null) return
+
+        val eraGiaCosi = _anagrafiche.value.commesse
+            .firstOrNull { it.id.equals(codice, ignoreCase = true) }
+            ?.stato?.equals(stato.parlato, ignoreCase = true) == true
+        if (eraGiaCosi) return
+
+        scope.launch {
+            try {
+                ponte.impostaStatoCommessa(codice, stato.parlato)
+                _anagrafiche.value = ponte.caricaAnagrafiche()
+                registro("commessa_aggiornata", "$codice -> ${stato.parlato}")
+            } catch (e: Exception) {
+                registro("commessa_non_aggiornata", e.message ?: "sconosciuto")
+            }
+        }
+    }
+
+    private fun rispondi(frase: String, poi: () -> Unit) {
+        _fase.value = Fase.PARLA
+        _messaggio.value = frase
+        // Si ricorda solo cio' che e' una domanda vera, non le riprese: se no
+        // ripetendo si finirebbe a dire "Dicevo: dicevo: dicevo...".
+        if (!frase.startsWith("Dicevo:")) ultimaFrase = frase
+        // Ogni frase che non sia il riepilogo azzera il segno. Il riepilogo lo
+        // rialza subito prima di chiamare questa, quindi non si perde.
+        if (!frase.startsWith("Oggi hai lavorato per")) ultimaEraRiepilogo = false
+
+        // Mentre parla, il microfono e' libero — la voce esce dall'altoparlante,
+        // non entra. Lo si da' a Vosk, che cosi' puo' sentire l'interruzione.
+        // Nessun rischio che si attivi da solo: Wisper il proprio nome non lo
+        // pronuncia mai.
+        wake.ascolta()
+
+        voce.parla(frase) { main.post(poi) }
+    }
+
+    private fun chiudiGiro() {
+        _fase.value = Fase.RIPOSO
+        _trascrizione.value = ""
+        trascrittore.ferma()
+        wake.ascolta()                  // handoff inverso: il microfono torna a Vosk
+    }
+}

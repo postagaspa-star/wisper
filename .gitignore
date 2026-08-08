@@ -1,0 +1,30 @@
+*.iml
+.gradle/
+.kotlin/
+/local.properties
+/.idea/
+.DS_Store
+
+# Senza la barra finale e senza barra iniziale vale a QUALSIASI livello.
+# Con "/build" valeva solo per la radice, e app/build/ ci finiva dentro:
+# dentro c'e' BuildConfig.java, che contiene le chiavi in chiaro.
+build/
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+
+# Campioni audio delle voci: servono solo a scegliere, non al progetto
+/voci-campione/
+
+# Il modello vocale di Vosk: 88 MB, ed e' roba di alphacephei, non nostra.
+# Si scarica, vedi README.
+/app/src/main/assets/modello-it/
+
+# Le chiavi non entrano MAI nel repo: vivono in C:\Users\andre\wisper-keys\
+*.properties.local
+wisper.properties
+google-services.json
+
+# Appunti per la consegna, non fanno parte del progetto
+/CONSEGNA-devpost.md
