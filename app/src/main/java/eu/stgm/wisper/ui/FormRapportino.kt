@@ -25,10 +25,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import eu.stgm.wisper.R
 import eu.stgm.wisper.rapportino.Rapportino
+import eu.stgm.wisper.rapportino.StatoCommessa
 import kotlinx.coroutines.delay
 
 /**
@@ -83,14 +86,14 @@ fun FormRapportino(
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 Text(
-                    "RAPPORTINO",
+                    stringResource(R.string.scheda_titolo),
                     color = Bianco.copy(alpha = 0.55f),
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
                     letterSpacing = 2.4.sp,
                 )
                 Text(
-                    "in compilazione",
+                    stringResource(R.string.scheda_in_corso),
                     color = Giallo.copy(alpha = 0.65f),
                     fontSize = 11.sp,
                     letterSpacing = 0.6.sp,
@@ -99,33 +102,52 @@ fun FormRapportino(
 
             Spacer(Modifier.height(16.dp))
 
-            RigaCampo("Cliente", rapportino.cliente)
+            RigaCampo(stringResource(R.string.campo_cliente), rapportino.cliente)
             Divisore()
             RigaCampo(
-                "Commessa",
+                stringResource(R.string.campo_commessa),
                 commessaLeggibile ?: rapportino.commessa,
                 sotto = indirizzoCommessa,
             )
             Divisore()
-            RigaCampo("Lavoro svolto", rapportino.descrizione, alto = true)
+            RigaCampo(
+                stringResource(R.string.campo_lavoro),
+                rapportino.descrizione,
+                alto = true,
+            )
             Divisore()
 
             Row(
                 modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                RigaCampo("Ore", rapportino.ore?.let(::formatta), modifier = Modifier.weight(1f))
-                RigaCampo("Km", rapportino.km?.let(::formatta), modifier = Modifier.weight(1f))
                 RigaCampo(
-                    "Spese",
+                    stringResource(R.string.campo_ore),
+                    rapportino.ore?.let(::formatta),
+                    modifier = Modifier.weight(1f),
+                )
+                RigaCampo(
+                    stringResource(R.string.campo_km),
+                    rapportino.km?.let(::formatta),
+                    modifier = Modifier.weight(1f),
+                )
+                RigaCampo(
+                    stringResource(R.string.campo_spese),
                     rapportino.spese?.let { "${formatta(it)} €" },
                     modifier = Modifier.weight(1.2f),
                 )
             }
             Divisore()
+            // Lo stato si mostra tradotto, ma nel foglio ci va sempre la parola
+            // italiana: la colonna la legge chi lavora in ufficio, non chi ha
+            // il telefono in inglese.
             RigaCampo(
-                "Stato commessa",
-                rapportino.statoCommessa?.parlato?.replaceFirstChar { it.uppercase() },
+                stringResource(R.string.campo_stato),
+                when (rapportino.statoCommessa) {
+                    StatoCommessa.APERTA -> stringResource(R.string.stato_aperta)
+                    StatoCommessa.CHIUSA -> stringResource(R.string.stato_chiusa)
+                    null -> null
+                },
             )
         }
 

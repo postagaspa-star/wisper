@@ -7,10 +7,13 @@ row lands in the company spreadsheet.
 
 It speaks Italian, because that is who it was built for.
 
-| At rest | Filling in | Job resolved |
+| At rest | Half a sentence in | The whole day |
 |---|---|---|
-| ![](docs/immagini/1-ascolto.png) | ![](docs/immagini/2-scheda.png) | ![](docs/immagini/3-riepilogo.png) |
-| Waiting for the wake word. Nothing has been touched. | The fields appear while you talk. A dash means Wisper does not know yet, and it will ask. | Everything it has, including which job and where. |
+| ![](docs/immagini/1-ascolto.png) | ![](docs/immagini/3-domanda.png) | ![](docs/immagini/2-scheda.png) |
+| Waiting for the wake word. Nothing has been touched. | A dash is a field Wisper does not know yet, and it asks for one thing at a time. | Client, job, address, hours, kilometres, expenses, and whether the job closes. |
+
+The labels follow the phone's language. Wisper still speaks Italian, because
+the technicians it was built for do.
 
 ## Why it exists
 

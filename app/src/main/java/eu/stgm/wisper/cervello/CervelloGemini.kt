@@ -28,6 +28,17 @@ data class RispostaWisper(
     val dati: Rapportino,
     /** Nome del cliente o descrizione della commessa da creare. */
     val nuovoNome: String? = null,
+    /**
+     * Come il tecnico ha chiamato la commessa in questo turno, parola per
+     * parola, oppure null se non l'ha nominata.
+     *
+     * Non finisce da nessuna parte: serve solo a permettere al codice di
+     * accorgersi quando il modello ha scelto una commessa che con quelle
+     * parole non c'entra niente. Il modello e' bravo a riportare cosa e' stato
+     * detto ed e' incostante nel decidere: quindi qui riporta, e decide il
+     * codice.
+     */
+    val commessaDetta: String? = null,
 )
 
 /**
@@ -171,6 +182,8 @@ class CervelloGemini(
             frase = perLaVoce(o.optString("frase").ifBlank { "Fatto." }),
             nuovoNome = if (o.isNull("nuovoNome")) null
             else o.optString("nuovoNome").takeIf { it.isNotBlank() },
+            commessaDetta = if (o.isNull("commessaDetta")) null
+            else o.optString("commessaDetta").takeIf { it.isNotBlank() },
             dati = Rapportino(
                 cliente = d.testo("cliente"),
                 commessa = d.testo("commessa"),
@@ -355,6 +368,17 @@ class CervelloGemini(
             Scriverlo soltanto nel campo lascerebbe il foglio senza quel cliente, e domani
             non lo riconosceresti di nuovo.
 
+            NON RIPIEGARE MAI SULLA COMMESSA PIU' SIMILE. Se nomina un lavoro che fra
+            quelli aperti non c'e', quello e' un lavoro NUOVO: "crea_commessa". Mettergli
+            le ore su una commessa diversa e gia' aperta e' l'errore peggiore che tu possa
+            fare, perche' e' invisibile: lui non guarda lo schermo, sente "ok" e va avanti,
+            e a fine mese quelle ore risultano su un lavoro dove non e' mai stato.
+
+            "commessaDetta": come ha chiamato LUI il lavoro, con le sue parole esatte
+            ("la manutenzione della caldaia", "quella dei tubi"), oppure null se non l'ha
+            nominato. Non e' un campo del rapportino e non finisce nel foglio: serve a
+            controllare che la commessa che hai scelto sia davvero quella di cui parlava.
+
             ANAGRAFICHE NUOVE, DETTATE A VOCE
             - "crea_cliente": lui chiede di aggiungere un cliente che non e' in elenco
               ("crea un nuovo cliente Bianchi Termoidraulica", "aggiungi il cliente...").
@@ -423,6 +447,7 @@ class CervelloGemini(
                 "azione": {"type": "string", "enum": ["aggiorna", "conferma", "salva", "annulla", "crea_cliente", "crea_commessa"]},
                 "frase":  {"type": "string"},
                 "nuovoNome": {"type": "string", "nullable": true},
+                "commessaDetta": {"type": "string", "nullable": true},
                 "dati": {
                   "type": "object",
                   "properties": {

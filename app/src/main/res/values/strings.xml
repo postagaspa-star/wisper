@@ -3,4 +3,19 @@
     <string name="app_name">Wisper</string>
     <string name="canale_ascolto">Ascolto</string>
     <string name="canale_sveglia">Apertura a comando vocale</string>
+
+    <!-- La scheda. Wisper parla italiano perche' parla coi tecnici italiani,
+         ma le etichette seguono la lingua del telefono: su un telefono in
+         inglese la scheda si legge, e la voce resta quella di casa. -->
+    <string name="scheda_titolo">RAPPORTINO</string>
+    <string name="scheda_in_corso">in compilazione</string>
+    <string name="campo_cliente">Cliente</string>
+    <string name="campo_commessa">Commessa</string>
+    <string name="campo_lavoro">Lavoro svolto</string>
+    <string name="campo_ore">Ore</string>
+    <string name="campo_km">Km</string>
+    <string name="campo_spese">Spese</string>
+    <string name="campo_stato">Stato commessa</string>
+    <string name="stato_aperta">Aperta</string>
+    <string name="stato_chiusa">Chiusa</string>
 </resources>

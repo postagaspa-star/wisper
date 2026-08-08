@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="canale_ascolto">Listening</string>
+    <string name="canale_sveglia">Opened by voice</string>
+
+    <!-- Only the labels are translated. Wisper still speaks Italian, because
+         the technicians it was built for do, and the dictation is pinned to
+         it-IT in code rather than following the phone. On an English phone you
+         can read the card and still hear the language the job is done in. -->
+    <string name="scheda_titolo">WORK REPORT</string>
+    <string name="scheda_in_corso">filling in</string>
+    <string name="campo_cliente">Client</string>
+    <string name="campo_commessa">Job</string>
+    <string name="campo_lavoro">Work done</string>
+    <string name="campo_ore">Hours</string>
+    <string name="campo_km">Km</string>
+    <string name="campo_spese">Expenses</string>
+    <string name="campo_stato">Job status</string>
+    <string name="stato_aperta">Open</string>
+    <string name="stato_chiusa">Closed</string>
+</resources>

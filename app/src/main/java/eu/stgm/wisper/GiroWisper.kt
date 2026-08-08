@@ -522,6 +522,20 @@ class GiroWisper(
                 if (turnoDiChiusura) risposta.dati.copy(statoCommessa = null)
                 else risposta.dati
             val commessaPrima = _rapportino.value.commessa
+
+            // Il modello, quando non trova il lavoro che gli hai nominato, a
+            // volte ripiega sulla commessa piu' simile fra quelle aperte. Se
+            // le parole del tecnico e quella commessa non hanno niente in
+            // comune, quel lavoro e' nuovo e va aperto: non si accetta il
+            // ripiego.
+            val ripiego = commessaDiRipiego(patch, commessaPrima, risposta.commessaDetta)
+            if (ripiego != null) {
+                _rapportino.value = _rapportino.value.aggiorna(patch.copy(commessa = null))
+                registro("commessa_ripiego_rifiutato", ripiego)
+                creaCommessa(risposta.copy(nuovoNome = ripiego, frase = ""))
+                return@launch
+            }
+
             _rapportino.value = _rapportino.value.aggiorna(patch)
 
             when (risposta.azione) {
@@ -607,7 +621,14 @@ class GiroWisper(
             _rapportino.value = _rapportino.value.aggiorna(Rapportino(commessa = creata.id))
             registro("commessa_creata", "${creata.id} ${creata.descrizione}")
             annunciate += "${creata.descrizione} come nuova commessa"
-            rispondi("Ok, aggiungo ${creata.descrizione} come nuova commessa. ${risposta.frase}") {
+            // La coda della frase la porta il modello, tranne quando e' stato
+            // proprio lui a sbagliare commessa: in quel caso il suo seguito
+            // nomina il lavoro che avevamo appena scartato, e ci si sentirebbe
+            // dire due nomi diversi nella stessa frase. Allora la scriviamo noi.
+            val coda = risposta.frase.trim().ifBlank {
+                _rapportino.value.domandaSuCosaManca()?.let { "$it." } ?: "Altro, o salvo?"
+            }
+            rispondi("Ok, aggiungo ${creata.descrizione} come nuova commessa. $coda") {
                 ascolta()
             }
         } catch (e: Exception) {
@@ -767,6 +788,47 @@ class GiroWisper(
                 registro("commessa_non_aggiornata", e.message ?: "sconosciuto")
             }
         }
+    }
+
+    /**
+     * La descrizione da aprire come commessa nuova, quando il modello ha
+     * ripiegato su una gia' esistente che non c'entra. Null se e' tutto a posto.
+     *
+     * IL CASO, visto sul telefono l'08/08. Dicendo "la commessa e' la
+     * manutenzione della caldaia", che nel foglio non c'e', il modello ha
+     * scritto M001, cioe' FV Fara Vicentino, l'unica aperta per quel cliente.
+     * E' il tipo di errore peggiore che possa fare, perche' e' invisibile: il
+     * tecnico non guarda lo schermo, sente "ok" e va avanti, e a fine mese
+     * quelle ore risultano su un lavoro dove non ha mai messo piede.
+     *
+     * COME SI RICONOSCE. Non serve capire il senso: bastano le parole. Il
+     * modello riporta in "commessaDetta" come il tecnico ha chiamato il lavoro,
+     * e si guarda se quelle parole e la descrizione della commessa scelta ne
+     * hanno almeno una in comune. "Quella dei pannelli a Fara" e "FV Fara
+     * Vicentino" condividono Fara: e' la stessa. "Manutenzione della caldaia" e
+     * "FV Fara Vicentino" non condividono niente: e' un altro lavoro.
+     *
+     * COSA SI FA. Si apre la commessa nuova, dicendolo ad alta voce. Non si
+     * chiede: chiedere vuol dire un turno in piu' a ogni lavoro nuovo, e i
+     * lavori nuovi capitano di continuo. Se ha sbagliato lui, dice "cancella
+     * tutto" e si ricomincia.
+     *
+     * Vale solo quando la commessa CAMBIA in questo turno e solo se il tecnico
+     * l'ha davvero nominata: se non ha detto niente sul lavoro, il modello che
+     * mette l'unica commessa aperta del cliente sta facendo la cosa giusta.
+     */
+    private fun commessaDiRipiego(
+        patch: Rapportino,
+        prima: String?,
+        detta: String?,
+    ): String? {
+        val codice = patch.commessa?.trim()?.takeIf { it.isNotBlank() } ?: return null
+        if (codice == prima) return null
+        val nome = detta?.trim()?.takeIf { it.isNotBlank() } ?: return null
+        // Se il codice non esiste ci pensa gia' la creazione automatica al
+        // salvataggio: qui interessa solo il ripiego su una commessa VERA.
+        val vera = _anagrafiche.value.descrizioneCommessa(codice) ?: return null
+        return if (parlaDi(nome, vera)) null else nome
     }
 
     /**
