@@ -11,10 +11,10 @@ phone's language, so the screenshots below are the English ones.
 One person, two days, sixteen years old. Built for NGN Hacks 2026.
 **[postagaspa-star.github.io/wisper](https://postagaspa-star.github.io/wisper/)**
 
-| One sentence, spoken with gloves on | Half a sentence in |
-|---|---|
-| ![](docs/immagini/5-scheda.png) | ![](docs/immagini/4-domanda.png) |
-| Client, job, the address of the site, hours, kilometres, expenses, and whether the job closes. WORK DONE reads *"Sostituzione pompa di circolazione impianto fotovoltaico"*: replaced the circulation pump on the photovoltaic system. The line underneath is Wisper asking *"Il lavoro è chiuso, confermi?"* (The job is closed, do you confirm?) | A dash is a field Wisper does not have yet, and it asks for one thing at a time rather than reading a list. Here: *"Ho segnato tre ore e mezza per Rossi Impianti, ma quale commessa hai seguito?"* (I have put down three and a half hours for Rossi Impianti, but which job were you on?) |
+| One sentence, spoken with gloves on | Half a sentence in | |
+|---|---|---|
+| <img src="docs/immagini/5-scheda.png" width="260"> | <img src="docs/immagini/4-domanda.png" width="260"> | |
+| Client, job, the address of the site, hours, kilometres, expenses, and whether the job closes. WORK DONE reads *"Sostituzione pompa di circolazione impianto fotovoltaico"*: replaced the circulation pump on the photovoltaic system. Underneath, Wisper asking *"Il lavoro è chiuso, confermi?"* (The job is closed, do you confirm?) | A dash is a field Wisper does not have yet, and it asks for one thing at a time rather than reading a list. Here: *"Ho segnato tre ore e mezza per Rossi Impianti, ma quale commessa hai seguito?"* (I have put down three and a half hours for Rossi Impianti, but which job were you on?) | |
 
 **Before the card, there is only the ball**, and its colour is how you know whose
 turn it is. You read it from a metre away, out of the corner of your eye, which
@@ -22,7 +22,7 @@ is the only kind of reading available to someone holding a wrench.
 
 | White, at rest | Blue, Wisper talking | Yellow, your turn |
 |---|---|---|
-| ![](docs/immagini/1-riposo.png) | ![](docs/immagini/2-parla.png) | ![](docs/immagini/3-ascolta.png) |
+| <img src="docs/immagini/1-riposo.png" width="260"> | <img src="docs/immagini/2-parla.png" width="260"> | <img src="docs/immagini/3-ascolta.png" width="260"> |
 | Waiting for the wake word. Nothing has been touched, and nothing is being sent anywhere. | Wisper is talking. Say "Wisper" over the top of it and it stops mid sentence. | Your turn. The microphone icon is there because a colour has to be learned and a microphone does not. |
 
 ## Why it exists
