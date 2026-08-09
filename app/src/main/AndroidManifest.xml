@@ -14,6 +14,10 @@
     <!-- Il servizio che resta in ascolto della parola magica. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <!-- Senza questo, a un'app che non e' davanti Android non da' la posizione,
+         e riconoscere il cantiere funzionava solo con l'app aperta: cioe' mai,
+         visto che il tecnico sveglia Wisper col telefono in tasca. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <!-- Per accendere lo schermo e mostrarsi sopra il blocco quando sente "Ehi Wisper". -->
@@ -47,7 +51,7 @@
         <service
             android:name=".ServizioAscolto"
             android:exported="false"
-            android:foregroundServiceType="microphone" />
+            android:foregroundServiceType="microphone|location" />
 
     </application>
 </manifest>

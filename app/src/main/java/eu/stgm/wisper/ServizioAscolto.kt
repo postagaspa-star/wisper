@@ -7,6 +7,7 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
@@ -205,17 +206,42 @@ class ServizioAscolto : Service() {
 
     // ---- notifica ----
 
+    /**
+     * Il tipo dichiarato al sistema decide cosa il servizio puo' toccare.
+     *
+     * Microfono e' ovvio. La POSIZIONE meno, e senza costava la funzione piu'
+     * bella: a un'app che non e' in primo piano Android non da' la posizione,
+     * quindi riconoscere il cantiere funzionava solo aprendo l'app a mano.
+     * Svegliando Wisper col telefono in tasca — cioe' sempre, nell'uso vero —
+     * l'ultima posizione nota tornava vuota e apriva col saluto generico.
+     * Misurato il 09/08: a schermo acceso 43 m dal cantiere, a schermo spento
+     * "il telefono non ha nessuna posizione nota".
+     *
+     * Il permesso resta quello di sempre, "solo mentre l'app e' in uso": il
+     * servizio in primo piano *e'* l'app in uso. Nessun tracciamento di sfondo.
+     */
     private fun avviaInPrimoPiano() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(
-                ID_NOTIFICA,
-                costruisciNotifica(Fase.RIPOSO),
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE,
-            )
+            val tipi = ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE or
+                if (posizioneConcessa()) ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION else 0
+            startForeground(ID_NOTIFICA, costruisciNotifica(Fase.RIPOSO), tipi)
         } else {
             startForeground(ID_NOTIFICA, costruisciNotifica(Fase.RIPOSO))
         }
     }
+
+    /**
+     * Dichiarare il tipo "posizione" senza averne il permesso fa morire il
+     * servizio all'avvio con un'eccezione, e Wisper non parte piu'. Meglio
+     * partire senza quella funzione che non partire.
+     */
+    private fun posizioneConcessa(): Boolean =
+        ContextCompat.checkSelfPermission(
+            this, android.Manifest.permission.ACCESS_COARSE_LOCATION,
+        ) == PackageManager.PERMISSION_GRANTED ||
+            ContextCompat.checkSelfPermission(
+                this, android.Manifest.permission.ACCESS_FINE_LOCATION,
+            ) == PackageManager.PERMISSION_GRANTED
 
     private fun costruisciNotifica(fase: Fase): Notification {
         val apri = PendingIntent.getActivity(
