@@ -177,6 +177,9 @@ class GiroWisper(
     /** Vero fra "sei nel cantiere di X, è corretto?" e la risposta del tecnico. */
     private var cantiereDaConfermare = false
 
+    /** Vero appena il tecnico dice qualcosa: distingue un rapportino vero da una proposta. */
+    private var haParlato = false
+
     /**
      * Le parole con cui si dice di sì a "è corretto?".
      *
@@ -540,6 +543,7 @@ class GiroWisper(
             return
         }
         silenziDiFila = 0
+        haParlato = true
 
         // Il "sì" al cantiere proposto non ha bisogno di nessun ragionamento:
         // cliente e commessa sono gia' scritti nella scheda da prima che il
@@ -997,6 +1001,17 @@ class GiroWisper(
     }
 
     private fun chiudiGiro() {
+        // Se il tecnico non ha detto NIENTE, la scheda non e' un rapportino a
+        // meta': e' solo la proposta che Wisper si e' fatto da solo guardando
+        // dove si trova. Tenerla vuol dire che al risveglio dopo si sente
+        // "Dicevo: ho visto che sei nel cantiere di..." invece di ricominciare,
+        // e la domanda ripetuta per intero e' anche lenta da ascoltare.
+        // Quello che si butta qui non l'ha scritto nessuno.
+        if (!haParlato && _rapportino.value != Rapportino()) {
+            registro("scheda_svuotata", "era solo la proposta della posizione")
+            azzera()
+        }
+        haParlato = false
         _fase.value = Fase.RIPOSO
         _trascrizione.value = ""
         trascrittore.ferma()
