@@ -35,6 +35,16 @@ class DoveSono(private val ctx: Context) {
     /** Coordinate gia' risolte, per non richiedere due volte lo stesso posto. */
     private val coordinate = mutableMapOf<String, Pair<Double, Double>?>()
 
+    /**
+     * Perche' l'ultimo tentativo e' andato come e' andato, in una riga.
+     *
+     * Serve perche' quando questa cosa non funziona non si vede niente: Wisper
+     * apre col saluto generico e sembra che la posizione non sia prevista. Una
+     * mattina intera persa a indovinare quale dei cinque passaggi mancasse.
+     */
+    var motivo: String = "mai provato"
+        private set
+
     val permesso: Boolean
         get() = ContextCompat.checkSelfPermission(
             ctx, Manifest.permission.ACCESS_COARSE_LOCATION,
@@ -52,26 +62,58 @@ class DoveSono(private val ctx: Context) {
      */
     suspend fun commessaQui(anagrafiche: Anagrafiche): Vicinanza? =
         withContext(Dispatchers.IO) {
-            if (!permesso) return@withContext null
-            val qui = ultimaPosizione() ?: return@withContext null
+            if (!permesso) {
+                motivo = "permesso posizione negato"
+                return@withContext null
+            }
+            val qui = ultimaPosizione()
+            if (qui == null) {
+                motivo = "il telefono non ha nessuna posizione nota"
+                return@withContext null
+            }
 
             val aperte = anagrafiche.commesse.filter { it.aperta && it.indirizzo.isNotBlank() }
-            if (aperte.isEmpty()) return@withContext null
+            if (aperte.isEmpty()) {
+                motivo = "nessuna commessa aperta con un indirizzo " +
+                    "(ne conosco ${anagrafiche.commesse.size} in tutto)"
+                return@withContext null
+            }
 
-            val vicine = aperte.mapNotNull { m ->
-                val punto = coordinateDi(m.indirizzo) ?: return@mapNotNull null
-                val d = FloatArray(1)
-                Location.distanceBetween(qui.latitude, qui.longitude, punto.first, punto.second, d)
-                if (d[0] <= RAGGIO_METRI) m to d[0] else null
-            }.sortedBy { it.second }
+            val misurate = aperte.map { m ->
+                val punto = coordinateDi(m.indirizzo)
+                if (punto == null) {
+                    m to -1f
+                } else {
+                    val d = FloatArray(1)
+                    Location.distanceBetween(
+                        qui.latitude, qui.longitude, punto.first, punto.second, d,
+                    )
+                    m to d[0]
+                }
+            }
+            motivo = misurate.joinToString("; ") { (m, d) ->
+                if (d < 0) "${m.id} indirizzo non trovato sulla mappa"
+                else "${m.id} a ${d.toInt()} m"
+            }
 
-            val piuVicina = vicine.firstOrNull() ?: return@withContext null
+            val vicine = misurate.filter { it.second in 0f..RAGGIO_METRI }.sortedBy { it.second }
+
+            val piuVicina = vicine.firstOrNull() ?: run {
+                motivo = "nessuna entro ${RAGGIO_METRI.toInt()} m — $motivo"
+                return@withContext null
+            }
             val cliente = anagrafiche.clienti
-                .firstOrNull { it.id == piuVicina.first.idCliente } ?: return@withContext null
+                .firstOrNull { it.id == piuVicina.first.idCliente }
+            if (cliente == null) {
+                motivo = "la commessa ${piuVicina.first.id} punta a un cliente che non esiste"
+                return@withContext null
+            }
 
             // Quante altre commesse aperte ha QUESTO cliente qui intorno: se
             // ce n'e' una sola si puo' proporla, se ce ne sono due va chiesto.
             val altreQui = vicine.count { it.first.idCliente == cliente.id }
+            motivo = "sei da ${cliente.nome}, ${piuVicina.first.descrizione} " +
+                "a ${piuVicina.second.toInt()} m"
 
             Vicinanza(
                 cliente = cliente,

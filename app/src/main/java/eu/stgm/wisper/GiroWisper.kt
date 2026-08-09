@@ -12,11 +12,13 @@ import eu.stgm.wisper.cervello.Azione
 import eu.stgm.wisper.cervello.CervelloGemini
 import eu.stgm.wisper.cervello.RispostaWisper
 import eu.stgm.wisper.rapportino.Anagrafiche
+import eu.stgm.wisper.rapportino.AnagraficheSalvate
 import eu.stgm.wisper.rapportino.DoveSono
 import eu.stgm.wisper.rapportino.PonteFoglio
 import eu.stgm.wisper.rapportino.Rapportino
 import eu.stgm.wisper.rapportino.Vicinanza
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -107,6 +109,7 @@ class GiroWisper(
     private val cervello = CervelloGemini()
     private val ponte = PonteFoglio()
     private val dove = DoveSono(ctx)
+    private val salvate = AnagraficheSalvate(ctx)
     private val beep = ToneGenerator(AudioManager.STREAM_NOTIFICATION, 70)
 
     private val wake = RilevatoreWake(
@@ -159,16 +162,29 @@ class GiroWisper(
      */
     private var ultimaEraRiepilogo = false
 
+    /**
+     * Il caricamento dell'elenco di clienti e commesse, tenuto da parte per
+     * poterlo aspettare.
+     *
+     * Trovato la mattina del 09/08, a poche ore dalla consegna. Il foglio ci
+     * mette qualche secondo a rispondere e l'apertura per posizione partiva
+     * subito, quindi guardava in un elenco ancora vuoto, non trovava niente e
+     * ripiegava sul saluto generico. Sembrava che la geolocalizzazione fosse
+     * rotta; era solo arrivata prima lei.
+     */
+    private var caricamento: Job? = null
+
     // ---------------------------------------------------------------- avvio
 
     fun avvia() {
-        scope.launch {
-            _anagrafiche.value = ponte.caricaAnagrafiche()
-            registro(
-                "anagrafiche",
-                "${_anagrafiche.value.clienti.size} clienti, ${_anagrafiche.value.commesse.size} commesse",
-            )
+        // L'elenco di ieri, letto dal telefono: c'e' prima ancora che il
+        // servizio finisca di partire, cosi' la posizione funziona al primo
+        // colpo invece di aspettare il foglio.
+        salvate.leggi().takeIf { it.commesse.isNotEmpty() }?.let {
+            _anagrafiche.value = it
+            registro("anagrafiche_salvate", "${it.clienti.size} clienti, ${it.commesse.size} commesse")
         }
+        caricamento = ricaricaAnagrafiche()
         // Il servizio parte all'accensione dell'app e resta acceso: qui si
         // mette solo in ascolto della parola magica, senza aprire niente.
         // La conversazione la apre chi arriva: la voce, o la schermata.
@@ -369,14 +385,37 @@ class GiroWisper(
 
         // Rapportino nuovo: prima di chiedere, si guarda dove siamo.
         scope.launch {
+            // Qui NON si aspetta niente. L'elenco arriva dal file salvato sul
+            // telefono ed e' gia' pronto; il foglio ci mette dai sette ai
+            // tredici secondi e dopo la parola magica quel silenzio si sente.
+            // L'unica volta in cui l'elenco manca davvero e' al primo avvio
+            // dopo l'installazione, e li' si apre col saluto normale.
             val qui = try {
                 dove.commessaQui(_anagrafiche.value)
             } catch (e: Exception) {
                 registro("posizione_errore", e.message ?: "sconosciuto")
                 null
             }
+            registro("posizione", dove.motivo)
             rispondi(aperturaPer(qui, saluto)) { ascolta() }
+
+            // E intanto si rilegge il foglio per la prossima volta: un
+            // indirizzo corretto stamattina non deve aspettare un riavvio.
+            caricamento = ricaricaAnagrafiche()
         }
+    }
+
+    private fun ricaricaAnagrafiche(): Job = scope.launch {
+        val lette = runCatching { ponte.caricaAnagrafiche() }.getOrNull() ?: return@launch
+        // Un elenco vuoto vuol dire che il foglio non ha risposto, non che
+        // l'azienda non ha piu' clienti: quello buono che avevamo resta.
+        if (lette.commesse.isEmpty() && _anagrafiche.value.commesse.isNotEmpty()) {
+            registro("anagrafiche", "il foglio non ha risposto, tengo quelle salvate")
+            return@launch
+        }
+        _anagrafiche.value = lette
+        salvate.scrivi(lette)
+        registro("anagrafiche", "${lette.clienti.size} clienti, ${lette.commesse.size} commesse")
     }
 
     /**
