@@ -75,6 +75,37 @@ class CervelloGemini(
     }
 
     /**
+     * Mette in bocca al modello una frase che ha detto Wisper ma che ha scritto
+     * il codice.
+     *
+     * Serve perche' alcune frasi non passano di qui: l'apertura che riconosce
+     * il cantiere, il riepilogo finale, gli annunci di cliente o commessa
+     * nuovi. Senza questo la conversazione, vista dal modello, comincia con un
+     * "si', esatto" appeso al nulla, e infatti dopo aver proposto lui cliente e
+     * commessa e averle sentite confermare, richiedeva la commessa da capo.
+     *
+     * Non e' un trucco: al modello si racconta esattamente quello che il
+     * tecnico ha sentito, che e' l'unica versione che conta.
+     */
+    fun ricorda(frase: String) = aggiungi("model", frase)
+
+    /** Uno scambio intero avvenuto senza passare di qui: lui, poi Wisper. */
+    fun ricordaScambio(detto: String, risposta: String) {
+        aggiungi("user", detto)
+        aggiungi("model", risposta)
+    }
+
+    private fun aggiungi(ruolo: String, testo: String) {
+        if (testo.isBlank()) return
+        storia.put(
+            JSONObject()
+                .put("role", ruolo)
+                .put("parts", JSONArray().put(JSONObject().put("text", testo)))
+        )
+        while (storia.length() > MAX_BATTUTE) storia.remove(0)
+    }
+
+    /**
      * @param attuale il rapportino com'e' ADESSO. Va passato a ogni giro: il
      *        modello altrimenti ricostruisce lo stato dalla conversazione, e
      *        basta un campo riempito per altra via — un cliente appena creato,

@@ -174,6 +174,27 @@ class GiroWisper(
      */
     private var caricamento: Job? = null
 
+    /** Vero fra "sei nel cantiere di X, è corretto?" e la risposta del tecnico. */
+    private var cantiereDaConfermare = false
+
+    /**
+     * Le parole con cui si dice di sì a "è corretto?".
+     *
+     * Volutamente corta: se il tecnico risponde qualcosa di diverso, anche solo
+     * "sì ma la commessa è l'altra", non deve entrare di qui. Nel dubbio decide
+     * il modello, che e' piu' lento ma capisce le sfumature.
+     */
+    private fun suonaComeUnSi(testo: String): Boolean {
+        val t = testo.lowercase().trim().trim('.', '!', ',')
+        return t in setOf(
+            "sì", "si", "sì esatto", "si esatto", "esatto", "sì corretto",
+            "si corretto", "corretto", "giusto", "sì giusto", "si giusto",
+            "certo", "sì certo", "si certo", "esattamente", "confermo",
+            "va bene", "sì va bene", "si va bene", "ok", "sì ok", "si ok",
+            "perfetto", "sì perfetto", "si perfetto", "proprio quella",
+        )
+    }
+
     // ---------------------------------------------------------------- avvio
 
     fun avvia() {
@@ -397,7 +418,16 @@ class GiroWisper(
                 null
             }
             registro("posizione", dove.motivo)
-            rispondi(aperturaPer(qui, saluto)) { ascolta() }
+            val apertura = aperturaPer(qui, saluto)
+            // Solo se il cantiere e' stato riconosciuto e proposto: il "sì" che
+            // arriva dopo e' una risposta a questa domanda, non una frase da
+            // interpretare.
+            cantiereDaConfermare = qui != null && qui.soloQuesta
+            // Questa frase non l'ha scritta il modello: se non gliela si
+            // racconta, la conversazione per lui comincia da un "si', esatto"
+            // appeso al nulla e ricomincia a chiedere cose gia' proposte.
+            cervello.ricorda(apertura)
+            rispondi(apertura) { ascolta() }
 
             // E intanto si rilegge il foglio per la prossima volta: un
             // indirizzo corretto stamattina non deve aspettare un riavvio.
@@ -439,7 +469,11 @@ class GiroWisper(
             Rapportino(cliente = qui.cliente.nome, commessa = qui.commessa.id)
         )
 
-        val saluti = if (saluto) "Ehi, ciao $NOME_UTENTE. " else ""
+        // Qui si saluta sempre, anche svegliandolo con la parola magica. Aprire
+        // con "ho visto che sei nel cantiere di..." senza dire prima il nome
+        // suona come un sistema che ti sorveglia; con il nome davanti suona
+        // come qualcuno che ti riconosce.
+        val saluti = "Ehi, ciao $NOME_UTENTE. "
         return if (qui.soloQuesta) {
             saluti + "Ho visto che sei nel cantiere di ${qui.cliente.nome}, " +
                 "e qui hai aperta solo ${qui.commessa.descrizione}. È corretto?"
@@ -506,6 +540,21 @@ class GiroWisper(
             return
         }
         silenziDiFila = 0
+
+        // Il "sì" al cantiere proposto non ha bisogno di nessun ragionamento:
+        // cliente e commessa sono gia' scritti nella scheda da prima che il
+        // tecnico rispondesse. Mandarlo al modello vuol dire aspettare due
+        // secondi per sentirsi dire, con parole sue, quello che gia' sappiamo,
+        // e ogni tanto anche il codice della commessa letto ad alta voce.
+        // Quindi la risposta a questo turno la diamo noi, subito.
+        if (cantiereDaConfermare && suonaComeUnSi(testo)) {
+            cantiereDaConfermare = false
+            val frase = "Ottimo, e cos'hai fatto oggi?"
+            cervello.ricordaScambio(testo, frase)
+            rispondi(frase) { ascolta() }
+            return
+        }
+        cantiereDaConfermare = false
 
         if (!cervello.configurato) {
             rispondi("Non ho la chiave per capire quello che dici.") { chiudiGiro() }
