@@ -2,6 +2,7 @@
 <resources>
     <string name="canale_ascolto">Listening</string>
     <string name="canale_sveglia">Opened by voice</string>
+    <string name="canale_salvataggi">Reports sent to the sheet</string>
 
     <!-- Only the labels are translated. Wisper still speaks Italian, because
          the technicians it was built for do, and the dictation is pinned to

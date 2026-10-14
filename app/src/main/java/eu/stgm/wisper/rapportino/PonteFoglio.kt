@@ -71,44 +71,53 @@ class PonteFoglio(
     }
 
     /**
-     * Scrive la riga nel foglio. Qui invece l'errore si propaga: se il
-     * rapportino non arriva, il tecnico deve saperlo — a voce, subito.
+     * Scrive la riga nel foglio. Qui invece l'errore si propaga: finche' il
+     * foglio non risponde con un id, il rapportino resta in [CodaInvii].
      * Torna l'identificativo della riga (es. RAP-20260807-194006).
+     *
+     * Un tentativo solo, e paziente. I tentativi successivi li fa la coda, con
+     * le pause giuste e anche dopo un riavvio: il vecchio "riprova fra un
+     * secondo" aveva senso quando il rapportino viveva solo in memoria.
+     * La pazienza invece serve: lo script ci ha messo diciotto secondi il
+     * 26/09, e rinunciare troppo presto vuol dire ritentare una riga che forse
+     * e' gia' stata scritta.
+     *
+     * @param data il giorno del rapportino (gg/mm/aaaa). Se manca, lo script
+     *        mette quello di arrivo, sbagliato per un rapportino partito tardi.
+     * @param idLocale uguale a ogni tentativo dello stesso rapportino: permette
+     *        allo script di riconoscere una riga gia' scritta.
      */
-    suspend fun salva(r: Rapportino): String = withContext(Dispatchers.IO) {
-        if (!configurato) throw ErroreFoglio("indirizzo del foglio non configurato")
+    suspend fun salva(r: Rapportino, data: String? = null, idLocale: String? = null): String =
+        withContext(Dispatchers.IO) {
+            if (!configurato) throw ErroreFoglio("indirizzo del foglio non configurato")
 
-        val corpo = JSONObject().apply {
-            put("cliente", r.cliente ?: "")
-            put("commessa", r.commessa ?: "")
-            put("descrizione", r.descrizione ?: "")
-            put("ore", r.ore ?: 0.0)
-            put("km", r.km ?: 0.0)
-            put("spese", r.spese ?: 0.0)
-            put("statoCommessa", r.statoCommessa?.parlato?.uppercase() ?: "")
-        }.toString()
+            val corpo = JSONObject().apply {
+                put("cliente", r.cliente ?: "")
+                put("commessa", r.commessa ?: "")
+                put("descrizione", r.descrizione ?: "")
+                put("ore", r.ore ?: 0.0)
+                put("km", r.km ?: 0.0)
+                put("spese", r.spese ?: 0.0)
+                put("statoCommessa", r.statoCommessa?.parlato?.uppercase() ?: "")
+                data?.let { put("data", it) }
+                idLocale?.let { put("idLocale", it) }
+            }.toString()
 
-        val richiesta = Request.Builder()
-            .url(url)
-            // text/plain di proposito: evita il preflight e Apps Script legge
-            // comunque il corpo grezzo con postData.contents.
-            .post(corpo.toRequestBody("text/plain;charset=utf-8".toMediaType()))
-            .build()
+            val richiesta = Request.Builder()
+                .url(url)
+                // text/plain di proposito: evita il preflight e Apps Script legge
+                // comunque il corpo grezzo con postData.contents.
+                .post(corpo.toRequestBody("text/plain;charset=utf-8".toMediaType()))
+                .build()
 
-        // Un secondo tentativo dopo un attimo. In cantiere il segnale balla, e
-        // dire "non sono riuscito a salvare" per un pacchetto perso sarebbe
-        // una bugia inutile: la maggior parte di questi errori passa da sola.
-        val risposta = try {
-            chiama(richiesta)
-        } catch (primo: Exception) {
-            Thread.sleep(1200)
-            try {
-                chiama(richiesta.newBuilder().build())
-            } catch (_: Exception) {
-                throw primo
-            }
+            chiama(richiesta, clientSalvataggio)
+                .optString("id")
+                .ifBlank { throw ErroreFoglio("il foglio non ha restituito un id") }
         }
-        risposta.optString("id").ifBlank { throw ErroreFoglio("il foglio non ha restituito un id") }
+
+    /** Lo stesso client, con l'attesa che serve all'Apps Script quando scrive. */
+    private val clientSalvataggio: OkHttpClient by lazy {
+        client.newBuilder().readTimeout(90, TimeUnit.SECONDS).build()
     }
 
     /**
@@ -171,8 +180,8 @@ class PonteFoglio(
         )
     }
 
-    private fun chiama(richiesta: Request): JSONObject {
-        client.newCall(richiesta).execute().use { r ->
+    private fun chiama(richiesta: Request, c: OkHttpClient = client): JSONObject {
+        c.newCall(richiesta).execute().use { r ->
             val testo = r.body?.string().orEmpty()
             if (!r.isSuccessful) throw ErroreFoglio("HTTP ${r.code}")
             val json = try {

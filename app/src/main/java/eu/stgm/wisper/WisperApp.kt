@@ -54,11 +54,22 @@ class WisperApp : Application() {
                 enableVibration(false)
             }
         )
+
+        // Com'e' finito un rapportino partito in sottofondo: "salvato", oppure
+        // "non ancora sul foglio". Serve quando Wisper non puo' dirlo a voce.
+        gestore.createNotificationChannel(
+            NotificationChannel(
+                CANALE_SALVATAGGI,
+                getString(R.string.canale_salvataggi),
+                NotificationManager.IMPORTANCE_DEFAULT,
+            ).apply { setShowBadge(true) }
+        )
     }
 
     companion object {
         const val CANALE_ASCOLTO = "ascolto"
         const val CANALE_SVEGLIA = "sveglia"
+        const val CANALE_SALVATAGGI = "salvataggi"
 
         /** Vero se una schermata di Wisper e' quella che l'utente sta guardando. */
         private val _davanti = MutableStateFlow(false)

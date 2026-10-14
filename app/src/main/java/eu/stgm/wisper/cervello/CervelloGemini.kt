@@ -12,6 +12,7 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 
 /** Cosa Wisper ha deciso di fare dopo aver sentito una frase. */
@@ -54,6 +55,11 @@ data class RispostaWisper(
  * su una conversazione intera): in una chiacchierata a voce mezzo secondo per
  * battuta si sente. Il secondo esiste perche' il 07/08 un modello nuovissimo
  * ha risposto 503 a meta' prova — su una demo non ci si puo' fidare di uno solo.
+ *
+ * Ogni modello ha un tempo massimo, e al primo ne bastano quattro secondi. Il
+ * 26/09 una battuta su sei ha aspettato 7,5 secondi invece del solito secondo
+ * e mezzo; senza un limite si poteva restare zitti fino a trenta prima di
+ * provare il secondo.
  */
 class CervelloGemini(
     private val chiave: String = BuildConfig.AI_KEY,
@@ -61,11 +67,19 @@ class CervelloGemini(
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
         .build(),
+    /** Quale modello ha risposto e in quanto: senza, una battuta lenta non si spiega. */
+    private val registro: (String, String) -> Unit = { _, _ -> },
 ) {
 
     val configurato: Boolean get() = chiave.isNotBlank()
 
     class ErroreCervello(messaggio: String) : Exception(messaggio)
+
+    /** Il modello ha rifiutato la richiesta cosi' com'era (400): di solito un parametro. */
+    private class RichiestaRifiutata(messaggio: String) : Exception(messaggio)
+
+    /** @param tempoMassimoMs oltre questo si lascia perdere e si passa al modello dopo. */
+    private class Modello(val nome: String, val tempoMassimoMs: Long)
 
     /** La conversazione finora. Serve al modello per capire i riferimenti. */
     private val storia = JSONArray()
@@ -131,9 +145,14 @@ class CervelloGemini(
 
             var ultimo: Exception? = null
             for (modello in MODELLI) {
+                val t0 = System.nanoTime()
                 try {
                     val grezzo = chiama(modello, anagrafiche, attuale)
                     val risposta = interpreta(grezzo)
+                    registro(
+                        "cervello",
+                        "${modello.nome} ${msDa(t0)} ms, ${risposta.azione.name.lowercase()}",
+                    )
                     storia.put(
                         JSONObject()
                             .put("role", "model")
@@ -141,6 +160,10 @@ class CervelloGemini(
                     )
                     return@withContext risposta
                 } catch (e: Exception) {
+                    registro(
+                        "cervello_saltato",
+                        "${modello.nome} dopo ${msDa(t0)} ms: ${e.message ?: e.javaClass.simpleName}",
+                    )
                     ultimo = e
                 }
             }
@@ -149,7 +172,60 @@ class CervelloGemini(
 
     // ---- rete ----
 
-    private fun chiama(modello: String, anagrafiche: Anagrafiche, attuale: Rapportino): String {
+    /**
+     * Una chiamata a un modello, col ragionamento al minimo. Se il modello non
+     * accetta quel parametro (400) lo si ricorda e si riprova subito senza:
+     * meglio un modello che pensa un po' di piu' che perderlo del tutto.
+     */
+    private fun chiama(m: Modello, anagrafiche: Anagrafiche, attuale: Rapportino): String {
+        val pensiero = pensieroMinimo(m.nome)
+        return try {
+            chiamaUnaVolta(m, anagrafiche, attuale, pensiero)
+        } catch (e: RichiestaRifiutata) {
+            if (pensiero == null) throw e
+            senzaPensiero += m.nome
+            registro("cervello_senza_pensiero", e.message.orEmpty())
+            chiamaUnaVolta(m, anagrafiche, attuale, null)
+        }
+    }
+
+    /**
+     * Il ragionamento al minimo. Per mettere in fila sette campi non serve
+     * pensarci su, e ogni secondo di "pensiero" e' un secondo di silenzio in
+     * cuffia. La serie 2.5 si spegne con un budget a zero; la 3 non si spegne
+     * del tutto e si porta al livello piu' basso.
+     */
+    private fun pensieroMinimo(nome: String): JSONObject? = when {
+        nome in senzaPensiero -> null
+        nome.startsWith("gemini-2.5") -> JSONObject().put("thinkingBudget", 0)
+        nome.startsWith("gemini-3") -> JSONObject().put("thinkingLevel", "minimal")
+        else -> null
+    }
+
+    /** I modelli che hanno rifiutato il ragionamento al minimo: non si riprova a ogni battuta. */
+    private val senzaPensiero: MutableSet<String> = ConcurrentHashMap.newKeySet()
+
+    /** Lo stesso client, col tempo massimo di quel modello. */
+    private val clientPerModello = ConcurrentHashMap<String, OkHttpClient>()
+
+    private fun clientPer(m: Modello): OkHttpClient = clientPerModello.getOrPut(m.nome) {
+        client.newBuilder().callTimeout(m.tempoMassimoMs, TimeUnit.MILLISECONDS).build()
+    }
+
+    private fun msDa(t0: Long) = (System.nanoTime() - t0) / 1_000_000
+
+    private fun chiamaUnaVolta(
+        m: Modello,
+        anagrafiche: Anagrafiche,
+        attuale: Rapportino,
+        pensiero: JSONObject?,
+    ): String {
+        val generazione = JSONObject()
+            .put("temperature", 0.2)
+            .put("responseMimeType", "application/json")
+            .put("responseSchema", SCHEMA)
+        pensiero?.let { generazione.put("thinkingConfig", it) }
+
         val corpo = JSONObject()
             .put(
                 "systemInstruction",
@@ -159,17 +235,11 @@ class CervelloGemini(
                 )
             )
             .put("contents", storia)
-            .put(
-                "generationConfig",
-                JSONObject()
-                    .put("temperature", 0.2)
-                    .put("responseMimeType", "application/json")
-                    .put("responseSchema", SCHEMA)
-            )
+            .put("generationConfig", generazione)
             .toString()
 
         val richiesta = Request.Builder()
-            .url("$BASE$modello:generateContent")
+            .url("$BASE${m.nome}:generateContent")
             .header("x-goog-api-key", chiave)
             // Queste due dicono a Google da quale app arriva la chiamata, ed e'
             // quello che mandano da sole le librerie ufficiali.
@@ -185,13 +255,14 @@ class CervelloGemini(
             .post(corpo.toRequestBody("application/json".toMediaType()))
             .build()
 
-        client.newCall(richiesta).execute().use { r ->
+        clientPer(m).newCall(richiesta).execute().use { r ->
             val testo = r.body?.string().orEmpty()
-            if (!r.isSuccessful) throw ErroreCervello("$modello: HTTP ${r.code}")
+            if (r.code == 400) throw RichiestaRifiutata("${m.nome}: HTTP 400 ${testo.take(160)}")
+            if (!r.isSuccessful) throw ErroreCervello("${m.nome}: HTTP ${r.code}")
             val parti = JSONObject(testo)
                 .optJSONArray("candidates")?.optJSONObject(0)
                 ?.optJSONObject("content")?.optJSONArray("parts")
-                ?: throw ErroreCervello("$modello: risposta senza contenuto")
+                ?: throw ErroreCervello("${m.nome}: risposta senza contenuto")
             return buildString {
                 for (i in 0 until parti.length()) append(parti.optJSONObject(i)?.optString("text").orEmpty())
             }
@@ -465,8 +536,13 @@ class CervelloGemini(
         const val IMPRONTA = "108BA9BFDF0C37AC1E408E88B494A6F4478D7169"
 
         // Misurati sul campo il 07/08 su una conversazione intera:
-        // flash-lite 1,4 s a battuta, 2.5-flash 2,0 s.
-        val MODELLI = listOf("gemini-3.1-flash-lite", "gemini-2.5-flash")
+        // flash-lite 1,4 s a battuta, 2.5-flash 2,0 s. Il tempo massimo sta
+        // abbastanza sopra il normale da non tagliare una battuta lenta ma
+        // buona, e abbastanza sotto da non lasciare il tecnico ad aspettare.
+        val MODELLI = listOf(
+            Modello("gemini-3.1-flash-lite", tempoMassimoMs = 4_000),
+            Modello("gemini-2.5-flash", tempoMassimoMs = 12_000),
+        )
 
         const val MAX_BATTUTE = 16
 

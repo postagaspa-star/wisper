@@ -3,6 +3,7 @@
     <string name="app_name">Wisper</string>
     <string name="canale_ascolto">Ascolto</string>
     <string name="canale_sveglia">Apertura a comando vocale</string>
+    <string name="canale_salvataggi">Rapportini sul foglio</string>
 
     <!-- La scheda. Wisper parla italiano perche' parla coi tecnici italiani,
          ma le etichette seguono la lingua del telefono: su un telefono in

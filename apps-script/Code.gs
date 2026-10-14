@@ -108,6 +108,21 @@ function scriviRiga(nomeFoglio, valoriNormalizzati) {
 // Rapportini
 // ---------------------------------------------------------------------------
 function salvaRapportino(dati) {
+  // Lo stesso rapportino rimandato dal telefono perche' la risposta di prima si
+  // era persa per strada: si restituisce la riga gia' scritta invece di
+  // scriverne una seconda. L'app manda lo stesso idLocale a ogni tentativo.
+  var cache = CacheService.getScriptCache();
+  var chiave = dati.idLocale ? 'rap:' + dati.idLocale : null;
+  if (chiave) {
+    var gia = cache.get(chiave);
+    if (gia) return gia;
+  }
+  var id = salvaRiga(dati);
+  if (chiave) cache.put(chiave, id, 21600);   // sei ore, il massimo che la cache concede
+  return id;
+}
+
+function salvaRiga(dati) {
   var id = 'RAP-' + Utilities.formatDate(new Date(), 'Europe/Rome', 'yyyyMMdd-HHmmss');
   scriviRiga(NOME_RAPPORTINI, {
     'id': id,

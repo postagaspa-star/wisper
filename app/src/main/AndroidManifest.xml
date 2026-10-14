@@ -5,6 +5,9 @@
          in primo piano va acceso con l'app aperta, mai da sfondo. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Per accorgersi di quando torna il segnale e mandare subito i rapportini
+         rimasti in coda, invece di aspettare il prossimo tentativo. -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
     <!-- Per riconoscere in quale cantiere sei. Si usa solo l'ultima
          posizione nota, mai un aggancio GPS continuo: nessun tracciamento. -->

@@ -3,6 +3,8 @@ package eu.stgm.wisper.ascolto
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
@@ -80,6 +82,24 @@ class Trascrittore(
             onEsito(esito, testo)
         }
 
+        apri(mia, 0, onParziale) { esito, testo -> consegna(esito, testo) }
+    }
+
+    /**
+     * Crea il riconoscitore e comincia ad ascoltare.
+     *
+     * @param ripartenze quante volte questo stesso ascolto e' gia' ripartito da
+     *        solo dopo un errore di avvio, vedi [ripartibile].
+     */
+    private fun apri(
+        mia: Int,
+        ripartenze: Int,
+        onParziale: (String) -> Unit,
+        consegna: (Esito, String?) -> Unit,
+    ) {
+        recognizer?.destroy()
+        var pronto = false
+
         recognizer = SpeechRecognizer.createSpeechRecognizer(ctx).apply {
             setRecognitionListener(object : RecognitionListener {
 
@@ -93,7 +113,7 @@ class Trascrittore(
                         consegna(Esito.TESTO, testo)
                     } else {
                         registro("silenzio", "")
-                        consegna(Esito.SILENZIO)
+                        consegna(Esito.SILENZIO, null)
                     }
                 }
 
@@ -106,6 +126,20 @@ class Trascrittore(
                 }
 
                 override fun onError(codice: Int) {
+                    if (mia != sessione) return   // ascolto gia' fermato: niente da dire
+
+                    // Riparte da solo, senza dirlo a nessuno, se non ha ancora
+                    // cominciato ad ascoltare: il tecnico non ha detto niente,
+                    // quindi non c'e' niente di perso e niente da annunciare.
+                    if (!pronto && ripartibile(codice) && ripartenze < MAX_RIPARTENZE) {
+                        registro("trascrizione_riparte", nomeErrore(codice))
+                        mano.postDelayed(
+                            { if (mia == sessione) apri(mia, ripartenze + 1, onParziale, consegna) },
+                            PAUSA_RIPARTENZA_MS,
+                        )
+                        return
+                    }
+
                     // Si annuncia SOLO cio' che impedisce davvero di lavorare.
                     // "Non ho capito", "timeout" e gli errori di client sono
                     // pause o inciampi passeggeri: si riprova in silenzio.
@@ -117,10 +151,12 @@ class Trascrittore(
                         if (guasto) "trascrizione_errore" else "silenzio",
                         nomeErrore(codice),
                     )
-                    consegna(if (guasto) Esito.GUASTO else Esito.SILENZIO)
+                    consegna(if (guasto) Esito.GUASTO else Esito.SILENZIO, null)
                 }
 
-                override fun onReadyForSpeech(params: Bundle?) = Unit
+                override fun onReadyForSpeech(params: Bundle?) {
+                    pronto = true
+                }
                 override fun onBeginningOfSpeech() = Unit
                 override fun onRmsChanged(rmsdB: Float) = Unit
                 override fun onBufferReceived(buffer: ByteArray?) = Unit
@@ -152,11 +188,41 @@ class Trascrittore(
 
     fun ferma() {
         sessione++            // invalida le richiamate dell'ascolto in corso
+        mano.removeCallbacksAndMessages(null)   // e le ripartenze in attesa
         recognizer?.destroy()
         recognizer = null
     }
 
+    private val mano = Handler(Looper.getMainLooper())
+
+    /**
+     * Gli errori con cui il riconoscitore puo' fallire appena creato, prima di
+     * aver sentito una sola parola.
+     *
+     * TROVATO il 26/09 nel log di una prova vera: OGNI ascolto cominciava con
+     * "server scollegato" (codice 11) dopo venti millisecondi, e ripartendo
+     * funzionava. Succede perche' il riconoscitore di prima viene distrutto un
+     * istante prima di crearne uno nuovo, e il servizio di Google non ha
+     * ancora finito di staccarsi. Il danno non era il ritardo ma il conto: ogni
+     * volta risultava un "silenzio" del tecnico, e dopo tre silenzi di fila
+     * Wisper chiude la conversazione. Con una pausa vera in mezzo, la chiudeva
+     * molto prima del previsto.
+     */
+    private fun ripartibile(codice: Int): Boolean =
+        codice == ERRORE_SERVER_SCOLLEGATO ||
+            codice == SpeechRecognizer.ERROR_RECOGNIZER_BUSY ||
+            codice == SpeechRecognizer.ERROR_CLIENT
+
+    private companion object {
+        /** SpeechRecognizer.ERROR_SERVER_DISCONNECTED, che esiste solo da Android 12. */
+        const val ERRORE_SERVER_SCOLLEGATO = 11
+        const val MAX_RIPARTENZE = 2
+        const val PAUSA_RIPARTENZA_MS = 150L
+    }
+
     private fun nomeErrore(c: Int): String = when (c) {
+        ERRORE_SERVER_SCOLLEGATO -> "server scollegato"
+        SpeechRecognizer.ERROR_CLIENT -> "errore del client"
         SpeechRecognizer.ERROR_NO_MATCH -> "non ho capito"
         SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "silenzio"
         SpeechRecognizer.ERROR_AUDIO -> "problema audio"

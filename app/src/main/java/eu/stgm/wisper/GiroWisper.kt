@@ -1,10 +1,17 @@
 package eu.stgm.wisper
 
+import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.Context
+import android.content.Intent
 import android.media.AudioManager
 import android.media.ToneGenerator
+import android.net.ConnectivityManager
+import android.net.Network
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
+import androidx.core.app.NotificationCompat
 import eu.stgm.wisper.ascolto.RilevatoreWake
 import eu.stgm.wisper.ascolto.Trascrittore
 import eu.stgm.wisper.ascolto.Voce
@@ -13,14 +20,17 @@ import eu.stgm.wisper.cervello.CervelloGemini
 import eu.stgm.wisper.cervello.RispostaWisper
 import eu.stgm.wisper.rapportino.Anagrafiche
 import eu.stgm.wisper.rapportino.AnagraficheSalvate
+import eu.stgm.wisper.rapportino.CodaInvii
 import eu.stgm.wisper.rapportino.DoveSono
 import eu.stgm.wisper.rapportino.PonteFoglio
 import eu.stgm.wisper.rapportino.Rapportino
 import eu.stgm.wisper.rapportino.Vicinanza
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
@@ -28,6 +38,24 @@ import kotlinx.coroutines.launch
 enum class Fase { RIPOSO, ASCOLTO, PENSA, PARLA, SALVA }
 
 private const val SILENZI_PRIMA_DI_CHIUDERE = 3
+
+/**
+ * Pause fra un tentativo di invio e l'altro: fitte all'inizio, perche' in
+ * cantiere il segnale va e viene in pochi secondi, poi sempre piu' rade per non
+ * consumare batteria contro un foglio che non risponde. Il ritorno della rete
+ * fa comunque ripartire tutto subito.
+ */
+private val PAUSE_RIPROVA = listOf(15_000L, 30_000L, 60_000L, 120_000L, 300_000L, 600_000L)
+
+/** Dopo quanti tentativi a vuoto si avvisa che il rapportino non e' ancora sul foglio. */
+private const val AVVISO_DOPO_TENTATIVI = 3
+
+/** Come il foglio numera le commesse: M001, M002... (vedi prossimoCodice nello script). */
+private val CODICE_COMMESSA = Regex("^M\\d{3,}$", RegexOption.IGNORE_CASE)
+
+// Le notifiche 1 e 2 sono del servizio di ascolto.
+private const val ID_NOTIFICA_SALVATO = 3
+private const val ID_NOTIFICA_NON_SALVATO = 4
 
 /**
  * Chi sta usando Wisper. Fisso, perche' oggi l'app e' a utente singolo: scrive
@@ -106,10 +134,11 @@ class GiroWisper(
     private val main = Handler(Looper.getMainLooper())
     private val voce = Voce(ctx, registro)
     private val trascrittore = Trascrittore(ctx, registro)
-    private val cervello = CervelloGemini()
+    private val cervello = CervelloGemini(registro = registro)
     private val ponte = PonteFoglio()
     private val dove = DoveSono(ctx)
     private val salvate = AnagraficheSalvate(ctx)
+    private val coda = CodaInvii(ctx)
     private val beep = ToneGenerator(AudioManager.STREAM_NOTIFICATION, 70)
 
     private val wake = RilevatoreWake(
@@ -209,6 +238,10 @@ class GiroWisper(
             registro("anagrafiche_salvate", "${it.clienti.size} clienti, ${it.commesse.size} commesse")
         }
         caricamento = ricaricaAnagrafiche()
+        // I rapportini rimasti in coda dall'ultima volta — app chiusa, rete
+        // assente, telefono spento — partono adesso, senza aspettare nessuno.
+        ascoltaRete()
+        mandaCoda("avvio")
         // Il servizio parte all'accensione dell'app e resta acceso: qui si
         // mette solo in ascolto della parola magica, senza aprire niente.
         // La conversazione la apre chi arriva: la voce, o la schermata.
@@ -277,6 +310,7 @@ class GiroWisper(
     }
 
     fun spegni() {
+        runCatching { rete.unregisterNetworkCallback(suRete) }
         wake.spegni()
         trascrittore.ferma()
         voce.spegni()
@@ -650,7 +684,9 @@ class GiroWisper(
                 }
                 Azione.CREA_CLIENTE -> creaCliente(risposta)
                 Azione.CREA_COMMESSA -> creaCommessa(risposta)
-                Azione.SALVA -> salva(risposta.frase)
+                // La frase del modello qui si scarta: di solito dice "salvato",
+                // e sul foglio non c'e' ancora niente. Vedi [salva].
+                Azione.SALVA -> salva()
             }
         }
     }
@@ -729,46 +765,216 @@ class GiroWisper(
         }
     }
 
-    private fun salva(fraseDiChiusura: String) {
-        _fase.value = Fase.SALVA
-        _messaggio.value = "Salvo…"
-        scope.launch {
-            try {
-                // Rete di sicurezza: se il rapportino nomina un cliente o una
-                // commessa che nel foglio non esistono, si creano PRIMA di
-                // salvare. Senza, la riga finirebbe nel foglio con un nome
-                // scritto a mano e l'anagrafica non imparerebbe niente: domani
-                // Wisper non lo riconoscerebbe ancora.
-                val (r, aggiunte) = creaCioCheManca(_rapportino.value)
-                _rapportino.value = r
+    /**
+     * "Salva": il rapportino passa in coda sul telefono, Wisper risponde subito
+     * e la riga parte verso il foglio in sottofondo.
+     *
+     * PRIMA si aspettava il foglio a microfono aperto: diciotto secondi di
+     * silenzio misurati il 26/09, con il rapportino che esisteva solo in
+     * memoria. Spegnere lo schermo non annullava il salvataggio, ma se Android
+     * chiudeva l'app o spariva il segnale il rapportino era perso; e chi
+     * richiamava "Wisper" in quei secondi si ritrovava il rapportino vecchio,
+     * poi svuotato a meta' dal salvataggio che finiva.
+     *
+     * La frase NON dice "salvato": sul foglio non c'e' ancora niente. Non si
+     * dice mai "salvato" se non e' vero, e' l'unica cosa che il tecnico non puo'
+     * verificare da solo con le mani occupate: lo si dice in [confermaSalvato],
+     * quando il foglio ha risposto con l'id.
+     */
+    private fun salva() {
+        val voce = try {
+            coda.aggiungi(_rapportino.value)
+        } catch (e: Exception) {
+            // Il telefono non riesce nemmeno a scrivere il file (memoria piena):
+            // il rapportino resta nella scheda, e va detto.
+            registro("coda_errore", e.message ?: e.javaClass.simpleName)
+            rispondi(
+                "Attenzione: non riesco a salvarlo nemmeno sul telefono. Il rapportino resta qui."
+            ) { chiudiGiro() }
+            return
+        }
+        registro("in_coda", voce.idLocale)
 
-                val id = ponte.salva(r)
-                registro("salvato", id)
+        // La scheda si svuota adesso, non a fine frase: se lo schermo si spegne
+        // mentre Wisper parla la richiamata della frase non parte, e resterebbe
+        // in scheda un rapportino gia' in viaggio, pronto a partire due volte.
+        azzera()
+        rispondi("Fatto, lo mando al foglio. Puoi chiudere.") { chiudiGiro() }
+        mandaCoda("salva")
+    }
 
-                // Appena la riga e' scritta si parla. Tutto il resto — cambiare
-                // lo stato della commessa, ricaricare l'anagrafica — sono altri
-                // due viaggi di rete, e farli PRIMA di rispondere lasciava il
-                // tecnico ad aspettare in silenzio per secondi, chiedendosi se
-                // avesse funzionato. Il dato che conta e' gia' al sicuro.
-                // Le aggiunte all'anagrafica si dicono: sono modifiche al foglio
-                // dell'azienda, non dettagli. Se Wisper le ha gia' annunciate
-                // durante la conversazione non si ripetono.
-                val avviso = aggiunte.filterNot { annunciate.contains(it) }
-                    .joinToString("") { " Ho aggiunto anche $it." }
-                rispondi(fraseDiChiusura + avviso) { azzera(); chiudiGiro() }
+    // ------------------------------------------------------- la coda verso il foglio
 
-                // Il rapportino racconta la giornata, questo cambia il mondo:
-                // va fatto, ma non davanti a nessuno che aspetta.
-                aggiornaStatoCommessa(r)
-            } catch (e: Exception) {
-                registro("salvataggio_fallito", e.message ?: "sconosciuto")
-                // Non si dice mai "salvato" se non e' vero: e' l'unica cosa che
-                // il tecnico non puo' verificare da solo con le mani occupate.
-                rispondi(
-                    "Attenzione: non sono riuscito a salvare sul foglio. Il rapportino resta qui."
-                ) { chiudiGiro() }
+    /** L'invio in corso: uno alla volta, mai due sulla stessa coda. */
+    private var invio: Job? = null
+
+    /** Il prossimo tentativo, programmato dopo un invio andato a vuoto. */
+    private var riprova: Job? = null
+
+    /**
+     * Manda al foglio i rapportini in coda, uno alla volta e nell'ordine in cui
+     * sono stati detti. Si ferma al primo che non passa: se il foglio non
+     * risponde per uno non risponde nemmeno per quelli dopo, e insistere non
+     * aiuta.
+     *
+     * Non dipende da nessuna conversazione: spegnere lo schermo o richiamare
+     * "Wisper" non la tocca. La ferma solo la morte del servizio, e in quel caso
+     * i rapportini restano nel file e ripartono al prossimo avvio.
+     */
+    private fun mandaCoda(perche: String) {
+        if (invio?.isActive == true) return
+        val quanti = coda.tutte().size
+        if (quanti == 0) return
+        registro("coda_invio", "$perche: $quanti da mandare")
+        invio = scope.launch {
+            while (true) {
+                val voce = coda.tutte().firstOrNull() ?: break
+                val tentativi = invia(voce) ?: continue
+                programmaRiprova(tentativi)
+                break
             }
         }
+    }
+
+    /**
+     * Un rapportino verso il foglio.
+     *
+     * @return null se e' arrivato, altrimenti quanti tentativi ha fatto finora.
+     */
+    private suspend fun invia(voce: CodaInvii.Voce): Int? {
+        val t0 = SystemClock.elapsedRealtime()
+        var attuale = voce
+        return try {
+            // Rete di sicurezza: se il rapportino nomina un cliente o una
+            // commessa che nel foglio non esistono, si creano PRIMA della riga.
+            // Senza, la riga finirebbe nel foglio con un nome scritto a mano e
+            // l'anagrafica non imparerebbe niente. Il rapportino coi codici veri
+            // torna subito in coda: se poi la riga non passa, al tentativo dopo
+            // non si ricreano una seconda volta.
+            val (r, aggiunte) = creaCioCheManca(voce.rapportino)
+            if (r != voce.rapportino) {
+                attuale = voce.copy(rapportino = r)
+                coda.aggiorna(attuale)
+            }
+            val id = ponte.salva(r, voce.data, voce.idLocale)
+            coda.togli(voce.idLocale)
+            registro("salvato", "$id in ${SystemClock.elapsedRealtime() - t0} ms")
+            confermaSalvato(aggiunte)
+            // Il rapportino racconta la giornata, questo cambia il mondo: va
+            // fatto, ma dopo che la riga e' al sicuro.
+            aggiornaStatoCommessa(r)
+            null
+        } catch (e: CancellationException) {
+            throw e   // il servizio si sta spegnendo: il rapportino resta nel file
+        } catch (e: Exception) {
+            val tentativi = attuale.tentativi + 1
+            runCatching { coda.aggiorna(attuale.copy(tentativi = tentativi)) }
+            registro(
+                "invio_fallito",
+                "${voce.idLocale}, tentativo $tentativi dopo " +
+                    "${SystemClock.elapsedRealtime() - t0} ms: ${e.message ?: e.javaClass.simpleName}",
+            )
+            if (tentativi == AVVISO_DOPO_TENTATIVI) avvisaNonSalvato()
+            tentativi
+        }
+    }
+
+    private fun programmaRiprova(tentativi: Int) {
+        val attesa = PAUSE_RIPROVA.getOrElse(tentativi - 1) { PAUSE_RIPROVA.last() }
+        registro("coda_riprova", "fra ${attesa / 1000} s")
+        riprova?.cancel()
+        riprova = scope.launch {
+            delay(attesa)
+            mandaCoda("riprova")
+        }
+    }
+
+    /**
+     * Il rapportino e' sul foglio: adesso, e solo adesso, si dice "salvato".
+     *
+     * A voce se Wisper e' libero — nessuna conversazione in corso e microfono
+     * suo, quindi niente telefonate e nessun'altra app davanti: e' la conferma
+     * che il tecnico aspetta senza guardare, la stessa che sentiva prima.
+     * Altrimenti la si scrive in una notifica: interrompere una conversazione
+     * nuova, o parlare sopra una chiamata, per dire una cosa ormai al sicuro
+     * sarebbe peggio che non dirla a voce.
+     */
+    private fun confermaSalvato(aggiunte: List<String>) {
+        // Le aggiunte all'anagrafica si dicono: sono modifiche al foglio
+        // dell'azienda, non dettagli. Se Wisper le ha gia' annunciate durante la
+        // conversazione non si ripetono.
+        val frase = "Rapportino salvato sul foglio." +
+            aggiunte.filterNot { annunciate.contains(it) }.joinToString("") { " Ho aggiunto anche $it." }
+        main.post {
+            togliNotifica(ID_NOTIFICA_NON_SALVATO)
+            if (_fase.value == Fase.RIPOSO && !sospeso) rispondi(frase) { chiudiGiro() }
+            else notifica(ID_NOTIFICA_SALVATO, "Rapportino salvato", frase, importante = false)
+        }
+    }
+
+    /**
+     * Il foglio non risponde da qualche tentativo. Il rapportino e' al sicuro
+     * sul telefono e continua a riprovare da solo, ma il tecnico va avvisato:
+     * finche' non e' sul foglio, per l'ufficio quella giornata non esiste. La
+     * notifica resta finche' il rapportino non parte davvero.
+     */
+    private fun avvisaNonSalvato() {
+        val quanti = coda.tutte().size
+        val testo = if (quanti <= 1) {
+            "Il rapportino è al sicuro sul telefono, ma non ancora sul foglio. Riprovo da solo appena c'è rete."
+        } else {
+            "$quanti rapportini sono al sicuro sul telefono, ma non ancora sul foglio. Riprovo da solo appena c'è rete."
+        }
+        main.post {
+            notifica(ID_NOTIFICA_NON_SALVATO, "Rapportino non ancora sul foglio", testo, importante = true)
+            if (_fase.value == Fase.RIPOSO && !sospeso) rispondi("Attenzione: $testo") { chiudiGiro() }
+        }
+    }
+
+    // ------------------------------------------------------- la rete
+
+    private val rete by lazy { ctx.getSystemService(ConnectivityManager::class.java) }
+
+    /**
+     * Quando torna il segnale la coda riparte subito, senza aspettare il
+     * prossimo tentativo programmato: e' il momento esatto in cui ha senso.
+     */
+    private val suRete = object : ConnectivityManager.NetworkCallback() {
+        override fun onAvailable(network: Network) {
+            main.post { mandaCoda("rete tornata") }
+        }
+    }
+
+    private fun ascoltaRete() {
+        runCatching { rete.registerDefaultNetworkCallback(suRete) }
+            .onFailure { registro("rete_errore", it.message ?: it.javaClass.simpleName) }
+    }
+
+    // ------------------------------------------------------- notifiche del salvataggio
+
+    private fun notifica(id: Int, titolo: String, testo: String, importante: Boolean) {
+        val apri = PendingIntent.getActivity(
+            ctx, 10 + id,
+            Intent(ctx, MainActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
+            PendingIntent.FLAG_IMMUTABLE,
+        )
+        val n = NotificationCompat.Builder(ctx, WisperApp.CANALE_SALVATAGGI)
+            .setSmallIcon(R.drawable.ic_launcher)
+            .setContentTitle(titolo)
+            .setContentText(testo)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(testo))
+            .setContentIntent(apri)
+            // L'avviso "non ancora sul foglio" resta finche' non diventa falso.
+            .setOngoing(importante)
+            .setAutoCancel(!importante)
+            .setSilent(!importante)
+            .build()
+        runCatching { ctx.getSystemService(NotificationManager::class.java).notify(id, n) }
+    }
+
+    private fun togliNotifica(id: Int) {
+        runCatching { ctx.getSystemService(NotificationManager::class.java).cancel(id) }
     }
 
     /**
@@ -838,7 +1044,12 @@ class GiroWisper(
         // La commessa che non corrisponde a nessun codice noto e' una commessa
         // nuova, e cio' che il tecnico ha detto ne e' la descrizione.
         val commessa = r.commessa?.trim()
-        val codiceNoto = note.commesse.any { it.id.equals(commessa, ignoreCase = true) }
+        // Anche un codice che l'elenco sul telefono non ha ancora e' una commessa
+        // vera: succede quando la coda ritenta un rapportino la cui commessa e'
+        // stata creata al tentativo prima, senza che l'elenco facesse in tempo a
+        // rileggersi. Una descrizione dettata a voce non ha mai la forma "M005".
+        val codiceNoto = note.commesse.any { it.id.equals(commessa, ignoreCase = true) } ||
+            (commessa != null && CODICE_COMMESSA.matches(commessa))
         if (!commessa.isNullOrBlank() && !codiceNoto && !idCliente.isNullOrBlank()) {
             runCatching { ponte.creaCommessa(idCliente!!, commessa) }
                 .onSuccess { creata ->
