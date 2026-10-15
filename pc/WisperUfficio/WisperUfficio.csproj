@@ -1,0 +1,45 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>12</LangVersion>
+    <RootNamespace>WisperUfficio</RootNamespace>
+    <AssemblyName>WisperUfficio</AssemblyName>
+    <AssemblyTitle>Wisper Ufficio</AssemblyTitle>
+    <Product>Wisper Ufficio</Product>
+    <Version>0.1.0</Version>
+    <FileVersion>0.1.0.0</FileVersion>
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+    <SatelliteResourceLanguages>it</SatelliteResourceLanguages>
+    <!--
+      Il pacchetto WebView2 si porta dietro anche la sua parte WPF, che vuole un
+      WindowsBase diverso da quello di WinForms. Qui WPF non si usa: l'avviso è rumore.
+    -->
+    <MSBuildWarningsAsMessages>$(MSBuildWarningsAsMessages);MSB3277</MSBuildWarningsAsMessages>
+  </PropertyGroup>
+
+  <!-- Le impostazioni del pacchetto: le usa prove/crea-pacchetto.ps1 con -p:PubblicazioneWisper=true. -->
+  <PropertyGroup Condition="'$(PubblicazioneWisper)' == 'true'">
+    <SelfContained>true</SelfContained>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <!-- A cartella, come Pactum: niente eseguibile che si scompatta da solo, che un antivirus può scambiare per sospetto. -->
+    <PublishSingleFile>false</PublishSingleFile>
+    <PublishTrimmed>false</PublishTrimmed>
+    <DebugType>none</DebugType>
+    <DebugSymbols>false</DebugSymbols>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4191.47" />
+  </ItemGroup>
+
+  <!-- L'interfaccia (pc/ui) va nella cartella ui accanto a WisperUfficio.exe. -->
+  <ItemGroup>
+    <Content Include="..\ui\**\*" LinkBase="ui" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

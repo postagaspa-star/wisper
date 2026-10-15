@@ -28,3 +28,10 @@ google-services.json
 
 # Appunti per la consegna, non fanno parte del progetto
 /CONSEGNA-devpost.md
+
+# Prove: i PDF stampati e la posta del finto Google
+/pc/prove/stampe/
+/apps-script/prove/posta-finta/
+
+# Il pacchetto di Wisper Ufficio (si rifà con pc/prove/crea-pacchetto.ps1)
+/pc/dist/

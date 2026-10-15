@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <!-- Solo file di questa cartella e solo chiamate a questa origine (/locale, /foglio, /file): niente internet dalla pagina. -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'none'">
+  <title>Wisper Ufficio</title>
+  <link rel="stylesheet" href="stile.css">
+</head>
+<body>
+  <div class="app">
+    <nav class="lato" aria-label="Sezioni">
+      <div class="marchio"><span class="palla" aria-hidden="true"></span>Wisper<small>Ufficio</small></div>
+      <a href="#rapportini" data-sezione="rapportini">Rapportini</a>
+      <a href="#commesse" data-sezione="commesse">Commesse</a>
+      <a href="#clienti" data-sezione="clienti">Clienti</a>
+      <a href="#impostazioni" data-sezione="impostazioni">Impostazioni</a>
+      <div class="lato-piede">
+        <button type="button" id="aggiorna" class="lato-pulsante">Aggiorna dal foglio</button>
+        <div id="ultima-lettura" class="lato-nota"></div>
+      </div>
+    </nav>
+    <main id="principale" class="principale" aria-live="polite">
+      <p class="vuoto">Wisper Ufficio si sta aprendo…</p>
+    </main>
+  </div>
+  <div id="sovrapposti"></div>
+  <div id="avvisi" class="avvisi" role="status" aria-live="polite"></div>
+  <noscript><p>Wisper Ufficio ha bisogno di JavaScript.</p></noscript>
+  <script src="conti.js"></script>
+  <script src="documenti.js"></script>
+  <script src="api.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
