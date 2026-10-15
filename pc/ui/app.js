@@ -298,7 +298,8 @@
       barraScelti.append(
         h('span', { class: 'conteggio' }, sel.length === 1 ? '1 scelto' : sel.length + ' scelti · ' + C.euro(C.totali(sel).totale)),
         h('button', { class: 'btn piccolo', onclick: () => apriRiepilogo(sel) }, 'PDF riepilogo'),
-        h('button', { class: 'btn piccolo', onclick: () => cambiaStato(sel, 'INVIATO') }, 'Segna inviati'),
+        // I fatturati restano fatturati: "inviato" viene prima.
+        h('button', { class: 'btn piccolo', onclick: () => cambiaStato(sel.filter(r => r.stato !== 'FATTURATO'), 'INVIATO') }, 'Segna inviati'),
         h('button', { class: 'btn piccolo', onclick: () => cambiaStato(sel, 'FATTURATO') }, 'Segna fatturati'),
         h('button', { class: 'btn collegamento', onclick: () => { scelti.clear(); tabellaRapportini(area, lista, o); } }, 'Deseleziona'));
     };
@@ -433,6 +434,7 @@
   }
 
   async function cambiaStato(lista, stato) {
+    if (!lista.length) { avviso('Niente da cambiare', true); return; }
     const ids = lista.map(r => r.id || r.idLocale);
     const fatto = await lavora('Aggiorno lo stato', async () => {
       const ris = await Api.post('/foglio/stato', { ids, stato });
@@ -834,7 +836,7 @@
       h('label', { class: 'spunta-campo' }, importi, 'Con gli importi (mandali solo se al cliente servono)'),
       h('p', { class: 'secondario' }, 'La mail parte dal tuo account Google, quello del foglio.')),
     [
-      h('button', { class: 'btn', onclick: async () => { chiudi(); await cambiaStato(lista, 'INVIATO'); } }, 'Segna come inviato senza email'),
+      h('button', { class: 'btn', onclick: async () => { chiudi(); await cambiaStato(lista.filter(r => r.stato !== 'FATTURATO'), 'INVIATO'); } }, 'Segna come inviato senza email'),
       'spazio',
       h('button', { class: 'btn', onclick: () => manda(true) }, 'Anteprima a me'),
       h('button', { class: 'btn primario', onclick: () => manda(false) }, 'Invia email'),

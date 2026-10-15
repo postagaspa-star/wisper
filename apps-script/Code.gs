@@ -1077,7 +1077,10 @@ function caricaFile(d) {
       firma: urlFile(fileF.getId()),
       firmatario: testo(d.firmatario),
       firmatoIl: d.firmatoIl ? new Date(d.firmatoIl) : new Date(),
-      stato: 'FIRMATO',
+      // Una firma arrivata dopo l'invio (il foglio firmato a mano, scansionato
+      // dopo) si aggiunge, ma non riporta indietro un rapportino gia' inviato
+      // o fatturato.
+      stato: stato === 'INVIATO' || stato === 'FATTURATO' ? stato : 'FIRMATO',
       modificato: new Date()
     });
     return { id: fileF.getId(), url: urlFile(fileF.getId()) };
@@ -1193,7 +1196,14 @@ function inviaEmail(d) {
   if (testo(imp.EMAIL)) opzioni.replyTo = testo(imp.EMAIL);
   MailApp.sendEmail(destinatario, testo(d.oggetto) || 'Rapportino', testo(d.messaggio) || ' ', opzioni);
   if (aMe || !d.ids || !d.ids.length) return [];
-  return cambiaStato(d.ids, 'INVIATO');
+  // Un riepilogo puo' contenere rapportini gia' fatturati: mandarlo non li
+  // riporta indietro a "inviato".
+  var righe = leggi(NOME_RAPPORTINI);
+  var daSegnare = d.ids.filter(function (id) {
+    var r = trovaRiga(righe, id, id);
+    return r && testo(r.stato).toUpperCase() !== 'FATTURATO';
+  });
+  return daSegnare.length ? cambiaStato(daSegnare, 'INVIATO') : [];
 }
 
 // ---------------------------------------------------------------------------

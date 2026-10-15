@@ -6,8 +6,8 @@ the client's, managed on the computer at the office, kept in a Google Sheet.
 It is built for one person, my father, a self-employed surveyor who does monthly
 reports for a few clients. Everything in it comes from a recorded conversation
 between us (14/10/2026) and from a demo of [Pleya](https://pleya.it), a management
-suite he liked, of which two parts were taken and cut down to one person:
-projects (here *commesse*, the word he uses) and the team's reports.
+suite my father liked, of which two parts were taken and cut down to one person:
+projects (here *commesse*, the word my father uses) and the team's reports.
 
 ## What changed
 
