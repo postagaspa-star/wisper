@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<title>Wisper, Nuovo rapportino</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:inherit;text-decoration:none}a:hover{color:inherit}
+button{font-family:inherit}
+textarea,input{font-family:inherit}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; position: relative; overflow: hidden; background: #F4F4F2; font-family: 'Figtree', system-ui, sans-serif; color: #1B1B1F; box-sizing: border-box">
+
+  <div style="padding: 10px 20px 0 20px; display: flex; flex-direction: column; gap: 10px">
+    <div style="display: flex; align-items: center; justify-content: space-between; height: 48px">
+      <sc-if value="{{ p1 }}" hint-placeholder-val="{{ true }}">
+        <a href="Main.dc.html" aria-label="Chiudi" style="width: 44px; height: 44px; border-radius: 22px; background: #E7E6E2; display: flex; align-items: center; justify-content: center">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1B1B1F" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg>
+        </a>
+      </sc-if>
+      <sc-if value="{{ nonP1 }}" hint-placeholder-val="{{ false }}">
+        <button onClick="{{ indietro }}" aria-label="Indietro" style="width: 44px; height: 44px; border-radius: 22px; border: none; background: #E7E6E2; display: flex; align-items: center; justify-content: center; cursor: pointer">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1B1B1F" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"></path></svg>
+        </button>
+      </sc-if>
+      <span style="font-size: 14px; font-weight: 700; color: #5F5F67">{{ passoTesto }}</span>
+    </div>
+    <div style="height: 6px; border-radius: 3px; background: #E2E1DD; overflow: hidden">
+      <div style="height: 6px; border-radius: 3px; background: #1B1B1F; width: {{ barra }}"></div>
+    </div>
+  </div>
+
+  <sc-if value="{{ p1 }}" hint-placeholder-val="{{ true }}">
+    <div style="padding: 18px 20px 0 20px; display: flex; flex-direction: column; gap: 14px">
+      <h1 style="margin: 0; font-size: 30px; line-height: 1.15; font-weight: 800; letter-spacing: -0.6px">Per chi?</h1>
+      <button style="height: 52px; border-radius: 16px; border: 1.5px solid #CFCEC9; background: #FFFFFF; display: flex; align-items: center; gap: 10px; padding: 0 16px; cursor: pointer">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1B1B1F" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2.5"></rect><path d="M8 3v4M16 3v4M4 10h16"></path></svg>
+        <span style="flex: 1; text-align: left; font-size: 16px; font-weight: 700; color: #1B1B1F">Oggi, giovedì 15 ottobre</span>
+        <span style="font-size: 15px; font-weight: 700; color: #8A5A00">Cambia</span>
+      </button>
+      <span style="font-size: 12px; font-weight: 700; letter-spacing: 0.08em; color: #5F5F67; margin-top: 4px">RECENTI</span>
+      <sc-for list="{{ recenti }}" as="item" hint-placeholder-count="3">
+        <button onClick="{{ item.pick }}" style="min-height: 84px; border-radius: 20px; border: 1px solid #E6E5E1; background: #FFFFFF; display: flex; align-items: center; gap: 14px; padding: 14px 16px; cursor: pointer; text-align: left">
+          <span style="width: 48px; height: 48px; border-radius: 24px; background: {{ item.tinta }}; color: {{ item.inchiostro }}; font-size: 16px; font-weight: 800; display: flex; align-items: center; justify-content: center; flex: none">{{ item.iniziali }}</span>
+          <span style="flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0">
+            <span style="font-size: 17px; font-weight: 800; color: #1B1B1F">{{ item.cliente }}</span>
+            <span style="font-size: 15px; font-weight: 500; color: #3F3F46">{{ item.commessa }}</span>
+            <span style="font-size: 13px; font-weight: 600; color: #5F5F67">{{ item.codice }} · {{ item.gruppo }}</span>
+          </span>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5F5F67" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg>
+        </button>
+      </sc-for>
+      <label style="display: flex; flex-direction: column; gap: 6px; margin-top: 4px">
+        <span style="font-size: 15px; font-weight: 700; color: #1B1B1F">Altro cliente o commessa</span>
+        <span style="height: 52px; border-radius: 16px; border: 1.5px solid #CFCEC9; background: #FFFFFF; display: flex; align-items: center; gap: 10px; padding: 0 14px">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#5F5F67" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"></circle><path d="M20 20l-4-4"></path></svg>
+          <input placeholder="Scrivi il nome" style="flex: 1; border: none; outline: none; font-size: 16px; background: transparent; color: #1B1B1F">
+        </span>
+      </label>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ p2 }}" hint-placeholder-val="{{ false }}">
+    <div style="padding: 16px 20px 0 20px; display: flex; flex-direction: column; gap: 12px">
+      <div style="display: flex; flex-direction: column; gap: 2px">
+        <span style="font-size: 15px; font-weight: 600; color: #5F5F67">{{ c.cliente }} · {{ c.commessa }}</span>
+        <h1 style="margin: 0; font-size: 30px; line-height: 1.15; font-weight: 800; letter-spacing: -0.6px">Ore e strada</h1>
+      </div>
+
+      <div style="background: #FFFFFF; border: 1px solid #E6E5E1; border-radius: 22px; padding: 14px 16px; display: flex; flex-direction: column; gap: 12px">
+        <div style="display: flex; align-items: center; justify-content: space-between">
+          <span style="font-size: 18px; font-weight: 800">Lavoro</span>
+          <div style="display: flex; align-items: center; gap: 10px">
+            <button onClick="{{ lavoroMeno }}" aria-label="Meno mezz'ora di lavoro" style="width: 52px; height: 52px; border-radius: 26px; border: none; background: #E7E6E2; display: flex; align-items: center; justify-content: center; cursor: pointer"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#1B1B1F" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14"></path></svg></button>
+            <span style="min-width: 76px; text-align: center; font-size: 28px; font-weight: 800; letter-spacing: -0.4px">{{ lavoroTesto }}</span>
+            <button onClick="{{ lavoroPiu }}" aria-label="Più mezz'ora di lavoro" style="width: 52px; height: 52px; border-radius: 26px; border: none; background: #E7E6E2; display: flex; align-items: center; justify-content: center; cursor: pointer"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#1B1B1F" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg></button>
+          </div>
+        </div>
+        <div style="display: flex; gap: 8px">
+          <sc-for list="{{ scelteOre }}" as="o" hint-placeholder-count="3">
+            <button onClick="{{ o.pick }}" style="flex: 1; height: 46px; border-radius: 999px; border: 1.5px solid {{ o.bordo }}; background: {{ o.fondo }}; color: {{ o.testo }}; font-size: 16px; font-weight: 700; cursor: pointer">{{ o.etichetta }}</button>
+          </sc-for>
+        </div>
+      </div>
+
+      <div style="background: #FFFFFF; border: 1px solid #E6E5E1; border-radius: 22px; padding: 12px 16px; display: flex; align-items: center; justify-content: space-between">
+        <span style="display: flex; flex-direction: column; gap: 1px">
+          <span style="font-size: 18px; font-weight: 800">Viaggio</span>
+          <span style="font-size: 13px; font-weight: 600; color: #5F5F67">{{ c.viaggioNota }}</span>
+        </span>
+        <div style="display: flex; align-items: center; gap: 10px">
+          <button onClick="{{ viaggioMeno }}" aria-label="Meno mezz'ora di viaggio" style="width: 52px; height: 52px; border-radius: 26px; border: none; background: #E7E6E2; display: flex; align-items: center; justify-content: center; cursor: pointer"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#1B1B1F" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14"></path></svg></button>
+          <span style="min-width: 76px; text-align: center; font-size: 28px; font-weight: 800; letter-spacing: -0.4px">{{ viaggioTesto }}</span>
+          <button onClick="{{ viaggioPiu }}" aria-label="Più mezz'ora di viaggio" style="width: 52px; height: 52px; border-radius: 26px; border: none; background: #E7E6E2; display: flex; align-items: center; justify-content: center; cursor: pointer"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#1B1B1F" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg></button>
+        </div>
+      </div>
+
+      <sc-if value="{{ extraChiuso }}" hint-placeholder-val="{{ true }}">
+        <button onClick="{{ apriExtra }}" style="height: 48px; border-radius: 16px; border: 1.5px dashed #CFCEC9; background: transparent; color: #3F3F46; font-size: 16px; font-weight: 700; cursor: pointer">+ Ore extra</button>
+      </sc-if>
+      <sc-if value="{{ extraAperto }}" hint-placeholder-val="{{ false }}">
+        <div style="background: #FFFFFF; border: 1px solid #E6E5E1; border-radius: 22px; padding: 12px 16px; display: flex; align-items: center; justify-content: space-between">
+          <span style="font-size: 18px; font-weight: 800">Extra</span>
+          <div style="display: flex; align-items: center; gap: 10px">
+            <button onClick="{{ extraMeno }}" aria-label="Meno mezz'ora extra" style="width: 52px; height: 52px; border-radius: 26px; border: none; background: #E7E6E2; display: flex; align-items: center; justify-content: center; cursor: pointer"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#1B1B1F" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14"></path></svg></button>
+            <span style="min-width: 76px; text-align: center; font-size: 28px; font-weight: 800">{{ extraTesto }}</span>
+            <button onClick="{{ extraPiu }}" aria-label="Più mezz'ora extra" style="width: 52px; height: 52px; border-radius: 26px; border: none; background: #E7E6E2; display: flex; align-items: center; justify-content: center; cursor: pointer"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#1B1B1F" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg></button>
+          </div>
+        </div>
+      </sc-if>
+
+      <div style="background: #FFFFFF; border: 1px solid #E6E5E1; border-radius: 22px; padding: 12px 16px; display: flex; flex-direction: column; gap: 10px">
+        <div style="display: flex; align-items: center; justify-content: space-between">
+          <span style="font-size: 18px; font-weight: 800">Chilometri</span>
+          <span style="min-width: 110px; height: 48px; border-radius: 14px; border: 1.5px solid #CFCEC9; display: flex; align-items: center; justify-content: flex-end; padding: 0 14px; box-sizing: border-box; font-size: 22px; font-weight: 800">{{ kmTesto }}</span>
+        </div>
+        <div style="display: flex; gap: 8px">
+          <button onClick="{{ kmUltimi }}" style="flex: 1.6; height: 44px; border-radius: 999px; border: 1.5px solid #CFCEC9; background: #FFFFFF; font-size: 15px; font-weight: 700; color: #1B1B1F; cursor: pointer">Come l'ultima volta · {{ c.ultimiKm }} km</button>
+          <button onClick="{{ kmZero }}" style="flex: 1; height: 44px; border-radius: 999px; border: 1.5px solid #CFCEC9; background: #FFFFFF; font-size: 15px; font-weight: 700; color: #1B1B1F; cursor: pointer">Senza auto</button>
+        </div>
+      </div>
+
+      <div style="display: flex; align-items: center; justify-content: space-between; padding: 0 4px">
+        <span style="display: flex; flex-direction: column; gap: 1px">
+          <span style="font-size: 15px; font-weight: 700">{{ c.tariffaTitolo }}</span>
+          <span style="font-size: 13px; font-weight: 600; color: #5F5F67">{{ c.tariffaNota }}</span>
+        </span>
+        <span style="height: 40px; border-radius: 12px; background: #E7E6E2; display: flex; align-items: center; padding: 0 12px; font-size: 16px; font-weight: 800">{{ c.tariffaTesto }}</span>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ p3 }}" hint-placeholder-val="{{ false }}">
+    <div style="padding: 16px 20px 0 20px; display: flex; flex-direction: column; gap: 14px">
+      <div style="display: flex; flex-direction: column; gap: 2px">
+        <span style="font-size: 15px; font-weight: 600; color: #5F5F67">{{ c.cliente }} · {{ lavoroTesto }} · {{ kmTesto }}</span>
+        <h1 style="margin: 0; font-size: 30px; line-height: 1.15; font-weight: 800; letter-spacing: -0.6px">Il lavoro</h1>
+      </div>
+      <label style="display: flex; flex-direction: column; gap: 6px">
+        <span style="font-size: 15px; font-weight: 700">Cosa hai fatto</span>
+        <textarea rows="5" style="border-radius: 18px; border: 1.5px solid #CFCEC9; background: #FFFFFF; padding: 14px 16px; font-size: 17px; line-height: 1.45; color: #1B1B1F; resize: none; outline: none">Taratura inverter del nastro 2 e prova a vuoto con il capo reparto.</textarea>
+      </label>
+      <span style="font-size: 15px; font-weight: 700; margin-top: 6px">Spese</span>
+      <sc-if value="{{ senzaFoto }}" hint-placeholder-val="{{ true }}">
+        <button onClick="{{ scatta }}" style="height: 96px; border-radius: 20px; border: 2px dashed #CFCEC9; background: #FFFFFF; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; cursor: pointer">
+          <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#1B1B1F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"></path><circle cx="12" cy="13" r="3.5"></circle></svg>
+          <span style="font-size: 16px; font-weight: 700; color: #1B1B1F">Fotografa lo scontrino</span>
+        </button>
+      </sc-if>
+      <sc-if value="{{ conFoto }}" hint-placeholder-val="{{ false }}">
+        <div style="background: #FFFFFF; border: 1px solid #E6E5E1; border-radius: 20px; padding: 12px; display: flex; align-items: center; gap: 12px">
+          <span style="width: 64px; height: 64px; border-radius: 12px; background: #EDECE8; display: flex; align-items: center; justify-content: center; flex: none"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#5F5F67" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"></path><path d="M9 8h6M9 12h6"></path></svg></span>
+          <span style="flex: 1; display: flex; flex-direction: column; gap: 2px">
+            <span style="font-size: 16px; font-weight: 800">Pranzo</span>
+            <span style="font-size: 14px; font-weight: 600; color: #5F5F67">1 scontrino</span>
+          </span>
+          <span style="height: 48px; min-width: 104px; border-radius: 14px; border: 1.5px solid #CFCEC9; display: flex; align-items: center; justify-content: flex-end; padding: 0 12px; box-sizing: border-box; font-size: 20px; font-weight: 800">12,50 €</span>
+        </div>
+        <button onClick="{{ scatta }}" style="height: 44px; border-radius: 999px; border: 1.5px solid #CFCEC9; background: transparent; font-size: 15px; font-weight: 700; color: #1B1B1F; cursor: pointer">+ Un altro scontrino</button>
+      </sc-if>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ p4 }}" hint-placeholder-val="{{ false }}">
+    <div style="padding: 16px 20px 0 20px; display: flex; flex-direction: column; gap: 12px">
+      <div style="display: flex; flex-direction: column; gap: 2px">
+        <span style="font-size: 15px; font-weight: 600; color: #5F5F67">Giovedì 15 ottobre</span>
+        <h1 style="margin: 0; font-size: 30px; line-height: 1.15; font-weight: 800; letter-spacing: -0.6px">Riepilogo</h1>
+      </div>
+      <div style="background: #FFFFFF; border: 1px solid #E6E5E1; border-radius: 22px; padding: 4px 16px">
+        <div style="display: flex; align-items: center; gap: 12px; min-height: 58px; border-bottom: 1px solid #EFEEEB">
+          <span style="flex: 1; display: flex; flex-direction: column"><span style="font-size: 16px; font-weight: 800">{{ c.cliente }}</span><span style="font-size: 14px; color: #5F5F67">{{ c.commessa }}</span></span>
+          <button onClick="{{ vaiA1 }}" style="border: none; background: none; font-size: 15px; font-weight: 700; color: #8A5A00; cursor: pointer; height: 44px">Cambia</button>
+        </div>
+        <div style="display: flex; align-items: center; gap: 12px; min-height: 58px; border-bottom: 1px solid #EFEEEB">
+          <span style="flex: 1; display: flex; flex-direction: column"><span style="font-size: 16px; font-weight: 800">{{ oreRiga }}</span><span style="font-size: 14px; color: #5F5F67">{{ kmTesto }}</span></span>
+          <button onClick="{{ vaiA2 }}" style="border: none; background: none; font-size: 15px; font-weight: 700; color: #8A5A00; cursor: pointer; height: 44px">Cambia</button>
+        </div>
+        <div style="display: flex; align-items: center; gap: 12px; min-height: 58px">
+          <span style="flex: 1; display: flex; flex-direction: column; min-width: 0"><span style="font-size: 16px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Taratura inverter del nastro 2…</span><span style="font-size: 14px; color: #5F5F67">{{ speseRiga }}</span></span>
+          <button onClick="{{ vaiA3 }}" style="border: none; background: none; font-size: 15px; font-weight: 700; color: #8A5A00; cursor: pointer; height: 44px">Cambia</button>
+        </div>
+      </div>
+      <div style="background: #FFFFFF; border: 1px solid #E6E5E1; border-radius: 22px; padding: 16px; display: flex; flex-direction: column; gap: 8px">
+        <div style="display: flex; justify-content: space-between; font-size: 15px"><span style="color: #3F3F46">Ore · {{ dettaglioOre }}</span><span style="font-weight: 700">{{ compensoTesto }}</span></div>
+        <div style="display: flex; justify-content: space-between; font-size: 15px"><span style="color: #3F3F46">Km · {{ dettaglioKm }}</span><span style="font-weight: 700">{{ rimborsoTesto }}</span></div>
+        <div style="display: flex; justify-content: space-between; font-size: 15px"><span style="color: #3F3F46">Spese</span><span style="font-weight: 700">{{ speseTesto }}</span></div>
+        <div style="display: flex; justify-content: space-between; align-items: baseline; border-top: 1px solid #E6E5E1; padding-top: 10px; margin-top: 2px"><span style="font-size: 17px; font-weight: 800">Totale</span><span style="font-size: 32px; font-weight: 800; letter-spacing: -0.6px">{{ totaleTesto }}</span></div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ barraAvanti }}" hint-placeholder-val="{{ false }}">
+    <div style="position: absolute; left: 0; right: 0; bottom: 0; padding: 14px 20px 26px 20px; background: #F4F4F2; border-top: 1px solid #E6E5E1; display: flex; align-items: center; gap: 14px">
+      <span style="flex: 1; display: flex; flex-direction: column">
+        <span style="font-size: 13px; font-weight: 700; color: #5F5F67">Totale</span>
+        <span style="font-size: 24px; font-weight: 800; letter-spacing: -0.4px">{{ totaleTesto }}</span>
+      </span>
+      <button onClick="{{ avanti }}" style="width: 172px; height: 60px; border-radius: 18px; border: none; background: {{ avantiFondo }}; color: {{ avantiTesto }}; font-size: 18px; font-weight: 800; cursor: pointer">Avanti</button>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ p4 }}" hint-placeholder-val="{{ false }}">
+    <div style="position: absolute; left: 0; right: 0; bottom: 0; padding: 12px 20px 22px 20px; background: #F4F4F2; display: flex; flex-direction: column; gap: 6px">
+      <a href="Firma.dc.html" style="height: 64px; border-radius: 18px; background: #FFC53D; color: #1B1B1F; display: flex; align-items: center; justify-content: center; gap: 10px; font-size: 18px; font-weight: 800">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#1B1B1F" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20c2-6 6-6 8-3s6 3 8-3"></path><path d="M14 4l6 6-9 9H5v-6z"></path></svg>
+        Fai firmare al cliente
+      </a>
+      <a href="Main.dc.html" style="height: 48px; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 700; color: #3F3F46">Salva senza firma</a>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { passo: 1, scelta: 'bat', lavoro: 0, viaggio: 0, extra: 0, extraAperto: false, km: 0, foto: false };
+  }
+
+  renderVals() {
+    const s = this.state;
+    const commesse = {
+      bat: { cliente: 'Batokyo', commessa: 'Nuovo magazzino automatico', codice: 'P2601', gruppo: 'Elettrodinamica', iniziali: 'BA', tinta: '#EAF1FD', inchiostro: '#1E4FA8', tariffa: 30, fissa: true, pagaViaggio: false, ultimiKm: 96 },
+      rossi: { cliente: 'Rossi Impianti Srl', commessa: 'Quadro elettrico capannone', codice: 'P2602', gruppo: 'Privato', iniziali: 'RI', tinta: '#EBF7EE', inchiostro: '#1F6A30', tariffa: 42, fissa: false, pagaViaggio: false, ultimiKm: 22 },
+      bianchi: { cliente: 'Bianchi Termoidraulica', commessa: 'Caldaia via Roma', codice: 'P2603', gruppo: 'Privato', iniziali: 'BT', tinta: '#F1ECFE', inchiostro: '#5532C9', tariffa: 38, fissa: false, pagaViaggio: false, ultimiKm: 14 }
+    };
+    const n = (x) => (x % 1 === 0 ? String(x) : String(x).replace('.', ','));
+    const eur = (x) => {
+      const t = (Math.round(x * 100) / 100).toFixed(2).split('.');
+      return t[0].replace(/\B(?=(\d{3})+(?!\d))/g, '.') + ',' + t[1] + ' €';
+    };
+    const c0 = commesse[s.scelta] || commesse.bat;
+    const c = Object.assign({}, c0, {
+      viaggioNota: c0.pagaViaggio ? 'pagato' : 'non pagato da ' + (c0.fissa ? c0.gruppo : 'questo cliente'),
+      tariffaTitolo: c0.fissa ? 'Tariffa fissa ' + c0.gruppo : 'Tariffa oraria',
+      tariffaNota: c0.fissa ? 'uguale per tutti i suoi clienti' : "l'ultima usata per " + c0.cliente.split(' ')[0],
+      tariffaTesto: c0.tariffa + ' €/h'
+    });
+    const piu = (k, d) => () => this.setState({ [k]: Math.max(0, Math.round((this.state[k] + d) * 2) / 2) });
+    const compenso = (s.lavoro + (c.pagaViaggio ? s.viaggio : 0)) * c.tariffa + s.extra * c.tariffa;
+    const rimborso = Math.round(s.km * 0.76 * 100) / 100;
+    const spese = s.foto ? 12.5 : 0;
+    const totale = Math.round(compenso * 100) / 100 + rimborso + spese;
+    const ore = s.lavoro + s.viaggio + s.extra;
+    const pronto = s.passo !== 2 || ore > 0;
+    return {
+      p1: s.passo === 1, nonP1: s.passo !== 1, p2: s.passo === 2, p3: s.passo === 3, p4: s.passo === 4,
+      passoTesto: s.passo === 4 ? 'Riepilogo' : 'Passo ' + s.passo + ' di 3',
+      barra: Math.round((s.passo / 4) * 100) + '%',
+      recenti: ['bat', 'rossi', 'bianchi'].map((k) => Object.assign({}, commesse[k], {
+        pick: () => this.setState({ scelta: k, passo: 2 })
+      })),
+      c: c,
+      scelteOre: [4, 6, 8].map((h) => ({
+        etichetta: h + ' h',
+        fondo: s.lavoro === h ? '#1B1B1F' : '#FFFFFF',
+        testo: s.lavoro === h ? '#FFFFFF' : '#1B1B1F',
+        bordo: s.lavoro === h ? '#1B1B1F' : '#CFCEC9',
+        pick: () => this.setState({ lavoro: h })
+      })),
+      lavoroTesto: n(s.lavoro) + ' h', viaggioTesto: n(s.viaggio) + ' h', extraTesto: n(s.extra) + ' h',
+      kmTesto: s.km + ' km',
+      lavoroMeno: piu('lavoro', -0.5), lavoroPiu: piu('lavoro', 0.5),
+      viaggioMeno: piu('viaggio', -0.5), viaggioPiu: piu('viaggio', 0.5),
+      extraMeno: piu('extra', -0.5), extraPiu: piu('extra', 0.5),
+      extraChiuso: !s.extraAperto, extraAperto: s.extraAperto,
+      apriExtra: () => this.setState({ extraAperto: true }),
+      kmUltimi: () => this.setState({ km: c.ultimiKm }),
+      kmZero: () => this.setState({ km: 0 }),
+      senzaFoto: !s.foto, conFoto: s.foto,
+      scatta: () => this.setState({ foto: true }),
+      barraAvanti: s.passo === 2 || s.passo === 3,
+      avantiFondo: pronto ? '#FFC53D' : '#E2E1DD',
+      avantiTesto: pronto ? '#1B1B1F' : '#8A8A92',
+      avanti: () => { if (pronto) this.setState({ passo: s.passo + 1 }); },
+      indietro: () => this.setState({ passo: Math.max(1, s.passo - 1) }),
+      vaiA1: () => this.setState({ passo: 1 }), vaiA2: () => this.setState({ passo: 2 }), vaiA3: () => this.setState({ passo: 3 }),
+      oreRiga: n(s.lavoro) + ' h di lavoro' + (s.viaggio ? ' · ' + n(s.viaggio) + ' h di viaggio' : '') + (s.extra ? ' · ' + n(s.extra) + ' h extra' : ''),
+      speseRiga: s.foto ? 'Spese 12,50 € · 1 scontrino' : 'Nessuna spesa',
+      dettaglioOre: n(s.lavoro + s.extra + (c.pagaViaggio ? s.viaggio : 0)) + ' h × ' + c.tariffa + ' €',
+      dettaglioKm: s.km + ' × 0,76 €',
+      compensoTesto: eur(compenso), rimborsoTesto: eur(rimborso), speseTesto: eur(spese), totaleTesto: eur(totale)
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -20,14 +20,18 @@ a report, and the sheet as the single place where data lives.
 
 ## Three pieces
 
-**The phone** (`app/`, Kotlin, Compose). Opens on the month's reports with their
-totals. A report is one screen, from the date to the client's signature, with
-Save always at the bottom. In Pleya you create a report and then reopen it to
-add hours and photos; the first thing my father said was "this is one step too
-many".
+**The phone** (`app/`, Kotlin, Compose). Opens on *Oggi*: is today's report
+written, which days of the week are missing, what still needs a signature. A
+report is three short steps (who, hours and road, the work) and a summary, with
+the total counting up at the bottom while you fill it in. In Pleya you create a
+report and then reopen it to add hours and photos; the first thing my father
+said was "this is one step too many".
 
-- Today is the default date. Choosing a job fills in the client; a client or job
-  typed in that does not exist yet is created by the sheet, with its code.
+- The system remembers so you only confirm: the last clients and jobs as big
+  cards, "Come ieri" to copy the last report, last time's kilometres, the last
+  rate used for that client. Steppers in half hours, no drop-downs.
+- Today is the default date. A client or job typed in that does not exist yet is
+  created by the sheet, with its code.
 - Hours: work, extra, travel. Kilometres. Expenses with photos of the receipts,
   taken there and then or added later by reopening the report.
 - The client signs with a finger on the phone. No QR code: in Pleya the client
@@ -35,16 +39,18 @@ many".
   complicated". A signed report is locked until it is put back to draft, which
   removes the signature.
 - Everything goes to a file first and WorkManager sends it when there is signal,
-  even with the app closed. Without signal the list says so: "1 modifica è sul
-  telefono e parte appena c'è rete".
+  even with the app closed. Without signal a calm grey pill says so: "1
+  rapportino parte appena c'è rete". Red only if the sheet refuses something.
 
 **Wisper Ufficio** (`pc/`, C# .NET 8, WebView2, built like Pactum). The main
 program, because invoicing is done at a desk.
 
-- *Rapportini*: filters by client, group, month and state, totals at the bottom.
-  "07" with no client gives every report of July with the total, which is what
-  an invoice is made from. Each report shows its steps, Bozza → Firmato →
-  Inviato → Fatturato, with one sentence saying what is missing.
+- *Fine mese*, the home: what is ready to invoice, one card per payer
+  (Elettrodinamica, not each of its clients) with **Prepara riepilogo**: the PDF
+  previewed on the left, sent by email on the right. Then **Segna fatturati**.
+- *Rapportini*: grouped by who pays, with totals; search, month and *Tutti | Da
+  fatturare | Da firmare*. A side panel shows one report and one yellow button,
+  the thing to do now: Modifica, Invia al cliente or Segna fatturato.
 - *Commesse*: open, suspended and closed, with the hidden ones counted instead of
   silently filtered. Hours against the budget (warning at 85%, over at 100%),
   expected value, cost, margin, what is ready to invoice, documents in Drive.
@@ -59,6 +65,16 @@ program, because invoicing is done at a desk.
 signatures and job documents. It is the only place where money is computed, so
 phone and computer can never show two different totals. Nothing answers without
 the code.
+
+## Look
+
+`docs/aspetto.md` is the design guide (research, principles, colours, type, every
+screen of phone and computer), `docs/prototipo/` the clickable prototype it came
+from. One family with the phone: warm light background, white cards with a
+border, yellow only on the thing to do, Figtree (SIL OFL, bundled), light and
+dark themes. No permanent help text: the first time, both apps open a guided
+tour on the real screens with example data, and it can be replayed from the
+settings.
 
 ## Money
 
