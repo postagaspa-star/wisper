@@ -74,7 +74,7 @@ data class Vista(
  * sola. Ogni modifica va prima nella [CodaInvii] (cioe' su disco) e solo dopo
  * parte: cosi' quello che si vede e' sempre quello che e' al sicuro.
  */
-class Archivio(private val ctx: Context) {
+class Archivio(private val ctx: Context) : Dati {
 
     val configurazione = Configurazione(ctx)
     private val ponte = PonteFoglio({ configurazione.url }, { configurazione.codice })
@@ -86,13 +86,13 @@ class Archivio(private val ctx: Context) {
     private val invio = Mutex()
 
     private val _anagrafiche = MutableStateFlow(copia.anagrafiche())
-    val anagrafiche: StateFlow<Anagrafiche> = _anagrafiche.asStateFlow()
+    override val anagrafiche: StateFlow<Anagrafiche> = _anagrafiche.asStateFlow()
 
     /** L'ultimo elenco letto dal foglio, aggiornato a ogni risposta. */
     private val _dalFoglio = MutableStateFlow(copia.rapportini())
 
     private val _coda = MutableStateFlow(coda.tutte())
-    val operazioni: StateFlow<List<CodaInvii.Operazione>> = _coda.asStateFlow()
+    override val operazioni: StateFlow<List<CodaInvii.Operazione>> = _coda.asStateFlow()
 
     data class Aggiornamento(
         val inCorso: Boolean = false,
@@ -101,13 +101,13 @@ class Archivio(private val ctx: Context) {
     )
 
     private val _aggiornamento = MutableStateFlow(Aggiornamento())
-    val aggiornamento: StateFlow<Aggiornamento> = _aggiornamento.asStateFlow()
+    override val aggiornamento: StateFlow<Aggiornamento> = _aggiornamento.asStateFlow()
 
-    val viste: StateFlow<List<Vista>> = combine(_dalFoglio, _coda, _anagrafiche, ::componi)
+    override val viste: StateFlow<List<Vista>> = combine(_dalFoglio, _coda, _anagrafiche, ::componi)
         .stateIn(scope, SharingStarted.Eagerly, componi(_dalFoglio.value, _coda.value, _anagrafiche.value))
 
     /** Chi compila: il nome di questo telefono, o quello scritto nelle impostazioni del foglio. */
-    val tecnico: String
+    override val tecnico: String
         get() = configurazione.tecnico.ifBlank { _anagrafiche.value.tecnico }
 
     val configurato: Boolean get() = ponte.configurato
@@ -115,7 +115,9 @@ class Archivio(private val ctx: Context) {
     // ------------------------------------------------------------- lettura
 
     /** Rilegge clienti, commesse e rapportini. Con [mese], legge anche quel mese (per sfogliare indietro). */
-    fun aggiorna(mese: YearMonth? = null) {
+    override val esempio: Boolean = false
+
+    override fun aggiorna(mese: YearMonth?) {
         scope.launch { aggiornaOra(mese) }
         programmaInvio()
     }
@@ -158,7 +160,7 @@ class Archivio(private val ctx: Context) {
      * rapportino scritto per lui. Prima quelli ancora sul telefono (sono i piu'
      * recenti), poi quella che il foglio si ricorda, poi l'ultimo rapportino letto.
      */
-    fun tariffaProposta(cliente: Cliente?, nomeCliente: String): Double? {
+    override fun tariffaProposta(cliente: Cliente?, nomeCliente: String): Double? {
         val nome = Anagrafiche.normalizza(cliente?.nome ?: nomeCliente)
         if (nome.isEmpty()) return null
         fun suo(r: Rapportino) = (cliente != null && r.idCliente == cliente.id) ||
@@ -171,7 +173,7 @@ class Archivio(private val ctx: Context) {
 
     // ------------------------------------------------------------- modifiche
 
-    fun salva(r: Rapportino) {
+    override fun salva(r: Rapportino) {
         coda.salva(r)
         dopoModifica()
     }
@@ -181,17 +183,17 @@ class Archivio(private val ctx: Context) {
      * salvataggio del rapportino: lo script mette la foto sulla riga, e la
      * riga deve esistere.
      */
-    fun accodaFoto(idLocale: String, file: File) {
+    override fun accodaFoto(idLocale: String, file: File) {
         coda.foto(idLocale, file.nameWithoutExtension, file.path)
         dopoModifica()
     }
 
-    suspend fun preparaFoto(sorgente: Uri): File = withContext(Dispatchers.IO) {
+    override suspend fun preparaFoto(sorgente: Uri): File = withContext(Dispatchers.IO) {
         Immagini.preparaFoto(ctx, sorgente).second
     }
 
     /** Una foto ancora sul telefono si toglie e basta; una gia' sul foglio va tolta anche li'. */
-    fun togliFoto(idLocale: String, remota: FileRemoto?, locale: File?) {
+    override fun togliFoto(idLocale: String, remota: FileRemoto?, locale: File?) {
         if (locale != null) {
             coda.tutte().firstOrNull { it.tipo == CodaInvii.Tipo.FOTO && it.percorso == locale.path }
                 ?.let { coda.togli(it.idOp) }
@@ -201,7 +203,7 @@ class Archivio(private val ctx: Context) {
         dopoModifica()
     }
 
-    suspend fun firma(idLocale: String, disegno: Bitmap, firmatario: String) = withContext(Dispatchers.IO) {
+    override suspend fun firma(idLocale: String, disegno: Bitmap, firmatario: String): Unit = withContext(Dispatchers.IO) {
         val (idFile, file) = Immagini.salvaFirma(ctx, disegno)
         coda.firma(idLocale, idFile, file.path, firmatario, LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME))
         dopoModifica()
@@ -212,7 +214,7 @@ class Archivio(private val ctx: Context) {
      * firmato quello che c'era, e se cambia quella firma non vale piu'.
      * Una firma che non e' ancora partita si toglie e basta.
      */
-    fun riportaInBozza(idLocale: String) {
+    override fun riportaInBozza(idLocale: String) {
         val firmeInAttesa = coda.diRapportino(idLocale).filter { it.tipo == CodaInvii.Tipo.FIRMA }
         firmeInAttesa.forEach { coda.togli(it.idOp); File(it.percorso).delete() }
         val remoto = remotoDi(idLocale)
@@ -221,7 +223,7 @@ class Archivio(private val ctx: Context) {
     }
 
     /** Un rapportino mai arrivato sul foglio sparisce; uno gia' sul foglio diventa ANNULLATO e si recupera da li'. */
-    fun elimina(idLocale: String) {
+    override fun elimina(idLocale: String) {
         if (remotoDi(idLocale) == null) {
             coda.diRapportino(idLocale).forEach { op ->
                 coda.togli(op.idOp)
@@ -234,13 +236,13 @@ class Archivio(private val ctx: Context) {
     }
 
     /** Il foglio aveva rifiutato: si riprova (dopo aver sistemato, per esempio, il codice). */
-    fun riprova(idOp: String) {
+    override fun riprova(idOp: String) {
         coda.tutte().firstOrNull { it.idOp == idOp }?.let { coda.aggiorna(it.copy(errore = "", tentativi = 0)) }
         dopoModifica()
     }
 
     /** Il foglio aveva rifiutato e non serve piu': si butta, e con lei il suo file. */
-    fun scarta(idOp: String) {
+    override fun scarta(idOp: String) {
         coda.tutte().firstOrNull { it.idOp == idOp }?.let { op ->
             coda.togli(op.idOp)
             if (op.percorso.isNotBlank()) File(op.percorso).delete()

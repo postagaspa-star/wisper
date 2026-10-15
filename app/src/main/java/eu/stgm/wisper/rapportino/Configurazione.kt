@@ -30,4 +30,17 @@ class Configurazione(ctx: Context) {
     var tecnico: String
         get() = prefs.getString("tecnico", "").orEmpty()
         set(v) = prefs.edit().putString("tecnico", v.trim()).apply()
+
+    /** "auto" (segue il telefono), "chiaro" o "scuro". */
+    var tema: String
+        get() = prefs.getString("tema", "auto") ?: "auto"
+        set(v) = prefs.edit().putString("tema", v).apply()
+
+    /**
+     * La visita guidata parte da sola una volta: al primo collegamento, o al
+     * primo avvio dopo l'aggiornamento al nuovo aspetto (versione 2).
+     */
+    var visitaVista: Int
+        get() = prefs.getInt("visitaVista", 0)
+        set(v) = prefs.edit().putInt("visitaVista", v).apply()
 }

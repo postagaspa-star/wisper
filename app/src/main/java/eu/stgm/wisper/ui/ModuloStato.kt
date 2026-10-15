@@ -1,6 +1,7 @@
 package eu.stgm.wisper.ui
 
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -18,8 +19,25 @@ import java.io.File
  * [base] e' il rapportino da cui si parte, con quello che sa il foglio (numero,
  * stato, foto gia' caricate). Il modulo cambia solo i campi che si compilano.
  */
-class ModuloStato(base: Rapportino, val nuovo: Boolean, tariffaToccata: Boolean = !nuovo) {
+class ModuloStato(
+    base: Rapportino,
+    val nuovo: Boolean,
+    tariffaToccata: Boolean = !nuovo,
+    passoIniziale: Int = if (nuovo) 1 else 4,
+) {
     var base by mutableStateOf(base)
+
+    /** 1 Per chi, 2 Ore e strada, 3 Il lavoro, 4 Riepilogo. */
+    var passo by mutableIntStateOf(passoIniziale)
+    /** Si è arrivati a un passo da "Cambia" del riepilogo: Avanti torna lì. */
+    var tornaAlRiepilogo by mutableStateOf(false)
+    /** Al passo 1, dopo aver cercato un cliente: si sceglie la sua commessa. */
+    var sceltaCommessa by mutableStateOf(false)
+    var ricerca by mutableStateOf("")
+    var extraAperto by mutableStateOf(base.oreExtra > 0)
+    var speseAperte by mutableStateOf(base.spese > 0 || base.noteSpese.isNotBlank())
+    var luogoAperto by mutableStateOf(base.luogo.isNotBlank())
+    var notaAperta by mutableStateOf(base.noteInterne.isNotBlank())
 
     var data by mutableStateOf(base.data)
     var cliente by mutableStateOf(base.cliente)
@@ -74,6 +92,30 @@ class ModuloStato(base: Rapportino, val nuovo: Boolean, tariffaToccata: Boolean 
     val cambiato: Boolean
         get() = nuovo || fotoNuove.isNotEmpty() || rapportino().soloCompilato() != base.soloCompilato()
 
+    /** Controlla solo i campi di un passo: Avanti non va oltre finché mancano. */
+    fun validaPasso(n: Int, regole: Regole): Boolean {
+        val tutti = valida(regole)
+        val delPasso = when (n) {
+            1 -> setOf("cliente")
+            2 -> setOf("oreLavoro", "oreExtra", "oreViaggio", "km", "tariffa")
+            3 -> setOf("descrizione", "spese")
+            else -> errori.keys
+        }
+        errori = errori.filterKeys { it in delPasso }
+        return tutti || errori.isEmpty()
+    }
+
+    /** Ore e km a passi di mezz'ora, mai sotto zero. */
+    fun cambia(campo: String, delta: Double) {
+        fun nuovo(t: String) = Numeri.scrivi(maxOf(0.0, Math.round(((Numeri.leggi(t) ?: 0.0) + delta) * 2) / 2.0), vuotoSeZero = true)
+        when (campo) {
+            "oreLavoro" -> oreLavoro = nuovo(oreLavoro)
+            "oreExtra" -> oreExtra = nuovo(oreExtra)
+            "oreViaggio" -> oreViaggio = nuovo(oreViaggio)
+        }
+        errori = errori - campo
+    }
+
     /**
      * Controlla che il rapportino stia in piedi. Gli errori si scrivono sotto il
      * campo che li ha, con le parole di chi compila e non col nome del campo.
@@ -99,6 +141,7 @@ class ModuloStato(base: Rapportino, val nuovo: Boolean, tariffaToccata: Boolean 
 
     fun aJson(): JSONObject = JSONObject()
         .put("nuovo", nuovo)
+        .put("passo", passo)
         .put("tariffaToccata", tariffaToccata)
         .put("base", base.aJson())
         .put("rapportino", rapportino().aJson())
@@ -109,7 +152,7 @@ class ModuloStato(base: Rapportino, val nuovo: Boolean, tariffaToccata: Boolean 
             val base = Rapportino.daJson(o.getJSONObject("base"))
             val compilato = Rapportino.daJson(o.getJSONObject("rapportino"))
             return ModuloStato(compilato.copy(id = base.id, foto = base.foto, firma = base.firma, stato = base.stato),
-                o.optBoolean("nuovo"), o.optBoolean("tariffaToccata")).also { s ->
+                o.optBoolean("nuovo"), o.optBoolean("tariffaToccata"), o.optInt("passo", 1)).also { s ->
                 // Si riparte dal rapportino com'era all'apertura, cosi' "cambiato"
                 // vede le modifiche fatte prima della chiusura.
                 s.base = base
