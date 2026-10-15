@@ -1,244 +1,135 @@
 # Wisper
 
-An Android app that lets an industrial technician file the daily work report by
-talking, without ever touching the phone. You say "Wisper", you tell it about
-your day, the fields fill themselves in on screen, you say "confermo" (I
-confirm), and the row lands in the company spreadsheet.
+Work reports for a technician who works alone: filled in on the phone at
+the client's, managed on the computer at the office, kept in a Google Sheet.
 
-It speaks Italian, because that is who it was built for. The labels follow the
-phone's language, so the screenshots below are the English ones.
+It is built for one person, my father, a self-employed surveyor who does monthly
+reports for a few clients. Everything in it comes from a recorded conversation
+between us (14/10/2026) and from a demo of [Pleya](https://pleya.it), a management
+suite he liked, of which two parts were taken and cut down to one person:
+projects (here *commesse*, the word he uses) and the team's reports.
 
-One person, two days, sixteen years old. Built for NGN Hacks 2026.
-**[postagaspa-star.github.io/wisper](https://postagaspa-star.github.io/wisper/)**
+## What changed
 
-<img src="docs/immagini/5-scheda.png" width="250"> <img src="docs/immagini/4-domanda.png" width="250"> <img src="docs/immagini/3-ascolta.png" width="250">
+The first Wisper, built for NGN Hacks 2026, was voice only: a wake word, a
+conversation, a row in the sheet. When my father tried it, the answer was "lascia
+stare la voce, facciamola a mano", leave the voice, let's do it by hand. So the
+voice is gone, all of it: wake word, recogniser, Gemini, the listening service,
+the location. What was worth keeping stayed: the on-disk queue that never loses
+a report, and the sheet as the single place where data lives.
 
-**Left: one sentence, spoken with gloves on.** Client, job, the address of the
-site, hours, kilometres, expenses, and whether the job closes. WORK DONE reads
-*"Sostituzione pompa di circolazione impianto fotovoltaico"*: replaced the
-circulation pump on the photovoltaic system. Underneath, Wisper asking *"Il
-lavoro è chiuso, confermi?"* (The job is closed, do you confirm?)
+## Three pieces
 
-**Middle: half a sentence in.** A dash is a field Wisper does not have yet, and
-it asks for one thing at a time rather than reading a list: *"Ho segnato tre ore
-e mezza per Rossi Impianti, ma quale commessa hai seguito?"* (I have put down
-three and a half hours for Rossi Impianti, but which job were you on?)
+**The phone** (`app/`, Kotlin, Compose). Opens on the month's reports with their
+totals. A report is one screen, from the date to the client's signature, with
+Save always at the bottom. In Pleya you create a report and then reopen it to
+add hours and photos; the first thing my father said was "this is one step too
+many".
 
-**Right: your turn.** The microphone icon is there because a colour has to be
-learned and a microphone does not.
+- Today is the default date. Choosing a job fills in the client; a client or job
+  typed in that does not exist yet is created by the sheet, with its code.
+- Hours: work, extra, travel. Kilometres. Expenses with photos of the receipts,
+  taken there and then or added later by reopening the report.
+- The client signs with a finger on the phone. No QR code: in Pleya the client
+  frames a code with their own phone, and my father's verdict was "even more
+  complicated". A signed report is locked until it is put back to draft, which
+  removes the signature.
+- Everything goes to a file first and WorkManager sends it when there is signal,
+  even with the app closed. Without signal the list says so: "1 modifica è sul
+  telefono e parte appena c'è rete".
 
-**Before the card, there is only the ball**, and its colour is how you know whose
-turn it is. You read it from a metre away, out of the corner of your eye, which
-is the only kind of reading available to someone holding a wrench.
+**Wisper Ufficio** (`pc/`, C# .NET 8, WebView2, built like Pactum). The main
+program, because invoicing is done at a desk.
 
-<img src="docs/immagini/1-riposo.png" width="250"> <img src="docs/immagini/2-parla.png" width="250">
+- *Rapportini*: filters by client, group, month and state, totals at the bottom.
+  "07" with no client gives every report of July with the total, which is what
+  an invoice is made from. Each report shows its steps, Bozza → Firmato →
+  Inviato → Fatturato, with one sentence saying what is missing.
+- *Commesse*: open, suspended and closed, with the hidden ones counted instead of
+  silently filtered. Hours against the budget (warning at 85%, over at 100%),
+  expected value, cost, margin, what is ready to invoice, documents in Drive.
+- *Clienti* and *Impostazioni*: groups and rates, ACI cost per km, your hourly
+  cost, letterhead, your signature.
+- Two PDFs printed by WebView2: the single report (laid out like Pleya's, no
+  prices unless asked) and the month's summary with totals. Sent by email from
+  the sheet owner's Gmail, or "segna come inviato senza email".
 
-**White**, waiting for the wake word: nothing has been touched, and nothing is
-being sent anywhere. **Blue**, Wisper talking: say "Wisper" over the top of it
-and it stops mid sentence.
+**The sheet** (`apps-script/Code.gs`). Sheets *Rapportini*, *Clienti*,
+*Commesse*, *Gruppi*, *Impostazioni*, and a *Wisper* folder in Drive for receipts,
+signatures and job documents. It is the only place where money is computed, so
+phone and computer can never show two different totals. Nothing answers without
+the code.
 
-## Why it exists
+## Money
 
-My father runs a technical firm in northern Italy. I have been building software
-for its clients for the past few months, which is how I ended up watching this
-particular problem from close up.
+- **Groups.** Every client belongs to one. *Elettrodinamica*: 30 €/h fixed, travel
+  time not paid, kilometres paid. *Privato*: no fixed rate.
+- **Free rates.** For a client outside a fixed group the rate is typed in the
+  report, and the sheet remembers it: next time the phone proposes it already
+  written ("L'ultima usata per Rossi Impianti").
+- **Kilometres** at the ACI rate for the Volvo XC40 (0,76 €/km to start with; to
+  be checked every January against the ACI table, it is a setting).
+- Rates are **frozen in the row**: changing the ACI cost in January does not
+  rewrite July.
+- Work hours at the rate, extra hours at the rate plus the group's surcharge,
+  travel only if paid, km if refunded, expenses as they are. Each piece is
+  rounded to the cent before adding up, so the total on the PDF is the exact sum
+  of the lines above it. The same formula lives in the script, the app and the
+  office program, and all three are tested on the same cases
+  (`apps-script/prove/casi-calcolo.json`).
 
-His technicians spend the day on site with gloves on and both hands busy. Then
-the report has to be filed: client, job, what they did, hours, kilometres,
-expenses, whether the work is finished.
+## Setting it up
 
-The interesting part is when it happens. Back at the office, near closing time,
-at the end of a day that started at seven, by someone who is tired and wants to
-go home. It is a form, filled in by hand, one field after another, and nothing
-about it is automatic. So it gets rushed, or written from memory two days later,
-or forgotten, and the office spends the next morning chasing it.
+1. **The sheet.** In the spreadsheet: Extensions → Apps Script, paste
+   `apps-script/Code.gs`, run `preparaFoglio()` once. It adds the missing sheets
+   and columns without touching existing ones, and writes the CODE in the log.
+   Deploy → New deployment → Web app, execute as *me*, access *Anyone*. The sheet
+   should belong to whoever sends the emails: they leave from its owner's Gmail.
+2. **The phone.** In `C:\Users\andre\wisper-keys\wisper.properties`:
+   ```
+   sheetUrl=https://script.google.com/macros/s/.../exec
+   sheetCodice=...
+   ```
+   Build the APK. Both can also be changed from the app's settings, so a new
+   code does not need a new app.
+3. **The computer.** `powershell -ExecutionPolicy Bypass -File pc\prove\crea-pacchetto.ps1`
+   makes `pc/dist/wisper-ufficio.zip`. Unzip anywhere, start `WisperUfficio.exe`,
+   paste address and code in *Impostazioni*. The code is stored encrypted with
+   the Windows user's DPAPI. `WisperUfficio.exe --stampa-prova file.html file.pdf`
+   tells you whether PDFs print on that computer.
 
-The constraint was fixed before any code existed: gloves, dirty hands, a ladder.
-Anything that needs a screen has already lost.
+After every change to `Code.gs`: Deploy → Manage deployments → edit → New
+version, or the address keeps serving the old code.
 
-## One turn, end to end
-
-Open it standing in a client's yard and it goes first, because the phone already
-knows where it is: *"Ho visto che sei nel cantiere di Rossi Impianti, e qui hai
-aperta solo FV Fara Vicentino. È corretto?"* (I see you are on Rossi Impianti's
-site, and the only job open here is FV Fara Vicentino. Is that right?) It uses
-the last known location rather than waiting for a fresh fix, because a fresh fix
-means standing still for thirty seconds and in a plant room it never arrives. It
-proposes and never assumes: you might be at the office writing up yesterday.
-
-Otherwise: wake word, beep, then you talk. The model pulls the fields out of
-ordinary speech: "tre ore e mezza" (three and a half hours) becomes 3.5, "mezza giornata"
-(half a day) becomes 4, "esse pi emme" (the letters S P M, said out loud)
-becomes SPM Srl. Corrections work mid sentence: say "no, aspetta, erano due ore"
-(no, hang on, it was two hours) and it changes. When you are done it reads the
-whole report back, you confirm, and it saves.
-
-Why not just send a voice note, since the phone already records one hands free.
-Because a voice note does not file anything: it moves the typing from the
-technician to whoever plays it back at the office, and nobody can invoice against
-an audio file. Wisper produces the row itself, against the right job.
-
-It also lists a client's open jobs on request, telling them apart by where they
-are rather than by code, since a technician says "quella di via Roma" (the one
-on via Roma) and never "M004". It creates new clients and jobs by voice and says
-so out loud: "ok, aggiungo Bianchi Termoidraulica come nuovo cliente" (ok, I am
-adding Bianchi Termoidraulica as a new client). And it closes a job in the
-company sheet when you say the work is finished, so it stops being offered
-tomorrow.
-
-## The two rules
-
-**One microphone owner at a time.** The wake word and the recogniser alternate,
-they never overlap. Two clients on one microphone do not throw an error on
-Android, they return silence, and you spend the afternoon debugging the network
-instead.
-
-**What you hear is what gets saved.** The final read back is built from the
-stored fields, not written by the model. Earlier it would announce "forty
-kilometres" with the kilometres field empty, and on a work report that is the
-worst thing that can happen: the technician is not looking at the screen, he
-hears it confirmed, and the number does not exist.
-
-The same lesson kept coming back. "Ho finito" in Italian means both "I have
-finished speaking" and "the job is finished", and the model kept closing jobs
-that had just been declared open. Prompting did not fix it; a rule in the code
-did. Things that must never be wrong do not get asked of a model politely.
-
-It came back a third time with the job itself. Told "la commessa è la
-manutenzione della caldaia" (the job is the boiler maintenance), which is not in
-the sheet, the model settled for the closest job that was, and then said out
-loud the name I had used rather than the one it had stored. So the model now
-also reports the job in the technician's own words, and the code checks the two
-share a word: "quella dei pannelli a Fara" (the one with the panels at Fara) and
-"FV Fara Vicentino" share Fara and are the same job, while boiler maintenance
-shares nothing and is a new one, opened and announced.
-
-## Sharing the microphone
-
-A wake word means holding the microphone open forever, and on Android the
-microphone belongs to whoever grabbed it. With a foreground service running all
-day, Wisper won every time and the rest of the phone went deaf: voice notes,
-video, calls, the Google assistant, all of it silently broken, and by us.
-
-The rule now is one line. Wisper listens when the screen is off, or when Wisper
-is the app you are looking at. Use the phone for anything else, or take a call,
-and it steps aside on its own and says why in its notification: "In pausa, stai
-usando il telefono" (Paused, you are using the phone).
-
-Those two situations never overlap. The case Wisper exists for is a technician
-with the phone in his pocket and his hands busy, which is screen off. Every case
-where it used to steal the microphone had the screen on and another app in front.
-Calls are handled separately, because a phone against your ear has the screen off
-just like a pocket does; those are read from the system audio mode.
-
-## Stack
-
-Kotlin, native Android, minSdk 26, Jetpack Compose. Vosk for the wake word,
-running entirely on the device: until the word is heard no audio leaves the
-phone and no connection is needed. Android's own recogniser for dictation,
-Gemini over REST for the reasoning, with a fixed response schema so the model
-has to return the report fields and cannot drift into prose. System
-text to speech for the voice, with the Italian voice chosen by measuring the
-available ones instead of taking the default.
-
-The whole loop lives in a foreground service, so it keeps listening with the app
-closed. A Google Apps Script bound to the spreadsheet is the bridge: the app
-posts a report, the script appends the row and hands back the client and job
-lists.
-
-## Building it
-
-The Vosk Italian model is not in this repository; it is 88 MB and it belongs to
-alphacephei. Download it and unpack it into the assets folder:
+## Trying it without the real sheet
 
 ```
-https://alphacephei.com/vosk/models/vosk-model-small-it-0.22.zip
-  -> app/src/main/assets/modello-it/
+node apps-script/prove/finto-google.js
+node pc/prove/finto-ponte.js
 ```
 
-Add a `uuid` file inside that folder with any fixed string in it; Vosk uses it to
-tell whether the model changed.
+The first runs `Code.gs` unchanged over in-memory sheets, Drive and Gmail, on
+port 8765 with code `prova`, seeded with a few clients, jobs and reports; emails
+land in `apps-script/prove/posta-finta/`. The second imitates the office
+program's bridge on port 8790, so the interface opens in any browser; PDFs are
+printed by headless Edge into `pc/prove/stampe/`. A debug build of the app talks
+to `http://10.0.2.2:8765/exec` from the emulator.
 
-Keys live outside the repository, in `C:\Users\andre\wisper-keys\wisper.properties`:
-
-```
-sheetUrl=https://script.google.com/macros/s/.../exec
-aiKey=...
-```
-
-Without that file the project still compiles. The keys become empty strings and
-the parts that need them switch themselves off, which is deliberate: the build
-should never break because a key is missing.
-
-The Apps Script that goes in the spreadsheet is in `apps-script/Code.gs`.
+Tests: `node --test "apps-script/prove/*.test.js"`, `node --test "pc/prove/*.test.js"`,
+`gradlew :app:testDebugUnitTest`.
 
 ## Things worth knowing
 
-**Single user.** There is no login. The app writes to one spreadsheet, its
-owner's. A real version needs accounts, one workspace per company, and
-permissions per technician.
+**One user.** One sheet, its owner's. A second phone gets its own name in the
+settings, nothing more.
 
-**The spreadsheet endpoint is unprotected.** It is a public Apps Script URL;
-anyone holding it can append a row.
+**The code is a shared secret, not an account.** Anyone with the address and the
+code can read and write. `cambiaCodice()` in the script makes a new one.
 
-**It needs a connection to understand you.** The wake word is fully offline, the
-reasoning and the save are not. It does not fail silently, though: it says so out
-loud, and a half filled report is never thrown away, so saying "Wisper" again
-when the signal comes back repeats the last question and carries on from there.
-What is missing is the queue that would save it for you unattended, and that is
-the next thing to build.
+**Not done yet.** The monthly summary does not yet copy the layout of the Excel
+sheet my father uses today. Ticket, calendar, credentials and the whole sales,
+purchases and accounting side of Pleya are deliberately left out for now.
 
-**Only two people have used it.** Me, and my father for fifteen minutes at lunch,
-which is where three of the features here came from. No technician has run a
-whole day on it yet.
-
-**Noise degrades accuracy.** Published Italian speech recognition benchmarks sit
-around 3% word error, measured on clean studio audio. On a real building site,
-expect meaningfully worse. This is the honest weak point of the whole idea.
-
-**There is no APK to download, on purpose.** The model key would travel inside
-it and anyone could pull it back out. Gemini keys cannot be locked to an Android
-package the way Maps keys can, so the only real fix is a server holding the key
-and the app asking that server. That server is not built yet, so the app is
-source only and you build it with your own key.
-
-## Where it goes
-
-A spreadsheet is where this starts, not where it ends. The next step is writing
-into the system a firm already runs, an ERP like Odoo, so the report lands as a
-timesheet entry against the right job instead of a row somebody copies over by
-hand.
-
-Then the two things a report is actually used for.
-
-**Signatures.** The surveyor's is signed once and kept in Drive. The client signs
-on the phone there and then, offered only when the job is being closed, because a
-signature on unfinished work means nothing.
-
-**Receipts.** Photograph it, read it with OCR, attach it to the expense. Right
-now an expense is a number somebody said out loud and the accountant takes it on
-trust.
-
-Before any of that, the offline queue, one account per technician, a real token
-on the spreadsheet endpoint, and a server holding the model key.
-
-## How this was built
-
-Several features exist because I used it and it annoyed me. It used to keep
-listening after I turned the screen off and picked up other people's
-conversations. It closed a job in the sheet when I said "ho finito" (I have
-finished), meaning I had finished speaking. It read me a summary I already knew
-with no way to cut it short. It held the microphone so tightly that nothing else
-on the phone could record. It once told me it had put the hours against a job it
-had not put them against. None of those came out of automated testing; they came
-out of being the person holding the phone, and each one is a rule in the code
-now rather than a polite instruction to a model.
-
-That is the part of this that is mine. I ship products with AI: the product and
-design calls are mine, the code is Claude's. My job here was deciding what the
-app should do, what it should refuse to do, and what it must never get wrong.
-
-Field feedback from Manuel Gasparotto, Studio Tecnico GM, the surveyor whose
-technicians this was built for.
-
-Built for NGN Hacks 2026.
+**How this was built.** The product calls are mine and my father's, the code is
+Claude's. My job was deciding what it should do, what it should leave out, and
+what it must never get wrong.
