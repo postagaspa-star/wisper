@@ -24,19 +24,15 @@ android {
         applicationId = "eu.stgm.wisper"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.2.0"
 
-        // Indirizzo dell'Apps Script che scrive sul foglio Google.
+        // Indirizzo dell'Apps Script che fa da ponte col foglio Google, e il
+        // codice senza il quale lo script non risponde (lo crea preparaFoglio()).
+        // Sono solo i valori di partenza: dalle impostazioni dell'app si cambiano
+        // senza ricompilare, per esempio se il codice va rifatto.
         buildConfigField("String", "SHEET_URL", "\"${chiave("sheetUrl")}\"")
-        // Chiave del riconoscimento/AI (si riempie domani, quando sappiamo quale porta usiamo).
-        buildConfigField("String", "AI_KEY", "\"${chiave("aiKey")}\"")
-
-        // Vosk porta la sua libreria nativa per QUATTRO architetture: da sole
-        // pesano 35 MB, e tre non servono. Ogni telefono uscito dal 2017 in poi
-        // e' arm64. Conseguenza voluta: l'app non gira sull'emulatore, che per
-        // la parte audio era comunque inutilizzabile.
-        ndk { abiFilters += listOf("arm64-v8a") }
+        buildConfigField("String", "SHEET_CODICE", "\"${chiave("sheetCodice")}\"")
     }
 
     buildTypes {
@@ -68,14 +64,13 @@ dependencies {
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
+    implementation(libs.androidx.compose.icons)
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.okhttp)
-
-    implementation("${libs.vosk.android.get()}@aar")
-    implementation("${libs.jna.get()}@aar")
+    implementation(libs.androidx.work.runtime)
 
     debugImplementation(libs.androidx.compose.ui.tooling)
 

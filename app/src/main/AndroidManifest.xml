@@ -1,31 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Il microfono. Da Android 14 e' "solo mentre l'app e' in uso": il servizio
-         in primo piano va acceso con l'app aperta, mai da sfondo. -->
-    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- Il foglio Google. Niente microfono e niente posizione: il rapportino si
+         compila a mano, e il luogo, se serve, lo scrive chi lo compila. -->
     <uses-permission android:name="android.permission.INTERNET" />
-    <!-- Per accorgersi di quando torna il segnale e mandare subito i rapportini
-         rimasti in coda, invece di aspettare il prossimo tentativo. -->
+    <!-- Per mandare i rapportini rimasti sul telefono appena torna il segnale. -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-
-    <!-- Per riconoscere in quale cantiere sei. Si usa solo l'ultima
-         posizione nota, mai un aggancio GPS continuo: nessun tracciamento. -->
-    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
-    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
-
-    <!-- Il servizio che resta in ascolto della parola magica. -->
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
-    <!-- Senza questo, a un'app che non e' davanti Android non da' la posizione,
-         e riconoscere il cantiere funzionava solo con l'app aperta: cioe' mai,
-         visto che il tecnico sveglia Wisper col telefono in tasca. -->
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+    <!-- L'avviso "rapportino non ancora sul foglio" quando l'app e' chiusa. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-
-    <!-- Per accendere lo schermo e mostrarsi sopra il blocco quando sente "Ehi Wisper". -->
-    <uses-permission android:name="android.permission.WAKE_LOCK" />
-    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
 
     <application
         android:name=".WisperApp"
@@ -39,9 +21,7 @@
             android:name=".MainActivity"
             android:exported="true"
             android:launchMode="singleTask"
-            android:screenOrientation="portrait"
-            android:showWhenLocked="true"
-            android:turnScreenOn="true"
+            android:windowSoftInputMode="adjustResize"
             android:theme="@style/Theme.Wisper">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -49,12 +29,17 @@
             </intent-filter>
         </activity>
 
-        <!-- Tiene Vosk in ascolto anche ad app chiusa. Senza, la parola magica
-             muore insieme alla schermata e Wisper sente solo mentre lo guardi. -->
-        <service
-            android:name=".ServizioAscolto"
+        <!-- La fotocamera scrive la foto dello scontrino direttamente in un
+             file dell'app: serve un indirizzo che possa raggiungere. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.foto"
             android:exported="false"
-            android:foregroundServiceType="microphone|location" />
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/percorsi_foto" />
+        </provider>
 
     </application>
 </manifest>

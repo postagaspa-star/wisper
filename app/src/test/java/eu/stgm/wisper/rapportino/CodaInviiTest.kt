@@ -1,18 +1,17 @@
 package eu.stgm.wisper.rapportino
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.io.File
-import java.text.SimpleDateFormat
-import java.util.Locale
+import java.time.LocalDate
 
 /**
- * La coda e' l'unico posto in cui un rapportino confermato vive finche' il
- * foglio non risponde. Qui dentro non si deve perdere niente: ne' fra un
+ * La coda e' l'unico posto in cui una modifica fatta sul telefono vive finche'
+ * il foglio non risponde. Qui dentro non si deve perdere niente: ne' fra un
  * riavvio e l'altro, ne' con un file rovinato, ne' con i tentativi.
  */
 class CodaInviiTest {
@@ -23,85 +22,110 @@ class CodaInviiTest {
     private val file: File get() = File(cartella.root, "coda-invii.json")
 
     private val completo = Rapportino(
-        cliente = "Rossi Impianti Srl",
-        commessa = "M001",
-        descrizione = "Manutenzione ordinaria impianto",
-        ore = 4.0,
-        km = 15.0,
-        spese = 0.0,
-        statoCommessa = StatoCommessa.CHIUSA,
+        idLocale = "W-prova",
+        data = LocalDate.of(2026, 10, 15),
+        tecnico = "Manuel Gasparotto",
+        idCliente = "C001",
+        cliente = "Batokyo",
+        idCommessa = "P2601",
+        commessa = "Nuovo magazzino automatico",
+        descrizione = "Collaudo quadro elettrico",
+        oreLavoro = 6.5,
+        oreExtra = 1.0,
+        oreViaggio = 1.5,
+        km = 120.0,
+        spese = 12.5,
+        noteSpese = "Pranzo",
+        tariffa = null,
+        noteInterne = "Richiamare per la seconda linea",
     )
 
     @Test
     fun `sopravvive a un riavvio con tutti i campi`() {
-        CodaInvii(file).aggiungi(completo)
+        CodaInvii(file).salva(completo)
 
         val riletta = CodaInvii(file).tutte()   // un'altra istanza: come dopo un riavvio
         assertEquals(1, riletta.size)
-        assertEquals(completo, riletta.first().rapportino)
-        assertEquals(0, riletta.first().tentativi)
+        assertEquals(CodaInvii.Tipo.SALVA, riletta[0].tipo)
+        assertEquals(completo, riletta[0].rapportino)
     }
 
     @Test
-    fun `i campi mai detti restano vuoti, non diventano zero`() {
-        CodaInvii(file).aggiungi(Rapportino(cliente = "SPM Srl"))
-
-        val r = CodaInvii(file).tutte().first().rapportino
-        assertEquals("SPM Srl", r.cliente)
-        assertEquals(null, r.km)       // "non ne ha parlato" non e' "zero chilometri"
-        assertEquals(null, r.spese)
-        assertEquals(null, r.statoCommessa)
+    fun `la tariffa scritta a mano resta, quella vuota resta vuota`() {
+        val privato = completo.copy(idLocale = "W-privato", tariffa = 42.0)
+        CodaInvii(file).salva(privato)
+        CodaInvii(file).salva(completo)
+        val r = CodaInvii(file).tutte()
+        assertEquals(42.0, r[0].rapportino!!.tariffa!!, 0.0)
+        assertNull(r[1].rapportino!!.tariffa)
     }
 
     @Test
-    fun `la data e' quella in cui e' stato detto`() {
-        val lunedi = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.ITALY).parse("21/09/2026 18:40")!!
-        val voce = CodaInvii(file).aggiungi(completo, ora = lunedi)
-        assertEquals("21/09/2026", voce.data)
-    }
-
-    @Test
-    fun `ognuno ha il suo id e l'ordine e' quello in cui sono stati detti`() {
+    fun `due salvataggi dello stesso rapportino occupano un posto solo, con l'ultima versione`() {
         val coda = CodaInvii(file)
-        val primo = coda.aggiungi(completo.copy(cliente = "Primo"))
-        val secondo = coda.aggiungi(completo.copy(cliente = "Secondo"))
+        coda.salva(completo)
+        coda.foto("W-prova", "f1", "/foto/f1.jpg")
+        coda.salva(completo.copy(oreLavoro = 7.0))
 
-        assertNotEquals(primo.idLocale, secondo.idLocale)
-        assertEquals(listOf("Primo", "Secondo"), coda.tutte().map { it.rapportino.cliente })
+        val tutte = coda.tutte()
+        assertEquals(2, tutte.size)
+        // Il salvataggio resta PRIMA della foto: la foto ha bisogno della riga.
+        assertEquals(CodaInvii.Tipo.SALVA, tutte[0].tipo)
+        assertEquals(7.0, tutte[0].rapportino!!.oreLavoro, 0.0)
+        assertEquals(CodaInvii.Tipo.FOTO, tutte[1].tipo)
     }
 
     @Test
-    fun `i tentativi si contano e il codice nuovo della commessa resta`() {
+    fun `un salvataggio rifiutato non assorbe quello nuovo`() {
         val coda = CodaInvii(file)
-        val voce = coda.aggiungi(completo.copy(commessa = "manutenzione caldaia"))
+        val primo = coda.salva(completo)
+        coda.aggiorna(primo.copy(errore = "Codice sbagliato"))
+        coda.salva(completo.copy(oreLavoro = 7.0))
+        assertEquals(2, coda.tutte().size)
+    }
 
-        coda.aggiorna(voce.copy(rapportino = voce.rapportino.copy(commessa = "M005"), tentativi = 2))
+    @Test
+    fun `l'ordine e' quello in cui le cose sono state fatte`() {
+        val coda = CodaInvii(file)
+        coda.salva(completo)
+        coda.foto("W-prova", "f1", "/foto/f1.jpg")
+        coda.firma("W-prova", "s1", "/firme/s1.png", "Mario Bianchi", "2026-10-15T17:30:00")
+        coda.stato("W-prova", Stato.BOZZA)
+        assertEquals(
+            listOf(CodaInvii.Tipo.SALVA, CodaInvii.Tipo.FOTO, CodaInvii.Tipo.FIRMA, CodaInvii.Tipo.STATO),
+            CodaInvii(file).tutte().map { it.tipo },
+        )
+        val firma = CodaInvii(file).tutte()[2]
+        assertEquals("Mario Bianchi", firma.firmatario)
+        assertEquals(Stato.BOZZA, CodaInvii(file).tutte()[3].stato)
+    }
 
+    @Test
+    fun `i tentativi e il rifiuto sopravvivono a un riavvio`() {
+        val op = CodaInvii(file).salva(completo)
+        CodaInvii(file).aggiorna(op.copy(tentativi = 3, errore = "Il rapportino e' gia' firmato"))
         val riletta = CodaInvii(file).tutte().single()
-        assertEquals("M005", riletta.rapportino.commessa)
-        assertEquals(2, riletta.tentativi)
-        assertEquals(voce.idLocale, riletta.idLocale)   // stesso rapportino per il foglio
+        assertEquals(3, riletta.tentativi)
+        assertTrue(riletta.rifiutata)
     }
 
     @Test
-    fun `esce solo quello arrivato`() {
+    fun `togliere un'operazione non tocca le altre`() {
         val coda = CodaInvii(file)
-        val arrivato = coda.aggiungi(completo.copy(cliente = "Arrivato"))
-        coda.aggiungi(completo.copy(cliente = "In attesa"))
-
-        coda.togli(arrivato.idLocale)
-
-        assertEquals(listOf("In attesa"), CodaInvii(file).tutte().map { it.rapportino.cliente })
+        val a = coda.salva(completo)
+        coda.salva(completo.copy(idLocale = "W-altro"))
+        coda.togli(a.idOp)
+        assertEquals(listOf("W-altro"), coda.tutte().map { it.idLocale })
     }
 
     @Test
-    fun `un file rovinato non si sovrascrive, si mette da parte`() {
+    fun `un file rovinato non si sovrascrive e non blocca la coda`() {
         file.writeText("{ questo non e' json")
-
-        assertTrue(CodaInvii(file).tutte().isEmpty())
-
-        val messiDaParte = cartella.root.listFiles()!!.filter { it.name.contains("illeggibile") }
-        assertEquals(1, messiDaParte.size)
-        assertEquals("{ questo non e' json", messiDaParte.first().readText())
+        val coda = CodaInvii(file)
+        assertTrue(coda.tutte().isEmpty())
+        // Il file rovinato e' stato messo da parte, non cancellato.
+        assertTrue(cartella.root.listFiles()!!.any { it.name.startsWith("coda-invii.json.illeggibile-") })
+        coda.salva(completo)
+        assertEquals(1, CodaInvii(file).tutte().size)
     }
 }
