@@ -111,6 +111,7 @@ var SCHEMA = {
     ['pagaViaggio', 'PAGA_VIAGGIO'],
     ['kmRimborsati', 'KM_RIMBORSATI'],
     ['maggExtra', 'MAGG_EXTRA'],
+    ['email', 'EMAIL'],
     ['note', 'NOTE']
   ]
 };
@@ -165,6 +166,8 @@ function doGet(e) {
         return json({ ok: true, rapportini: leggiRapportini(p.da, p.a, p.tutti === '1') });
       case 'file':
         return json({ ok: true, file: leggiFile(p.id) });
+      case 'documenti':
+        return json(documentiCommessa(p.idCommessa));
       default:
         return json(rispostaAnagrafiche());
     }
@@ -182,6 +185,7 @@ function doPost(e) {
       return json({ ok: true, rapportini: leggiRapportini(d.da, d.a, d.tutti === true) });
     }
     if (d.azione === 'file') return json({ ok: true, file: leggiFile(d.id) });
+    if (d.azione === 'documenti') return json(documentiCommessa(d.idCommessa));
 
     // Tutto il resto scrive: uno alla volta. Telefono e computer possono
     // salvare nello stesso istante, e due righe col numero RAP/2026/0007
@@ -450,6 +454,8 @@ function leggiGruppi() {
       pagaViaggio: siNoONull(r.pagaViaggio) === true,
       kmRimborsati: siNoONull(r.kmRimborsati) !== false,
       maggExtra: numero(r.maggExtra),
+      // A chi va il riepilogo del mese quando si fattura al gruppo e non al cliente.
+      email: testo(r.email),
       note: testo(r.note)
     };
   }).filter(function (g) { return g.nome !== ''; });
@@ -494,6 +500,7 @@ function salvaGruppo(g) {
     maggExtra: numero(g.maggExtra)
   };
   if (g.note !== undefined) valori.note = g.note;
+  if (g.email !== undefined) valori.email = testo(g.email);
   var esistente = leggi(NOME_GRUPPI).filter(function (r) { return normalizza(r.nome) === normalizza(nome); })[0];
   if (esistente) aggiornaRiga(NOME_GRUPPI, esistente._riga, valori);
   else scriviRiga(NOME_GRUPPI, valori);
@@ -756,8 +763,17 @@ function salvaRapportino(r) {
 
   var clienti = leggiClienti();
   var cliente = trovaCliente(clienti, testo(r.idCliente), testo(r.cliente));
-  if (!cliente && testo(r.cliente)) cliente = creaCliente({ nome: r.cliente, gruppo: r.gruppo });
-  if (!cliente) throw new Error('Manca il cliente');
+  if (!cliente && !testo(r.cliente)) throw new Error('Manca il cliente');
+
+  // Prima i controlli, poi le creazioni: un rapportino rifiutato non deve
+  // lasciare nel foglio un cliente o una commessa nati per lui.
+  var impostazioni = leggiImpostazioni();
+  var regole = regoleDi(cliente || { gruppo: testo(r.gruppo) || 'Privato' }, leggiGruppi(), impostazioni);
+  if (regole.tariffaFissa === null && !(numero(r.tariffa) > 0)) {
+    throw new Error('Manca la tariffa oraria per ' + (cliente ? cliente.nome : testo(r.cliente)));
+  }
+
+  if (!cliente) cliente = creaCliente({ nome: r.cliente, gruppo: r.gruppo });
 
   var commessa = null;
   if (testo(r.idCommessa)) {
@@ -766,9 +782,6 @@ function salvaRapportino(r) {
   if (!commessa && testo(r.commessa)) {
     commessa = creaCommessa({ idCliente: cliente.id, descrizione: r.commessa });
   }
-
-  var impostazioni = leggiImpostazioni();
-  var regole = regoleDi(cliente, leggiGruppi(), impostazioni);
 
   // Le tariffe di un rapportino gia' scritto non cambiano se cambiano le
   // impostazioni: aggiornare l'ACI a gennaio non deve riscrivere luglio.
@@ -783,9 +796,6 @@ function salvaRapportino(r) {
   }
 
   var conto = calcola(r, regole);
-  if (regole.tariffaFissa === null && !(conto.tariffa > 0)) {
-    throw new Error('Manca la tariffa oraria per ' + cliente.nome);
-  }
 
   var data = r.data ? dataDaIso(r.data) : new Date();
   var adesso = new Date();
@@ -1034,7 +1044,7 @@ function caricaFile(d) {
   var unico = testo(d.idFile) || Utilities.getUuid().slice(0, 8);
 
   if (tipo === 'spesa') {
-    var dataRap = riga.data instanceof Date ? riga.data : new Date();
+    var dataRap = eData(riga.data) ? riga.data : new Date();
     var mese = Utilities.formatDate(dataRap, FUSO, 'yyyy-MM');
     var cartellaS = sottocartella(sottocartella(radice, 'Spese'), mese);
     var nome = sigla + ' spesa ' + unico + estensione;
@@ -1087,6 +1097,31 @@ function cartellaCommessa(riga) {
   var c = sottocartella(sottocartella(cartellaRadice(), 'Commesse'), testo(riga.id) + ' ' + testo(riga.descrizione));
   aggiornaRiga(NOME_COMMESSE, riga._riga, { cartella: c.getUrl() });
   return c;
+}
+
+/**
+ * I documenti della cartella di una commessa, piu' recenti prima. La cartella si
+ * crea la prima volta che la si guarda: cosi' ogni commessa ne ha una pronta.
+ */
+function documentiCommessa(idCommessa) {
+  var riga = leggi(NOME_COMMESSE).filter(function (r) { return testo(r.id) === testo(idCommessa); })[0];
+  if (!riga) throw new Error('Commessa ' + idCommessa + ' non trovata');
+  var cartella = cartellaCommessa(riga);
+  var file = [];
+  var it = cartella.getFiles();
+  while (it.hasNext()) {
+    var f = it.next();
+    if (f.isTrashed()) continue;
+    file.push({
+      id: f.getId(),
+      nome: f.getName(),
+      url: f.getUrl(),
+      mime: f.getMimeType(),
+      data: Utilities.formatDate(f.getLastUpdated(), FUSO, "yyyy-MM-dd'T'HH:mm:ss")
+    });
+  }
+  file.sort(function (a, b) { return a.data < b.data ? 1 : -1; });
+  return { ok: true, cartella: cartella.getUrl(), documenti: file };
 }
 
 /** Toglie una foto dal rapportino. Il file va nel cestino di Drive, da cui si recupera. */
@@ -1191,9 +1226,17 @@ function siNoONull(v) {
   return null;
 }
 
+/**
+ * Vero per una data. Non con instanceof: una data che arriva da un altro
+ * contesto (le prove con Node, per esempio) non e' "instanceof" il Date di qui.
+ */
+function eData(v) {
+  return Object.prototype.toString.call(v) === '[object Date]' && !isNaN(v.getTime());
+}
+
 /** Una data del foglio (Date, "15/10/2026" o "2026-10-15") -> "2026-10-15". */
 function dataIso(v) {
-  if (v instanceof Date) return Utilities.formatDate(v, FUSO, 'yyyy-MM-dd');
+  if (eData(v)) return Utilities.formatDate(v, FUSO, 'yyyy-MM-dd');
   var s = testo(v);
   var it = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
   if (it) return it[3] + '-' + ('0' + it[2]).slice(-2) + '-' + ('0' + it[1]).slice(-2);
@@ -1202,7 +1245,7 @@ function dataIso(v) {
 }
 
 function dataOraIso(v) {
-  if (v instanceof Date) return Utilities.formatDate(v, FUSO, "yyyy-MM-dd'T'HH:mm:ss");
+  if (eData(v)) return Utilities.formatDate(v, FUSO, "yyyy-MM-dd'T'HH:mm:ss");
   return testo(v);
 }
 
