@@ -5,8 +5,8 @@ import android.graphics.Paint
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -108,16 +108,24 @@ fun SchermataFirma(
                     .background(Color.White)
                     .onSizeChanged { dimensione = it }
                     .pointerInput(Unit) {
-                        detectDragGestures(
-                            onDragStart = { tratto = listOf(it) },
-                            onDrag = { cambio, _ -> tratto = tratto + cambio.position },
-                            onDragEnd = { tratti.add(tratto); tratto = emptyList() },
-                            onDragCancel = { tratti.add(tratto); tratto = emptyList() },
-                        )
-                    }
-                    .pointerInput(Unit) {
-                        // Un tocco solo e' un punto: le "i" della firma.
-                        detectTapGestures(onTap = { tratti.add(listOf(it, it + Offset(0.5f, 0.5f))) })
+                        // Il dito si segue da quando tocca, non da quando "trascina":
+                        // il riconoscimento del trascinamento parte dopo qualche
+                        // pixel, e ogni tratto della firma perdeva il suo inizio.
+                        awaitEachGesture {
+                            val giu = awaitFirstDown()
+                            var punti = listOf(giu.position)
+                            tratto = punti
+                            while (true) {
+                                val dito = awaitPointerEvent().changes.firstOrNull { it.id == giu.id } ?: break
+                                if (!dito.pressed) break
+                                punti = punti + dito.position
+                                tratto = punti
+                                dito.consume()
+                            }
+                            // Un tocco solo e' un punto: le "i" della firma.
+                            tratti.add(if (punti.size == 1) listOf(punti[0], punti[0] + Offset(0.5f, 0.5f)) else punti)
+                            tratto = emptyList()
+                        }
                     },
             ) {
                 Canvas(Modifier.fillMaxSize()) {
@@ -148,11 +156,26 @@ fun SchermataFirma(
     }
 }
 
-/** La firma come immagine: tratti scuri su bianco, pronta per il PDF. */
+/**
+ * La firma come immagine: tratti scuri su bianco, ritagliata attorno ai tratti.
+ *
+ * Senza ritaglio l'immagine era grande quanto tutto il riquadro, quasi tutta
+ * bianca: nello spazio della firma sul PDF diventava un segnetto illeggibile.
+ */
 private fun disegna(tratti: List<List<Offset>>, dimensione: IntSize, spessore: Float): Bitmap {
-    val bmp = Bitmap.createBitmap(dimensione.width, dimensione.height, Bitmap.Config.ARGB_8888)
+    val punti = tratti.flatten()
+    val margine = spessore * 4
+    val sinistra = ((punti.minOfOrNull { it.x } ?: 0f) - margine).coerceAtLeast(0f)
+    val alto = ((punti.minOfOrNull { it.y } ?: 0f) - margine).coerceAtLeast(0f)
+    val destra = ((punti.maxOfOrNull { it.x } ?: dimensione.width.toFloat()) + margine).coerceAtMost(dimensione.width.toFloat())
+    val basso = ((punti.maxOfOrNull { it.y } ?: dimensione.height.toFloat()) + margine).coerceAtMost(dimensione.height.toFloat())
+    val larghezza = (destra - sinistra).toInt().coerceAtLeast(1)
+    val altezza = (basso - alto).toInt().coerceAtLeast(1)
+
+    val bmp = Bitmap.createBitmap(larghezza, altezza, Bitmap.Config.ARGB_8888)
     val tela = android.graphics.Canvas(bmp)
     tela.drawColor(android.graphics.Color.WHITE)
+    tela.translate(-sinistra, -alto)
     val pennello = Paint().apply {
         color = 0xFF101418.toInt()
         strokeWidth = spessore
@@ -161,10 +184,10 @@ private fun disegna(tratti: List<List<Offset>>, dimensione: IntSize, spessore: F
         strokeJoin = Paint.Join.ROUND
         isAntiAlias = true
     }
-    tratti.filter { it.size >= 2 }.forEach { punti ->
+    tratti.filter { it.size >= 2 }.forEach { tratto ->
         val p = android.graphics.Path().apply {
-            moveTo(punti.first().x, punti.first().y)
-            punti.drop(1).forEach { lineTo(it.x, it.y) }
+            moveTo(tratto.first().x, tratto.first().y)
+            tratto.drop(1).forEach { lineTo(it.x, it.y) }
         }
         tela.drawPath(p, pennello)
     }
