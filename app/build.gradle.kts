@@ -54,6 +54,11 @@ android {
         buildConfig = true
     }
     packaging { resources.excludes += "/META-INF/{AL2.0,LGPL2.1}" }
+
+    // Il modello vocale del primo Wisper (Vosk, 88 MB) puo' essere ancora nella
+    // cartella assets di chi l'aveva scaricato. Non serve piu', e dentro l'APK
+    // lo porterebbe da una decina di MB a sessanta.
+    androidResources { ignoreAssetsPatterns += listOf("!modello-it") }
 }
 
 dependencies {
