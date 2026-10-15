@@ -38,43 +38,55 @@
     return id ? '<img class="' + classe + '" src="/file/' + encodeURIComponent(id) + '" alt="">' : '';
   }
 
+  // Il simbolo di Wisper, piccolo, accanto al numero di pagina.
+  const SIMBOLO = 'data:image/svg+xml;utf8,' + encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 32 32"><rect width="32" height="32" rx="9" fill="#1B1B1F"/>' +
+    [[16, 7.5], [22, 10], [24.5, 16], [22, 22], [16, 24.5], [10, 22], [7.5, 16], [10, 10]].map(p => '<circle cx="' + p[0] + '" cy="' + p[1] + '" r="2.4" fill="#FFC53D"/>').join('') +
+    '<circle cx="16" cy="16" r="3.2" fill="#F2F4F7"/></svg>');
+
+  /**
+   * Il formato: A4, Figtree, i grigi di docs/aspetto.md. Niente giallo pieno:
+   * si stampa anche in bianco e nero.
+   */
   function stile(imp) {
     const piede = [imp.RAGIONE_SOCIALE, imp.PARTITA_IVA ? 'P.IVA ' + imp.PARTITA_IVA : ''].filter(Boolean).join(' · ');
+    const carattere = '"Figtree", "Segoe UI", Arial, sans-serif';
     return '<style>' +
+      '@font-face { font-family: "Figtree"; src: url("/font/Figtree.ttf") format("truetype"); font-weight: 300 900; font-display: block; }' +
       '@page { size: A4; margin: 14mm 14mm 18mm 14mm;' +
-      '  @bottom-left { content: "' + escCss(piede) + '"; font: 8.5px "Segoe UI", Arial, sans-serif; color: #8a8f98; }' +
-      '  @bottom-right { content: "Pagina " counter(page) " / " counter(pages); font: 8.5px "Segoe UI", Arial, sans-serif; color: #8a8f98; } }' +
+      '  @bottom-left { content: "' + escCss(piede) + '"; font: 500 8.5px ' + carattere + '; color: #8A8A92; }' +
+      '  @bottom-right { content: url("' + SIMBOLO + '") "  Pagina " counter(page) " / " counter(pages); font: 500 8.5px ' + carattere + '; color: #8A8A92; } }' +
       '* { box-sizing: border-box; }' +
-      'body { margin: 0; font: 10.5px/1.45 "Segoe UI", Arial, sans-serif; color: #1d2127; }' +
-      '.testa { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #1d2127; padding-bottom: 10px; margin-bottom: 14px; }' +
-      '.azienda { font-size: 17px; font-weight: 700; }' +
-      '.tipo { text-align: right; } .tipo .etichetta { font-size: 9px; letter-spacing: .14em; color: #6b717c; }' +
-      '.tipo .numero { font-size: 19px; font-weight: 700; } .tipo .sotto { color: #6b717c; }' +
+      'body { margin: 0; font: 500 10.5px/1.45 ' + carattere + '; color: #1B1B1F; }' +
+      '.testa { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #1B1B1F; padding-bottom: 10px; margin-bottom: 14px; }' +
+      '.azienda { font-size: 17px; font-weight: 800; letter-spacing: -0.2px; }' +
+      '.tipo { text-align: right; } .tipo .etichetta { font-size: 8.5px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #5F5F67; }' +
+      '.tipo .numero { font-size: 19px; font-weight: 800; letter-spacing: -0.3px; } .tipo .sotto { color: #5F5F67; font-weight: 600; }' +
       '.parti { display: flex; gap: 12px; margin-bottom: 12px; }' +
-      '.parte { flex: 1; background: #f3f4f6; border-radius: 6px; padding: 9px 11px; }' +
-      '.parte .etichetta, .cella .etichetta, .blocco .etichetta { font-size: 8.5px; letter-spacing: .12em; color: #6b717c; text-transform: uppercase; margin-bottom: 3px; }' +
-      '.parte .nome { font-weight: 700; font-size: 12px; }' +
-      '.barra { background: #1d2127; color: #fff; border-radius: 6px; padding: 7px 11px; font-weight: 600; margin-bottom: 12px; }' +
-      '.barra .cod { color: #ffc53d; margin-right: 6px; }' +
+      '.parte { flex: 1; background: #F4F4F2; border-radius: 8px; padding: 9px 11px; }' +
+      '.parte .etichetta, .cella .etichetta, .blocco .etichetta { font-size: 8.5px; font-weight: 700; letter-spacing: .1em; color: #5F5F67; text-transform: uppercase; margin-bottom: 3px; }' +
+      '.parte .nome { font-weight: 800; font-size: 12px; }' +
+      '.barra { border: 1.5px solid #1B1B1F; border-radius: 8px; padding: 7px 11px; font-weight: 700; font-size: 11.5px; margin-bottom: 12px; }' +
+      '.barra .cod { font-family: Consolas, monospace; font-weight: 700; background: #1B1B1F; color: #FFFFFF; border-radius: 4px; padding: 1px 6px; margin-right: 8px; }' +
       '.griglia { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px 12px; margin-bottom: 12px; }' +
-      '.cella .valore { font-size: 12px; font-weight: 600; }' +
-      '.blocco { border: 1px solid #e1e4e9; border-radius: 6px; padding: 9px 11px; margin-bottom: 10px; break-inside: avoid; }' +
+      '.cella .valore { font-size: 12px; font-weight: 700; }' +
+      '.blocco { border: 1px solid #E6E5E1; border-radius: 8px; padding: 9px 11px; margin-bottom: 10px; break-inside: avoid; }' +
       '.blocco .testo { white-space: pre-wrap; font-size: 11px; }' +
       'table { width: 100%; border-collapse: collapse; margin-bottom: 12px; }' +
-      'th { font-size: 8.5px; letter-spacing: .08em; text-transform: uppercase; color: #6b717c; text-align: left; border-bottom: 1.5px solid #1d2127; padding: 5px 4px; }' +
-      'td { border-bottom: 1px solid #e6e8ec; padding: 5px 4px; vertical-align: top; }' +
+      'th { font-size: 8.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #5F5F67; text-align: left; border-bottom: 1.5px solid #1B1B1F; padding: 5px 4px; }' +
+      'td { border-bottom: 1px solid #EFEEEB; padding: 5px 4px; vertical-align: top; }' +
       'tr { break-inside: avoid; }' +
-      '.n { text-align: right; white-space: nowrap; }' +
-      'tfoot td { font-weight: 700; border-top: 1.5px solid #1d2127; border-bottom: none; }' +
-      '.conto { margin-left: auto; width: 55%; } .conto td { border: none; padding: 3px 4px; } .conto .tot td { font-size: 13px; font-weight: 700; border-top: 1.5px solid #1d2127; padding-top: 6px; }' +
-      '.sotto-riga { color: #6b717c; font-size: 9px; }' +
+      '.n { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }' +
+      'tfoot td { font-weight: 800; border-top: 1.5px solid #1B1B1F; border-bottom: none; }' +
+      '.conto { margin-left: auto; width: 55%; } .conto td { border: none; padding: 3px 4px; } .conto .tot td { font-size: 13px; font-weight: 800; border-top: 1.5px solid #1B1B1F; padding-top: 6px; }' +
+      '.sotto-riga { color: #5F5F67; font-size: 9px; }' +
       '.firme { display: flex; gap: 24px; margin-top: 22px; break-inside: avoid; }' +
-      '.firma { flex: 1; } .firma .spazio { height: 62px; display: flex; align-items: flex-end; border-bottom: 1px solid #1d2127; }' +
-      '.firma img { max-height: 60px; max-width: 100%; } .firma .chi { margin-top: 3px; color: #6b717c; font-size: 9.5px; }' +
-      '.allegati { break-before: page; } .allegati h2 { font-size: 13px; margin: 0 0 10px; }' +
+      '.firma { flex: 1; } .firma .spazio { height: 62px; display: flex; align-items: flex-end; border-bottom: 1px solid #1B1B1F; }' +
+      '.firma img { max-height: 60px; max-width: 100%; } .firma .chi { margin-top: 3px; color: #5F5F67; font-size: 9.5px; }' +
+      '.allegati { break-before: page; } .allegati h2 { font-size: 13px; font-weight: 800; margin: 0 0 10px; }' +
       '.foto { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }' +
-      '.foto figure { margin: 0; break-inside: avoid; border: 1px solid #e1e4e9; border-radius: 6px; padding: 6px; }' +
-      '.foto img { width: 100%; max-height: 330px; object-fit: contain; } .foto figcaption { font-size: 9px; color: #6b717c; margin-top: 4px; }' +
+      '.foto figure { margin: 0; break-inside: avoid; border: 1px solid #E6E5E1; border-radius: 8px; padding: 6px; }' +
+      '.foto img { width: 100%; max-height: 330px; object-fit: contain; } .foto figcaption { font-size: 9px; color: #5F5F67; margin-top: 4px; }' +
       '</style>';
   }
 

@@ -90,6 +90,8 @@ public sealed class Ponte
         ".png" => "image/png",
         ".jpg" or ".jpeg" => "image/jpeg",
         ".ico" => "image/x-icon",
+        ".ttf" => "font/ttf",
+        ".txt" => "text/plain; charset=utf-8",
         _ => "application/octet-stream",
     };
 

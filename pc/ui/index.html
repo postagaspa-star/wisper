@@ -1,26 +1,27 @@
 <!doctype html>
-<html lang="it">
+<html lang="it" data-tema="auto">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="color-scheme" content="light">
+  <meta name="color-scheme" content="light dark">
   <!-- Solo file di questa cartella e solo chiamate a questa origine (/locale, /foglio, /file): niente internet dalla pagina. -->
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'none'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'none'">
   <title>Wisper Ufficio</title>
   <link rel="stylesheet" href="stile.css">
 </head>
 <body>
   <div class="app">
     <nav class="lato" aria-label="Sezioni">
-      <div class="marchio"><span class="palla" aria-hidden="true"></span>Wisper<small>Ufficio</small></div>
-      <a href="#rapportini" data-sezione="rapportini">Rapportini</a>
-      <a href="#commesse" data-sezione="commesse">Commesse</a>
-      <a href="#clienti" data-sezione="clienti">Clienti</a>
-      <a href="#impostazioni" data-sezione="impostazioni">Impostazioni</a>
-      <div class="lato-piede">
-        <button type="button" id="aggiorna" class="lato-pulsante">Aggiorna dal foglio</button>
-        <div id="ultima-lettura" class="lato-nota"></div>
+      <div class="marchio">
+        <svg width="32" height="32" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="9" fill="#1B1B1F"/><circle cx="16" cy="7.5" r="2.2" fill="#FFC53D"/><circle cx="22" cy="10" r="2.2" fill="#FFC53D"/><circle cx="24.5" cy="16" r="2.2" fill="#FFC53D"/><circle cx="22" cy="22" r="2.2" fill="#FFC53D"/><circle cx="16" cy="24.5" r="2.2" fill="#FFC53D"/><circle cx="10" cy="22" r="2.2" fill="#FFC53D"/><circle cx="7.5" cy="16" r="2.2" fill="#FFC53D"/><circle cx="10" cy="10" r="2.2" fill="#FFC53D"/><circle cx="16" cy="16" r="3.2" fill="#F2F4F7"/></svg>
+        <span class="nomi"><b>Wisper</b><span>Ufficio</span></span>
       </div>
+      <a href="#finemese" data-sezione="finemese"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2.5"/><path d="M8 3v4M16 3v4M4 10h16"/></svg>Fine mese</a>
+      <a href="#rapportini" data-sezione="rapportini" data-visita="nav-rapportini"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4h10l3 3v13H4V4z"/><path d="M8 11h8M8 15h6"/></svg>Rapportini</a>
+      <a href="#commesse" data-sezione="commesse"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7h7l2 2h9v10H3z"/></svg>Commesse</a>
+      <a href="#clienti" data-sezione="clienti"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M3 20c.5-3.5 3-5.5 6-5.5s5.5 2 6 5.5"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 14.5c2 .6 3.3 2.6 3.6 5.5"/></svg>Clienti</a>
+      <a href="#impostazioni" data-sezione="impostazioni"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></svg>Impostazioni</a>
+      <button type="button" id="stato-foglio" class="stato-foglio" title="Rileggi il foglio"></button>
     </nav>
     <main id="principale" class="principale" aria-live="polite">
       <p class="vuoto">Wisper Ufficio si sta aprendo…</p>
@@ -29,9 +30,12 @@
   <div id="sovrapposti"></div>
   <div id="avvisi" class="avvisi" role="status" aria-live="polite"></div>
   <noscript><p>Wisper Ufficio ha bisogno di JavaScript.</p></noscript>
+  <script src="tema.js"></script>
   <script src="conti.js"></script>
   <script src="documenti.js"></script>
   <script src="api.js"></script>
+  <script src="esempio.js"></script>
+  <script src="visita.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

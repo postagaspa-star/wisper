@@ -24,7 +24,10 @@ const STAMPE = path.join(__dirname, 'stampe');
 const EDGE = 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';
 const daStampare = new Map();
 
-const TIPI = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8' };
+const TIPI = {
+  '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
+  '.ttf': 'font/ttf', '.txt': 'text/plain; charset=utf-8',
+};
 
 // Un PNG 2x2 grigio: lo "scontrino" e la "firma" di prova.
 const IMMAGINE = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGNkYGD4z8DAwMDEwMDAAAAZ8wMDp0gFgQAAAABJRU5ErkJggg==', 'base64');

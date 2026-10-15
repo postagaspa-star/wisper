@@ -11,8 +11,8 @@
     <AssemblyName>WisperUfficio</AssemblyName>
     <AssemblyTitle>Wisper Ufficio</AssemblyTitle>
     <Product>Wisper Ufficio</Product>
-    <Version>0.1.0</Version>
-    <FileVersion>0.1.0.0</FileVersion>
+    <Version>0.2.0</Version>
+    <FileVersion>0.2.0.0</FileVersion>
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
     <SatelliteResourceLanguages>it</SatelliteResourceLanguages>
     <!--

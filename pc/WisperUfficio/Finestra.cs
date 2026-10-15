@@ -47,7 +47,7 @@ public sealed class Finestra : Form, Ponte.IFinestra
         ClientSize = new Size(1280, 820);
         MinimumSize = new Size(900, 600);
         StartPosition = FormStartPosition.CenterScreen;
-        BackColor = Color.FromArgb(0xF6, 0xF7, 0xF9);
+        BackColor = Color.FromArgb(0xF4, 0xF4, 0xF2);
 
         vista = new WebView2 { Dock = DockStyle.Fill, DefaultBackgroundColor = BackColor };
         Controls.Add(vista);
