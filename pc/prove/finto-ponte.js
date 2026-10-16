@@ -23,6 +23,9 @@ const UI = path.join(__dirname, '..', 'ui');
 const STAMPE = path.join(__dirname, 'stampe');
 const EDGE = 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';
 const daStampare = new Map();
+const aggiornamento = () => process.env.AGGIORNAMENTO === 'pronto'
+  ? { attivi: true, versione: '0.3.0', stato: 'pronto', nuova: '0.3.1', messaggio: 'La versione 0.3.1 è pronta: parte alla prossima apertura', controllato: '18:00' }
+  : { attivi: true, versione: '0.3.0', stato: 'nessuno', nuova: null, messaggio: 'Hai l’ultima versione', controllato: '18:00' };
 
 const TIPI = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
@@ -99,7 +102,10 @@ http.createServer(async (rq, rs) => {
     if (u.pathname.startsWith('/locale/')) {
       const o = corpo ? JSON.parse(corpo) : {};
       switch (u.pathname.slice(8)) {
-        case 'stato': return json({ ok: true, configurato: true, url: FOGLIO, cartellaPdf: STAMPE, versione: '0.1.0 (prova)' });
+        // AGGIORNAMENTO=pronto fa vedere il riquadro "Versione pronta" e il pulsante Riavvia.
+        case 'stato': return json({ ok: true, configurato: true, url: FOGLIO, cartellaPdf: STAMPE, versione: '0.3.0', aggiornamento: aggiornamento() });
+        case 'aggiorna': return json({ ok: true, aggiornamento: aggiornamento() });
+        case 'riavvia': console.log('[riavvia]'); return json({ ok: true });
         case 'configura': return json({ ok: true, configurato: true });
         case 'cartella-pdf': return json({ ok: true });
         case 'apri': return json({ ok: true });

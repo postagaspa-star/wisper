@@ -270,6 +270,8 @@
     S.configurato = !!st.configurato;
     S.cartellaPdf = st.cartellaPdf;
     S.versione = st.versione;
+    S.aggiornamento = st.aggiornamento || null;
+    mostraAggiornamento();
     if (!S.configurato) {
       S.caricato = false;
       if (location.hash !== '#impostazioni') location.hash = '#impostazioni';
@@ -432,6 +434,47 @@
     aggiungi(b, [spunta, h('span', null, 'Foglio letto alle ' + ora)]);
   }
   $('#stato-foglio').addEventListener('click', () => { if (!S.esempio) carica(true); });
+
+  // ======================================================================= aggiornamenti
+
+  /**
+   * Il programma controlla da solo ogni ora se c'è una versione nuova, la scarica
+   * e la mette al suo posto. Qui si mostra soltanto: un riquadro tranquillo nella
+   * barra laterale, "Riavvia" per aprirla subito, altrimenti parte alla prossima apertura.
+   */
+  function mostraAggiornamento() {
+    const a = S.aggiornamento;
+    const zona = svuota($('#aggiornamento'));
+    const pronto = a && a.stato === 'pronto';
+    zona.classList.toggle('nascosto', !pronto);
+    if (!pronto) return;
+    aggiungi(zona, [h('b', null, 'Versione ' + a.nuova + ' pronta'), h('span', null, 'Parte alla prossima apertura, o subito:'),
+      h('button', { type: 'button', class: 'btn giallo', onclick: riavvia }, 'Riavvia Wisper Ufficio')]);
+  }
+
+  async function riavvia() {
+    await lavora('Riapro Wisper Ufficio', () => Api.post('/locale/riavvia'));
+  }
+
+  async function cercaAggiornamenti() {
+    const ris = await lavora('Cerco aggiornamenti', () => Api.post('/locale/aggiorna'));
+    if (!ris) return;
+    S.aggiornamento = ris.aggiornamento || S.aggiornamento;
+    mostraAggiornamento();
+    if (S.aggiornamento) avviso(S.aggiornamento.stato === 'errore' ? S.aggiornamento.messaggio : (S.aggiornamento.messaggio || 'Hai l’ultima versione'), S.aggiornamento.stato === 'errore');
+    if (sezione() === 'impostazioni') ridisegna();
+  }
+
+  // Il programma lo dice da solo quando la versione nuova è pronta.
+  if (window.chrome && window.chrome.webview) {
+    window.chrome.webview.addEventListener('message', e => {
+      const m = e.data || {};
+      if (m.tipo !== 'aggiornamento') return;
+      S.aggiornamento = Object.assign({}, S.aggiornamento || {}, { stato: 'pronto', nuova: m.versione });
+      mostraAggiornamento();
+      avviso('È pronta la versione ' + m.versione + ' di Wisper Ufficio');
+    });
+  }
 
   // ======================================================================= FINE MESE
 
@@ -1744,7 +1787,19 @@
           h('button', { type: 'button', class: 'btn', onclick: () => iniziaVisita() }, 'Rifai la visita')) : null,
         h('div', { class: 'voce-imp' }, h('span', { class: 'testi' }, h('b', null, 'Licenze'), h('span', null, 'Carattere Figtree, SIL OFL 1.1')),
           h('button', { type: 'button', class: 'btn', onclick: mostraLicenza }, 'Leggi')),
-        S.versione ? h('div', { class: 'voce-imp' }, h('span', { class: 'testi' }, h('b', null, 'Versione'), h('span', null, 'Wisper Ufficio ' + S.versione))) : null))]);
+        S.versione ? h('div', { class: 'voce-imp' }, h('span', { class: 'testi' }, h('b', null, 'Versione ' + S.versione),
+          h('span', null, statoAggiornamenti())),
+          S.aggiornamento && S.aggiornamento.stato === 'pronto'
+            ? h('button', { type: 'button', class: 'btn giallo', onclick: riavvia }, 'Riavvia')
+            : S.aggiornamento && S.aggiornamento.attivi ? h('button', { type: 'button', class: 'btn', onclick: cercaAggiornamenti }, 'Cerca aggiornamenti') : null) : null))]);
+  }
+
+  function statoAggiornamenti() {
+    const a = S.aggiornamento;
+    if (!a || !a.attivi) return 'Wisper Ufficio';
+    if (a.stato === 'pronto') return 'La ' + a.nuova + ' è pronta: parte alla prossima apertura';
+    if (a.stato === 'errore') return a.messaggio;
+    return 'Si aggiorna da solo' + (a.controllato ? ' · controllato alle ' + a.controllato : '');
   }
 
   async function mostraLicenza() {

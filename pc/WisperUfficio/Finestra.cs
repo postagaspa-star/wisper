@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using System.Drawing;
-using System.Drawing.Drawing2D;
 using System.Text;
 using System.Windows.Forms;
 using Microsoft.Web.WebView2.Core;
@@ -100,7 +99,17 @@ public sealed class Finestra : Form, Ponte.IFinestra
             return;
         }
         core.Navigate(Ponte.Origine + "/index.html");
+
+        // La versione nuova è al suo posto: lo si dice alla pagina, che mostra "Riavvia".
+        if (ponte.Aggiornamenti is { } agg)
+            agg.Pronta += versione => BeginInvoke(() =>
+            {
+                try { vista.CoreWebView2?.PostWebMessageAsJson(new System.Text.Json.Nodes.JsonObject { ["tipo"] = "aggiornamento", ["versione"] = versione }.ToJsonString()); }
+                catch (Exception ex) { Log.Errore("avviso di aggiornamento non mandato", ex); }
+            });
     }
+
+    public void Riavvia() => BeginInvoke(() => ponte.Aggiornamenti?.Riavvia(ponte.ArgomentiDiAvvio));
 
     private async void SuRichiesta(object? mittente, CoreWebView2WebResourceRequestedEventArgs e)
     {
@@ -125,9 +134,9 @@ public sealed class Finestra : Form, Ponte.IFinestra
             }
             if (!Ponte.ÈApi(uri))
             {
-                var file = metodo is "GET" or "HEAD" ? Ponte.FileDellInterfaccia(cartellaUi, uri.AbsolutePath) : null;
-                e.Response = file != null && File.Exists(file)
-                    ? Risposta(200, Ponte.TipoContenuto(file), File.ReadAllBytes(file))
+                var dati = metodo is "GET" or "HEAD" ? Ponte.LeggiInterfaccia(cartellaUi, uri.AbsolutePath) : null;
+                e.Response = dati != null
+                    ? Risposta(200, Ponte.TipoContenuto(uri.AbsolutePath == "/" ? "index.html" : uri.AbsolutePath), dati)
                     : Risposta(404, "text/plain", Encoding.UTF8.GetBytes("non trovato"));
                 return;
             }
@@ -272,25 +281,10 @@ public sealed class Finestra : Form, Ponte.IFinestra
         });
     }
 
-    /// <summary>L'icona: il cerchio giallo del primo Wisper su fondo scuro, disegnata qui per non portarsi dietro un .ico.</summary>
-    private static Icon Icona()
+    /// <summary>L'icona: il simbolo di Wisper (lo stesso dell'exe), da dentro il programma.</summary>
+    private static Icon? Icona()
     {
-        using var bmp = new Bitmap(64, 64);
-        using (var g = Graphics.FromImage(bmp))
-        {
-            g.SmoothingMode = SmoothingMode.AntiAlias;
-            g.Clear(Color.Transparent);
-            using var fondo = new SolidBrush(Color.FromArgb(0x07, 0x08, 0x0A));
-            g.FillEllipse(fondo, 2, 2, 60, 60);
-            using var giallo = new SolidBrush(Color.FromArgb(0xFF, 0xC5, 0x3D));
-            for (int i = 0; i < 8; i++)
-            {
-                var a = i * Math.PI / 4;
-                g.FillEllipse(giallo, (float)(32 + 19 * Math.Cos(a) - 4.5), (float)(32 + 19 * Math.Sin(a) - 4.5), 9, 9);
-            }
-            using var bianco = new SolidBrush(Color.FromArgb(0xF2, 0xF4, 0xF7));
-            g.FillEllipse(bianco, 25, 25, 14, 14);
-        }
-        return Icon.FromHandle(bmp.GetHicon());
+        using var flusso = typeof(Finestra).Assembly.GetManifestResourceStream("WisperUfficio.wisper.ico");
+        return flusso == null ? null : new Icon(flusso);
     }
 }

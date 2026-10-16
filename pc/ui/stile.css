@@ -102,6 +102,12 @@ button { cursor: pointer; }
 .lato a svg { stroke: currentColor; flex: none; }
 .lato a:hover { background: var(--fondo); }
 .lato a.attivo { background: var(--giallo-tenue); color: var(--testo); font-weight: 800; }
+/* La versione nuova scaricata: si apre col riavvio. */
+.aggiornamento { margin-top: auto; padding: 12px; border-radius: 12px; background: var(--giallo-tenue); display: flex; flex-direction: column; gap: 8px; animation: entra .28s ease both; }
+.aggiornamento b { font-size: 14px; font-weight: 800; }
+.aggiornamento span { font-size: 13px; font-weight: 600; color: var(--testo2); }
+.aggiornamento .btn { height: 38px; }
+.aggiornamento:not(.nascosto) + .stato-foglio { margin-top: 8px; }
 .stato-foglio {
   margin-top: auto; padding: 12px; border-radius: 12px; background: var(--fondo); border: none; width: 100%;
   display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: var(--testo2); text-align: left;

@@ -1,26 +1,35 @@
 <#
 .SINOSSI
-    Costruisce il pacchetto di Wisper Ufficio: pc/dist/wisper-ufficio.zip.
+    Costruisce Wisper Ufficio: UN file, pc/dist/WisperUfficio.exe.
 
-    Come Pactum: dotnet publish self-contained per win-x64 A CARTELLA (niente
-    eseguibile che si scompatta da solo, che un antivirus scambia per sospetto).
-    Nello zip c'e' una cartella WisperUfficio\ con WisperUfficio.exe, le dll del
-    runtime .NET e la cartella ui. Si scompatta dove si vuole e si avvia da li'.
+    dotnet publish self-contained per win-x64 in un file solo: dentro ci sono il
+    runtime .NET, l'interfaccia (pc/ui) e il caricatore di WebView2. Si scarica, si
+    mette dove si vuole (Desktop, Documenti) e si apre con un doppio clic; poi si
+    aggiorna da solo (Aggiornamenti.cs). Niente zip, niente cartelle da scompattare.
 
     Usa lo SDK .NET 8 in %LOCALAPPDATA%\Microsoft\dotnet-sdk-8 (o quello nel PATH).
+
+.PARAMETER Versione
+    Per le prove degli aggiornamenti: costruisce l'exe con un'altra versione
+    (es. 0.3.1) senza toccare il progetto.
+
+.PARAMETER Uscita
+    Dove mettere l'exe (predefinito: pc\dist).
 
 .ESEMPIO
     powershell -ExecutionPolicy Bypass -File pc\prove\crea-pacchetto.ps1
 #>
 [CmdletBinding()]
-param()
+param(
+    [string]$Versione = '',
+    [string]$Uscita = ''
+)
 $ErrorActionPreference = 'Stop'
 
 $radicePc = Split-Path -Parent $PSScriptRoot
 $progetto = Join-Path $radicePc 'WisperUfficio\WisperUfficio.csproj'
-$dist = Join-Path $radicePc 'dist'
-$staging = Join-Path $dist 'WisperUfficio'
-$zip = Join-Path $dist 'wisper-ufficio.zip'
+$dist = if ($Uscita) { $Uscita } else { Join-Path $radicePc 'dist' }
+$lavoro = Join-Path $env:TEMP ('wisper-pubblica-' + [guid]::NewGuid().ToString('N'))
 
 $dotnet = Join-Path $env:LOCALAPPDATA 'Microsoft\dotnet-sdk-8\dotnet.exe'
 if (-not (Test-Path $dotnet)) {
@@ -29,20 +38,30 @@ if (-not (Test-Path $dotnet)) {
     $dotnet = $c.Source
 }
 
-Remove-Item -Recurse -Force $staging -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force $dist | Out-Null
 $env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'
 $env:DOTNET_NOLOGO = '1'
 
-Write-Host "Pubblicazione (self-contained, a cartella)..." -ForegroundColor Cyan
-& $dotnet publish $progetto -c Release -r win-x64 "-p:PubblicazioneWisper=true" -o $staging
+$extra = @()
+if ($Versione) { $extra += "-p:Version=$Versione"; $extra += "-p:FileVersion=$Versione.0" }
+
+Write-Host "Pubblicazione (un file solo)..." -ForegroundColor Cyan
+& $dotnet publish $progetto -c Release -r win-x64 "-p:PubblicazioneWisper=true" @extra -o $lavoro
 if ($LASTEXITCODE -ne 0) { throw "publish fallito (codice $LASTEXITCODE)" }
 
-if (-not (Test-Path (Join-Path $staging 'WisperUfficio.exe'))) { throw "WisperUfficio.exe non prodotto." }
-if (-not (Test-Path (Join-Path $staging 'ui\index.html'))) { throw "La cartella ui non e' finita accanto all'exe." }
-if (-not (Test-Path (Join-Path $staging 'coreclr.dll'))) { throw "Manca coreclr.dll: il pacchetto non e' self-contained." }
+$exe = Join-Path $lavoro 'WisperUfficio.exe'
+if (-not (Test-Path $exe)) { throw "WisperUfficio.exe non prodotto." }
+# Nel file solo non deve restare niente accanto: niente ui\, niente dll.
+$accanto = Get-ChildItem $lavoro -File | Where-Object { $_.Name -ne 'WisperUfficio.exe' }
+if ($accanto) { throw "Accanto all'exe sono rimasti dei file: $($accanto.Name -join ', ')" }
+if (Test-Path (Join-Path $lavoro 'ui')) { throw "La cartella ui e' finita accanto all'exe invece che dentro." }
 
-Remove-Item $zip -ErrorAction SilentlyContinue
-Compress-Archive -Path $staging -DestinationPath $zip -CompressionLevel Optimal
-$mb = [math]::Round((Get-Item $zip).Length / 1MB, 1)
-Write-Host "Fatto: $zip ($mb MB)" -ForegroundColor Green
+$finale = Join-Path $dist 'WisperUfficio.exe'
+Copy-Item $exe $finale -Force
+Remove-Item -Recurse -Force $lavoro
+# I pacchetti vecchi a cartella non servono piu'.
+Remove-Item -Recurse -Force (Join-Path $dist 'WisperUfficio'), (Join-Path $dist 'wisper-ufficio.zip') -ErrorAction SilentlyContinue
+
+$mb = [math]::Round((Get-Item $finale).Length / 1MB, 1)
+$v = (Get-Item $finale).VersionInfo.FileVersion
+Write-Host "Fatto: $finale ($mb MB, versione $v)" -ForegroundColor Green

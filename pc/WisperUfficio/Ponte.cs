@@ -24,14 +24,20 @@ public sealed class Ponte
     /// <summary>Dove finiscono i PDF: Documenti\Wisper.</summary>
     public string CartellaPdf { get; }
 
-    /// <summary>Le cose che sa fare solo la finestra: stampare in PDF, scegliere un file.</summary>
+    /// <summary>Le cose che sa fare solo la finestra: stampare in PDF, scegliere un file, riaprirsi aggiornata.</summary>
     public interface IFinestra
     {
         Task<bool> StampaAsync(string html, string percorso);
         (string Nome, byte[] Dati)? ScegliFile(string filtro);
+        void Riavvia();
     }
 
     public IFinestra? Finestra { get; set; }
+
+    public Aggiornamenti? Aggiornamenti { get; set; }
+
+    /// <summary>Le opzioni con cui è partito il programma: il riavvio dopo un aggiornamento le ripete.</summary>
+    public IReadOnlyList<string> ArgomentiDiAvvio { get; set; } = Array.Empty<string>();
 
     public Ponte(Configurazione config, Foglio foglio, string cartellaFile, string cartellaPdf)
     {
@@ -80,6 +86,30 @@ public sealed class Ponte
         return completo.StartsWith(radice, StringComparison.OrdinalIgnoreCase) ? completo : null;
     }
 
+    /// <summary>
+    /// Un file dell'interfaccia: dalla cartella ui accanto all'exe se c'è (build di
+    /// sviluppo, si modifica e si ricarica), altrimenti da dentro l'exe.
+    /// </summary>
+    public static byte[]? LeggiInterfaccia(string cartellaUi, string percorsoUrl)
+    {
+        var file = FileDellInterfaccia(cartellaUi, percorsoUrl);
+        if (file == null) return null;
+        if (Directory.Exists(cartellaUi)) return File.Exists(file) ? File.ReadAllBytes(file) : null;
+        var relativo = Path.GetRelativePath(cartellaUi, file).Replace(Path.DirectorySeparatorChar, '/');
+        if (!RisorseUi.Value.TryGetValue(relativo, out var nome)) return null;
+        using var flusso = typeof(Ponte).Assembly.GetManifestResourceStream(nome);
+        if (flusso == null) return null;
+        using var copia = new MemoryStream();
+        flusso.CopyTo(copia);
+        return copia.ToArray();
+    }
+
+    /// <summary>Le risorse "ui/..." dell'exe, per percorso con le barre dritte (msbuild a volte mette le rovesce).</summary>
+    private static readonly Lazy<Dictionary<string, string>> RisorseUi = new(() =>
+        typeof(Ponte).Assembly.GetManifestResourceNames()
+            .Where(n => n.StartsWith("ui/", StringComparison.Ordinal))
+            .ToDictionary(n => n[3..].Replace(Path.DirectorySeparatorChar, '/'), n => n, StringComparer.OrdinalIgnoreCase));
+
     public static string TipoContenuto(string file) => Path.GetExtension(file).ToLowerInvariant() switch
     {
         ".html" => "text/html; charset=utf-8",
@@ -123,7 +153,18 @@ public sealed class Ponte
                     ["url"] = config.Url,
                     ["cartellaPdf"] = CartellaPdf,
                     ["versione"] = typeof(Ponte).Assembly.GetName().Version?.ToString(3),
+                    ["aggiornamento"] = Aggiornamenti?.ComeJson(),
                 });
+
+            case "aggiorna":
+                if (Aggiornamenti == null) return Json(200, new JsonObject { ["ok"] = true });
+                await Aggiornamenti.ControllaAsync().ConfigureAwait(false);
+                return Json(200, new JsonObject { ["ok"] = true, ["aggiornamento"] = Aggiornamenti.ComeJson() });
+
+            case "riavvia":
+                if (Aggiornamenti?.Stato != "pronto") return Json(409, Errore("Non c'è una versione nuova da aprire"));
+                Finestra?.Riavvia();
+                return Json(200, new JsonObject { ["ok"] = true });
 
             case "configura":
             {
