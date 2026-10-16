@@ -36,6 +36,21 @@ if (-not $codice -or -not $nome -or -not $versionePc) { throw "Non trovo le vers
 $tag = "v$nome"
 Write-Host "Telefono $nome (codice $codice), computer $versionePc, release $tag" -ForegroundColor Cyan
 
+# --- il codice da cui si costruisce: per pubblicare dev'essere tutto salvato e gia' su GitHub,
+#     così l'etichetta della versione indica proprio il commit da cui escono APK ed exe.
+Push-Location $radice
+try {
+    $commit = (git rev-parse HEAD).Trim()
+    $sporco = git status --porcelain
+    if ($Pubblica) {
+        if ($sporco) { throw "Ci sono modifiche non salvate in un commit: prima il commit, poi il rilascio." }
+        git fetch -q origin
+        if (-not (git branch -r --contains $commit)) { throw "Il commit $($commit.Substring(0, 7)) non e' su GitHub: prima il push del ramo, poi il rilascio." }
+    } elseif ($sporco) {
+        Write-Warning "Ci sono modifiche non salvate in un commit: per una prova va bene, per pubblicare no."
+    }
+} finally { Pop-Location }
+
 $cartella = Join-Path $radice "dist\rilascio\$tag"
 Remove-Item -Recurse -Force $cartella -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force $cartella | Out-Null
@@ -74,6 +89,6 @@ if (-not $Pubblica) {
 $note = "Wisper $nome. Telefono e computer si aggiornano da soli entro un'ora.`n`n" +
         "Prima installazione: sul telefono wisper.apk, sul computer WisperUfficio.exe (basta aprirlo)."
 & gh release create $tag (Join-Path $cartella 'wisper.apk') (Join-Path $cartella 'WisperUfficio.exe') (Join-Path $cartella 'aggiornamento.json') `
-    --repo $Repo --title "Wisper $nome" --notes $note
+    --repo $Repo --target $commit --title "Wisper $nome" --notes $note
 if ($LASTEXITCODE -ne 0) { throw "gh release create fallito" }
 Write-Host "Pubblicata: https://github.com/$Repo/releases/tag/$tag" -ForegroundColor Green
