@@ -39,7 +39,15 @@ public sealed class Foglio
             if (k is "codice" or "azione") continue;
             query.Append('&').Append(Uri.EscapeDataString(k)).Append('=').Append(Uri.EscapeDataString(v));
         }
-        return await ChiamaAsync(() => new HttpRequestMessage(HttpMethod.Get, config.Url + query)).ConfigureAwait(false);
+        var risposta = await ChiamaAsync(() => new HttpRequestMessage(HttpMethod.Get, config.Url + query)).ConfigureAwait(false);
+        // Una lettura si può ripetere senza danni: al primo singhiozzo di Google si riprova una volta.
+        // (Le scritture no: un invio di email partirebbe due volte.)
+        if (risposta.Item1 == 502 && risposta.Item2.Contains("\"rete\":true", StringComparison.Ordinal))
+        {
+            await Task.Delay(1500).ConfigureAwait(false);
+            risposta = await ChiamaAsync(() => new HttpRequestMessage(HttpMethod.Get, config.Url + query)).ConfigureAwait(false);
+        }
+        return risposta;
     }
 
     public async Task<(int Stato, string Json)> ScriviAsync(string azione, string? corpo)
@@ -74,6 +82,16 @@ public sealed class Foglio
         {
             using var r = await http.SendAsync(richiesta()).ConfigureAwait(false);
             var testo = await r.Content.ReadAsStringAsync().ConfigureAwait(false);
+            if (r.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                // 404 dall'indirizzo scritto: lì non c'è nessuno script, quasi sempre è scritto male.
+                // 404 dopo il rimbalzo verso googleusercontent: un singhiozzo di Google (capita
+                // per qualche minuto dopo una distribuzione nuova), l'indirizzo è giusto.
+                var dopoIlRimbalzo = r.RequestMessage?.RequestUri?.Host.EndsWith("googleusercontent.com", StringComparison.OrdinalIgnoreCase) == true;
+                return dopoIlRimbalzo
+                    ? (502, Errore("Il foglio non ha risposto bene: riprova fra poco", rete: true))
+                    : (502, Errore("A questo indirizzo Google non trova lo script: controlla che sia scritto giusto, lettera per lettera"));
+            }
             if (!r.IsSuccessStatusCode) return (502, Errore($"Il foglio ha risposto {(int)r.StatusCode}", rete: true));
             // Se lo script non è pubblicato per "Chiunque", Google risponde con una pagina di accesso.
             if (!testo.TrimStart().StartsWith('{')) return (502, Errore("Risposta non valida dal foglio: lo script è pubblicato per \"Chiunque\"?"));

@@ -44,6 +44,13 @@ $env:DOTNET_NOLOGO = '1'
 
 $extra = @()
 if ($Versione) { $extra += "-p:Version=$Versione"; $extra += "-p:FileVersion=$Versione.0" }
+# L'indirizzo del foglio, lo stesso dell'app (wisper-keys): il programma lo ha gia' scritto
+# e alla prima apertura basta il codice.
+$chiavi = 'C:\Users\andre\wisper-keys\wisper.properties'
+if (Test-Path $chiavi) {
+    $riga = Get-Content $chiavi | Where-Object { $_ -match '^sheetUrl=' } | Select-Object -First 1
+    if ($riga) { $extra += "-p:IndirizzoFoglio=$(($riga -replace '^sheetUrl=', '').Trim())" }
+}
 
 Write-Host "Pubblicazione (un file solo)..." -ForegroundColor Cyan
 & $dotnet publish $progetto -c Release -r win-x64 "-p:PubblicazioneWisper=true" @extra -o $lavoro

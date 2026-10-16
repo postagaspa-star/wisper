@@ -1788,8 +1788,8 @@
     aggiungi(pagina, [h('div', { class: 'scheda' }, h('h2', null, 'L\'app'),
       h('div', null,
         h('div', { class: 'voce-imp' }, h('span', { class: 'testi' }, h('b', null, 'Tema')), zonaTema),
-        S.caricato ? h('div', { class: 'voce-imp' }, h('span', { class: 'testi' }, h('b', null, 'Come funziona Wisper Ufficio'), h('span', null, 'La visita guidata, coi dati di esempio')),
-          h('button', { type: 'button', class: 'btn', onclick: () => iniziaVisita() }, 'Rifai la visita')) : null,
+        h('div', { class: 'voce-imp' }, h('span', { class: 'testi' }, h('b', null, 'Visita guidata'), h('span', null, 'Da capo, coi dati di esempio')),
+          h('button', { type: 'button', class: 'btn', onclick: () => iniziaVisita() }, 'Rifai la visita guidata')),
         h('div', { class: 'voce-imp' }, h('span', { class: 'testi' }, h('b', null, 'Licenze'), h('span', null, 'Carattere Figtree, SIL OFL 1.1')),
           h('button', { type: 'button', class: 'btn', onclick: mostraLicenza }, 'Leggi')),
         S.versione ? h('div', { class: 'voce-imp' }, h('span', { class: 'testi' }, h('b', null, 'Versione ' + S.versione),
@@ -1851,7 +1851,8 @@
   }
 
   function iniziaVisita() {
-    if (Visita.attiva || !S.caricato) return;
+    // Gira sui dati di esempio: si può rifare anche prima di collegare il foglio.
+    if (Visita.attiva) return;
     Visita.inizia({
       inizio: () => {
         S.veri = { ana: S.ana, rapportini: S.rapportini, mese: S.mese, filtri: S.filtri };

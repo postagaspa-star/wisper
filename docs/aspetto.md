@@ -212,7 +212,7 @@ rapportino a settembre".
     un errore), Indirizzo, Codice.
   - *Tariffe*: gruppi con la tariffa (fissa o libera), viaggio, km; rimborso km con l'auto. Solo da leggere
     (si cambiano da Wisper Ufficio): righe senza freccia, nessuna frase d'aiuto.
-  - *App*: Tema (automatico, chiaro, scuro), **Come funziona Wisper** (riapre la visita), Versione, Licenze.
+  - *App*: Tema (automatico, chiaro, scuro), **Rifai la visita guidata** ("Da capo, coi dati di esempio": riparte dal primo passo), Versione, Licenze.
 - **Versione** (in fondo alle Impostazioni): "Versione 0.3.0" e sotto "Si aggiorna da sola", "La 0.4.0 è
   pronta" o l'esito dell'ultimo controllo; a destra **Controlla** o **Installa**. In Oggi, solo se il telefono
   ha chiesto un tocco per installare, una riga col simbolo: "Versione nuova di Wisper · La X è pronta: tocca
@@ -270,9 +270,9 @@ con spunta verde, oppure "Foglio non raggiunto · Riprova").
 - **Clienti**: ricerca e gruppi a segmenti; righe con cerchio, nome, gruppo, tariffa ("30 €/h fissa" o "42 €/h
   l'ultima"), email, commesse aperte, ore e totale del mese; finestra di modifica con le eccezioni (viaggio,
   km) come segmenti "Come il gruppo | Sì | No".
-- **Impostazioni**: schede per Il foglio (indirizzo e codice), Lo studio (intestazione dei PDF), La tua firma,
+- **Impostazioni**: schede per Il foglio (indirizzo già scritto nel programma, come nell'app: basta il codice; con un indirizzo sbagliato il messaggio lo dice), Lo studio (intestazione dei PDF), La tua firma,
   Gruppi e tariffe (tabella modificabile), Rimborso km e costi (con la lettera delle commesse), L'app (tema
-  Automatico | Chiaro | Scuro, **Rifai la visita**, licenze, versione). Ogni scheda ha il suo **Salva** con il
+  Automatico | Chiaro | Scuro, **Visita guidata · Rifai la visita guidata** (anche prima di collegare il foglio: usa i dati di esempio), licenze, versione). Ogni scheda ha il suo **Salva** con il
   bordo: il giallo c'è solo su **Collega** quando il foglio non è ancora collegato. Le frasi che prima stavano
   fisse sotto i campi diventano la conferma dopo il salvataggio ("Vale per i rapportini nuovi: quelli già
   scritti tengono il rimborso con cui sono nati").

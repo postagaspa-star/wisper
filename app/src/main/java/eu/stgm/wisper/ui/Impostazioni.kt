@@ -145,7 +145,7 @@ fun SchermataImpostazioni(
                 }
             }
             Scheda(verticale = 2.dp, spazio = 0.dp) {
-                Voce("Come funziona Wisper", "") { onVisita() }
+                Voce("Rifai la visita guidata", "Da capo, coi dati di esempio") { onVisita() }
                 Linea()
                 Voce("Licenze", "Carattere Figtree, SIL OFL 1.1") { licenza = true }
                 Linea()

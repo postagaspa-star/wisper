@@ -15,7 +15,7 @@ public sealed class Configurazione
 {
     private readonly string file;
 
-    public string Url { get; private set; } = "";
+    public string Url { get; private set; } = IndirizzoPredefinito;
     public string Codice { get; private set; } = "";
     public bool Configurato => Url.Length > 0 && Codice.Length > 0;
 
@@ -26,7 +26,8 @@ public sealed class Configurazione
         {
             if (!File.Exists(file)) return;
             var o = JsonNode.Parse(File.ReadAllText(file)) as JsonObject;
-            Url = o?["url"]?.GetValue<string>() ?? "";
+            var salvato = o?["url"]?.GetValue<string>() ?? "";
+            if (salvato.Length > 0) Url = salvato;
             Codice = Dpapi.Svela(o?["codice"]?.GetValue<string>()) ?? "";
         }
         catch (Exception e) when (e is IOException or JsonException or InvalidOperationException)
@@ -45,6 +46,16 @@ public sealed class Configurazione
         File.WriteAllText(tmp, o.ToJsonString());
         File.Move(tmp, file, overwrite: true);
     }
+
+    /// <summary>
+    /// L'indirizzo del foglio messo nel programma quando lo si costruisce (da wisper-keys,
+    /// come per l'app): così la prima volta basta scrivere il codice. Senza, è vuoto.
+    /// Copiarlo a mano è facile sbagliarlo: la I maiuscola e la l minuscola sembrano uguali.
+    /// </summary>
+    public static string IndirizzoPredefinito { get; } =
+        typeof(Configurazione).Assembly.GetCustomAttributes(typeof(System.Reflection.AssemblyMetadataAttribute), false)
+            .OfType<System.Reflection.AssemblyMetadataAttribute>()
+            .FirstOrDefault(a => a.Key == "IndirizzoFoglio")?.Value ?? "";
 
     /// <summary>Per le prove: indirizzo e codice dalla riga di comando, senza toccare il disco.</summary>
     public void Imposta(string url, string codice)

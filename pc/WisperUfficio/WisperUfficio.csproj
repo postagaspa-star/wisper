@@ -12,8 +12,8 @@
     <AssemblyTitle>Wisper Ufficio</AssemblyTitle>
     <Product>Wisper Ufficio</Product>
     <!-- La versione decide gli aggiornamenti: quella pubblicata deve essere più alta di quella installata. -->
-    <Version>0.3.1</Version>
-    <FileVersion>0.3.1.0</FileVersion>
+    <Version>0.3.2</Version>
+    <FileVersion>0.3.2.0</FileVersion>
     <ApplicationIcon>Risorse\wisper.ico</ApplicationIcon>
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
     <SatelliteResourceLanguages>it</SatelliteResourceLanguages>
@@ -53,6 +53,11 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Risorse\wisper.ico" LogicalName="WisperUfficio.wisper.ico" />
+  </ItemGroup>
+
+  <!-- L'indirizzo del foglio, se crea-pacchetto.ps1 lo passa (-p:IndirizzoFoglio=...): così non va copiato a mano. -->
+  <ItemGroup Condition="'$(IndirizzoFoglio)' != ''">
+    <AssemblyMetadata Include="IndirizzoFoglio" Value="$(IndirizzoFoglio)" />
   </ItemGroup>
 
   <!--
