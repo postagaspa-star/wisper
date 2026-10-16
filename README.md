@@ -43,7 +43,9 @@ said was "this is one step too many".
   rapportino parte appena c'è rete". Red only if the sheet refuses something.
 
 **Wisper Ufficio** (`pc/`, C# .NET 8, WebView2, built like Pactum). The main
-program, because invoicing is done at a desk.
+program, because invoicing is done at a desk. One file, `WisperUfficio.exe`, with
+the .NET runtime and the interface inside: download it, put it on the Desktop,
+double-click.
 
 - *Fine mese*, the home: what is ready to invoice, one card per payer
   (Elettrodinamica, not each of its clients) with **Prepara riepilogo**: the PDF
@@ -109,13 +111,45 @@ settings.
    Build the APK. Both can also be changed from the app's settings, so a new
    code does not need a new app.
 3. **The computer.** `powershell -ExecutionPolicy Bypass -File pc\prove\crea-pacchetto.ps1`
-   makes `pc/dist/wisper-ufficio.zip`. Unzip anywhere, start `WisperUfficio.exe`,
+   makes `pc/dist/WisperUfficio.exe`, a single file. Put it anywhere you can
+   write (Desktop, Documents: it replaces itself when it updates), start it,
    paste address and code in *Impostazioni*. The code is stored encrypted with
    the Windows user's DPAPI. `WisperUfficio.exe --stampa-prova file.html file.pdf`
    tells you whether PDFs print on that computer.
 
 After every change to `Code.gs`: Deploy → Manage deployments → edit → New
 version, or the address keeps serving the old code.
+
+## Updates
+
+Both apps update themselves. Once an hour (and at start) they fetch
+`aggiornamento.json` from the latest GitHub release of this repository: the
+versions, where to download them, their size and SHA-256, **signed** with an
+ECDSA key whose private half lives only in `wisper-keys`
+(`aggiornamenti-privata.pem`). The apps carry the public half and ignore any
+list that does not verify, so a stolen GitHub account is not enough to push a
+program onto my father's phone or computer.
+
+- **Computer.** If there is a newer version it downloads the exe, checks the
+  hash, renames the running exe to `.vecchio` (Windows allows it) and puts the
+  new one in its place. The sidebar says "Versione X pronta" with *Riavvia*;
+  otherwise it starts with the new version next time.
+- **Phone.** It downloads the APK, checks the hash and installs it through
+  Android's PackageInstaller, which also refuses anything not signed with the
+  app's own key. It installs only when the app is closed or in the background
+  and no report is half written. The very first update asks for two taps
+  (allow installs from Wisper, then *Update*); from then on, on Android 12 and
+  later, updates install with no question at all.
+
+**Publishing a version.** Raise `versionCode`/`versionName` in
+`app/build.gradle.kts` and `Version` in the `.csproj`, then
+`powershell -ExecutionPolicy Bypass -File strumenti\rilascio.ps1` builds the signed APK, the exe and the signed list in `dist/rilascio/vX.Y.Z/`; add
+`-Pubblica` to create the GitHub release. Within an hour both apps have it.
+
+**Keys.** `wisper-keys\wisper-release.jks` signs the APK: if it is lost, the
+next version cannot be installed over the old one (uninstall and reinstall,
+data on the sheet is safe). Keep a copy of the whole `wisper-keys` folder
+somewhere that is not this computer.
 
 ## Trying it without the real sheet
 
@@ -133,6 +167,15 @@ to `http://10.0.2.2:8765/exec` from the emulator.
 
 Tests: `node --test "apps-script/prove/*.test.js"`, `node --test "pc/prove/*.test.js"`,
 `gradlew :app:testDebugUnitTest`.
+
+Updates can be tried locally: build a higher version
+(`crea-pacchetto.ps1 -Versione 0.3.1 -Uscita DIR`, or
+`gradlew assembleDebug -PcodiceVersione=4 -PnomeVersione=0.4.0`), sign the list
+with `node strumenti/firma-aggiornamento.js --cartella DIR --indirizzo http://...`,
+serve the folder over HTTP and point the apps at it
+(`WisperUfficio.exe --aggiornamenti http://localhost:PORT/aggiornamento.json`,
+`gradlew assembleDebug -PaggiornamentiUrl=http://10.0.2.2:PORT/aggiornamento.json`).
+Plain http is accepted only from the computer itself.
 
 ## Things worth knowing
 

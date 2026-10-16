@@ -213,6 +213,10 @@ rapportino a settembre".
   - *Tariffe*: gruppi con la tariffa (fissa o libera), viaggio, km; rimborso km con l'auto. Solo da leggere
     (si cambiano da Wisper Ufficio): righe senza freccia, nessuna frase d'aiuto.
   - *App*: Tema (automatico, chiaro, scuro), **Come funziona Wisper** (riapre la visita), Versione, Licenze.
+- **Versione** (in fondo alle Impostazioni): "Versione 0.3.0" e sotto "Si aggiorna da sola", "La 0.4.0 è
+  pronta" o l'esito dell'ultimo controllo; a destra **Controlla** o **Installa**. In Oggi, solo se il telefono
+  ha chiesto un tocco per installare, una riga col simbolo: "Versione nuova di Wisper · La X è pronta: tocca
+  per installarla". Di solito non si vede niente: si installa da sola ad app chiusa.
 - **Primo avvio / collegamento**: il simbolo grande, "Collega Wisper al tuo foglio", campi Indirizzo e Codice
   grandi, pulsante giallo "Collega". Collegato: parte la visita guidata.
 - **Stati**: senza rete tutto resta consultabile coi dati dell'ultima lettura, più la pillola grigia; errore
@@ -273,6 +277,10 @@ con spunta verde, oppure "Foglio non raggiunto · Riprova").
   fisse sotto i campi diventano la conferma dopo il salvataggio ("Vale per i rapportini nuovi: quelli già
   scritti tengono il rimborso con cui sono nati").
 - **Avvisi**: in basso al centro, scuri, 3,5 s; gli errori restano finché non si chiudono, con cosa fare.
+- **Versione nuova**: si scarica da sola; quando è pronta, sopra lo stato del foglio nella barra laterale
+  compare un riquadro giallo tenue "Versione X pronta · Parte alla prossima apertura, o subito:" con
+  **Riavvia Wisper Ufficio**. In Impostazioni › L'app la riga "Versione X" dice "Si aggiorna da solo ·
+  controllato alle HH:MM" con **Cerca aggiornamenti**.
 
 ## 9. Visita guidata (al posto delle istruzioni scritte)
 Sulle **schermate vere**, con **dati di esempio** (stesse pagine e stesso codice, sorgente dati finta in

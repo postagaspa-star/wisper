@@ -35,3 +35,6 @@ google-services.json
 
 # Il pacchetto di Wisper Ufficio (si rifà con pc/prove/crea-pacchetto.ps1)
 /pc/dist/
+
+# I rilasci preparati da strumenti/rilascio.ps1 (si pubblicano su GitHub, non nel repo)
+/dist/
