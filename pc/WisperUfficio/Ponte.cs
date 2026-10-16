@@ -36,6 +36,9 @@ public sealed class Ponte
 
     public Aggiornamenti? Aggiornamenti { get; set; }
 
+    /// <summary>La prima apertura dopo l'installazione: la pagina dice dove trovarlo.</summary>
+    public bool AppenaInstallato { get; set; }
+
     /// <summary>Le opzioni con cui è partito il programma: il riavvio dopo un aggiornamento le ripete.</summary>
     public IReadOnlyList<string> ArgomentiDiAvvio { get; set; } = Array.Empty<string>();
 
@@ -154,6 +157,7 @@ public sealed class Ponte
                     ["cartellaPdf"] = CartellaPdf,
                     ["versione"] = typeof(Ponte).Assembly.GetName().Version?.ToString(3),
                     ["aggiornamento"] = Aggiornamenti?.ComeJson(),
+                    ["appenaInstallato"] = AppenaInstallato,
                 });
 
             case "aggiorna":

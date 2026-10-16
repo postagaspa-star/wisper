@@ -33,7 +33,10 @@ $nome = [regex]::Match($gradle, 'versionName = .*\?: "([0-9.]+)"').Groups[1].Val
 $csproj = Get-Content (Join-Path $radice 'pc\WisperUfficio\WisperUfficio.csproj') -Raw
 $versionePc = [regex]::Match($csproj, '<Version>([0-9.]+)</Version>').Groups[1].Value
 if (-not $codice -or -not $nome -or -not $versionePc) { throw "Non trovo le versioni in build.gradle.kts o nel .csproj." }
-$tag = "v$nome"
+# La release prende il numero piu' alto dei due: si puo' pubblicare un computer nuovo
+# lasciando il telefono com'e' (stesso codice: i telefoni non scaricano niente).
+$versioneRilascio = @([version]$nome, [version]$versionePc) | Sort-Object -Descending | Select-Object -First 1
+$tag = "v$($versioneRilascio.ToString(3))"
 Write-Host "Telefono $nome (codice $codice), computer $versionePc, release $tag" -ForegroundColor Cyan
 
 # --- il codice da cui si costruisce: per pubblicare dev'essere tutto salvato e gia' su GitHub,
@@ -86,9 +89,9 @@ if (-not $Pubblica) {
     Write-Host "Non pubblicato. Per pubblicare: strumenti\rilascio.ps1 -Pubblica" -ForegroundColor Yellow
     return
 }
-$note = "Wisper $nome. Telefono e computer si aggiornano da soli entro un'ora.`n`n" +
+$note = "Wisper $($versioneRilascio.ToString(3)): telefono $nome, computer $versionePc. Si aggiornano da soli entro un'ora.`n`n" +
         "Prima installazione: sul telefono wisper.apk, sul computer WisperUfficio.exe (basta aprirlo)."
 & gh release create $tag (Join-Path $cartella 'wisper.apk') (Join-Path $cartella 'WisperUfficio.exe') (Join-Path $cartella 'aggiornamento.json') `
-    --repo $Repo --target $commit --title "Wisper $nome" --notes $note
+    --repo $Repo --target $commit --title "Wisper $($versioneRilascio.ToString(3))" --notes $note
 if ($LASTEXITCODE -ne 0) { throw "gh release create fallito" }
 Write-Host "Pubblicata: https://github.com/$Repo/releases/tag/$tag" -ForegroundColor Green

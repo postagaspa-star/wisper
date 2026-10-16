@@ -44,8 +44,11 @@ said was "this is one step too many".
 
 **Wisper Ufficio** (`pc/`, C# .NET 8, WebView2, built like Pactum). The main
 program, because invoicing is done at a desk. One file, `WisperUfficio.exe`, with
-the .NET runtime and the interface inside: download it, put it on the Desktop,
-double-click.
+the .NET runtime and the interface inside. The first time it is opened it installs
+itself for the current user, no administrator: it copies itself to
+`%LOCALAPPDATA%\Programs\WisperUfficio` (outside OneDrive, which locks files and
+would break updates), adds *Wisper Ufficio* to Start and the Desktop and to
+*Settings › Apps*, from where it can be removed.
 
 - *Fine mese*, the home: what is ready to invoice, one card per payer
   (Elettrodinamica, not each of its clients) with **Prepara riepilogo**: the PDF

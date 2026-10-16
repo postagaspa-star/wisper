@@ -120,14 +120,14 @@
 
   // ======================================================================= avvisi e attese
 
-  function avviso(testo, errore) {
+  function avviso(testo, errore, durata) {
     const chiudi = () => a.remove();
     const a = h('div', { class: 'avviso' + (errore ? ' errore' : ''), role: errore ? 'alert' : 'status' },
       errore ? icona('avviso', 18) : null, h('span', null, testo),
       errore ? h('button', { type: 'button', 'aria-label': 'Chiudi', onclick: chiudi }, icona('chiudi', 16)) : null);
     aggiungi($('#avvisi'), [a]);
     // Gli errori restano finché non si chiudono: dicono cosa fare.
-    if (!errore) setTimeout(chiudi, 3500);
+    if (!errore) setTimeout(chiudi, durata || 3500);
   }
 
   let inAttesa = 0;
@@ -272,6 +272,11 @@
     S.versione = st.versione;
     S.aggiornamento = st.aggiornamento || null;
     mostraAggiornamento();
+    // La prima apertura dopo che si è installato da solo: dove ritrovarlo.
+    if (st.appenaInstallato && !S.dettoInstallato) {
+      S.dettoInstallato = true;
+      avviso('Wisper Ufficio è installato: lo trovi in Start e sul Desktop. Il file scaricato si può cancellare.', false, 10000);
+    }
     if (!S.configurato) {
       S.caricato = false;
       if (location.hash !== '#impostazioni') location.hash = '#impostazioni';
