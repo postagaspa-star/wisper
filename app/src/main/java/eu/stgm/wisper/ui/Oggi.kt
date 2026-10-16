@@ -34,7 +34,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.ui.platform.LocalContext
 import eu.stgm.wisper.Dati
+import eu.stgm.wisper.NuoveVersioni
 import eu.stgm.wisper.Riepiloghi
 import eu.stgm.wisper.Riepiloghi.TipoGiorno
 import eu.stgm.wisper.rapportino.Numeri
@@ -241,6 +243,29 @@ fun SchermataOggi(
                 }
                 Text("Il mese", style = Testi.secondarioGrande.copy(fontWeight = FontWeight.Bold), color = c.gialloTesto)
                 Icon(Icone.freccia, null, tint = c.gialloTesto, modifier = Modifier.size(16.dp))
+            }
+
+            // ---------------------------------------------------------- versione nuova
+            // Di solito si installa da sola ad app chiusa; questa riga c'è solo se il
+            // telefono ha chiesto un tocco per installarla.
+            val versioni by NuoveVersioni.stato.collectAsStateWithLifecycle()
+            if (!dati.esempio && versioni.pronta != null && versioni.attesaConferma) {
+                val ctx = LocalContext.current
+                Row(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(c.scheda)
+                        .border(1.dp, c.bordoScheda, RoundedCornerShape(20.dp))
+                        .clickable { NuoveVersioni.installa(ctx, chiesto = true) }
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Simbolo(dimensione = 44.dp)
+                    Spacer(Modifier.width(14.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text("Versione nuova di Wisper", style = Testi.forte, color = c.testo)
+                        Text("La ${versioni.nome} è pronta: tocca per installarla", style = Testi.secondario, color = c.tenue)
+                    }
+                    Icon(Icone.freccia, null, tint = c.tenue, modifier = Modifier.size(18.dp))
+                }
             }
         }
 

@@ -24,8 +24,10 @@ android {
         applicationId = "eu.stgm.wisper"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        versionName = "0.2.0"
+        // Il codice decide gli aggiornamenti: quello pubblicato deve essere più alto di quello installato.
+        // (-PcodiceVersione=4 -PnomeVersione=0.4.0 solo per provare gli aggiornamenti sull'emulatore.)
+        versionCode = (project.findProperty("codiceVersione") as String?)?.toInt() ?: 3
+        versionName = (project.findProperty("nomeVersione") as String?) ?: "0.3.0"
 
         // Indirizzo dell'Apps Script che fa da ponte col foglio Google, e il
         // codice senza il quale lo script non risponde (lo crea preparaFoglio()).
@@ -33,6 +35,24 @@ android {
         // senza ricompilare, per esempio se il codice va rifatto.
         buildConfigField("String", "SHEET_URL", "\"${chiave("sheetUrl")}\"")
         buildConfigField("String", "SHEET_CODICE", "\"${chiave("sheetCodice")}\"")
+
+        // L'elenco firmato delle versioni (NuoveVersioni.kt). Per le prove se ne usa
+        // un altro: ./gradlew assembleDebug -PaggiornamentiUrl=http://10.0.2.2:8767/aggiornamento.json
+        val aggiornamenti = (project.findProperty("aggiornamentiUrl") as String?)
+            ?: "https://github.com/postagaspa-star/wisper/releases/latest/download/aggiornamento.json"
+        buildConfigField("String", "AGGIORNAMENTI_URL", "\"$aggiornamenti\"")
+    }
+
+    // La firma delle versioni da distribuire: sempre la stessa, o Android non accetta
+    // gli aggiornamenti. La chiave vive in wisper-keys; senza, l'APK release esce non firmato.
+    val archivioChiavi = chiave("releaseStoreFile").takeIf { it.isNotBlank() }?.let { file(it) }?.takeIf { it.exists() }
+    signingConfigs {
+        if (archivioChiavi != null) create("release") {
+            storeFile = archivioChiavi
+            storePassword = chiave("releaseStorePassword")
+            keyAlias = chiave("releaseKeyAlias")
+            keyPassword = chiave("releaseKeyPassword")
+        }
     }
 
     buildTypes {
@@ -41,6 +61,7 @@ android {
             // avremmo il tempo di diagnosticarli. APK piu' grosso, va benissimo.
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            if (archivioChiavi != null) signingConfig = signingConfigs.getByName("release")
         }
     }
 

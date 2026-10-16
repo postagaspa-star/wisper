@@ -45,6 +45,10 @@ class WisperApp : Application() {
                 NotificationManager.IMPORTANCE_DEFAULT,
             ).apply { setShowBadge(true) }
         )
+
+        // Le versioni nuove: lo stato salvato, e il controllo di ogni ora.
+        NuoveVersioni.carica(this)
+        NuoveVersioni.programma(this)
     }
 
     companion object {

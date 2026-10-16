@@ -8,6 +8,12 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- L'avviso "rapportino non ancora sul foglio" quando l'app e' chiusa. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Per installare da sola le versioni nuove (NuoveVersioni.kt): solo APK firmati
+         con la stessa chiave dell'app, Android non accetta altro. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- Da Android 12: le versioni dopo la prima si installano senza chiedere niente,
+         perché a installarle è Wisper stesso (e solo se l'app è chiusa). -->
+    <uses-permission android:name="android.permission.UPDATE_PACKAGES_WITHOUT_USER_ACTION" />
 
     <application
         android:name=".WisperApp"
@@ -28,6 +34,9 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Le risposte dell'installazione di una versione nuova. -->
+        <receiver android:name=".EsitoInstallazione" android:exported="false" />
 
         <!-- La fotocamera scrive la foto dello scontrino direttamente in un
              file dell'app: serve un indirizzo che possa raggiungere. -->

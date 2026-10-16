@@ -40,6 +40,9 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import eu.stgm.wisper.Archivio
 import eu.stgm.wisper.BuildConfig
+import eu.stgm.wisper.NuoveVersioni
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import eu.stgm.wisper.rapportino.Numeri
 import java.time.format.DateTimeFormatter
 
@@ -146,7 +149,25 @@ fun SchermataImpostazioni(
                 Linea()
                 Voce("Licenze", "Carattere Figtree, SIL OFL 1.1") { licenza = true }
                 Linea()
-                Voce("Versione", BuildConfig.VERSION_NAME, freccia = false) {}
+                // Si aggiorna da sola ogni ora; qui si vede a che punto è e si può controllare subito.
+                val versioni by NuoveVersioni.stato.collectAsStateWithLifecycle()
+                val scope = rememberCoroutineScope()
+                Row(Modifier.fillMaxWidth().heightIn(min = 60.dp).padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Versione ${BuildConfig.VERSION_NAME}", style = Testi.forte, color = c.testo)
+                        Text(
+                            when {
+                                versioni.inCorso -> "Controllo…"
+                                versioni.pronta != null -> "La ${versioni.nome} è pronta"
+                                versioni.messaggio.isNotBlank() -> versioni.messaggio
+                                else -> "Si aggiorna da sola"
+                            },
+                            style = Testi.secondario, color = c.tenue, maxLines = 2,
+                        )
+                    }
+                    if (versioni.pronta != null) PulsanteTesto("Installa", { NuoveVersioni.installa(ctx, chiesto = true) })
+                    else if (!versioni.inCorso) PulsanteTesto("Controlla", { scope.launch { NuoveVersioni.controlla(ctx) } })
+                }
             }
         }
     }
