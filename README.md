@@ -106,19 +106,44 @@ settings.
    and columns without touching existing ones, and writes the CODE in the log.
    Deploy → New deployment → Web app, execute as *me*, access *Anyone*. The sheet
    should belong to whoever sends the emails: they leave from its owner's Gmail.
-2. **The phone.** In `C:\Users\andre\wisper-keys\wisper.properties`:
-   ```
-   sheetUrl=https://script.google.com/macros/s/.../exec
-   sheetCodice=...
-   ```
-   Build the APK. Both can also be changed from the app's settings, so a new
-   code does not need a new app.
+2. **The phone.** The first screen asks for the sheet address and the code; both
+   can be changed later from the settings, so a new code does not need a new app.
+   The address lives in `C:\Users\andre\wisper-keys\wisper.properties`
+   (`sheetUrl=https://script.google.com/macros/s/.../exec`), outside the repo, and
+   goes into debug builds only. A release APK carries it only if asked for, to
+   install by hand at home: `gradlew :app:assembleRelease -PconIndirizzo`. The
+   phone saves it on first start, so later updates without it keep working.
 3. **The computer.** `powershell -ExecutionPolicy Bypass -File pc\prove\crea-pacchetto.ps1`
    makes `pc/dist/WisperUfficio.exe`, a single file. Put it anywhere you can
    write (Desktop, Documents: it replaces itself when it updates), start it,
    paste address and code in *Impostazioni*. The code is stored encrypted with
-   the Windows user's DPAPI. `WisperUfficio.exe --stampa-prova file.html file.pdf`
-   tells you whether PDFs print on that computer.
+   the Windows user's DPAPI. `-ConIndirizzo` puts the address inside, for a home
+   copy only. `WisperUfficio.exe --stampa-prova file.html file.pdf` tells you
+   whether PDFs print on that computer.
+
+**The address never goes into what is published.** GitHub releases are public
+and anything inside an APK or an exe can be read. `strumenti\rilascio.ps1`
+refuses to publish if it finds the address in the APK's code or if the exe says
+it carries one (`WisperUfficio.exe --indirizzo-incluso` exits with 3).
+
+**Access log.** Every request to the script leaves a row in the *Accessi* sheet:
+when, outcome, action, device name, app version, device id. Phone and computer
+create their id on first start and send it with every call; *Dispositivi* lists
+them with first and last access, and a NOTE column for who owns each. Google
+does not give the script the caller's IP address, so there is none. The owner of
+the sheet (and anyone in the `EMAIL_AVVISI` setting) gets an email when an
+unknown device gets in with the right code, when a request with the right code
+does not say who it is (once a day, once the apps have been updated for two
+days), and after 5 wrong codes in an hour (once every 6 hours). The code itself
+is never written down. Wrong codes beyond 50 an hour are only counted, so
+nobody can fill the sheet. Rows beyond 60,000 (about a year) are trimmed.
+
+**Text stays text.** Sheets reads what it receives as if someone typed it:
+`01234567890` becomes a number and loses its zero, `=...` becomes a formula. The
+script writes VAT numbers and phones, values starting with `= + - @` and
+digit-only codes starting with 0 with the apostrophe that marks text
+(`perLaCella`). VAT numbers and phones that had already turned into numbers are
+read back right and fixed in the sheet on the first request.
 
 After every change to `Code.gs`: Deploy → Manage deployments → edit → New
 version, or the address keeps serving the old code.

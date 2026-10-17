@@ -19,6 +19,15 @@ public sealed class Configurazione
     public string Codice { get; private set; } = "";
     public bool Configurato => Url.Length > 0 && Codice.Length > 0;
 
+    /// <summary>
+    /// Come si presenta questo computer al foglio, che lo scrive nella scheda Accessi a
+    /// ogni richiesta. Nasce qui la prima volta e non è mai uguale su due computer.
+    /// </summary>
+    public string Dispositivo { get; private set; } = Guid.NewGuid().ToString();
+
+    /// <summary>"UFFICIO-PC (manuel)": quello che si legge nella scheda Accessi.</summary>
+    public static string NomeDispositivo { get; } = $"{Environment.MachineName} ({Environment.UserName})";
+
     public Configurazione(string file)
     {
         this.file = file;
@@ -29,6 +38,12 @@ public sealed class Configurazione
             var salvato = o?["url"]?.GetValue<string>() ?? "";
             if (salvato.Length > 0) Url = salvato;
             Codice = Dpapi.Svela(o?["codice"]?.GetValue<string>()) ?? "";
+            var dispositivo = o?["dispositivo"]?.GetValue<string>() ?? "";
+            if (dispositivo.Length > 0) Dispositivo = dispositivo;
+            // Un exe di casa porta l'indirizzo dentro, quelli pubblicati no: si salva subito,
+            // così l'aggiornamento dopo non scollega il computer. E il nome del dispositivo
+            // deve restare lo stesso da un'apertura all'altra.
+            if ((salvato.Length == 0 && Url.Length > 0) || dispositivo.Length == 0) Scrivi();
         }
         catch (Exception e) when (e is IOException or JsonException or InvalidOperationException)
         {
@@ -40,17 +55,22 @@ public sealed class Configurazione
     {
         Url = url.Trim();
         Codice = codice.Trim();
+        Scrivi();
+    }
+
+    private void Scrivi()
+    {
         Directory.CreateDirectory(Path.GetDirectoryName(file)!);
-        var o = new JsonObject { ["url"] = Url, ["codice"] = Dpapi.Proteggi(Codice) };
+        var o = new JsonObject { ["url"] = Url, ["codice"] = Dpapi.Proteggi(Codice), ["dispositivo"] = Dispositivo };
         var tmp = file + ".tmp";
         File.WriteAllText(tmp, o.ToJsonString());
         File.Move(tmp, file, overwrite: true);
     }
 
     /// <summary>
-    /// L'indirizzo del foglio messo nel programma quando lo si costruisce (da wisper-keys,
-    /// come per l'app): così la prima volta basta scrivere il codice. Senza, è vuoto.
-    /// Copiarlo a mano è facile sbagliarlo: la I maiuscola e la l minuscola sembrano uguali.
+    /// L'indirizzo del foglio messo nel programma quando lo si costruisce, solo per un exe
+    /// da usare in casa (crea-pacchetto.ps1 -ConIndirizzo). Quello che si pubblica su GitHub
+    /// non lo ha: le release sono pubbliche. Senza, è vuoto e lo si scrive in Impostazioni.
     /// </summary>
     public static string IndirizzoPredefinito { get; } =
         typeof(Configurazione).Assembly.GetCustomAttributes(typeof(System.Reflection.AssemblyMetadataAttribute), false)

@@ -35,6 +35,8 @@ import java.util.concurrent.TimeUnit
 class PonteFoglio(
     private val url: () -> String,
     private val codice: () -> String,
+    /** Chi chiama (disp, dispNome, app): lo script lo scrive nel registro degli accessi. */
+    private val chiSono: () -> Map<String, String> = { emptyMap() },
     private val client: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
@@ -117,6 +119,7 @@ class PonteFoglio(
         val indirizzo = url().toHttpUrlOrNull()?.newBuilder()
             ?.addQueryParameter("codice", codice())
             ?.addQueryParameter("azione", azione)
+            ?.apply { chiSono().forEach { (k, v) -> addQueryParameter(k, v) } }
             ?.apply { parametri.forEach { (k, v) -> addQueryParameter(k, v) } }
             ?.build()
             ?: throw RifiutatoDalFoglio("indirizzo del foglio non valido")
@@ -126,6 +129,7 @@ class PonteFoglio(
     private fun scrivi(corpo: JSONObject): JSONObject {
         controllaConfigurazione()
         corpo.put("codice", codice())
+        chiSono().forEach { (k, v) -> corpo.put(k, v) }
         return chiama(
             Request.Builder()
                 .url(url())

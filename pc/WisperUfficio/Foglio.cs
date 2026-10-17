@@ -34,9 +34,11 @@ public sealed class Foglio
         if (!config.Configurato) return NonConfigurato();
         var query = new StringBuilder("?codice=").Append(Uri.EscapeDataString(config.Codice))
             .Append("&azione=").Append(Uri.EscapeDataString(azione));
+        foreach (var (k, v) in ChiSono())
+            query.Append('&').Append(k).Append('=').Append(Uri.EscapeDataString(v));
         foreach (var (k, v) in parametri)
         {
-            if (k is "codice" or "azione") continue;
+            if (k is "codice" or "azione" or "disp" or "dispNome" or "app") continue;
             query.Append('&').Append(Uri.EscapeDataString(k)).Append('=').Append(Uri.EscapeDataString(v));
         }
         var risposta = await ChiamaAsync(() => new HttpRequestMessage(HttpMethod.Get, config.Url + query)).ConfigureAwait(false);
@@ -56,6 +58,7 @@ public sealed class Foglio
         var o = (string.IsNullOrWhiteSpace(corpo) ? null : JsonNode.Parse(corpo) as JsonObject) ?? new JsonObject();
         o["azione"] = azione;
         o["codice"] = config.Codice;
+        foreach (var (k, v) in ChiSono()) o[k] = v;
         var testo = o.ToJsonString();
         // text/plain di proposito: Apps Script legge comunque il corpo grezzo.
         return await ChiamaAsync(() => new HttpRequestMessage(HttpMethod.Post, config.Url)
@@ -103,6 +106,17 @@ public sealed class Foglio
             return (502, Errore(e is TaskCanceledException ? "Il foglio non ha risposto in tempo" : "Niente rete: il foglio non si raggiunge", rete: true));
         }
     }
+
+    /// <summary>Chi chiama: lo script lo scrive nel registro degli accessi (scheda Accessi).</summary>
+    private KeyValuePair<string, string>[] ChiSono() => new[]
+    {
+        KeyValuePair.Create("disp", config.Dispositivo),
+        KeyValuePair.Create("dispNome", Configurazione.NomeDispositivo),
+        KeyValuePair.Create("app", "ufficio " + Versione),
+    };
+
+    private static readonly string Versione =
+        typeof(Foglio).Assembly.GetName().Version is { } v ? $"{v.Major}.{v.Minor}.{v.Build}" : "?";
 
     private static (int, string) NonConfigurato() =>
         (409, Errore("Manca il collegamento al foglio: aprilo da Impostazioni"));

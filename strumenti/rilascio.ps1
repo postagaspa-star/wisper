@@ -73,6 +73,27 @@ Copy-Item $apk (Join-Path $cartella 'wisper.apk')
 & powershell -ExecutionPolicy Bypass -File (Join-Path $radice 'pc\prove\crea-pacchetto.ps1') -Uscita $cartella
 if ($LASTEXITCODE -ne 0) { throw "crea-pacchetto fallito" }
 
+# --- l'indirizzo del foglio non deve uscire di casa: le release di GitHub sono pubbliche.
+#     Nell'APK si cerca dentro il codice compilato (classes*.dex); l'exe lo dice da solo.
+$chiavi = 'C:\Users\andre\wisper-keys\wisper.properties'
+$riga = if (Test-Path $chiavi) { Get-Content $chiavi | Where-Object { $_ -match '^sheetUrl=' } | Select-Object -First 1 }
+$idScript = if ($riga) { [regex]::Match($riga, '/macros/s/([^/]+)/').Groups[1].Value } else { '' }
+if ($idScript) {
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $zip = [System.IO.Compression.ZipFile]::OpenRead((Join-Path $cartella 'wisper.apk'))
+    try {
+        foreach ($voce in $zip.Entries | Where-Object { $_.Name -like 'classes*.dex' }) {
+            $flusso = $voce.Open(); $mem = New-Object System.IO.MemoryStream
+            try { $flusso.CopyTo($mem) } finally { $flusso.Dispose() }
+            $testo = [System.Text.Encoding]::GetEncoding(28591).GetString($mem.ToArray())
+            if ($testo.Contains($idScript)) { throw "L'APK contiene l'indirizzo del foglio ($($voce.Name)): non si pubblica. Era stato costruito con -PconIndirizzo?" }
+        }
+    } finally { $zip.Dispose() }
+}
+$prova = Start-Process -FilePath (Join-Path $cartella 'WisperUfficio.exe') -ArgumentList '--indirizzo-incluso' -Wait -PassThru
+if ($prova.ExitCode -ne 0) { throw "WisperUfficio.exe contiene l'indirizzo del foglio (uscita $($prova.ExitCode)): non si pubblica." }
+Write-Host "Controllato: nell'APK e nell'exe l'indirizzo del foglio non c'e'." -ForegroundColor Green
+
 # --- 3. l'elenco firmato
 $base = "https://github.com/$Repo/releases/download/$tag"
 & node (Join-Path $radice 'strumenti\firma-aggiornamento.js') --cartella $cartella --indirizzo $base `

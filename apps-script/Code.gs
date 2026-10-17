@@ -20,6 +20,11 @@
  *
  * Le intestazioni si riconoscono a prescindere da maiuscole, spazi e trattini
  * bassi: "ORE_LAVORO", "Ore lavoro" e "ore lavoro" sono la stessa colonna.
+ *
+ * OGNI RICHIESTA LASCIA UNA RIGA nella scheda Accessi (quando, quale
+ * dispositivo, per fare cosa, com'e' andata), e la scheda Dispositivi elenca
+ * chi si e' collegato. Un dispositivo nuovo, o troppi codici sbagliati, e
+ * arriva un'email: vedi "Il registro degli accessi" piu' sotto.
  */
 
 var NOME_RAPPORTINI = 'Rapportini';
@@ -27,6 +32,8 @@ var NOME_CLIENTI = 'Clienti';
 var NOME_COMMESSE = 'Commesse';
 var NOME_GRUPPI = 'Gruppi';
 var NOME_IMPOSTAZIONI = 'Impostazioni';
+var NOME_ACCESSI = 'Accessi';
+var NOME_DISPOSITIVI = 'Dispositivi';
 
 var FUSO = 'Europe/Rome';
 
@@ -134,8 +141,16 @@ var IMPOSTAZIONI_INIZIALI = [
   ['EMAIL', '', 'Intestazione dei PDF.'],
   ['TELEFONO', '', 'Intestazione dei PDF.'],
   ['PEC', '', 'Intestazione dei PDF.'],
-  ['FIRMA_TECNICO', '', 'La firma del compilatore: si mette da sola su ogni rapportino. La carica il programma.']
+  ['FIRMA_TECNICO', '', 'La firma del compilatore: si mette da sola su ogni rapportino. La carica il programma.'],
+  ['EMAIL_AVVISI', '', 'Chi riceve gli avvisi di sicurezza (dispositivo nuovo, codici sbagliati) oltre al proprietario del foglio. Piu\' indirizzi separati da virgola.']
 ];
+
+/**
+ * Le colonne che sono sempre testo, anche quando dentro ci sono solo cifre. Una
+ * partita IVA "01234567890" scritta cosi' com'e', Fogli la trasforma nel numero
+ * 1234567890, e lo zero davanti sparisce. Stessa cosa per un fisso "0445...".
+ */
+var SEMPRE_TESTO = ['partitaIva', 'telefono', 'PARTITA_IVA', 'TELEFONO'];
 
 /**
  * I gruppi di partenza. Elettrodinamica paga 30 euro l'ora fissi, i km ma non
@@ -158,34 +173,34 @@ var STATI_BLOCCATI = ['FIRMATO', 'INVIATO', 'FATTURATO'];
 // ---------------------------------------------------------------------------
 
 function doGet(e) {
-  try {
-    var p = (e && e.parameter) || {};
-    controllaCodice(p.codice);
+  var p = (e && e.parameter) || {};
+  return rispondi(p, function () {
     switch (p.azione) {
       case 'rapportini':
-        return json({ ok: true, rapportini: leggiRapportini(p.da, p.a, p.tutti === '1') });
+        return { ok: true, rapportini: leggiRapportini(p.da, p.a, p.tutti === '1') };
       case 'file':
-        return json({ ok: true, file: leggiFile(p.id) });
+        return { ok: true, file: leggiFile(p.id) };
       case 'documenti':
-        return json(documentiCommessa(p.idCommessa));
+        return documentiCommessa(p.idCommessa);
       default:
-        return json(rispostaAnagrafiche());
+        return rispostaAnagrafiche();
     }
-  } catch (err) {
-    return json({ ok: false, errore: messaggio(err) });
-  }
+  });
 }
 
 function doPost(e) {
+  var d;
   try {
-    var d = JSON.parse(e.postData.contents);
-    controllaCodice(d.codice);
-    if (d.azione === 'anagrafiche') return json(rispostaAnagrafiche());
-    if (d.azione === 'rapportini') {
-      return json({ ok: true, rapportini: leggiRapportini(d.da, d.a, d.tutti === true) });
-    }
-    if (d.azione === 'file') return json({ ok: true, file: leggiFile(d.id) });
-    if (d.azione === 'documenti') return json(documentiCommessa(d.idCommessa));
+    d = JSON.parse(e.postData.contents);
+  } catch (err) {
+    registraAccesso({}, 'richiesta non valida');
+    return json({ ok: false, errore: 'Richiesta non valida' });
+  }
+  return rispondi(d, function () {
+    if (d.azione === 'anagrafiche') return rispostaAnagrafiche();
+    if (d.azione === 'rapportini') return { ok: true, rapportini: leggiRapportini(d.da, d.a, d.tutti === true) };
+    if (d.azione === 'file') return { ok: true, file: leggiFile(d.id) };
+    if (d.azione === 'documenti') return documentiCommessa(d.idCommessa);
 
     // Tutto il resto scrive: uno alla volta. Telefono e computer possono
     // salvare nello stesso istante, e due righe col numero RAP/2026/0007
@@ -193,13 +208,33 @@ function doPost(e) {
     var lucchetto = LockService.getScriptLock();
     lucchetto.waitLock(30000);
     try {
-      return json(scrivi(d));
+      return scrivi(d);
     } finally {
       lucchetto.releaseLock();
     }
+  });
+}
+
+/**
+ * Controlla il codice, fa il lavoro e lascia la riga nel registro degli
+ * accessi. Sempre: anche quando il codice e' sbagliato, anzi soprattutto allora.
+ */
+function rispondi(d, lavoro) {
+  try {
+    controllaCodice(d.codice);
   } catch (err) {
+    registraAccesso(d, messaggio(err) === 'Codice sbagliato' ? 'codice sbagliato' : 'rifiutato');
     return json({ ok: false, errore: messaggio(err) });
   }
+  var risposta;
+  try {
+    riparaUnaVolta();
+    risposta = lavoro();
+  } catch (err) {
+    risposta = { ok: false, errore: messaggio(err) };
+  }
+  registraAccesso(d, risposta && risposta.ok === false ? 'errore' : 'ok');
+  return json(risposta);
 }
 
 function scrivi(d) {
@@ -301,6 +336,10 @@ function preparaFoglio() {
     if (chiavi.indexOf(riga[0]) < 0) imp.appendRow(riga);
   });
 
+  schedaAccessi();
+  schedaDispositivi();
+  riparaTesti();
+
   var prop = PropertiesService.getScriptProperties();
   if (!prop.getProperty('CODICE')) {
     prop.setProperty('CODICE', Utilities.getUuid().replace(/-/g, ''));
@@ -372,7 +411,7 @@ function leggi(nome) {
     var vuota = true;
     chiavi.forEach(function (k, c) {
       if (!k) return;
-      o[k] = dati[i][c];
+      o[k] = senzaApostrofo(dati[i][c]);
       if (dati[i][c] !== '' && dati[i][c] !== null) vuota = false;
     });
     if (!vuota) righe.push(o);
@@ -387,12 +426,17 @@ function scriviRiga(nome, valori) {
   var chiavi = chiaviColonne(nome, intestazioniDi(nome));
   if (chiavi.length === 0) throw new Error('La scheda ' + nome + ' non ha intestazioni');
   f.appendRow(chiavi.map(function (k) {
-    return k && Object.prototype.hasOwnProperty.call(valori, k) ? valori[k] : '';
+    return k && Object.prototype.hasOwnProperty.call(valori, k) ? perLaCella(k, valori[k]) : '';
   }));
   return f.getLastRow();
 }
 
-/** Riscrive solo le colonne indicate di una riga, in una scrittura sola. */
+/**
+ * Riscrive solo le colonne indicate di una riga, in una scrittura sola.
+ * La riga si riscrive intera, quindi anche le celle che non cambiano passano da
+ * perLaCella: una partita IVA gia' giusta non deve perdere lo zero perche' si e'
+ * corretta l'email.
+ */
 function aggiornaRiga(nome, riga, valori) {
   var f = foglio(nome);
   var intestazioni = intestazioniDi(nome);
@@ -402,7 +446,104 @@ function aggiornaRiga(nome, riga, valori) {
   chiavi.forEach(function (k, c) {
     if (k && Object.prototype.hasOwnProperty.call(valori, k)) attuale[c] = valori[k];
   });
-  range.setValues([attuale]);
+  range.setValues([attuale.map(function (v, c) { return perLaCella(chiavi[c], v); })]);
+}
+
+/**
+ * Il valore come va scritto nella cella. Fogli legge quello che riceve come se
+ * l'avesse digitato una persona: "0445123456" diventa il numero 445123456,
+ * "=..." diventa una formula. L'apostrofo davanti dice a Fogli "questo e'
+ * testo": nella cella non si vede, e rileggendo non c'e' (senzaApostrofo).
+ */
+function perLaCella(chiave, v) {
+  if (typeof v !== 'string' || v === '' || v.charAt(0) === '\'') return v;
+  if (SEMPRE_TESTO.indexOf(chiave) >= 0) return '\'' + v;
+  // Una formula, o un segno davanti che Fogli proverebbe a calcolare.
+  if (/^[=+\-@]/.test(v)) return '\'' + v;
+  // Solo cifre con uno zero davanti: un codice, non un numero.
+  if (/^0[\d\s]*$/.test(v)) return '\'' + v;
+  return v;
+}
+
+/** Se Fogli restituisse anche l'apostrofo che dice "testo", qui si toglie. */
+function senzaApostrofo(v) {
+  return typeof v === 'string' && v.charAt(0) === '\'' ? v.slice(1) : v;
+}
+
+/**
+ * Una partita IVA dal foglio. Quelle scritte prima della 0.3.3 possono essere
+ * diventate numeri, e un numero non ha zeri davanti. Una partita IVA italiana ha
+ * sempre 11 cifre, quindi gli zeri mancanti si rimettono senza indovinare.
+ */
+function partitaIvaDalFoglio(v) {
+  if (typeof v === 'number' && isFinite(v)) {
+    var s = String(Math.round(v));
+    return s.length < 11 ? ('00000000000' + s).slice(-11) : s;
+  }
+  return testo(senzaApostrofo(v));
+}
+
+/**
+ * Un telefono dal foglio. Se e' diventato un numero ha perso lo zero dei fissi
+ * (in Italia cominciano tutti con 0) o il + del prefisso 39. I cellulari
+ * cominciano con 3 e restano come sono.
+ */
+function telefonoDalFoglio(v) {
+  if (typeof v === 'number' && isFinite(v)) {
+    var s = String(Math.round(v));
+    if (/^39\d{9,}$/.test(s)) return '+' + s;
+    return s.charAt(0) === '3' ? s : '0' + s;
+  }
+  return testo(senzaApostrofo(v));
+}
+
+/**
+ * Rimette a posto, nel foglio, le partite IVA e i telefoni diventati numeri.
+ * Si puo' lanciare quante volte si vuole: quelli gia' giusti sono testo e non
+ * li tocca.
+ */
+function riparaTesti() {
+  var riparati = 0;
+  leggi(NOME_CLIENTI).forEach(function (r) {
+    var valori = {};
+    if (typeof r.partitaIva === 'number') valori.partitaIva = partitaIvaDalFoglio(r.partitaIva);
+    if (typeof r.telefono === 'number') valori.telefono = telefonoDalFoglio(r.telefono);
+    if (Object.keys(valori).length) {
+      aggiornaRiga(NOME_CLIENTI, r._riga, valori);
+      riparati++;
+    }
+  });
+  var imp = foglio(NOME_IMPOSTAZIONI);
+  if (imp && imp.getLastRow() > 1) {
+    imp.getRange(2, 1, imp.getLastRow() - 1, 2).getValues().forEach(function (r, i) {
+      var k = String(r[0]).trim();
+      if (typeof r[1] !== 'number' || SEMPRE_TESTO.indexOf(k) < 0) return;
+      var giusto = k === 'PARTITA_IVA' ? partitaIvaDalFoglio(r[1]) : telefonoDalFoglio(r[1]);
+      imp.getRange(i + 2, 2).setValue(perLaCella(k, giusto));
+      riparati++;
+    });
+  }
+  if (riparati) Logger.log('Partite IVA e telefoni rimessi come testo: ' + riparati + ' righe');
+  return riparati;
+}
+
+/** La riparazione la prima volta che arriva una richiesta col codice giusto, poi mai piu'. */
+function riparaUnaVolta() {
+  try {
+    var prop = PropertiesService.getScriptProperties();
+    if (prop.getProperty('TESTI_RIPARATI')) return;
+    var lucchetto = LockService.getScriptLock();
+    if (!lucchetto.tryLock(10000)) return;
+    try {
+      if (prop.getProperty('TESTI_RIPARATI')) return;
+      riparaTesti();
+      prop.setProperty('TESTI_RIPARATI', String(new Date().getTime()));
+    } finally {
+      lucchetto.releaseLock();
+    }
+  } catch (err) {
+    // Se non riesce ci riprova la prossima volta: intanto le letture rimettono gli zeri da sole.
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -417,9 +558,9 @@ function leggiClienti() {
       alias: testo(r.alias).split(',').map(function (s) { return s.trim(); }).filter(String),
       gruppo: testo(r.gruppo),
       email: testo(r.email),
-      telefono: testo(r.telefono),
+      telefono: telefonoDalFoglio(r.telefono),
       indirizzo: testo(r.indirizzo),
-      partitaIva: testo(r.partitaIva),
+      partitaIva: partitaIvaDalFoglio(r.partitaIva),
       ultimaTariffa: numeroONull(r.ultimaTariffa),
       pagaViaggio: siNoONull(r.pagaViaggio),
       kmRimborsati: siNoONull(r.kmRimborsati),
@@ -469,7 +610,10 @@ function leggiImpostazioni() {
   if (!f || f.getLastRow() < 2) return o;
   f.getRange(2, 1, f.getLastRow() - 1, 2).getValues().forEach(function (r) {
     var k = String(r[0]).trim();
-    if (k) o[k] = r[1];
+    if (!k) return;
+    if (k === 'PARTITA_IVA') o[k] = partitaIvaDalFoglio(r[1]);
+    else if (k === 'TELEFONO') o[k] = telefonoDalFoglio(r[1]);
+    else o[k] = senzaApostrofo(r[1]);
   });
   return o;
 }
@@ -480,9 +624,9 @@ function salvaImpostazioni(valori) {
   var righe = f.getLastRow() > 1 ? f.getRange(2, 1, f.getLastRow() - 1, 1).getValues() : [];
   Object.keys(valori).forEach(function (k) {
     var i = righe.map(function (r) { return String(r[0]).trim(); }).indexOf(k);
-    if (i >= 0) f.getRange(i + 2, 2).setValue(valori[k]);
+    if (i >= 0) f.getRange(i + 2, 2).setValue(perLaCella(k, valori[k]));
     else {
-      f.appendRow([k, valori[k], '']);
+      f.appendRow([k, perLaCella(k, valori[k]), '']);
       righe.push([k]);
     }
   });
@@ -1204,6 +1348,218 @@ function inviaEmail(d) {
     return r && testo(r.stato).toUpperCase() !== 'FATTURATO';
   });
   return daSegnare.length ? cambiaStato(daSegnare, 'INVIATO') : [];
+}
+
+// ---------------------------------------------------------------------------
+// Il registro degli accessi
+// ---------------------------------------------------------------------------
+
+/*
+ * Ogni richiesta lascia una riga nella scheda Accessi: quando, com'e' andata,
+ * per fare cosa, da quale dispositivo. Telefono e computer si presentano con un
+ * identificativo nato su di loro al primo avvio (mai uguale su due dispositivi)
+ * e un nome che si legge ("motorola edge 60 pro", "UFFICIO-PC (manuel)"). La
+ * scheda Dispositivi li elenca, con il primo e l'ultimo accesso: la colonna NOTE
+ * e' vostra, per scriverci di chi e' ognuno.
+ *
+ * L'indirizzo IP non c'e': Google non lo passa allo script, a nessuno script.
+ * Il dispositivo dice di piu': l'IP di un telefono cambia da una cella
+ * all'altra, e tanti telefoni ne condividono uno.
+ *
+ * Gli avvisi arrivano per email al proprietario del foglio (e a EMAIL_AVVISI):
+ *  - un dispositivo mai visto entra col codice giusto;
+ *  - una richiesta col codice giusto arriva senza dire chi e' (una versione
+ *    vecchia dell'app, o qualcuno che usa il codice a mano): al massimo uno al giorno;
+ *  - 5 o piu' codici sbagliati di fila: al massimo uno ogni 6 ore.
+ * Nelle righe non finisce mai il codice, giusto o sbagliato che sia.
+ */
+
+var INTESTAZIONI_ACCESSI = ['QUANDO', 'ESITO', 'AZIONE', 'DISPOSITIVO', 'APP', 'ID_DISPOSITIVO'];
+var INTESTAZIONI_DISPOSITIVI = ['ID_DISPOSITIVO', 'NOME', 'APP', 'PRIMO_ACCESSO', 'ULTIMO_ACCESSO', 'NOTE'];
+
+/** Oltre tante righe le piu' vecchie si tolgono (una volta al giorno): circa un anno d'uso. */
+var MASSIMO_ACCESSI = 60000;
+var ACCESSI_DOPO_LA_PULIZIA = 50000;
+
+/** Dopo tanti codici sbagliati in un'ora non si scrivono piu' righe, si contano e basta. */
+var MASSIMO_SBAGLIATI_SCRITTI = 50;
+var SOGLIA_AVVISO_SBAGLIATI = 5;
+
+function schedaAccessi() {
+  return schedaFissa(NOME_ACCESSI, INTESTAZIONI_ACCESSI);
+}
+
+function schedaDispositivi() {
+  return schedaFissa(NOME_DISPOSITIVI, INTESTAZIONI_DISPOSITIVI);
+}
+
+/** La scheda, creata con le sue intestazioni se non c'e' ancora. */
+function schedaFissa(nome, intestazioni) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var f = ss.getSheetByName(nome);
+  if (f) return f;
+  f = ss.insertSheet(nome);
+  f.getRange(1, 1, 1, intestazioni.length).setValues([intestazioni]).setFontWeight('bold');
+  f.setFrozenRows(1);
+  return f;
+}
+
+/**
+ * La riga nel registro. Non deve mai fermare una risposta: se qualcosa va
+ * storto qui, la richiesta va avanti lo stesso.
+ *
+ * @param d     la richiesta: disp, dispNome, app, azione (il codice non si legge)
+ * @param esito 'ok', 'errore' (codice giusto, lavoro rifiutato), 'codice sbagliato',
+ *              'rifiutato', 'richiesta non valida'
+ */
+function registraAccesso(d, esito) {
+  try {
+    d = d || {};
+    var adesso = new Date();
+    var id = testo(d.disp).slice(0, 64);
+    var nome = testo(d.dispNome).slice(0, 80);
+    var app = testo(d.app).slice(0, 40);
+    var azione = testo(d.azione).slice(0, 40) || 'anagrafiche';
+    var entrato = esito === 'ok' || esito === 'errore';
+    var cache = CacheService.getScriptCache();
+
+    if (!entrato) {
+      var sbagliati = Number(cache.get('sbagliati') || 0) + 1;
+      cache.put('sbagliati', String(sbagliati), 3600);
+      if (esito === 'codice sbagliato' && sbagliati >= SOGLIA_AVVISO_SBAGLIATI) {
+        avvisaUnaVolta('sbagliati', 6 * 3600, 'Wisper: tanti codici sbagliati',
+          'Nell\'ultima ora sono arrivate ' + sbagliati + ' richieste al foglio di Wisper con un codice sbagliato.\n\n' +
+          'Una o due sono un errore di battitura. Tante di fila sono qualcuno che prova a indovinare il codice: ' +
+          'piu\' e\' lungo, piu\' e\' al sicuro.\n\n' +
+          'Ultima richiesta: ' + quando(adesso) + ', dispositivo "' + (nome || 'senza nome') + '".\n' +
+          'I dettagli sono nella scheda Accessi del foglio.\n\n(Questo avviso arriva al massimo una volta ogni 6 ore.)');
+      }
+      if (sbagliati > MASSIMO_SBAGLIATI_SCRITTI) return;
+    }
+
+    var f = schedaAccessi();
+    f.appendRow([adesso, esito, azione, nome || 'senza nome', app, id].map(function (v, i) {
+      return i === 0 ? v : perLaCella(null, v);
+    }));
+    puliziaAccessi(f);
+    if (entrato) dispositivoVisto(id, nome, app, azione, adesso, cache);
+  } catch (err) {
+    // Il registro non deve fermare la risposta.
+  }
+}
+
+/**
+ * Aggiorna la scheda Dispositivi. Il primo accesso di un dispositivo mai visto
+ * manda l'avviso. Per non rileggere la scheda a ogni richiesta, un dispositivo
+ * gia' visto si riguarda al massimo ogni 10 minuti.
+ */
+function dispositivoVisto(id, nome, app, azione, adesso, cache) {
+  if (!id) {
+    if (dispositiviGiaAggiornati(cache)) {
+      avvisaUnaVolta('senzaNome', 24 * 3600, 'Wisper: un accesso senza nome',
+        'Una richiesta col codice giusto e\' arrivata al foglio di Wisper senza dire da quale dispositivo.\n\n' +
+        'Quando: ' + quando(adesso) + '\nAzione: ' + azione + '\n\n' +
+        'Succede con una versione vecchia di Wisper che non si e\' ancora aggiornata: controlla che su tutti i ' +
+        'telefoni e sul computer ci sia la 0.3.3 o una successiva. Se ce l\'hanno gia\' tutti, qualcuno sta usando ' +
+        'il codice a mano: cambialo (Apps Script, Impostazioni progetto, Proprieta\' dello script, CODICE) e ' +
+        'rimettilo su telefoni e computer.\n\n(Questo avviso arriva al massimo una volta al giorno.)');
+    }
+    return;
+  }
+  if (cache.get('visto:' + id)) return;
+  var f = schedaDispositivi();
+  var trovato = rigaDispositivo(f, id);
+  var nuovo = false;
+  if (trovato < 0) {
+    var lucchetto = LockService.getScriptLock();
+    if (!lucchetto.tryLock(5000)) return;
+    try {
+      // Due richieste dello stesso dispositivo nuovo nello stesso istante: una sola riga, un solo avviso.
+      trovato = rigaDispositivo(f, id);
+      if (trovato < 0) {
+        f.appendRow([perLaCella(null, id), perLaCella(null, nome), perLaCella(null, app), adesso, adesso, '']);
+        nuovo = true;
+      }
+    } finally {
+      lucchetto.releaseLock();
+    }
+  }
+  if (nuovo) {
+    avvisa('Wisper: un dispositivo nuovo',
+      'Un dispositivo nuovo e\' entrato nel foglio di Wisper col codice giusto.\n\n' +
+      'Nome: ' + (nome || '(nessuno)') + '\nApp: ' + (app || '(non detta)') + '\nQuando: ' + quando(adesso) + '\n\n' +
+      'Se e\' uno dei vostri (un telefono nuovo, Wisper reinstallato, il computer dell\'ufficio) va tutto bene: ' +
+      'nella scheda Dispositivi, colonna NOTE, potete scrivere di chi e\'.\n' +
+      'Se non lo riconoscete, qualcuno ha il codice: cambialo (Apps Script, Impostazioni progetto, Proprieta\' ' +
+      'dello script, CODICE) e rimettilo su telefoni e computer. Cosa ha letto o scritto e\' nella scheda Accessi.');
+  } else if (trovato >= 0) {
+    f.getRange(trovato, 2, 1, 2).setValues([[perLaCella(null, nome), perLaCella(null, app)]]);
+    f.getRange(trovato, 5).setValue(adesso);
+  }
+  cache.put('visto:' + id, '1', 600);
+}
+
+/** Il numero di riga del dispositivo nella scheda Dispositivi, o -1. */
+function rigaDispositivo(f, id) {
+  if (f.getLastRow() < 2) return -1;
+  var ids = f.getRange(2, 1, f.getLastRow() - 1, 1).getValues();
+  for (var i = 0; i < ids.length; i++) {
+    if (testo(senzaApostrofo(ids[i][0])) === id) return i + 2;
+  }
+  return -1;
+}
+
+/**
+ * Vero quando le app che si presentano ci sono da almeno due giorni: da li' in
+ * poi, una richiesta senza nome non e' piu' un telefono rimasto indietro di
+ * qualche ora.
+ */
+function dispositiviGiaAggiornati(cache) {
+  var giaDetto = cache.get('aggiornati');
+  if (giaDetto) return giaDetto === 'si';
+  var f = foglio(NOME_DISPOSITIVI);
+  var si = false;
+  if (f && f.getLastRow() > 1) {
+    var due = new Date().getTime() - 2 * 24 * 3600 * 1000;
+    si = f.getRange(2, 4, f.getLastRow() - 1, 1).getValues().some(function (r) {
+      return eData(r[0]) && r[0].getTime() < due;
+    });
+  }
+  cache.put('aggiornati', si ? 'si' : 'no', 3600);
+  return si;
+}
+
+/** Una volta al giorno, se le righe sono troppe, via le piu' vecchie. */
+function puliziaAccessi(f) {
+  var prop = PropertiesService.getScriptProperties();
+  var ultima = Number(prop.getProperty('ACCESSI_PULITI') || 0);
+  if (new Date().getTime() - ultima < 24 * 3600 * 1000) return;
+  prop.setProperty('ACCESSI_PULITI', String(new Date().getTime()));
+  var righe = f.getLastRow() - 1;
+  if (righe > MASSIMO_ACCESSI) f.deleteRows(2, righe - ACCESSI_DOPO_LA_PULIZIA);
+}
+
+/** L'avviso, ma non piu' di uno ogni tot secondi per lo stesso motivo. */
+function avvisaUnaVolta(motivo, secondi, oggetto, corpo) {
+  var prop = PropertiesService.getScriptProperties();
+  var ultimo = Number(prop.getProperty('AVVISO_' + motivo) || 0);
+  if (new Date().getTime() - ultimo < secondi * 1000) return;
+  prop.setProperty('AVVISO_' + motivo, String(new Date().getTime()));
+  avvisa(oggetto, corpo);
+}
+
+/** L'email al proprietario del foglio, e a chi c'e' in EMAIL_AVVISI. */
+function avvisa(oggetto, corpo) {
+  var a = [Session.getEffectiveUser().getEmail()];
+  testo(leggiImpostazioni().EMAIL_AVVISI).split(',').forEach(function (x) {
+    x = x.trim();
+    if (x && a.indexOf(x) < 0) a.push(x);
+  });
+  MailApp.sendEmail(a.filter(String).join(','), oggetto, corpo, { name: 'Wisper' });
+}
+
+function quando(d) {
+  return Utilities.formatDate(d, FUSO, 'dd/MM/yyyy HH:mm');
 }
 
 // ---------------------------------------------------------------------------

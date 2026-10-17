@@ -33,6 +33,12 @@ internal static class Program
         var daRipetere = new List<string>();
         bool noInstalla = false, appenaInstallato = false, disinstalla = false;
         string? installaIn = null;
+        // Per strumenti\rilascio.ps1, prima di pubblicare: esce con 3 se dentro c'è l'indirizzo
+        // del foglio (un exe di casa), con 0 se no. Non apre niente e non si installa.
+        if (args.Length == 1 && args[0] == "--indirizzo-incluso")
+        {
+            Environment.Exit(Configurazione.IndirizzoPredefinito.Length > 0 ? 3 : 0);
+        }
         for (int i = 0; i < args.Length; i++)
         {
             if (args[i] == "--attendi" && i + 1 < args.Length) { attendi = int.TryParse(args[++i], out var pid) ? pid : null; continue; }

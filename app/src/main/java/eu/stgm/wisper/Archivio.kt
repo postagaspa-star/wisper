@@ -77,7 +77,13 @@ data class Vista(
 class Archivio(private val ctx: Context) : Dati {
 
     val configurazione = Configurazione(ctx)
-    private val ponte = PonteFoglio({ configurazione.url }, { configurazione.codice })
+    private val ponte = PonteFoglio({ configurazione.url }, { configurazione.codice }, {
+        mapOf(
+            "disp" to configurazione.dispositivo,
+            "dispNome" to configurazione.nomeDispositivo,
+            "app" to "telefono ${BuildConfig.VERSION_NAME}",
+        )
+    })
     private val coda = CodaInvii(ctx)
     private val copia = CopiaLocale(ctx)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)

@@ -20,7 +20,7 @@ const vm = require('node:vm');
 const crypto = require('node:crypto');
 
 const PORTA = Number(process.argv[2] || 8765);
-const CARTELLA_POSTA = path.join(__dirname, 'posta-finta');
+const CARTELLA_POSTA = process.env.WISPER_POSTA_FINTA || path.join(__dirname, 'posta-finta');
 
 // ------------------------------------------------------------------ Fogli
 
@@ -55,9 +55,9 @@ class Foglio {
     while (this.celle.length < riga) this.celle.push([]);
     const r = this.celle[riga - 1];
     while (r.length < colonna) r.push('');
-    // Come Fogli: le date restano date, il resto si salva com'e'.
-    r[colonna - 1] = v instanceof Date ? new Date(v.getTime()) : v;
+    r[colonna - 1] = comeFogli(v);
   }
+  deleteRows(da, quante) { this.celle.splice(da - 1, quante); }
   getLastRow() {
     for (let i = this.celle.length - 1; i >= 0; i--) if (this.celle[i].some(v => v !== '' && v !== undefined)) return i + 1;
     return 0;
@@ -68,6 +68,21 @@ class Foglio {
   appendRow(valori) { const r = this.getLastRow() + 1; valori.forEach((v, c) => this.scrivi(r, c + 1, v)); }
   getFrozenRows() { return this.bloccate; }
   setFrozenRows(n) { this.bloccate = n; }
+}
+
+/**
+ * Come Fogli legge quello che riceve: come se l'avesse digitato una persona.
+ * Le date restano date; "'0123" e' testo (l'apostrofo non resta); "=..." e' una
+ * formula (qui: un errore); "0445123456" e "+393331234567" diventano numeri, e
+ * lo zero o il + davanti si perdono. E' proprio quello che succedeva alle partite IVA.
+ */
+function comeFogli(v) {
+  if (v instanceof Date || Object.prototype.toString.call(v) === '[object Date]') return new Date(v.getTime());
+  if (typeof v !== 'string') return v;
+  if (v.charAt(0) === '\'') return v.slice(1);
+  if (v.charAt(0) === '=') return '#ERROR!';
+  if (/^[+-]?\d+(\.\d+)?$/.test(v.trim())) return Number(v.trim());
+  return v;
 }
 
 const fogli = new Map();
@@ -135,7 +150,15 @@ const PropertiesService = {
   }),
 };
 
-const LockService = { getScriptLock: () => ({ waitLock: () => {}, releaseLock: () => {} }) };
+const LockService = { getScriptLock: () => ({ waitLock: () => {}, tryLock: () => true, releaseLock: () => {} }) };
+
+const memoria = new Map();
+const CacheService = {
+  getScriptCache: () => ({
+    get: k => { const e = memoria.get(k); return e && e.scade > Date.now() ? e.v : null; },
+    put: (k, v, secondi) => { memoria.set(k, { v: String(v), scade: Date.now() + (secondi || 600) * 1000 }); },
+  }),
+};
 
 const due = n => String(n).padStart(2, '0');
 const Utilities = {
@@ -179,7 +202,7 @@ const MailApp = {
 
 const contesto = {
   SpreadsheetApp: { getActiveSpreadsheet: () => Cartella },
-  DriveApp, PropertiesService, LockService, Utilities, MailApp,
+  DriveApp, PropertiesService, LockService, CacheService, Utilities, MailApp,
   Session: { getEffectiveUser: () => ({ getEmail: () => 'proprietario@example.com' }) },
   ContentService: {
     MimeType: { JSON: 'application/json' },
@@ -189,7 +212,8 @@ const contesto = {
   console,
 };
 vm.createContext(contesto);
-vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'Code.gs'), 'utf8'), contesto, { filename: 'Code.gs' });
+// WISPER_SCRIPT: un altro Code.gs (per esempio quello di prima, per vedere che le prove lo bocciano).
+vm.runInContext(fs.readFileSync(process.env.WISPER_SCRIPT || path.join(__dirname, '..', 'Code.gs'), 'utf8'), contesto, { filename: 'Code.gs' });
 
 // ------------------------------------------------------------------ dati di esempio
 
@@ -218,10 +242,21 @@ function semina() {
 
 semina();
 
+// Le prove (registro.test.js) lo usano senza server: lo script, le schede, la posta.
+module.exports = { contesto, fogli, proprieta, memoria, CARTELLA_POSTA };
+if (require.main !== module) return;
+
 // ------------------------------------------------------------------ il server
 
 http.createServer((richiesta, risposta) => {
   const url = new URL(richiesta.url, 'http://localhost');
+  // Solo qui, per guardare le schede durante le prove: GET /scheda/Accessi
+  if (url.pathname.startsWith('/scheda/')) {
+    const f = fogli.get(decodeURIComponent(url.pathname.slice('/scheda/'.length)));
+    risposta.writeHead(f ? 200 : 404, { 'Content-Type': 'application/json; charset=utf-8' });
+    risposta.end(JSON.stringify(f ? f.celle : null));
+    return;
+  }
   let corpo = '';
   richiesta.on('data', p => { corpo += p; });
   richiesta.on('end', () => {

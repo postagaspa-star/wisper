@@ -26,15 +26,22 @@ android {
         targetSdk = 35
         // Il codice decide gli aggiornamenti: quello pubblicato deve essere più alto di quello installato.
         // (-PcodiceVersione=4 -PnomeVersione=0.4.0 solo per provare gli aggiornamenti sull'emulatore.)
-        versionCode = (project.findProperty("codiceVersione") as String?)?.toInt() ?: 4
-        versionName = (project.findProperty("nomeVersione") as String?) ?: "0.3.2"
+        versionCode = (project.findProperty("codiceVersione") as String?)?.toInt() ?: 5
+        versionName = (project.findProperty("nomeVersione") as String?) ?: "0.3.3"
 
         // Indirizzo dell'Apps Script che fa da ponte col foglio Google, e il
         // codice senza il quale lo script non risponde (lo crea preparaFoglio()).
         // Sono solo i valori di partenza: dalle impostazioni dell'app si cambiano
         // senza ricompilare, per esempio se il codice va rifatto.
-        buildConfigField("String", "SHEET_URL", "\"${chiave("sheetUrl")}\"")
-        buildConfigField("String", "SHEET_CODICE", "\"${chiave("sheetCodice")}\"")
+        //
+        // NELL'APK CHE SI PUBBLICA NON CI SONO: le release di GitHub sono pubbliche, e
+        // da un APK si legge tutto. Ci sono nelle build di prova (debug, sotto) e, solo
+        // se lo si chiede con -PconIndirizzo, in un APK da installare a mano su un
+        // telefono di casa. Il telefono li salva al primo avvio (Configurazione.kt),
+        // quindi gli aggiornamenti senza indirizzo non lo scollegano.
+        val conIndirizzo = project.hasProperty("conIndirizzo")
+        buildConfigField("String", "SHEET_URL", "\"${if (conIndirizzo) chiave("sheetUrl") else ""}\"")
+        buildConfigField("String", "SHEET_CODICE", "\"${if (conIndirizzo) chiave("sheetCodice") else ""}\"")
 
         // L'elenco firmato delle versioni (NuoveVersioni.kt). Per le prove se ne usa
         // un altro: ./gradlew assembleDebug -PaggiornamentiUrl=http://10.0.2.2:8767/aggiornamento.json
@@ -56,6 +63,10 @@ android {
     }
 
     buildTypes {
+        debug {
+            buildConfigField("String", "SHEET_URL", "\"${chiave("sheetUrl")}\"")
+            buildConfigField("String", "SHEET_CODICE", "\"${chiave("sheetCodice")}\"")
+        }
         release {
             // R8 rompe le cose in modi che scopri solo sull'APK finale, e non
             // avremmo il tempo di diagnosticarli. APK piu' grosso, va benissimo.

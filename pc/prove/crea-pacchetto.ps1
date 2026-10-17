@@ -16,13 +16,19 @@
 .PARAMETER Uscita
     Dove mettere l'exe (predefinito: pc\dist).
 
+.PARAMETER ConIndirizzo
+    Mette nell'exe l'indirizzo del foglio (da wisper-keys), così alla prima apertura
+    basta il codice. SOLO per un exe da usare in casa: quello che si pubblica su
+    GitHub non deve averlo, e strumenti\rilascio.ps1 si ferma se lo trova.
+
 .ESEMPIO
     powershell -ExecutionPolicy Bypass -File pc\prove\crea-pacchetto.ps1
 #>
 [CmdletBinding()]
 param(
     [string]$Versione = '',
-    [string]$Uscita = ''
+    [string]$Uscita = '',
+    [switch]$ConIndirizzo
 )
 $ErrorActionPreference = 'Stop'
 
@@ -44,10 +50,10 @@ $env:DOTNET_NOLOGO = '1'
 
 $extra = @()
 if ($Versione) { $extra += "-p:Version=$Versione"; $extra += "-p:FileVersion=$Versione.0" }
-# L'indirizzo del foglio, lo stesso dell'app (wisper-keys): il programma lo ha gia' scritto
-# e alla prima apertura basta il codice.
+# L'indirizzo del foglio (wisper-keys), solo se chiesto: un exe pubblicato lo
+# mostrerebbe a chiunque lo scarica.
 $chiavi = 'C:\Users\andre\wisper-keys\wisper.properties'
-if (Test-Path $chiavi) {
+if ($ConIndirizzo -and (Test-Path $chiavi)) {
     $riga = Get-Content $chiavi | Where-Object { $_ -match '^sheetUrl=' } | Select-Object -First 1
     if ($riga) { $extra += "-p:IndirizzoFoglio=$(($riga -replace '^sheetUrl=', '').Trim())" }
 }
