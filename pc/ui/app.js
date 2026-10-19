@@ -268,6 +268,8 @@
     if (S.esempio) return;
     const st = await Api.get('/locale/stato').catch(() => ({ configurato: false }));
     S.configurato = !!st.configurato;
+    S.codiceSalvato = !!st.codiceSalvato;
+    S.codiceFine = st.codiceFine || '';
     S.cartellaPdf = st.cartellaPdf;
     S.versione = st.versione;
     S.aggiornamento = st.aggiornamento || null;
@@ -291,14 +293,19 @@
         S.ana = normalizzaAna(ana);
         S.rapportini = rap.rapportini || [];
         S.caricato = true;
+        S.codiceRifiutato = false;
         S.ultimaLettura = new Date();
         return true;
       } catch (e) {
         S.erroreLettura = e.message || String(e);
+        // Il foglio risponde, ma non col codice di questo computer: di solito l'hanno
+        // cambiato nello script, e va scritto quello nuovo. Non e' "il foglio non risponde".
+        S.codiceRifiutato = /codice sbagliato/i.test(S.erroreLettura);
         throw e;
       }
     });
     aggiornaStatoFoglio();
+    if (S.codiceRifiutato && location.hash !== '#impostazioni') location.hash = '#impostazioni';
     if (silenzioso) ridisegna(); else mostra();
     if (fatto && !S.esempio && !visitaVista()) setTimeout(iniziaVisita, 400);
   }
@@ -411,8 +418,11 @@
       return;
     }
     if (S.configurato && !S.caricato && nome !== 'impostazioni') {
-      aggiungi(pagina, [h('div', { class: 'banda' }, icona('avviso', 20), h('span', { class: 'spazio' }, 'Il foglio non risponde' + (S.erroreLettura ? ': ' + S.erroreLettura : '') + '.'),
-        h('button', { type: 'button', class: 'btn piccolo', onclick: () => carica() }, 'Riprova'))]);
+      aggiungi(pagina, [S.codiceRifiutato
+        ? h('div', { class: 'banda' }, icona('avviso', 20), h('span', { class: 'spazio' }, 'Il foglio non accetta il codice salvato su questo computer: se l\'hai cambiato nello script, scrivi quello nuovo.'),
+          h('button', { type: 'button', class: 'btn piccolo', onclick: () => { location.hash = '#impostazioni'; } }, 'Impostazioni'))
+        : h('div', { class: 'banda' }, icona('avviso', 20), h('span', { class: 'spazio' }, 'Il foglio non risponde' + (S.erroreLettura ? ': ' + S.erroreLettura : '') + '.'),
+          h('button', { type: 'button', class: 'btn piccolo', onclick: () => carica() }, 'Riprova'))]);
       return;
     }
     if (nome === 'commesse' && arg) vistaCommessa(pagina, decodeURIComponent(arg));
@@ -428,6 +438,11 @@
     b.classList.remove('male');
     if (S.esempio) { aggiungi(b, [h('span', null, 'Dati di esempio')]); return; }
     if (!S.configurato) { aggiungi(b, [h('span', null, 'Foglio non collegato')]); return; }
+    if (S.codiceRifiutato) {
+      b.classList.add('male');
+      aggiungi(b, [icona('avviso', 16), h('span', null, 'Codice da aggiornare')]);
+      return;
+    }
     if (S.erroreLettura || !S.caricato) {
       b.classList.add('male');
       aggiungi(b, [icona('avviso', 16), h('span', null, 'Foglio non raggiunto'), h('span', { class: 'riprova' }, 'Riprova')]);
@@ -1703,11 +1718,16 @@
 
     // --- collegamento
     const url = h('input', { type: 'text', placeholder: 'https://script.google.com/macros/s/…/exec' });
-    const codice = h('input', { type: 'password', placeholder: S.configurato ? 'Lascia vuoto per non cambiarlo' : '' });
+    // Il codice salvato non si mostra mai, ma si vede che c'e': ••••••••a846, come sul telefono.
+    const codice = h('input', { type: 'password', placeholder: S.codiceSalvato ? '••••••••' + S.codiceFine : '' });
     Api.get('/locale/stato').then(s => { url.value = s.url || ''; }).catch(() => null);
+    if (S.codiceRifiutato) setTimeout(() => codice.focus(), 0);
+    const statoCollegamento = S.codiceRifiutato ? 'Il foglio non accetta il codice salvato: scrivi quello nuovo'
+      : S.caricato ? 'Collegato · letto alle ' + (S.ultimaLettura ? S.ultimaLettura.toTimeString().slice(0, 5) : '') + (S.codiceSalvato ? ' · codice ••••' + S.codiceFine : '')
+      : 'Il foglio non risponde';
     aggiungi(pagina, [h('div', { class: 'scheda' }, h('h2', null, S.configurato ? 'Il foglio' : 'Collega Wisper Ufficio al foglio'),
       h('div', { class: 'fila' },
-        S.configurato ? h('div', { class: 'secondario' }, S.caricato ? 'Collegato · letto alle ' + (S.ultimaLettura ? S.ultimaLettura.toTimeString().slice(0, 5) : '') : 'Il foglio non risponde') : null,
+        S.configurato ? h('div', { class: S.codiceRifiutato ? 'secondario errore' : 'secondario' }, statoCollegamento) : null,
         campo('Indirizzo', url),
         campo('Codice (resta cifrato su questo computer)', codice),
         h('div', { style: { display: 'flex', gap: '10px', flexWrap: 'wrap' } },

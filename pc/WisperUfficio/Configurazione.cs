@@ -9,7 +9,7 @@ namespace WisperUfficio;
 /// <summary>
 /// Dove sta il foglio e il codice per entrarci. Il codice sul disco è cifrato con
 /// DPAPI dell'utente di Windows: lo può leggere solo questo utente su questo computer.
-/// L'interfaccia non lo vede mai: lo aggiunge il ponte a ogni chiamata.
+/// L'interfaccia non lo vede mai (solo le ultime quattro cifre): lo aggiunge il ponte a ogni chiamata.
 /// </summary>
 public sealed class Configurazione
 {

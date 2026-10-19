@@ -154,6 +154,10 @@ public sealed class Ponte
                     ["ok"] = true,
                     ["configurato"] = config.Configurato,
                     ["url"] = config.Url,
+                    // Il codice non esce dal ponte: solo che c'è e le ultime quattro cifre, come
+                    // sul telefono, così in Impostazioni si vede che è salvato.
+                    ["codiceSalvato"] = config.Codice.Length > 0,
+                    ["codiceFine"] = config.Codice.Length >= 8 ? config.Codice[^4..] : "",
                     ["cartellaPdf"] = CartellaPdf,
                     ["versione"] = typeof(Ponte).Assembly.GetName().Version?.ToString(3),
                     ["aggiornamento"] = Aggiornamenti?.ComeJson(),

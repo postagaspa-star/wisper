@@ -103,7 +103,7 @@ http.createServer(async (rq, rs) => {
       const o = corpo ? JSON.parse(corpo) : {};
       switch (u.pathname.slice(8)) {
         // AGGIORNAMENTO=pronto fa vedere il riquadro "Versione pronta" e il pulsante Riavvia.
-        case 'stato': return json({ ok: true, configurato: true, url: FOGLIO, cartellaPdf: STAMPE, versione: '0.3.0', aggiornamento: aggiornamento() });
+        case 'stato': return json({ ok: true, configurato: true, codiceSalvato: true, codiceFine: CODICE.length >= 8 ? CODICE.slice(-4) : '', url: FOGLIO, cartellaPdf: STAMPE, versione: '0.3.0', aggiornamento: aggiornamento() });
         case 'aggiorna': return json({ ok: true, aggiornamento: aggiornamento() });
         case 'riavvia': console.log('[riavvia]'); return json({ ok: true });
         case 'configura': return json({ ok: true, configurato: true });
