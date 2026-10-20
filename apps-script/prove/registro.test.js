@@ -200,6 +200,8 @@ test('collegare il computer: un\'email al proprietario col file di collegamento'
   assert.match(testo, /^A: proprietario@example\.com/);
   assert.match(testo, /Oggetto: Collega Wisper Ufficio al foglio/);
   assert.match(testo, /motorola edge 60 pro/);
+  // La stessa email installa anche il programma: il link all'ultima versione pubblicata.
+  assert.match(testo, /https:\/\/github\.com\/postagaspa-star\/wisper\/releases\/latest\/download\/WisperUfficio\.exe/);
   const file = JSON.parse(fs.readFileSync(path.join(dir, 'Collega Wisper Ufficio.wisper'), 'utf8'));
   assert.deepEqual(file, { tipo: 'wisper-collegamento', versione: 1, url: 'https://script.google.com/macros/s/AKfyc-prova_123/exec', codice: CODICE });
 });

@@ -1620,8 +1620,11 @@ function dentroWisper(file) {
  * Ufficio.wisper"). Wisper Ufficio lo legge e si collega da solo: niente indirizzo
  * lungo da ricopiare, niente codice da scrivere. Il file contiene indirizzo e
  * codice, quindi parte solo verso il proprietario: anche chi avesse il codice non
- * potrebbe farselo mandare altrove.
+ * potrebbe farselo mandare altrove. La stessa email serve a installarlo: c'e' il link
+ * all'ultima versione pubblicata, che si installa da sola quando la si apre.
  */
+var SCARICA_UFFICIO = 'https://github.com/postagaspa-star/wisper/releases/latest/download/WisperUfficio.exe';
+
 function collegaComputer(d) {
   var url = testo(d.url);
   var valido = /^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/exec$/.test(url) ||
@@ -1637,8 +1640,11 @@ function collegaComputer(d) {
   var chi = testo(d.dispNome);
   MailApp.sendEmail(a, 'Collega Wisper Ufficio al foglio',
     'Per collegare Wisper Ufficio a questo foglio, sul computer dell\'ufficio:\n\n' +
-    '1. scarica l\'allegato "Collega Wisper Ufficio.wisper" e aprilo con un doppio clic;\n' +
-    '2. Wisper Ufficio si apre e si collega da solo.\n\n' +
+    '1. se Wisper Ufficio non c\'e\' ancora, scaricalo da qui e aprilo: si installa da solo e ' +
+    'mette l\'icona sul Desktop.\n   ' + SCARICA_UFFICIO + '\n' +
+    '   Se Windows dice che ha protetto il PC, tocca "Ulteriori informazioni" e poi "Esegui comunque".\n' +
+    '2. scarica l\'allegato "Collega Wisper Ufficio.wisper" e aprilo con un doppio clic: ' +
+    'Wisper Ufficio si apre e si collega da solo.\n\n' +
     'Se il doppio clic non apre Wisper Ufficio: apri Wisper Ufficio, vai in Impostazioni e tocca ' +
     '"Usa il file dell\'email".\n\n' +
     'Poi cancella questa email e il file scaricato: dentro c\'e\' il codice del foglio.\n\n' +

@@ -9,6 +9,9 @@ between us (14/10/2026) and from a demo of [Pleya](https://pleya.it), a manageme
 suite my father liked, of which two parts were taken and cut down to one person:
 projects (here *commesse*, the word my father uses) and the team's reports.
 
+Every version, with its date, the reason behind it and screenshots, is in the
+diary: [DIARIO.md](DIARIO.md) (in Italian).
+
 ## What changed
 
 The first Wisper, built for NGN Hacks 2026, was voice only: a wake word, a
@@ -151,7 +154,9 @@ phone asks the script (`collegaComputer`) to email the sheet owner a small file,
 computer (double click: the installer associates `.wisper` with the program, per user)
 connects Wisper Ufficio and deletes the file; *Impostazioni › Usa il file dell'email* does
 the same by hand. The email only ever goes to the owner. A program already open notices
-the new connection on its next call to the sheet.
+the new connection on its next call to the sheet. The same email carries the link to the
+latest `WisperUfficio.exe`, so a computer without Wisper Ufficio installs it first (it
+installs itself when opened, and that also registers `.wisper`) and then opens the file.
 
 **The address never goes into what is published.** GitHub releases are public
 and anything inside an APK or an exe can be read. `strumenti\rilascio.ps1`
