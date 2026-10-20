@@ -40,12 +40,13 @@ test('numero del rapportino: progressivo per anno', () => {
   assert.equal(script.prossimoNumeroRapportino([], 2026), 'RAP/2026/0001');
 });
 
-test('codice commessa: prefisso, anno, numero; i codici vecchi non contano', () => {
-  const codici = ['M001', 'M002', 'P2601', 'P2603', 'P2512'];
-  assert.equal(script.prossimoCodiceCommessa(codici, 'P', 2026), 'P2604');
-  assert.equal(script.prossimoCodiceCommessa(codici, 'P', 2027), 'P2701');
-  assert.equal(script.prossimoCodiceCommessa(['P2699'], 'P', 2026), 'P26100');
-  assert.equal(script.prossimoCodiceCommessa([], 'c', 2026), 'C2601');
+test('codice commessa: anno, ST, numero di fila che non riparte a gennaio', () => {
+  const codici = ['M001', 'P2601', '26ST009', '25ST120', '26st004'];
+  assert.equal(script.prossimoCodiceCommessa(codici, 2026), '26ST121');
+  assert.equal(script.prossimoCodiceCommessa(codici, 2027), '27ST121');
+  assert.equal(script.prossimoCodiceCommessa([], 2026), '26ST001');
+  assert.equal(script.prossimoCodiceCommessa(['26ST999'], 2026), '26ST1000');
+  assert.equal(script.prossimoCodiceCommessa(['P2601', 'M001'], 2026), '26ST001', 'i codici vecchi non contano');
 });
 
 test('codice cliente: C001, C002, senza riusare i buchi', () => {
@@ -53,31 +54,34 @@ test('codice cliente: C001, C002, senza riusare i buchi', () => {
   assert.equal(script.prossimoCodice([], 'C'), 'C001');
 });
 
-const gruppi = [
-  { nome: 'Elettrodinamica', tariffaFissa: 30, pagaViaggio: false, kmRimborsati: true, maggExtra: 0 },
-  { nome: 'Privato', tariffaFissa: null, pagaViaggio: false, kmRimborsati: true, maggExtra: 0 },
-];
 const impostazioni = { EURO_KM: '0,76', COSTO_ORARIO: '' };
 
-test('regole: Elettrodinamica ha la tariffa fissa', () => {
-  const r = script.regoleDi({ gruppo: 'elettrodinamica', pagaViaggio: null, kmRimborsati: null }, gruppi, impostazioni);
+test('regole: Elettrodinamica ha la tariffa fissa scritta sulla sua scheda', () => {
+  const r = script.regoleDi({ nome: 'Elettrodinamica', tariffaFissa: 30, pagaViaggio: false, kmRimborsati: true }, [], impostazioni);
   assert.equal(r.tariffaFissa, 30);
   assert.equal(r.pagaViaggio, false);
+  assert.equal(r.kmRimborsati, true);
   assert.equal(r.euroKm, 0.76);
   assert.equal(r.costoOrario, null);
 });
 
-test('regole: privato e cliente senza gruppo hanno la tariffa libera', () => {
-  assert.equal(script.regoleDi({ gruppo: 'Privato' }, gruppi, impostazioni).tariffaFissa, null);
-  assert.equal(script.regoleDi({ gruppo: '' }, gruppi, impostazioni).tariffaFissa, null);
-  assert.equal(script.regoleDi({ gruppo: 'Inesistente' }, gruppi, impostazioni).tariffaFissa, null);
+test('regole: gli altri clienti hanno la tariffa libera, viaggio non pagato e km pagati', () => {
+  const r = script.regoleDi({ nome: 'Rossi', tariffaFissa: null, pagaViaggio: null, kmRimborsati: null }, [], impostazioni);
+  assert.equal(r.tariffaFissa, null);
+  assert.equal(r.pagaViaggio, false);
+  assert.equal(r.kmRimborsati, true);
+  assert.equal(script.regoleDi(null, [], impostazioni).tariffaFissa, null, 'un cliente nuovo');
 });
 
-test('regole: la scheda del cliente vince sul gruppo', () => {
-  const r = script.regoleDi({ gruppo: 'Elettrodinamica', pagaViaggio: true, kmRimborsati: false }, gruppi, impostazioni);
-  assert.equal(r.pagaViaggio, true);
-  assert.equal(r.kmRimborsati, false);
-  assert.equal(r.tariffaFissa, 30);
+test('regole: il rimborso chilometrico della commessa vince su quello generale', () => {
+  assert.equal(script.regoleDi({ nome: 'Rossi' }, [], impostazioni, { euroKm: 0.9 }).euroKm, 0.9);
+  assert.equal(script.regoleDi({ nome: 'Rossi' }, [], impostazioni, { euroKm: null }).euroKm, 0.76);
+});
+
+test('regole: un cliente dei fogli vecchi con un gruppo a tariffa fissa la tiene', () => {
+  const gruppi = [{ nome: 'Elettrodinamica', tariffaFissa: 30, pagaViaggio: false, kmRimborsati: true, maggExtra: 0 }];
+  assert.equal(script.regoleDi({ gruppo: 'elettrodinamica' }, gruppi, impostazioni).tariffaFissa, 30);
+  assert.equal(script.regoleDi({ gruppo: 'Elettrodinamica', tariffaFissa: 35 }, gruppi, impostazioni).tariffaFissa, 35, 'la scheda del cliente vince');
 });
 
 test('date: dal foglio al formato aaaa-mm-gg', () => {

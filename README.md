@@ -50,8 +50,8 @@ itself for the current user, no administrator: it copies itself to
 would break updates), adds *Wisper Ufficio* to Start and the Desktop and to
 *Settings › Apps*, from where it can be removed.
 
-- *Fine mese*, the home: what is ready to invoice, one card per payer
-  (Elettrodinamica, not each of its clients) with **Prepara riepilogo**: the PDF
+- *Fine mese*, the home: what is ready to invoice, one card per client
+  (Elettrodinamica is one client, whoever the work was for) with **Prepara riepilogo**: the PDF
   previewed on the left, sent by email on the right. Then **Segna fatturati**.
 - *Rapportini*: grouped by who pays, with totals; search, month and *Tutti | Da
   fatturare | Da firmare*. A side panel shows one report and one yellow button,
@@ -66,7 +66,7 @@ would break updates), adds *Wisper Ufficio* to Start and the Desktop and to
   the sheet owner's Gmail, or "segna come inviato senza email".
 
 **The sheet** (`apps-script/Code.gs`). Sheets *Rapportini*, *Clienti*,
-*Commesse*, *Gruppi*, *Impostazioni*, and a *Wisper* folder in Drive for receipts,
+*Commesse*, *Impostazioni* (plus *Accessi* and *Dispositivi*), and a *Wisper* folder in Drive for receipts,
 signatures and job documents. It is the only place where money is computed, so
 phone and computer can never show two different totals. Nothing answers without
 the code.
@@ -83,13 +83,37 @@ settings.
 
 ## Money
 
-- **Groups.** Every client belongs to one. *Elettrodinamica*: 30 €/h fixed, travel
-  time not paid, kilometres paid. *Privato*: no fixed rate.
-- **Free rates.** For a client outside a fixed group the rate is typed in the
-  report, and the sheet remembers it: next time the phone proposes it already
-  written ("L'ultima usata per Rossi Impianti").
+- **Elettrodinamica** is a client with a fixed rate (`TARIFFA_FISSA` 30 €/h),
+  travel time not paid, kilometres paid. Work done for Elettrodinamica at other
+  companies is billed to Elettrodinamica: the end customer does not matter.
+- **Free rates.** Every other client has none: the rate is typed in the report,
+  and the sheet remembers it: next time the phone proposes it already written
+  ("L'ultima usata per Rossi Impianti"). Any client can be given a fixed rate.
+- **Job budget**, as the studio writes it: planned hours × hourly price = budget;
+  hours × hourly cost = planned cost; the difference is the margin (30 − 22 = 8 €/h).
+  Any two of hours, price and budget give the third. A job's price is proposed
+  as the rate in its reports (still editable); a job without one takes the rate
+  of its first report, from phone or computer. The hourly cost comes from the
+  client's optional fixed cost (`COSTO_FISSO`, typed by hand for Elettrodinamica),
+  then the job's, then the setting. Travel hours are not costed separately: the
+  hourly cost already includes them. Elettrodinamica's jobs always use its fixed
+  rate and cost.
 - **Kilometres** at the ACI rate for the Volvo XC40 (0,76 €/km to start with; to
-  be checked every January against the ACI table, it is a setting).
+  be checked every January against the ACI table, it is a setting). A job can
+  have its own €/km (`EURO_KM` on the job), which wins over the setting.
+- **Job codes**: two-digit year, `ST` (Studio Tecnico GM) and a number that
+  keeps counting across years: 26ST001, …, 26ST046, 27ST047. The code is shown as
+  soon as a job is created, also on the phone offline (it proposes the next
+  number; if the computer took it meanwhile, the sheet gives the next free one).
+  The *COMMESSA* column of *Rapportini* holds the code, and summaries and PDFs
+  show the code, not the description.
+- **Up to 0.3.4** there were groups (*Elettrodinamica*, *Privato*) with end
+  customers inside Elettrodinamica, and codes like P2601. The first request after
+  pasting the 0.3.5 script fixes the sheet once (`aggiornaStruttura`): it creates
+  the Elettrodinamica client, moves the end customers' reports and jobs to it
+  (their rows stay, hidden, with `ACCORPATO_IN`, and their names become
+  aliases), gives old jobs a 26ST code (the old one stays in
+  `CODICE_PRECEDENTE`) and writes the code in the *COMMESSA* column.
 - Rates are **frozen in the row**: changing the ACI cost in January does not
   rewrite July.
 - Work hours at the rate, extra hours at the rate plus the group's surcharge,

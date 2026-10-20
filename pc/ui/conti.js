@@ -77,21 +77,22 @@
 
   // ------------------------------------------------------------------ regole e calcolo
 
-  /** Le stesse regole di regoleDi() nello script. */
-  function regoleDi(cliente, gruppi, impostazioni) {
-    const nomeGruppo = cliente && cliente.gruppo ? cliente.gruppo : '';
-    const g = (gruppi || []).find(x => normalizza(x.nome) === normalizza(nomeGruppo));
-    let pagaViaggio = g ? g.pagaViaggio : false;
-    let kmRimborsati = g ? g.kmRimborsati : true;
-    if (cliente && cliente.pagaViaggio !== null && cliente.pagaViaggio !== undefined) pagaViaggio = cliente.pagaViaggio;
-    if (cliente && cliente.kmRimborsati !== null && cliente.kmRimborsati !== undefined) kmRimborsati = cliente.kmRimborsati;
+  /**
+   * Le stesse regole di regoleDi() nello script: la tariffa fissa dalla scheda del
+   * cliente (Elettrodinamica 30, gli altri liberi), il rimborso chilometrico dalla
+   * commessa se ne ha uno. I gruppi solo per i clienti dei fogli vecchi.
+   */
+  function regoleDi(cliente, gruppi, impostazioni, commessa) {
+    const c = cliente || {};
+    const g = (gruppi || []).find(x => normalizza(x.nome) === normalizza(c.gruppo || ''));
+    const scritto = v => v !== null && v !== undefined;
     return {
-      gruppo: g ? g.nome : nomeGruppo,
-      tariffaFissa: g && g.tariffaFissa !== null && g.tariffaFissa !== undefined ? g.tariffaFissa : null,
-      pagaViaggio: !!pagaViaggio,
-      kmRimborsati: kmRimborsati !== false,
-      maggExtra: g ? num(g.maggExtra) : 0,
-      euroKm: num((impostazioni || {}).EURO_KM),
+      gruppo: g ? g.nome : (c.gruppo || ''),
+      tariffaFissa: scritto(c.tariffaFissa) ? c.tariffaFissa : (g && scritto(g.tariffaFissa) ? g.tariffaFissa : null),
+      pagaViaggio: !!(scritto(c.pagaViaggio) ? c.pagaViaggio : (g ? g.pagaViaggio : false)),
+      kmRimborsati: (scritto(c.kmRimborsati) ? c.kmRimborsati : (g ? g.kmRimborsati : true)) !== false,
+      maggExtra: num(scritto(c.maggExtra) ? c.maggExtra : (g ? g.maggExtra : 0)),
+      euroKm: commessa && scritto(commessa.euroKm) ? num(commessa.euroKm) : num((impostazioni || {}).EURO_KM),
     };
   }
 
@@ -116,8 +117,12 @@
     };
   }
 
-  /** La tariffa da proporre: l'ultima usata per il cliente (la ricorda il foglio), o quella del suo ultimo rapportino. */
-  function tariffaProposta(cliente, rapportini) {
+  /**
+   * La tariffa da proporre: il prezzo della commessa, se ne ha uno; altrimenti l'ultima
+   * usata per il cliente (la ricorda il foglio), o quella del suo ultimo rapportino.
+   */
+  function tariffaProposta(cliente, rapportini, commessa) {
+    if (commessa && commessa.prezzoOrario > 0) return commessa.prezzoOrario;
     if (cliente && cliente.ultimaTariffa > 0) return cliente.ultimaTariffa;
     if (!cliente) return null;
     const suoi = (rapportini || []).filter(r => r.idCliente === cliente.id && r.tariffa > 0)
@@ -125,18 +130,18 @@
     return suoi.length ? suoi[0].tariffa : null;
   }
 
-  /** Come nello script: prefisso + anno a due cifre + numero, P2601. */
-  function prossimoCodiceCommessa(codici, prefisso, anno) {
-    const p = String(prefisso || 'P').toUpperCase();
-    const aa = String(anno % 100).padStart(2, '0');
-    const re = new RegExp('^' + p + aa + '(\\d{2,})$');
+  /**
+   * Come nello script: anno a due cifre + ST + numero, 26ST001. Il numero va di
+   * fila e non riparte a gennaio (dopo 26ST046 viene 27ST047).
+   */
+  function prossimoCodiceCommessa(codici, anno) {
     let max = 0;
     (codici || []).forEach(c => {
-      const m = String(c).trim().toUpperCase().match(re);
+      const m = String(c).trim().toUpperCase().match(/^\d{2}ST(\d+)$/);
       if (m) max = Math.max(max, parseInt(m[1], 10));
     });
     const n = max + 1;
-    return p + aa + (n < 100 ? String(n).padStart(2, '0') : String(n));
+    return String(anno % 100).padStart(2, '0') + 'ST' + (n < 1000 ? String(n).padStart(3, '0') : String(n));
   }
 
   // ------------------------------------------------------------------ filtri e totali
@@ -204,38 +209,81 @@
 
   // ------------------------------------------------------------------ commesse
 
+  const scritto = v => v !== null && v !== undefined && v !== '';
+
+  /** Il prezzo di un'ora della commessa: la tariffa fissa del cliente (Elettrodinamica) o quello della commessa. */
+  function prezzoOrarioDi(cliente, commessa) {
+    if (cliente && scritto(cliente.tariffaFissa)) return num(cliente.tariffaFissa);
+    return commessa && scritto(commessa.prezzoOrario) ? num(commessa.prezzoOrario) : null;
+  }
+
+  /** Quanto costa a te un'ora: il costo fisso del cliente, poi quello della commessa, poi le impostazioni. */
+  function costoOrarioDi(cliente, commessa, impostazioni) {
+    if (cliente && scritto(cliente.costoFisso)) return num(cliente.costoFisso);
+    if (commessa && scritto(commessa.costoOrario)) return num(commessa.costoOrario);
+    return numONull((impostazioni || {}).COSTO_ORARIO);
+  }
+
+  /**
+   * Il budget di una commessa come lo scrive lo studio: ore previste x prezzo orario =
+   * budget in euro; ore x costo orario = costo previsto; la differenza e' il margine
+   * (prezzo - costo all'ora, 30 - 22 = 8 euro). Ne bastano due fra ore, prezzo e budget.
+   */
+  function budgetDi(commessa, cliente, impostazioni) {
+    const prezzo = prezzoOrarioDi(cliente, commessa);
+    const costo = costoOrarioDi(cliente, commessa, impostazioni);
+    let ore = scritto(commessa.budgetOre) && num(commessa.budgetOre) > 0 ? num(commessa.budgetOre) : null;
+    let euro = scritto(commessa.budgetEuro) && num(commessa.budgetEuro) > 0 ? num(commessa.budgetEuro) : null;
+    if (euro === null && ore !== null && prezzo) euro = centesimi(ore * prezzo);
+    if (ore === null && euro !== null && prezzo) ore = Math.round(euro / prezzo * 10) / 10;
+    const margineOrario = prezzo !== null && costo !== null ? centesimi(prezzo - costo) : null;
+    const costoPrevisto = ore !== null && costo !== null ? centesimi(ore * costo) : null;
+    return {
+      ore, prezzo, costo, euro, margineOrario, costoPrevisto,
+      margine: euro !== null && costoPrevisto !== null ? centesimi(euro - costoPrevisto) : null,
+    };
+  }
+
   /**
    * Il cruscotto di una commessa, adattato da Pleya a chi lavora da solo e non
    * ha ancora la fatturazione nel programma:
    *  - valore atteso: il budget in euro, o quello che i rapportini hanno già
    *    maturato se è di più;
-   *  - costo sostenuto: le tue ore al tuo costo orario, l'auto al costo ACI, le spese;
-   *  - margine: la differenza;
+   *  - costo sostenuto: le tue ore di lavoro al tuo costo orario, l'auto al costo ACI,
+   *    le spese. Le ore di viaggio no: il costo orario le comprende gia';
+   *  - margine atteso: il valore atteso meno i costi attesi, cioè i soldi che restano.
+   *    Il lavoro costa almeno quanto previsto dal budget (ore × costo orario) anche
+   *    prima di farlo; se si è già speso di più, conta quello. Auto e spese come sono;
    *  - fatturazione: fatturato / pronto da fatturare (firmati e inviati) / in bozza.
-   * Le ore si confrontano col budget: dall'85% si avvisa, dal 100% è sforato.
+   * Le ore di lavoro (con le extra) si confrontano col budget: dall'85% si avvisa,
+   * dal 100% è sforato.
    */
-  function cruscotto(commessa, rapportini, impostazioni, oggi) {
+  function cruscotto(commessa, rapportini, impostazioni, oggi, cliente) {
     const suoi = (rapportini || []).filter(r => r.idCommessa === commessa.id && r.stato !== 'ANNULLATO');
     const t = totali(suoi);
-    const costoOrarioDiOggi = numONull((impostazioni || {}).COSTO_ORARIO);
+    const oreLavoro = Math.round(suoi.reduce((s, r) => s + num(r.oreLavoro) + num(r.oreExtra), 0) * 100) / 100;
+    const costoOrarioDiOggi = costoOrarioDi(cliente, commessa, impostazioni);
     let costoLavoro = 0;
     let costoLavoroNoto = true;
     let costoAuto = 0;
     suoi.forEach(r => {
       const co = r.costoOrario !== null && r.costoOrario !== undefined && r.costoOrario !== '' ? num(r.costoOrario) : costoOrarioDiOggi;
       if (co === null) costoLavoroNoto = false;
-      else costoLavoro += num(r.oreTotali) * co;
+      else costoLavoro += (num(r.oreLavoro) + num(r.oreExtra)) * co;
       costoAuto += num(r.km) * (num(r.euroKm) || num((impostazioni || {}).EURO_KM));
     });
     costoLavoro = centesimi(costoLavoro);
     costoAuto = centesimi(costoAuto);
     const costo = centesimi(costoLavoro + costoAuto + t.spese);
-    const budgetEuro = num(commessa.budgetEuro);
+    const previsto = budgetDi(commessa, cliente, impostazioni);
+    const budgetEuro = num(commessa.budgetEuro) || num(previsto.euro);
     const valoreAtteso = Math.max(budgetEuro, t.totale);
-    const margine = centesimi(valoreAtteso - costo);
+    const lavoroAtteso = previsto.costoPrevisto !== null && costoLavoroNoto ? Math.max(costoLavoro, previsto.costoPrevisto) : costoLavoro;
+    const costoAtteso = centesimi(lavoroAtteso + costoAuto + t.spese);
+    const margine = centesimi(valoreAtteso - costoAtteso);
 
-    const budgetOre = num(commessa.budgetOre);
-    const percOre = budgetOre > 0 ? t.ore / budgetOre : null;
+    const budgetOre = previsto.ore || 0;
+    const percOre = budgetOre > 0 ? oreLavoro / budgetOre : null;
     const livelloOre = percOre === null ? 'nessuno' : percOre >= 1 ? 'sforato' : percOre >= 0.85 ? 'attenzione' : 'ok';
 
     let percTempo = null;
@@ -254,8 +302,10 @@
     return {
       rapportini: suoi,
       totali: t,
-      ore: t.ore,
+      ore: oreLavoro,
+      oreViaggio: centesimi(t.ore - oreLavoro),
       budgetOre: budgetOre || null,
+      previsto: previsto,
       percOre: percOre,
       livelloOre: livelloOre,
       percTempo: percTempo,
@@ -263,6 +313,9 @@
       valoreMaturato: t.totale,
       valoreAtteso: valoreAtteso,
       costo: { lavoro: costoLavoro, lavoroNoto: costoLavoroNoto, auto: costoAuto, spese: t.spese, totale: costo },
+      costoAtteso: costoAtteso,
+      // Il margine tiene conto del costo previsto dal budget, non ancora speso.
+      margineDaBudget: lavoroAtteso > costoLavoro,
       margine: margine,
       percMargine: valoreAtteso > 0 ? margine / valoreAtteso : null,
       fatturato: somma(['FATTURATO']),
@@ -297,7 +350,7 @@
 
   const Conti = {
     num, numONull, centesimi, euro, numero, ore, data, dataOra, nomeMese, oggiIso, normalizza,
-    regoleDi, calcola, tariffaProposta, prossimoCodiceCommessa,
+    regoleDi, calcola, tariffaProposta, prossimoCodiceCommessa, prezzoOrarioDi, costoOrarioDi, budgetDi,
     STATI, ETICHETTE_STATO, filtra, ordina, totali, cruscotto, settimane,
   };
 

@@ -94,9 +94,19 @@ var SCHEMA = {
     ['telefono', 'TELEFONO'],
     ['indirizzo', 'INDIRIZZO'],
     ['partitaIva', 'PARTITA_IVA', 'PIVA'],
+    // Vuota = tariffa libera, quella scritta nel rapportino (si ricorda l'ultima).
+    // Elettrodinamica ha 30: si fattura a lei, a tariffa fissa.
+    ['tariffaFissa', 'TARIFFA_FISSA'],
+    // Facoltativo: quanto costa a te un'ora per questo cliente, sempre uguale (Elettrodinamica).
+    // Vince sul costo orario della commessa.
+    ['costoFisso', 'COSTO_FISSO'],
     ['ultimaTariffa', 'ULTIMA_TARIFFA'],
     ['pagaViaggio', 'PAGA_VIAGGIO'],
     ['kmRimborsati', 'KM_RIMBORSATI'],
+    ['maggExtra', 'MAGG_EXTRA'],
+    // Un cliente finale di Elettrodinamica dei primi tempi: resta nel foglio, ma non
+    // si propone piu'. Qui c'e' il codice del cliente in cui e' confluito.
+    ['accorpatoIn', 'ACCORPATO_IN'],
     ['note', 'NOTE']
   ],
   Commesse: [
@@ -105,11 +115,21 @@ var SCHEMA = {
     ['descrizione', 'DESCRIZIONE', 'Desc', 'Lavoro'],
     ['stato', 'STATO', 'Stato_Commessa'],
     ['indirizzo', 'INDIRIZZO', 'Via', 'Luogo', 'Cantiere'],
+    // Il budget: ore previste x prezzo orario = budget in euro.
     ['budgetOre', 'BUDGET_ORE'],
     ['budgetEuro', 'BUDGET_EURO'],
+    // Il prezzo di un'ora di questa commessa: si propone nei rapportini (non per un cliente a
+    // tariffa fissa). Vuoto: lo prende dalla tariffa del primo rapportino.
+    ['prezzoOrario', 'PREZZO_ORARIO'],
+    // Quanto costa a te un'ora di questa commessa; vuoto = COSTO_ORARIO delle impostazioni.
+    ['costoOrario', 'COSTO_ORARIO'],
+    // Vuoto = quello delle impostazioni (EURO_KM).
+    ['euroKm', 'EURO_KM'],
     ['inizio', 'INIZIO'],
     ['finePrevista', 'FINE_PREVISTA'],
     ['cartella', 'CARTELLA'],
+    // Il codice che aveva prima dei codici 26ST (P2601, M001...).
+    ['codicePrecedente', 'CODICE_PRECEDENTE'],
     ['note', 'NOTE']
   ],
   Gruppi: [
@@ -129,10 +149,9 @@ var SCHEMA = {
  * non chi lo scrive: il costo ACI cambia ogni anno.
  */
 var IMPOSTAZIONI_INIZIALI = [
-  ['EURO_KM', 0.76, 'Rimborso chilometrico. Da controllare ogni gennaio sulla tabella ACI dell\'auto qui sotto.'],
+  ['EURO_KM', 0.76, 'Rimborso chilometrico, se la commessa non ne ha uno suo. Da controllare ogni gennaio sulla tabella ACI dell\'auto qui sotto.'],
   ['AUTO', 'Volvo XC40', 'L\'auto su cui si calcola il rimborso ACI.'],
   ['COSTO_ORARIO', '', 'Quanto costa a te un\'ora di lavoro. Serve solo a calcolare il margine delle commesse.'],
-  ['PREFISSO_COMMESSA', 'P', 'Le commesse nuove si numerano P2601, P2602... (prefisso + anno + numero).'],
   ['TICKET_ATTIVO', 'NO', 'SI per mostrare il campo ticket nel rapportino.'],
   ['TECNICO', 'Manuel Gasparotto', 'Il nome che compare come compilatore.'],
   ['RAGIONE_SOCIALE', 'Studio Tecnico GM', 'Intestazione dei PDF.'],
@@ -153,14 +172,20 @@ var IMPOSTAZIONI_INIZIALI = [
 var SEMPRE_TESTO = ['partitaIva', 'telefono', 'PARTITA_IVA', 'TELEFONO'];
 
 /**
- * I gruppi di partenza. Elettrodinamica paga 30 euro l'ora fissi, i km ma non
- * il tempo di viaggio. Per i privati la tariffa la scrive il tecnico nel
- * rapportino, e lo script se la ricorda cliente per cliente.
+ * Elettrodinamica: il cliente a cui si fattura a tariffa fissa, 30 euro l'ora,
+ * i km si' e il tempo di viaggio no. Per chi lavora con Elettrodinamica presso
+ * altri clienti si fattura sempre a lei: il cliente finale non conta. Gli altri
+ * clienti hanno la tariffa libera, scritta nel rapportino, e lo script se la
+ * ricorda cliente per cliente.
+ *
+ * (Fino alla 0.3.4 c'erano i gruppi "Elettrodinamica" e "Privato", con i clienti
+ * finali dentro Elettrodinamica: la scheda Gruppi resta solo per i fogli vecchi,
+ * e aggiornaStruttura() la trasforma.)
  */
-var GRUPPI_INIZIALI = [
-  ['Elettrodinamica', 30, 'NO', 'SI', 0, 'Tariffa fissa. Il tempo di viaggio non si paga, i km si.'],
-  ['Privato', '', 'NO', 'SI', 0, 'Tariffa libera: si propone l\'ultima usata per quel cliente.']
-];
+var ELETTRODINAMICA = {
+  nome: 'Elettrodinamica', tariffaFissa: 30, pagaViaggio: 'NO', kmRimborsati: 'SI', maggExtra: 0,
+  note: 'Tariffa fissa: il tempo di viaggio non si paga, i km si.'
+};
 
 /** Gli stati di un rapportino, in ordine di vita. */
 var STATI = ['BOZZA', 'FIRMATO', 'INVIATO', 'FATTURATO', 'ANNULLATO'];
@@ -228,7 +253,8 @@ function rispondi(d, lavoro) {
   }
   var risposta;
   try {
-    riparaUnaVolta();
+    dimenticaCommesse();
+    manutenzioneUnaVolta();
     risposta = lavoro();
   } catch (err) {
     risposta = { ok: false, errore: messaggio(err) };
@@ -295,34 +321,10 @@ function rispostaAnagrafiche() {
  */
 function preparaFoglio() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
+  // La scheda Gruppi serve solo ai fogli nati prima della 0.3.5: in uno nuovo non si crea.
   Object.keys(SCHEMA).forEach(function (nome) {
-    var f = ss.getSheetByName(nome) || ss.insertSheet(nome);
-    var intestazioni = f.getLastColumn() > 0
-      ? f.getRange(1, 1, 1, f.getLastColumn()).getValues()[0].map(function (h) { return String(h).trim(); })
-      : [];
-    var presenti = intestazioni.map(normalizza);
-    var aggiunte = [];
-    SCHEMA[nome].forEach(function (col) {
-      var nomi = col.slice(1).map(normalizza);
-      var trovata = nomi.some(function (n) { return presenti.indexOf(n) >= 0; });
-      if (!trovata) aggiunte.push(col[1]);
-    });
-    if (aggiunte.length) {
-      f.getRange(1, intestazioni.length + 1, 1, aggiunte.length).setValues([aggiunte]).setFontWeight('bold');
-      Logger.log(nome + ': aggiunte le colonne ' + aggiunte.join(', '));
-    }
-    if (f.getFrozenRows() === 0) f.setFrozenRows(1);
+    if (nome !== NOME_GRUPPI || ss.getSheetByName(nome)) aggiungiColonne(nome);
   });
-
-  var gruppi = ss.getSheetByName(NOME_GRUPPI);
-  if (gruppi.getLastRow() < 2) {
-    GRUPPI_INIZIALI.forEach(function (g) {
-      scriviRiga(NOME_GRUPPI, {
-        nome: g[0], tariffaFissa: g[1], pagaViaggio: g[2], kmRimborsati: g[3], maggExtra: g[4], note: g[5]
-      });
-    });
-    Logger.log('Gruppi: creati Elettrodinamica e Privato');
-  }
 
   var imp = ss.getSheetByName(NOME_IMPOSTAZIONI) || ss.insertSheet(NOME_IMPOSTAZIONI);
   if (imp.getLastRow() === 0) {
@@ -339,12 +341,34 @@ function preparaFoglio() {
   schedaAccessi();
   schedaDispositivi();
   riparaTesti();
+  aggiornaStruttura();
 
   var prop = PropertiesService.getScriptProperties();
   if (!prop.getProperty('CODICE')) {
     prop.setProperty('CODICE', Utilities.getUuid().replace(/-/g, ''));
   }
   Logger.log('CODICE da mettere nell\'app e nel programma del computer: ' + prop.getProperty('CODICE'));
+}
+
+/** Crea la scheda se manca e aggiunge le colonne dello schema che non ci sono. */
+function aggiungiColonne(nome) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var f = ss.getSheetByName(nome) || ss.insertSheet(nome);
+  var intestazioni = f.getLastColumn() > 0
+    ? f.getRange(1, 1, 1, f.getLastColumn()).getValues()[0].map(function (h) { return String(h).trim(); })
+    : [];
+  var presenti = intestazioni.map(normalizza);
+  var aggiunte = [];
+  SCHEMA[nome].forEach(function (col) {
+    var nomi = col.slice(1).map(normalizza);
+    var trovata = nomi.some(function (n) { return presenti.indexOf(n) >= 0; });
+    if (!trovata) aggiunte.push(col[1]);
+  });
+  if (aggiunte.length) {
+    f.getRange(1, intestazioni.length + 1, 1, aggiunte.length).setValues([aggiunte]).setFontWeight('bold');
+    Logger.log(nome + ': aggiunte le colonne ' + aggiunte.join(', '));
+  }
+  if (f.getFrozenRows() === 0) f.setFrozenRows(1);
 }
 
 /** Se il codice e' finito in mani sbagliate: ne fa uno nuovo, e il vecchio smette di valere. */
@@ -527,22 +551,199 @@ function riparaTesti() {
   return riparati;
 }
 
-/** La riparazione la prima volta che arriva una richiesta col codice giusto, poi mai piu'. */
-function riparaUnaVolta() {
+/**
+ * Riscrive in una volta sola le righe di una scheda: cambia(riga) restituisce i
+ * valori da cambiare, o null per lasciarla com'e'. Una lettura e una scrittura
+ * per tutta la scheda, invece di due per riga: per sistemare cento rapportini
+ * serve un secondo, non un minuto. Va chiamata col lucchetto preso.
+ */
+function riscriviRighe(nome, cambia) {
+  var f = foglio(nome);
+  if (!f || f.getLastRow() < 2 || f.getLastColumn() === 0) return 0;
+  var range = f.getRange(1, 1, f.getLastRow(), f.getLastColumn());
+  var dati = range.getValues();
+  var chiavi = chiaviColonne(nome, dati[0].map(function (h) { return String(h).trim(); }));
+  var cambiate = 0;
+  for (var i = 1; i < dati.length; i++) {
+    var o = { _riga: i + 1 };
+    chiavi.forEach(function (k, c) { if (k) o[k] = senzaApostrofo(dati[i][c]); });
+    var nuovi = cambia(o);
+    if (!nuovi) continue;
+    chiavi.forEach(function (k, c) {
+      if (k && Object.prototype.hasOwnProperty.call(nuovi, k)) dati[i][c] = nuovi[k];
+    });
+    cambiate++;
+  }
+  if (cambiate) {
+    range.setValues(dati.map(function (riga, i) {
+      return i === 0 ? riga : riga.map(function (v, c) { return perLaCella(chiavi[c], v); });
+    }));
+  }
+  return cambiate;
+}
+
+/**
+ * Il foglio come lo vuole la 0.3.5 (ottobre 2026). Si puo' lanciare quante volte
+ * si vuole: quello che e' gia' a posto non lo tocca.
+ *
+ *  1. Le colonne nuove (TARIFFA_FISSA, EURO_KM delle commesse...).
+ *  2. Il cliente Elettrodinamica, a tariffa fissa, se non c'e'.
+ *  3. I clienti finali che stavano nel gruppo Elettrodinamica confluiscono in
+ *     lei: i loro rapportini e le loro commesse passano a Elettrodinamica, e i
+ *     loro nomi diventano soprannomi di Elettrodinamica. Le loro righe restano
+ *     nel foglio (ACCORPATO_IN), non si cancella niente.
+ *  4. Le commesse coi codici vecchi (P2601, M001) prendono il codice 26ST001;
+ *     quello vecchio resta in CODICE_PRECEDENTE.
+ *  5. Nella colonna COMMESSA dei rapportini va il codice, non la descrizione.
+ */
+function aggiornaStruttura() {
+  [NOME_CLIENTI, NOME_COMMESSE, NOME_RAPPORTINI].forEach(aggiungiColonne);
+  var elettro = clienteElettrodinamica();
+  var accorpati = accorpaInElettrodinamica(elettro);
+  var ricodificate = ricodificaCommesse();
+  var colonna = codiceNellaColonnaCommessa();
+  dimenticaCommesse();
+  Logger.log('Struttura 0.3.5: Elettrodinamica ' + elettro.id + ', clienti accorpati ' + accorpati +
+    ', commesse con codice nuovo ' + ricodificate + ', rapportini col codice in COMMESSA ' + colonna);
+}
+
+/** Il cliente Elettrodinamica: lo trova (o lo crea) e lo mette a tariffa fissa. */
+function clienteElettrodinamica() {
+  var chiave = normalizza(ELETTRODINAMICA.nome);
+  var gruppo = leggiGruppi().filter(function (g) { return normalizza(g.nome) === chiave; })[0];
+  var valori = {
+    tariffaFissa: gruppo && gruppo.tariffaFissa !== null ? gruppo.tariffaFissa : ELETTRODINAMICA.tariffaFissa,
+    pagaViaggio: gruppo ? (gruppo.pagaViaggio ? 'SI' : 'NO') : ELETTRODINAMICA.pagaViaggio,
+    kmRimborsati: gruppo ? (gruppo.kmRimborsati ? 'SI' : 'NO') : ELETTRODINAMICA.kmRimborsati,
+    maggExtra: gruppo ? gruppo.maggExtra : ELETTRODINAMICA.maggExtra,
+    gruppo: ''
+  };
+  var righe = leggi(NOME_CLIENTI);
+  var riga = righe.filter(function (r) {
+    if (testo(r.accorpatoIn)) return false;
+    return [r.nome].concat(testo(r.alias).split(',')).some(function (n) { return normalizza(n) === chiave; });
+  })[0];
+  if (riga) {
+    // Una tariffa fissa gia' scritta e' una scelta di chi usa il foglio: non si tocca.
+    if (testo(riga.tariffaFissa) === '') {
+      if (gruppo && gruppo.email && !testo(riga.email)) valori.email = gruppo.email;
+      aggiornaRiga(NOME_CLIENTI, riga._riga, valori);
+    }
+    return trovaCliente(leggiClienti(), testo(riga.id), '');
+  }
+  var id = prossimoCodice(righe.map(function (r) { return testo(r.id); }), 'C');
+  scriviRiga(NOME_CLIENTI, Object.assign({
+    id: id, nome: ELETTRODINAMICA.nome, email: gruppo ? gruppo.email : '', note: ELETTRODINAMICA.note
+  }, valori));
+  return trovaCliente(leggiClienti(), id, '');
+}
+
+/** I clienti del gruppo Elettrodinamica confluiscono nel cliente Elettrodinamica. */
+function accorpaInElettrodinamica(elettro) {
+  var chiave = normalizza(ELETTRODINAMICA.nome);
+  var vecchi = leggi(NOME_CLIENTI).filter(function (r) {
+    return testo(r.id) !== elettro.id && !testo(r.accorpatoIn) && normalizza(r.gruppo) === chiave;
+  });
+  if (!vecchi.length) return 0;
+  var ids = vecchi.map(function (r) { return testo(r.id); });
+  var nomi = vecchi.map(function (r) { return normalizza(r.nome); });
+  var suoi = function (idCliente, nome) {
+    return ids.indexOf(testo(idCliente)) >= 0 || (!testo(idCliente) && nomi.indexOf(normalizza(nome)) >= 0);
+  };
+  riscriviRighe(NOME_RAPPORTINI, function (r) {
+    return suoi(r.idCliente, r.cliente) ? { idCliente: elettro.id, cliente: elettro.nome, gruppo: '' } : null;
+  });
+  riscriviRighe(NOME_COMMESSE, function (m) {
+    return suoi(m.idCliente, '') ? { idCliente: elettro.id } : null;
+  });
+  riscriviRighe(NOME_CLIENTI, function (c) {
+    if (ids.indexOf(testo(c.id)) >= 0) return { accorpatoIn: elettro.id };
+    if (testo(c.id) !== elettro.id) return null;
+    // I nomi dei clienti finali diventano soprannomi: un rapportino vecchio ancora in
+    // coda su un telefono, intestato a uno di loro, finisce comunque a Elettrodinamica.
+    var alias = testo(c.alias).split(',').map(function (s) { return s.trim(); }).filter(String);
+    vecchi.forEach(function (v) { if (alias.indexOf(testo(v.nome)) < 0) alias.push(testo(v.nome)); });
+    return { alias: alias.join(', ') };
+  });
+  return vecchi.length;
+}
+
+/**
+ * Le commesse coi codici di prima prendono il codice 26ST, nell'ordine in cui
+ * sono nel foglio; l'anno e' quello di inizio. I rapportini seguono la loro
+ * commessa grazie a CODICE_PRECEDENTE, anche se un giro si fosse interrotto a meta'.
+ */
+function ricodificaCommesse() {
+  var righe = leggi(NOME_COMMESSE);
+  var numero = maxNumeroCommessa(righe.map(function (m) { return testo(m.id); }));
+  var nuovi = {};
+  righe.forEach(function (m) {
+    var vecchio = testo(m.id).toUpperCase();
+    if (!vecchio || RE_CODICE_COMMESSA.test(vecchio)) return;
+    numero++;
+    nuovi[vecchio] = codiceCommessa(eData(m.inizio) ? m.inizio.getFullYear() : new Date().getFullYear(), numero);
+  });
+  var fatte = riscriviRighe(NOME_COMMESSE, function (m) {
+    var nuovo = nuovi[testo(m.id).toUpperCase()];
+    return nuovo ? { id: nuovo, codicePrecedente: testo(m.id) } : null;
+  });
+  var daVecchio = {};
+  leggi(NOME_COMMESSE).forEach(function (m) {
+    if (testo(m.codicePrecedente)) daVecchio[testo(m.codicePrecedente).toUpperCase()] = testo(m.id);
+  });
+  riscriviRighe(NOME_RAPPORTINI, function (r) {
+    var nuovo = daVecchio[testo(r.idCommessa).toUpperCase()];
+    return nuovo ? { idCommessa: nuovo } : null;
+  });
+  dimenticaCommesse();
+  return fatte;
+}
+
+/** Nella colonna COMMESSA dei rapportini il codice, al posto della descrizione. */
+function codiceNellaColonnaCommessa() {
+  var commesse = leggiCommesse();
+  return riscriviRighe(NOME_RAPPORTINI, function (r) {
+    var id = testo(r.idCommessa);
+    if (id) return testo(r.commessa) === id ? null : { commessa: id };
+    // I rapportini dei primi tempi avevano solo la descrizione: si cerca la commessa.
+    var desc = normalizza(r.commessa);
+    if (!desc) return null;
+    var m = commesse.filter(function (x) {
+      return normalizza(x.descrizione) === desc && (!testo(r.idCliente) || x.idCliente === testo(r.idCliente));
+    })[0];
+    return m ? { idCommessa: m.id, commessa: m.id } : null;
+  });
+}
+
+/**
+ * I lavori da fare una volta sola sul foglio, alla prima richiesta col codice
+ * giusto dopo aver incollato uno script nuovo: niente da lanciare a mano.
+ * Ognuno ha la sua proprieta': fatto una volta, non si ripete.
+ */
+var MANUTENZIONI = [
+  ['TESTI_RIPARATI', function () { riparaTesti(); }],
+  ['STRUTTURA_0_3_5', function () { aggiornaStruttura(); }]
+];
+
+function manutenzioneUnaVolta() {
   try {
     var prop = PropertiesService.getScriptProperties();
-    if (prop.getProperty('TESTI_RIPARATI')) return;
+    var da = MANUTENZIONI.filter(function (m) { return !prop.getProperty(m[0]); });
+    if (!da.length) return;
     var lucchetto = LockService.getScriptLock();
-    if (!lucchetto.tryLock(10000)) return;
+    if (!lucchetto.tryLock(20000)) return;
     try {
-      if (prop.getProperty('TESTI_RIPARATI')) return;
-      riparaTesti();
-      prop.setProperty('TESTI_RIPARATI', String(new Date().getTime()));
+      da.forEach(function (m) {
+        if (prop.getProperty(m[0])) return;
+        m[1]();
+        prop.setProperty(m[0], String(new Date().getTime()));
+      });
     } finally {
       lucchetto.releaseLock();
     }
   } catch (err) {
-    // Se non riesce ci riprova la prossima volta: intanto le letture rimettono gli zeri da sole.
+    // Se non riesce ci riprova alla prossima richiesta. Intanto le letture si arrangiano.
+    Logger.log('manutenzione non riuscita: ' + messaggio(err));
   }
 }
 
@@ -561,12 +762,16 @@ function leggiClienti() {
       telefono: telefonoDalFoglio(r.telefono),
       indirizzo: testo(r.indirizzo),
       partitaIva: partitaIvaDalFoglio(r.partitaIva),
+      tariffaFissa: numeroONull(r.tariffaFissa),
+      costoFisso: numeroONull(r.costoFisso),
       ultimaTariffa: numeroONull(r.ultimaTariffa),
       pagaViaggio: siNoONull(r.pagaViaggio),
       kmRimborsati: siNoONull(r.kmRimborsati),
-      note: testo(r.note)
+      maggExtra: numeroONull(r.maggExtra),
+      note: testo(r.note),
+      accorpatoIn: testo(r.accorpatoIn)
     };
-  }).filter(function (c) { return c.nome !== ''; });
+  }).filter(function (c) { return c.nome !== '' && !c.accorpatoIn; });
 }
 
 function leggiCommesse() {
@@ -579,12 +784,37 @@ function leggiCommesse() {
       indirizzo: testo(r.indirizzo),
       budgetOre: numeroONull(r.budgetOre),
       budgetEuro: numeroONull(r.budgetEuro),
+      prezzoOrario: numeroONull(r.prezzoOrario),
+      costoOrario: numeroONull(r.costoOrario),
+      euroKm: numeroONull(r.euroKm),
       inizio: dataIso(r.inizio),
       finePrevista: dataIso(r.finePrevista),
       cartella: testo(r.cartella),
+      codicePrecedente: testo(r.codicePrecedente),
       note: testo(r.note)
     };
   }).filter(function (m) { return m.id !== ''; });
+}
+
+/**
+ * La descrizione di una commessa dal suo codice. Nella colonna COMMESSA dei
+ * rapportini c'e' il codice: telefono e computer ricevono anche la descrizione,
+ * per mostrarla dove serve. Si legge la scheda una volta per richiesta.
+ */
+var descrizioniCommesse = null;
+
+function descrizioneCommessa(id) {
+  if (!testo(id)) return '';
+  if (descrizioniCommesse === null) {
+    descrizioniCommesse = {};
+    leggiCommesse().forEach(function (m) { descrizioniCommesse[m.id.toUpperCase()] = m.descrizione; });
+  }
+  return descrizioniCommesse[testo(id).toUpperCase()] || '';
+}
+
+/** Dopo aver scritto nella scheda Commesse. */
+function dimenticaCommesse() {
+  descrizioniCommesse = null;
 }
 
 function leggiGruppi() {
@@ -668,20 +898,29 @@ function prossimoCodice(codici, lettera) {
 }
 
 /**
- * Prossimo codice commessa: prefisso + anno a due cifre + numero, P2601.
- * Il numero riparte ogni anno. Le commesse coi codici vecchi (M001) restano
- * come sono e non contano.
+ * Il codice delle commesse: anno a due cifre, ST (Studio Tecnico GM, sempre
+ * uguale) e un numero, 26ST001. Il numero va di fila e non riparte a gennaio:
+ * dopo 26ST046 viene 27ST047. Stessa regola in conti.js e nell'app.
  */
-function prossimoCodiceCommessa(codici, prefisso, anno) {
-  var p = String(prefisso || 'P').toUpperCase();
-  var aa = ('0' + (anno % 100)).slice(-2);
+var RE_CODICE_COMMESSA = /^\d{2}ST(\d+)$/;
+
+/** Il numero piu' alto gia' usato in un codice 26ST (0 se non ce ne sono). */
+function maxNumeroCommessa(codici) {
   var max = 0;
   codici.forEach(function (c) {
-    var m = String(c).trim().toUpperCase().match(new RegExp('^' + p + aa + '(\\d{2,})$'));
+    var m = String(c).trim().toUpperCase().match(RE_CODICE_COMMESSA);
     if (m) max = Math.max(max, parseInt(m[1], 10));
   });
-  var n = max + 1;
-  return p + aa + (n < 100 ? ('0' + n).slice(-2) : String(n));
+  return max;
+}
+
+function codiceCommessa(anno, numero) {
+  return ('0' + (anno % 100)).slice(-2) + 'ST' + (numero < 1000 ? ('00' + numero).slice(-3) : String(numero));
+}
+
+/** Il codice di una commessa nuova: il numero dopo il piu' alto usato. */
+function prossimoCodiceCommessa(codici, anno) {
+  return codiceCommessa(anno, maxNumeroCommessa(codici) + 1);
 }
 
 function creaCliente(d) {
@@ -694,11 +933,19 @@ function creaCliente(d) {
   var esistente = trovaCliente(leggiClienti(), '', pulito);
   if (esistente) return Object.assign({ giaEsisteva: true }, esistente);
 
-  var id = prossimoCodice(leggiClienti().map(function (c) { return c.id; }), 'C');
+  // Un telefono rimasto alla 0.3.3 chiede ancora "di che gruppo e'?": un cliente
+  // finale "di Elettrodinamica" e' Elettrodinamica, perche' si fattura a lei.
+  if (normalizza(d.gruppo) === normalizza(ELETTRODINAMICA.nome)) {
+    var elettro = trovaCliente(leggiClienti(), '', ELETTRODINAMICA.nome);
+    if (elettro) return Object.assign({ giaEsisteva: true }, elettro);
+  }
+
+  // Anche le righe dei clienti accorpati contano: un codice non si riusa mai.
+  var id = prossimoCodice(leggi(NOME_CLIENTI).map(function (c) { return testo(c.id); }), 'C');
   scriviRiga(NOME_CLIENTI, {
     id: id,
     nome: pulito,
-    gruppo: testo(d.gruppo) || 'Privato',
+    tariffaFissa: d.tariffaFissa === undefined || d.tariffaFissa === null || d.tariffaFissa === '' ? '' : numero(d.tariffaFissa),
     email: testo(d.email),
     telefono: testo(d.telefono),
     indirizzo: testo(d.indirizzo),
@@ -718,7 +965,9 @@ function aggiornaCliente(id, campi) {
   ['pagaViaggio', 'kmRimborsati'].forEach(function (k) {
     if (campi[k] !== undefined) valori[k] = campi[k] === null ? '' : (campi[k] ? 'SI' : 'NO');
   });
-  if (campi.ultimaTariffa !== undefined) valori.ultimaTariffa = campi.ultimaTariffa === null ? '' : numero(campi.ultimaTariffa);
+  ['ultimaTariffa', 'tariffaFissa', 'costoFisso', 'maggExtra'].forEach(function (k) {
+    if (campi[k] !== undefined) valori[k] = campi[k] === null || campi[k] === '' ? '' : numero(campi[k]);
+  });
   aggiornaRiga(NOME_CLIENTI, riga._riga, valori);
   return trovaCliente(leggiClienti(), id, '');
 }
@@ -734,24 +983,33 @@ function creaCommessa(d) {
   })[0];
   if (esistente) return Object.assign({ giaEsisteva: true }, esistente);
 
-  var imp = leggiImpostazioni();
-  var id = testo(d.id) || prossimoCodiceCommessa(
-    commesse.map(function (m) { return m.id; }), imp.PREFISSO_COMMESSA, new Date().getFullYear());
-  if (commesse.some(function (m) { return m.id.toUpperCase() === id.toUpperCase(); })) {
-    throw new Error('Il codice ' + id + ' e\' gia\' di un\'altra commessa');
+  var codici = commesse.map(function (m) { return m.id; });
+  var prossimo = prossimoCodiceCommessa(codici, new Date().getFullYear());
+  var id = testo(d.id).toUpperCase() || prossimo;
+  if (codici.some(function (c) { return c.toUpperCase() === id; })) {
+    // Il telefono propone il codice quando la commessa nasce, anche senza rete: se nel
+    // frattempo il computer l'ha dato a un'altra, si prende il primo libero. Un codice
+    // scritto a mano, invece, si rifiuta: chi l'ha scritto deve saperlo.
+    if (d.idProposto !== true) throw new Error('Il codice ' + id + ' e\' gia\' di un\'altra commessa');
+    id = prossimo;
   }
+  var vuoto = function (v) { return v === undefined || v === null || v === ''; };
   scriviRiga(NOME_COMMESSE, {
     id: id,
     idCliente: d.idCliente,
     descrizione: desc,
     stato: 'APERTA',
     indirizzo: testo(d.indirizzo),
-    budgetOre: d.budgetOre === undefined || d.budgetOre === null || d.budgetOre === '' ? '' : numero(d.budgetOre),
-    budgetEuro: d.budgetEuro === undefined || d.budgetEuro === null || d.budgetEuro === '' ? '' : numero(d.budgetEuro),
+    budgetOre: vuoto(d.budgetOre) ? '' : numero(d.budgetOre),
+    budgetEuro: vuoto(d.budgetEuro) ? '' : numero(d.budgetEuro),
+    euroKm: vuoto(d.euroKm) ? '' : numero(d.euroKm),
+    prezzoOrario: vuoto(d.prezzoOrario) ? '' : numero(d.prezzoOrario),
+    costoOrario: vuoto(d.costoOrario) ? '' : numero(d.costoOrario),
     inizio: d.inizio ? dataDaIso(d.inizio) : new Date(),
     finePrevista: d.finePrevista ? dataDaIso(d.finePrevista) : '',
     note: testo(d.note)
   });
+  dimenticaCommesse();
   return Object.assign({ giaEsisteva: false }, leggiCommesse().filter(function (m) { return m.id === id; })[0]);
 }
 
@@ -774,7 +1032,7 @@ function aggiornaCommessa(id, campi) {
   ['descrizione', 'indirizzo', 'note', 'idCliente'].forEach(function (k) {
     if (campi[k] !== undefined) valori[k] = campi[k];
   });
-  ['budgetOre', 'budgetEuro'].forEach(function (k) {
+  ['budgetOre', 'budgetEuro', 'euroKm', 'prezzoOrario', 'costoOrario'].forEach(function (k) {
     if (campi[k] !== undefined) valori[k] = campi[k] === null || campi[k] === '' ? '' : numero(campi[k]);
   });
   ['inizio', 'finePrevista'].forEach(function (k) {
@@ -782,6 +1040,7 @@ function aggiornaCommessa(id, campi) {
   });
   var precedente = testo(riga.stato).toUpperCase();
   aggiornaRiga(NOME_COMMESSE, riga._riga, valori);
+  dimenticaCommesse();
   var dopo = leggiCommesse().filter(function (m) { return m.id.toUpperCase() === codice; })[0];
   return Object.assign({ precedente: precedente, cambiato: precedente !== dopo.stato }, dopo);
 }
@@ -804,27 +1063,35 @@ function trovaCliente(clienti, id, nome) {
 // ---------------------------------------------------------------------------
 
 /**
- * Le regole economiche di un cliente: dal suo gruppo, con le eccezioni scritte
- * sulla scheda del cliente.
+ * Le regole economiche di un rapportino: dalla scheda del cliente, e il
+ * rimborso chilometrico dalla commessa.
  *
- * tariffaFissa null vuol dire tariffa libera: la scrive il tecnico nel
- * rapportino. Un cliente senza gruppo, o con un gruppo che non c'e', e' libero.
+ *  - tariffaFissa: quella del cliente (Elettrodinamica 30); null vuol dire
+ *    tariffa libera, la scrive il tecnico nel rapportino;
+ *  - euroKm: quello della commessa, se ne ha uno, altrimenti EURO_KM;
+ *  - costoOrario (quanto costa a te un'ora, per il margine): il costo fisso del
+ *    cliente (Elettrodinamica), poi quello della commessa, poi COSTO_ORARIO.
+ *    Le ore di viaggio non si contano a parte: sono gia' dentro il costo orario.
+ *
+ * I gruppi valgono ancora solo per un cliente dei fogli vecchi che ne ha uno e
+ * non ha la sua tariffa: dopo aggiornaStruttura() non ce ne sono piu'.
+ * Stesse regole in conti.js e in Anagrafiche.kt.
  */
-function regoleDi(cliente, gruppi, impostazioni) {
-  var nomeGruppo = cliente && cliente.gruppo ? cliente.gruppo : '';
-  var g = gruppi.filter(function (x) { return normalizza(x.nome) === normalizza(nomeGruppo); })[0];
-  var pagaViaggio = g ? g.pagaViaggio : false;
-  var kmRimborsati = g ? g.kmRimborsati : true;
-  if (cliente && cliente.pagaViaggio !== null && cliente.pagaViaggio !== undefined) pagaViaggio = cliente.pagaViaggio;
-  if (cliente && cliente.kmRimborsati !== null && cliente.kmRimborsati !== undefined) kmRimborsati = cliente.kmRimborsati;
+function regoleDi(cliente, gruppi, impostazioni, commessa) {
+  var c = cliente || {};
+  var nomeGruppo = c.gruppo || '';
+  var g = (gruppi || []).filter(function (x) { return normalizza(x.nome) === normalizza(nomeGruppo); })[0];
+  var scritto = function (v) { return v !== null && v !== undefined; };
+  var tariffaFissa = scritto(c.tariffaFissa) ? c.tariffaFissa : (g && scritto(g.tariffaFissa) ? g.tariffaFissa : null);
   return {
     gruppo: g ? g.nome : nomeGruppo,
-    tariffaFissa: g && g.tariffaFissa !== null ? g.tariffaFissa : null,
-    pagaViaggio: pagaViaggio,
-    kmRimborsati: kmRimborsati,
-    maggExtra: g ? g.maggExtra : 0,
-    euroKm: numero(impostazioni.EURO_KM),
-    costoOrario: numeroONull(impostazioni.COSTO_ORARIO)
+    tariffaFissa: tariffaFissa,
+    pagaViaggio: scritto(c.pagaViaggio) ? c.pagaViaggio : (g ? g.pagaViaggio : false),
+    kmRimborsati: scritto(c.kmRimborsati) ? c.kmRimborsati : (g ? g.kmRimborsati : true),
+    maggExtra: scritto(c.maggExtra) ? c.maggExtra : (g ? g.maggExtra : 0),
+    euroKm: commessa && scritto(commessa.euroKm) ? commessa.euroKm : numero(impostazioni.EURO_KM),
+    costoOrario: scritto(c.costoFisso) ? c.costoFisso
+      : commessa && scritto(commessa.costoOrario) ? commessa.costoOrario : numeroONull(impostazioni.COSTO_ORARIO)
   };
 }
 
@@ -908,29 +1175,40 @@ function salvaRapportino(r) {
   var clienti = leggiClienti();
   var cliente = trovaCliente(clienti, testo(r.idCliente), testo(r.cliente));
   if (!cliente && !testo(r.cliente)) throw new Error('Manca il cliente');
+  // Un cliente nuovo "del gruppo Elettrodinamica" (un telefono rimasto alla 0.3.3)
+  // e' Elettrodinamica: si fattura a lei.
+  if (!cliente && normalizza(r.gruppo) === normalizza(ELETTRODINAMICA.nome)) {
+    cliente = trovaCliente(clienti, '', ELETTRODINAMICA.nome);
+  }
 
   // Prima i controlli, poi le creazioni: un rapportino rifiutato non deve
   // lasciare nel foglio un cliente o una commessa nati per lui.
   var impostazioni = leggiImpostazioni();
-  var regole = regoleDi(cliente || { gruppo: testo(r.gruppo) || 'Privato' }, leggiGruppi(), impostazioni);
+  var commesse = leggiCommesse();
+  var codiceScelto = testo(r.idCommessa).toUpperCase();
+  var commessa = !codiceScelto ? null : commesse.filter(function (m) {
+    // Anche col codice di prima dei 26ST: un rapportino rimasto in coda su un telefono.
+    return m.id.toUpperCase() === codiceScelto || m.codicePrecedente.toUpperCase() === codiceScelto;
+  })[0] || null;
+  var regole = regoleDi(cliente, leggiGruppi(), impostazioni, commessa);
   if (regole.tariffaFissa === null && !(numero(r.tariffa) > 0)) {
     throw new Error('Manca la tariffa oraria per ' + (cliente ? cliente.nome : testo(r.cliente)));
   }
 
-  if (!cliente) cliente = creaCliente({ nome: r.cliente, gruppo: r.gruppo });
+  if (!cliente) cliente = creaCliente({ nome: r.cliente });
 
-  var commessa = null;
-  if (testo(r.idCommessa)) {
-    commessa = leggiCommesse().filter(function (m) { return m.id.toUpperCase() === testo(r.idCommessa).toUpperCase(); })[0] || null;
-  }
+  // Una commessa nata sul telefono arriva con la descrizione e il codice che il
+  // telefono le ha dato (codiceProposto): si usa quello, se e' ancora libero.
   if (!commessa && testo(r.commessa)) {
-    commessa = creaCommessa({ idCliente: cliente.id, descrizione: r.commessa });
+    commessa = creaCommessa({ idCliente: cliente.id, descrizione: r.commessa, id: testo(r.codiceProposto), idProposto: true });
+    regole = regoleDi(cliente, leggiGruppi(), impostazioni, commessa);
   }
 
   // Le tariffe di un rapportino gia' scritto non cambiano se cambiano le
   // impostazioni: aggiornare l'ACI a gennaio non deve riscrivere luglio.
-  // Si ricalcola con le regole di oggi solo se e' cambiato il cliente.
-  if (esistente && testo(esistente.idCliente) === cliente.id && testo(esistente.euroKm) !== '') {
+  // Si ricalcola con le regole di oggi solo se sono cambiati il cliente o la commessa.
+  var stessaCommessa = testo(esistente && esistente.idCommessa).toUpperCase() === (commessa ? commessa.id.toUpperCase() : '');
+  if (esistente && testo(esistente.idCliente) === cliente.id && stessaCommessa && testo(esistente.euroKm) !== '') {
     regole.euroKm = numero(esistente.euroKm);
     regole.maggExtra = numero(esistente.maggExtra);
     regole.pagaViaggio = siNoONull(esistente.pagaViaggio) === true;
@@ -951,7 +1229,8 @@ function salvaRapportino(r) {
     cliente: cliente.nome,
     gruppo: regole.gruppo,
     idCommessa: commessa ? commessa.id : '',
-    commessa: commessa ? commessa.descrizione : '',
+    // Nel foglio, nella colonna COMMESSA, il codice: e' quello che si cerca.
+    commessa: commessa ? commessa.id : '',
     ticket: testo(r.ticket),
     luogo: testo(r.luogo),
     descrizione: testo(r.descrizione),
@@ -990,6 +1269,11 @@ function salvaRapportino(r) {
   // il telefono la propone gia' scritta.
   if (regole.tariffaFissa === null && conto.tariffa > 0 && cliente.ultimaTariffa !== conto.tariffa) {
     aggiornaCliente(cliente.id, { ultimaTariffa: conto.tariffa });
+  }
+  // Una commessa senza prezzo prende quello del suo primo rapportino, scritto dal
+  // telefono o dal computer: dal secondo in poi si propone quello.
+  if (regole.tariffaFissa === null && conto.tariffa > 0 && commessa && commessa.prezzoOrario === null) {
+    aggiornaCommessa(commessa.id, { prezzoOrario: conto.tariffa });
   }
 
   return rapportinoDaRiga(leggi(NOME_RAPPORTINI).filter(function (x) { return x._riga === riga; })[0]);
@@ -1032,7 +1316,8 @@ function rapportinoDaRiga(r) {
     cliente: testo(r.cliente),
     gruppo: testo(r.gruppo),
     idCommessa: testo(r.idCommessa),
-    commessa: testo(r.commessa),
+    // Nel foglio la colonna COMMESSA ha il codice; qui si manda la descrizione.
+    commessa: descrizioneCommessa(r.idCommessa) || testo(r.commessa),
     ticket: testo(r.ticket),
     luogo: testo(r.luogo),
     descrizione: testo(r.descrizione),

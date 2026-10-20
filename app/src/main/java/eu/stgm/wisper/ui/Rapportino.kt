@@ -148,8 +148,10 @@ fun SchermataRapportino(
 
     val bloccato = stato.base.bloccato
     val clienteScelto: Cliente? = ana.cliente(stato.idCliente, if (stato.idCliente.isBlank()) stato.cliente else "")
-    val regole = ana.regoleDi(clienteScelto ?: Cliente(id = "", nome = stato.cliente, gruppo = stato.gruppoNuovo))
-    val proposta = dati.tariffaProposta(clienteScelto, stato.cliente)
+    val regole = ana.regoleDi(clienteScelto, ana.commessa(stato.idCommessa))
+    // La tariffa da proporre: il prezzo della commessa, se ce l'ha; altrimenti l'ultima del cliente.
+    val prezzoCommessa = ana.commessa(stato.idCommessa)?.prezzoOrario?.takeIf { it > 0 }
+    val proposta = prezzoCommessa ?: dati.tariffaProposta(clienteScelto, stato.cliente)
     val ultimiKm = Riepiloghi.ultimiKm(viste.filterNot { it.rapportino.idLocale == stato.base.idLocale }, stato.idCommessa, stato.idCliente, stato.cliente)
 
     // Nella visita la descrizione non si può scrivere (è sotto il velo): c'è già.
@@ -157,8 +159,8 @@ fun SchermataRapportino(
         if (dati.esempio && stato.passo == 3 && stato.descrizione.isBlank()) stato.descrizione = "Collaudo del quadro della linea 2"
     }
 
-    // La tariffa libera si propone da sola: l'ultima usata per questo cliente.
-    LaunchedEffect(stato.idCliente, stato.cliente, regole.tariffaFissa) {
+    // La tariffa libera si propone da sola: il prezzo della commessa o l'ultima usata per questo cliente.
+    LaunchedEffect(stato.idCliente, stato.cliente, stato.idCommessa, regole.tariffaFissa) {
         if (!bloccato && !stato.tariffaToccata && regole.tariffaFissa == null) stato.tariffa = Numeri.scrivi(proposta)
     }
 
@@ -313,7 +315,7 @@ fun SchermataRapportino(
                 ) {
                     when (passo) {
                         1 -> PassoPerChi(stato, dati, viste, ana, regole, onScelto = { visita?.azione(it); vaiA(if (stato.tornaAlRiepilogo) 4 else 2); stato.tornaAlRiepilogo = false })
-                        2 -> PassoOre(stato, regole, proposta, ultimiKm, clienteScelto)
+                        2 -> PassoOre(stato, regole, proposta, ultimiKm, clienteScelto, prezzoCommessa != null)
                         3 -> PassoLavoro(stato, ana.ticketAttivo, vista, onScatta = { scatta() }, onGalleria = { dallaGalleria() }, dati = dati)
                         else -> PassoRiepilogo(stato, vista, conto, regole, onCambia = { cambiaDa(it) })
                     }
@@ -418,11 +420,11 @@ private fun ColumnScope.PassoPerChi(
                 nome = rc.cliente,
                 titolo = rc.cliente,
                 sotto = rc.commessa.ifBlank { "Senza commessa" },
-                piccolo = listOf(rc.idCommessa, rc.gruppo).filter { it.isNotBlank() }.joinToString(" · "),
+                piccolo = rc.idCommessa,
                 modifier = Modifier.bersaglio("recente-$i"),
             ) {
                 stato.cliente = rc.cliente; stato.idCliente = rc.idCliente
-                stato.commessa = rc.commessa; stato.idCommessa = rc.idCommessa
+                stato.commessa = rc.commessa; stato.idCommessa = rc.idCommessa; stato.codiceProposto = ""
                 stato.errori = stato.errori - "cliente"
                 onScelto("recente-$i")
             }
@@ -437,30 +439,20 @@ private fun ColumnScope.PassoPerChi(
                 (listOf(cl.nome) + cl.alias).any { it.contains(testo, ignoreCase = true) }
             }.sortedBy { it.nome.lowercase() }.take(6)
             trovati.forEach { cl ->
-                SchedaScelta(nome = cl.nome, titolo = cl.nome, sotto = cl.gruppo, piccolo = "", compatta = true) {
-                    stato.cliente = cl.nome; stato.idCliente = cl.id; stato.commessa = ""; stato.idCommessa = ""
+                SchedaScelta(nome = cl.nome, titolo = cl.nome, sotto = if (cl.tariffaFissa != null) "Tariffa fissa" else "", piccolo = "", compatta = true) {
+                    stato.cliente = cl.nome; stato.idCliente = cl.id; stato.commessa = ""; stato.idCommessa = ""; stato.codiceProposto = ""
                     stato.errori = stato.errori - "cliente"
                     stato.sceltaCommessa = true
                 }
             }
             if (trovati.none { it.nome.equals(testo, ignoreCase = true) }) {
-                var gruppo by remember { mutableStateOf(false) }
-                if (!gruppo) {
-                    PulsanteBordo("Cliente nuovo «$testo»", { gruppo = true }, Modifier.fillMaxWidth(), icona = Icone.piu, tratteggiato = true)
-                } else {
-                    Scheda {
-                        Text("«$testo» è nuovo. Di che gruppo è?", style = Testi.forte, color = c.testo)
-                        val gruppi = ana.gruppi.map { it.nome }.ifEmpty { listOf("Elettrodinamica", "Privato") }
-                        gruppi.forEach { g ->
-                            PulsanteBordo(g, {
-                                stato.cliente = testo; stato.idCliente = ""; stato.gruppoNuovo = g
-                                stato.commessa = ""; stato.idCommessa = ""
-                                stato.errori = stato.errori - "cliente"
-                                stato.sceltaCommessa = true
-                            }, Modifier.fillMaxWidth())
-                        }
-                    }
-                }
+                // Un cliente nuovo ha la tariffa libera: Elettrodinamica, l'unica fissa, c'è già.
+                PulsanteBordo("Cliente nuovo «$testo»", {
+                    stato.cliente = testo; stato.idCliente = ""
+                    stato.commessa = ""; stato.idCommessa = ""; stato.codiceProposto = ""
+                    stato.errori = stato.errori - "cliente"
+                    stato.sceltaCommessa = true
+                }, Modifier.fillMaxWidth(), icona = Icone.piu, tratteggiato = true)
             }
         }
     } else {
@@ -469,7 +461,7 @@ private fun ColumnScope.PassoPerChi(
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(stato.cliente, style = Testi.forteGrande, color = c.testo)
-                Text(if (stato.idCliente.isBlank()) "Cliente nuovo · ${stato.gruppoNuovo}" else regole.gruppo, style = Testi.secondario, color = c.tenue)
+                Text(if (stato.idCliente.isBlank()) "Cliente nuovo · tariffa libera" else if (regole.tariffaFissa != null) "Tariffa fissa" else "Tariffa libera", style = Testi.secondario, color = c.tenue)
             }
             PulsanteTesto("Cambia", { stato.sceltaCommessa = false })
         }
@@ -477,15 +469,20 @@ private fun ColumnScope.PassoPerChi(
         val commesse = if (stato.idCliente.isBlank()) emptyList() else ana.commesseAperteDi(stato.idCliente)
         commesse.forEach { m ->
             SchedaScelta(nome = stato.cliente, titolo = m.descrizione, sotto = m.indirizzo, piccolo = m.id, compatta = true) {
-                stato.commessa = m.descrizione; stato.idCommessa = m.id
+                stato.commessa = m.descrizione; stato.idCommessa = m.id; stato.codiceProposto = ""
                 onScelto("commessa")
             }
         }
-        PulsanteBordo("Senza commessa", { stato.commessa = ""; stato.idCommessa = ""; onScelto("commessa") }, Modifier.fillMaxWidth())
+        PulsanteBordo("Senza commessa", { stato.commessa = ""; stato.idCommessa = ""; stato.codiceProposto = ""; onScelto("commessa") }, Modifier.fillMaxWidth())
         var nuova by remember { mutableStateOf("") }
         CampoTesto(nuova, { nuova = it }, "Commessa nuova", segnaposto = "Come la chiami tu")
         if (nuova.isNotBlank()) {
-            PulsanteBordo("Usa «${nuova.trim()}»", { stato.commessa = nuova.trim(); stato.idCommessa = ""; onScelto("commessa") }, Modifier.fillMaxWidth(), icona = Icone.piu)
+            // Il codice della commessa nuova si sa subito, anche senza rete.
+            val codice = ana.prossimoCodiceCommessa(stato.data.year)
+            PulsanteBordo("Usa «${nuova.trim()}» · $codice", {
+                stato.commessa = nuova.trim(); stato.idCommessa = ""; stato.codiceProposto = codice
+                onScelto("commessa")
+            }, Modifier.fillMaxWidth(), icona = Icone.piu)
         }
     }
 }
@@ -559,11 +556,13 @@ private fun ColumnScope.PassoOre(
     proposta: Double?,
     ultimiKm: Double?,
     cliente: Cliente?,
+    /** La tariffa proposta e' il prezzo della commessa, non l'ultima del cliente. */
+    daCommessa: Boolean = false,
 ) {
     val c = W.colori
     val visita = LocalVisita.current
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Text(listOf(stato.cliente, stato.commessa.takeIf { it.isNotBlank() }).filterNotNull().joinToString(" · "),
+        Text(listOf(stato.cliente, stato.idCommessa.ifBlank { stato.codiceProposto }.ifBlank { stato.commessa }.takeIf { it.isNotBlank() }).filterNotNull().joinToString(" · "),
             style = Testi.secondarioGrande, color = c.tenue, maxLines = 1, overflow = TextOverflow.Ellipsis)
         Text("Ore e strada", style = Testi.titoloPagina, color = c.testo)
     }
@@ -640,9 +639,11 @@ private fun ColumnScope.PassoOre(
     // La tariffa: fissa per il gruppo, o quella scritta qui (proposta: l'ultima usata).
     Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
-            Text(if (regole.tariffaFissa != null) "Tariffa fissa ${regole.gruppo}" else "Tariffa oraria", style = Testi.secondarioGrande.copy(fontWeight = FontWeight.Bold), color = c.testo)
+            Text(if (regole.tariffaFissa != null) "Tariffa fissa ${stato.cliente}" else "Tariffa oraria", style = Testi.secondarioGrande.copy(fontWeight = FontWeight.Bold), color = c.testo)
             if (regole.tariffaFissa == null) Text(
                 when {
+                    daCommessa && Numeri.leggi(stato.tariffa) == proposta -> "il prezzo della commessa"
+                    daCommessa -> "la commessa è a ${Numeri.scrivi(proposta)} €/h"
                     proposta != null && Numeri.leggi(stato.tariffa) == proposta -> "l'ultima usata per ${(cliente?.nome ?: stato.cliente).substringBefore(' ')}"
                     proposta != null -> "l'ultima volta era ${Numeri.scrivi(proposta)} €/h"
                     else -> "prima volta per questo cliente"
@@ -791,7 +792,8 @@ private fun ColumnScope.PassoRiepilogo(
     }
 
     Scheda(verticale = 4.dp, spazio = 0.dp) {
-        RigaRiepilogo(r.cliente.ifBlank { "Manca il cliente" }, r.commessa.ifBlank { "Senza commessa" }, bloccato) { onCambia(1) }
+        // La commessa col suo codice (26ST047), non con la descrizione: come la conosce lo studio.
+        RigaRiepilogo(r.cliente.ifBlank { "Manca il cliente" }, r.idCommessa.ifBlank { r.codiceProposto }.ifBlank { r.commessa }.ifBlank { "Senza commessa" }, bloccato) { onCambia(1) }
         Box(Modifier.fillMaxWidth().height(1.dp).background(c.riga))
         RigaRiepilogo(
             listOf("${Numeri.ore(r.oreLavoro)} di lavoro", r.oreViaggio.takeIf { it > 0 }?.let { "${Numeri.ore(it)} di viaggio" },

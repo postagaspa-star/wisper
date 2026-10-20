@@ -141,11 +141,11 @@ destra "Passo N di 3" / "Riepilogo"; sotto la barra di avanzamento nera su `#E2E
 - Titolo "Per chi?". Pulsante data con bordo: "Oggi, giovedì 15 ottobre" e "Cambia" (giallo scuro) → foglio
   dal basso col calendario.
 - "RECENTI": le 3-4 commesse aperte usate più di recente, una scheda alta 84: cerchio con le iniziali, cliente
-  (17/800), commessa (15/500), "codice · gruppo" (13/600 tenue), freccia. Tocco = scelta e passo 2.
+  (17/800), commessa (15/500), codice commessa (13/600 tenue), freccia. Tocco = scelta e passo 2.
 - "Altro cliente o commessa": campo di ricerca con la lente; i risultati compaiono sotto come le schede, prima
   le commesse aperte, poi i clienti. In fondo ai risultati: "+ Cliente nuovo «testo»" e, scelto un cliente,
-  "+ Commessa nuova «testo»". Cliente nuovo: foglio dal basso "Di che gruppo è?" con i gruppi come pulsanti
-  grandi.
+  "Usa «testo» · 26ST047": il codice della commessa nuova si vede subito, anche senza rete. Cliente nuovo: un
+  tocco su "Cliente nuovo «testo»", con la tariffa libera (dalla 0.3.5 non ci sono più i gruppi).
 
 **Passo 2 · Ore e strada** (sopra: "{cliente} · {commessa}" tenue)
 - Scheda **Lavoro**: titolo a sinistra, a destra stepper (cerchi 52 `#E7E6E2` con − e +, valore 28/800 largo
@@ -157,7 +157,7 @@ destra "Passo N di 3" / "Riepilogo"; sotto la barra di avanzamento nera su `#E2E
 - Scheda **Chilometri**: valore in un campo con bordo (tocco = tastiera numerica); sotto le pillole "Ultima
   volta · {km} km" (ultimi km di quella commessa, altrimenti di quel cliente; nascosta se non ce ne
   sono) e "Senza auto" (0).
-- Riga **Tariffa**: gruppo a tariffa fissa = "Tariffa fissa {gruppo}" e il valore in un riquadro grigio, senza
+- Riga **Tariffa**: cliente a tariffa fissa (Elettrodinamica) = "Tariffa fissa {cliente}" e il valore in un riquadro grigio, senza
   frase sotto; tariffa
   libera = "Tariffa oraria", sotto "l'ultima usata per {cliente}" o "prima volta per questo cliente", e il
   valore toccabile (tastiera numerica). Se manca, il pulsante Avanti la chiede con un errore sotto la riga.
@@ -196,9 +196,9 @@ conferma, non un'istruzione). In basso **Cancella** (bordo) e **Conferma firma**
 
 ## 6. Mese
 Come `docs/prototipo/Mese.dc.html`. Pulsante tondo indietro (→ Oggi); a destra mese prima / dopo. Titolo
-"Ottobre 2026". Tre riquadri: Ore, Km, Totale. Poi i rapportini **raggruppati per chi paga** (il gruppo con
-tariffa fissa, come Elettrodinamica, oppure il cliente privato): intestazione in maiuscolo con il totale del
-gruppo, e una scheda con le righe: giorno (22/800) e giorno della settimana, cliente o lavoro (16/800) e
+"Ottobre 2026". Tre riquadri: Ore, Km, Totale. Poi i rapportini **raggruppati per cliente** (Elettrodinamica è
+un cliente come gli altri): intestazione in maiuscolo con il totale del
+cliente, e una scheda con le righe: giorno (22/800) e giorno della settimana, cliente o lavoro (16/800) e
 "ore · commessa" (le ore prima: il nome della commessa può essere lungo), importo e UNA parola di stato ("Da firmare", "Firmato", "Inviato", "Fatturato"); l'icona
 della nuvola accanto al titolo se è ancora sul telefono, il bordo rosso se il foglio l'ha rifiutato. In basso
 **Nuovo rapportino** (giallo, 64) su una sfumatura del fondo. Mese senza rapportini: una riga calma "Nessun
@@ -210,7 +210,7 @@ rapportino a settembre".
   - *Tu*: Nome di chi compila (vuoto = quello del foglio).
   - *Il foglio*: Collegamento (stato col pallino verde/rosso, ultima lettura, "Aggiorna" o "Riprova" se c'è
     un errore), Indirizzo, Codice.
-  - *Tariffe*: gruppi con la tariffa (fissa o libera), viaggio, km; rimborso km con l'auto. Solo da leggere
+  - *Tariffe*: la tariffa del cliente (fissa o libera), viaggio, km; rimborso km con l'auto. Solo da leggere
     (si cambiano da Wisper Ufficio): righe senza freccia, nessuna frase d'aiuto.
   - *App*: Tema (automatico, chiaro, scuro), **Rifai la visita guidata** ("Da capo, coi dati di esempio": riparte dal primo passo), Versione, Licenze.
 - **Versione** (in fondo alle Impostazioni): "Versione 0.3.0" e sotto "Si aggiorna da sola", "La 0.4.0 è
@@ -241,7 +241,7 @@ con spunta verde, oppure "Foglio non raggiunto · Riprova").
   "Vicina al budget"/"Oltre il budget"/"Scaduta", barra, "ore di budget · margine"). Niente da fatturare: una
   riga calma con la spunta.
 - **Finestra Prepara riepilogo**: a sinistra l'anteprima della pagina, a destra "Riepilogo di {mese}", "{chi} ·
-  {totale}", campo **A** (email del gruppo o del cliente), caselle "Con gli importi" (spuntata) e "Con le foto
+  {totale}", campo **A** (email del cliente), caselle "Con gli importi" (spuntata) e "Con le foto
   degli scontrini", "Cambia il messaggio" (apre Oggetto, Copia anche a, Messaggio, già scritti), pulsanti
   **Annulla**, **Solo il PDF**, **Invia per email** (giallo), e il testo "Segna come inviato senza email".
   "Mandane una copia a me" nel menu ⋯ della finestra. La stessa finestra fa **Invia al cliente** per un
@@ -267,11 +267,11 @@ con spunta verde, oppure "Foglio non raggiunto · Riprova").
   aperta**: codice, nome, stato, cliente · cantiere · date; Sospendi / Chiudi / Riapri e **Modifica**; schede
   Panoramica (tre riquadri valore-costo-margine, barra fatturazione, ore sul budget e tempo, settimane),
   Rapportini, Costi, Da fatturare, Documenti — come oggi, nello stile nuovo.
-- **Clienti**: ricerca e gruppi a segmenti; righe con cerchio, nome, gruppo, tariffa ("30 €/h fissa" o "42 €/h
-  l'ultima"), email, commesse aperte, ore e totale del mese; finestra di modifica con le eccezioni (viaggio,
-  km) come segmenti "Come il gruppo | Sì | No".
+- **Clienti**: ricerca; righe con cerchio, nome, tariffa ("30 €/h fissa" o "libera"), ultima tariffa usata,
+  email, commesse aperte, ore e totale del mese; finestra di modifica con tariffa fissa (vuota = libera),
+  ultima tariffa, viaggio e km come segmenti "Sì | No".
 - **Impostazioni**: schede per Il foglio (indirizzo già scritto nel programma, come nell'app: basta il codice; con un indirizzo sbagliato il messaggio lo dice), Lo studio (intestazione dei PDF), La tua firma,
-  Gruppi e tariffe (tabella modificabile), Rimborso km e costi (con la lettera delle commesse), L'app (tema
+  Rimborso km e costi, L'app (tema
   Automatico | Chiaro | Scuro, **Visita guidata · Rifai la visita guidata** (anche prima di collegare il foglio: usa i dati di esempio), licenze, versione). Ogni scheda ha il suo **Salva** con il
   bordo: il giallo c'è solo su **Collega** quando il foglio non è ancora collegato. Le frasi che prima stavano
   fisse sotto i campi diventano la conferma dopo il salvataggio ("Vale per i rapportini nuovi: quelli già

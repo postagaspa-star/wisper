@@ -432,7 +432,7 @@ class Archivio(private val ctx: Context) : Dati {
             .map { v ->
                 val r = v.rapportino
                 if (v.cambiatoQui || r.conto == null) {
-                    v.copy(conto = Calcolo.calcola(r, ana.regoleDi(ana.cliente(r.idCliente, r.cliente))))
+                    v.copy(conto = Calcolo.calcola(r, ana.regoleDi(ana.cliente(r.idCliente, r.cliente), ana.commessa(r.idCommessa))))
                 } else v
             }
             .filter { it.rapportino.stato != Stato.ANNULLATO }

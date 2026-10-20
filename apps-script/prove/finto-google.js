@@ -225,15 +225,16 @@ function semina() {
     return r;
   };
   scrivi('salvaImpostazioni', { valori: { INDIRIZZO: 'Via dell\'Esempio 1, 36016 Thiene (VI)', PARTITA_IVA: '00000000000', EMAIL: 'studio@example.com', COSTO_ORARIO: 15 } });
-  scrivi('salvaGruppo', { gruppo: { nome: 'Elettrodinamica', tariffaFissa: 30, pagaViaggio: false, kmRimborsati: true, maggExtra: 0, email: 'rapportini@elettrodinamica.example' } });
-  const batokyo = scrivi('creaCliente', { nome: 'Batokyo', gruppo: 'Elettrodinamica' }).cliente;
-  const rossi = scrivi('creaCliente', { nome: 'Rossi Impianti Srl', gruppo: 'Privato', email: 'rossi@example.com' }).cliente;
-  const p1 = scrivi('creaCommessa', { idCliente: batokyo.id, descrizione: 'Nuovo magazzino automatico', indirizzo: 'Zona industriale, Schio', budgetOre: 40, inizio: '2026-09-01', finePrevista: '2026-12-20' }).commessa;
-  const p2 = scrivi('creaCommessa', { idCliente: rossi.id, descrizione: 'Quadro elettrico capannone', budgetEuro: 2500 }).commessa;
+  // Elettrodinamica la crea preparaFoglio(), a tariffa fissa: qui le si da' l'email dei riepiloghi.
+  const elettro = scrivi('anagrafiche', {}).clienti.find(c => c.nome === 'Elettrodinamica');
+  scrivi('aggiornaCliente', { id: elettro.id, campi: { email: 'rapportini@elettrodinamica.example', costoFisso: 22 } });
+  const rossi = scrivi('creaCliente', { nome: 'Rossi Impianti Srl', email: 'rossi@example.com' }).cliente;
+  const p1 = scrivi('creaCommessa', { idCliente: elettro.id, descrizione: 'Nuovo magazzino automatico Batokyo', indirizzo: 'Zona industriale, Schio', budgetOre: 40, budgetEuro: 1200, inizio: '2026-09-01', finePrevista: '2026-12-20' }).commessa;
+  const p2 = scrivi('creaCommessa', { idCliente: rossi.id, descrizione: 'Quadro elettrico capannone', budgetEuro: 2500, prezzoOrario: 42, costoOrario: 25, euroKm: 0.9 }).commessa;
   const rap = (dati) => scrivi('salvaRapportino', { rapportino: Object.assign({ idLocale: 'seme-' + (++contatore), tecnico: 'Manuel Gasparotto' }, dati) }).rapportino;
-  rap({ data: '2026-09-15', idCliente: batokyo.id, idCommessa: p1.id, descrizione: 'Sopralluogo e rilievo quadri esistenti', oreLavoro: 6, oreViaggio: 1.5, km: 96 });
-  rap({ data: '2026-10-02', idCliente: batokyo.id, idCommessa: p1.id, descrizione: 'Cablaggio quadro di linea 1', oreLavoro: 8, oreExtra: 1, km: 96, spese: 14.5, noteSpese: 'Pranzo' });
-  rap({ data: '2026-10-08', idCliente: batokyo.id, idCommessa: p1.id, descrizione: 'Collaudo sensori e messa in servizio nastro', oreLavoro: 7.5, oreViaggio: 1.5, km: 96 });
+  rap({ data: '2026-09-15', idCliente: elettro.id, idCommessa: p1.id, descrizione: 'Sopralluogo e rilievo quadri esistenti', oreLavoro: 6, oreViaggio: 1.5, km: 96 });
+  rap({ data: '2026-10-02', idCliente: elettro.id, idCommessa: p1.id, descrizione: 'Cablaggio quadro di linea 1', oreLavoro: 8, oreExtra: 1, km: 96, spese: 14.5, noteSpese: 'Pranzo' });
+  rap({ data: '2026-10-08', idCliente: elettro.id, idCommessa: p1.id, descrizione: 'Collaudo sensori e messa in servizio nastro', oreLavoro: 7.5, oreViaggio: 1.5, km: 96 });
   rap({ data: '2026-10-10', idCliente: rossi.id, idCommessa: p2.id, descrizione: 'Sostituzione interruttore generale', oreLavoro: 3.5, km: 22, tariffa: 42 });
   scrivi('stato', { ids: ['RAP/2026/0001'], stato: 'FATTURATO' });
   scrivi('stato', { ids: ['RAP/2026/0002'], stato: 'INVIATO' });

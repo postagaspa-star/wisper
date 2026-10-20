@@ -12,8 +12,8 @@
     <AssemblyTitle>Wisper Ufficio</AssemblyTitle>
     <Product>Wisper Ufficio</Product>
     <!-- La versione decide gli aggiornamenti: quella pubblicata deve essere più alta di quella installata. -->
-    <Version>0.3.4</Version>
-    <FileVersion>0.3.4.0</FileVersion>
+    <Version>0.3.5</Version>
+    <FileVersion>0.3.5.0</FileVersion>
     <ApplicationIcon>Risorse\wisper.ico</ApplicationIcon>
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
     <SatelliteResourceLanguages>it</SatelliteResourceLanguages>

@@ -82,7 +82,7 @@ class Visita {
     val passi = listOf(
         Passo("giorno", "Il tuo giorno", "Qui vedi subito se il rapportino di oggi è scritto.", false, "oggi"),
         Passo("scrivi", "Scrivi il rapportino", "Tocca il pulsante giallo.", true, "oggi"),
-        Passo("recente-0", "Per chi", "I clienti di questi giorni sono già qui. Tocca Batokyo.", true, "rapportino"),
+        Passo("recente-0", "Per chi", "I clienti di questi giorni sono già qui. Tocca Elettrodinamica.", true, "rapportino"),
         Passo("ore-6", "Le ore", "Tocca 6 h, poi aggiusti con più e meno.", true, "rapportino"),
         Passo("km-ultimi", "I chilometri", "Wisper ricorda i km dell'ultima volta. Toccali.", true, "rapportino"),
         Passo("totale", "Il conto", "Il totale si aggiorna mentre scrivi.", false, "rapportino"),

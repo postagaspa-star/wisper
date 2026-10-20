@@ -27,6 +27,12 @@ data class Rapportino(
     val cliente: String = "",
     val idCommessa: String = "",
     val commessa: String = "",
+    /**
+     * Per una commessa nuova, nata qui: il codice che avra' (26ST047), deciso sul
+     * telefono anche senza rete. Il foglio lo usa se e' ancora libero, altrimenti
+     * le da' il primo libero e lo rimanda in idCommessa.
+     */
+    val codiceProposto: String = "",
     val ticket: String = "",
     val luogo: String = "",
     val descrizione: String = "",
@@ -61,7 +67,7 @@ data class Rapportino(
     /** I campi che si compilano, senza quello che aggiunge il foglio: per capire se e' cambiato qualcosa. */
     fun soloCompilato(): Rapportino = Rapportino(
         idLocale = idLocale, data = data, tecnico = tecnico, idCliente = idCliente,
-        cliente = cliente, idCommessa = idCommessa, commessa = commessa, ticket = ticket,
+        cliente = cliente, idCommessa = idCommessa, commessa = commessa, codiceProposto = codiceProposto, ticket = ticket,
         luogo = luogo, descrizione = descrizione, oreLavoro = oreLavoro, oreExtra = oreExtra,
         oreViaggio = oreViaggio, km = km, spese = spese, noteSpese = noteSpese,
         tariffa = tariffa, noteInterne = noteInterne,
@@ -75,10 +81,9 @@ data class Rapportino(
         .put("tecnico", tecnico)
         .put("idCliente", idCliente)
         .put("cliente", cliente)
-        // Serve solo se il cliente e' nuovo: lo script lo crea in questo gruppo.
-        .put("gruppo", gruppo)
         .put("idCommessa", idCommessa)
         .put("commessa", commessa)
+        .put("codiceProposto", codiceProposto)
         .put("ticket", ticket)
         .put("luogo", luogo)
         .put("descrizione", descrizione)
@@ -159,6 +164,7 @@ data class Rapportino(
                 cliente = o.testo("cliente"),
                 idCommessa = o.testo("idCommessa"),
                 commessa = o.testo("commessa"),
+                codiceProposto = o.testo("codiceProposto"),
                 ticket = o.testo("ticket"),
                 luogo = o.testo("luogo"),
                 descrizione = o.testo("descrizione"),

@@ -54,25 +54,37 @@ class CalcoloTest {
     }
 
     @Test
-    fun `le regole vengono dal gruppo, con le eccezioni del cliente`() {
+    fun `le regole vengono dalla scheda del cliente, i km dalla commessa`() {
         val ana = Anagrafiche(
             clienti = listOf(
-                Cliente("C001", "Batokyo", gruppo = "Elettrodinamica"),
-                Cliente("C002", "Rossi", gruppo = "Privato", ultimaTariffa = 42.0),
-                Cliente("C003", "Bianchi", gruppo = "Privato", pagaViaggio = true),
+                Cliente("C001", "Elettrodinamica", tariffaFissa = 30.0, pagaViaggio = false, kmRimborsati = true),
+                Cliente("C002", "Rossi", ultimaTariffa = 42.0),
+                Cliente("C003", "Bianchi", pagaViaggio = true),
+                // Un cliente dei fogli di prima della 0.3.5, ancora in un gruppo.
+                Cliente("C004", "Vecchio", gruppo = "Elettrodinamica"),
             ),
-            gruppi = listOf(
-                Gruppo("Elettrodinamica", tariffaFissa = 30.0, pagaViaggio = false, kmRimborsati = true),
-                Gruppo("Privato", tariffaFissa = null, pagaViaggio = false, kmRimborsati = true),
-            ),
+            commesse = listOf(Commessa("26ST001", "C002", "Lontana", euroKm = 0.9)),
+            gruppi = listOf(Gruppo("Elettrodinamica", tariffaFissa = 30.0)),
             impostazioni = mapOf("EURO_KM" to "0,76"),
         )
         val elettro = ana.regoleDi(ana.cliente("C001"))
         assertEquals(30.0, elettro.tariffaFissa!!, 0.0)
         assertEquals(0.76, elettro.euroKm, 0.0)
         assertEquals(null, ana.regoleDi(ana.cliente("C002")).tariffaFissa)
+        assertEquals(false, ana.regoleDi(ana.cliente("C002")).pagaViaggio)
         assertEquals(true, ana.regoleDi(ana.cliente("C003")).pagaViaggio)
+        assertEquals(null, ana.regoleDi(null).tariffaFissa)
+        assertEquals(30.0, ana.regoleDi(ana.cliente("C004")).tariffaFissa!!, 0.0)
+        assertEquals(0.9, ana.regoleDi(ana.cliente("C002"), ana.commessa("26st001")).euroKm, 0.0)
         // Un cliente scritto a mano si riconosce anche con maiuscole e punti diversi.
         assertEquals("C002", ana.cliente("", "rossi")?.id)
+    }
+
+    @Test
+    fun `codice della commessa nuova come nello script`() {
+        val ana = Anagrafiche(commesse = listOf(Commessa("P2601", "C1", "a"), Commessa("26ST009", "C1", "b"), Commessa("25ST120", "C1", "c")))
+        assertEquals("26ST121", ana.prossimoCodiceCommessa(2026))
+        assertEquals("27ST121", ana.prossimoCodiceCommessa(2027))
+        assertEquals("26ST001", Anagrafiche().prossimoCodiceCommessa(2026))
     }
 }

@@ -36,7 +36,7 @@
     scelti: new Set(),
     aperto: null,
     filtriCommesse: { testo: '', stato: 'APERTA', cliente: '' },
-    filtriClienti: { testo: '', gruppo: '' },
+    filtriClienti: { testo: '' },
     schedaCommessa: 'panoramica',
     esempio: null,
     veri: null,
@@ -326,7 +326,6 @@
 
   const cliente = id => S.ana.clienti.find(c => c.id === id);
   const commessa = id => S.ana.commesse.find(m => m.id === id);
-  const gruppo = nome => S.ana.gruppi.find(g => C.normalizza(g.nome) === C.normalizza(nome));
   const trova = chiave => S.rapportini.find(x => x.id === chiave || x.idLocale === chiave);
   const attivi = () => S.rapportini.filter(r => r.stato !== 'ANNULLATO');
   const somma = lista => C.totali(lista).totale;
@@ -340,19 +339,15 @@
   const dataLunga = iso => { const d = new Date(iso + 'T12:00:00'); return GIORNI_LUNGHI[d.getDay()] + ' ' + d.getDate() + ' ' + MESI_LUNGHI[d.getMonth()]; };
 
   /**
-   * Chi paga un rapportino, cioè a chi si fattura. I clienti di un gruppo a
-   * tariffa fissa come Elettrodinamica si fatturano al gruppo; gli altri a sé
-   * stessi. È lo stesso raggruppamento del telefono.
+   * Chi paga un rapportino, cioè a chi si fattura: il suo cliente. Elettrodinamica
+   * è un cliente come gli altri (a tariffa fissa); il cliente finale presso cui si
+   * lavora per lei non conta. È lo stesso raggruppamento del telefono.
    */
   function chiPaga(r) {
-    const g = gruppo(r.gruppo);
-    if (g && g.tariffaFissa !== null && g.tariffaFissa !== undefined) {
-      return { chiave: 'g:' + C.normalizza(g.nome), nome: g.nome, email: g.email || '', righe: [g.email], perGruppo: true };
-    }
     const c = cliente(r.idCliente) || { nome: r.cliente };
     return {
       chiave: 'c:' + (r.idCliente || C.normalizza(r.cliente)), nome: c.nome, email: c.email || '',
-      righe: [c.indirizzo, c.partitaIva ? 'P.IVA ' + c.partitaIva : '', c.email], perGruppo: false,
+      righe: [c.indirizzo, c.partitaIva ? 'P.IVA ' + c.partitaIva : '', c.email],
     };
   }
 
@@ -368,7 +363,7 @@
 
   function intestatarioRiepilogo(lista) {
     const gruppi = perChiPaga(lista);
-    if (gruppi.length === 1) return { nome: gruppi[0].nome, righe: gruppi[0].righe, email: gruppi[0].email, mostraCliente: gruppi[0].perGruppo };
+    if (gruppi.length === 1) return { nome: gruppi[0].nome, righe: gruppi[0].righe, email: gruppi[0].email, mostraCliente: false };
     return { nome: 'Vari clienti', righe: [], email: '', mostraCliente: true };
   }
 
@@ -555,7 +550,7 @@
     }
 
     const guardare = h('div', { class: 'sezione' }, h('h2', null, 'Commesse da guardare'));
-    const daGuardare = S.ana.commesse.filter(m => m.stato === 'APERTA').map(m => ({ m, k: C.cruscotto(m, S.rapportini, S.ana.impostazioni) }))
+    const daGuardare = S.ana.commesse.filter(m => m.stato === 'APERTA').map(m => ({ m, k: C.cruscotto(m, S.rapportini, S.ana.impostazioni, null, cliente(m.idCliente)) }))
       .filter(x => x.k.livelloOre === 'attenzione' || x.k.livelloOre === 'sforato' || (x.k.giorniMancanti !== null && x.k.giorniMancanti < 0));
     if (daGuardare.length) {
       aggiungi(guardare, [h('div', { class: 'scheda stretta' }, daGuardare.map(({ m, k }) => {
@@ -581,7 +576,6 @@
 
   function schedaChiPaga(g, prima) {
     const t = C.totali(g.lista);
-    const clienti = Array.from(new Set(g.lista.map(r => r.cliente)));
     const tuttiInviati = g.lista.every(r => r.stato === 'INVIATO');
     const quando = g.lista.map(r => r.inviatoIl).filter(Boolean).sort().reverse()[0];
     const azioni = h('div', { class: 'azioni' },
@@ -603,7 +597,7 @@
     return h('div', { class: 'chi-paga' },
       iniziali(g.nome),
       h('div', { class: 'chi' }, h('b', null, g.nome),
-        h('span', { class: 'secondario' }, nRapportini(t.n) + (g.perGruppo ? ' di ' + clienti.join(', ') : '') + ' · ' + C.ore(t.ore) + ' · ' + C.numero(t.km) + ' km'),
+        h('span', { class: 'secondario' }, nRapportini(t.n) + ' · ' + C.ore(t.ore) + ' · ' + C.numero(t.km) + ' km'),
         esito),
       h('span', { class: 'quanto' }, C.euro(t.totale)),
       azioni);
@@ -681,7 +675,6 @@
         const chiave = r.id || r.idLocale;
         const casella = h('input', { type: 'checkbox', class: 'casella', 'aria-label': 'Scegli ' + (r.id || 'il rapportino'), checked: S.scelti.has(chiave),
           onclick: e => { e.stopPropagation(); if (e.target.checked) S.scelti.add(chiave); else S.scelti.delete(chiave); elencoRapportini(area); } });
-        const sotto = g.perGruppo ? [r.cliente, r.idCommessa].filter(Boolean).join(' · ') : r.idCommessa;
         aggiungi(tab, [h('div', {
           class: 'r colonne-rap cliccabile' + (S.aperto === chiave ? ' scelta' : ''), role: 'button', tabindex: '0', 'data-chiave': chiave,
           'data-visita': primaRiga ? 'riga-rapportino' : null,
@@ -691,7 +684,7 @@
         h('span', null, casella),
         // La data e sotto il numero: una colonna in meno, più spazio a commessa e lavoro.
         h('span', { class: 'doppia' }, h('span', { class: 'forte' }, dataBreve(r.data)), h('span', { class: 'num' }, r.id || 'in arrivo')),
-        h('span', { class: 'doppia' }, h('span', null, r.commessa || 'Senza commessa'), sotto ? h('span', null, sotto) : null),
+        h('span', { class: 'doppia' }, h('span', null, r.idCommessa || r.commessa || 'Senza commessa'), r.idCommessa && r.commessa ? h('span', null, r.commessa) : null),
         h('span', { class: 'taglia t2', title: r.descrizione }, r.descrizione),
         h('span', { class: 'n' }, C.numero(r.oreTotali)),
         h('span', { class: 'n' }, C.numero(r.km)),
@@ -1053,7 +1046,7 @@
     if (r.idCommessa && !r.commessa) r.commessa = (commessa(r.idCommessa) || {}).descrizione || '';
 
     const m = {
-      idCliente: r.idCliente, cliente: r.cliente, gruppoNuovo: '', idCommessa: r.idCommessa, commessa: r.commessa,
+      idCliente: r.idCliente, cliente: r.cliente, idCommessa: r.idCommessa, commessa: r.commessa, codiceProposto: '',
       sceltaFatta: !!r.cliente, commessaFatta: !!esistente || !!r.idCommessa,
       oreLavoro: C.num(r.oreLavoro), oreExtra: C.num(r.oreExtra), oreViaggio: C.num(r.oreViaggio),
       extraAperto: C.num(r.oreExtra) > 0, tariffaToccata: !!esistente, nuovoCliente: false,
@@ -1077,7 +1070,10 @@
     v.noteInterne.value = r.noteInterne || '';
 
     const clienteScelto = () => (m.idCliente && cliente(m.idCliente)) || null;
-    const regoleAttuali = () => C.regoleDi(clienteScelto() || { gruppo: m.gruppoNuovo || 'Privato' }, S.ana.gruppi, S.ana.impostazioni);
+    const regoleAttuali = () => C.regoleDi(clienteScelto(), S.ana.gruppi, S.ana.impostazioni, commessa(m.idCommessa));
+    // Il codice che avrà una commessa nuova: si vede subito, come vuole lo studio.
+    const codiceNuovo = () => C.prossimoCodiceCommessa(S.ana.commesse.map(x => x.id), new Date(v.data.value || Date.now()).getFullYear());
+    const sottoCliente = c => (c && c.tariffaFissa !== null && c.tariffaFissa !== undefined) ? 'Tariffa fissa ' + C.numero(c.tariffaFissa) + ' €/h' : 'Tariffa libera';
 
     const zonaPerChi = h('div', { class: 'fila', style: { display: 'flex', flexDirection: 'column', gap: '10px' } });
     const zonaOre = h('div');
@@ -1089,17 +1085,24 @@
     let luogoAperto = !!r.luogo;
     let notaAperta = !!r.noteInterne;
 
-    function scegliCliente(c, nuovo, gruppoNuovo) {
+    /** Il prezzo della commessa scelta (o l'ultima tariffa del cliente), se la tariffa non l'ha scritta la persona. */
+    function proponiTariffa() {
+      if (m.tariffaToccata) return;
+      const proposta = C.tariffaProposta(clienteScelto(), S.rapportini, commessa(m.idCommessa));
+      v.tariffa.value = proposta ? C.numero(proposta) : '';
+    }
+
+    function scegliCliente(c, nuovo) {
       m.idCliente = c ? c.id : '';
       m.cliente = c ? c.nome : nuovo;
-      m.gruppoNuovo = c ? '' : gruppoNuovo;
       m.sceltaFatta = true;
       m.commessaFatta = false;
       m.idCommessa = '';
       m.commessa = '';
+      m.codiceProposto = '';
       delete errori.cliente;
       if (!m.tariffaToccata) {
-        const proposta = C.tariffaProposta(c, S.rapportini);
+        const proposta = C.tariffaProposta(c, S.rapportini, null);
         v.tariffa.value = proposta ? C.numero(proposta) : '';
       }
       disegnaPerChi();
@@ -1116,9 +1119,9 @@
           aggiungi(zonaPerChi, [h('div', { class: 'griglia-scelte' }, rec.map(x => h('button', {
             type: 'button', class: 'scelta-card', onclick: () => {
               const c = cliente(x.idCliente);
-              scegliCliente(c, x.cliente, x.gruppo);
+              scegliCliente(c, x.cliente);
               m.idCommessa = x.idCommessa; m.commessa = x.commessa; m.commessaFatta = true;
-              disegnaPerChi(); disegnaKm(); aggiornaConto();
+              proponiTariffa(); disegnaPerChi(); disegnaKm(); disegnaTariffa(); aggiornaConto();
             },
           }, iniziali(x.cliente, true), h('span', { class: 'testi' }, h('b', null, x.cliente), h('span', null, x.commessa || 'Senza commessa')))))]);
         }
@@ -1128,34 +1131,30 @@
           const trovati = S.ana.clienti.filter(c => C.normalizza([c.nome].concat(c.alias || []).join(' ')).indexOf(C.normalizza(testo)) >= 0)
             .sort((a, b) => a.nome.localeCompare(b.nome, 'it')).slice(0, 6);
           trovati.forEach(c => aggiungi(zonaPerChi, [h('button', { type: 'button', class: 'scelta-card', onclick: () => scegliCliente(c) },
-            iniziali(c.nome, true), h('span', { class: 'testi' }, h('b', null, c.nome), h('span', null, c.gruppo)))]));
+            iniziali(c.nome, true), h('span', { class: 'testi' }, h('b', null, c.nome), h('span', null, sottoCliente(c))))]));
           if (!trovati.some(c => C.normalizza(c.nome) === C.normalizza(testo))) {
-            if (!m.nuovoCliente) {
-              aggiungi(zonaPerChi, [h('button', { type: 'button', class: 'pillola tratteggiata', style: { alignSelf: 'flex-start' }, onclick: () => { m.nuovoCliente = true; disegnaPerChi(); } }, '+ Cliente nuovo «' + testo + '»')]);
-            } else {
-              aggiungi(zonaPerChi, [h('div', { class: 'secondario' }, '«' + testo + '» è nuovo. Di che gruppo è?'),
-                segmenti((S.ana.gruppi.length ? S.ana.gruppi : [{ nome: 'Privato' }]).map(g => [g.nome, g.nome]), '', g => scegliCliente(null, testo, g))]);
-            }
+            // Un cliente nuovo ha la tariffa libera: Elettrodinamica, l'unica fissa, c'è già.
+            aggiungi(zonaPerChi, [h('button', { type: 'button', class: 'pillola tratteggiata', style: { alignSelf: 'flex-start' }, onclick: () => scegliCliente(null, testo) }, '+ Cliente nuovo «' + testo + '»')]);
           }
         }
         if (errori.cliente) aggiungi(zonaPerChi, [h('div', { class: 'campo' }, h('div', { class: 'errore' }, errori.cliente))]);
         return;
       }
       aggiungi(zonaPerChi, [h('div', { class: 'scelta-card scelta' }, iniziali(m.cliente, true),
-        h('span', { class: 'testi' }, h('b', null, m.cliente), h('span', null, m.idCliente ? regoleAttuali().gruppo : 'Cliente nuovo · ' + m.gruppoNuovo)),
-        h('button', { type: 'button', class: 'btn collegamento', onclick: () => { m.sceltaFatta = false; m.nuovoCliente = false; disegnaPerChi(); } }, 'Cambia'))]);
+        h('span', { class: 'testi' }, h('b', null, m.cliente), h('span', null, m.idCliente ? sottoCliente(clienteScelto()) : 'Cliente nuovo · tariffa libera')),
+        h('button', { type: 'button', class: 'btn collegamento', onclick: () => { m.sceltaFatta = false; disegnaPerChi(); } }, 'Cambia'))]);
       const aperte = m.idCliente ? S.ana.commesse.filter(x => x.idCliente === m.idCliente && (x.stato === 'APERTA' || x.id === m.idCommessa)) : [];
       const pill = (testo, scelta, fn) => h('button', { type: 'button', class: 'pillola' + (scelta ? ' scelta' : ''), onclick: fn }, testo);
       aggiungi(zonaPerChi, [h('div', { class: 'etichetta' }, 'Commessa'),
         h('div', { class: 'pillole' },
-          aperte.map(x => pill(x.id + ' · ' + x.descrizione, m.idCommessa === x.id, () => { m.idCommessa = x.id; m.commessa = x.descrizione; m.commessaFatta = true; disegnaPerChi(); disegnaKm(); })),
-          m.commessa && !m.idCommessa ? pill(m.commessa + ' (nuova)', true, () => {}) : null,
-          pill('Senza commessa', m.commessaFatta && !m.commessa, () => { m.idCommessa = ''; m.commessa = ''; m.commessaFatta = true; disegnaPerChi(); })),
+          aperte.map(x => pill(x.id + ' · ' + x.descrizione, m.idCommessa === x.id, () => { m.idCommessa = x.id; m.commessa = x.descrizione; m.codiceProposto = ''; m.commessaFatta = true; proponiTariffa(); disegnaPerChi(); disegnaKm(); disegnaTariffa(); aggiornaConto(); })),
+          m.commessa && !m.idCommessa ? pill(m.codiceProposto + ' · ' + m.commessa + ' (nuova)', true, () => {}) : null,
+          pill('Senza commessa', m.commessaFatta && !m.commessa, () => { m.idCommessa = ''; m.commessa = ''; m.codiceProposto = ''; m.commessaFatta = true; disegnaPerChi(); disegnaKm(); aggiornaConto(); })),
         h('div', { style: { display: 'flex', gap: '8px' } }, h('div', { style: { flex: '1' } }, campo(null, v.nuovaCommessa)),
           h('button', { type: 'button', class: 'btn', onclick: () => {
             const n = v.nuovaCommessa.value.trim();
             if (!n) { v.nuovaCommessa.focus(); return; }
-            m.idCommessa = ''; m.commessa = n; m.commessaFatta = true; v.nuovaCommessa.value = ''; disegnaPerChi();
+            m.idCommessa = ''; m.commessa = n; m.codiceProposto = codiceNuovo(); m.commessaFatta = true; v.nuovaCommessa.value = ''; disegnaPerChi(); disegnaKm(); aggiornaConto();
           } }, 'Commessa nuova'))]);
     }
 
@@ -1194,13 +1193,16 @@
       const regole = regoleAttuali();
       svuota(zonaTariffa);
       if (regole.tariffaFissa !== null) {
-        aggiungi(zonaTariffa, [h('div', { class: 'riga-stepper' }, h('span', { class: 'nome' }, h('b', null, 'Tariffa fissa ' + regole.gruppo)),
+        aggiungi(zonaTariffa, [h('div', { class: 'riga-stepper' }, h('span', { class: 'nome' }, h('b', null, 'Tariffa fissa ' + (m.cliente || ''))),
           h('span', { style: { fontSize: '18px', fontWeight: '800' } }, C.numero(regole.tariffaFissa) + ' €/h'))]);
         return;
       }
       const c = clienteScelto();
-      const proposta = C.tariffaProposta(c, S.rapportini);
-      const nota = proposta && C.num(v.tariffa.value) === proposta ? 'l\'ultima usata per ' + (c ? c.nome : 'questo cliente')
+      const mc = commessa(m.idCommessa);
+      const proposta = C.tariffaProposta(c, S.rapportini, mc);
+      const daCommessa = mc && mc.prezzoOrario > 0;
+      const nota = daCommessa ? (C.num(v.tariffa.value) === proposta ? 'il prezzo della commessa ' + mc.id : 'la commessa ' + mc.id + ' è a ' + C.numero(proposta) + ' €/h')
+        : proposta && C.num(v.tariffa.value) === proposta ? 'l\'ultima usata per ' + (c ? c.nome : 'questo cliente')
         : proposta ? 'l\'ultima volta era ' + C.numero(proposta) + ' €/h' : 'prima volta per questo cliente';
       aggiungi(zonaTariffa, [h('div', { class: 'riga-stepper' }, h('span', { class: 'nome' }, h('b', null, 'Tariffa oraria'), h('span', { class: 'piccolo' }, nota)),
         h('div', { style: { width: '150px' } }, campo(null, conSuffisso(v.tariffa, '€/h'), errori.tariffa)))]);
@@ -1226,9 +1228,9 @@
         tecnico: r.tecnico || S.ana.impostazioni.TECNICO || '',
         idCliente: m.idCliente,
         cliente: m.cliente,
-        gruppo: m.idCliente ? '' : m.gruppoNuovo,
         idCommessa: m.idCommessa,
         commessa: m.commessa,
+        codiceProposto: m.idCommessa ? '' : m.codiceProposto,
         ticket: v.ticket.value.trim(),
         luogo: v.luogo.value.trim(),
         descrizione: v.descrizione.value.trim(),
@@ -1351,7 +1353,7 @@
         h('span', null, 'Ore'), h('span', { class: 'n' }, 'Costo'), h('span', { class: 'n' }, 'Valore atteso'), h('span', { class: 'n' }, 'Margine')));
       mostrate.forEach(m => {
         const c = cliente(m.idCliente);
-        const k = C.cruscotto(m, S.rapportini, S.ana.impostazioni);
+        const k = C.cruscotto(m, S.rapportini, S.ana.impostazioni, null, cliente(m.idCliente));
         aggiungi(tab, [h('div', { class: 'r colonne-com cliccabile', role: 'button', tabindex: '0', onclick: () => { location.hash = '#commesse/' + encodeURIComponent(m.id); } },
           h('span', null, h('span', { class: 'codice' }, m.id)),
           h('span', { class: 'doppia' }, h('span', null, m.descrizione, k.livelloOre === 'sforato' ? h('span', { class: 'pallino', title: 'Oltre le ore a budget' }) : null), h('span', null, c ? c.nome : m.idCliente)),
@@ -1374,7 +1376,7 @@
     const m = commessa(id);
     if (!m) { aggiungi(pagina, [h('p', { class: 'vuoto' }, 'Commessa ' + id + ' non trovata.')]); return; }
     const c = cliente(m.idCliente);
-    const k = C.cruscotto(m, S.rapportini, S.ana.impostazioni);
+    const k = C.cruscotto(m, S.rapportini, S.ana.impostazioni, null, c);
     const area = h('div', { class: 'sezione' });
 
     const azioni = [];
@@ -1447,12 +1449,27 @@
 
   function panoramicaCommessa(area, m, k) {
     const perc = x => x === null ? '' : Math.round(x * 100) + '%';
+    const b = k.previsto;
+    if (b && (b.ore !== null || b.euro !== null || b.prezzo !== null)) {
+      const voce = (che, quanto, nota) => h('div', { class: 'voce-budget' }, h('span', { class: 'piccolo' }, che), h('b', null, quanto), nota ? h('span', { class: 'piccolo' }, nota) : null);
+      const tratt = '—';
+      aggiungi(area, [h('div', { class: 'scheda' }, h('h2', null, 'Budget'),
+        h('div', { class: 'griglia-budget' },
+          voce('Ore previste', b.ore !== null ? C.ore(b.ore) : tratt, k.ore ? C.ore(k.ore) + ' fatte' : null),
+          voce('Prezzo orario', b.prezzo !== null ? C.numero(b.prezzo) + ' €/h' : tratt),
+          voce('Costo orario', b.costo !== null ? C.numero(b.costo) + ' €/h' : tratt),
+          voce('Margine orario', b.margineOrario !== null ? C.numero(b.margineOrario) + ' €/h' : tratt),
+          voce('Budget', b.euro !== null ? C.euro(b.euro) : tratt),
+          voce('Costo previsto', b.costoPrevisto !== null ? C.euro(b.costoPrevisto) : tratt),
+          voce('Margine previsto', b.margine !== null ? C.euro(b.margine) : tratt, b.euro && b.margine !== null ? perc(b.margine / b.euro) : null)))]);
+    }
     aggiungi(area, [h('div', { class: 'tre-colonne' },
-      riquadro('Valore atteso', C.euro(k.valoreAtteso), m.budgetEuro && m.budgetEuro >= k.valoreMaturato ? 'il budget della commessa' : 'quello che i rapportini hanno maturato'),
+      riquadro('Valore atteso', C.euro(k.valoreAtteso), (m.budgetEuro || (k.previsto && k.previsto.euro)) && (m.budgetEuro || k.previsto.euro) >= k.valoreMaturato ? 'il budget della commessa' : 'quello che i rapportini hanno maturato'),
       riquadro('Costo sostenuto', k.costo.lavoroNoto ? C.euro(k.costo.totale) : '—',
         k.costo.lavoroNoto ? (k.valoreAtteso > 0 ? perc(k.costo.totale / k.valoreAtteso) + ' del valore atteso' : '') : 'manca il tuo costo orario in Impostazioni'),
       riquadro('Margine atteso', k.costo.lavoroNoto ? C.euro(k.margine) : '—',
-        k.costo.lavoroNoto && k.percMargine !== null ? perc(k.percMargine) + (k.margine < 0 ? ': costa più di quanto vale' : '') : '', null, k.costo.lavoroNoto && k.margine < 0))]);
+        k.costo.lavoroNoto && k.percMargine !== null ? perc(k.percMargine) + (k.margine < 0 ? ': costa più di quanto vale'
+          : k.margineDaBudget ? ', dopo ' + C.euro(k.costoAtteso) + ' di costi previsti' : ', dopo i costi') : '', null, k.costo.lavoroNoto && k.margine < 0))]);
 
     const tot = k.fatturato + k.prontoDaFatturare + k.inBozza;
     const pezzo = (x, classe) => tot > 0 && x > 0 ? h('i', { class: classe, style: { width: (x / tot * 100) + '%' } }) : null;
@@ -1553,7 +1570,8 @@
   function moduloCommessa(esistente) {
     const m = esistente || {};
     const anno = new Date().getFullYear();
-    const prossimo = C.prossimoCodiceCommessa(S.ana.commesse.map(x => x.id), S.ana.impostazioni.PREFISSO_COMMESSA, anno);
+    // Il codice si vede subito: 26ST + il numero dopo l'ultimo. Si può cambiare prima di salvare.
+    const prossimo = C.prossimoCodiceCommessa(S.ana.commesse.map(x => x.id), anno);
     const clientiOrdinati = S.ana.clienti.slice().sort((a, b) => a.nome.localeCompare(b.nome, 'it'));
     const v = {
       cliente: h('select', null, [h('option', { value: '' }, 'Scegli il cliente')].concat(clientiOrdinati.map(c => h('option', { value: c.id, selected: c.id === (m.idCliente || S.filtriCommesse.cliente) }, c.nome)))),
@@ -1563,10 +1581,56 @@
       inizio: h('input', { type: 'date', value: m.inizio || (esistente ? '' : C.oggiIso()) }),
       fine: h('input', { type: 'date', value: m.finePrevista || '' }),
       budgetOre: h('input', { type: 'text', inputmode: 'decimal', value: m.budgetOre ? C.numero(m.budgetOre) : '' }),
+      prezzoOrario: h('input', { type: 'text', inputmode: 'decimal', value: m.prezzoOrario ? C.numero(m.prezzoOrario) : '' }),
       budgetEuro: h('input', { type: 'text', inputmode: 'decimal', value: m.budgetEuro ? C.numero(m.budgetEuro) : '' }),
+      costoOrario: h('input', { type: 'text', inputmode: 'decimal', value: m.costoOrario ? C.numero(m.costoOrario) : '' }),
+      // Vuoto = quello delle impostazioni, che si vede in grigio.
+      euroKm: h('input', { type: 'text', inputmode: 'decimal', value: m.euroKm !== null && m.euroKm !== undefined ? C.numero(m.euroKm) : '', placeholder: C.numero(C.num(S.ana.impostazioni.EURO_KM)) }),
       note: h('textarea', { rows: 3 }),
     };
     v.note.value = m.note || '';
+
+    // Il budget come lo scrive lo studio: ore previste × prezzo orario = budget; il costo
+    // orario dà il margine. Ne bastano due fra ore, prezzo e budget: il terzo si calcola.
+    // Un cliente a tariffa fissa (Elettrodinamica) ha già prezzo e, se scritto, costo:
+    // qui si vedono ma non si cambiano.
+    const sottoBudget = h('div', { class: 'secondario' });
+    const clienteSel = () => cliente(v.cliente.value) || null;
+    const fisso = (c, k) => c && c[k] !== null && c[k] !== undefined && c[k] !== '';
+    const aggiornaFissi = () => {
+      const c = clienteSel();
+      v.prezzoOrario.disabled = fisso(c, 'tariffaFissa');
+      if (v.prezzoOrario.disabled) v.prezzoOrario.value = C.numero(c.tariffaFissa);
+      v.costoOrario.disabled = fisso(c, 'costoFisso');
+      if (v.costoOrario.disabled) v.costoOrario.value = C.numero(c.costoFisso);
+      const costoImp = C.numONull(S.ana.impostazioni.COSTO_ORARIO);
+      v.costoOrario.placeholder = costoImp !== null ? C.numero(costoImp) : '';
+    };
+    const ricalcola = cambiato => {
+      const ore = C.numONull(v.budgetOre.value);
+      const prezzo = C.numONull(v.prezzoOrario.value);
+      const euro = C.numONull(v.budgetEuro.value);
+      if ((cambiato === 'ore' || cambiato === 'prezzo') && ore && prezzo) v.budgetEuro.value = C.numero(Math.round(ore * prezzo * 100) / 100);
+      if (cambiato === 'euro' && euro && prezzo) v.budgetOre.value = C.numero(Math.round(euro / prezzo * 10) / 10);
+      if (cambiato === 'prezzo' && !ore && euro && prezzo) v.budgetOre.value = C.numero(Math.round(euro / prezzo * 10) / 10);
+      const b = C.budgetDi({ budgetOre: C.numONull(v.budgetOre.value), budgetEuro: C.numONull(v.budgetEuro.value),
+        prezzoOrario: C.numONull(v.prezzoOrario.value), costoOrario: C.numONull(v.costoOrario.value) }, clienteSel(), S.ana.impostazioni);
+      svuota(sottoBudget);
+      const pezzi = [];
+      if (b.margineOrario !== null) pezzi.push('Margine ' + C.numero(b.margineOrario) + ' €/h');
+      if (b.costoPrevisto !== null) pezzi.push('costo previsto ' + C.euro(b.costoPrevisto));
+      if (b.margine !== null) pezzi.push('margine previsto ' + C.euro(b.margine));
+      sottoBudget.textContent = pezzi.join(' · ');
+      sottoBudget.classList.toggle('errore', b.margineOrario !== null && b.margineOrario < 0);
+    };
+    v.budgetOre.addEventListener('input', () => ricalcola('ore'));
+    v.prezzoOrario.addEventListener('input', () => ricalcola('prezzo'));
+    v.budgetEuro.addEventListener('input', () => ricalcola('euro'));
+    v.costoOrario.addEventListener('input', () => ricalcola('costo'));
+    v.cliente.addEventListener('change', () => { aggiornaFissi(); ricalcola('prezzo'); });
+    aggiornaFissi();
+    ricalcola('');
+
     let chiudi;
     const salva = async () => {
       if (!v.cliente.value) { v.cliente.focus(); avviso('Scegli il cliente', true); return; }
@@ -1574,9 +1638,12 @@
       const campi = {
         idCliente: v.cliente.value, descrizione: v.descrizione.value.trim(), indirizzo: v.indirizzo.value.trim(),
         inizio: v.inizio.value, finePrevista: v.fine.value,
-        budgetOre: C.numONull(v.budgetOre.value), budgetEuro: C.numONull(v.budgetEuro.value), note: v.note.value.trim(),
+        budgetOre: C.numONull(v.budgetOre.value), budgetEuro: C.numONull(v.budgetEuro.value), euroKm: C.numONull(v.euroKm.value), note: v.note.value.trim(),
       };
-      const codice = v.codice.value.trim() === prossimo ? '' : v.codice.value.trim();
+      // Prezzo e costo fissi del cliente restano sulla sua scheda, non si copiano sulla commessa.
+      if (!v.prezzoOrario.disabled) campi.prezzoOrario = C.numONull(v.prezzoOrario.value);
+      if (!v.costoOrario.disabled) campi.costoOrario = C.numONull(v.costoOrario.value);
+      const codice = v.codice.value.trim().toUpperCase() === prossimo ? '' : v.codice.value.trim().toUpperCase();
       const ris = await lavora('Salvo la commessa', () => esistente
         ? Rete.post('/foglio/aggiornaCommessa', { id: m.id, campi })
         : Rete.post('/foglio/creaCommessa', Object.assign({ id: codice }, campi)));
@@ -1593,9 +1660,12 @@
       corpo: [
         h('div', { class: 'riga-campi' }, campo('Cliente', v.cliente), campo('Codice', v.codice)),
         campo('Come si chiama', v.descrizione),
-        campo('Indirizzo del cantiere', v.indirizzo),
+        h('div', { class: 'riga-campi' }, campo('Indirizzo del cantiere', v.indirizzo), campo('Rimborso km (€/km)', v.euroKm)),
         h('div', { class: 'riga-campi' }, campo('Inizio', v.inizio), campo('Fine prevista', v.fine)),
-        h('div', { class: 'riga-campi' }, campo('Budget in ore', v.budgetOre), campo('Budget in euro', v.budgetEuro)),
+        h('div', { class: 'etichetta' }, 'Budget'),
+        h('div', { class: 'riga-campi' }, campo('Ore previste', v.budgetOre), campo('Prezzo orario (€/h)', v.prezzoOrario)),
+        h('div', { class: 'riga-campi' }, campo('Budget (€)', v.budgetEuro), campo('Costo orario (€/h)', v.costoOrario)),
+        sottoBudget,
         campo('Note', v.note)],
       pulsanti: ['spazio', h('button', { type: 'button', class: 'btn testo grande', onclick: () => chiudi() }, 'Annulla'),
         h('button', { type: 'button', class: 'btn giallo grande', onclick: salva }, 'Salva')],
@@ -1610,24 +1680,21 @@
     const disegna = () => {
       svuota(area);
       const testo = C.normalizza(f.testo);
-      const lista = S.ana.clienti.filter(c => (!f.gruppo || C.normalizza(c.gruppo) === C.normalizza(f.gruppo)) &&
-        (!testo || C.normalizza([c.id, c.nome, (c.alias || []).join(' '), c.email, c.partitaIva].join(' ')).indexOf(testo) >= 0))
+      const lista = S.ana.clienti.filter(c => (!testo || C.normalizza([c.id, c.nome, (c.alias || []).join(' '), c.email, c.partitaIva].join(' ')).indexOf(testo) >= 0))
         .sort((a, b) => a.nome.localeCompare(b.nome, 'it'));
       if (!lista.length) { aggiungi(area, [h('p', { class: 'vuoto' }, 'Nessun cliente.')]); return; }
       const mese = meseDiOggi();
-      const tab = h('div', { class: 'tab' }, h('div', { class: 'r testa colonne-cli' }, h('span'), h('span', null, 'Cliente'), h('span', null, 'Gruppo'), h('span', null, 'Tariffa'),
+      const tab = h('div', { class: 'tab' }, h('div', { class: 'r testa colonne-cli' }, h('span'), h('span', null, 'Cliente'), h('span', null, 'Tariffa'), h('span', null, 'Ultima usata'),
         h('span', null, 'Email'), h('span', { class: 'n' }, 'Commesse'), h('span', { class: 'n' }, meseMinuscolo(mese))));
       lista.forEach(c => {
-        const g = gruppo(c.gruppo);
-        const tariffa = g && g.tariffaFissa !== null && g.tariffaFissa !== undefined ? C.numero(g.tariffaFissa) + ' €/h fissa'
-          : c.ultimaTariffa ? C.numero(c.ultimaTariffa) + ' €/h l\'ultima' : '—';
+        const fissa = c.tariffaFissa !== null && c.tariffaFissa !== undefined;
         const aperte = S.ana.commesse.filter(m => m.idCliente === c.id && m.stato === 'APERTA').length;
         const delMese = C.totali(attivi().filter(r => r.idCliente === c.id && String(r.data).slice(0, 7) === mese));
         aggiungi(tab, [h('div', { class: 'r colonne-cli cliccabile', role: 'button', tabindex: '0', onclick: () => moduloCliente(c) },
           iniziali(c.nome, true),
           h('span', { class: 'doppia' }, h('span', null, c.nome), (c.alias || []).length ? h('span', null, c.alias.join(', ')) : null),
-          h('span', { class: 't2' }, c.gruppo || '—'),
-          h('span', { class: 't2' }, tariffa),
+          h('span', { class: 't2' }, fissa ? C.numero(c.tariffaFissa) + ' €/h fissa' : 'libera'),
+          h('span', { class: 't2' }, !fissa && c.ultimaTariffa ? C.numero(c.ultimaTariffa) + ' €/h' : '—'),
           h('span', { class: 'taglia t2' }, c.email || '—'),
           h('span', { class: 'n' }, String(aperte)),
           h('span', { class: 'n' }, delMese.n ? C.ore(delMese.ore) + ' · ' + C.euro(delMese.totale) : ''))]);
@@ -1638,18 +1705,15 @@
       h('div', { class: 'testata' }, h('h1', { class: 'spazio' }, 'Clienti'),
         h('button', { type: 'button', class: 'btn giallo', onclick: () => moduloCliente(null) }, 'Nuovo cliente')),
       h('div', { class: 'filtri' },
-        cerca(f.testo, 'Nome, email, partita IVA', x => { f.testo = x; disegna(); }),
-        segmenti([['', 'Tutti']].concat(S.ana.gruppi.map(g => [g.nome, g.nome])), f.gruppo, x => { f.gruppo = x; disegnaPagina(); })),
+        cerca(f.testo, 'Nome, email, partita IVA', x => { f.testo = x; disegna(); })),
       area]);
     disegna();
   }
 
   function moduloCliente(esistente) {
     const c = esistente || { alias: [] };
-    const triplo = x => x === true ? 'SI' : x === false ? 'NO' : '';
-    const daTriplo = s => s === 'SI' ? true : s === 'NO' ? false : null;
-    const scelte = { gruppo: c.gruppo || (S.ana.gruppi.find(g => C.normalizza(g.nome) === 'privato') || S.ana.gruppi[0] || { nome: 'Privato' }).nome,
-      pagaViaggio: triplo(c.pagaViaggio), kmRimborsati: triplo(c.kmRimborsati) };
+    // Di solito il viaggio non si paga e i km sì: è così finché non si sceglie altro.
+    const scelte = { pagaViaggio: c.pagaViaggio === true ? 'SI' : 'NO', kmRimborsati: c.kmRimborsati === false ? 'NO' : 'SI' };
     const v = {
       nome: h('input', { type: 'text', value: c.nome || '' }),
       email: h('input', { type: 'email', value: c.email || '' }),
@@ -1657,6 +1721,8 @@
       indirizzo: h('input', { type: 'text', value: c.indirizzo || '' }),
       partitaIva: h('input', { type: 'text', value: c.partitaIva || '' }),
       alias: h('input', { type: 'text', value: (c.alias || []).join(', ') }),
+      tariffaFissa: h('input', { type: 'text', inputmode: 'decimal', value: c.tariffaFissa !== null && c.tariffaFissa !== undefined ? C.numero(c.tariffaFissa) : '' }),
+      costoFisso: h('input', { type: 'text', inputmode: 'decimal', value: c.costoFisso !== null && c.costoFisso !== undefined ? C.numero(c.costoFisso) : '' }),
       ultimaTariffa: h('input', { type: 'text', inputmode: 'decimal', value: c.ultimaTariffa ? C.numero(c.ultimaTariffa) : '' }),
       note: h('textarea', { rows: 2 }),
     };
@@ -1671,17 +1737,17 @@
     const salva = async () => {
       if (!v.nome.value.trim()) { v.nome.focus(); avviso('Scrivi il nome del cliente', true); return; }
       const campi = {
-        nome: v.nome.value.trim(), gruppo: scelte.gruppo, email: v.email.value.trim(), telefono: v.telefono.value.trim(),
+        nome: v.nome.value.trim(), email: v.email.value.trim(), telefono: v.telefono.value.trim(),
         indirizzo: v.indirizzo.value.trim(), partitaIva: v.partitaIva.value.trim(),
         alias: v.alias.value.split(',').map(s => s.trim()).filter(Boolean),
-        pagaViaggio: daTriplo(scelte.pagaViaggio), kmRimborsati: daTriplo(scelte.kmRimborsati),
-        ultimaTariffa: C.numONull(v.ultimaTariffa.value), note: v.note.value.trim(),
+        pagaViaggio: scelte.pagaViaggio === 'SI', kmRimborsati: scelte.kmRimborsati === 'SI',
+        tariffaFissa: C.numONull(v.tariffaFissa.value), costoFisso: C.numONull(v.costoFisso.value), ultimaTariffa: C.numONull(v.ultimaTariffa.value), note: v.note.value.trim(),
       };
       const ris = await lavora('Salvo il cliente', async () => {
         if (esistente) return Rete.post('/foglio/aggiornaCliente', { id: c.id, campi });
         const nuovo = await Rete.post('/foglio/creaCliente', campi);
         if (nuovo.cliente.giaEsisteva) return nuovo;
-        // creaCliente scrive nome e gruppo; il resto (eccezioni, tariffa) con un aggiornamento.
+        // creaCliente scrive l'anagrafica; il resto (viaggio, km, tariffe) con un aggiornamento.
         return Rete.post('/foglio/aggiornaCliente', { id: nuovo.cliente.id, campi });
       });
       if (!ris) return;
@@ -1690,17 +1756,17 @@
       avviso(ris.cliente && ris.cliente.giaEsisteva ? 'C\'era già: ' + ris.cliente.nome : 'Salvato ' + v.nome.value.trim());
       ridisegna();
     };
-    const triplice = [['', 'Come il gruppo'], ['SI', 'Sì'], ['NO', 'No']];
+    const siNo = [['SI', 'Sì'], ['NO', 'No']];
     chiudi = finestra({
       titolo: esistente ? c.nome : 'Nuovo cliente',
       corpo: [
         campo('Ragione sociale', v.nome),
-        campo('Gruppo', scegli('gruppo', S.ana.gruppi.map(g => [g.nome, g.nome]))),
         h('div', { class: 'riga-campi' }, campo('Email', v.email), campo('Telefono', v.telefono)),
         h('div', { class: 'riga-campi' }, campo('Indirizzo', v.indirizzo), campo('Partita IVA', v.partitaIva)),
         campo('Altri nomi, separati da virgola', v.alias),
-        h('div', { class: 'riga-campi' }, campo('Viaggio pagato', scegli('pagaViaggio', triplice)), campo('Km rimborsati', scegli('kmRimborsati', triplice))),
-        h('div', { class: 'riga-campi' }, campo('Ultima tariffa (€/h)', v.ultimaTariffa), h('span')),
+        h('div', { class: 'riga-campi' }, campo('Tariffa fissa (€/h, vuota = libera)', v.tariffaFissa), campo('Ultima tariffa libera (€/h)', v.ultimaTariffa)),
+        h('div', { class: 'riga-campi' }, campo('Costo orario fisso (€/h, facoltativo)', v.costoFisso), h('span')),
+        h('div', { class: 'riga-campi' }, campo('Viaggio pagato', scegli('pagaViaggio', siNo)), campo('Km rimborsati', scegli('kmRimborsati', siNo))),
         campo('Note', v.note)],
       pulsanti: [
         esistente ? h('button', { type: 'button', class: 'btn', onclick: () => { chiudi(); vaiARapportini({ mese: '', cliente: c.id }); } }, 'Vedi i rapportini') : null,
@@ -1777,9 +1843,6 @@
             if (ris) { await ricaricaAnagrafiche(); avviso('Firma caricata'); ridisegna(); }
           } }, idFirma ? 'Cambia la firma' : 'Carica la firma'))))]);
 
-      // --- tariffe
-      aggiungi(pagina, [tariffeGruppi()]);
-
       // --- rimborsi, costi, numerazione
       campiImp.TICKET_ATTIVO = h('input', { type: 'checkbox', checked: imp.TICKET_ATTIVO === 'SI' });
       aggiungi(pagina, [h('div', { class: 'scheda' }, h('h2', null, 'Rimborso km e costi'),
@@ -1787,10 +1850,9 @@
           h('div', { class: 'riga-campi' },
             inputImp('EURO_KM', 'Rimborso km (€/km, tabella ACI)'),
             inputImp('AUTO', 'Auto'),
-            inputImp('COSTO_ORARIO', 'Quanto ti costa un\'ora (€/h)'),
-            inputImp('PREFISSO_COMMESSA', 'Lettera delle commesse')),
+            inputImp('COSTO_ORARIO', 'Quanto ti costa un\'ora (€/h)')),
           h('label', { class: 'spunta-campo' }, campiImp.TICKET_ATTIVO, 'Campo ticket nei rapportini'),
-          h('div', null, h('button', { type: 'button', class: 'btn', onclick: salvaImp(['EURO_KM', 'AUTO', 'COSTO_ORARIO', 'PREFISSO_COMMESSA', 'TICKET_ATTIVO'],
+          h('div', null, h('button', { type: 'button', class: 'btn', onclick: salvaImp(['EURO_KM', 'AUTO', 'COSTO_ORARIO', 'TICKET_ATTIVO'],
             'Salvato. Vale per i rapportini nuovi: quelli già scritti tengono il rimborso con cui sono nati') }, 'Salva'))))]);
     }
 
@@ -1836,34 +1898,6 @@
   }
 
   /** I gruppi e le loro regole: Elettrodinamica a 30 €/h fissi, i privati a tariffa libera. */
-  function tariffeGruppi() {
-    const tab = h('div', { class: 'tab tab-gruppi' }, h('div', { class: 'r testa colonne-gru' }, h('span', null, 'Gruppo'), h('span', null, 'Tariffa fissa'),
-      h('span', null, 'Viaggio'), h('span', null, 'Km'), h('span', null, 'Extra %'), h('span', null, 'Email del riepilogo'), h('span')));
-    const riga = g => {
-      const v = {
-        nome: h('input', { type: 'text', value: g.nome || '', disabled: !!g.nome, 'aria-label': 'Nome del gruppo' }),
-        tariffa: h('input', { type: 'text', inputmode: 'decimal', value: g.tariffaFissa !== null && g.tariffaFissa !== undefined ? C.numero(g.tariffaFissa) : '', placeholder: 'libera', 'aria-label': 'Tariffa fissa' }),
-        viaggio: h('input', { type: 'checkbox', checked: !!g.pagaViaggio, 'aria-label': 'Viaggio pagato' }),
-        km: h('input', { type: 'checkbox', checked: g.kmRimborsati !== false, 'aria-label': 'Km rimborsati' }),
-        magg: h('input', { type: 'text', inputmode: 'decimal', value: g.maggExtra ? C.numero(g.maggExtra) : '', placeholder: '0', 'aria-label': 'Maggiorazione ore extra' }),
-        email: h('input', { type: 'email', value: g.email || '', 'aria-label': 'Email del riepilogo' }),
-      };
-      const salva = h('button', { type: 'button', class: 'btn piccolo', onclick: async () => {
-        if (!v.nome.value.trim()) { v.nome.focus(); return; }
-        const ris = await lavora('Salvo il gruppo', () => Rete.post('/foglio/salvaGruppo', { gruppo: {
-          nome: v.nome.value.trim(), tariffaFissa: C.numONull(v.tariffa.value), pagaViaggio: v.viaggio.checked,
-          kmRimborsati: v.km.checked, maggExtra: C.num(v.magg.value), email: v.email.value.trim(),
-        } }));
-        if (ris) { await ricaricaAnagrafiche(); avviso('Salvato ' + ris.gruppo.nome); ridisegna(); }
-      } }, 'Salva');
-      return h('div', { class: 'r colonne-gru' }, v.nome, v.tariffa, h('span', null, v.viaggio), h('span', null, v.km), v.magg, v.email, salva);
-    };
-    S.ana.gruppi.forEach(g => aggiungi(tab, [riga(g)]));
-    const aggiungiGruppo = h('button', { type: 'button', class: 'btn collegamento', onclick: () => { aggiungi(tab, [riga({})]); aggiungiGruppo.remove(); } }, '+ Aggiungi un gruppo');
-    return h('div', { class: 'scheda' }, h('h2', null, 'Gruppi e tariffe'),
-      h('div', { class: 'fila' }, tab, h('div', null, aggiungiGruppo)));
-  }
-
   // ======================================================================= visita guidata
 
   function visitaVista() {

@@ -42,10 +42,10 @@ class ModuloStato(
     var data by mutableStateOf(base.data)
     var cliente by mutableStateOf(base.cliente)
     var idCliente by mutableStateOf(base.idCliente)
-    /** Solo per un cliente nuovo, scritto qui: a quale gruppo appartiene. */
-    var gruppoNuovo by mutableStateOf(base.gruppo.ifBlank { "Privato" })
     var commessa by mutableStateOf(base.commessa)
     var idCommessa by mutableStateOf(base.idCommessa)
+    /** Il codice di una commessa nuova scritta qui (26ST047): si vede subito. */
+    var codiceProposto by mutableStateOf(base.codiceProposto)
     var ticket by mutableStateOf(base.ticket)
     var luogo by mutableStateOf(base.luogo)
     var descrizione by mutableStateOf(base.descrizione)
@@ -72,9 +72,9 @@ class ModuloStato(
         data = data,
         cliente = cliente.trim(),
         idCliente = idCliente,
-        gruppo = if (clienteNuovo) gruppoNuovo else base.gruppo,
         commessa = commessa.trim(),
         idCommessa = idCommessa,
+        codiceProposto = if (idCommessa.isBlank() && commessa.isNotBlank()) codiceProposto else "",
         ticket = ticket.trim(),
         luogo = luogo.trim(),
         descrizione = descrizione.trim(),

@@ -5,7 +5,7 @@
  *  - il rapportino singolo, impaginato come quello di Pleya (che a chi lo deve
  *    usare piace): intestazione, mittente e cliente affiancati, la commessa, i
  *    dati in griglia, il lavoro, le firme. Gli importi solo se richiesti.
- *  - il riepilogo di un periodo per un cliente o un gruppo: le righe del mese
+ *  - il riepilogo di un periodo per un cliente: le righe del mese
  *    con i totali, quello da cui si fa la fattura.
  *
  * Sono HTML fisso: il programma lo stampa con una WebView senza script. Il
@@ -152,11 +152,9 @@
       cliente.indirizzo,
       cliente.partitaIva ? 'P.IVA ' + cliente.partitaIva : '',
       cliente.email,
-      r.gruppo && C.normalizza(r.gruppo) !== 'privato' ? 'Per conto di ' + r.gruppo : '',
     ]) + '</div>';
-    corpo += '<div class="barra">' + (r.idCommessa
-      ? '<span class="cod">' + esc(r.idCommessa) + '</span>' + esc(r.commessa || (commessa && commessa.descrizione) || '')
-      : 'Senza commessa') + '</div>';
+    // La commessa si indica col suo codice (26ST001), come vuole lo studio: la descrizione no.
+    corpo += '<div class="barra">' + (r.idCommessa ? '<span class="cod">' + esc(r.idCommessa) + '</span>' : 'Senza commessa') + '</div>';
     corpo += '<div class="griglia">' +
       cella('Data', C.data(r.data)) +
       cella('Tecnico', r.tecnico || imp.TECNICO || '') +
@@ -199,7 +197,7 @@
 
   /**
    * Il riepilogo di un periodo: le righe e i totali, per fare la fattura.
-   * destinatario: { nome, righe[] }  (il cliente, o il gruppo come Elettrodinamica)
+   * destinatario: { nome, righe[] }  (il cliente, per esempio Elettrodinamica)
    * opzioni: conImporti (di solito sì), conFoto
    */
   function riepilogo(lista, ana, intestatario, periodo, opzioni) {
@@ -217,7 +215,7 @@
       (conImporti ? '<th class="n">Importo</th>' : '') + '</tr></thead><tbody>';
     righe.forEach(r => {
       corpo += '<tr><td>' + esc(C.data(r.data)) + '</td><td>' + esc(r.id) + '</td>' +
-        '<td>' + esc(r.commessa || '') + (r.idCommessa ? '<div class="sotto-riga">' + esc(r.idCommessa) + '</div>' : '') +
+        '<td>' + esc(r.idCommessa || r.commessa || '') +
         (intestatario.mostraCliente ? '<div class="sotto-riga">' + esc(r.cliente) + '</div>' : '') + '</td>' +
         '<td>' + esc(r.descrizione || '') + '</td>' +
         '<td class="n">' + esc(C.numero(r.oreLavoro)) + '</td><td class="n">' + esc(C.numero(r.oreExtra)) + '</td>' +

@@ -71,14 +71,15 @@ test('tariffa proposta: prima quella che ricorda il foglio, poi l\'ultimo rappor
 test('cruscotto della commessa: valore, costo, margine, ore sul budget', () => {
   const k = C.cruscotto({ id: 'P2601', budgetOre: 20, budgetEuro: null, inizio: '2026-07-01', finePrevista: '2026-08-31' },
     rapportini, { EURO_KM: 0.76, COSTO_ORARIO: '' }, '2026-07-31');
-  assert.equal(k.ore, 17);
-  assert.equal(k.livelloOre, 'attenzione');                 // 85% di 20 = 17
+  assert.equal(k.ore, 16);                                  // ore di lavoro ed extra: il viaggio no
+  assert.equal(k.oreViaggio, 1);
+  assert.equal(k.livelloOre, 'ok');                         // 16 di 20 = 80%
   assert.equal(k.valoreAtteso, 581.2);                      // niente budget in euro: quello maturato
-  assert.equal(k.costo.lavoro, 255);                        // 17 h × 15 €/h di costo orario
+  assert.equal(k.costo.lavoro, 240);                        // 16 h × 15 €/h: il viaggio è già nel costo orario
   assert.equal(k.costo.auto, 91.2);                         // 120 km al costo ACI
   assert.equal(k.costo.spese, 10);
-  assert.equal(k.costo.totale, 356.2);
-  assert.equal(k.margine, 225);
+  assert.equal(k.costo.totale, 341.2);
+  assert.equal(k.margine, 240);
   assert.equal(k.fatturato, 341.2);
   assert.equal(k.prontoDaFatturare, 240);
   assert.equal(k.inBozza, 0);
@@ -97,8 +98,20 @@ test('cruscotto: oltre il budget è sforato, e il budget in euro vince se è di 
 });
 
 test('codice della prossima commessa, come nello script', () => {
-  assert.equal(C.prossimoCodiceCommessa(['P2601', 'P2603', 'M001'], 'P', 2026), 'P2604');
-  assert.equal(C.prossimoCodiceCommessa([], 'P', 2027), 'P2701');
+  assert.equal(C.prossimoCodiceCommessa(['P2601', '26ST009', '25ST120', 'M001'], 2026), '26ST121');
+  assert.equal(C.prossimoCodiceCommessa(['26ST046'], 2027), '27ST047', 'il numero non riparte a gennaio');
+  assert.equal(C.prossimoCodiceCommessa([], 2026), '26ST001');
+});
+
+test('regole: tariffa fissa dalla scheda del cliente, km dalla commessa', () => {
+  const imp = { EURO_KM: 0.76 };
+  const elettro = { nome: 'Elettrodinamica', tariffaFissa: 30, pagaViaggio: false, kmRimborsati: true };
+  assert.equal(C.regoleDi(elettro, [], imp).tariffaFissa, 30);
+  assert.equal(C.regoleDi({ nome: 'Rossi', tariffaFissa: null }, [], imp).tariffaFissa, null);
+  assert.equal(C.regoleDi(null, [], imp).pagaViaggio, false);
+  assert.equal(C.regoleDi(null, [], imp).kmRimborsati, true);
+  assert.equal(C.regoleDi(elettro, [], imp, { euroKm: 0.9 }).euroKm, 0.9);
+  assert.equal(C.regoleDi(elettro, [], imp, { euroKm: null }).euroKm, 0.76);
 });
 
 test('settimane: dodici, la più vecchia prima, con le ore giuste', () => {
@@ -134,4 +147,44 @@ test('PDF del riepilogo: righe in ordine di data e totale giusto', () => {
   assert.ok(html.indexOf('RAP/2026/0001') < html.indexOf('RAP/2026/0002'));
   assert.ok(html.includes('581,20 €'));
   assert.ok(html.includes('Luglio 2026'));
+});
+
+test('budget della commessa: ore × prezzo, costo e margine, come nel foglio dello studio', () => {
+  const imp = { COSTO_ORARIO: 18 };
+  // 10 h × 45 €/h = 450 €; 10 h × 22 €/h = 220 € di costo; 23 €/h di margine.
+  let b = C.budgetDi({ budgetOre: 10, prezzoOrario: 45, costoOrario: 22 }, { nome: 'Rossi' }, imp);
+  assert.equal(b.euro, 450);
+  assert.equal(b.costoPrevisto, 220);
+  assert.equal(b.margineOrario, 23);
+  assert.equal(b.margine, 230);
+  // 1300 € a 30 €/h (Elettrodinamica, fissa) col suo costo fisso di 22: 43,3 h e 8 €/h di margine.
+  b = C.budgetDi({ budgetEuro: 1300, prezzoOrario: 50, costoOrario: 40 }, { nome: 'Elettrodinamica', tariffaFissa: 30, costoFisso: 22 }, imp);
+  assert.equal(b.prezzo, 30, 'la tariffa fissa del cliente vince sul prezzo della commessa');
+  assert.equal(b.costo, 22, 'il costo fisso del cliente vince');
+  assert.equal(b.ore, 43.3);
+  assert.equal(b.margineOrario, 8);
+  // Senza costo sulla commessa né sul cliente: quello delle impostazioni.
+  assert.equal(C.costoOrarioDi({ nome: 'Rossi' }, { costoOrario: null }, imp), 18);
+});
+
+test('margine atteso: il valore meno i costi previsti, anche prima di cominciare', () => {
+  const m = { id: 'N1', budgetOre: 10, prezzoOrario: 45, costoOrario: 22 };
+  let k = C.cruscotto(m, [], { EURO_KM: 0.76 }, '2026-10-20', { nome: 'Rossi' });
+  assert.equal(k.valoreAtteso, 450);
+  assert.equal(k.costo.totale, 0);
+  assert.equal(k.margine, 230);                             // 450 − 10 h × 22 €/h
+  // A metà lavoro il lavoro costa ancora quanto previsto; i km si aggiungono.
+  const r = { id: 'R1', idCommessa: 'N1', stato: 'BOZZA', oreLavoro: 5, oreExtra: 0, oreViaggio: 1, km: 50, spese: 0, costoOrario: 22, euroKm: 0.76, totale: 263 };
+  k = C.cruscotto(m, [r], { EURO_KM: 0.76 }, '2026-10-20', { nome: 'Rossi' });
+  assert.equal(k.costo.lavoro, 110);
+  assert.equal(k.margine, 192);                             // 450 − (220 + 38 di auto)
+  // Se si sfora il budget, conta il costo vero.
+  const tanti = Object.assign({}, r, { id: 'R2', oreLavoro: 15, km: 0, totale: 675 });
+  k = C.cruscotto(m, [tanti], { EURO_KM: 0.76 }, '2026-10-20', { nome: 'Rossi' });
+  assert.equal(k.margine, 675 - 330);
+});
+
+test('la tariffa proposta è il prezzo della commessa, se ce l\'ha', () => {
+  assert.equal(C.tariffaProposta({ id: 'C002', ultimaTariffa: 42 }, rapportini, { prezzoOrario: 48 }), 48);
+  assert.equal(C.tariffaProposta({ id: 'C002', ultimaTariffa: 42 }, rapportini, { prezzoOrario: null }), 42);
 });

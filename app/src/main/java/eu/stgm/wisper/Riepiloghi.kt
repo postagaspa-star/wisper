@@ -99,13 +99,12 @@ object Riepiloghi {
     }
 
     /**
-     * A chi si fattura: il gruppo se ha la tariffa fissa (i clienti di
-     * Elettrodinamica si fatturano a Elettrodinamica), altrimenti il cliente.
+     * A chi si fattura: il cliente del rapportino. Elettrodinamica e' un cliente
+     * come gli altri (a tariffa fissa); il cliente finale presso cui si lavora
+     * per lei non conta. Come in Wisper Ufficio.
      */
-    fun chiPaga(r: Rapportino, ana: Anagrafiche): String {
-        val g = ana.regoleDi(ana.cliente(r.idCliente, r.cliente))
-        return if (g.tariffaFissa != null && g.gruppo.isNotBlank()) g.gruppo else r.cliente.ifBlank { "Senza cliente" }
-    }
+    @Suppress("UNUSED_PARAMETER")
+    fun chiPaga(r: Rapportino, ana: Anagrafiche): String = r.cliente.ifBlank { "Senza cliente" }
 
     /** Le bozze: sono i rapportini da far firmare. */
     fun daFirmare(viste: List<Vista>): List<Vista> = viste.filter { it.rapportino.stato == Stato.BOZZA }

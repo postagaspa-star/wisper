@@ -174,7 +174,7 @@ private fun RigaMese(v: Vista, gruppoCliente: Boolean, onClick: () -> Unit) {
             }
             Text(
                 // Prima le ore: il nome della commessa può essere lungo e si taglia lui.
-                listOf(Numeri.ore(r.oreTotali), r.commessa.takeIf { it.isNotBlank() }).filterNotNull().joinToString(" · "),
+                listOf(Numeri.ore(r.oreTotali), r.idCommessa.ifBlank { r.commessa }.takeIf { it.isNotBlank() }).filterNotNull().joinToString(" · "),
                 style = Testi.secondario.copy(fontWeight = FontWeight.Medium), color = c.tenue, maxLines = 1, overflow = TextOverflow.Ellipsis,
             )
         }

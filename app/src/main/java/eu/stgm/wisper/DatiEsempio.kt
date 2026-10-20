@@ -8,7 +8,6 @@ import eu.stgm.wisper.rapportino.Cliente
 import eu.stgm.wisper.rapportino.CodaInvii
 import eu.stgm.wisper.rapportino.Commessa
 import eu.stgm.wisper.rapportino.FileRemoto
-import eu.stgm.wisper.rapportino.Gruppo
 import eu.stgm.wisper.rapportino.Rapportino
 import eu.stgm.wisper.rapportino.Stato
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -29,18 +28,14 @@ class DatiEsempio(oggi: LocalDate = LocalDate.now()) : Dati {
 
     private val ana = Anagrafiche(
         clienti = listOf(
-            Cliente("C001", "Batokyo", gruppo = "Elettrodinamica"),
-            Cliente("C002", "Rossi Impianti Srl", gruppo = "Privato", ultimaTariffa = 42.0),
-            Cliente("C003", "Bianchi Termoidraulica", gruppo = "Privato", ultimaTariffa = 38.0),
+            Cliente("C001", "Elettrodinamica", tariffaFissa = 30.0, pagaViaggio = false, kmRimborsati = true),
+            Cliente("C002", "Rossi Impianti Srl", ultimaTariffa = 42.0),
+            Cliente("C003", "Bianchi Termoidraulica", ultimaTariffa = 38.0),
         ),
         commesse = listOf(
-            Commessa("P2601", "C001", "Nuovo magazzino automatico", "APERTA", "Zona industriale, Schio"),
-            Commessa("P2602", "C002", "Quadro elettrico capannone", "APERTA"),
-            Commessa("P2603", "C003", "Caldaia via Roma", "APERTA"),
-        ),
-        gruppi = listOf(
-            Gruppo("Elettrodinamica", tariffaFissa = 30.0, pagaViaggio = false, kmRimborsati = true),
-            Gruppo("Privato", tariffaFissa = null, pagaViaggio = false, kmRimborsati = true),
+            Commessa("26ST001", "C001", "Nuovo magazzino automatico Batokyo", "APERTA", "Zona industriale, Schio"),
+            Commessa("26ST002", "C002", "Quadro elettrico capannone", "APERTA"),
+            Commessa("26ST003", "C003", "Caldaia via Roma", "APERTA"),
         ),
         impostazioni = mapOf("EURO_KM" to "0.76", "TECNICO" to "Manuel Gasparotto", "AUTO" to "Volvo XC40"),
     )
@@ -57,7 +52,7 @@ class DatiEsempio(oggi: LocalDate = LocalDate.now()) : Dati {
     override val esempio: Boolean = true
 
     private fun conConto(r: Rapportino): Vista =
-        Vista(r.copy(conto = Calcolo.calcola(r, ana.regoleDi(ana.cliente(r.idCliente, r.cliente)))))
+        Vista(r.copy(conto = Calcolo.calcola(r, ana.regoleDi(ana.cliente(r.idCliente, r.cliente), ana.commessa(r.idCommessa)))))
 
     /**
      * Ogni giorno lavorativo passato della settimana ha il suo rapportino, tranne
@@ -70,8 +65,8 @@ class DatiEsempio(oggi: LocalDate = LocalDate.now()) : Dati {
         val fatti = if (passati.size > 1) passati.dropLast(1) else passati
         val settimana = fatti.mapIndexed { i, d ->
             Rapportino(
-                idLocale = "esempio-s$i", data = d, tecnico = tecnico, idCliente = "C001", cliente = "Batokyo",
-                gruppo = "Elettrodinamica", idCommessa = "P2601", commessa = "Nuovo magazzino automatico",
+                idLocale = "esempio-s$i", data = d, tecnico = tecnico, idCliente = "C001", cliente = "Elettrodinamica",
+                idCommessa = "26ST001", commessa = "Nuovo magazzino automatico Batokyo",
                 descrizione = if (i % 2 == 0) "Cablaggio quadro di linea" else "Collaudo sensori del nastro",
                 oreLavoro = if (i % 2 == 0) 6.5 else 8.0, oreViaggio = 1.0, km = 96.0, id = "RAP/2026/00${10 + i}",
                 stato = Stato.INVIATO,
@@ -80,13 +75,13 @@ class DatiEsempio(oggi: LocalDate = LocalDate.now()) : Dati {
         val bozze = listOf(
             Rapportino(
                 idLocale = "esempio-b1", data = lunedi.minusDays(5), tecnico = tecnico, idCliente = "C002",
-                cliente = "Rossi Impianti Srl", gruppo = "Privato", idCommessa = "P2602",
+                cliente = "Rossi Impianti Srl", idCommessa = "26ST002",
                 commessa = "Quadro elettrico capannone", descrizione = "Sostituzione interruttore generale",
                 oreLavoro = 3.5, km = 22.0, tariffa = 42.0, id = "RAP/2026/0004",
             ),
             Rapportino(
                 idLocale = "esempio-b2", data = lunedi.minusDays(3), tecnico = tecnico, idCliente = "C002",
-                cliente = "Rossi Impianti Srl", gruppo = "Privato", idCommessa = "P2602",
+                cliente = "Rossi Impianti Srl", idCommessa = "26ST002",
                 commessa = "Quadro elettrico capannone", descrizione = "Verifica impianto di terra",
                 oreLavoro = 2.5, oreViaggio = 1.0, km = 30.0, tariffa = 42.0, id = "RAP/2026/0005",
             ),

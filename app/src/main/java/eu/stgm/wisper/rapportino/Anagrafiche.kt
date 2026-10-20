@@ -8,15 +8,18 @@ data class Cliente(
     val id: String,
     val nome: String,
     val alias: List<String> = emptyList(),
-    /** "Elettrodinamica", "Privato"...: decide tariffa e rimborsi. */
+    /** Solo nei fogli di prima della 0.3.5: le regole ora stanno sulla scheda del cliente. */
     val gruppo: String = "",
     val email: String = "",
     val indirizzo: String = "",
+    /** Elettrodinamica: 30. Null = tariffa libera, scritta nel rapportino. */
+    val tariffaFissa: Double? = null,
     /** L'ultima tariffa libera usata per questo cliente: il foglio se la ricorda. */
     val ultimaTariffa: Double? = null,
-    /** Eccezioni alle regole del gruppo; null = decide il gruppo. */
+    /** Null = come di solito: viaggio non pagato, km pagati. */
     val pagaViaggio: Boolean? = null,
     val kmRimborsati: Boolean? = null,
+    val maggExtra: Double? = null,
 )
 
 /** Una commessa: un lavoro presso un cliente. */
@@ -26,12 +29,16 @@ data class Commessa(
     val descrizione: String,
     val stato: String = "APERTA",
     val indirizzo: String = "",
+    /** Il rimborso chilometrico di questa commessa; null = quello delle impostazioni. */
+    val euroKm: Double? = null,
+    /** Il prezzo di un'ora: si propone come tariffa (non per un cliente a tariffa fissa). */
+    val prezzoOrario: Double? = null,
 ) {
     /** Solo le aperte si propongono nei rapportini nuovi. Le sospese e le chiuse restano sul foglio. */
     val aperta: Boolean get() = stato.equals("APERTA", ignoreCase = true)
 }
 
-/** Le regole economiche di un gruppo di clienti. */
+/** I gruppi dei fogli di prima della 0.3.5 (Elettrodinamica e Privato): solo per leggerli. */
 data class Gruppo(
     val nome: String,
     /** Null = tariffa libera, la scrive il tecnico. */
@@ -63,25 +70,43 @@ data class Anagrafiche(
         commesse.filter { it.idCliente == idCliente && it.aperta }
 
     /**
-     * Le regole di un cliente: quelle del suo gruppo, con le eccezioni scritte
-     * sulla sua scheda. Stessa logica di regoleDi() nello script.
+     * Le regole di un rapportino: la tariffa fissa dalla scheda del cliente
+     * (Elettrodinamica 30, gli altri liberi), il rimborso chilometrico dalla
+     * commessa se ne ha uno. Stessa logica di regoleDi() nello script.
      */
-    fun regoleDi(cliente: Cliente?): Regole {
+    fun regoleDi(cliente: Cliente?, commessa: Commessa? = null): Regole {
         val nomeGruppo = cliente?.gruppo.orEmpty()
-        val g = gruppi.firstOrNull { normalizza(it.nome) == normalizza(nomeGruppo) }
+        val g = gruppi.firstOrNull { nomeGruppo.isNotBlank() && normalizza(it.nome) == normalizza(nomeGruppo) }
         return Regole(
             gruppo = g?.nome ?: nomeGruppo,
-            tariffaFissa = g?.tariffaFissa,
+            tariffaFissa = cliente?.tariffaFissa ?: g?.tariffaFissa,
             pagaViaggio = cliente?.pagaViaggio ?: g?.pagaViaggio ?: false,
             kmRimborsati = cliente?.kmRimborsati ?: g?.kmRimborsati ?: true,
-            maggExtra = g?.maggExtra ?: 0.0,
-            euroKm = euroKm,
+            maggExtra = cliente?.maggExtra ?: g?.maggExtra ?: 0.0,
+            euroKm = commessa?.euroKm ?: euroKm,
         )
+    }
+
+    fun commessa(id: String): Commessa? = commesse.firstOrNull { id.isNotBlank() && it.id.equals(id, ignoreCase = true) }
+
+    /**
+     * Il codice di una commessa nuova: anno a due cifre, ST, e il numero dopo il
+     * piu' alto usato (26ST047). Il numero non riparte a gennaio. Come nello script:
+     * se nel frattempo il computer ha dato lo stesso codice a un'altra, il foglio
+     * ne sceglie un altro.
+     */
+    fun prossimoCodiceCommessa(anno: Int): String {
+        val max = commesse.mapNotNull { CODICE_COMMESSA.find(it.id.trim().uppercase())?.groupValues?.get(1)?.toIntOrNull() }.maxOrNull() ?: 0
+        val n = max + 1
+        return "%02d".format(anno % 100) + "ST" + (if (n < 1000) "%03d".format(n) else n.toString())
     }
 
     companion object {
         /** "Rossi Impianti S.r.l." e "rossi impianti srl" sono lo stesso cliente. */
         fun normalizza(s: String): String = s.lowercase().replace(Regex("[^a-z0-9]"), "")
+
+        /** 26ST047: anno, ST (Studio Tecnico GM), numero. */
+        private val CODICE_COMMESSA = Regex("""^\d{2}ST(\d+)$""")
 
         fun daJson(o: JSONObject) = Anagrafiche(
             clienti = o.optJSONArray("clienti").oggetti().map { c ->
@@ -94,9 +119,11 @@ data class Anagrafiche(
                     gruppo = c.testo("gruppo"),
                     email = c.testo("email"),
                     indirizzo = c.testo("indirizzo"),
+                    tariffaFissa = c.numero("tariffaFissa"),
                     ultimaTariffa = c.numero("ultimaTariffa"),
                     pagaViaggio = c.booleanoONull("pagaViaggio"),
                     kmRimborsati = c.booleanoONull("kmRimborsati"),
+                    maggExtra = c.numero("maggExtra"),
                 )
             }.filter { it.nome.isNotBlank() },
             commesse = o.optJSONArray("commesse").oggetti().map { m ->
@@ -106,6 +133,8 @@ data class Anagrafiche(
                     descrizione = m.testo("descrizione"),
                     stato = m.testo("stato").ifBlank { "APERTA" },
                     indirizzo = m.testo("indirizzo"),
+                    euroKm = m.numero("euroKm"),
+                    prezzoOrario = m.numero("prezzoOrario"),
                 )
             }.filter { it.id.isNotBlank() },
             gruppi = o.optJSONArray("gruppi").oggetti().map { g ->
@@ -131,9 +160,11 @@ data class Anagrafiche(
                     JSONObject()
                         .put("id", c.id).put("nome", c.nome).put("alias", JSONArray(c.alias))
                         .put("gruppo", c.gruppo).put("email", c.email).put("indirizzo", c.indirizzo)
+                        .put("tariffaFissa", c.tariffaFissa ?: JSONObject.NULL)
                         .put("ultimaTariffa", c.ultimaTariffa ?: JSONObject.NULL)
                         .put("pagaViaggio", c.pagaViaggio ?: JSONObject.NULL)
                         .put("kmRimborsati", c.kmRimborsati ?: JSONObject.NULL)
+                        .put("maggExtra", c.maggExtra ?: JSONObject.NULL)
                 )
             }
         })
@@ -142,6 +173,8 @@ data class Anagrafiche(
                 put(
                     JSONObject().put("id", m.id).put("idCliente", m.idCliente)
                         .put("descrizione", m.descrizione).put("stato", m.stato).put("indirizzo", m.indirizzo)
+                        .put("euroKm", m.euroKm ?: JSONObject.NULL)
+                        .put("prezzoOrario", m.prezzoOrario ?: JSONObject.NULL)
                 )
             }
         })
