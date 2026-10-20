@@ -60,8 +60,8 @@ private fun comeQuando(d: LocalDate, oggi: LocalDate = LocalDate.now()): String 
 }
 
 /**
- * La casa (docs/aspetto.md §3): risponde a "il rapportino di oggi è scritto?",
- * poi la settimana coi giorni che mancano, poi quello che c'è da far firmare.
+ * La casa (docs/aspetto.md §3): in cima la settimana coi giorni che mancano, poi
+ * "il rapportino di oggi è scritto?", poi quello che c'è da far firmare.
  * L'elenco dei rapportini sta nel Mese, non qui.
  */
 @Composable
@@ -133,6 +133,20 @@ fun SchermataOggi(
                 )
             }
 
+            // ---------------------------------------------------------- la settimana
+            // In cima, come chiede lo studio: prima si vede la settimana, poi il rapportino di oggi.
+            Scheda(orizzontale = 20.dp, verticale = 18.dp, raggio = 24.dp, spazio = 14.dp) {
+                val passati = settimana.count { it.tipo != TipoGiorno.FUTURO && it.data.dayOfWeek.value <= 5 }
+                val fatti = settimana.count { (it.tipo == TipoGiorno.FATTO || it.tipo == TipoGiorno.OGGI_FATTO) && it.data.dayOfWeek.value <= 5 }
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Etichetta("Questa settimana", Modifier.weight(1f))
+                    Text("$fatti di $passati giorni", style = Testi.secondario.copy(fontWeight = FontWeight.Bold), color = c.testo)
+                }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    settimana.forEach { g -> GiornoSettimana(g, Modifier.weight(1f), onNuovo, onMese) }
+                }
+            }
+
             // ---------------------------------------------------------- il rapportino di oggi
             Scheda(Modifier.bersaglio("giorno"), orizzontale = 20.dp, verticale = 20.dp, raggio = 24.dp, spazio = 14.dp) {
                 Etichetta("Il rapportino di oggi")
@@ -188,19 +202,6 @@ fun SchermataOggi(
                         }
                     }
                     PulsanteBordo("Aggiungi un altro rapportino", { onNuovo(oggi) }, Modifier.fillMaxWidth(), icona = Icone.piu)
-                }
-            }
-
-            // ---------------------------------------------------------- la settimana
-            Scheda(orizzontale = 20.dp, verticale = 18.dp, raggio = 24.dp, spazio = 14.dp) {
-                val passati = settimana.count { it.tipo != TipoGiorno.FUTURO && it.data.dayOfWeek.value <= 5 }
-                val fatti = settimana.count { (it.tipo == TipoGiorno.FATTO || it.tipo == TipoGiorno.OGGI_FATTO) && it.data.dayOfWeek.value <= 5 }
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Etichetta("Questa settimana", Modifier.weight(1f))
-                    Text("$fatti di $passati giorni", style = Testi.secondario.copy(fontWeight = FontWeight.Bold), color = c.testo)
-                }
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    settimana.forEach { g -> GiornoSettimana(g, Modifier.weight(1f), onNuovo, onMese) }
                 }
             }
 

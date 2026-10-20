@@ -28,22 +28,51 @@ public sealed class Configurazione
     /// <summary>"UFFICIO-PC (manuel)": quello che si legge nella scheda Accessi.</summary>
     public static string NomeDispositivo { get; } = $"{Environment.MachineName} ({Environment.UserName})";
 
+    /// <summary>Quando il file è stato letto o scritto l'ultima volta (vedi RileggiSeCambiato).</summary>
+    private DateTime letto = DateTime.MinValue;
+
     public Configurazione(string file)
     {
         this.file = file;
         try
         {
+            var (salvato, dispositivo) = Leggi();
             if (!File.Exists(file)) return;
-            var o = JsonNode.Parse(File.ReadAllText(file)) as JsonObject;
-            var salvato = o?["url"]?.GetValue<string>() ?? "";
-            if (salvato.Length > 0) Url = salvato;
-            Codice = Dpapi.Svela(o?["codice"]?.GetValue<string>()) ?? "";
-            var dispositivo = o?["dispositivo"]?.GetValue<string>() ?? "";
-            if (dispositivo.Length > 0) Dispositivo = dispositivo;
             // Un exe di casa porta l'indirizzo dentro, quelli pubblicati no: si salva subito,
             // così l'aggiornamento dopo non scollega il computer. E il nome del dispositivo
             // deve restare lo stesso da un'apertura all'altra.
             if ((salvato.Length == 0 && Url.Length > 0) || dispositivo.Length == 0) Scrivi();
+        }
+        catch (Exception e) when (e is IOException or JsonException or InvalidOperationException)
+        {
+            Log.Errore("configurazione illeggibile", e);
+        }
+    }
+
+    /// <summary>Legge il file, se c'è: torna l'indirizzo e il dispositivo così come sono scritti.</summary>
+    private (string Url, string Dispositivo) Leggi()
+    {
+        if (!File.Exists(file)) return ("", "");
+        letto = File.GetLastWriteTimeUtc(file);
+        var o = JsonNode.Parse(File.ReadAllText(file)) as JsonObject;
+        var salvato = o?["url"]?.GetValue<string>() ?? "";
+        if (salvato.Length > 0) Url = salvato;
+        Codice = Dpapi.Svela(o?["codice"]?.GetValue<string>()) ?? "";
+        var dispositivo = o?["dispositivo"]?.GetValue<string>() ?? "";
+        if (dispositivo.Length > 0) Dispositivo = dispositivo;
+        return (salvato, dispositivo);
+    }
+
+    /// <summary>
+    /// Se il file è cambiato da fuori si rilegge. Succede col doppio clic sul file
+    /// dell'email mentre il programma è già aperto: lo collega l'altro processo, e
+    /// questo se ne accorge alla prima chiamata al foglio.
+    /// </summary>
+    public void RileggiSeCambiato()
+    {
+        try
+        {
+            if (File.Exists(file) && File.GetLastWriteTimeUtc(file) > letto) Leggi();
         }
         catch (Exception e) when (e is IOException or JsonException or InvalidOperationException)
         {
@@ -65,6 +94,7 @@ public sealed class Configurazione
         var tmp = file + ".tmp";
         File.WriteAllText(tmp, o.ToJsonString());
         File.Move(tmp, file, overwrite: true);
+        letto = File.GetLastWriteTimeUtc(file);
     }
 
     /// <summary>

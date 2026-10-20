@@ -29,6 +29,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -65,6 +67,9 @@ fun SchermataImpostazioni(
     val ana by archivio.anagrafiche.collectAsStateWithLifecycle()
     val aggiornamento by archivio.aggiornamento.collectAsStateWithLifecycle()
     var modifica by remember { mutableStateOf<String?>(null) }
+    // "Collega il computer": prima si chiede, poi si dice com'e' andata.
+    var collegaPc by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
     var licenza by remember { mutableStateOf(false) }
 
     BackHandler { onChiudi() }
@@ -109,22 +114,31 @@ fun SchermataImpostazioni(
                 Voce("Indirizzo", config.url.ifBlank { "—" }) { modifica = "url" }
                 Linea()
                 Voce("Codice", if (config.codice.isBlank()) "—" else "••••••" + config.codice.takeLast(4)) { modifica = "codice" }
+                Linea()
+                Voce("Collega il computer", "Un'email con un file da aprire sul PC") { collegaPc = "chiedi" }
             }
 
             Etichetta("Tariffe", Modifier.padding(top = 8.dp))
             Scheda(spazio = 10.dp) {
-                ana.gruppi.forEach { g ->
+                ana.clienti.filter { it.tariffaFissa != null }.forEach { cl ->
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
-                            Text(g.nome, style = Testi.forte, color = c.testo)
+                            Text(cl.nome, style = Testi.forte, color = c.testo)
                             Text(
-                                listOf(if (g.pagaViaggio) "viaggio pagato" else "viaggio non pagato", if (g.kmRimborsati) "km rimborsati" else "km non rimborsati")
+                                listOf(if (cl.pagaViaggio == true) "viaggio pagato" else "viaggio non pagato", if (cl.kmRimborsati != false) "km rimborsati" else "km non rimborsati")
                                     .joinToString(" · "),
                                 style = Testi.secondario, color = c.tenue,
                             )
                         }
-                        Text(g.tariffaFissa?.let { "${Numeri.scrivi(it)} €/h" } ?: "libera", style = Testi.forte, color = c.testo)
+                        Text("${Numeri.scrivi(cl.tariffaFissa!!)} €/h", style = Testi.forte, color = c.testo)
                     }
+                }
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Gli altri clienti", style = Testi.forte, color = c.testo)
+                        Text("si ricorda l'ultima di ognuno", style = Testi.secondario, color = c.tenue)
+                    }
+                    Text("libera", style = Testi.forte, color = c.testo)
                 }
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
@@ -192,6 +206,39 @@ fun SchermataImpostazioni(
                 }) { Text("Salva", color = c.testo, style = Testi.pulsanteSecondario) }
             },
             dismissButton = { TextButton(onClick = { modifica = null }) { Text("Annulla", color = c.testo2) } },
+        )
+    }
+    collegaPc?.let { fase ->
+        AlertDialog(
+            onDismissRequest = { if (fase != "mando") collegaPc = null },
+            title = { Text(if (fase == "chiedi" || fase == "mando") "Collega il computer" else if (fase.startsWith("ok:")) "Email mandata" else "Non è partita", style = Testi.titoloSezione) },
+            text = {
+                Text(
+                    when {
+                        fase == "chiedi" -> "Ti mando un'email con un file. Sul computer dell'ufficio aprilo con un doppio clic: Wisper Ufficio si collega da solo, senza scrivere indirizzo e codice."
+                        fase == "mando" -> "Mando l'email…"
+                        fase.startsWith("ok:") -> "L'email è andata a ${fase.removePrefix("ok:")}. Aprila sul computer, poi cancellala: dentro c'è il codice."
+                        else -> fase.removePrefix("errore:")
+                    },
+                    style = Testi.secondario, color = c.testo,
+                )
+            },
+            confirmButton = {
+                if (fase == "chiedi") TextButton(onClick = {
+                    collegaPc = "mando"
+                    scope.launch {
+                        collegaPc = archivio.collegaComputer().fold(
+                            { "ok:" + it },
+                            { e ->
+                                "errore:" + if (e is eu.stgm.wisper.rapportino.PonteFoglio.RifiutatoDalFoglio) e.message.orEmpty()
+                                else "Senza rete l'email non parte: riprova quando c'è."
+                            },
+                        )
+                    }
+                }) { Text("Manda", color = c.testo, style = Testi.pulsanteSecondario) }
+                else if (fase != "mando") TextButton(onClick = { collegaPc = null }) { Text("Chiudi", color = c.testo, style = Testi.pulsanteSecondario) }
+            },
+            dismissButton = { if (fase == "chiedi") TextButton(onClick = { collegaPc = null }) { Text("Annulla", color = c.testo2) } },
         )
     }
     if (licenza) {

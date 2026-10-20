@@ -29,6 +29,7 @@ public sealed class Ponte
     {
         Task<bool> StampaAsync(string html, string percorso);
         (string Nome, byte[] Dati)? ScegliFile(string filtro);
+        string? ScegliPercorso(string filtro);
         void Riavvia();
     }
 
@@ -38,6 +39,9 @@ public sealed class Ponte
 
     /// <summary>La prima apertura dopo l'installazione: la pagina dice dove trovarlo.</summary>
     public bool AppenaInstallato { get; set; }
+
+    /// <summary>Si è appena collegato col file dell'email (doppio clic): la pagina lo dice.</summary>
+    public bool AppenaCollegato { get; set; }
 
     /// <summary>Le opzioni con cui è partito il programma: il riavvio dopo un aggiornamento le ripete.</summary>
     public IReadOnlyList<string> ArgomentiDiAvvio { get; set; } = Array.Empty<string>();
@@ -149,6 +153,7 @@ public sealed class Ponte
         switch (nome)
         {
             case "stato":
+                config.RileggiSeCambiato();
                 return Json(200, new JsonObject
                 {
                     ["ok"] = true,
@@ -162,7 +167,18 @@ public sealed class Ponte
                     ["versione"] = typeof(Ponte).Assembly.GetName().Version?.ToString(3),
                     ["aggiornamento"] = Aggiornamenti?.ComeJson(),
                     ["appenaInstallato"] = AppenaInstallato,
+                    ["appenaCollegato"] = AppenaCollegato,
                 });
+
+            case "collega-file":
+            {
+                // Il file "Collega Wisper Ufficio.wisper" dell'email, scelto a mano.
+                var scelto = Finestra?.ScegliPercorso("collegamento");
+                if (scelto == null) return Json(200, new JsonObject { ["ok"] = false, ["annullato"] = true });
+                var errore = Collegamento.Importa(scelto, config);
+                if (errore != null) return Json(400, Errore(errore));
+                return Json(200, new JsonObject { ["ok"] = true, ["configurato"] = config.Configurato });
+            }
 
             case "aggiorna":
                 if (Aggiornamenti == null) return Json(200, new JsonObject { ["ok"] = true });

@@ -112,6 +112,14 @@ class PonteFoglio(
         Rapportino.daJson(r.getJSONArray("rapportini").getJSONObject(0), dalFoglio = true)
     }
 
+    /**
+     * Fa mandare al proprietario del foglio un'email col file che collega Wisper
+     * Ufficio (lo apre sul computer e si collega da solo). Torna a chi e' andata.
+     */
+    suspend fun collegaComputer(): String = withContext(Dispatchers.IO) {
+        scrivi(JSONObject().put("azione", "collegaComputer").put("url", url())).optString("a")
+    }
+
     // --- interno ---
 
     private fun leggi(azione: String, vararg parametri: Pair<String, String>): JSONObject {

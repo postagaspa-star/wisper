@@ -268,6 +268,19 @@ public sealed class Finestra : Form, Ponte.IFinestra
         return (Path.GetFileName(finestra.FileName), File.ReadAllBytes(finestra.FileName));
     }
 
+    /// <summary>Il percorso di un file scelto a mano (qui: il file di collegamento dell'email).</summary>
+    public string? ScegliPercorso(string filtro)
+    {
+        using var finestra = new OpenFileDialog
+        {
+            Title = "Scegli il file dell'email",
+            Filter = "Collegamento a Wisper (*.wisper)|*.wisper|Tutti i file|*.*",
+            InitialDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads"),
+            Multiselect = false,
+        };
+        return finestra.ShowDialog(this) == DialogResult.OK ? finestra.FileName : null;
+    }
+
     private void MostraMessaggio(string testo)
     {
         Controls.Clear();

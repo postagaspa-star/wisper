@@ -107,7 +107,30 @@ public static class Installazione
         k.SetValue("NoRepair", 1, RegistryValueKind.DWord);
         var dimensione = new FileInfo(luoghi.Exe).Length / 1024;
         k.SetValue("EstimatedSize", (int)Math.Min(int.MaxValue, dimensione), RegistryValueKind.DWord);
+        AssociaFileCollegamento(luoghi.Exe);
     }
+
+    private const string TipoCollegamento = "WisperUfficio.Collegamento";
+
+    /// <summary>
+    /// I file .wisper (il collegamento che arriva per email) si aprono con Wisper Ufficio:
+    /// col doppio clic il programma si collega da solo al foglio. Solo per questo utente.
+    /// </summary>
+    private static void AssociaFileCollegamento(string exe)
+    {
+        using (var est = Registry.CurrentUser.CreateSubKey(@"Software\Classes\" + Collegamento.Estensione))
+            est.SetValue("", TipoCollegamento);
+        using (var tipo = Registry.CurrentUser.CreateSubKey(@"Software\Classes\" + TipoCollegamento))
+        {
+            tipo.SetValue("", "Collegamento a Wisper Ufficio");
+            using (var icona = tipo.CreateSubKey("DefaultIcon")) icona.SetValue("", $"\"{exe}\",0");
+            using (var cmd = tipo.CreateSubKey(@"shell\open\command")) cmd.SetValue("", $"\"{exe}\" \"%1\"");
+        }
+        SHChangeNotify(0x08000000, 0, IntPtr.Zero, IntPtr.Zero); // SHCNE_ASSOCCHANGED: Esplora risorse se ne accorge subito
+    }
+
+    [System.Runtime.InteropServices.DllImport("shell32.dll")]
+    private static extern void SHChangeNotify(int evento, uint flags, IntPtr a, IntPtr b);
 
     /// <summary>
     /// Da Impostazioni › App installate: via le icone, la voce e il programma. I dati
@@ -119,7 +142,12 @@ public static class Installazione
         {
             try { if (File.Exists(lnk)) File.Delete(lnk); } catch (IOException) { }
         }
-        if (luoghi.Registro) Registry.CurrentUser.DeleteSubKeyTree(ChiaveDisinstalla, throwOnMissingSubKey: false);
+        if (luoghi.Registro)
+        {
+            Registry.CurrentUser.DeleteSubKeyTree(ChiaveDisinstalla, throwOnMissingSubKey: false);
+            Registry.CurrentUser.DeleteSubKeyTree(@"Software\Classes\" + TipoCollegamento, throwOnMissingSubKey: false);
+            Registry.CurrentUser.DeleteSubKeyTree(@"Software\Classes\" + Collegamento.Estensione, throwOnMissingSubKey: false);
+        }
         // L'exe in uso non si può cancellare: lo fa PowerShell appena questo programma si è chiuso
         // (dopo che si è letto il messaggio "è stato tolto").
         if (Directory.Exists(luoghi.Cartella))

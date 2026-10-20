@@ -179,6 +179,9 @@ class Archivio(private val ctx: Context) : Dati {
 
     // ------------------------------------------------------------- modifiche
 
+    /** "Collega il computer": l'email col file di collegamento. Serve la rete. */
+    suspend fun collegaComputer(): Result<String> = runCatching { ponte.collegaComputer() }
+
     override fun salva(r: Rapportino) {
         coda.salva(r)
         dopoModifica()

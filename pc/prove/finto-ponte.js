@@ -107,6 +107,7 @@ http.createServer(async (rq, rs) => {
         case 'aggiorna': return json({ ok: true, aggiornamento: aggiornamento() });
         case 'riavvia': console.log('[riavvia]'); return json({ ok: true });
         case 'configura': return json({ ok: true, configurato: true });
+        case 'collega-file': return json({ ok: false, annullato: true });
         case 'cartella-pdf': return json({ ok: true });
         case 'apri': return json({ ok: true });
         case 'scegli-file': return json({ ok: true, nome: 'scontrino.png', mime: 'image/png', base64: IMMAGINE.toString('base64') });

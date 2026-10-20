@@ -275,6 +275,11 @@
     S.aggiornamento = st.aggiornamento || null;
     mostraAggiornamento();
     // La prima apertura dopo che si è installato da solo: dove ritrovarlo.
+    // Aperto col doppio clic sul file dell'email: è collegato, lo si dice una volta.
+    if (st.appenaCollegato && !S.dettoCollegato) {
+      S.dettoCollegato = true;
+      avviso('Collegato al foglio col file dell\'email. Ora puoi cancellare l\'email.', false, 8000);
+    }
     if (st.appenaInstallato && !S.dettoInstallato) {
       S.dettoInstallato = true;
       avviso('Wisper Ufficio è installato: lo trovi in Start e sul Desktop. Il file scaricato si può cancellare.', false, 10000);
@@ -1802,6 +1807,11 @@
             const ok = await lavora('Provo il collegamento', () => Api.post('/locale/configura', { url: url.value.trim(), codice: codice.value.trim() }));
             if (ok) { codice.value = ''; await carica(); if (S.caricato) avviso('Collegato'); }
           } }, S.configurato ? 'Salva e prova' : 'Collega'),
+          // Il file che arriva per email quando dal telefono si tocca "Collega il computer".
+          h('button', { type: 'button', class: 'btn', onclick: async () => {
+            const ris = await lavora('Leggo il file', () => Api.post('/locale/collega-file'));
+            if (ris && ris.ok) { await carica(); if (S.caricato) avviso('Collegato al foglio. Ora puoi cancellare l\'email.'); }
+          } }, 'Usa il file dell\'email'),
           S.cartellaPdf ? h('button', { type: 'button', class: 'btn', onclick: () => Api.post('/locale/cartella-pdf').catch(() => null) }, 'Apri la cartella dei PDF') : null)))]);
 
     if (S.caricato) {

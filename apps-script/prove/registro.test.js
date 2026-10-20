@@ -185,3 +185,28 @@ test('le schede Accessi e Dispositivi hanno le loro intestazioni', () => {
   assert.deepEqual(fogli.get('Accessi').celle[0], ['QUANDO', 'ESITO', 'AZIONE', 'DISPOSITIVO', 'APP', 'ID_DISPOSITIVO']);
   assert.deepEqual(fogli.get('Dispositivi').celle[0], ['ID_DISPOSITIVO', 'NOME', 'APP', 'PRIMO_ACCESSO', 'ULTIMO_ACCESSO', 'NOTE']);
 });
+
+// ------------------------------------------------------------------ collegare il computer
+
+test('collegare il computer: un\'email al proprietario col file di collegamento', () => {
+  const prima = fs.readdirSync(CARTELLA_POSTA).length;
+  const r = scrivi('collegaComputer', { url: 'https://script.google.com/macros/s/AKfyc-prova_123/exec' }, TELEFONO);
+  assert.equal(r.ok, true, r.errore);
+  assert.equal(r.a, 'proprietario@example.com');
+  const cartelle = fs.readdirSync(CARTELLA_POSTA).sort();
+  assert.equal(cartelle.length, prima + 1);
+  const dir = path.join(CARTELLA_POSTA, cartelle[cartelle.length - 1]);
+  const testo = fs.readFileSync(path.join(dir, 'email.txt'), 'utf8');
+  assert.match(testo, /^A: proprietario@example\.com/);
+  assert.match(testo, /Oggetto: Collega Wisper Ufficio al foglio/);
+  assert.match(testo, /motorola edge 60 pro/);
+  const file = JSON.parse(fs.readFileSync(path.join(dir, 'Collega Wisper Ufficio.wisper'), 'utf8'));
+  assert.deepEqual(file, { tipo: 'wisper-collegamento', versione: 1, url: 'https://script.google.com/macros/s/AKfyc-prova_123/exec', codice: CODICE });
+});
+
+test('collegare il computer: un indirizzo strano si rifiuta, e senza codice niente email', () => {
+  assert.equal(scrivi('collegaComputer', { url: 'https://example.com/ruba' }).ok, false);
+  const r = JSON.parse(contesto.doPost({ postData: { contents: JSON.stringify({ codice: 'sbagliato', azione: 'collegaComputer', url: 'https://script.google.com/macros/s/x/exec' }) } }).testo);
+  assert.equal(r.ok, false);
+  assert.equal(r.errore, 'Codice sbagliato');
+});

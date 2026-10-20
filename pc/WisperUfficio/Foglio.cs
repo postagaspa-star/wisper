@@ -31,6 +31,7 @@ public sealed class Foglio
 
     public async Task<(int Stato, string Json)> LeggiAsync(string azione, IEnumerable<KeyValuePair<string, string>> parametri)
     {
+        config.RileggiSeCambiato();
         if (!config.Configurato) return NonConfigurato();
         var query = new StringBuilder("?codice=").Append(Uri.EscapeDataString(config.Codice))
             .Append("&azione=").Append(Uri.EscapeDataString(azione));
@@ -54,6 +55,7 @@ public sealed class Foglio
 
     public async Task<(int Stato, string Json)> ScriviAsync(string azione, string? corpo)
     {
+        config.RileggiSeCambiato();
         if (!config.Configurato) return NonConfigurato();
         var o = (string.IsNullOrWhiteSpace(corpo) ? null : JsonNode.Parse(corpo) as JsonObject) ?? new JsonObject();
         o["azione"] = azione;

@@ -145,6 +145,14 @@ settings.
    copy only. `WisperUfficio.exe --stampa-prova file.html file.pdf` tells you
    whether PDFs print on that computer.
 
+**Connecting the computer from the phone.** *Impostazioni › Collega il computer* on the
+phone asks the script (`collegaComputer`) to email the sheet owner a small file,
+`Collega Wisper Ufficio.wisper`, with the address and the code. Opening it on the office
+computer (double click: the installer associates `.wisper` with the program, per user)
+connects Wisper Ufficio and deletes the file; *Impostazioni › Usa il file dell'email* does
+the same by hand. The email only ever goes to the owner. A program already open notices
+the new connection on its next call to the sheet.
+
 **The address never goes into what is published.** GitHub releases are public
 and anything inside an APK or an exe can be read. `strumenti\rilascio.ps1`
 refuses to publish if it finds the address in the APK's code or if the exe says

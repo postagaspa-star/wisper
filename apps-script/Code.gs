@@ -290,6 +290,8 @@ function scrivi(d) {
       return { ok: true, impostazioni: salvaImpostazioni(d.valori || {}) };
     case 'inviaEmail':
       return { ok: true, rapportini: inviaEmail(d) };
+    case 'collegaComputer':
+      return { ok: true, a: collegaComputer(d) };
     default:
       throw new Error('Azione sconosciuta: ' + d.azione);
   }
@@ -1612,6 +1614,39 @@ function dentroWisper(file) {
  * segna i rapportini come INVIATO. Con aMe la manda solo a se stessi, come
  * anteprima, e non cambia niente.
  */
+/**
+ * Il collegamento del computer, chiesto dal telefono: un'email al proprietario del
+ * foglio con un file da aprire sul computer dell'ufficio ("Collega Wisper
+ * Ufficio.wisper"). Wisper Ufficio lo legge e si collega da solo: niente indirizzo
+ * lungo da ricopiare, niente codice da scrivere. Il file contiene indirizzo e
+ * codice, quindi parte solo verso il proprietario: anche chi avesse il codice non
+ * potrebbe farselo mandare altrove.
+ */
+function collegaComputer(d) {
+  var url = testo(d.url);
+  var valido = /^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/exec$/.test(url) ||
+    /^http:\/\/(localhost|127\.0\.0\.1|10\.0\.2\.2)(:\d+)?\/exec$/.test(url);   // il finto Google delle prove
+  if (!valido) throw new Error('Indirizzo del foglio non valido');
+  var a = Session.getEffectiveUser().getEmail();
+  if (!a) throw new Error('Non so a chi mandare l\'email: manca l\'indirizzo del proprietario del foglio');
+  var contenuto = JSON.stringify({
+    tipo: 'wisper-collegamento', versione: 1, url: url,
+    codice: PropertiesService.getScriptProperties().getProperty('CODICE')
+  });
+  var file = Utilities.newBlob(contenuto, 'application/octet-stream', 'Collega Wisper Ufficio.wisper');
+  var chi = testo(d.dispNome);
+  MailApp.sendEmail(a, 'Collega Wisper Ufficio al foglio',
+    'Per collegare Wisper Ufficio a questo foglio, sul computer dell\'ufficio:\n\n' +
+    '1. scarica l\'allegato "Collega Wisper Ufficio.wisper" e aprilo con un doppio clic;\n' +
+    '2. Wisper Ufficio si apre e si collega da solo.\n\n' +
+    'Se il doppio clic non apre Wisper Ufficio: apri Wisper Ufficio, vai in Impostazioni e tocca ' +
+    '"Usa il file dell\'email".\n\n' +
+    'Poi cancella questa email e il file scaricato: dentro c\'e\' il codice del foglio.\n\n' +
+    'L\'ha chiesta ' + (chi ? 'il telefono "' + chi + '"' : 'un telefono collegato al foglio') + ' il ' + quando(new Date()) + '.',
+    { attachments: [file], name: 'Wisper' });
+  return a;
+}
+
 function inviaEmail(d) {
   var aMe = d.aMe === true;
   var destinatario = aMe ? Session.getEffectiveUser().getEmail() : testo(d.a);

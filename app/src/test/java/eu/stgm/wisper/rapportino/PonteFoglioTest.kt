@@ -59,6 +59,15 @@ class PonteFoglioTest {
     }
 
     @Test
+    fun `collega il computer manda l'indirizzo del foglio`() {
+        runBlocking { ponte.collegaComputer() }
+        val o = JSONObject(Buffer().also { viste.single().body!!.writeTo(it) }.readUtf8())
+        assertEquals("collegaComputer", o.getString("azione"))
+        assertEquals("https://script.example.com/exec", o.getString("url"))
+        assertEquals("id-di-prova", o.getString("disp"))
+    }
+
+    @Test
     fun `senza chi sono non si aggiunge niente`() = runBlocking {
         PonteFoglio({ "https://script.example.com/exec" }, { "prova" }, client = client)
             .rapportini(LocalDate.of(2026, 10, 1), LocalDate.of(2026, 10, 31))

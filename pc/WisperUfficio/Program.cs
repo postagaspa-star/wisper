@@ -32,6 +32,9 @@ internal static class Program
         int? attendi = null;
         var daRipetere = new List<string>();
         bool noInstalla = false, appenaInstallato = false, disinstalla = false;
+        // Il doppio clic sul file dell'email ("Collega Wisper Ufficio.wisper") apre il
+        // programma col percorso del file: si collega e il file non si ripete al riavvio.
+        string? fileCollegamento = null;
         string? installaIn = null;
         // Per strumenti\rilascio.ps1, prima di pubblicare: esce con 3 se dentro c'è l'indirizzo
         // del foglio (un exe di casa), con 0 se no. Non apre niente e non si installa.
@@ -44,6 +47,7 @@ internal static class Program
             if (args[i] == "--attendi" && i + 1 < args.Length) { attendi = int.TryParse(args[++i], out var pid) ? pid : null; continue; }
             if (args[i] == "--appena-installato") { appenaInstallato = true; continue; }
             if (args[i] == "--disinstalla") { disinstalla = true; continue; }
+            if (args[i].EndsWith(Collegamento.Estensione, StringComparison.OrdinalIgnoreCase) && File.Exists(args[i])) { fileCollegamento = args[i]; continue; }
             var prima = i;
             if (args[i] == "--no-installa") noInstalla = true;
             else if (args[i] == "--installa-in" && i + 1 < args.Length) installaIn = Path.GetFullPath(args[++i]);
@@ -84,6 +88,20 @@ internal static class Program
             catch (ArgumentException) { /* già chiuso */ }
         }
 
+        // Il file dell'email si usa subito, prima di guardare se il programma è già aperto:
+        // se lo è, si accorge da solo del collegamento nuovo (Configurazione.RileggiSeCambiato).
+        var collegatoDaFile = false;
+        if (fileCollegamento != null)
+        {
+            var errore = Collegamento.Importa(fileCollegamento, new Configurazione(Path.Combine(appData, "configurazione.json")));
+            if (errore != null)
+            {
+                MessageBox.Show(errore, "Wisper Ufficio", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+            collegatoDaFile = true;
+        }
+
         // Un Wisper Ufficio alla volta per cartella di dati: due finestre sullo
         // stesso foglio salverebbero una sopra l'altra.
         // (string.GetHashCode cambia a ogni avvio in .NET: serve un'impronta stabile.)
@@ -98,7 +116,9 @@ internal static class Program
         }
         if (!primo)
         {
-            MessageBox.Show("Wisper Ufficio è già aperto.", "Wisper Ufficio", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            MessageBox.Show(collegatoDaFile
+                ? "Wisper Ufficio è collegato al foglio. Torna alla sua finestra e premi Riprova, o aprilo di nuovo."
+                : "Wisper Ufficio è già aperto.", "Wisper Ufficio", MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
 
@@ -118,6 +138,7 @@ internal static class Program
         var cartellaUi = Path.Combine(AppContext.BaseDirectory, "ui");
 
         ponte.AppenaInstallato = appenaInstallato;
+        ponte.AppenaCollegato = collegatoDaFile;
         var aggiornamenti = new Aggiornamenti(indirizzoAggiornamenti, unFileSolo && stampaProva == null ? Environment.ProcessPath : null);
         ponte.Aggiornamenti = aggiornamenti;
         ponte.ArgomentiDiAvvio = daRipetere;

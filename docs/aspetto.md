@@ -113,6 +113,8 @@ Come `docs/prototipo/Main.dc.html`:
 - In alto il simbolo e "Wisper"; a destra il cerchio con le iniziali di chi compila (→ Impostazioni).
 - Data ("Giovedì 15 ottobre", 15/600 tenue) e "Buongiorno/Buon pomeriggio/Buonasera, {nome}" (senza nome:
   solo il saluto).
+- Dalla 0.3.6 la scheda **"QUESTA SETTIMANA"** (descritta sotto) sta in cima, sopra quella del rapportino di oggi:
+  lo ha chiesto lo studio, la prima cosa da vedere sono i giorni che mancano.
 - **Scheda "IL RAPPORTINO DI OGGI"**:
   - non scritto: "Non l'hai ancora scritto", pulsante giallo **Scrivi il rapportino** (64 dp) e sotto la riga
     **Come ieri** con cliente · commessa · ore · km dell'ultimo rapportino (apre il rapportino già compilato
