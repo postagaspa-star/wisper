@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Solo nelle build di prova: permette di parlare col finto Google sul computer
+     (apps-script/prove/finto-google.js), che non ha https. L'app vera parla
+     solo con script.google.com, in https. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application android:networkSecurityConfig="@xml/rete_prove" />
+</manifest>

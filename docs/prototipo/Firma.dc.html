@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<title>Wisper, Firma del cliente</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:inherit;text-decoration:none}a:hover{color:inherit}
+button,input{font-family:inherit}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; position: relative; overflow: hidden; background: #F4F4F2; font-family: 'Figtree', system-ui, sans-serif; color: #1B1B1F; box-sizing: border-box">
+  <div style="padding: 10px 20px 0 20px; display: flex; flex-direction: column; gap: 14px">
+    <div style="display: flex; align-items: center; height: 48px">
+      <a href="Rapportino.dc.html" aria-label="Indietro" style="width: 44px; height: 44px; border-radius: 22px; background: #E7E6E2; display: flex; align-items: center; justify-content: center">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1B1B1F" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"></path></svg>
+      </a>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 2px">
+      <span style="font-size: 15px; font-weight: 600; color: #5F5F67">Batokyo · giovedì 15 ottobre</span>
+      <h1 style="margin: 0; font-size: 30px; line-height: 1.15; font-weight: 800; letter-spacing: -0.6px">Firma del cliente</h1>
+    </div>
+
+    <div style="background: #FFFFFF; border: 1px solid #E6E5E1; border-radius: 20px; padding: 14px 16px; display: flex; flex-direction: column; gap: 6px">
+      <span style="font-size: 16px; font-weight: 800">Taratura inverter del nastro 2 e prova a vuoto con il capo reparto.</span>
+      <span style="font-size: 15px; font-weight: 600; color: #3F3F46">6,5 h di lavoro · 1 h di viaggio · 96 km</span>
+    </div>
+
+    <label style="display: flex; flex-direction: column; gap: 6px">
+      <span style="font-size: 15px; font-weight: 700">Nome di chi firma</span>
+      <input value="Mario Bianchi" style="height: 54px; border-radius: 16px; border: 1.5px solid #CFCEC9; background: #FFFFFF; padding: 0 16px; font-size: 18px; font-weight: 600; color: #1B1B1F; outline: none">
+    </label>
+
+    <div style="height: 300px; border-radius: 22px; background: #FFFFFF; border: 1.5px solid #CFCEC9; position: relative; overflow: hidden">
+      <svg width="350" height="300" viewBox="0 0 350 300" aria-hidden="true" style="position: absolute; left: 0; top: 0"><path d="M58 186c14-38 22-74 30-72s-6 64 2 70 22-56 34-54 4 48 12 50 18-30 28-32 6 26 16 26 20-18 34-20 18 14 34 10" fill="none" stroke="#1B1B1F" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"></path><path d="M80 214c50-6 120-8 196-4" fill="none" stroke="#1B1B1F" stroke-width="3" stroke-linecap="round"></path></svg>
+      <div style="position: absolute; left: 24px; right: 24px; bottom: 54px; border-bottom: 1.5px solid #E2E1DD"></div>
+      <span style="position: absolute; left: 24px; bottom: 22px; font-size: 14px; font-weight: 600; color: #5F5F67">Firmando confermi lavoro e ore del rapportino</span>
+    </div>
+  </div>
+
+  <div style="position: absolute; left: 0; right: 0; bottom: 0; padding: 12px 20px 26px 20px; display: flex; gap: 10px">
+    <button style="flex: 1; height: 64px; border-radius: 18px; border: 1.5px solid #CFCEC9; background: #FFFFFF; font-size: 17px; font-weight: 700; color: #1B1B1F; cursor: pointer">Cancella</button>
+    <a href="Main.dc.html" style="flex: 1.6; height: 64px; border-radius: 18px; background: #FFC53D; color: #1B1B1F; display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 18px; font-weight: 800">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#1B1B1F" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg>
+      Conferma firma
+    </a>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

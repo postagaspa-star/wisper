@@ -1,0 +1,177 @@
+[
+  {
+    "nome": "Elettrodinamica: tariffa fissa, viaggio non pagato, km rimborsati",
+    "rapportino": {
+      "oreLavoro": 8,
+      "oreExtra": 0,
+      "oreViaggio": 1.5,
+      "km": 120,
+      "spese": 12.5,
+      "tariffa": null
+    },
+    "regole": {
+      "tariffaFissa": 30,
+      "pagaViaggio": false,
+      "kmRimborsati": true,
+      "maggExtra": 0,
+      "euroKm": 0.76
+    },
+    "atteso": {
+      "oreTotali": 9.5,
+      "tariffa": 30,
+      "compensoOre": 240,
+      "rimborsoKm": 91.2,
+      "totale": 343.7
+    }
+  },
+  {
+    "nome": "Privato: tariffa scritta, viaggio pagato",
+    "rapportino": {
+      "oreLavoro": 3.5,
+      "oreExtra": 0,
+      "oreViaggio": 1,
+      "km": 0,
+      "spese": 0,
+      "tariffa": 42
+    },
+    "regole": {
+      "tariffaFissa": null,
+      "pagaViaggio": true,
+      "kmRimborsati": true,
+      "maggExtra": 0,
+      "euroKm": 0.76
+    },
+    "atteso": {
+      "oreTotali": 4.5,
+      "tariffa": 42,
+      "compensoOre": 189,
+      "rimborsoKm": 0,
+      "totale": 189
+    }
+  },
+  {
+    "nome": "Ore extra con maggiorazione del 25%",
+    "rapportino": {
+      "oreLavoro": 8,
+      "oreExtra": 2,
+      "oreViaggio": 0,
+      "km": 0,
+      "spese": 0,
+      "tariffa": null
+    },
+    "regole": {
+      "tariffaFissa": 30,
+      "pagaViaggio": false,
+      "kmRimborsati": true,
+      "maggExtra": 25,
+      "euroKm": 0.76
+    },
+    "atteso": {
+      "oreTotali": 10,
+      "tariffa": 30,
+      "compensoOre": 315,
+      "rimborsoKm": 0,
+      "totale": 315
+    }
+  },
+  {
+    "nome": "Km non rimborsati da questo cliente",
+    "rapportino": {
+      "oreLavoro": 2,
+      "oreExtra": 0,
+      "oreViaggio": 0.5,
+      "km": 50,
+      "spese": 0,
+      "tariffa": 35
+    },
+    "regole": {
+      "tariffaFissa": null,
+      "pagaViaggio": false,
+      "kmRimborsati": false,
+      "maggExtra": 0,
+      "euroKm": 0.76
+    },
+    "atteso": {
+      "oreTotali": 2.5,
+      "tariffa": 35,
+      "compensoOre": 70,
+      "rimborsoKm": 0,
+      "totale": 70
+    }
+  },
+  {
+    "nome": "La tariffa fissa vince su quella scritta",
+    "rapportino": {
+      "oreLavoro": 4,
+      "oreExtra": 0,
+      "oreViaggio": 0,
+      "km": 10,
+      "spese": 0,
+      "tariffa": 50
+    },
+    "regole": {
+      "tariffaFissa": 30,
+      "pagaViaggio": false,
+      "kmRimborsati": true,
+      "maggExtra": 0,
+      "euroKm": 0.76
+    },
+    "atteso": {
+      "oreTotali": 4,
+      "tariffa": 30,
+      "compensoOre": 120,
+      "rimborsoKm": 7.6,
+      "totale": 127.6
+    }
+  },
+  {
+    "nome": "Arrotondamenti: ogni pezzo al centesimo prima della somma",
+    "rapportino": {
+      "oreLavoro": 1.25,
+      "oreExtra": 0.75,
+      "oreViaggio": 0.3,
+      "km": 33,
+      "spese": 7.1,
+      "tariffa": 37.9
+    },
+    "regole": {
+      "tariffaFissa": null,
+      "pagaViaggio": true,
+      "kmRimborsati": true,
+      "maggExtra": 12.5,
+      "euroKm": 0.7634
+    },
+    "atteso": {
+      "oreTotali": 2.3,
+      "tariffa": 37.9,
+      "compensoOre": 90.72,
+      "rimborsoKm": 25.19,
+      "totale": 123.01
+    }
+  },
+  {
+    "nome": "Rapportino vuoto",
+    "rapportino": {
+      "oreLavoro": 0,
+      "oreExtra": 0,
+      "oreViaggio": 0,
+      "km": 0,
+      "spese": 0,
+      "tariffa": 30
+    },
+    "regole": {
+      "tariffaFissa": null,
+      "pagaViaggio": false,
+      "kmRimborsati": true,
+      "maggExtra": 0,
+      "euroKm": 0.76
+    },
+    "atteso": {
+      "oreTotali": 0,
+      "tariffa": 30,
+      "compensoOre": 0,
+      "rimborsoKm": 0,
+      "totale": 0
+    }
+  }
+]

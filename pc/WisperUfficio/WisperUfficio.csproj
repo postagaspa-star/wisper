@@ -1,0 +1,74 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>12</LangVersion>
+    <RootNamespace>WisperUfficio</RootNamespace>
+    <AssemblyName>WisperUfficio</AssemblyName>
+    <AssemblyTitle>Wisper Ufficio</AssemblyTitle>
+    <Product>Wisper Ufficio</Product>
+    <!-- La versione decide gli aggiornamenti: quella pubblicata deve essere più alta di quella installata. -->
+    <Version>0.3.6</Version>
+    <FileVersion>0.3.6.0</FileVersion>
+    <ApplicationIcon>Risorse\wisper.ico</ApplicationIcon>
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+    <SatelliteResourceLanguages>it</SatelliteResourceLanguages>
+    <!--
+      Il pacchetto WebView2 si porta dietro anche la sua parte WPF, che vuole un
+      WindowsBase diverso da quello di WinForms. Qui WPF non si usa: l'avviso è rumore.
+    -->
+    <MSBuildWarningsAsMessages>$(MSBuildWarningsAsMessages);MSB3277</MSBuildWarningsAsMessages>
+  </PropertyGroup>
+
+  <!--
+    Il pacchetto: UN file, WisperUfficio.exe, con dentro il runtime .NET e
+    l'interfaccia. Si scarica, si mette dove si vuole (Desktop, Documenti) e si
+    apre; si aggiorna da solo sostituendo sé stesso. Lo usa prove/crea-pacchetto.ps1
+    con -p:PubblicazioneWisper=true.
+  -->
+  <PropertyGroup Condition="'$(PubblicazioneWisper)' == 'true'">
+    <SelfContained>true</SelfContained>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <PublishSingleFile>true</PublishSingleFile>
+    <!-- La sola libreria nativa che serve (il caricatore di WebView2) viaggia dentro l'exe. -->
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <!-- Niente trimming: WinForms e WebView2 usano la reflection. -->
+    <PublishTrimmed>false</PublishTrimmed>
+    <DebugType>none</DebugType>
+    <DebugSymbols>false</DebugSymbols>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <!-- Le pagine di documentazione delle librerie (.xml) non servono a chi usa il programma. -->
+    <PublishDocumentationFile>false</PublishDocumentationFile>
+    <PublishReferencesDocumentationFiles>false</PublishReferencesDocumentationFiles>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4191.47" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Risorse\wisper.ico" LogicalName="WisperUfficio.wisper.ico" />
+  </ItemGroup>
+
+  <!-- L'indirizzo del foglio, solo in un exe di casa (crea-pacchetto.ps1 -ConIndirizzo): mai in quello che si pubblica. -->
+  <ItemGroup Condition="'$(IndirizzoFoglio)' != ''">
+    <AssemblyMetadata Include="IndirizzoFoglio" Value="$(IndirizzoFoglio)" />
+  </ItemGroup>
+
+  <!--
+    L'interfaccia (pc/ui) viaggia dentro l'exe come risorsa. Nelle build di
+    sviluppo va anche nella cartella ui accanto all'exe, e se c'è si legge da lì.
+  -->
+  <ItemGroup>
+    <EmbeddedResource Include="..\ui\**\*" LogicalName="ui/%(RecursiveDir)%(Filename)%(Extension)" WithCulture="false" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(PubblicazioneWisper)' != 'true'">
+    <Content Include="..\ui\**\*" LinkBase="ui" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

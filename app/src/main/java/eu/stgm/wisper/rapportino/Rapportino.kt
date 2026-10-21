@@ -1,300 +1,340 @@
 package eu.stgm.wisper.rapportino
 
+import org.json.JSONArray
+import org.json.JSONObject
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.util.UUID
+
 /**
- * Il rapportino mentre si compone.
+ * Un rapportino: una giornata di lavoro per un cliente.
  *
- * Tutti i campi sono opzionali di proposito: si riempie un pezzo alla volta
- * mentre il tecnico parla, e a meta' discorso e' normale che meta' sia vuoto.
- * E' anche il motivo per cui e' immutabile — ogni frase produce una copia
- * nuova, e la schermata ridisegna solo i campi cambiati.
+ * La prima parte sono i campi che si compilano. La seconda e' quello che sa
+ * solo il foglio: il numero RAP/2026/0001, i conti fatti dallo script, la firma
+ * e lo stato. Sul telefono quei campi arrivano quando il foglio ha risposto;
+ * fino ad allora i conti si mostrano con [Calcolo], che fa la stessa formula.
+ *
+ * [idLocale] nasce sul telefono e non cambia mai: e' quello che permette al
+ * foglio di riconoscere un rapportino gia' scritto, sia quando un invio si
+ * ripete perche' la risposta si era persa, sia quando lo si riapre per
+ * correggerlo.
  */
 data class Rapportino(
-    val cliente: String? = null,
-    val commessa: String? = null,
-    val descrizione: String? = null,
-    val ore: Double? = null,
-    val km: Double? = null,
-    val spese: Double? = null,
+    val idLocale: String,
+    val data: LocalDate,
+    val tecnico: String = "",
+    val idCliente: String = "",
+    val cliente: String = "",
+    val idCommessa: String = "",
+    val commessa: String = "",
     /**
-     * Come resta la commessa dopo questa giornata: aperta o chiusa.
-     *
-     * Ha preso il posto del vecchio "esito" (positivo/negativo), che guardava
-     * indietro e non serviva a nessuno. Questo guarda avanti: dice all'ufficio
-     * se il lavoro va rimesso in calendario.
+     * Per una commessa nuova, nata qui: il codice che avra' (26ST047), deciso sul
+     * telefono anche senza rete. Il foglio lo usa se e' ancora libero, altrimenti
+     * le da' il primo libero e lo rimanda in idCommessa.
      */
-    val statoCommessa: StatoCommessa? = null,
+    val codiceProposto: String = "",
+    val ticket: String = "",
+    val luogo: String = "",
+    val descrizione: String = "",
+    val oreLavoro: Double = 0.0,
+    val oreExtra: Double = 0.0,
+    val oreViaggio: Double = 0.0,
+    val km: Double = 0.0,
+    val spese: Double = 0.0,
+    val noteSpese: String = "",
+    /** La tariffa scritta nel rapportino. Null per i gruppi a tariffa fissa: la decide il foglio. */
+    val tariffa: Double? = null,
+    /** Note per se'. Non finiscono mai sul PDF del cliente. */
+    val noteInterne: String = "",
+
+    // ---- dal foglio ----
+    val id: String = "",
+    val gruppo: String = "",
+    val foto: List<FileRemoto> = emptyList(),
+    val firma: FileRemoto? = null,
+    val firmatario: String = "",
+    val firmatoIl: String = "",
+    val stato: Stato = Stato.BOZZA,
+    /** I conti dello script. Null finche' il foglio non ha risposto. */
+    val conto: Conto? = null,
+    val modificato: String = "",
+    /** "2026-10-15T17:30:00" quando e' stato segnato inviato; vuoto se non lo e'. */
+    val inviatoIl: String = "",
+    val fatturatoIl: String = "",
+    /** Quando il foglio ha scritto la riga la prima volta. */
+    val creato: String = "",
+    /**
+     * Quanto costava un'ora quando il foglio ha fatto il conto (per il margine
+     * delle commesse). Null = non scritto: vale quello di oggi.
+     */
+    val costoOrario: Double? = null,
 ) {
+    /** Firmato, inviato o fatturato: il lavoro non si tocca piu', si riporta in bozza. */
+    val bloccato: Boolean get() = stato in Stato.BLOCCATI
 
-    /**
-     * I cinque campi senza i quali il rapportino non ha senso: a chi, su cosa,
-     * che lavoro, per quanto tempo, per quanta strada. Spese ed esito sono un
-     * di piu': utili, ma un rapportino senza di loro sta comunque in piedi.
-     *
-     * Attenzione: km VALE anche a zero. "Zero chilometri" e' una risposta;
-     * non averne parlato e' un buco. Per questo il campo e' nullable e non
-     * azzerato di default.
-     */
-    val completo: Boolean
-        get() = !cliente.isNullOrBlank() && !commessa.isNullOrBlank() &&
-            !descrizione.isNullOrBlank() && ore != null && km != null &&
-            statoCommessa != null
+    val oreTotali: Double get() = oreLavoro + oreExtra + oreViaggio
 
-    /** Cosa manca ancora, in italiano, per farlo chiedere all'AI. */
-    val mancanti: List<String>
-        get() = buildList {
-            if (cliente.isNullOrBlank()) add("cliente")
-            if (commessa.isNullOrBlank()) add("commessa")
-            if (descrizione.isNullOrBlank()) add("descrizione")
-            if (ore == null) add("ore")
-            if (km == null) add("chilometri")
-            if (statoCommessa == null) add("se il lavoro è finito")
-        }
-
-    /**
-     * Cosa manca, detto come lo direbbe una persona invece che col nome del
-     * campo. Un posto solo, perche' queste parole servono in due punti — il
-     * riepilogo finale e le domande a meta' strada — e se divergessero Wisper
-     * chiamerebbe la stessa cosa in due modi nella stessa conversazione.
-     *
-     * Le spese stanno qui ma non fra i campi obbligatori: chiederle e' giusto,
-     * pretenderle no.
-     */
-    val mancanzeParlate: List<String>
-        get() = buildList {
-            if (descrizione.isNullOrBlank()) add("che lavoro hai fatto")
-            if (ore == null) add("quanto è durato")
-            if (km == null) add("i chilometri")
-            if (spese == null) add("le spese")
-            if (statoCommessa == null) add("se il lavoro è finito")
-        }
-
-    /**
-     * "Mi devi ancora dire i chilometri e se il lavoro è finito", oppure null.
-     *
-     * Il verbo e' scelto perche' regge tutti i pezzi senza sgrammaticature:
-     * "mi manca" andrebbe accordato al plurale, "mi devi dire" no.
-     */
-    fun domandaSuCosaManca(): String? =
-        mancanzeParlate.takeIf { it.isNotEmpty() }
-            ?.let { "Mi devi ancora dire ${unisci(it)}" }
-
-    /**
-     * Applica solo i campi valorizzati: un campo null NON cancella quello che
-     * c'era. Serve perche' l'AI manda solo cio' che ha appena capito, non
-     * tutto il rapportino ogni volta.
-     */
-    fun aggiorna(patch: Rapportino): Rapportino = Rapportino(
-        cliente = patch.cliente?.takeIf { it.isNotBlank() } ?: cliente,
-        commessa = patch.commessa?.takeIf { it.isNotBlank() } ?: commessa,
-        descrizione = patch.descrizione?.takeIf { it.isNotBlank() } ?: descrizione,
-        ore = patch.ore ?: ore,
-        km = patch.km ?: km,
-        spese = patch.spese ?: spese,
-        statoCommessa = patch.statoCommessa ?: statoCommessa,
+    /** I campi che si compilano, senza quello che aggiunge il foglio: per capire se e' cambiato qualcosa. */
+    fun soloCompilato(): Rapportino = Rapportino(
+        idLocale = idLocale, data = data, tecnico = tecnico, idCliente = idCliente,
+        cliente = cliente, idCommessa = idCommessa, commessa = commessa, codiceProposto = codiceProposto, ticket = ticket,
+        luogo = luogo, descrizione = descrizione, oreLavoro = oreLavoro, oreExtra = oreExtra,
+        oreViaggio = oreViaggio, km = km, spese = spese, noteSpese = noteSpese,
+        tariffa = tariffa, noteInterne = noteInterne,
     )
 
-    /**
-     * Il riepilogo che Wisper rilegge prima di salvare, costruito DAI CAMPI
-     * e non chiesto al modello.
-     *
-     * Motivo, trovato sul telefono il 07/08: il modello aveva annunciato
-     * "quaranta chilometri e dodici euro" avendone scritto solo uno dei due.
-     * Su un rapportino e' il difetto peggiore che ci sia — il tecnico sente
-     * confermare un dato, ci crede, e quel dato non esiste. Quello che si
-     * sente e' quello che si salva, perche' e' la stessa fonte.
-     *
-     * @param commessaLeggibile la descrizione, non il codice: "M001" a voce
-     *        non vuol dire niente per chi lavora.
-     */
-    fun riletturaAdAltaVoce(commessaLeggibile: String? = null): String {
-        val frasi = mutableListOf<String>()
+    /** Quello che si manda allo script con "salvaRapportino". */
+    fun perIlFoglio(): JSONObject = JSONObject()
+        .put("idLocale", idLocale)
+        .put("id", id)
+        .put("data", data.format(ISO))
+        .put("tecnico", tecnico)
+        .put("idCliente", idCliente)
+        .put("cliente", cliente)
+        .put("idCommessa", idCommessa)
+        .put("commessa", commessa)
+        .put("codiceProposto", codiceProposto)
+        .put("ticket", ticket)
+        .put("luogo", luogo)
+        .put("descrizione", descrizione)
+        .put("oreLavoro", oreLavoro)
+        .put("oreExtra", oreExtra)
+        .put("oreViaggio", oreViaggio)
+        .put("km", km)
+        .put("spese", spese)
+        .put("noteSpese", noteSpese)
+        .put("tariffa", tariffa ?: JSONObject.NULL)
+        .put("noteInterne", noteInterne)
 
-        // 1. Chi e su cosa.
-        frasi += buildString {
-            append("Oggi hai lavorato per ${cliente ?: "un cliente che non mi hai detto"}")
-            append(
-                commessaLeggibile?.takeIf { it.isNotBlank() }
-                    ?.let { ", sulla commessa $it" }
-                    ?: ", ma non mi hai detto su quale commessa"
-            )
-        }
-
-        // 2. Quello che SO. "Non hai speso nulla" sta qui, non fra le mancanze:
-        //    zero e' un dato che il tecnico ha detto, non un buco. Il buco e'
-        //    non averne parlato affatto — ed e' per questo che i campi sono
-        //    nullable e non azzerati di default.
-        val presenti = mutableListOf<String>()
-        descrizione?.takeIf { it.isNotBlank() }?.let {
-            presenti += "hai fatto ${it.replaceFirstChar { c -> c.lowercaseChar() }}"
-        }
-        ore?.let { presenti += "il lavoro è durato ${oreParlate()}" }
-        km?.let {
-            presenti += if (it > 0) "hai percorso ${numeroParlato(it)} chilometri"
-            else "non hai fatto chilometri"
-        }
-        spese?.let {
-            presenti += if (it > 0) "hai speso ${euroParlati(it)}"
-            else "non hai speso nulla"
-        }
-        if (presenti.isNotEmpty()) frasi += unisci(presenti)
-
-        statoCommessa?.let {
-            frasi += if (it == StatoCommessa.CHIUSA) "Il lavoro è concluso"
-            else "Il lavoro resta aperto"
-        }
-
-        // 3. Le mancanze TUTTE INSIEME, in una frase sola e con UN solo "però".
-        //    Sparpagliarle fra le altre le fa sembrare piu' gravi di quello che
-        //    sono e riempie la frase di avversative; raccolte qui si sente in
-        //    un colpo cosa manca e si risponde una volta.
-        val mancano = mancanzeParlate
-        if (mancano.isNotEmpty()) frasi += "Non mi hai però detto ${unisci(mancano)}"
-
-        // Ogni frase comincia con la maiuscola: i pezzi vengono costruiti in
-        // minuscolo per potersi incastrare fra loro, ma dopo un punto stona —
-        // e la voce sintetica ci mette anche l'intonazione sbagliata.
-        return frasi.joinToString(". ") { it.replaceFirstChar { c -> c.uppercaseChar() } } +
-            ". È tutto corretto?"
-    }
-
-    /** "a, b e c" — con la virgola fra i primi e la "e" davanti all'ultimo. */
-    private fun unisci(pezzi: List<String>): String = when (pezzi.size) {
-        0 -> ""
-        1 -> pezzi.first()
-        else -> pezzi.dropLast(1).joinToString(", ") + " e " + pezzi.last()
-    }
-
-    /**
-     * "Tre ore e mezza", non "3 e mezzo ore". Il mezzo in italiano va DOPO
-     * l'unita', e questa e' la frase su cui il tecnico dice "confermo": se
-     * suona sgrammaticata, si perde a decifrarla invece di ascoltare i numeri.
-     */
-    private fun oreParlate(): String {
-        val o = ore ?: return "Ore non indicate"
-        return when {
-            o == 0.5 -> "Mezz'ora"
-            o == 1.0 -> "Un'ora"
-            o == 1.5 -> "Un'ora e mezza"
-            o % 1.0 == 0.5 -> "${o.toInt()} ore e mezza"
-            o % 1.0 == 0.0 -> "${o.toInt()} ore"
-            else -> "${o.toString().replace('.', ',')} ore"
-        }
-    }
-
-    /** 42.5 -> "quarantadue euro e cinquanta"; 12.0 -> "12 euro". */
-    private fun euroParlati(n: Double): String {
-        if (n % 1.0 == 0.0) return "${n.toInt()} euro"
-        val centesimi = Math.round((n % 1.0) * 100).toInt()
-        return "${n.toInt()} euro e ${if (centesimi < 10) "zero$centesimi" else "$centesimi"}"
-    }
-
-    /** Mai col punto decimale: la voce sintetica leggerebbe "tre punto cinque". */
-    private fun numeroParlato(n: Double): String = when {
-        n % 1.0 == 0.0 -> n.toInt().toString()
-        n % 1.0 == 0.5 -> "${n.toInt()} e mezzo"
-        else -> n.toString().replace('.', ',')
-    }
-}
-
-/**
- * Come resta la commessa dopo la giornata. Nel foglio finisce nella colonna
- * "STATO COMMESSA"; nel parlato il tecnico la chiama "lavoro".
- */
-enum class StatoCommessa(val parlato: String) {
-    APERTA("aperta"),
-    CHIUSA("chiusa");
-
-    companion object {
-        fun da(testo: String?): StatoCommessa? = when (testo?.lowercase()?.trim()) {
-            "chiusa", "chiuso", "finita", "finito", "concluso", "conclusa", "completato" -> CHIUSA
-            "aperta", "aperto", "in corso", "da finire", "da riprendere" -> APERTA
-            else -> null
-        }
-    }
-}
-
-/** Un cliente come sta nel foglio. */
-data class Cliente(
-    val id: String,
-    val nome: String,
-    val alias: List<String> = emptyList(),
-)
-
-/** Una commessa come sta nel foglio. */
-data class Commessa(
-    val id: String,
-    val idCliente: String,
-    val descrizione: String,
-    val stato: String,
-    /**
-     * Dove si trova il cantiere. Lo mette l'ufficio nel foglio, il tecnico non
-     * lo detta mai.
-     *
-     * Non serve a navigarci — il rapportino si compila a lavoro finito, la
-     * strada l'ha gia' fatta. Serve a DISTINGUERE: quando un cliente ha due
-     * lavori aperti, un tecnico non dice "la M004", dice "quello di via Roma
-     * a Thiene". E' l'unico modo in cui quei due lavori sono diversi per lui.
-     */
-    val indirizzo: String = "",
-) {
-    val aperta: Boolean get() = stato.equals("APERTA", ignoreCase = true)
-
-    /**
-     * L'indirizzo come lo si dice a voce: via e citta', senza numero civico
-     * ne' CAP ne' provincia. "Via Roma 47, 36016 Thiene VI" letto da una voce
-     * sintetica e' rumore; "via Roma a Thiene" e' un'informazione.
-     */
-    val indirizzoParlato: String
-        get() {
-            if (indirizzo.isBlank()) return ""
-            val pezzi = indirizzo.split(",").map { it.trim() }.filter { it.isNotBlank() }
-
-            // Il numero finale si toglie SOLO nel formato canonico "Via X 47,
-            // 36016 Citta", riconoscibile dalla virgola. Senza virgola non si
-            // sa cosa sia quel numero: in "Zona industriale lotto 7" e' il
-            // lotto, e toglierlo rovina l'indirizzo invece di ripulirlo.
-            val canonico = pezzi.size > 1
-            val via = pezzi.firstOrNull().orEmpty()
-                .let { if (canonico) it.replace(Regex("\\s*\\d+\\s*$"), "") else it }
-                .trim()
-            val citta = pezzi.getOrNull(1).orEmpty()
-                .replace(Regex("^\\d{5}\\s*"), "")      // via il CAP
-                .replace(Regex("\\s*\\([^)]*\\)$"), "") // via la provincia fra parentesi
-                .replace(Regex("\\s+[A-Z]{2}$"), "")    // via la sigla provincia
-                .trim()
-            return when {
-                via.isNotBlank() && citta.isNotBlank() -> "$via a $citta"
-                via.isNotBlank() -> via
-                else -> indirizzo
+    /** Tutto, per le copie sul telefono (coda e ultimo elenco letto). */
+    fun aJson(): JSONObject = perIlFoglio()
+        .put("foto", JSONArray().apply { foto.forEach { put(it.aJson()) } })
+        .put("firma", firma?.aJson() ?: JSONObject.NULL)
+        .put("firmatario", firmatario)
+        .put("firmatoIl", firmatoIl)
+        .put("stato", stato.name)
+        .put("modificato", modificato)
+        .put("inviatoIl", inviatoIl)
+        .put("fatturatoIl", fatturatoIl)
+        .put("creato", creato)
+        .put("costoOrario", costoOrario ?: JSONObject.NULL)
+        .apply {
+            conto?.let {
+                put("oreTotali", it.oreTotali)
+                put("compensoOre", it.compensoOre)
+                put("rimborsoKm", it.rimborsoKm)
+                put("totale", it.totale)
+                put("tariffaApplicata", it.tariffa)
+                put("euroKm", it.euroKm)
+                put("pagaViaggio", it.pagaViaggio)
+                put("kmRimborsati", it.kmRimborsati)
+                put("maggExtra", it.maggExtra)
             }
         }
-}
 
-/** Quello che il foglio sa: serve all'AI per riconoscere i nomi veri. */
-data class Anagrafiche(
-    val clienti: List<Cliente> = emptyList(),
-    val commesse: List<Commessa> = emptyList(),
-) {
-    fun commesseDi(idCliente: String): List<Commessa> =
-        commesse.filter { it.idCliente == idCliente && it.aperta }
+    companion object {
+        val ISO: DateTimeFormatter = DateTimeFormatter.ISO_LOCAL_DATE
+
+        fun nuovo(tecnico: String, oggi: LocalDate = LocalDate.now()) = Rapportino(
+            idLocale = nuovoIdLocale(),
+            data = oggi,
+            tecnico = tecnico,
+        )
+
+        fun nuovoIdLocale(): String = "W-" + UUID.randomUUID().toString().replace("-", "").take(16)
+
+        /**
+         * Da JSON: sia la risposta dello script sia le copie sul telefono.
+         *
+         * Lo script manda i conti con i loro nomi (tariffa = quella applicata);
+         * le copie locali li hanno sotto "tariffaApplicata", perche' "tariffa"
+         * li' e' quella scritta a mano. Si capisce dalla presenza di "totale".
+         */
+        fun daJson(o: JSONObject, dalFoglio: Boolean = false): Rapportino {
+            val haConto = o.has("totale") && !o.isNull("totale")
+            val tariffaApplicata = when {
+                dalFoglio -> o.numero("tariffa")
+                else -> o.numero("tariffaApplicata")
+            }
+            val conto = if (haConto) Conto(
+                oreTotali = o.numero("oreTotali") ?: 0.0,
+                tariffa = tariffaApplicata ?: 0.0,
+                compensoOre = o.numero("compensoOre") ?: 0.0,
+                rimborsoKm = o.numero("rimborsoKm") ?: 0.0,
+                totale = o.numero("totale") ?: 0.0,
+                euroKm = o.numero("euroKm") ?: 0.0,
+                pagaViaggio = o.optBoolean("pagaViaggio", false),
+                kmRimborsati = o.optBoolean("kmRimborsati", true),
+                maggExtra = o.numero("maggExtra") ?: 0.0,
+            ) else null
+            val id = o.testo("id")
+            return Rapportino(
+                // I rapportini del primo Wisper non hanno idLocale: li si
+                // riconosce dal numero, e alla prima modifica ne prendono uno.
+                idLocale = o.testo("idLocale").ifBlank { if (id.isNotBlank()) "R-$id" else nuovoIdLocale() },
+                data = runCatching { LocalDate.parse(o.testo("data"), ISO) }.getOrDefault(LocalDate.now()),
+                tecnico = o.testo("tecnico"),
+                idCliente = o.testo("idCliente"),
+                cliente = o.testo("cliente"),
+                idCommessa = o.testo("idCommessa"),
+                commessa = o.testo("commessa"),
+                codiceProposto = o.testo("codiceProposto"),
+                ticket = o.testo("ticket"),
+                luogo = o.testo("luogo"),
+                descrizione = o.testo("descrizione"),
+                oreLavoro = o.numero("oreLavoro") ?: 0.0,
+                oreExtra = o.numero("oreExtra") ?: 0.0,
+                oreViaggio = o.numero("oreViaggio") ?: 0.0,
+                km = o.numero("km") ?: 0.0,
+                spese = o.numero("spese") ?: 0.0,
+                noteSpese = o.testo("noteSpese"),
+                // Dal foglio la tariffa e' sempre quella applicata: riaprendo un
+                // rapportino privato la si ritrova scritta nel campo.
+                tariffa = if (dalFoglio) tariffaApplicata?.takeIf { it > 0 } else o.numero("tariffa"),
+                noteInterne = o.testo("noteInterne"),
+                id = id,
+                gruppo = o.testo("gruppo"),
+                foto = o.optJSONArray("foto").oggetti().map(FileRemoto::daJson).filter { it.id.isNotBlank() },
+                firma = o.optJSONObject("firma")?.let(FileRemoto::daJson)?.takeIf { it.id.isNotBlank() },
+                firmatario = o.testo("firmatario"),
+                firmatoIl = o.testo("firmatoIl"),
+                stato = Stato.da(o.testo("stato")),
+                conto = conto,
+                modificato = o.testo("modificato"),
+                inviatoIl = o.testo("inviatoIl"),
+                fatturatoIl = o.testo("fatturatoIl"),
+                creato = o.testo("creato"),
+                costoOrario = o.numero("costoOrario"),
+            )
+        }
+    }
 
     /**
-     * Da "M001" a "FV Fara Vicentino".
+     * Il rapportino nella forma esatta in cui lo manda lo script (rapportinoDaRiga):
+     * e' quella che leggono i PDF di pc/ui/documenti.js, quindi i nomi dei campi
+     * non si cambiano. "tariffa" qui e' quella applicata, come sul foglio.
      *
-     * Nel foglio la commessa e' il codice, ma il tecnico i codici non li ha in
-     * mente: per lui e' "il fotovoltaico di Fara". Quindi a schermo e a voce si
-     * mostra sempre la descrizione, e il codice resta un fatto interno.
+     * @param conto quello del foglio, o quello ricalcolato sul telefono se il
+     *        rapportino e' cambiato qui e non e' ancora partito.
+     * @param fotoInAttesa gli id delle foto ancora sul telefono: Dati.file() le
+     *        trova in locale, cosi' il PDF le ha anche senza rete.
+     * @param firmaInAttesa l'id della firma ancora sul telefono, se c'e'.
      */
-    fun descrizioneCommessa(codice: String?): String? {
-        if (codice.isNullOrBlank()) return null
-        val trovata = commesse.firstOrNull { it.id.equals(codice.trim(), ignoreCase = true) }
-        return trovata?.descrizione?.takeIf { it.isNotBlank() } ?: codice
-    }
+    fun comeDalFoglio(
+        conto: Conto? = this.conto,
+        fotoInAttesa: List<String> = emptyList(),
+        firmaInAttesa: String? = null,
+    ): JSONObject = JSONObject()
+        .put("id", id)
+        .put("idLocale", idLocale)
+        .put("data", data.format(ISO))
+        .put("tecnico", tecnico)
+        .put("idCliente", idCliente)
+        .put("cliente", cliente)
+        .put("gruppo", gruppo)
+        .put("idCommessa", idCommessa)
+        .put("commessa", commessa)
+        .put("ticket", ticket)
+        .put("luogo", luogo)
+        .put("descrizione", descrizione)
+        .put("oreLavoro", oreLavoro)
+        .put("oreExtra", oreExtra)
+        .put("oreViaggio", oreViaggio)
+        .put("oreTotali", conto?.oreTotali ?: oreTotali)
+        .put("km", km)
+        .put("spese", spese)
+        .put("noteSpese", noteSpese)
+        .put("foto", JSONArray().apply {
+            foto.forEach { put(it.aJson()) }
+            fotoInAttesa.forEach { put(FileRemoto(it, "").aJson()) }
+        })
+        .put("tariffa", conto?.tariffa ?: tariffa ?: 0.0)
+        .put("pagaViaggio", conto?.pagaViaggio ?: false)
+        .put("kmRimborsati", conto?.kmRimborsati ?: true)
+        .put("euroKm", conto?.euroKm ?: 0.0)
+        .put("maggExtra", conto?.maggExtra ?: 0.0)
+        .put("compensoOre", conto?.compensoOre ?: 0.0)
+        .put("rimborsoKm", conto?.rimborsoKm ?: 0.0)
+        .put("totale", conto?.totale ?: 0.0)
+        .put("costoOrario", costoOrario ?: JSONObject.NULL)
+        .put("noteInterne", noteInterne)
+        .put("firma", (firmaInAttesa?.let { FileRemoto(it, "") } ?: firma)?.aJson() ?: JSONObject.NULL)
+        .put("firmatario", firmatario)
+        .put("firmatoIl", firmatoIl)
+        .put("stato", stato.name)
+        .put("inviatoIl", inviatoIl)
+        .put("fatturatoIl", fatturatoIl)
+        .put("creato", creato)
+        .put("modificato", modificato)
+}
 
-    /** Il cantiere di una commessa, per intero, da mostrare a schermo. */
-    fun indirizzoCommessa(codice: String?): String? {
-        if (codice.isNullOrBlank()) return null
-        return commesse.firstOrNull { it.id.equals(codice.trim(), ignoreCase = true) }
-            ?.indirizzo?.takeIf { it.isNotBlank() }
+/** I conti di un rapportino, come li ha fatti il foglio o [Calcolo] sul telefono. */
+data class Conto(
+    val oreTotali: Double,
+    val tariffa: Double,
+    val compensoOre: Double,
+    val rimborsoKm: Double,
+    val totale: Double,
+    val euroKm: Double = 0.0,
+    val pagaViaggio: Boolean = false,
+    val kmRimborsati: Boolean = true,
+    val maggExtra: Double = 0.0,
+)
+
+/** Un file su Drive: la foto di uno scontrino o una firma. */
+data class FileRemoto(val id: String, val url: String) {
+    fun aJson(): JSONObject = JSONObject().put("id", id).put("url", url)
+
+    companion object {
+        fun daJson(o: JSONObject) = FileRemoto(o.testo("id"), o.testo("url"))
+
+        /** L'id di un file di Drive dal suo indirizzo (.../d/<id>/view), come idDaUrl() nello script. */
+        fun idDaUrl(url: String?): String {
+            val u = url.orEmpty()
+            return (Regex("""/d/([A-Za-z0-9_-]{10,})""").find(u) ?: Regex("""[?&]id=([A-Za-z0-9_-]{10,})""").find(u))
+                ?.groupValues?.get(1).orEmpty()
+        }
     }
+}
+
+enum class Stato(val etichetta: String) {
+    BOZZA("Bozza"),
+    FIRMATO("Firmato"),
+    INVIATO("Inviato"),
+    FATTURATO("Fatturato"),
+    ANNULLATO("Annullato");
+
+    companion object {
+        val BLOCCATI = setOf(FIRMATO, INVIATO, FATTURATO)
+
+        fun da(testo: String?): Stato =
+            entries.firstOrNull { it.name.equals(testo?.trim(), ignoreCase = true) } ?: BOZZA
+    }
+}
+
+// ---- piccoli aiuti per org.json, che con i null e' scomodo ----
+
+internal fun JSONObject.testo(campo: String): String =
+    if (!has(campo) || isNull(campo)) "" else optString(campo).trim()
+
+internal fun JSONObject.numero(campo: String): Double? {
+    if (!has(campo) || isNull(campo)) return null
+    val v = opt(campo)
+    return when (v) {
+        is Number -> v.toDouble()
+        is String -> Numeri.leggi(v)
+        else -> null
+    }?.takeIf { !it.isNaN() }
+}
+
+/** "2026-10-15" (anche "2026-10-15T..."), o null se vuota o non valida. */
+internal fun JSONObject.data(campo: String): LocalDate? =
+    testo(campo).takeIf { it.length >= 10 }?.let { runCatching { LocalDate.parse(it.take(10), Rapportino.ISO) }.getOrNull() }
+
+internal fun JSONObject.booleanoONull(campo: String): Boolean? =
+    if (!has(campo) || isNull(campo)) null else optBoolean(campo)
+
+internal fun JSONArray?.oggetti(): List<JSONObject> {
+    if (this == null) return emptyList()
+    return (0 until length()).mapNotNull { optJSONObject(it) }
 }

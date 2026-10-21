@@ -11,11 +11,14 @@ import kotlinx.coroutines.flow.asStateFlow
 
 class WisperApp : Application() {
 
+    /** Uno solo per tutta l'app: schermate e invio in sottofondo guardano gli stessi dati. */
+    val archivio: Archivio by lazy { Archivio(this) }
+
     override fun onCreate() {
         super.onCreate()
 
-        // Chi sta guardando cosa. Serve al servizio per decidere se puo'
-        // tenersi il microfono: se davanti c'e' un'altra app, Wisper lo molla.
+        // Chi sta guardando cosa: con l'app davanti gli avvisi li mostra la
+        // schermata, e la notifica sarebbe un doppione.
         registerActivityLifecycleCallbacks(object : ActivityLifecycleCallbacks {
             private var vive = 0
             override fun onActivityResumed(a: Activity) { vive++; _davanti.value = vive > 0 }
@@ -26,39 +29,30 @@ class WisperApp : Application() {
             override fun onActivitySaveInstanceState(a: Activity, b: Bundle) {}
             override fun onActivityDestroyed(a: Activity) {}
         })
-        // Il canale della notifica persistente del servizio di ascolto.
-        // Si crea una volta sola all'avvio: se manca, da Android 8 la notifica
-        // non compare e il servizio in primo piano viene ucciso senza spiegazioni.
+
         val gestore = getSystemService(NotificationManager::class.java)
+        // I canali della voce, che non c'e' piu': sui telefoni che avevano la
+        // versione vecchia resterebbero nelle impostazioni a non servire a niente.
+        gestore.deleteNotificationChannel("ascolto")
+        gestore.deleteNotificationChannel("sveglia")
 
+        // "Rapportini non ancora sul foglio" e "il foglio ha rifiutato": servono
+        // quando l'app e' chiusa e l'invio parte in sottofondo.
         gestore.createNotificationChannel(
             NotificationChannel(
-                CANALE_ASCOLTO,
-                getString(R.string.canale_ascolto),
-                NotificationManager.IMPORTANCE_LOW,
-            ).apply { setShowBadge(false) }
+                CANALE_SALVATAGGI,
+                getString(R.string.canale_salvataggi),
+                NotificationManager.IMPORTANCE_DEFAULT,
+            ).apply { setShowBadge(true) }
         )
 
-        // Canale a parte, ad alta importanza: e' l'unico modo per cui Android
-        // accetta di aprire la schermata quando scatta la parola magica. Un
-        // servizio in sottofondo non puo' farlo da solo, ma una notifica "a
-        // schermo intero" si', ed e' lo stesso meccanismo delle chiamate.
-        gestore.createNotificationChannel(
-            NotificationChannel(
-                CANALE_SVEGLIA,
-                getString(R.string.canale_sveglia),
-                NotificationManager.IMPORTANCE_HIGH,
-            ).apply {
-                setShowBadge(false)
-                setSound(null, null)   // il bip lo fa gia' l'app
-                enableVibration(false)
-            }
-        )
+        // Le versioni nuove: lo stato salvato, e il controllo di ogni ora.
+        NuoveVersioni.carica(this)
+        NuoveVersioni.programma(this)
     }
 
     companion object {
-        const val CANALE_ASCOLTO = "ascolto"
-        const val CANALE_SVEGLIA = "sveglia"
+        const val CANALE_SALVATAGGI = "salvataggi"
 
         /** Vero se una schermata di Wisper e' quella che l'utente sta guardando. */
         private val _davanti = MutableStateFlow(false)

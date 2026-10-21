@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<title>Wisper Ufficio, Rapportini</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:inherit;text-decoration:none}a:hover{color:inherit}
+button,input,select{font-family:inherit}
+</style>
+</helmet>
+<div style="position: relative; min-height: 1040px; background: #F4F4F2; font-family: 'Figtree', system-ui, sans-serif; color: #1B1B1F; display: flex; flex-wrap: wrap; align-items: stretch; overflow: hidden">
+
+  <nav aria-label="Sezioni" style="flex: 1 1 220px; max-width: 248px; background: #FFFFFF; border-right: 1px solid #E6E5E1; padding: 22px 14px; box-sizing: border-box; display: flex; flex-direction: column; gap: 4px">
+    <div style="display: flex; align-items: center; gap: 10px; padding: 0 8px 18px 8px">
+      <svg width="32" height="32" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="9" fill="#1B1B1F"></rect><circle cx="16" cy="7.5" r="2.2" fill="#FFC53D"></circle><circle cx="22" cy="10" r="2.2" fill="#FFC53D"></circle><circle cx="24.5" cy="16" r="2.2" fill="#FFC53D"></circle><circle cx="22" cy="22" r="2.2" fill="#FFC53D"></circle><circle cx="16" cy="24.5" r="2.2" fill="#FFC53D"></circle><circle cx="10" cy="22" r="2.2" fill="#FFC53D"></circle><circle cx="7.5" cy="16" r="2.2" fill="#FFC53D"></circle><circle cx="10" cy="10" r="2.2" fill="#FFC53D"></circle><circle cx="16" cy="16" r="3.2" fill="#F2F4F7"></circle></svg>
+      <span style="display: flex; flex-direction: column; line-height: 1.1"><span style="font-size: 18px; font-weight: 800">Wisper</span><span style="font-size: 13px; font-weight: 600; color: #5F5F67">Ufficio</span></span>
+    </div>
+    <a href="Ufficio.dc.html" style="height: 44px; border-radius: 12px; display: flex; align-items: center; gap: 10px; padding: 0 12px; font-size: 15px; font-weight: 600; color: #3F3F46">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3F3F46" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2.5"></rect><path d="M8 3v4M16 3v4M4 10h16"></path></svg>Fine mese</a>
+    <a href="UfficioRapportini.dc.html" style="height: 44px; border-radius: 12px; background: #FFF4D6; display: flex; align-items: center; gap: 10px; padding: 0 12px; font-size: 15px; font-weight: 800">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1B1B1F" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4h10l3 3v13H4V4z"></path><path d="M8 11h8M8 15h6"></path></svg>Rapportini</a>
+    <a href="Ufficio.dc.html" style="height: 44px; border-radius: 12px; display: flex; align-items: center; gap: 10px; padding: 0 12px; font-size: 15px; font-weight: 600; color: #3F3F46">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3F3F46" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7h7l2 2h9v10H3z"></path></svg>Commesse</a>
+    <a href="Ufficio.dc.html" style="height: 44px; border-radius: 12px; display: flex; align-items: center; gap: 10px; padding: 0 12px; font-size: 15px; font-weight: 600; color: #3F3F46">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3F3F46" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"></circle><path d="M3 20c.5-3.5 3-5.5 6-5.5s5.5 2 6 5.5"></path><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 14.5c2 .6 3.3 2.6 3.6 5.5"></path></svg>Clienti</a>
+    <a href="Ufficio.dc.html" style="height: 44px; border-radius: 12px; display: flex; align-items: center; gap: 10px; padding: 0 12px; font-size: 15px; font-weight: 600; color: #3F3F46">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3F3F46" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"></path></svg>Impostazioni</a>
+  </nav>
+
+  <main style="flex: 999 1 560px; min-width: 0; padding: 32px 40px 48px 40px; box-sizing: border-box">
+    <div style="max-width: 1100px; display: flex; flex-direction: column; gap: 18px">
+      <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap">
+        <h1 style="margin: 0; font-size: 34px; font-weight: 800; letter-spacing: -0.8px; flex: 1">Rapportini</h1>
+        <button style="height: 44px; border-radius: 14px; border: none; background: #FFC53D; padding: 0 18px; font-size: 15px; font-weight: 800; color: #1B1B1F; cursor: pointer">Nuovo rapportino</button>
+      </div>
+
+      <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap">
+        <label style="flex: 1; min-width: 240px; height: 46px; border-radius: 14px; border: 1.5px solid #CFCEC9; background: #FFFFFF; display: flex; align-items: center; gap: 10px; padding: 0 14px">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5F5F67" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"></circle><path d="M20 20l-4-4"></path></svg>
+          <input aria-label="Cerca" placeholder="Cliente, commessa, lavoro, numero" style="flex: 1; border: none; outline: none; font-size: 15px; background: transparent; color: #1B1B1F">
+        </label>
+        <select aria-label="Mese" style="height: 46px; border-radius: 14px; border: 1.5px solid #CFCEC9; background: #FFFFFF; padding: 0 12px; font-size: 15px; font-weight: 700; color: #1B1B1F">
+          <option>Ottobre 2026</option>
+          <option>Settembre 2026</option>
+          <option>Tutto l'anno</option>
+        </select>
+        <div role="group" aria-label="Quali rapportini" style="height: 46px; border-radius: 14px; background: #E7E6E2; padding: 4px; display: flex; gap: 4px; box-sizing: border-box">
+          <sc-for list="{{ filtri }}" as="f" hint-placeholder-count="3">
+            <button onClick="{{ f.pick }}" style="height: 38px; border-radius: 10px; border: none; background: {{ f.fondo }}; padding: 0 14px; font-size: 14px; font-weight: 700; color: #1B1B1F; cursor: pointer">{{ f.etichetta }}</button>
+          </sc-for>
+        </div>
+      </div>
+
+      <sc-for list="{{ gruppi }}" as="g" hint-placeholder-count="2">
+        <div style="display: flex; flex-direction: column; gap: 8px">
+          <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 6px 4px 0 4px">
+            <span style="font-size: 18px; font-weight: 800">{{ g.nome }}</span>
+            <span style="font-size: 14px; font-weight: 600; color: #5F5F67; flex: 1">{{ g.riassunto }}</span>
+            <span style="font-size: 18px; font-weight: 800">{{ g.totale }}</span>
+            <sc-if value="{{ g.conAzione }}" hint-placeholder-val="{{ true }}">
+              <a href="Ufficio.dc.html" style="height: 38px; border-radius: 12px; border: 1.5px solid #CFCEC9; background: #FFFFFF; padding: 0 14px; display: flex; align-items: center; font-size: 14px; font-weight: 700">Prepara riepilogo</a>
+            </sc-if>
+          </div>
+          <div style="background: #FFFFFF; border: 1px solid #E6E5E1; border-radius: 18px; overflow: hidden">
+            <div style="display: grid; grid-template-columns: 76px 128px minmax(0, 1.2fr) minmax(0, 2fr) 60px 60px 84px 96px 108px; gap: 12px; padding: 10px 16px; background: #FAFAF8; border-bottom: 1px solid #ECEBE7; font-size: 12px; font-weight: 700; letter-spacing: 0.04em; color: #5F5F67">
+              <span>DATA</span><span>N°</span><span>COMMESSA</span><span>LAVORO SVOLTO</span><span style="text-align: right">ORE</span><span style="text-align: right">KM</span><span style="text-align: right">SPESE</span><span style="text-align: right">TOTALE</span><span>STATO</span>
+            </div>
+            <sc-for list="{{ g.righe }}" as="r" hint-placeholder-count="3">
+              <button onClick="{{ r.apri }}" style="width: 100%; display: grid; grid-template-columns: 76px 128px minmax(0, 1.2fr) minmax(0, 2fr) 60px 60px 84px 96px 108px; gap: 12px; align-items: center; padding: 0 16px; min-height: 58px; border: none; border-bottom: 1px solid #F0EFEB; background: {{ r.fondo }}; text-align: left; font-size: 15px; color: #1B1B1F; cursor: pointer">
+                <span style="font-weight: 700">{{ r.data }}</span>
+                <span style="color: #3F3F46; font-variant-numeric: tabular-nums">{{ r.id }}</span>
+                <span style="display: flex; flex-direction: column; min-width: 0"><span style="font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{ r.commessa }}</span><span style="font-size: 13px; color: #5F5F67">{{ r.sotto }}</span></span>
+                <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #3F3F46">{{ r.lavoro }}</span>
+                <span style="text-align: right; font-variant-numeric: tabular-nums">{{ r.ore }}</span>
+                <span style="text-align: right; font-variant-numeric: tabular-nums">{{ r.km }}</span>
+                <span style="text-align: right; font-variant-numeric: tabular-nums; color: #3F3F46">{{ r.spese }}</span>
+                <span style="text-align: right; font-weight: 800; font-variant-numeric: tabular-nums">{{ r.totale }}</span>
+                <span><span style="font-size: 12px; font-weight: 700; color: {{ r.chipTesto }}; background: {{ r.chipFondo }}; border-radius: 999px; padding: 3px 10px; white-space: nowrap">{{ r.stato }}</span></span>
+              </button>
+            </sc-for>
+          </div>
+        </div>
+      </sc-for>
+
+      <div style="display: flex; justify-content: flex-end; gap: 28px; padding: 6px 20px 0 20px; font-size: 15px; font-weight: 600; color: #3F3F46">
+        <span>{{ totaleOre }}</span><span>{{ totaleKm }}</span><span style="font-weight: 800; color: #1B1B1F">Totale {{ totaleEuro }}</span>
+      </div>
+    </div>
+  </main>
+
+  <sc-if value="{{ aperto }}" hint-placeholder-val="{{ true }}">
+    <aside aria-label="Dettaglio del rapportino" style="position: absolute; top: 0; right: 0; bottom: 0; width: min(440px, 100%); background: #FFFFFF; border-left: 1px solid #E6E5E1; box-shadow: -18px 0 40px rgba(20,20,22,0.10); display: flex; flex-direction: column">
+      <div style="padding: 22px 24px 0 24px; display: flex; flex-direction: column; gap: 14px; flex: 1">
+        <div style="display: flex; align-items: center; gap: 10px">
+          <span style="font-size: 22px; font-weight: 800; flex: 1">{{ sel.id }}</span>
+          <span style="font-size: 13px; font-weight: 700; color: {{ sel.chipTesto }}; background: {{ sel.chipFondo }}; border-radius: 999px; padding: 3px 10px">{{ sel.stato }}</span>
+          <button onClick="{{ chiudi }}" aria-label="Chiudi" style="width: 40px; height: 40px; border-radius: 20px; border: none; background: #E7E6E2; display: flex; align-items: center; justify-content: center; cursor: pointer"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1B1B1F" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg></button>
+        </div>
+        <div style="display: flex; align-items: center; gap: 6px">
+          <sc-for list="{{ passi }}" as="p" hint-placeholder-count="4">
+            <span style="flex: 1; display: flex; flex-direction: column; gap: 6px">
+              <span style="height: 6px; border-radius: 3px; background: {{ p.colore }}"></span>
+              <span style="font-size: 12px; font-weight: {{ p.peso }}; color: {{ p.testo }}">{{ p.nome }}</span>
+            </span>
+          </sc-for>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 2px">
+          <span style="font-size: 18px; font-weight: 800">{{ sel.cliente }}</span>
+          <span style="font-size: 15px; color: #3F3F46">{{ sel.commessaLunga }} · {{ sel.dataLunga }}</span>
+        </div>
+        <div style="background: #F4F4F2; border-radius: 16px; padding: 14px 16px; font-size: 16px; line-height: 1.45">{{ sel.lavoro }}</div>
+        <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px">
+          <span style="display: flex; flex-direction: column"><span style="font-size: 13px; font-weight: 700; color: #5F5F67">Ore</span><span style="font-size: 18px; font-weight: 800">{{ sel.ore }}</span></span>
+          <span style="display: flex; flex-direction: column"><span style="font-size: 13px; font-weight: 700; color: #5F5F67">Km</span><span style="font-size: 18px; font-weight: 800">{{ sel.km }}</span></span>
+          <span style="display: flex; flex-direction: column"><span style="font-size: 13px; font-weight: 700; color: #5F5F67">Spese</span><span style="font-size: 18px; font-weight: 800">{{ sel.spese }}</span></span>
+        </div>
+        <div style="border-top: 1px solid #ECEBE7; padding-top: 12px; display: flex; flex-direction: column; gap: 6px; font-size: 15px">
+          <div style="display: flex; justify-content: space-between"><span style="color: #3F3F46">{{ sel.dettaglioOre }}</span><span style="font-weight: 700">{{ sel.compenso }}</span></div>
+          <div style="display: flex; justify-content: space-between"><span style="color: #3F3F46">{{ sel.dettaglioKm }}</span><span style="font-weight: 700">{{ sel.rimborso }}</span></div>
+          <div style="display: flex; justify-content: space-between; align-items: baseline; margin-top: 4px"><span style="font-size: 16px; font-weight: 800">Totale</span><span style="font-size: 28px; font-weight: 800; letter-spacing: -0.5px">{{ sel.totale }}</span></div>
+        </div>
+        <sc-if value="{{ sel.firmato }}" hint-placeholder-val="{{ false }}">
+          <div style="display: flex; align-items: center; gap: 12px; border: 1px solid #ECEBE7; border-radius: 14px; padding: 10px 12px">
+            <svg width="96" height="40" viewBox="0 0 96 40" aria-hidden="true"><path d="M6 28c6-14 9-24 12-23s-2 22 1 24 9-19 13-18 1 16 4 17 7-10 11-11 2 9 6 9 8-6 13-7 7 5 13 3" fill="none" stroke="#1B1B1F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+            <span style="display: flex; flex-direction: column; font-size: 14px"><span style="font-weight: 700">{{ sel.firmatario }}</span><span style="color: #5F5F67">firmato il 15/10 alle 17:02</span></span>
+          </div>
+        </sc-if>
+      </div>
+      <div style="padding: 16px 24px 22px 24px; border-top: 1px solid #ECEBE7; display: flex; gap: 10px">
+        <button style="height: 52px; border-radius: 16px; border: 1.5px solid #CFCEC9; background: #FFFFFF; padding: 0 18px; font-size: 16px; font-weight: 700; cursor: pointer">PDF</button>
+        <button aria-label="Altre azioni" style="width: 52px; height: 52px; border-radius: 16px; border: 1.5px solid #CFCEC9; background: #FFFFFF; display: flex; align-items: center; justify-content: center; cursor: pointer"><svg width="20" height="20" viewBox="0 0 24 24" fill="#1B1B1F" aria-hidden="true"><circle cx="5.5" cy="12" r="1.8"></circle><circle cx="12" cy="12" r="1.8"></circle><circle cx="18.5" cy="12" r="1.8"></circle></svg></button>
+        <button style="flex: 1; height: 52px; border-radius: 16px; border: none; background: #FFC53D; font-size: 16px; font-weight: 800; color: #1B1B1F; cursor: pointer">{{ sel.azione }}</button>
+      </div>
+    </aside>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1040}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { filtro: 'tutti', scelto: 'RAP/2026/0006' };
+  }
+  renderVals() {
+    const s = this.state;
+    const chip = {
+      BOZZA: { stato: 'Da firmare', chipTesto: '#8A5A00', chipFondo: '#FFF4D6', azione: 'Modifica' },
+      FIRMATO: { stato: 'Firmato', chipTesto: '#1F6A30', chipFondo: '#EBF7EE', azione: 'Invia al cliente' },
+      INVIATO: { stato: 'Inviato', chipTesto: '#1E4FA8', chipFondo: '#EAF1FD', azione: 'Segna fatturato' }
+    };
+    const tutti = [
+      { id: 'RAP/2026/0006', gruppo: 'Elettrodinamica', cliente: 'Batokyo', data: '15/10', dataLunga: 'giovedì 15 ottobre', commessa: 'Nuovo magazzino', commessaLunga: 'P2601 Nuovo magazzino automatico', lavoro: 'Taratura inverter del nastro 2 e prova a vuoto con il capo reparto.', ore: '7,5', km: '96', spese: '12,50 €', totale: '280,46 €', stato: 'FIRMATO', dettaglioOre: '6,5 h × 30 € (viaggio non pagato)', compenso: '195,00 €', dettaglioKm: '96 km × 0,76 €', rimborso: '72,96 €', firmatario: 'Mario Bianchi' },
+      { id: 'RAP/2026/0003', gruppo: 'Elettrodinamica', cliente: 'Batokyo', data: '08/10', dataLunga: 'giovedì 8 ottobre', commessa: 'Nuovo magazzino', commessaLunga: 'P2601 Nuovo magazzino automatico', lavoro: 'Collaudo sensori e messa in servizio del nastro.', ore: '9', km: '96', spese: '', totale: '297,96 €', stato: 'INVIATO', dettaglioOre: '7,5 h × 30 € (viaggio non pagato)', compenso: '225,00 €', dettaglioKm: '96 km × 0,76 €', rimborso: '72,96 €', firmatario: '' },
+      { id: 'RAP/2026/0002', gruppo: 'Elettrodinamica', cliente: 'Batokyo', data: '02/10', dataLunga: 'venerdì 2 ottobre', commessa: 'Nuovo magazzino', commessaLunga: 'P2601 Nuovo magazzino automatico', lavoro: 'Cablaggio del quadro di linea 1.', ore: '9', km: '96', spese: '14,50 €', totale: '357,46 €', stato: 'INVIATO', dettaglioOre: '8 h + 1 h extra × 30 €', compenso: '270,00 €', dettaglioKm: '96 km × 0,76 €', rimborso: '72,96 €', firmatario: '' },
+      { id: 'RAP/2026/0005', gruppo: 'Rossi Impianti Srl', cliente: 'Rossi Impianti Srl', data: '15/10', dataLunga: 'giovedì 15 ottobre', commessa: 'Quadro capannone', commessaLunga: 'P2602 Quadro elettrico capannone', lavoro: 'Verifica impianto di terra.', ore: '3,5', km: '30', spese: '', totale: '127,80 €', stato: 'BOZZA', dettaglioOre: '2,5 h × 42 €', compenso: '105,00 €', dettaglioKm: '30 km × 0,76 €', rimborso: '22,80 €', firmatario: '' },
+      { id: 'RAP/2026/0004', gruppo: 'Rossi Impianti Srl', cliente: 'Rossi Impianti Srl', data: '10/10', dataLunga: 'sabato 10 ottobre', commessa: 'Quadro capannone', commessaLunga: 'P2602 Quadro elettrico capannone', lavoro: 'Sostituzione interruttore generale.', ore: '3,5', km: '22', spese: '', totale: '163,72 €', stato: 'BOZZA', dettaglioOre: '3,5 h × 42 €', compenso: '147,00 €', dettaglioKm: '22 km × 0,76 €', rimborso: '16,72 €', firmatario: '' }
+    ];
+    const passa = (r) => s.filtro === 'tutti' || (s.filtro === 'fatturare' && (r.stato === 'FIRMATO' || r.stato === 'INVIATO')) || (s.filtro === 'firmare' && r.stato === 'BOZZA');
+    const visibili = tutti.filter(passa);
+    const eur = (x) => {
+      const t = (Math.round(x * 100) / 100).toFixed(2).split('.');
+      return t[0].replace(/\B(?=(\d{3})+(?!\d))/g, '.') + ',' + t[1] + ' €';
+    };
+    const num = (t) => parseFloat(String(t).replace('.', '').replace(',', '.')) || 0;
+    const nomi = ['Elettrodinamica', 'Rossi Impianti Srl'];
+    const gruppi = nomi.map((nome) => {
+      const righe = visibili.filter((r) => r.gruppo === nome);
+      const ore = righe.reduce((a, r) => a + num(r.ore), 0);
+      const km = righe.reduce((a, r) => a + num(r.km), 0);
+      const tot = righe.reduce((a, r) => a + num(r.totale), 0);
+      return {
+        nome: nome,
+        riassunto: righe.length + (righe.length === 1 ? ' rapportino · ' : ' rapportini · ') + String(ore).replace('.', ',') + ' h · ' + km + ' km',
+        totale: eur(tot),
+        conAzione: righe.some((r) => r.stato !== 'BOZZA'),
+        vuoto: righe.length === 0,
+        righe: righe.map((r) => Object.assign({}, r, chip[r.stato], {
+          sotto: r.gruppo === r.cliente ? r.commessaLunga.split(' ')[0] : r.cliente + ' · ' + r.commessaLunga.split(' ')[0],
+          fondo: s.scelto === r.id ? '#FFF8E5' : '#FFFFFF',
+          apri: () => this.setState({ scelto: r.id })
+        }))
+      };
+    }).filter((g) => !g.vuoto);
+    const sel0 = tutti.find((r) => r.id === s.scelto);
+    const ordine = ['BOZZA', 'FIRMATO', 'INVIATO', 'FATTURATO'];
+    const at = sel0 ? ordine.indexOf(sel0.stato) : 0;
+    return {
+      filtri: [['tutti', 'Tutti'], ['fatturare', 'Da fatturare'], ['firmare', 'Da firmare']].map((f) => ({
+        etichetta: f[1], fondo: s.filtro === f[0] ? '#FFFFFF' : 'transparent', pick: () => this.setState({ filtro: f[0] })
+      })),
+      gruppi: gruppi,
+      totaleOre: String(visibili.reduce((a, r) => a + num(r.ore), 0)).replace('.', ',') + ' h',
+      totaleKm: visibili.reduce((a, r) => a + num(r.km), 0) + ' km',
+      totaleEuro: eur(visibili.reduce((a, r) => a + num(r.totale), 0)),
+      aperto: !!sel0,
+      sel: sel0 ? Object.assign({}, sel0, chip[sel0.stato], { firmato: sel0.stato === 'FIRMATO', ore: sel0.ore + ' h', km: sel0.km + ' km', spese: sel0.spese || '—' }) : {},
+      passi: ['Bozza', 'Firmato', 'Inviato', 'Fatturato'].map((nome, i) => ({
+        nome: nome,
+        colore: i <= at ? '#1B1B1F' : '#E2E1DD',
+        testo: i === at ? '#1B1B1F' : '#5F5F67',
+        peso: i === at ? '800' : '600'
+      })),
+      chiudi: () => this.setState({ scelto: null })
+    };
+  }
+}
+</script>
+</body>
+</html>

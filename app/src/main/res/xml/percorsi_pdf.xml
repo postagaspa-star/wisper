@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Solo i PDF fatti dal telefono (rapportino/Stampa.kt): chi li riceve non vede altro dell'app. -->
+<paths>
+    <cache-path name="pdf" path="pdf/" />
+</paths>

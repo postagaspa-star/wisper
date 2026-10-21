@@ -1,19 +1,387 @@
 /**
- * WISPER - ponte tra l'app Android e il foglio "Rapportini vocali".
+ * WISPER - il foglio dei rapportini e il suo script.
  *
- * Va in Estensioni -> Apps Script del foglio, dentro Code.gs.
- * Essendo legato al foglio non serve nessun ID.
+ * Fa da ponte per due programmi: l'app sul telefono, dove si compilano i
+ * rapportini, e Wisper Ufficio sul computer, dove si gestiscono commesse,
+ * clienti, PDF e invii. Il foglio e' l'unico posto dove i dati stanno davvero:
+ * tutti e due leggono e scrivono qui, e i conti li fa SOLO questo script, cosi'
+ * telefono e computer non possono mai dare due totali diversi.
  *
- * Le intestazioni si riconoscono a prescindere da maiuscole, spazi e trattini
- * bassi: "CLIENTE", "Cliente" e "cliente" sono la stessa cosa.
+ * Va in Estensioni -> Apps Script del foglio, dentro Code.gs. Essendo legato al
+ * foglio non serve nessun ID.
+ *
+ * LA PRIMA VOLTA: dall'editor lancia preparaFoglio(). Crea le schede e le
+ * colonne che mancano, senza toccare quelle che ci sono, e scrive nel registro
+ * il CODICE da mettere nell'app e nel programma del computer. Senza codice lo
+ * script non risponde a nessuno: dentro ci sono fatturato e scontrini.
  *
  * DOPO OGNI MODIFICA: Distribuisci -> Gestisci distribuzioni -> matita ->
  * Versione: Nuova versione. Senza, l'indirizzo serve ancora il codice vecchio.
+ *
+ * Le intestazioni si riconoscono a prescindere da maiuscole, spazi e trattini
+ * bassi: "ORE_LAVORO", "Ore lavoro" e "ore lavoro" sono la stessa colonna.
+ *
+ * OGNI RICHIESTA LASCIA UNA RIGA nella scheda Accessi (quando, quale
+ * dispositivo, per fare cosa, com'e' andata), e la scheda Dispositivi elenca
+ * chi si e' collegato. Un dispositivo nuovo, o troppi codici sbagliati, e
+ * arriva un'email: vedi "Il registro degli accessi" piu' sotto.
  */
 
-const NOME_RAPPORTINI = 'Rapportini';
-const NOME_CLIENTI    = 'Clienti';
-const NOME_COMMESSE   = 'Commesse';
+var NOME_RAPPORTINI = 'Rapportini';
+var NOME_CLIENTI = 'Clienti';
+var NOME_COMMESSE = 'Commesse';
+var NOME_GRUPPI = 'Gruppi';
+var NOME_IMPOSTAZIONI = 'Impostazioni';
+var NOME_ACCESSI = 'Accessi';
+var NOME_DISPOSITIVI = 'Dispositivi';
+
+var FUSO = 'Europe/Rome';
+
+/**
+ * Le colonne di ogni scheda: [chiave nel codice, intestazione, altri nomi].
+ *
+ * Gli altri nomi servono ai fogli nati prima: la colonna "ORE" del primo Wisper
+ * e' la stessa cosa di "ORE_LAVORO", e si continua a usarla invece di crearne
+ * una seconda accanto.
+ */
+var SCHEMA = {
+  Rapportini: [
+    ['id', 'ID'],
+    ['idLocale', 'ID_LOCALE'],
+    ['data', 'DATA'],
+    ['tecnico', 'TECNICO'],
+    ['idCliente', 'ID_CLIENTE'],
+    ['cliente', 'CLIENTE'],
+    ['gruppo', 'GRUPPO'],
+    ['idCommessa', 'ID_COMMESSA'],
+    ['commessa', 'COMMESSA'],
+    ['ticket', 'TICKET'],
+    ['luogo', 'LUOGO'],
+    ['descrizione', 'DESCRIZIONE'],
+    ['oreLavoro', 'ORE_LAVORO', 'ORE'],
+    ['oreExtra', 'ORE_EXTRA'],
+    ['oreViaggio', 'ORE_VIAGGIO'],
+    ['oreTotali', 'ORE_TOTALI'],
+    ['km', 'KM'],
+    ['spese', 'SPESE'],
+    ['noteSpese', 'NOTE_SPESE'],
+    ['foto', 'FOTO_SPESE'],
+    ['tariffa', 'TARIFFA'],
+    ['pagaViaggio', 'PAGA_VIAGGIO'],
+    ['kmRimborsati', 'KM_RIMBORSATI'],
+    ['euroKm', 'EURO_KM'],
+    ['maggExtra', 'MAGG_EXTRA'],
+    ['compensoOre', 'COMPENSO_ORE'],
+    ['rimborsoKm', 'RIMBORSO_KM'],
+    ['totale', 'TOTALE'],
+    ['costoOrario', 'COSTO_ORARIO'],
+    ['noteInterne', 'NOTE_INTERNE'],
+    ['firma', 'FIRMA'],
+    ['firmatario', 'FIRMATARIO'],
+    ['firmatoIl', 'FIRMATO_IL'],
+    ['stato', 'STATO'],
+    ['inviatoIl', 'INVIATO_IL'],
+    ['fatturatoIl', 'FATTURATO_IL'],
+    ['creato', 'CREATO', 'TIMESTAMP'],
+    ['modificato', 'MODIFICATO']
+  ],
+  Clienti: [
+    ['id', 'ID_CLIENTE', 'IDCliente', 'ID', 'Codice', 'Codice_Cliente'],
+    ['nome', 'RAGIONE_SOCIALE', 'Cliente', 'Nome', 'Denominazione'],
+    ['alias', 'ALIAS', 'Alias_Cliente', 'Soprannomi'],
+    ['gruppo', 'GRUPPO'],
+    ['email', 'EMAIL'],
+    ['telefono', 'TELEFONO'],
+    ['indirizzo', 'INDIRIZZO'],
+    ['partitaIva', 'PARTITA_IVA', 'PIVA'],
+    // Vuota = tariffa libera, quella scritta nel rapportino (si ricorda l'ultima).
+    // Elettrodinamica ha 30: si fattura a lei, a tariffa fissa.
+    ['tariffaFissa', 'TARIFFA_FISSA'],
+    // Facoltativo: quanto costa a te un'ora per questo cliente, sempre uguale (Elettrodinamica).
+    // Vince sul costo orario della commessa.
+    ['costoFisso', 'COSTO_FISSO'],
+    ['ultimaTariffa', 'ULTIMA_TARIFFA'],
+    ['pagaViaggio', 'PAGA_VIAGGIO'],
+    ['kmRimborsati', 'KM_RIMBORSATI'],
+    ['maggExtra', 'MAGG_EXTRA'],
+    // Un cliente finale di Elettrodinamica dei primi tempi: resta nel foglio, ma non
+    // si propone piu'. Qui c'e' il codice del cliente in cui e' confluito.
+    ['accorpatoIn', 'ACCORPATO_IN'],
+    ['note', 'NOTE']
+  ],
+  Commesse: [
+    ['id', 'ID_COMMESSA', 'IDCommessa', 'Codice', 'Codice_Commessa'],
+    ['idCliente', 'ID_CLIENTE', 'IDCliente'],
+    ['descrizione', 'DESCRIZIONE', 'Desc', 'Lavoro'],
+    ['stato', 'STATO', 'Stato_Commessa'],
+    ['indirizzo', 'INDIRIZZO', 'Via', 'Luogo', 'Cantiere'],
+    // Il budget: ore previste x prezzo orario = budget in euro.
+    ['budgetOre', 'BUDGET_ORE'],
+    ['budgetEuro', 'BUDGET_EURO'],
+    // Il prezzo di un'ora di questa commessa: si propone nei rapportini (non per un cliente a
+    // tariffa fissa). Vuoto: lo prende dalla tariffa del primo rapportino.
+    ['prezzoOrario', 'PREZZO_ORARIO'],
+    // Quanto costa a te un'ora di questa commessa; vuoto = COSTO_ORARIO delle impostazioni.
+    ['costoOrario', 'COSTO_ORARIO'],
+    // Vuoto = quello delle impostazioni (EURO_KM).
+    ['euroKm', 'EURO_KM'],
+    ['inizio', 'INIZIO'],
+    ['finePrevista', 'FINE_PREVISTA'],
+    ['cartella', 'CARTELLA'],
+    // Il codice che aveva prima dei codici 26ST (P2601, M001...).
+    ['codicePrecedente', 'CODICE_PRECEDENTE'],
+    ['note', 'NOTE']
+  ],
+  Gruppi: [
+    ['nome', 'GRUPPO'],
+    ['tariffaFissa', 'TARIFFA_FISSA'],
+    ['pagaViaggio', 'PAGA_VIAGGIO'],
+    ['kmRimborsati', 'KM_RIMBORSATI'],
+    ['maggExtra', 'MAGG_EXTRA'],
+    ['email', 'EMAIL'],
+    ['note', 'NOTE']
+  ]
+};
+
+/**
+ * Le impostazioni, una per riga: chiave, valore, a cosa serve.
+ * Stanno in una scheda e non nel codice perche' le cambia chi usa il programma,
+ * non chi lo scrive: il costo ACI cambia ogni anno.
+ */
+var IMPOSTAZIONI_INIZIALI = [
+  ['EURO_KM', 0.76, 'Rimborso chilometrico, se la commessa non ne ha uno suo. Da controllare ogni gennaio sulla tabella ACI dell\'auto qui sotto.'],
+  ['AUTO', 'Volvo XC40', 'L\'auto su cui si calcola il rimborso ACI.'],
+  ['COSTO_ORARIO', '', 'Quanto costa a te un\'ora di lavoro. Serve solo a calcolare il margine delle commesse.'],
+  ['TICKET_ATTIVO', 'NO', 'SI per mostrare il campo ticket nel rapportino.'],
+  ['TECNICO', 'Manuel Gasparotto', 'Il nome che compare come compilatore.'],
+  ['RAGIONE_SOCIALE', 'Studio Tecnico GM', 'Intestazione dei PDF.'],
+  ['INDIRIZZO', '', 'Intestazione dei PDF.'],
+  ['PARTITA_IVA', '', 'Intestazione dei PDF.'],
+  ['EMAIL', '', 'Intestazione dei PDF.'],
+  ['TELEFONO', '', 'Intestazione dei PDF.'],
+  ['PEC', '', 'Intestazione dei PDF.'],
+  ['FIRMA_TECNICO', '', 'La firma del compilatore: si mette da sola su ogni rapportino. La carica il programma.'],
+  ['EMAIL_AVVISI', '', 'Chi riceve gli avvisi di sicurezza (dispositivo nuovo, codici sbagliati) oltre al proprietario del foglio. Piu\' indirizzi separati da virgola.']
+];
+
+/**
+ * Le colonne che sono sempre testo, anche quando dentro ci sono solo cifre. Una
+ * partita IVA "01234567890" scritta cosi' com'e', Fogli la trasforma nel numero
+ * 1234567890, e lo zero davanti sparisce. Stessa cosa per un fisso "0445...".
+ */
+var SEMPRE_TESTO = ['partitaIva', 'telefono', 'PARTITA_IVA', 'TELEFONO'];
+
+/**
+ * Elettrodinamica: il cliente a cui si fattura a tariffa fissa, 30 euro l'ora,
+ * i km si' e il tempo di viaggio no. Per chi lavora con Elettrodinamica presso
+ * altri clienti si fattura sempre a lei: il cliente finale non conta. Gli altri
+ * clienti hanno la tariffa libera, scritta nel rapportino, e lo script se la
+ * ricorda cliente per cliente.
+ *
+ * (Fino alla 0.3.4 c'erano i gruppi "Elettrodinamica" e "Privato", con i clienti
+ * finali dentro Elettrodinamica: la scheda Gruppi resta solo per i fogli vecchi,
+ * e aggiornaStruttura() la trasforma.)
+ */
+var ELETTRODINAMICA = {
+  nome: 'Elettrodinamica', tariffaFissa: 30, pagaViaggio: 'NO', kmRimborsati: 'SI', maggExtra: 0,
+  note: 'Tariffa fissa: il tempo di viaggio non si paga, i km si.'
+};
+
+/** Gli stati di un rapportino, in ordine di vita. */
+var STATI = ['BOZZA', 'FIRMATO', 'INVIATO', 'FATTURATO', 'ANNULLATO'];
+
+/** Da firmato in poi il contenuto non si tocca: si riporta in bozza, e la firma cade. */
+var STATI_BLOCCATI = ['FIRMATO', 'INVIATO', 'FATTURATO'];
+
+// ---------------------------------------------------------------------------
+// Ingresso
+// ---------------------------------------------------------------------------
+
+function doGet(e) {
+  var p = (e && e.parameter) || {};
+  return rispondi(p, function () {
+    switch (p.azione) {
+      case 'rapportini':
+        return { ok: true, rapportini: leggiRapportini(p.da, p.a, p.tutti === '1') };
+      case 'file':
+        return { ok: true, file: leggiFile(p.id) };
+      case 'documenti':
+        return documentiCommessa(p.idCommessa);
+      default:
+        return rispostaAnagrafiche();
+    }
+  });
+}
+
+function doPost(e) {
+  var d;
+  try {
+    d = JSON.parse(e.postData.contents);
+  } catch (err) {
+    registraAccesso({}, 'richiesta non valida');
+    return json({ ok: false, errore: 'Richiesta non valida' });
+  }
+  return rispondi(d, function () {
+    if (d.azione === 'anagrafiche') return rispostaAnagrafiche();
+    if (d.azione === 'rapportini') return { ok: true, rapportini: leggiRapportini(d.da, d.a, d.tutti === true) };
+    if (d.azione === 'file') return { ok: true, file: leggiFile(d.id) };
+    if (d.azione === 'documenti') return documentiCommessa(d.idCommessa);
+
+    // Tutto il resto scrive: uno alla volta. Telefono e computer possono
+    // salvare nello stesso istante, e due righe col numero RAP/2026/0007
+    // sarebbero un guaio da sistemare a mano.
+    var lucchetto = LockService.getScriptLock();
+    lucchetto.waitLock(30000);
+    try {
+      return scrivi(d);
+    } finally {
+      lucchetto.releaseLock();
+    }
+  });
+}
+
+/**
+ * Controlla il codice, fa il lavoro e lascia la riga nel registro degli
+ * accessi. Sempre: anche quando il codice e' sbagliato, anzi soprattutto allora.
+ */
+function rispondi(d, lavoro) {
+  try {
+    controllaCodice(d.codice);
+  } catch (err) {
+    registraAccesso(d, messaggio(err) === 'Codice sbagliato' ? 'codice sbagliato' : 'rifiutato');
+    return json({ ok: false, errore: messaggio(err) });
+  }
+  var risposta;
+  try {
+    dimenticaCommesse();
+    manutenzioneUnaVolta();
+    risposta = lavoro();
+  } catch (err) {
+    risposta = { ok: false, errore: messaggio(err) };
+  }
+  registraAccesso(d, risposta && risposta.ok === false ? 'errore' : 'ok');
+  return json(risposta);
+}
+
+function scrivi(d) {
+  switch (d.azione) {
+    case 'salvaRapportino':
+      return { ok: true, rapportino: salvaRapportino(d.rapportino || {}) };
+    case 'caricaFile':
+      return { ok: true, file: caricaFile(d) };
+    case 'togliFile':
+      return { ok: true, rapportino: togliFile(d.id, d.fileId) };
+    case 'stato':
+      return { ok: true, rapportini: cambiaStato(d.ids || [d.id], d.stato) };
+    case 'creaCliente':
+      return { ok: true, cliente: creaCliente(d) };
+    case 'aggiornaCliente':
+      return { ok: true, cliente: aggiornaCliente(d.id, d.campi || {}) };
+    case 'creaCommessa':
+      return { ok: true, commessa: creaCommessa(d) };
+    case 'aggiornaCommessa':
+      return { ok: true, commessa: aggiornaCommessa(d.id, d.campi || {}) };
+    case 'statoCommessa':
+      // Il nome che usava il primo Wisper: resta valido.
+      return { ok: true, commessa: aggiornaCommessa(d.idCommessa, { stato: d.stato }) };
+    case 'salvaGruppo':
+      return { ok: true, gruppo: salvaGruppo(d.gruppo || {}) };
+    case 'salvaImpostazioni':
+      return { ok: true, impostazioni: salvaImpostazioni(d.valori || {}) };
+    case 'inviaEmail':
+      return { ok: true, rapportini: inviaEmail(d) };
+    case 'collegaComputer':
+      return { ok: true, a: collegaComputer(d) };
+    default:
+      throw new Error('Azione sconosciuta: ' + d.azione);
+  }
+}
+
+function controllaCodice(codice) {
+  var giusto = PropertiesService.getScriptProperties().getProperty('CODICE');
+  if (!giusto) throw new Error('Foglio non preparato: lancia preparaFoglio() dall\'editor dello script');
+  if (String(codice || '') !== giusto) throw new Error('Codice sbagliato');
+}
+
+function rispostaAnagrafiche() {
+  return {
+    ok: true,
+    clienti: leggiClienti(),
+    commesse: leggiCommesse(),
+    gruppi: leggiGruppi(),
+    impostazioni: leggiImpostazioni()
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Preparazione del foglio (si lancia a mano dall'editor)
+// ---------------------------------------------------------------------------
+
+/**
+ * Crea quello che manca e non tocca niente di quello che c'e'. Si puo'
+ * lanciare quante volte si vuole: la seconda volta non fa nulla.
+ */
+function preparaFoglio() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  // La scheda Gruppi serve solo ai fogli nati prima della 0.3.5: in uno nuovo non si crea.
+  Object.keys(SCHEMA).forEach(function (nome) {
+    if (nome !== NOME_GRUPPI || ss.getSheetByName(nome)) aggiungiColonne(nome);
+  });
+
+  var imp = ss.getSheetByName(NOME_IMPOSTAZIONI) || ss.insertSheet(NOME_IMPOSTAZIONI);
+  if (imp.getLastRow() === 0) {
+    imp.getRange(1, 1, 1, 3).setValues([['CHIAVE', 'VALORE', 'A COSA SERVE']]).setFontWeight('bold');
+    imp.setFrozenRows(1);
+  }
+  var chiavi = imp.getLastRow() > 1
+    ? imp.getRange(2, 1, imp.getLastRow() - 1, 1).getValues().map(function (r) { return String(r[0]).trim(); })
+    : [];
+  IMPOSTAZIONI_INIZIALI.forEach(function (riga) {
+    if (chiavi.indexOf(riga[0]) < 0) imp.appendRow(riga);
+  });
+
+  schedaAccessi();
+  schedaDispositivi();
+  riparaTesti();
+  aggiornaStruttura();
+
+  var prop = PropertiesService.getScriptProperties();
+  if (!prop.getProperty('CODICE')) {
+    prop.setProperty('CODICE', Utilities.getUuid().replace(/-/g, ''));
+  }
+  Logger.log('CODICE da mettere nell\'app e nel programma del computer: ' + prop.getProperty('CODICE'));
+}
+
+/** Crea la scheda se manca e aggiunge le colonne dello schema che non ci sono. */
+function aggiungiColonne(nome) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var f = ss.getSheetByName(nome) || ss.insertSheet(nome);
+  var intestazioni = f.getLastColumn() > 0
+    ? f.getRange(1, 1, 1, f.getLastColumn()).getValues()[0].map(function (h) { return String(h).trim(); })
+    : [];
+  var presenti = intestazioni.map(normalizza);
+  var aggiunte = [];
+  SCHEMA[nome].forEach(function (col) {
+    var nomi = col.slice(1).map(normalizza);
+    var trovata = nomi.some(function (n) { return presenti.indexOf(n) >= 0; });
+    if (!trovata) aggiunte.push(col[1]);
+  });
+  if (aggiunte.length) {
+    f.getRange(1, intestazioni.length + 1, 1, aggiunte.length).setValues([aggiunte]).setFontWeight('bold');
+    Logger.log(nome + ': aggiunte le colonne ' + aggiunte.join(', '));
+  }
+  if (f.getFrozenRows() === 0) f.setFrozenRows(1);
+}
+
+/** Se il codice e' finito in mani sbagliate: ne fa uno nuovo, e il vecchio smette di valere. */
+function cambiaCodice() {
+  PropertiesService.getScriptProperties().setProperty('CODICE', Utilities.getUuid().replace(/-/g, ''));
+  Logger.log('Nuovo CODICE: ' + PropertiesService.getScriptProperties().getProperty('CODICE'));
+}
+
+// ---------------------------------------------------------------------------
+// Righe e colonne
+// ---------------------------------------------------------------------------
 
 function foglio(nome) {
   return SpreadsheetApp.getActiveSpreadsheet().getSheetByName(nome);
@@ -26,63 +394,27 @@ function normalizza(s) {
     .replace(/[^a-z0-9]/g, '');
 }
 
-/** Primo valore trovato fra piu' nomi possibili di colonna. */
-function campo(riga, nomiPossibili) {
-  for (var i = 0; i < nomiPossibili.length; i++) {
-    var k = normalizza(nomiPossibili[i]);
-    if (Object.prototype.hasOwnProperty.call(riga, k) &&
-        riga[k] !== '' && riga[k] !== null && riga[k] !== undefined) {
-      return riga[k];
+/**
+ * Per ogni colonna del foglio, la chiave dello schema a cui corrisponde (o null
+ * se e' una colonna che lo schema non conosce: quelle si lasciano stare).
+ */
+function chiaviColonne(nome, intestazioni) {
+  var schema = SCHEMA[nome] || [];
+  var usate = {};
+  return intestazioni.map(function (h) {
+    var n = normalizza(h);
+    for (var i = 0; i < schema.length; i++) {
+      var col = schema[i];
+      // Una chiave sola per colonna: se il foglio ha sia "ORE" che "ORE_LAVORO"
+      // vince la prima, e l'altra resta com'e'.
+      if (usate[col[0]]) continue;
+      if (col.slice(1).map(normalizza).indexOf(n) >= 0) {
+        usate[col[0]] = true;
+        return col[0];
+      }
     }
-  }
-  return '';
-}
-
-// ---------------------------------------------------------------------------
-// Ingresso unico. "azione" decide cosa fare; senza azione si salva un
-// rapportino, cosi' le versioni vecchie dell'app continuano a funzionare.
-// ---------------------------------------------------------------------------
-function doPost(e) {
-  try {
-    var d = JSON.parse(e.postData.contents);
-    switch (d.azione) {
-      case 'creaCliente':
-        return json({ ok: true, cliente: creaCliente(d.nome) });
-      case 'creaCommessa':
-        return json({ ok: true, commessa: creaCommessa(d.idCliente, d.descrizione) });
-      case 'statoCommessa':
-        return json({ ok: true, commessa: impostaStato(d.idCommessa, d.stato) });
-      default:
-        return json({ ok: true, id: salvaRapportino(d) });
-    }
-  } catch (err) {
-    return json({ ok: false, errore: String(err) });
-  }
-}
-
-function doGet(e) {
-  try {
-    return json({
-      ok: true,
-      clienti: leggiClienti(),
-      commesse: leggiCommesse(),
-      diagnostica: diagnostica()
-    });
-  } catch (err) {
-    return json({ ok: false, errore: String(err) });
-  }
-}
-
-function diagnostica() {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  return {
-    schede: ss.getSheets().map(function (s) { return s.getName(); }),
-    intestazioni: {
-      Rapportini: intestazioniDi(NOME_RAPPORTINI),
-      Clienti: intestazioniDi(NOME_CLIENTI),
-      Commesse: intestazioniDi(NOME_COMMESSE)
-    }
-  };
+    return null;
+  });
 }
 
 function intestazioniDi(nome) {
@@ -92,199 +424,1575 @@ function intestazioniDi(nome) {
     .map(function (h) { return String(h).trim(); });
 }
 
-/** Scrive una riga mettendo ogni valore sotto la colonna col nome giusto. */
-function scriviRiga(nomeFoglio, valoriNormalizzati) {
-  var f = foglio(nomeFoglio);
-  if (!f) throw new Error('Scheda "' + nomeFoglio + '" non trovata');
-  var intestazioni = intestazioniDi(nomeFoglio);
-  if (intestazioni.length === 0) throw new Error('La scheda ' + nomeFoglio + ' non ha intestazioni');
-  f.appendRow(intestazioni.map(function (nome) {
-    var k = normalizza(nome);
-    return Object.prototype.hasOwnProperty.call(valoriNormalizzati, k) ? valoriNormalizzati[k] : '';
+/** Tutte le righe come oggetti {chiave: valore}, con _riga = numero di riga nel foglio. */
+function leggi(nome) {
+  var f = foglio(nome);
+  if (!f) return [];
+  var dati = f.getDataRange().getValues();
+  if (dati.length < 2) return [];
+  var chiavi = chiaviColonne(nome, dati[0]);
+  var righe = [];
+  for (var i = 1; i < dati.length; i++) {
+    var o = { _riga: i + 1 };
+    var vuota = true;
+    chiavi.forEach(function (k, c) {
+      if (!k) return;
+      o[k] = senzaApostrofo(dati[i][c]);
+      if (dati[i][c] !== '' && dati[i][c] !== null) vuota = false;
+    });
+    if (!vuota) righe.push(o);
+  }
+  return righe;
+}
+
+/** Aggiunge una riga mettendo ogni valore sotto la colonna giusta. */
+function scriviRiga(nome, valori) {
+  var f = foglio(nome);
+  if (!f) throw new Error('Scheda "' + nome + '" non trovata: lancia preparaFoglio()');
+  var chiavi = chiaviColonne(nome, intestazioniDi(nome));
+  if (chiavi.length === 0) throw new Error('La scheda ' + nome + ' non ha intestazioni');
+  f.appendRow(chiavi.map(function (k) {
+    return k && Object.prototype.hasOwnProperty.call(valori, k) ? perLaCella(k, valori[k]) : '';
   }));
+  return f.getLastRow();
 }
-
-// ---------------------------------------------------------------------------
-// Rapportini
-// ---------------------------------------------------------------------------
-function salvaRapportino(dati) {
-  var id = 'RAP-' + Utilities.formatDate(new Date(), 'Europe/Rome', 'yyyyMMdd-HHmmss');
-  scriviRiga(NOME_RAPPORTINI, {
-    'id': id,
-    'data': dati.data || Utilities.formatDate(new Date(), 'Europe/Rome', 'dd/MM/yyyy'),
-    'cliente': dati.cliente || '',
-    'commessa': dati.commessa || '',
-    'descrizione': dati.descrizione || '',
-    'ore': numero(dati.ore),
-    'km': numero(dati.km),
-    'spese': numero(dati.spese),
-    'firma': dati.firma || '',
-    // Colonna "STATO COMMESSA": come resta il lavoro dopo la giornata.
-    // Ha preso il posto del vecchio "esito", che guardava indietro.
-    'statocommessa': dati.statoCommessa || '',
-    'timestamp': Utilities.formatDate(new Date(), 'Europe/Rome', 'dd/MM/yyyy HH:mm:ss')
-  });
-  return id;
-}
-
-// ---------------------------------------------------------------------------
-// Anagrafiche nuove, create parlando
-// ---------------------------------------------------------------------------
 
 /**
- * Prossimo codice libero di una serie tipo C001 / M001.
+ * Riscrive solo le colonne indicate di una riga, in una scrittura sola.
+ * La riga si riscrive intera, quindi anche le celle che non cambiano passano da
+ * perLaCella: una partita IVA gia' giusta non deve perdere lo zero perche' si e'
+ * corretta l'email.
+ */
+function aggiornaRiga(nome, riga, valori) {
+  var f = foglio(nome);
+  var intestazioni = intestazioniDi(nome);
+  var chiavi = chiaviColonne(nome, intestazioni);
+  var range = f.getRange(riga, 1, 1, intestazioni.length);
+  var attuale = range.getValues()[0];
+  chiavi.forEach(function (k, c) {
+    if (k && Object.prototype.hasOwnProperty.call(valori, k)) attuale[c] = valori[k];
+  });
+  range.setValues([attuale.map(function (v, c) { return perLaCella(chiavi[c], v); })]);
+}
+
+/**
+ * Il valore come va scritto nella cella. Fogli legge quello che riceve come se
+ * l'avesse digitato una persona: "0445123456" diventa il numero 445123456,
+ * "=..." diventa una formula. L'apostrofo davanti dice a Fogli "questo e'
+ * testo": nella cella non si vede, e rileggendo non c'e' (senzaApostrofo).
+ */
+function perLaCella(chiave, v) {
+  if (typeof v !== 'string' || v === '' || v.charAt(0) === '\'') return v;
+  if (SEMPRE_TESTO.indexOf(chiave) >= 0) return '\'' + v;
+  // Una formula, o un segno davanti che Fogli proverebbe a calcolare.
+  if (/^[=+\-@]/.test(v)) return '\'' + v;
+  // Solo cifre con uno zero davanti: un codice, non un numero.
+  if (/^0[\d\s]*$/.test(v)) return '\'' + v;
+  return v;
+}
+
+/** Se Fogli restituisse anche l'apostrofo che dice "testo", qui si toglie. */
+function senzaApostrofo(v) {
+  return typeof v === 'string' && v.charAt(0) === '\'' ? v.slice(1) : v;
+}
+
+/**
+ * Una partita IVA dal foglio. Quelle scritte prima della 0.3.3 possono essere
+ * diventate numeri, e un numero non ha zeri davanti. Una partita IVA italiana ha
+ * sempre 11 cifre, quindi gli zeri mancanti si rimettono senza indovinare.
+ */
+function partitaIvaDalFoglio(v) {
+  if (typeof v === 'number' && isFinite(v)) {
+    var s = String(Math.round(v));
+    return s.length < 11 ? ('00000000000' + s).slice(-11) : s;
+  }
+  return testo(senzaApostrofo(v));
+}
+
+/**
+ * Un telefono dal foglio. Se e' diventato un numero ha perso lo zero dei fissi
+ * (in Italia cominciano tutti con 0) o il + del prefisso 39. I cellulari
+ * cominciano con 3 e restano come sono.
+ */
+function telefonoDalFoglio(v) {
+  if (typeof v === 'number' && isFinite(v)) {
+    var s = String(Math.round(v));
+    if (/^39\d{9,}$/.test(s)) return '+' + s;
+    return s.charAt(0) === '3' ? s : '0' + s;
+  }
+  return testo(senzaApostrofo(v));
+}
+
+/**
+ * Rimette a posto, nel foglio, le partite IVA e i telefoni diventati numeri.
+ * Si puo' lanciare quante volte si vuole: quelli gia' giusti sono testo e non
+ * li tocca.
+ */
+function riparaTesti() {
+  var riparati = 0;
+  leggi(NOME_CLIENTI).forEach(function (r) {
+    var valori = {};
+    if (typeof r.partitaIva === 'number') valori.partitaIva = partitaIvaDalFoglio(r.partitaIva);
+    if (typeof r.telefono === 'number') valori.telefono = telefonoDalFoglio(r.telefono);
+    if (Object.keys(valori).length) {
+      aggiornaRiga(NOME_CLIENTI, r._riga, valori);
+      riparati++;
+    }
+  });
+  var imp = foglio(NOME_IMPOSTAZIONI);
+  if (imp && imp.getLastRow() > 1) {
+    imp.getRange(2, 1, imp.getLastRow() - 1, 2).getValues().forEach(function (r, i) {
+      var k = String(r[0]).trim();
+      if (typeof r[1] !== 'number' || SEMPRE_TESTO.indexOf(k) < 0) return;
+      var giusto = k === 'PARTITA_IVA' ? partitaIvaDalFoglio(r[1]) : telefonoDalFoglio(r[1]);
+      imp.getRange(i + 2, 2).setValue(perLaCella(k, giusto));
+      riparati++;
+    });
+  }
+  if (riparati) Logger.log('Partite IVA e telefoni rimessi come testo: ' + riparati + ' righe');
+  return riparati;
+}
+
+/**
+ * Riscrive in una volta sola le righe di una scheda: cambia(riga) restituisce i
+ * valori da cambiare, o null per lasciarla com'e'. Una lettura e una scrittura
+ * per tutta la scheda, invece di due per riga: per sistemare cento rapportini
+ * serve un secondo, non un minuto. Va chiamata col lucchetto preso.
+ */
+function riscriviRighe(nome, cambia) {
+  var f = foglio(nome);
+  if (!f || f.getLastRow() < 2 || f.getLastColumn() === 0) return 0;
+  var range = f.getRange(1, 1, f.getLastRow(), f.getLastColumn());
+  var dati = range.getValues();
+  var chiavi = chiaviColonne(nome, dati[0].map(function (h) { return String(h).trim(); }));
+  var cambiate = 0;
+  for (var i = 1; i < dati.length; i++) {
+    var o = { _riga: i + 1 };
+    chiavi.forEach(function (k, c) { if (k) o[k] = senzaApostrofo(dati[i][c]); });
+    var nuovi = cambia(o);
+    if (!nuovi) continue;
+    chiavi.forEach(function (k, c) {
+      if (k && Object.prototype.hasOwnProperty.call(nuovi, k)) dati[i][c] = nuovi[k];
+    });
+    cambiate++;
+  }
+  if (cambiate) {
+    range.setValues(dati.map(function (riga, i) {
+      return i === 0 ? riga : riga.map(function (v, c) { return perLaCella(chiavi[c], v); });
+    }));
+  }
+  return cambiate;
+}
+
+/**
+ * Il foglio come lo vuole la 0.3.5 (ottobre 2026). Si puo' lanciare quante volte
+ * si vuole: quello che e' gia' a posto non lo tocca.
+ *
+ *  1. Le colonne nuove (TARIFFA_FISSA, EURO_KM delle commesse...).
+ *  2. Il cliente Elettrodinamica, a tariffa fissa, se non c'e'.
+ *  3. I clienti finali che stavano nel gruppo Elettrodinamica confluiscono in
+ *     lei: i loro rapportini e le loro commesse passano a Elettrodinamica, e i
+ *     loro nomi diventano soprannomi di Elettrodinamica. Le loro righe restano
+ *     nel foglio (ACCORPATO_IN), non si cancella niente.
+ *  4. Le commesse coi codici vecchi (P2601, M001) prendono il codice 26ST001;
+ *     quello vecchio resta in CODICE_PRECEDENTE.
+ *  5. Nella colonna COMMESSA dei rapportini va il codice, non la descrizione.
+ */
+function aggiornaStruttura() {
+  [NOME_CLIENTI, NOME_COMMESSE, NOME_RAPPORTINI].forEach(aggiungiColonne);
+  var elettro = clienteElettrodinamica();
+  var accorpati = accorpaInElettrodinamica(elettro);
+  var ricodificate = ricodificaCommesse();
+  var colonna = codiceNellaColonnaCommessa();
+  dimenticaCommesse();
+  Logger.log('Struttura 0.3.5: Elettrodinamica ' + elettro.id + ', clienti accorpati ' + accorpati +
+    ', commesse con codice nuovo ' + ricodificate + ', rapportini col codice in COMMESSA ' + colonna);
+}
+
+/** Il cliente Elettrodinamica: lo trova (o lo crea) e lo mette a tariffa fissa. */
+function clienteElettrodinamica() {
+  var chiave = normalizza(ELETTRODINAMICA.nome);
+  var gruppo = leggiGruppi().filter(function (g) { return normalizza(g.nome) === chiave; })[0];
+  var valori = {
+    tariffaFissa: gruppo && gruppo.tariffaFissa !== null ? gruppo.tariffaFissa : ELETTRODINAMICA.tariffaFissa,
+    pagaViaggio: gruppo ? (gruppo.pagaViaggio ? 'SI' : 'NO') : ELETTRODINAMICA.pagaViaggio,
+    kmRimborsati: gruppo ? (gruppo.kmRimborsati ? 'SI' : 'NO') : ELETTRODINAMICA.kmRimborsati,
+    maggExtra: gruppo ? gruppo.maggExtra : ELETTRODINAMICA.maggExtra,
+    gruppo: ''
+  };
+  var righe = leggi(NOME_CLIENTI);
+  var riga = righe.filter(function (r) {
+    if (testo(r.accorpatoIn)) return false;
+    return [r.nome].concat(testo(r.alias).split(',')).some(function (n) { return normalizza(n) === chiave; });
+  })[0];
+  if (riga) {
+    // Una tariffa fissa gia' scritta e' una scelta di chi usa il foglio: non si tocca.
+    if (testo(riga.tariffaFissa) === '') {
+      if (gruppo && gruppo.email && !testo(riga.email)) valori.email = gruppo.email;
+      aggiornaRiga(NOME_CLIENTI, riga._riga, valori);
+    }
+    return trovaCliente(leggiClienti(), testo(riga.id), '');
+  }
+  var id = prossimoCodice(righe.map(function (r) { return testo(r.id); }), 'C');
+  scriviRiga(NOME_CLIENTI, Object.assign({
+    id: id, nome: ELETTRODINAMICA.nome, email: gruppo ? gruppo.email : '', note: ELETTRODINAMICA.note
+  }, valori));
+  return trovaCliente(leggiClienti(), id, '');
+}
+
+/** I clienti del gruppo Elettrodinamica confluiscono nel cliente Elettrodinamica. */
+function accorpaInElettrodinamica(elettro) {
+  var chiave = normalizza(ELETTRODINAMICA.nome);
+  var vecchi = leggi(NOME_CLIENTI).filter(function (r) {
+    return testo(r.id) !== elettro.id && !testo(r.accorpatoIn) && normalizza(r.gruppo) === chiave;
+  });
+  if (!vecchi.length) return 0;
+  var ids = vecchi.map(function (r) { return testo(r.id); });
+  var nomi = vecchi.map(function (r) { return normalizza(r.nome); });
+  var suoi = function (idCliente, nome) {
+    return ids.indexOf(testo(idCliente)) >= 0 || (!testo(idCliente) && nomi.indexOf(normalizza(nome)) >= 0);
+  };
+  riscriviRighe(NOME_RAPPORTINI, function (r) {
+    return suoi(r.idCliente, r.cliente) ? { idCliente: elettro.id, cliente: elettro.nome, gruppo: '' } : null;
+  });
+  riscriviRighe(NOME_COMMESSE, function (m) {
+    return suoi(m.idCliente, '') ? { idCliente: elettro.id } : null;
+  });
+  riscriviRighe(NOME_CLIENTI, function (c) {
+    if (ids.indexOf(testo(c.id)) >= 0) return { accorpatoIn: elettro.id };
+    if (testo(c.id) !== elettro.id) return null;
+    // I nomi dei clienti finali diventano soprannomi: un rapportino vecchio ancora in
+    // coda su un telefono, intestato a uno di loro, finisce comunque a Elettrodinamica.
+    var alias = testo(c.alias).split(',').map(function (s) { return s.trim(); }).filter(String);
+    vecchi.forEach(function (v) { if (alias.indexOf(testo(v.nome)) < 0) alias.push(testo(v.nome)); });
+    return { alias: alias.join(', ') };
+  });
+  return vecchi.length;
+}
+
+/**
+ * Le commesse coi codici di prima prendono il codice 26ST, nell'ordine in cui
+ * sono nel foglio; l'anno e' quello di inizio. I rapportini seguono la loro
+ * commessa grazie a CODICE_PRECEDENTE, anche se un giro si fosse interrotto a meta'.
+ */
+function ricodificaCommesse() {
+  var righe = leggi(NOME_COMMESSE);
+  var numero = maxNumeroCommessa(righe.map(function (m) { return testo(m.id); }));
+  var nuovi = {};
+  righe.forEach(function (m) {
+    var vecchio = testo(m.id).toUpperCase();
+    if (!vecchio || RE_CODICE_COMMESSA.test(vecchio)) return;
+    numero++;
+    nuovi[vecchio] = codiceCommessa(eData(m.inizio) ? m.inizio.getFullYear() : new Date().getFullYear(), numero);
+  });
+  var fatte = riscriviRighe(NOME_COMMESSE, function (m) {
+    var nuovo = nuovi[testo(m.id).toUpperCase()];
+    return nuovo ? { id: nuovo, codicePrecedente: testo(m.id) } : null;
+  });
+  var daVecchio = {};
+  leggi(NOME_COMMESSE).forEach(function (m) {
+    if (testo(m.codicePrecedente)) daVecchio[testo(m.codicePrecedente).toUpperCase()] = testo(m.id);
+  });
+  riscriviRighe(NOME_RAPPORTINI, function (r) {
+    var nuovo = daVecchio[testo(r.idCommessa).toUpperCase()];
+    return nuovo ? { idCommessa: nuovo } : null;
+  });
+  dimenticaCommesse();
+  return fatte;
+}
+
+/** Nella colonna COMMESSA dei rapportini il codice, al posto della descrizione. */
+function codiceNellaColonnaCommessa() {
+  var commesse = leggiCommesse();
+  return riscriviRighe(NOME_RAPPORTINI, function (r) {
+    var id = testo(r.idCommessa);
+    if (id) return testo(r.commessa) === id ? null : { commessa: id };
+    // I rapportini dei primi tempi avevano solo la descrizione: si cerca la commessa.
+    var desc = normalizza(r.commessa);
+    if (!desc) return null;
+    var m = commesse.filter(function (x) {
+      return normalizza(x.descrizione) === desc && (!testo(r.idCliente) || x.idCliente === testo(r.idCliente));
+    })[0];
+    return m ? { idCommessa: m.id, commessa: m.id } : null;
+  });
+}
+
+/**
+ * I lavori da fare una volta sola sul foglio, alla prima richiesta col codice
+ * giusto dopo aver incollato uno script nuovo: niente da lanciare a mano.
+ * Ognuno ha la sua proprieta': fatto una volta, non si ripete.
+ */
+var MANUTENZIONI = [
+  ['TESTI_RIPARATI', function () { riparaTesti(); }],
+  ['STRUTTURA_0_3_5', function () { aggiornaStruttura(); }]
+];
+
+function manutenzioneUnaVolta() {
+  try {
+    var prop = PropertiesService.getScriptProperties();
+    var da = MANUTENZIONI.filter(function (m) { return !prop.getProperty(m[0]); });
+    if (!da.length) return;
+    var lucchetto = LockService.getScriptLock();
+    if (!lucchetto.tryLock(20000)) return;
+    try {
+      da.forEach(function (m) {
+        if (prop.getProperty(m[0])) return;
+        m[1]();
+        prop.setProperty(m[0], String(new Date().getTime()));
+      });
+    } finally {
+      lucchetto.releaseLock();
+    }
+  } catch (err) {
+    // Se non riesce ci riprova alla prossima richiesta. Intanto le letture si arrangiano.
+    Logger.log('manutenzione non riuscita: ' + messaggio(err));
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Anagrafiche
+// ---------------------------------------------------------------------------
+
+function leggiClienti() {
+  return leggi(NOME_CLIENTI).map(function (r) {
+    return {
+      id: testo(r.id),
+      nome: testo(r.nome),
+      alias: testo(r.alias).split(',').map(function (s) { return s.trim(); }).filter(String),
+      gruppo: testo(r.gruppo),
+      email: testo(r.email),
+      telefono: telefonoDalFoglio(r.telefono),
+      indirizzo: testo(r.indirizzo),
+      partitaIva: partitaIvaDalFoglio(r.partitaIva),
+      tariffaFissa: numeroONull(r.tariffaFissa),
+      costoFisso: numeroONull(r.costoFisso),
+      ultimaTariffa: numeroONull(r.ultimaTariffa),
+      pagaViaggio: siNoONull(r.pagaViaggio),
+      kmRimborsati: siNoONull(r.kmRimborsati),
+      maggExtra: numeroONull(r.maggExtra),
+      note: testo(r.note),
+      accorpatoIn: testo(r.accorpatoIn)
+    };
+  }).filter(function (c) { return c.nome !== '' && !c.accorpatoIn; });
+}
+
+function leggiCommesse() {
+  return leggi(NOME_COMMESSE).map(function (r) {
+    return {
+      id: testo(r.id),
+      idCliente: testo(r.idCliente),
+      descrizione: testo(r.descrizione),
+      stato: testo(r.stato).toUpperCase() || 'APERTA',
+      indirizzo: testo(r.indirizzo),
+      budgetOre: numeroONull(r.budgetOre),
+      budgetEuro: numeroONull(r.budgetEuro),
+      prezzoOrario: numeroONull(r.prezzoOrario),
+      costoOrario: numeroONull(r.costoOrario),
+      euroKm: numeroONull(r.euroKm),
+      inizio: dataIso(r.inizio),
+      finePrevista: dataIso(r.finePrevista),
+      cartella: testo(r.cartella),
+      codicePrecedente: testo(r.codicePrecedente),
+      note: testo(r.note)
+    };
+  }).filter(function (m) { return m.id !== ''; });
+}
+
+/**
+ * La descrizione di una commessa dal suo codice. Nella colonna COMMESSA dei
+ * rapportini c'e' il codice: telefono e computer ricevono anche la descrizione,
+ * per mostrarla dove serve. Si legge la scheda una volta per richiesta.
+ */
+var descrizioniCommesse = null;
+
+function descrizioneCommessa(id) {
+  if (!testo(id)) return '';
+  if (descrizioniCommesse === null) {
+    descrizioniCommesse = {};
+    leggiCommesse().forEach(function (m) { descrizioniCommesse[m.id.toUpperCase()] = m.descrizione; });
+  }
+  return descrizioniCommesse[testo(id).toUpperCase()] || '';
+}
+
+/** Dopo aver scritto nella scheda Commesse. */
+function dimenticaCommesse() {
+  descrizioniCommesse = null;
+}
+
+function leggiGruppi() {
+  return leggi(NOME_GRUPPI).map(function (r) {
+    return {
+      nome: testo(r.nome),
+      tariffaFissa: numeroONull(r.tariffaFissa),
+      pagaViaggio: siNoONull(r.pagaViaggio) === true,
+      kmRimborsati: siNoONull(r.kmRimborsati) !== false,
+      maggExtra: numero(r.maggExtra),
+      // A chi va il riepilogo del mese quando si fattura al gruppo e non al cliente.
+      email: testo(r.email),
+      note: testo(r.note)
+    };
+  }).filter(function (g) { return g.nome !== ''; });
+}
+
+/** Le impostazioni come oggetto: { EURO_KM: 0.76, AUTO: 'Volvo XC40', ... } */
+function leggiImpostazioni() {
+  var f = foglio(NOME_IMPOSTAZIONI);
+  var o = {};
+  IMPOSTAZIONI_INIZIALI.forEach(function (r) { o[r[0]] = r[1]; });
+  if (!f || f.getLastRow() < 2) return o;
+  f.getRange(2, 1, f.getLastRow() - 1, 2).getValues().forEach(function (r) {
+    var k = String(r[0]).trim();
+    if (!k) return;
+    if (k === 'PARTITA_IVA') o[k] = partitaIvaDalFoglio(r[1]);
+    else if (k === 'TELEFONO') o[k] = telefonoDalFoglio(r[1]);
+    else o[k] = senzaApostrofo(r[1]);
+  });
+  return o;
+}
+
+function salvaImpostazioni(valori) {
+  var f = foglio(NOME_IMPOSTAZIONI);
+  if (!f) throw new Error('Scheda Impostazioni non trovata: lancia preparaFoglio()');
+  var righe = f.getLastRow() > 1 ? f.getRange(2, 1, f.getLastRow() - 1, 1).getValues() : [];
+  Object.keys(valori).forEach(function (k) {
+    var i = righe.map(function (r) { return String(r[0]).trim(); }).indexOf(k);
+    if (i >= 0) f.getRange(i + 2, 2).setValue(perLaCella(k, valori[k]));
+    else {
+      f.appendRow([k, perLaCella(k, valori[k]), '']);
+      righe.push([k]);
+    }
+  });
+  return leggiImpostazioni();
+}
+
+function salvaGruppo(g) {
+  var nome = testo(g.nome);
+  if (!nome) throw new Error('Serve il nome del gruppo');
+  var valori = {
+    nome: nome,
+    tariffaFissa: g.tariffaFissa === null || g.tariffaFissa === '' || g.tariffaFissa === undefined ? '' : numero(g.tariffaFissa),
+    pagaViaggio: g.pagaViaggio ? 'SI' : 'NO',
+    kmRimborsati: g.kmRimborsati === false ? 'NO' : 'SI',
+    maggExtra: numero(g.maggExtra)
+  };
+  if (g.note !== undefined) valori.note = g.note;
+  if (g.email !== undefined) valori.email = testo(g.email);
+  var esistente = leggi(NOME_GRUPPI).filter(function (r) { return normalizza(r.nome) === normalizza(nome); })[0];
+  if (esistente) aggiornaRiga(NOME_GRUPPI, esistente._riga, valori);
+  else scriviRiga(NOME_GRUPPI, valori);
+  return leggiGruppi().filter(function (x) { return normalizza(x.nome) === normalizza(nome); })[0];
+}
+
+/**
+ * Prossimo codice libero di una serie tipo C001.
  * Si guarda il numero piu' alto gia' presente e si aggiunge uno: cosi' i buchi
  * lasciati da righe cancellate non vengono riusati, e un codice non finisce
  * mai su due anagrafiche diverse.
  */
-function prossimoCodice(nomeFoglio, colonne, lettera) {
+function prossimoCodice(codici, lettera) {
   var max = 0;
-  righeDi(nomeFoglio).forEach(function (r) {
-    var v = String(campo(r, colonne)).trim().toUpperCase();
-    var m = v.match(new RegExp('^' + lettera + '(\\d+)$'));
+  codici.forEach(function (c) {
+    var m = String(c).trim().toUpperCase().match(new RegExp('^' + lettera + '(\\d+)$'));
     if (m) max = Math.max(max, parseInt(m[1], 10));
   });
   var n = max + 1;
   return lettera + (n < 1000 ? ('00' + n).slice(-3) : String(n));
 }
 
-function creaCliente(nome) {
-  var pulito = String(nome || '').trim();
+/**
+ * Il codice delle commesse: anno a due cifre, ST (Studio Tecnico GM, sempre
+ * uguale) e un numero, 26ST001. Il numero va di fila e non riparte a gennaio:
+ * dopo 26ST046 viene 27ST047. Stessa regola in conti.js e nell'app.
+ */
+var RE_CODICE_COMMESSA = /^\d{2}ST(\d+)$/;
+
+/** Il numero piu' alto gia' usato in un codice 26ST (0 se non ce ne sono). */
+function maxNumeroCommessa(codici) {
+  var max = 0;
+  codici.forEach(function (c) {
+    var m = String(c).trim().toUpperCase().match(RE_CODICE_COMMESSA);
+    if (m) max = Math.max(max, parseInt(m[1], 10));
+  });
+  return max;
+}
+
+function codiceCommessa(anno, numero) {
+  return ('0' + (anno % 100)).slice(-2) + 'ST' + (numero < 1000 ? ('00' + numero).slice(-3) : String(numero));
+}
+
+/** Il codice di una commessa nuova: il numero dopo il piu' alto usato. */
+function prossimoCodiceCommessa(codici, anno) {
+  return codiceCommessa(anno, maxNumeroCommessa(codici) + 1);
+}
+
+function creaCliente(d) {
+  var pulito = testo(d.nome);
   if (!pulito) throw new Error('Serve il nome del cliente');
 
-  // Se esiste gia' (anche solo come alias) si restituisce quello: dettando a
-  // voce e' facilissimo ricreare due volte lo stesso cliente con una sillaba
-  // di differenza, e il foglio si riempirebbe di doppioni.
-  var esistente = null;
-  leggiClienti().forEach(function (c) {
-    if (esistente) return;
-    var nomi = [c.nome].concat(c.alias);
-    for (var i = 0; i < nomi.length; i++) {
-      if (normalizza(nomi[i]) === normalizza(pulito)) esistente = c;
-    }
-  });
-  if (esistente) return { id: esistente.id, nome: esistente.nome, giaEsisteva: true };
+  // Se esiste gia' (anche solo come alias) si restituisce quello: e'
+  // facilissimo ricreare due volte lo stesso cliente con una lettera di
+  // differenza, e il foglio si riempirebbe di doppioni.
+  var esistente = trovaCliente(leggiClienti(), '', pulito);
+  if (esistente) return Object.assign({ giaEsisteva: true }, esistente);
 
-  var id = prossimoCodice(NOME_CLIENTI, ['ID_Cliente', 'IDCliente', 'ID', 'Codice'], 'C');
+  // Un telefono rimasto alla 0.3.3 chiede ancora "di che gruppo e'?": un cliente
+  // finale "di Elettrodinamica" e' Elettrodinamica, perche' si fattura a lei.
+  if (normalizza(d.gruppo) === normalizza(ELETTRODINAMICA.nome)) {
+    var elettro = trovaCliente(leggiClienti(), '', ELETTRODINAMICA.nome);
+    if (elettro) return Object.assign({ giaEsisteva: true }, elettro);
+  }
+
+  // Anche le righe dei clienti accorpati contano: un codice non si riusa mai.
+  var id = prossimoCodice(leggi(NOME_CLIENTI).map(function (c) { return testo(c.id); }), 'C');
   scriviRiga(NOME_CLIENTI, {
-    'idcliente': id,
-    'ragionesociale': pulito,
-    'alias': '',
-    'email': ''
+    id: id,
+    nome: pulito,
+    tariffaFissa: d.tariffaFissa === undefined || d.tariffaFissa === null || d.tariffaFissa === '' ? '' : numero(d.tariffaFissa),
+    email: testo(d.email),
+    telefono: testo(d.telefono),
+    indirizzo: testo(d.indirizzo),
+    partitaIva: testo(d.partitaIva),
+    note: testo(d.note)
   });
-  return { id: id, nome: pulito, giaEsisteva: false };
+  return Object.assign({ giaEsisteva: false }, trovaCliente(leggiClienti(), id, ''));
 }
 
-function creaCommessa(idCliente, descrizione) {
-  var desc = String(descrizione || '').trim();
+function aggiornaCliente(id, campi) {
+  var riga = leggi(NOME_CLIENTI).filter(function (r) { return testo(r.id) === testo(id); })[0];
+  if (!riga) throw new Error('Cliente ' + id + ' non trovato');
+  var valori = {};
+  ['nome', 'gruppo', 'email', 'telefono', 'indirizzo', 'partitaIva', 'note', 'alias'].forEach(function (k) {
+    if (campi[k] !== undefined) valori[k] = Array.isArray(campi[k]) ? campi[k].join(', ') : campi[k];
+  });
+  ['pagaViaggio', 'kmRimborsati'].forEach(function (k) {
+    if (campi[k] !== undefined) valori[k] = campi[k] === null ? '' : (campi[k] ? 'SI' : 'NO');
+  });
+  ['ultimaTariffa', 'tariffaFissa', 'costoFisso', 'maggExtra'].forEach(function (k) {
+    if (campi[k] !== undefined) valori[k] = campi[k] === null || campi[k] === '' ? '' : numero(campi[k]);
+  });
+  aggiornaRiga(NOME_CLIENTI, riga._riga, valori);
+  return trovaCliente(leggiClienti(), id, '');
+}
+
+function creaCommessa(d) {
+  var desc = testo(d.descrizione);
   if (!desc) throw new Error('Serve la descrizione della commessa');
-  if (!idCliente) throw new Error('Serve il cliente della commessa');
+  if (!d.idCliente) throw new Error('Serve il cliente della commessa');
 
-  var esistente = null;
-  leggiCommesse().forEach(function (m) {
-    if (!esistente && m.idCliente === idCliente && normalizza(m.descrizione) === normalizza(desc)) {
-      esistente = m;
-    }
-  });
-  if (esistente) {
-    return { id: esistente.id, descrizione: esistente.descrizione, giaEsisteva: true };
+  var commesse = leggiCommesse();
+  var esistente = commesse.filter(function (m) {
+    return m.idCliente === d.idCliente && normalizza(m.descrizione) === normalizza(desc);
+  })[0];
+  if (esistente) return Object.assign({ giaEsisteva: true }, esistente);
+
+  var codici = commesse.map(function (m) { return m.id; });
+  var prossimo = prossimoCodiceCommessa(codici, new Date().getFullYear());
+  var id = testo(d.id).toUpperCase() || prossimo;
+  if (codici.some(function (c) { return c.toUpperCase() === id; })) {
+    // Il telefono propone il codice quando la commessa nasce, anche senza rete: se nel
+    // frattempo il computer l'ha dato a un'altra, si prende il primo libero. Un codice
+    // scritto a mano, invece, si rifiuta: chi l'ha scritto deve saperlo.
+    if (d.idProposto !== true) throw new Error('Il codice ' + id + ' e\' gia\' di un\'altra commessa');
+    id = prossimo;
   }
-
-  var id = prossimoCodice(NOME_COMMESSE, ['ID_Commessa', 'IDCommessa', 'Codice'], 'M');
+  var vuoto = function (v) { return v === undefined || v === null || v === ''; };
   scriviRiga(NOME_COMMESSE, {
-    'idcliente': idCliente,
-    'idcommessa': id,
-    'descrizione': desc,
-    'stato': 'APERTA'
+    id: id,
+    idCliente: d.idCliente,
+    descrizione: desc,
+    stato: 'APERTA',
+    indirizzo: testo(d.indirizzo),
+    budgetOre: vuoto(d.budgetOre) ? '' : numero(d.budgetOre),
+    budgetEuro: vuoto(d.budgetEuro) ? '' : numero(d.budgetEuro),
+    euroKm: vuoto(d.euroKm) ? '' : numero(d.euroKm),
+    prezzoOrario: vuoto(d.prezzoOrario) ? '' : numero(d.prezzoOrario),
+    costoOrario: vuoto(d.costoOrario) ? '' : numero(d.costoOrario),
+    inizio: d.inizio ? dataDaIso(d.inizio) : new Date(),
+    finePrevista: d.finePrevista ? dataDaIso(d.finePrevista) : '',
+    note: testo(d.note)
   });
-  return { id: id, descrizione: desc, giaEsisteva: false };
+  dimenticaCommesse();
+  return Object.assign({ giaEsisteva: false }, leggiCommesse().filter(function (m) { return m.id === id; })[0]);
+}
+
+/**
+ * Cambia i campi di una commessa, stato compreso: APERTA, SOSPESA o CHIUSA.
+ * Una commessa chiusa non si propone piu' nei rapportini nuovi, ma resta: i
+ * suoi rapportini, ore e costi si vedono sempre, e si puo' riaprire.
+ */
+function aggiornaCommessa(id, campi) {
+  var codice = testo(id).toUpperCase();
+  if (!codice) throw new Error('Serve il codice della commessa');
+  var riga = leggi(NOME_COMMESSE).filter(function (r) { return testo(r.id).toUpperCase() === codice; })[0];
+  if (!riga) throw new Error('Commessa ' + codice + ' non trovata');
+  var valori = {};
+  if (campi.stato !== undefined) {
+    var nuovo = testo(campi.stato).toUpperCase();
+    if (['APERTA', 'SOSPESA', 'CHIUSA'].indexOf(nuovo) < 0) throw new Error('Stato non valido: ' + nuovo);
+    valori.stato = nuovo;
+  }
+  ['descrizione', 'indirizzo', 'note', 'idCliente'].forEach(function (k) {
+    if (campi[k] !== undefined) valori[k] = campi[k];
+  });
+  ['budgetOre', 'budgetEuro', 'euroKm', 'prezzoOrario', 'costoOrario'].forEach(function (k) {
+    if (campi[k] !== undefined) valori[k] = campi[k] === null || campi[k] === '' ? '' : numero(campi[k]);
+  });
+  ['inizio', 'finePrevista'].forEach(function (k) {
+    if (campi[k] !== undefined) valori[k] = campi[k] ? dataDaIso(campi[k]) : '';
+  });
+  var precedente = testo(riga.stato).toUpperCase();
+  aggiornaRiga(NOME_COMMESSE, riga._riga, valori);
+  dimenticaCommesse();
+  var dopo = leggiCommesse().filter(function (m) { return m.id.toUpperCase() === codice; })[0];
+  return Object.assign({ precedente: precedente, cambiato: precedente !== dopo.stato }, dopo);
+}
+
+/** Per codice se c'e', altrimenti per nome o alias. */
+function trovaCliente(clienti, id, nome) {
+  if (id) {
+    var perId = clienti.filter(function (c) { return c.id === id; })[0];
+    if (perId) return perId;
+  }
+  if (!nome) return null;
+  var n = normalizza(nome);
+  return clienti.filter(function (c) {
+    return [c.nome].concat(c.alias).some(function (x) { return normalizza(x) === n; });
+  })[0] || null;
 }
 
 // ---------------------------------------------------------------------------
-// Lettura
+// I conti
 // ---------------------------------------------------------------------------
+
 /**
- * Cambia lo STATO di una commessa nel foglio Commesse.
+ * Le regole economiche di un rapportino: dalla scheda del cliente, e il
+ * rimborso chilometrico dalla commessa.
  *
- * Serve perche' quando il tecnico dice "il lavoro e' finito", scriverlo solo
- * nel rapportino non basta: la commessa resterebbe APERTA e Wisper
- * continuerebbe a proporgliela il giorno dopo. Il rapportino racconta la
- * giornata, questo cambia lo stato del mondo.
+ *  - tariffaFissa: quella del cliente (Elettrodinamica 30); null vuol dire
+ *    tariffa libera, la scrive il tecnico nel rapportino;
+ *  - euroKm: quello della commessa, se ne ha uno, altrimenti EURO_KM;
+ *  - costoOrario (quanto costa a te un'ora, per il margine): il costo fisso del
+ *    cliente (Elettrodinamica), poi quello della commessa, poi COSTO_ORARIO.
+ *    Le ore di viaggio non si contano a parte: sono gia' dentro il costo orario.
+ *
+ * I gruppi valgono ancora solo per un cliente dei fogli vecchi che ne ha uno e
+ * non ha la sua tariffa: dopo aggiornaStruttura() non ce ne sono piu'.
+ * Stesse regole in conti.js e in Anagrafiche.kt.
  */
-function impostaStato(idCommessa, stato) {
-  var codice = String(idCommessa || '').trim().toUpperCase();
-  var nuovo = String(stato || '').trim().toUpperCase();
-  if (!codice) throw new Error('Serve il codice della commessa');
-  if (nuovo !== 'APERTA' && nuovo !== 'CHIUSA') throw new Error('Stato non valido: ' + nuovo);
+function regoleDi(cliente, gruppi, impostazioni, commessa) {
+  var c = cliente || {};
+  var nomeGruppo = c.gruppo || '';
+  var g = (gruppi || []).filter(function (x) { return normalizza(x.nome) === normalizza(nomeGruppo); })[0];
+  var scritto = function (v) { return v !== null && v !== undefined; };
+  var tariffaFissa = scritto(c.tariffaFissa) ? c.tariffaFissa : (g && scritto(g.tariffaFissa) ? g.tariffaFissa : null);
+  return {
+    gruppo: g ? g.nome : nomeGruppo,
+    tariffaFissa: tariffaFissa,
+    pagaViaggio: scritto(c.pagaViaggio) ? c.pagaViaggio : (g ? g.pagaViaggio : false),
+    kmRimborsati: scritto(c.kmRimborsati) ? c.kmRimborsati : (g ? g.kmRimborsati : true),
+    maggExtra: scritto(c.maggExtra) ? c.maggExtra : (g ? g.maggExtra : 0),
+    euroKm: commessa && scritto(commessa.euroKm) ? commessa.euroKm : numero(impostazioni.EURO_KM),
+    costoOrario: scritto(c.costoFisso) ? c.costoFisso
+      : commessa && scritto(commessa.costoOrario) ? commessa.costoOrario : numeroONull(impostazioni.COSTO_ORARIO)
+  };
+}
 
-  var f = foglio(NOME_COMMESSE);
-  if (!f) throw new Error('Scheda "' + NOME_COMMESSE + '" non trovata');
+/**
+ * Il conto di un rapportino. La stessa formula vive anche nell'app (Calcolo.kt)
+ * per l'anteprima mentre si compila: se cambi qui, cambia anche li', e i test
+ * di tutti e due usano gli stessi casi.
+ *
+ *  - le ore di lavoro si pagano alla tariffa;
+ *  - le ore extra alla tariffa piu' la maggiorazione del gruppo;
+ *  - le ore di viaggio solo se il gruppo (o il cliente) le paga;
+ *  - i km alla tariffa ACI, se il cliente li rimborsa;
+ *  - le spese si sommano cosi' come sono.
+ *
+ * Ogni pezzo si arrotonda al centesimo PRIMA di sommare: il totale e' sempre
+ * la somma esatta dei pezzi che si vedono sul PDF.
+ */
+function calcola(r, regole) {
+  var lavoro = numero(r.oreLavoro);
+  var extra = numero(r.oreExtra);
+  var viaggio = numero(r.oreViaggio);
+  var tariffa = regole.tariffaFissa !== null && regole.tariffaFissa !== undefined
+    ? regole.tariffaFissa : numero(r.tariffa);
+  var compenso = centesimi(
+    (lavoro + (regole.pagaViaggio ? viaggio : 0)) * tariffa +
+    extra * tariffa * (1 + numero(regole.maggExtra) / 100)
+  );
+  var rimborso = regole.kmRimborsati ? centesimi(numero(r.km) * numero(regole.euroKm)) : 0;
+  var spese = centesimi(numero(r.spese));
+  return {
+    oreTotali: Math.round((lavoro + extra + viaggio) * 100) / 100,
+    tariffa: tariffa,
+    compensoOre: compenso,
+    rimborsoKm: rimborso,
+    totale: centesimi(compenso + rimborso + spese)
+  };
+}
 
-  var intestazioni = intestazioniDi(NOME_COMMESSE).map(normalizza);
-  var colCodice = intestazioni.indexOf('idcommessa');
-  if (colCodice < 0) colCodice = intestazioni.indexOf('codicecommessa');
-  var colStato = intestazioni.indexOf('stato');
-  if (colStato < 0) colStato = intestazioni.indexOf('statocommessa');
-  if (colCodice < 0 || colStato < 0) throw new Error('Colonne ID_COMMESSA o STATO non trovate');
+function centesimi(n) {
+  return Math.round(n * 100) / 100;
+}
 
-  var dati = f.getDataRange().getValues();
-  for (var i = 1; i < dati.length; i++) {
-    if (String(dati[i][colCodice]).trim().toUpperCase() === codice) {
-      var precedente = String(dati[i][colStato]).trim().toUpperCase();
-      // +1 perche' le righe del foglio partono da 1 e la prima e' l'intestazione
-      f.getRange(i + 1, colStato + 1).setValue(nuovo);
-      return { id: codice, stato: nuovo, precedente: precedente, cambiato: precedente !== nuovo };
+// ---------------------------------------------------------------------------
+// Rapportini
+// ---------------------------------------------------------------------------
+
+/**
+ * Il prossimo numero dell'anno: RAP/2026/0001, RAP/2026/0002...
+ * L'anno e' quello della data del rapportino, non di quando arriva: un
+ * rapportino del 31 dicembre spedito il 2 gennaio resta nell'anno vecchio.
+ */
+function prossimoNumeroRapportino(ids, anno) {
+  var max = 0;
+  ids.forEach(function (id) {
+    var m = String(id || '').match(/^RAP\/(\d{4})\/(\d+)$/);
+    if (m && Number(m[1]) === anno) max = Math.max(max, parseInt(m[2], 10));
+  });
+  return 'RAP/' + anno + '/' + ('000' + (max + 1)).slice(-4);
+}
+
+/**
+ * Crea o aggiorna un rapportino.
+ *
+ * Il telefono manda sempre lo stesso idLocale per lo stesso rapportino: alla
+ * prima volta si crea la riga, dalla seconda la si aggiorna. Cosi' un invio
+ * ripetuto perche' la risposta si era persa per strada non scrive una seconda
+ * riga, e riaprire un rapportino per correggerlo e' la stessa operazione.
+ *
+ * Se il cliente o la commessa non esistono ancora (creati sul telefono senza
+ * campo) si creano qui, prima della riga.
+ */
+function salvaRapportino(r) {
+  if (!r.idLocale && !r.id) throw new Error('Manca l\'identificativo del rapportino');
+  var righe = leggi(NOME_RAPPORTINI);
+  var esistente = trovaRiga(righe, r.id, r.idLocale);
+
+  if (esistente && STATI_BLOCCATI.indexOf(testo(esistente.stato).toUpperCase()) >= 0) {
+    throw new Error('Il rapportino ' + esistente.id + ' e\' gia\' firmato: riportalo in bozza per modificarlo');
+  }
+
+  var clienti = leggiClienti();
+  var cliente = trovaCliente(clienti, testo(r.idCliente), testo(r.cliente));
+  if (!cliente && !testo(r.cliente)) throw new Error('Manca il cliente');
+  // Un cliente nuovo "del gruppo Elettrodinamica" (un telefono rimasto alla 0.3.3)
+  // e' Elettrodinamica: si fattura a lei.
+  if (!cliente && normalizza(r.gruppo) === normalizza(ELETTRODINAMICA.nome)) {
+    cliente = trovaCliente(clienti, '', ELETTRODINAMICA.nome);
+  }
+
+  // Prima i controlli, poi le creazioni: un rapportino rifiutato non deve
+  // lasciare nel foglio un cliente o una commessa nati per lui.
+  var impostazioni = leggiImpostazioni();
+  var commesse = leggiCommesse();
+  var codiceScelto = testo(r.idCommessa).toUpperCase();
+  var commessa = !codiceScelto ? null : commesse.filter(function (m) {
+    // Anche col codice di prima dei 26ST: un rapportino rimasto in coda su un telefono.
+    return m.id.toUpperCase() === codiceScelto || m.codicePrecedente.toUpperCase() === codiceScelto;
+  })[0] || null;
+  var regole = regoleDi(cliente, leggiGruppi(), impostazioni, commessa);
+  if (regole.tariffaFissa === null && !(numero(r.tariffa) > 0)) {
+    throw new Error('Manca la tariffa oraria per ' + (cliente ? cliente.nome : testo(r.cliente)));
+  }
+
+  if (!cliente) cliente = creaCliente({ nome: r.cliente });
+
+  // Una commessa nata sul telefono arriva con la descrizione e il codice che il
+  // telefono le ha dato (codiceProposto): si usa quello, se e' ancora libero.
+  if (!commessa && testo(r.commessa)) {
+    commessa = creaCommessa({ idCliente: cliente.id, descrizione: r.commessa, id: testo(r.codiceProposto), idProposto: true });
+    regole = regoleDi(cliente, leggiGruppi(), impostazioni, commessa);
+  }
+
+  // Le tariffe di un rapportino gia' scritto non cambiano se cambiano le
+  // impostazioni: aggiornare l'ACI a gennaio non deve riscrivere luglio.
+  // Si ricalcola con le regole di oggi solo se sono cambiati il cliente o la commessa.
+  var stessaCommessa = testo(esistente && esistente.idCommessa).toUpperCase() === (commessa ? commessa.id.toUpperCase() : '');
+  if (esistente && testo(esistente.idCliente) === cliente.id && stessaCommessa && testo(esistente.euroKm) !== '') {
+    regole.euroKm = numero(esistente.euroKm);
+    regole.maggExtra = numero(esistente.maggExtra);
+    regole.pagaViaggio = siNoONull(esistente.pagaViaggio) === true;
+    regole.kmRimborsati = siNoONull(esistente.kmRimborsati) !== false;
+    regole.costoOrario = numeroONull(esistente.costoOrario);
+    if (regole.tariffaFissa !== null) regole.tariffaFissa = numero(esistente.tariffa);
+  }
+
+  var conto = calcola(r, regole);
+
+  var data = r.data ? dataDaIso(r.data) : new Date();
+  var adesso = new Date();
+  var valori = {
+    idLocale: testo(r.idLocale) || (esistente ? testo(esistente.idLocale) : ''),
+    data: data,
+    tecnico: testo(r.tecnico) || testo(impostazioni.TECNICO),
+    idCliente: cliente.id,
+    cliente: cliente.nome,
+    gruppo: regole.gruppo,
+    idCommessa: commessa ? commessa.id : '',
+    // Nel foglio, nella colonna COMMESSA, il codice: e' quello che si cerca.
+    commessa: commessa ? commessa.id : '',
+    ticket: testo(r.ticket),
+    luogo: testo(r.luogo),
+    descrizione: testo(r.descrizione),
+    oreLavoro: numero(r.oreLavoro),
+    oreExtra: numero(r.oreExtra),
+    oreViaggio: numero(r.oreViaggio),
+    oreTotali: conto.oreTotali,
+    km: numero(r.km),
+    spese: numero(r.spese),
+    noteSpese: testo(r.noteSpese),
+    tariffa: conto.tariffa,
+    pagaViaggio: regole.pagaViaggio ? 'SI' : 'NO',
+    kmRimborsati: regole.kmRimborsati ? 'SI' : 'NO',
+    euroKm: regole.euroKm,
+    maggExtra: regole.maggExtra,
+    compensoOre: conto.compensoOre,
+    rimborsoKm: conto.rimborsoKm,
+    totale: conto.totale,
+    costoOrario: regole.costoOrario === null ? '' : regole.costoOrario,
+    noteInterne: testo(r.noteInterne),
+    modificato: adesso
+  };
+
+  var riga;
+  if (esistente) {
+    riga = esistente._riga;
+    aggiornaRiga(NOME_RAPPORTINI, riga, valori);
+  } else {
+    valori.id = prossimoNumeroRapportino(righe.map(function (x) { return x.id; }), data.getFullYear());
+    valori.stato = 'BOZZA';
+    valori.creato = adesso;
+    riga = scriviRiga(NOME_RAPPORTINI, valori);
+  }
+
+  // La tariffa libera si ricorda: al prossimo rapportino per questo cliente
+  // il telefono la propone gia' scritta.
+  if (regole.tariffaFissa === null && conto.tariffa > 0 && cliente.ultimaTariffa !== conto.tariffa) {
+    aggiornaCliente(cliente.id, { ultimaTariffa: conto.tariffa });
+  }
+  // Una commessa senza prezzo prende quello del suo primo rapportino, scritto dal
+  // telefono o dal computer: dal secondo in poi si propone quello.
+  if (regole.tariffaFissa === null && conto.tariffa > 0 && commessa && commessa.prezzoOrario === null) {
+    aggiornaCommessa(commessa.id, { prezzoOrario: conto.tariffa });
+  }
+
+  return rapportinoDaRiga(leggi(NOME_RAPPORTINI).filter(function (x) { return x._riga === riga; })[0]);
+}
+
+function trovaRiga(righe, id, idLocale) {
+  if (idLocale) {
+    var perLocale = righe.filter(function (x) { return testo(x.idLocale) === testo(idLocale); })[0];
+    if (perLocale) return perLocale;
+  }
+  if (id) return righe.filter(function (x) { return testo(x.id) === testo(id); })[0] || null;
+  return null;
+}
+
+/**
+ * I rapportini fra due date (aaaa-mm-gg, comprese), i piu' recenti prima.
+ * Gli annullati non si mandano, a meno di chiederli.
+ */
+function leggiRapportini(da, a, ancheAnnullati) {
+  return leggi(NOME_RAPPORTINI)
+    .map(rapportinoDaRiga)
+    .filter(function (r) {
+      if (!ancheAnnullati && r.stato === 'ANNULLATO') return false;
+      if (da && r.data && r.data < da) return false;
+      if (a && r.data && r.data > a) return false;
+      return true;
+    })
+    .sort(function (x, y) {
+      return x.data < y.data ? 1 : x.data > y.data ? -1 : (x.creato < y.creato ? 1 : -1);
+    });
+}
+
+function rapportinoDaRiga(r) {
+  return {
+    id: testo(r.id),
+    idLocale: testo(r.idLocale),
+    data: dataIso(r.data),
+    tecnico: testo(r.tecnico),
+    idCliente: testo(r.idCliente),
+    cliente: testo(r.cliente),
+    gruppo: testo(r.gruppo),
+    idCommessa: testo(r.idCommessa),
+    // Nel foglio la colonna COMMESSA ha il codice; qui si manda la descrizione.
+    commessa: descrizioneCommessa(r.idCommessa) || testo(r.commessa),
+    ticket: testo(r.ticket),
+    luogo: testo(r.luogo),
+    descrizione: testo(r.descrizione),
+    oreLavoro: numero(r.oreLavoro),
+    oreExtra: numero(r.oreExtra),
+    oreViaggio: numero(r.oreViaggio),
+    oreTotali: numero(r.oreTotali) || numero(r.oreLavoro) + numero(r.oreExtra) + numero(r.oreViaggio),
+    km: numero(r.km),
+    spese: numero(r.spese),
+    noteSpese: testo(r.noteSpese),
+    foto: fileDaCella(r.foto),
+    tariffa: numero(r.tariffa),
+    pagaViaggio: siNoONull(r.pagaViaggio) === true,
+    kmRimborsati: siNoONull(r.kmRimborsati) !== false,
+    euroKm: numero(r.euroKm),
+    maggExtra: numero(r.maggExtra),
+    compensoOre: numero(r.compensoOre),
+    rimborsoKm: numero(r.rimborsoKm),
+    totale: numero(r.totale),
+    costoOrario: numeroONull(r.costoOrario),
+    noteInterne: testo(r.noteInterne),
+    firma: fileDaCella(r.firma)[0] || null,
+    firmatario: testo(r.firmatario),
+    firmatoIl: dataOraIso(r.firmatoIl),
+    stato: testo(r.stato).toUpperCase() || 'BOZZA',
+    inviatoIl: dataOraIso(r.inviatoIl),
+    fatturatoIl: dataOraIso(r.fatturatoIl),
+    creato: dataOraIso(r.creato),
+    modificato: dataOraIso(r.modificato)
+  };
+}
+
+/**
+ * Cambia lo stato di uno o piu' rapportini (il riepilogo di luglio si segna
+ * fatturato tutto insieme).
+ *
+ * Tornare in BOZZA toglie la firma: il cliente ha firmato quello che c'era, e
+ * se il rapportino cambia quella firma non vale piu'.
+ */
+function cambiaStato(ids, stato) {
+  var nuovo = testo(stato).toUpperCase();
+  if (STATI.indexOf(nuovo) < 0) throw new Error('Stato non valido: ' + nuovo);
+  if (nuovo === 'FIRMATO') throw new Error('Per firmare serve la firma: caricala dal rapportino');
+  var righe = leggi(NOME_RAPPORTINI);
+  var adesso = new Date();
+  return ids.map(function (id) {
+    var riga = trovaRiga(righe, id, id);
+    if (!riga) throw new Error('Rapportino ' + id + ' non trovato');
+    var valori = { stato: nuovo, modificato: adesso };
+    if (nuovo === 'BOZZA') {
+      valori.firma = '';
+      valori.firmatario = '';
+      valori.firmatoIl = '';
+      valori.inviatoIl = '';
+      valori.fatturatoIl = '';
+    }
+    if (nuovo === 'INVIATO') {
+      valori.inviatoIl = adesso;
+      valori.fatturatoIl = '';
+    }
+    if (nuovo === 'FATTURATO') valori.fatturatoIl = adesso;
+    aggiornaRiga(NOME_RAPPORTINI, riga._riga, valori);
+    return rapportinoDaRiga(leggi(NOME_RAPPORTINI).filter(function (x) { return x._riga === riga._riga; })[0]);
+  });
+}
+
+// ---------------------------------------------------------------------------
+// File: foto delle spese, firme, documenti delle commesse
+// ---------------------------------------------------------------------------
+
+/**
+ * La cartella "Wisper" nel Drive di chi possiede il foglio, con dentro
+ * Spese/2026-10, Firme e Commesse. Si crea la prima volta e poi si ritrova
+ * dall'id salvato, cosi' rinominarla o spostarla non rompe niente.
+ */
+function cartellaRadice() {
+  var prop = PropertiesService.getScriptProperties();
+  var id = prop.getProperty('CARTELLA_DRIVE');
+  if (id) {
+    try {
+      var c = DriveApp.getFolderById(id);
+      if (!c.isTrashed()) return c;
+    } catch (e) {
+      // cancellata o non piu' accessibile: se ne crea una nuova
     }
   }
-  throw new Error('Commessa ' + codice + ' non trovata');
+  var nuova = DriveApp.createFolder('Wisper');
+  prop.setProperty('CARTELLA_DRIVE', nuova.getId());
+  return nuova;
 }
 
-function leggiClienti() {
-  return righeDi(NOME_CLIENTI).map(function (r) {
-    return {
-      id: String(campo(r, ['ID_Cliente', 'IDCliente', 'ID', 'Codice', 'Codice_Cliente'])),
-      nome: String(campo(r, ['Ragione_Sociale', 'RagioneSociale', 'Cliente', 'Nome', 'Denominazione'])),
-      alias: String(campo(r, ['Alias', 'Alias_Cliente', 'Soprannomi']))
-        .split(',')
-        .map(function (s) { return s.trim(); })
-        .filter(function (s) { return s.length > 0; })
-    };
-  }).filter(function (c) { return c.nome !== ''; });
+function sottocartella(madre, nome) {
+  var it = madre.getFoldersByName(nome);
+  return it.hasNext() ? it.next() : madre.createFolder(nome);
 }
 
-function leggiCommesse() {
-  return righeDi(NOME_COMMESSE).map(function (r) {
-    return {
-      id: String(campo(r, ['ID_Commessa', 'IDCommessa', 'Commessa', 'Codice', 'Codice_Commessa', 'ID'])),
-      idCliente: String(campo(r, ['ID_Cliente', 'IDCliente', 'Cliente'])),
-      descrizione: String(campo(r, ['Descrizione', 'Desc', 'Lavoro'])),
-      stato: String(campo(r, ['Stato', 'Stato_Commessa'])),
-      // Lo mette l'ufficio: serve a distinguere due lavori dello stesso cliente.
-      indirizzo: String(campo(r, ['Indirizzo', 'Via', 'Luogo', 'Cantiere']))
-    };
-  }).filter(function (m) { return m.id !== ''; });
+function urlFile(id) {
+  return 'https://drive.google.com/file/d/' + id + '/view';
 }
 
-function righeDi(nomeFoglio) {
-  var f = foglio(nomeFoglio);
-  if (!f) return [];
-  var dati = f.getDataRange().getValues();
-  if (dati.length < 2) return [];
-  var intestazioni = dati[0].map(normalizza);
-  return dati.slice(1).map(function (riga) {
-    var o = {};
-    intestazioni.forEach(function (k, i) { if (k) o[k] = riga[i]; });
-    return o;
+function idDaUrl(url) {
+  var m = String(url).match(/\/d\/([A-Za-z0-9_-]{10,})/) || String(url).match(/[?&]id=([A-Za-z0-9_-]{10,})/);
+  return m ? m[1] : '';
+}
+
+/** Una cella con un link per riga -> [{id, url}] */
+function fileDaCella(v) {
+  return testo(v).split(/\s*\n\s*/).filter(String).map(function (url) {
+    return { id: idDaUrl(url), url: url };
+  }).filter(function (f) { return f.id; });
+}
+
+/**
+ * Carica una foto o una firma e la lega al suo posto.
+ *
+ * d.tipo:
+ *  - 'spesa'        foto di uno scontrino, aggiunta al rapportino (anche dopo la firma:
+ *                   e' un allegato, non cambia il lavoro firmato)
+ *  - 'firma'        firma del cliente, o la foto del foglio firmato a mano: il
+ *                   rapportino diventa FIRMATO
+ *  - 'firmaTecnico' la firma del compilatore, una volta per tutte
+ *  - 'documento'    un documento della commessa d.idCommessa
+ *
+ * d.idFile nasce sul telefono ed e' lo stesso a ogni tentativo: se il file
+ * c'e' gia' non se ne crea un secondo.
+ */
+function caricaFile(d) {
+  if (!d.base64) throw new Error('File vuoto');
+  var tipo = d.tipo;
+  var mime = d.mime || 'image/jpeg';
+  var estensione = mime === 'image/png' ? '.png' : mime === 'application/pdf' ? '.pdf' : '.jpg';
+  var radice = cartellaRadice();
+
+  if (tipo === 'firmaTecnico') {
+    var fileT = sottocartella(radice, 'Firme').createFile(
+      Utilities.newBlob(Utilities.base64Decode(d.base64), mime, 'firma-tecnico' + estensione));
+    salvaImpostazioni({ FIRMA_TECNICO: urlFile(fileT.getId()) });
+    return { id: fileT.getId(), url: urlFile(fileT.getId()) };
+  }
+
+  if (tipo === 'documento') {
+    var commessa = leggi(NOME_COMMESSE).filter(function (r) { return testo(r.id) === testo(d.idCommessa); })[0];
+    if (!commessa) throw new Error('Commessa ' + d.idCommessa + ' non trovata');
+    var cartella = cartellaCommessa(commessa);
+    var fileD = cartella.createFile(Utilities.newBlob(Utilities.base64Decode(d.base64), mime, testo(d.nome) || 'documento'));
+    return { id: fileD.getId(), url: urlFile(fileD.getId()), nome: fileD.getName() };
+  }
+
+  var righe = leggi(NOME_RAPPORTINI);
+  var riga = trovaRiga(righe, d.id, d.idLocale);
+  if (!riga) throw new Error('Rapportino non trovato: va salvato prima della foto');
+  var sigla = testo(riga.id).replace(/\//g, '-');
+  var unico = testo(d.idFile) || Utilities.getUuid().slice(0, 8);
+
+  if (tipo === 'spesa') {
+    var dataRap = eData(riga.data) ? riga.data : new Date();
+    var mese = Utilities.formatDate(dataRap, FUSO, 'yyyy-MM');
+    var cartellaS = sottocartella(sottocartella(radice, 'Spese'), mese);
+    var nome = sigla + ' spesa ' + unico + estensione;
+    var gia = cartellaS.getFilesByName(nome);
+    var file = gia.hasNext() ? gia.next() : cartellaS.createFile(
+      Utilities.newBlob(Utilities.base64Decode(d.base64), mime, nome));
+    var url = urlFile(file.getId());
+    var presenti = fileDaCella(riga.foto);
+    if (!presenti.some(function (f) { return f.id === file.getId(); })) {
+      aggiornaRiga(NOME_RAPPORTINI, riga._riga, {
+        foto: presenti.map(function (f) { return f.url; }).concat([url]).join('\n'),
+        modificato: new Date()
+      });
+    }
+    return { id: file.getId(), url: url };
+  }
+
+  if (tipo === 'firma') {
+    var stato = testo(riga.stato).toUpperCase();
+    if (stato === 'FIRMATO' || stato === 'INVIATO' || stato === 'FATTURATO') {
+      var gia2 = fileDaCella(riga.firma)[0];
+      if (gia2) return gia2;   // una ripetizione dello stesso invio
+    }
+    var nomeF = sigla + ' firma ' + unico + estensione;
+    var cartellaF = sottocartella(radice, 'Firme');
+    var esiste = cartellaF.getFilesByName(nomeF);
+    var fileF = esiste.hasNext() ? esiste.next() : cartellaF.createFile(
+      Utilities.newBlob(Utilities.base64Decode(d.base64), mime, nomeF));
+    aggiornaRiga(NOME_RAPPORTINI, riga._riga, {
+      firma: urlFile(fileF.getId()),
+      firmatario: testo(d.firmatario),
+      firmatoIl: d.firmatoIl ? new Date(d.firmatoIl) : new Date(),
+      // Una firma arrivata dopo l'invio (il foglio firmato a mano, scansionato
+      // dopo) si aggiunge, ma non riporta indietro un rapportino gia' inviato
+      // o fatturato.
+      stato: stato === 'INVIATO' || stato === 'FATTURATO' ? stato : 'FIRMATO',
+      modificato: new Date()
+    });
+    return { id: fileF.getId(), url: urlFile(fileF.getId()) };
+  }
+
+  throw new Error('Tipo di file sconosciuto: ' + tipo);
+}
+
+function cartellaCommessa(riga) {
+  var url = testo(riga.cartella);
+  if (url) {
+    var m = url.match(/folders\/([A-Za-z0-9_-]{10,})/);
+    if (m) {
+      try { return DriveApp.getFolderById(m[1]); } catch (e) { /* si ricrea */ }
+    }
+  }
+  var c = sottocartella(sottocartella(cartellaRadice(), 'Commesse'), testo(riga.id) + ' ' + testo(riga.descrizione));
+  aggiornaRiga(NOME_COMMESSE, riga._riga, { cartella: c.getUrl() });
+  return c;
+}
+
+/**
+ * I documenti della cartella di una commessa, piu' recenti prima. La cartella si
+ * crea la prima volta che la si guarda: cosi' ogni commessa ne ha una pronta.
+ */
+function documentiCommessa(idCommessa) {
+  var riga = leggi(NOME_COMMESSE).filter(function (r) { return testo(r.id) === testo(idCommessa); })[0];
+  if (!riga) throw new Error('Commessa ' + idCommessa + ' non trovata');
+  var cartella = cartellaCommessa(riga);
+  var file = [];
+  var it = cartella.getFiles();
+  while (it.hasNext()) {
+    var f = it.next();
+    if (f.isTrashed()) continue;
+    file.push({
+      id: f.getId(),
+      nome: f.getName(),
+      url: f.getUrl(),
+      mime: f.getMimeType(),
+      data: Utilities.formatDate(f.getLastUpdated(), FUSO, "yyyy-MM-dd'T'HH:mm:ss")
+    });
+  }
+  file.sort(function (a, b) { return a.data < b.data ? 1 : -1; });
+  return { ok: true, cartella: cartella.getUrl(), documenti: file };
+}
+
+/** Toglie una foto dal rapportino. Il file va nel cestino di Drive, da cui si recupera. */
+function togliFile(id, fileId) {
+  var riga = trovaRiga(leggi(NOME_RAPPORTINI), id, id);
+  if (!riga) throw new Error('Rapportino ' + id + ' non trovato');
+  var rimaste = fileDaCella(riga.foto).filter(function (f) { return f.id !== fileId; });
+  aggiornaRiga(NOME_RAPPORTINI, riga._riga, {
+    foto: rimaste.map(function (f) { return f.url; }).join('\n'),
+    modificato: new Date()
   });
+  try { DriveApp.getFileById(fileId).setTrashed(true); } catch (e) { /* gia' via */ }
+  return rapportinoDaRiga(leggi(NOME_RAPPORTINI).filter(function (x) { return x._riga === riga._riga; })[0]);
+}
+
+/**
+ * Il contenuto di un file, per metterlo nel PDF. Solo file dentro la cartella
+ * Wisper: chi ha il codice non deve poter leggere tutto il Drive.
+ */
+function leggiFile(id) {
+  if (!id) throw new Error('Manca il file');
+  var file = DriveApp.getFileById(id);
+  if (!dentroWisper(file)) throw new Error('File fuori dalla cartella Wisper');
+  var blob = file.getBlob();
+  return {
+    id: id,
+    nome: file.getName(),
+    mime: blob.getContentType(),
+    base64: Utilities.base64Encode(blob.getBytes())
+  };
+}
+
+function dentroWisper(file) {
+  var radice = cartellaRadice().getId();
+  var daGuardare = [];
+  var p = file.getParents();
+  while (p.hasNext()) daGuardare.push(p.next());
+  for (var livello = 0; livello < 5 && daGuardare.length; livello++) {
+    var prossimi = [];
+    for (var i = 0; i < daGuardare.length; i++) {
+      if (daGuardare[i].getId() === radice) return true;
+      var su = daGuardare[i].getParents();
+      while (su.hasNext()) prossimi.push(su.next());
+    }
+    daGuardare = prossimi;
+  }
+  return false;
+}
+
+// ---------------------------------------------------------------------------
+// Email
+// ---------------------------------------------------------------------------
+
+/**
+ * Manda la mail coi PDF allegati, dall'account di chi possiede il foglio, e
+ * segna i rapportini come INVIATO. Con aMe la manda solo a se stessi, come
+ * anteprima, e non cambia niente.
+ */
+/**
+ * Il collegamento del computer, chiesto dal telefono: un'email al proprietario del
+ * foglio con un file da aprire sul computer dell'ufficio ("Collega Wisper
+ * Ufficio.wisper"). Wisper Ufficio lo legge e si collega da solo: niente indirizzo
+ * lungo da ricopiare, niente codice da scrivere. Il file contiene indirizzo e
+ * codice, quindi parte solo verso il proprietario: anche chi avesse il codice non
+ * potrebbe farselo mandare altrove. La stessa email serve a installarlo: c'e' il link
+ * all'ultima versione pubblicata, che si installa da sola quando la si apre.
+ */
+var SCARICA_UFFICIO = 'https://github.com/postagaspa-star/wisper/releases/latest/download/WisperUfficio.exe';
+
+function collegaComputer(d) {
+  var url = testo(d.url);
+  var valido = /^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/exec$/.test(url) ||
+    /^http:\/\/(localhost|127\.0\.0\.1|10\.0\.2\.2)(:\d+)?\/exec$/.test(url);   // il finto Google delle prove
+  if (!valido) throw new Error('Indirizzo del foglio non valido');
+  var a = emailProprietario();
+  var contenuto = JSON.stringify({
+    tipo: 'wisper-collegamento', versione: 1, url: url,
+    codice: PropertiesService.getScriptProperties().getProperty('CODICE')
+  });
+  var file = Utilities.newBlob(contenuto, 'application/octet-stream', 'Collega Wisper Ufficio.wisper');
+  var chi = testo(d.dispNome);
+  MailApp.sendEmail(a, 'Collega Wisper Ufficio al foglio',
+    'Per collegare Wisper Ufficio a questo foglio, sul computer dell\'ufficio:\n\n' +
+    '1. se Wisper Ufficio non c\'e\' ancora, scaricalo da qui e aprilo: si installa da solo e ' +
+    'mette l\'icona sul Desktop.\n   ' + SCARICA_UFFICIO + '\n' +
+    '   Se Windows dice che ha protetto il PC, tocca "Ulteriori informazioni" e poi "Esegui comunque".\n' +
+    '2. scarica l\'allegato "Collega Wisper Ufficio.wisper" e aprilo con un doppio clic: ' +
+    'Wisper Ufficio si apre e si collega da solo.\n\n' +
+    'Se il doppio clic non apre Wisper Ufficio: apri Wisper Ufficio, vai in Impostazioni e tocca ' +
+    '"Usa il file dell\'email".\n\n' +
+    'Poi cancella questa email e il file scaricato: dentro c\'e\' il codice del foglio.\n\n' +
+    'L\'ha chiesta ' + (chi ? 'il telefono "' + chi + '"' : 'un telefono collegato al foglio') + ' il ' + quando(new Date()) + '.',
+    { attachments: [file], name: 'Wisper' });
+  return a;
+}
+
+function inviaEmail(d) {
+  var aMe = d.aMe === true;
+  var destinatario = aMe ? emailProprietario() : testo(d.a);
+  if (!destinatario) throw new Error('Manca l\'indirizzo del cliente');
+  var imp = leggiImpostazioni();
+  var allegati = (d.allegati || []).map(function (a) {
+    return Utilities.newBlob(Utilities.base64Decode(a.base64), a.mime || 'application/pdf', a.nome || 'rapportino.pdf');
+  });
+  var opzioni = { attachments: allegati, name: testo(imp.RAGIONE_SOCIALE) || 'Wisper' };
+  if (!aMe && testo(d.cc)) opzioni.cc = testo(d.cc);
+  if (testo(imp.EMAIL)) opzioni.replyTo = testo(imp.EMAIL);
+  MailApp.sendEmail(destinatario, testo(d.oggetto) || 'Rapportino', testo(d.messaggio) || ' ', opzioni);
+  if (aMe || !d.ids || !d.ids.length) return [];
+  // Un riepilogo puo' contenere rapportini gia' fatturati: mandarlo non li
+  // riporta indietro a "inviato".
+  var righe = leggi(NOME_RAPPORTINI);
+  var daSegnare = d.ids.filter(function (id) {
+    var r = trovaRiga(righe, id, id);
+    return r && testo(r.stato).toUpperCase() !== 'FATTURATO';
+  });
+  return daSegnare.length ? cambiaStato(daSegnare, 'INVIATO') : [];
+}
+
+// ---------------------------------------------------------------------------
+// Il registro degli accessi
+// ---------------------------------------------------------------------------
+
+/*
+ * Ogni richiesta lascia una riga nella scheda Accessi: quando, com'e' andata,
+ * per fare cosa, da quale dispositivo. Telefono e computer si presentano con un
+ * identificativo nato su di loro al primo avvio (mai uguale su due dispositivi)
+ * e un nome che si legge ("motorola edge 60 pro", "UFFICIO-PC (manuel)"). La
+ * scheda Dispositivi li elenca, con il primo e l'ultimo accesso: la colonna NOTE
+ * e' vostra, per scriverci di chi e' ognuno.
+ *
+ * L'indirizzo IP non c'e': Google non lo passa allo script, a nessuno script.
+ * Il dispositivo dice di piu': l'IP di un telefono cambia da una cella
+ * all'altra, e tanti telefoni ne condividono uno.
+ *
+ * Gli avvisi arrivano per email al proprietario del foglio (e a EMAIL_AVVISI):
+ *  - un dispositivo mai visto entra col codice giusto;
+ *  - una richiesta col codice giusto arriva senza dire chi e' (una versione
+ *    vecchia dell'app, o qualcuno che usa il codice a mano): al massimo uno al giorno;
+ *  - 5 o piu' codici sbagliati di fila: al massimo uno ogni 6 ore.
+ * Nelle righe non finisce mai il codice, giusto o sbagliato che sia.
+ */
+
+var INTESTAZIONI_ACCESSI = ['QUANDO', 'ESITO', 'AZIONE', 'DISPOSITIVO', 'APP', 'ID_DISPOSITIVO'];
+var INTESTAZIONI_DISPOSITIVI = ['ID_DISPOSITIVO', 'NOME', 'APP', 'PRIMO_ACCESSO', 'ULTIMO_ACCESSO', 'NOTE'];
+
+/** Oltre tante righe le piu' vecchie si tolgono (una volta al giorno): circa un anno d'uso. */
+var MASSIMO_ACCESSI = 60000;
+var ACCESSI_DOPO_LA_PULIZIA = 50000;
+
+/** Dopo tanti codici sbagliati in un'ora non si scrivono piu' righe, si contano e basta. */
+var MASSIMO_SBAGLIATI_SCRITTI = 50;
+var SOGLIA_AVVISO_SBAGLIATI = 5;
+
+function schedaAccessi() {
+  return schedaFissa(NOME_ACCESSI, INTESTAZIONI_ACCESSI);
+}
+
+function schedaDispositivi() {
+  return schedaFissa(NOME_DISPOSITIVI, INTESTAZIONI_DISPOSITIVI);
+}
+
+/** La scheda, creata con le sue intestazioni se non c'e' ancora. */
+function schedaFissa(nome, intestazioni) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var f = ss.getSheetByName(nome);
+  if (f) return f;
+  f = ss.insertSheet(nome);
+  f.getRange(1, 1, 1, intestazioni.length).setValues([intestazioni]).setFontWeight('bold');
+  f.setFrozenRows(1);
+  return f;
+}
+
+/**
+ * La riga nel registro. Non deve mai fermare una risposta: se qualcosa va
+ * storto qui, la richiesta va avanti lo stesso.
+ *
+ * @param d     la richiesta: disp, dispNome, app, azione (il codice non si legge)
+ * @param esito 'ok', 'errore' (codice giusto, lavoro rifiutato), 'codice sbagliato',
+ *              'rifiutato', 'richiesta non valida'
+ */
+function registraAccesso(d, esito) {
+  try {
+    d = d || {};
+    var adesso = new Date();
+    var id = testo(d.disp).slice(0, 64);
+    var nome = testo(d.dispNome).slice(0, 80);
+    var app = testo(d.app).slice(0, 40);
+    var azione = testo(d.azione).slice(0, 40) || 'anagrafiche';
+    var entrato = esito === 'ok' || esito === 'errore';
+    var cache = CacheService.getScriptCache();
+
+    if (!entrato) {
+      var sbagliati = Number(cache.get('sbagliati') || 0) + 1;
+      cache.put('sbagliati', String(sbagliati), 3600);
+      if (esito === 'codice sbagliato' && sbagliati >= SOGLIA_AVVISO_SBAGLIATI) {
+        avvisaUnaVolta('sbagliati', 6 * 3600, 'Wisper: tanti codici sbagliati',
+          'Nell\'ultima ora sono arrivate ' + sbagliati + ' richieste al foglio di Wisper con un codice sbagliato.\n\n' +
+          'Una o due sono un errore di battitura. Tante di fila sono qualcuno che prova a indovinare il codice: ' +
+          'piu\' e\' lungo, piu\' e\' al sicuro.\n\n' +
+          'Ultima richiesta: ' + quando(adesso) + ', dispositivo "' + (nome || 'senza nome') + '".\n' +
+          'I dettagli sono nella scheda Accessi del foglio.\n\n(Questo avviso arriva al massimo una volta ogni 6 ore.)');
+      }
+      if (sbagliati > MASSIMO_SBAGLIATI_SCRITTI) return;
+    }
+
+    var f = schedaAccessi();
+    f.appendRow([adesso, esito, azione, nome || 'senza nome', app, id].map(function (v, i) {
+      return i === 0 ? v : perLaCella(null, v);
+    }));
+    puliziaAccessi(f);
+    if (entrato) dispositivoVisto(id, nome, app, azione, adesso, cache);
+  } catch (err) {
+    // Il registro non deve fermare la risposta.
+  }
+}
+
+/**
+ * Aggiorna la scheda Dispositivi. Il primo accesso di un dispositivo mai visto
+ * manda l'avviso. Per non rileggere la scheda a ogni richiesta, un dispositivo
+ * gia' visto si riguarda al massimo ogni 10 minuti.
+ */
+function dispositivoVisto(id, nome, app, azione, adesso, cache) {
+  if (!id) {
+    if (dispositiviGiaAggiornati(cache)) {
+      avvisaUnaVolta('senzaNome', 24 * 3600, 'Wisper: un accesso senza nome',
+        'Una richiesta col codice giusto e\' arrivata al foglio di Wisper senza dire da quale dispositivo.\n\n' +
+        'Quando: ' + quando(adesso) + '\nAzione: ' + azione + '\n\n' +
+        'Succede con una versione vecchia di Wisper che non si e\' ancora aggiornata: controlla che su tutti i ' +
+        'telefoni e sul computer ci sia la 0.3.3 o una successiva. Se ce l\'hanno gia\' tutti, qualcuno sta usando ' +
+        'il codice a mano: cambialo (Apps Script, Impostazioni progetto, Proprieta\' dello script, CODICE) e ' +
+        'rimettilo su telefoni e computer.\n\n(Questo avviso arriva al massimo una volta al giorno.)');
+    }
+    return;
+  }
+  if (cache.get('visto:' + id)) return;
+  var f = schedaDispositivi();
+  var trovato = rigaDispositivo(f, id);
+  var nuovo = false;
+  if (trovato < 0) {
+    var lucchetto = LockService.getScriptLock();
+    if (!lucchetto.tryLock(5000)) return;
+    try {
+      // Due richieste dello stesso dispositivo nuovo nello stesso istante: una sola riga, un solo avviso.
+      trovato = rigaDispositivo(f, id);
+      if (trovato < 0) {
+        f.appendRow([perLaCella(null, id), perLaCella(null, nome), perLaCella(null, app), adesso, adesso, '']);
+        nuovo = true;
+      }
+    } finally {
+      lucchetto.releaseLock();
+    }
+  }
+  if (nuovo) {
+    avvisa('Wisper: un dispositivo nuovo',
+      'Un dispositivo nuovo e\' entrato nel foglio di Wisper col codice giusto.\n\n' +
+      'Nome: ' + (nome || '(nessuno)') + '\nApp: ' + (app || '(non detta)') + '\nQuando: ' + quando(adesso) + '\n\n' +
+      'Se e\' uno dei vostri (un telefono nuovo, Wisper reinstallato, il computer dell\'ufficio) va tutto bene: ' +
+      'nella scheda Dispositivi, colonna NOTE, potete scrivere di chi e\'.\n' +
+      'Se non lo riconoscete, qualcuno ha il codice: cambialo (Apps Script, Impostazioni progetto, Proprieta\' ' +
+      'dello script, CODICE) e rimettilo su telefoni e computer. Cosa ha letto o scritto e\' nella scheda Accessi.');
+  } else if (trovato >= 0) {
+    f.getRange(trovato, 2, 1, 2).setValues([[perLaCella(null, nome), perLaCella(null, app)]]);
+    f.getRange(trovato, 5).setValue(adesso);
+  }
+  cache.put('visto:' + id, '1', 600);
+}
+
+/** Il numero di riga del dispositivo nella scheda Dispositivi, o -1. */
+function rigaDispositivo(f, id) {
+  if (f.getLastRow() < 2) return -1;
+  var ids = f.getRange(2, 1, f.getLastRow() - 1, 1).getValues();
+  for (var i = 0; i < ids.length; i++) {
+    if (testo(senzaApostrofo(ids[i][0])) === id) return i + 2;
+  }
+  return -1;
+}
+
+/**
+ * Vero quando le app che si presentano ci sono da almeno due giorni: da li' in
+ * poi, una richiesta senza nome non e' piu' un telefono rimasto indietro di
+ * qualche ora.
+ */
+function dispositiviGiaAggiornati(cache) {
+  var giaDetto = cache.get('aggiornati');
+  if (giaDetto) return giaDetto === 'si';
+  var f = foglio(NOME_DISPOSITIVI);
+  var si = false;
+  if (f && f.getLastRow() > 1) {
+    var due = new Date().getTime() - 2 * 24 * 3600 * 1000;
+    si = f.getRange(2, 4, f.getLastRow() - 1, 1).getValues().some(function (r) {
+      return eData(r[0]) && r[0].getTime() < due;
+    });
+  }
+  cache.put('aggiornati', si ? 'si' : 'no', 3600);
+  return si;
+}
+
+/** Una volta al giorno, se le righe sono troppe, via le piu' vecchie. */
+function puliziaAccessi(f) {
+  var prop = PropertiesService.getScriptProperties();
+  var ultima = Number(prop.getProperty('ACCESSI_PULITI') || 0);
+  if (new Date().getTime() - ultima < 24 * 3600 * 1000) return;
+  prop.setProperty('ACCESSI_PULITI', String(new Date().getTime()));
+  var righe = f.getLastRow() - 1;
+  if (righe > MASSIMO_ACCESSI) f.deleteRows(2, righe - ACCESSI_DOPO_LA_PULIZIA);
+}
+
+/** L'avviso, ma non piu' di uno ogni tot secondi per lo stesso motivo. */
+function avvisaUnaVolta(motivo, secondi, oggetto, corpo) {
+  var prop = PropertiesService.getScriptProperties();
+  var ultimo = Number(prop.getProperty('AVVISO_' + motivo) || 0);
+  if (new Date().getTime() - ultimo < secondi * 1000) return;
+  prop.setProperty('AVVISO_' + motivo, String(new Date().getTime()));
+  avvisa(oggetto, corpo);
+}
+
+/** L'email al proprietario del foglio, e a chi c'e' in EMAIL_AVVISI. */
+function avvisa(oggetto, corpo) {
+  var a = [emailProprietario()];
+  testo(leggiImpostazioni().EMAIL_AVVISI).split(',').forEach(function (x) {
+    x = x.trim();
+    if (x && a.indexOf(x) < 0) a.push(x);
+  });
+  MailApp.sendEmail(a.filter(String).join(','), oggetto, corpo, { name: 'Wisper' });
+}
+
+/**
+ * L'email di chi possiede il foglio. Session.getEffectiveUser() vuole il permesso
+ * userinfo.email: un progetto con gli oauthScopes scritti a mano in appsscript.json,
+ * senza quello, si ferma con "Le autorizzazioni specificate non sono sufficienti".
+ * Allora lo si chiede a Drive, che sa di chi e' il foglio col permesso che lo
+ * script ha gia' per le foto.
+ */
+function emailProprietario() {
+  try {
+    var e = Session.getEffectiveUser().getEmail();
+    if (e) return e;
+  } catch (err) { /* permesso mancante: si prova con Drive */ }
+  try {
+    var p = DriveApp.getFileById(SpreadsheetApp.getActiveSpreadsheet().getId()).getOwner();
+    if (p && p.getEmail()) return p.getEmail();
+  } catch (err2) { /* niente neanche da Drive */ }
+  throw new Error('Il foglio non riesce a leggere l\'email del suo proprietario: in Apps Script esegui la funzione autorizza');
+}
+
+/**
+ * Da eseguire a mano nell'editor di Apps Script (in alto scegli "autorizza", poi
+ * Esegui) dopo aver incollato una versione nuova: Google chiede i permessi che
+ * mancano, e il registro di esecuzione dice se l'email del proprietario si legge.
+ * Non cambia niente nel foglio.
+ */
+function autorizza() {
+  var righe = [];
+  try {
+    righe.push('Email del proprietario: ' + Session.getEffectiveUser().getEmail());
+  } catch (e) {
+    righe.push('Manca il permesso https://www.googleapis.com/auth/userinfo.email (' + e.message + '). ' +
+      'Se appsscript.json ha "oauthScopes", aggiungilo li\' e rifai Esegui.');
+  }
+  try {
+    righe.push('Proprietario secondo Drive: ' +
+      DriveApp.getFileById(SpreadsheetApp.getActiveSpreadsheet().getId()).getOwner().getEmail());
+  } catch (e2) {
+    righe.push('Drive non dice di chi e\' il foglio: ' + e2.message);
+  }
+  righe.push('Email che si possono ancora mandare oggi: ' + MailApp.getRemainingDailyQuota());
+  Logger.log(righe.join('\n'));
+  return righe.join('\n');
+}
+
+function quando(d) {
+  return Utilities.formatDate(d, FUSO, 'dd/MM/yyyy HH:mm');
 }
 
 // ---------------------------------------------------------------------------
 // Utilita'
 // ---------------------------------------------------------------------------
+
+function testo(v) {
+  return v === null || v === undefined ? '' : String(v).trim();
+}
+
 function numero(v) {
   if (v === null || v === undefined || v === '') return 0;
+  if (typeof v === 'number') return isNaN(v) ? 0 : v;
   var n = parseFloat(String(v).replace(',', '.'));
   return isNaN(n) ? 0 : n;
+}
+
+function numeroONull(v) {
+  if (v === null || v === undefined || String(v).trim() === '') return null;
+  return numero(v);
+}
+
+/** 'SI' -> true, 'NO' -> false, vuoto -> null (= decide il gruppo). */
+function siNoONull(v) {
+  var s = testo(v).toUpperCase();
+  if (s === 'SI' || s === 'SÌ' || s === 'TRUE' || s === 'X') return true;
+  if (s === 'NO' || s === 'FALSE') return false;
+  if (v === true) return true;
+  if (v === false) return false;
+  return null;
+}
+
+/**
+ * Vero per una data. Non con instanceof: una data che arriva da un altro
+ * contesto (le prove con Node, per esempio) non e' "instanceof" il Date di qui.
+ */
+function eData(v) {
+  return Object.prototype.toString.call(v) === '[object Date]' && !isNaN(v.getTime());
+}
+
+/** Una data del foglio (Date, "15/10/2026" o "2026-10-15") -> "2026-10-15". */
+function dataIso(v) {
+  if (eData(v)) return Utilities.formatDate(v, FUSO, 'yyyy-MM-dd');
+  var s = testo(v);
+  var it = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (it) return it[3] + '-' + ('0' + it[2]).slice(-2) + '-' + ('0' + it[1]).slice(-2);
+  var iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return iso ? iso[0] : '';
+}
+
+function dataOraIso(v) {
+  if (eData(v)) return Utilities.formatDate(v, FUSO, "yyyy-MM-dd'T'HH:mm:ss");
+  return testo(v);
+}
+
+/** "2026-10-15" -> la data a mezzanotte, ora italiana. */
+function dataDaIso(s) {
+  var iso = dataIso(s);
+  if (!iso) throw new Error('Data non valida: ' + s);
+  return Utilities.parseDate(iso, FUSO, 'yyyy-MM-dd');
+}
+
+function messaggio(err) {
+  return err && err.message ? err.message : String(err);
 }
 
 function json(o) {
@@ -294,8 +2002,9 @@ function json(o) {
 
 // Da lanciare a mano dall'editor. Non scrive niente: mostra solo cosa vede.
 function provaTutto() {
-  Logger.log(JSON.stringify(diagnostica(), null, 2));
-  Logger.log('Clienti: ' + leggiClienti().length + ' | Commesse: ' + leggiCommesse().length);
-  Logger.log('Prossimo cliente: ' + prossimoCodice(NOME_CLIENTI, ['ID_Cliente'], 'C'));
-  Logger.log('Prossima commessa: ' + prossimoCodice(NOME_COMMESSE, ['ID_Commessa'], 'M'));
+  Logger.log('Schede: ' + SpreadsheetApp.getActiveSpreadsheet().getSheets().map(function (s) { return s.getName(); }).join(', '));
+  Logger.log('Clienti: ' + leggiClienti().length + ' | Commesse: ' + leggiCommesse().length +
+    ' | Gruppi: ' + leggiGruppi().map(function (g) { return g.nome; }).join(', '));
+  Logger.log('Impostazioni: ' + JSON.stringify(leggiImpostazioni()));
+  Logger.log('Rapportini: ' + leggiRapportini().length);
 }
