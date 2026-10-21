@@ -52,6 +52,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -73,10 +76,11 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import eu.stgm.wisper.Archivio
 import eu.stgm.wisper.BuildConfig
+import eu.stgm.wisper.Dati
 import eu.stgm.wisper.NuoveVersioni
 import eu.stgm.wisper.rapportino.Anagrafiche
 import eu.stgm.wisper.rapportino.Numeri
-import eu.stgm.wisper.rapportino.PonteFoglio
+import eu.stgm.wisper.rapportino.PonteServer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -90,53 +94,25 @@ import java.util.Locale
 import kotlin.math.max
 
 /**
- * Le impostazioni (docs/aspetto.md §7, prototipo SCHERMI.impostazioni): schede a
- * gruppi, ogni voce col suo valore; si cambia in un foglio dal basso. Ci sono le
- * stesse cose della pagina Impostazioni di Wisper Ufficio (pc/ui/app.js): lo
- * studio, la firma, i rimborsi. Quelle del foglio si scrivono sul foglio, quindi
- * valgono anche per il computer; nome, indirizzo e codice restano su questo telefono.
- * Le tariffe non stanno più qui: sono sulle pagine dei clienti.
+ * Amministrazione › Dati dello studio (docs/gestionale/fase1-schermate.md §7):
+ * l'intestazione dei PDF e la tua firma, come le Impostazioni di prima. Valgono
+ * anche per il computer. Chi vede Amministrazione solo in lettura non cambia niente.
  */
 @Composable
-fun SchermataImpostazioni(
-    archivio: Archivio,
-    tema: String,
-    onTema: (String) -> Unit,
-    onVisita: () -> Unit,
-    onChiudi: () -> Unit,
-) {
+fun PaginaStudio(dati: Dati, puoCambiare: Boolean, onIndietro: () -> Unit) {
     val c = W.colori
     val ctx = LocalContext.current
     val avvisi = LocalAvvisi.current
     val scope = rememberCoroutineScope()
-    val config = archivio.configurazione
-    val ana by archivio.anagrafiche.collectAsStateWithLifecycle()
-    val aggiornamento by archivio.aggiornamento.collectAsStateWithLifecycle()
-    val versioni by NuoveVersioni.stato.collectAsStateWithLifecycle()
+    val ana by dati.anagrafiche.collectAsStateWithLifecycle()
     var modifica by remember { mutableStateOf<Modifica?>(null) }
-    // "Collega il computer": prima si chiede, poi si dice com'è andata.
-    var collegaPc by remember { mutableStateOf<String?>(null) }
-    var licenza by remember { mutableStateOf(false) }
     var firmaColDito by remember { mutableStateOf(false) }
     var caricoFirma by remember { mutableStateOf(false) }
-    // L'interruttore si sposta subito; se il foglio non risponde torna com'era.
-    var ticket by remember { mutableStateOf<Boolean?>(null) }
-    val ticketAcceso = ticket ?: ana.ticketAttivo
-    LaunchedEffect(ana.ticketAttivo) { if (ticket == ana.ticketAttivo) ticket = null }
-
-    BackHandler { onChiudi() }
-
-    /** Una voce del foglio: si scrive sul foglio e si dice com'è andata. Torna l'errore da mostrare, o null. */
-    suspend fun salvaSulFoglio(chiave: String, valore: String, conferma: String): String? =
-        archivio.salvaImpostazioni(mapOf(chiave to valore)).fold(
-            onSuccess = { avvisi.mostra(conferma); null },
-            onFailure = { spiegaErrore(it) },
-        )
 
     fun caricaFirma(png: ByteArray, onFatto: (String?) -> Unit) {
         caricoFirma = true
         scope.launch {
-            val errore = archivio.caricaFirmaTecnico(png).fold({ null }, { spiegaErrore(it) })
+            val errore = dati.caricaFirmaTecnico(png).fold({ null }, { spiegaErrore(it) })
             caricoFirma = false
             if (errore == null) avvisi.mostra("Firma caricata")
             onFatto(errore)
@@ -157,68 +133,25 @@ fun SchermataImpostazioni(
         }
     }
 
-    Box(Modifier.fillMaxSize().background(c.fondo)) {
-        Column(
-            Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(MarginePagina).padding(bottom = 48.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
-        ) {
-            Testata(onIndietro = onChiudi)
-            TitoloPagina("Impostazioni")
-
-            // ---- su questo telefono
-            TitoloSezione("Tu")
-            SchedaElenco {
-                RigaVoce("Nome di chi compila", sotto = config.tecnico.ifBlank { ana.tecnico.ifBlank { "—" } }, onClick = {
-                    modifica = Modifica("Nome di chi compila", config.tecnico, locale = "tecnico", segnaposto = ana.tecnico)
-                })
+    Column(
+        Modifier.fillMaxSize().background(c.fondo).verticalScroll(rememberScrollState()).padding(MarginePagina).padding(bottom = 48.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        Testata(onIndietro = onIndietro)
+        TitoloPagina("Dati dello studio")
+        TitoloSezione("Lo studio")
+        SchedaElenco {
+            VOCI_STUDIO.forEachIndexed { i, v ->
+                if (i > 0) LineaElenco()
+                RigaVoce(v.titolo, sotto = ana.impostazione(v.chiave).ifBlank { "—" }, freccia = puoCambiare, onClick = if (puoCambiare) ({
+                    modifica = Modifica(v.titolo, ana.impostazione(v.chiave), chiave = v.chiave, tastiera = v.tastiera)
+                }) else null)
             }
-
-            TitoloSezione("Il foglio")
-            SchedaElenco {
-                val collegato = aggiornamento.errore.isBlank() && aggiornamento.ultimo != null
-                Row(Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.size(10.dp).clip(CircleShape).background(if (collegato) c.firmatoTesto else c.rossoPieno))
-                    Spacer(Modifier.width(14.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text(if (collegato) "Collegato" else "Non collegato", style = Testi.forte, color = c.testo)
-                        Text(
-                            when {
-                                aggiornamento.inCorso -> "Leggo il foglio…"
-                                aggiornamento.errore.isNotBlank() -> aggiornamento.errore
-                                aggiornamento.ultimo != null -> "Letto alle " + aggiornamento.ultimo!!.format(DateTimeFormatter.ofPattern("HH:mm"))
-                                else -> ""
-                            },
-                            style = Testi.secondario, color = c.tenue, maxLines = 2,
-                        )
-                    }
-                    PulsanteTesto(if (collegato) "Aggiorna" else "Riprova", { archivio.aggiorna() })
-                }
-                LineaElenco()
-                RigaVoce("Indirizzo", sotto = config.url.ifBlank { "—" }, onClick = {
-                    modifica = Modifica("Indirizzo del foglio", config.url, locale = "url", righe = 3, tastiera = KeyboardType.Uri)
-                })
-                LineaElenco()
-                RigaVoce("Codice", sotto = if (config.codice.isBlank()) "—" else "••••••" + config.codice.takeLast(4), onClick = {
-                    modifica = Modifica("Codice", "", locale = "codice", tastiera = KeyboardType.Password)
-                })
-                LineaElenco()
-                RigaVoce("Collega il computer", sotto = "Un'email con il file da aprire sul PC", onClick = { collegaPc = "chiedi" })
-            }
-
-            // ---- sul foglio: valgono anche per Wisper Ufficio
-            TitoloSezione("Lo studio")
-            SchedaElenco {
-                VOCI_STUDIO.forEachIndexed { i, v ->
-                    if (i > 0) LineaElenco()
-                    RigaVoce(v.titolo, sotto = ana.impostazione(v.chiave).ifBlank { "—" }, onClick = {
-                        modifica = Modifica(v.titolo, ana.impostazione(v.chiave), chiave = v.chiave, tastiera = v.tastiera)
-                    })
-                }
-            }
-
-            TitoloSezione("La tua firma")
-            Scheda(orizzontale = 20.dp, verticale = 18.dp, raggio = 24.dp, spazio = 14.dp) {
-                FirmaTecnico(archivio, ana.idFirmaTecnico)
+        }
+        TitoloSezione("La tua firma")
+        Scheda(orizzontale = 20.dp, verticale = 18.dp, raggio = 24.dp, spazio = 14.dp) {
+            FirmaTecnico(dati, ana.idFirmaTecnico)
+            if (puoCambiare) {
                 // Uno sotto l'altro: affiancati, su un telefono da 360 i due testi si taglierebbero.
                 PulsanteBordo("Rifai la firma", { if (!caricoFirma) firmaColDito = true }, Modifier.fillMaxWidth(), icona = Icone.firma)
                 PulsanteBordo(
@@ -227,84 +160,14 @@ fun SchermataImpostazioni(
                     Modifier.fillMaxWidth(), icona = Icone.carica,
                 )
             }
-
-            TitoloSezione("Rimborso km e costi")
-            SchedaElenco {
-                val euroKm = ana.impostazione(Anagrafiche.EURO_KM)
-                RigaVoce("Rimborso km", sotto = Numeri.leggi(euroKm)?.let { "${Numeri.scrivi(it)} €/km · tabella ACI" } ?: "—", onClick = {
-                    modifica = Modifica(
-                        "Rimborso km", preciso(Numeri.leggi(euroKm)), chiave = Anagrafiche.EURO_KM,
-                        tastiera = KeyboardType.Decimal, suffisso = "€/km", conferma = CONFERMA_RIMBORSI,
-                    )
-                })
-                LineaElenco()
-                RigaVoce("Auto", sotto = ana.impostazione(Anagrafiche.AUTO).ifBlank { "—" }, onClick = {
-                    modifica = Modifica("Auto", ana.impostazione(Anagrafiche.AUTO), chiave = Anagrafiche.AUTO, conferma = CONFERMA_RIMBORSI)
-                })
-                LineaElenco()
-                val costo = ana.costoOrario
-                RigaVoce("Quanto ti costa un'ora", sotto = costo?.let { "${Numeri.scrivi(it)} €/h" } ?: "—", onClick = {
-                    modifica = Modifica(
-                        "Quanto ti costa un'ora", preciso(costo), chiave = Anagrafiche.COSTO_ORARIO,
-                        tastiera = KeyboardType.Decimal, suffisso = "€/h", conferma = CONFERMA_RIMBORSI,
-                    )
-                })
-                LineaElenco()
-                Box(Modifier.padding(vertical = 4.dp)) {
-                    RigaInterruttore("Campo ticket nei rapportini", ticketAcceso) { nuovo ->
-                        ticket = nuovo
-                        scope.launch {
-                            val errore = salvaSulFoglio(Anagrafiche.TICKET_ATTIVO, if (nuovo) "SI" else "NO", "Salvato")
-                            if (errore != null) {
-                                ticket = null
-                                avvisi.mostra(errore)
-                            }
-                        }
-                    }
-                }
-            }
-
-            // ---- l'app
-            TitoloSezione("L'app")
-            Scheda(orizzontale = 20.dp, verticale = 18.dp, raggio = 24.dp, spazio = 10.dp) {
-                Text("Tema", style = Testi.forte, color = c.testo)
-                Segmenti(listOf("auto" to "Automatico", "chiaro" to "Chiaro", "scuro" to "Scuro"), tema, onTema)
-            }
-            SchedaElenco {
-                RigaVoce("Rifai la visita guidata", sotto = "Da capo, coi dati di esempio", onClick = onVisita)
-                LineaElenco()
-                // Si aggiorna da sola ogni ora; qui si vede a che punto è e si può controllare subito.
-                RigaVoce(
-                    "Versione ${BuildConfig.VERSION_NAME}",
-                    sotto = when {
-                        versioni.inCorso -> "Controllo…"
-                        versioni.pronta != null -> "La ${versioni.nome} è pronta"
-                        versioni.messaggio.isNotBlank() -> versioni.messaggio
-                        else -> "Si aggiorna da sola"
-                    },
-                    fine = {
-                        if (versioni.pronta != null) PulsanteTesto("Installa", { NuoveVersioni.installa(ctx, chiesto = true) })
-                        else if (!versioni.inCorso) PulsanteTesto("Controlla", { scope.launch { NuoveVersioni.controlla(ctx) } })
-                    },
-                    freccia = false,
-                )
-                LineaElenco()
-                RigaVoce("Licenze", sotto = "Carattere Figtree, SIL OFL 1.1", onClick = { licenza = true })
-            }
         }
     }
 
     modifica?.let { m ->
         FoglioModifica(m, scope, onChiudi = { if (modifica === m) modifica = null }) { valore ->
-            when (m.locale) {
-                "tecnico" -> { config.tecnico = valore; avvisi.mostra("Salvato"); null }
-                "url" -> { config.url = valore; archivio.aggiorna(); null }
-                "codice" -> { if (valore.isNotBlank()) { config.codice = valore; archivio.aggiorna() }; null }
-                else -> salvaSulFoglio(m.chiave!!, valore, m.conferma)
-            }
+            dati.salvaImpostazioni(mapOf(m.chiave!! to valore)).fold(onSuccess = { avvisi.mostra(m.conferma); null }, onFailure = { spiegaErrore(it) })
         }
     }
-
     if (firmaColDito) {
         FoglioFirma(
             caricando = caricoFirma,
@@ -321,48 +184,173 @@ fun SchermataImpostazioni(
             },
         )
     }
+}
 
-    collegaPc?.let { fase ->
-        FoglioDalBasso(onChiudi = { collegaPc = null }) {
-            Text(
-                when {
-                    fase == "chiedi" || fase == "mando" -> "Collega il computer"
-                    fase.startsWith("ok:") -> "Email mandata"
-                    else -> "Non è partita"
-                },
-                style = Testi.titoloScheda, color = c.testo,
-            )
-            Text(
-                when {
-                    fase == "chiedi" -> "Ti mando un'email con un file. Sul computer dell'ufficio aprilo con un doppio clic: Wisper Ufficio si collega da solo, senza scrivere indirizzo e codice."
-                    fase == "mando" -> "Mando l'email…"
-                    fase.startsWith("ok:") -> "L'email è andata a ${fase.removePrefix("ok:")}. Aprila sul computer, poi cancellala: dentro c'è il codice."
-                    else -> fase.removePrefix("errore:")
-                },
-                style = Testi.testo, color = c.testo2,
-            )
-            when (fase) {
-                "chiedi" -> {
-                    PulsantePrincipale("Manda", {
-                        collegaPc = "mando"
+/**
+ * Amministrazione › Tariffe e rimborsi: rimborso km con l'auto, quanto costa
+ * un'ora, il campo ticket. Le tariffe dei clienti stanno sulle loro schede.
+ */
+@Composable
+fun PaginaTariffe(dati: Dati, puoCambiare: Boolean, onIndietro: () -> Unit) {
+    val c = W.colori
+    val avvisi = LocalAvvisi.current
+    val scope = rememberCoroutineScope()
+    val ana by dati.anagrafiche.collectAsStateWithLifecycle()
+    var modifica by remember { mutableStateOf<Modifica?>(null) }
+    // L'interruttore si sposta subito; se il server non risponde torna com'era.
+    var ticket by remember { mutableStateOf<Boolean?>(null) }
+    val ticketAcceso = ticket ?: ana.ticketAttivo
+    LaunchedEffect(ana.ticketAttivo) { if (ticket == ana.ticketAttivo) ticket = null }
+
+    Column(
+        Modifier.fillMaxSize().background(c.fondo).verticalScroll(rememberScrollState()).padding(MarginePagina).padding(bottom = 48.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        Testata(onIndietro = onIndietro)
+        TitoloPagina("Tariffe e rimborsi")
+        SchedaElenco {
+            val euroKm = ana.impostazione(Anagrafiche.EURO_KM)
+            RigaVoce("Rimborso km", sotto = Numeri.leggi(euroKm)?.let { "${Numeri.scrivi(it)} €/km · tabella ACI" } ?: "—", freccia = puoCambiare, onClick = if (puoCambiare) ({
+                modifica = Modifica(
+                    "Rimborso km", preciso(Numeri.leggi(euroKm)), chiave = Anagrafiche.EURO_KM,
+                    tastiera = KeyboardType.Decimal, suffisso = "€/km", conferma = CONFERMA_RIMBORSI,
+                )
+            }) else null)
+            LineaElenco()
+            RigaVoce("Auto", sotto = ana.impostazione(Anagrafiche.AUTO).ifBlank { "—" }, freccia = puoCambiare, onClick = if (puoCambiare) ({
+                modifica = Modifica("Auto", ana.impostazione(Anagrafiche.AUTO), chiave = Anagrafiche.AUTO, conferma = CONFERMA_RIMBORSI)
+            }) else null)
+            LineaElenco()
+            val costo = ana.costoOrario
+            RigaVoce("Quanto ti costa un'ora", sotto = costo?.let { "${Numeri.scrivi(it)} €/h" } ?: "—", freccia = puoCambiare, onClick = if (puoCambiare) ({
+                modifica = Modifica(
+                    "Quanto ti costa un'ora", preciso(costo), chiave = Anagrafiche.COSTO_ORARIO,
+                    tastiera = KeyboardType.Decimal, suffisso = "€/h", conferma = CONFERMA_RIMBORSI,
+                )
+            }) else null)
+            LineaElenco()
+            Box(Modifier.padding(vertical = 4.dp)) {
+                if (puoCambiare) {
+                    RigaInterruttore("Campo ticket nei rapportini", ticketAcceso) { nuovo ->
+                        ticket = nuovo
                         scope.launch {
-                            val esito = archivio.collegaComputer()
-                            val errore = esito.exceptionOrNull()?.let { e ->
-                                if (e is PonteFoglio.RifiutatoDalFoglio) e.message.orEmpty()
-                                else "Senza rete l'email non parte: riprova quando c'è."
-                            }
-                            // Se il foglio dal basso è stato chiuso intanto, com'è andata lo dice un avviso.
-                            if (collegaPc == "mando") collegaPc = if (errore == null) "ok:" + esito.getOrNull() else "errore:$errore"
-                            else avvisi.mostra(errore ?: "Email mandata a ${esito.getOrNull()}")
+                            dati.salvaImpostazioni(mapOf(Anagrafiche.TICKET_ATTIVO to if (nuovo) "SI" else "NO")).fold(
+                                onSuccess = { avvisi.mostra("Salvato") },
+                                onFailure = { ticket = null; avvisi.mostra(spiegaErrore(it)) },
+                            )
                         }
-                    }, icona = Icone.invia)
-                    PulsanteTesto("Annulla", { collegaPc = null }, Modifier.fillMaxWidth(), colore = c.testo)
+                    }
+                } else {
+                    RigaVoce("Campo ticket nei rapportini", valore = if (ticketAcceso) "sì" else "no")
                 }
-                "mando" -> PulsantePrincipale("Mando…", {}, abilitato = false)
-                else -> PulsantePrincipale("Chiudi", { collegaPc = null })
             }
         }
     }
+
+    modifica?.let { m ->
+        FoglioModifica(m, scope, onChiudi = { if (modifica === m) modifica = null }) { valore ->
+            dati.salvaImpostazioni(mapOf(m.chiave!! to valore)).fold(onSuccess = { avvisi.mostra(m.conferma); null }, onFailure = { spiegaErrore(it) })
+        }
+    }
+}
+
+/**
+ * Amministrazione › L'app: tema, visita guidata, versione e aggiornamenti, e il
+ * collegamento col server. È di tutti: si apre anche dal foglio "Tu", per chi
+ * non vede Amministrazione.
+ */
+@Composable
+fun PaginaApp(
+    archivio: Archivio,
+    tema: String,
+    onTema: (String) -> Unit,
+    onVisita: () -> Unit,
+    onIndietro: () -> Unit,
+) {
+    val c = W.colori
+    val ctx = LocalContext.current
+    val avvisi = LocalAvvisi.current
+    val scope = rememberCoroutineScope()
+    val config = archivio.configurazione
+    val ana by archivio.anagrafiche.collectAsStateWithLifecycle()
+    val aggiornamento by archivio.aggiornamento.collectAsStateWithLifecycle()
+    val versioni by NuoveVersioni.stato.collectAsStateWithLifecycle()
+    var modifica by remember { mutableStateOf<Modifica?>(null) }
+    var licenza by remember { mutableStateOf(false) }
+
+    Column(
+        Modifier.fillMaxSize().background(c.fondo).verticalScroll(rememberScrollState()).padding(MarginePagina).padding(bottom = 48.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        Testata(onIndietro = onIndietro)
+        TitoloPagina("L'app")
+        Scheda(orizzontale = 20.dp, verticale = 18.dp, raggio = 24.dp, spazio = 10.dp) {
+            Text("Tema", style = Testi.forte, color = c.testo)
+            Segmenti(listOf("auto" to "Automatico", "chiaro" to "Chiaro", "scuro" to "Scuro"), tema, onTema)
+        }
+        SchedaElenco {
+            RigaVoce("Rifai la visita guidata", sotto = "Da capo, coi dati di esempio", onClick = onVisita)
+            LineaElenco()
+            // Si aggiorna da sola ogni ora; qui si vede a che punto è e si può controllare subito.
+            RigaVoce(
+                "Versione ${BuildConfig.VERSION_NAME}",
+                sotto = when {
+                    versioni.inCorso -> "Controllo…"
+                    versioni.pronta != null -> "La ${versioni.nome} è pronta"
+                    versioni.messaggio.isNotBlank() -> versioni.messaggio
+                    else -> "Si aggiorna da sola"
+                },
+                fine = {
+                    if (versioni.pronta != null) PulsanteTesto("Installa", { NuoveVersioni.installa(ctx, chiesto = true) })
+                    else if (!versioni.inCorso) PulsanteTesto("Controlla", { scope.launch { NuoveVersioni.controlla(ctx) } })
+                },
+                freccia = false,
+            )
+            LineaElenco()
+            RigaVoce("Licenze", sotto = "Carattere Figtree, SIL OFL 1.1", onClick = { licenza = true })
+        }
+
+        TitoloSezione("Il collegamento")
+        SchedaElenco {
+            val collegato = aggiornamento.errore.isBlank() && aggiornamento.ultimo != null
+            Row(Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(10.dp).clip(CircleShape).background(if (collegato) c.firmatoTesto else c.moltoTenue))
+                Spacer(Modifier.width(14.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(if (collegato) "Collegato" else "Non collegato", style = Testi.forte, color = c.testo)
+                    Text(
+                        when {
+                            aggiornamento.inCorso -> "Leggo…"
+                            aggiornamento.errore.isNotBlank() -> aggiornamento.errore
+                            aggiornamento.ultimo != null -> "Letto alle " + aggiornamento.ultimo!!.format(DateTimeFormatter.ofPattern("HH:mm"))
+                            else -> ""
+                        },
+                        style = Testi.secondario, color = c.tenue, maxLines = 2,
+                    )
+                }
+                PulsanteTesto(if (collegato) "Aggiorna" else "Riprova", { archivio.aggiorna() })
+            }
+            LineaElenco()
+            // Cambiare server vuol dire entrare di nuovo: il token di un server non vale sull'altro.
+            RigaVoce("Server", sotto = config.server.ifBlank { "—" }, onClick = {
+                modifica = Modifica("Indirizzo del server", config.server, locale = "server", righe = 2, tastiera = KeyboardType.Uri)
+            })
+        }
+    }
+
+    modifica?.let { m ->
+        FoglioModifica(m, scope, onChiudi = { if (modifica === m) modifica = null }) { valore ->
+            when (m.locale) {
+                "server" -> if (valore.isBlank()) "Scrivi l'indirizzo del server" else {
+                    if (valore.trim() != config.server) archivio.cambiaServer(valore)
+                    null
+                }
+                else -> null
+            }
+        }
+    }
+
+
 
     if (licenza) {
         val testo = remember { runCatching { ctx.assets.open("licenze/figtree-OFL.txt").bufferedReader().use { it.readText() } }.getOrDefault("") }
@@ -477,7 +465,7 @@ private fun preciso(n: Double?): String =
 
 /** Cosa è successo e cosa fare: Dati lo dice già in italiano; una frase di riserva se manca. */
 private fun spiegaErrore(e: Throwable): String =
-    e.message?.takeIf { it.isNotBlank() } ?: "Il foglio non risponde: controlla la rete e riprova."
+    e.message?.takeIf { it.isNotBlank() } ?: "Il server non risponde: controlla la rete e riprova."
 
 // ---------------------------------------------------------------------------------- la firma del tecnico
 
@@ -486,11 +474,11 @@ private fun spiegaErrore(e: Throwable): String =
  * nel tema scuro: è un'immagine scura su bianco, come sul PDF.
  */
 @Composable
-private fun FirmaTecnico(archivio: Archivio, idFirma: String) {
+private fun FirmaTecnico(dati: Dati, idFirma: String) {
     val c = W.colori
     val immagine by produceState<Pair<String, ImageBitmap?>?>(null, idFirma) {
         if (idFirma.isBlank()) return@produceState
-        val bmp = runCatching { archivio.file(idFirma) }.getOrNull()?.let { (byte, _) ->
+        val bmp = runCatching { dati.file(idFirma) }.getOrNull()?.let { (byte, _) ->
             withContext(Dispatchers.Default) { BitmapFactory.decodeByteArray(byte, 0, byte.size)?.asImageBitmap() }
         }
         value = idFirma to bmp
@@ -696,46 +684,95 @@ private fun firmaDaFoto(ctx: Context, sorgente: Uri): ByteArray {
     }
 }
 
-/** Il primo avvio: collegare l'app al foglio, con due campi grandi e un pulsante. */
+/**
+ * La schermata di accesso (docs/gestionale/fase1-schermate.md §2): il simbolo,
+ * "Entra in Wisper", l'indirizzo del server solo se manca (o se si tocca Cambia),
+ * email e password con l'occhio, Entra. Gli errori del server in un riquadro rosso
+ * tenue sopra i campi; la rete che manca in grigio, mai in rosso. L'email resta scritta.
+ */
 @Composable
-fun SchermataCollega(archivio: Archivio, onCollegato: () -> Unit) {
+fun SchermataAccesso(archivio: Archivio, onEntrato: () -> Unit) {
     val c = W.colori
     val config = archivio.configurazione
-    val aggiornamento by archivio.aggiornamento.collectAsStateWithLifecycle()
-    var url by remember { mutableStateOf(config.url) }
-    var codice by remember { mutableStateOf(config.codice) }
-    var provato by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val sessione by archivio.sessione.collectAsStateWithLifecycle()
+    var server by remember { mutableStateOf(config.server) }
+    var cambiaServer by remember { mutableStateOf(config.server.isBlank()) }
+    var email by remember { mutableStateOf(config.ultimaEmail) }
+    var password by remember { mutableStateOf("") }
+    // Il testo dell'errore e se è un no del server (rosso) o la rete (grigio).
+    var errore by remember { mutableStateOf<Pair<String, Boolean>?>(null) }
+    var entro by remember { mutableStateOf(false) }
+    val fuocoPassword = remember { FocusRequester() }
 
-    if (provato && !aggiornamento.inCorso && aggiornamento.errore.isBlank() && aggiornamento.ultimo != null) {
-        LaunchedEffect(Unit) { onCollegato() }
+    fun entra() {
+        if (entro) return
+        when {
+            server.isBlank() -> { errore = "Scrivi l'indirizzo del server." to true; cambiaServer = true; return }
+            email.isBlank() || password.isBlank() -> { errore = "Scrivi email e password." to true; return }
+        }
+        entro = true
+        errore = null
+        scope.launch {
+            archivio.entra(email, password, server).fold(
+                onSuccess = { password = ""; onEntrato() },
+                onFailure = { e ->
+                    errore = if (e is PonteServer.Rifiutato) frase(e.message.orEmpty().ifBlank { "Il server ha detto di no" }) to true
+                    else "Il server non risponde: controlla la rete e riprova." to false
+                },
+            )
+            entro = false
+        }
     }
 
     Box(Modifier.fillMaxSize().background(c.fondo)) {
         Column(
-            Modifier.fillMaxSize().statusBarsPadding().verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp).padding(top = 64.dp, bottom = 120.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
+            Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().imePadding().verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp).padding(top = 70.dp, bottom = 32.dp),
+            verticalArrangement = Arrangement.spacedBy(18.dp),
         ) {
-            Simbolo(dimensione = 72.dp)
-            Text("Collega Wisper al tuo foglio", style = Testi.titoloPagina, color = c.testo, textAlign = TextAlign.Center)
-            CampoTesto(url, { url = it }, "Indirizzo", Modifier.fillMaxWidth(), segnaposto = "https://script.google.com/…", righe = 2)
-            CampoTesto(codice, { codice = it }, "Codice", Modifier.fillMaxWidth())
-            if (provato && aggiornamento.errore.isNotBlank()) {
-                Text(aggiornamento.errore, style = Testi.secondario, color = c.rossoTesto, modifier = Modifier.fillMaxWidth())
+            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { Simbolo(dimensione = 64.dp) }
+            Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("Entra in Wisper", style = Testi.titoloPagina, color = c.testo, textAlign = TextAlign.Center)
+                if (config.ragioneSociale.isNotBlank()) Text(config.ragioneSociale, style = Testi.secondarioGrande, color = c.tenue, textAlign = TextAlign.Center)
             }
-        }
-        Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().navigationBarsPadding().imePadding().padding(20.dp)) {
-            PulsantePrincipale(
-                if (provato && aggiornamento.inCorso) "Collego…" else "Collega",
-                {
-                    config.url = url
-                    config.codice = codice
-                    provato = true
-                    archivio.aggiorna()
-                },
-                abilitato = url.isNotBlank() && codice.isNotBlank(),
+            val avviso = errore ?: if (sessione.scaduta) "Sei uscito da questo dispositivo: entra di nuovo." to false else null
+            avviso?.let { (testo, grave) ->
+                Text(
+                    testo, style = Testi.secondarioGrande.copy(fontWeight = FontWeight.Bold), color = if (grave) c.rossoTesto else c.testo2,
+                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(if (grave) c.rossoTenue else c.superficie2)
+                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                )
+            }
+            if (cambiaServer) {
+                CampoTesto(
+                    server, { server = it.trim() }, "Indirizzo del server", Modifier.fillMaxWidth(),
+                    segnaposto = "https://…", tastiera = KeyboardType.Uri, azione = ImeAction.Next,
+                )
+            }
+            CampoTesto(
+                email, { email = it.trim() }, "Email", Modifier.fillMaxWidth(), tastiera = KeyboardType.Email,
+                azione = ImeAction.Next, onAzione = { runCatching { fuocoPassword.requestFocus() } },
             )
+            CampoPassword(
+                password, { password = it }, "Password", Modifier.fillMaxWidth().focusRequester(fuocoPassword),
+                azione = ImeAction.Done, onAzione = { entra() },
+            )
+            PulsantePrincipale(if (entro) "Entro…" else "Entra", { entra() }, abilitato = !entro)
+            if (!cambiaServer) {
+                Row(
+                    Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(RoundedCornerShape(12.dp)).clickable { cambiaServer = true },
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("Server · ", style = Testi.piccolo, color = c.tenue)
+                    Text(server.removePrefix("https://").removePrefix("http://").trimEnd('/'), style = Testi.piccolo, color = c.tenue, maxLines = 1)
+                    Text(" · Cambia", style = Testi.piccolo.copy(fontWeight = FontWeight.Bold), color = c.gialloTesto)
+                }
+            }
         }
     }
 }
+
+/** Le frasi del server con il punto in fondo, come le scrive la guida ("Email o password sbagliate."). */
+private fun frase(t: String): String = t.trim().let { if (it.endsWith(".") || it.endsWith(":")) it else "$it." }

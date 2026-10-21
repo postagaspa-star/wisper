@@ -6,9 +6,24 @@ import eu.stgm.wisper.rapportino.Anagrafiche
 import eu.stgm.wisper.rapportino.Cliente
 import eu.stgm.wisper.rapportino.CodaInvii
 import eu.stgm.wisper.rapportino.Commessa
+import eu.stgm.wisper.rapportino.Dashboard
+import eu.stgm.wisper.rapportino.DatiPartitaIva
+import eu.stgm.wisper.rapportino.Dispositivo
 import eu.stgm.wisper.rapportino.Documento
 import eu.stgm.wisper.rapportino.DocumentiCommessa
+import eu.stgm.wisper.rapportino.FileCestino
 import eu.stgm.wisper.rapportino.FileRemoto
+import eu.stgm.wisper.rapportino.FiltroRegistro
+import eu.stgm.wisper.rapportino.Numerazione
+import eu.stgm.wisper.rapportino.PaginaRegistro
+import eu.stgm.wisper.rapportino.Permessi
+import eu.stgm.wisper.rapportino.Prestazione
+import eu.stgm.wisper.rapportino.Referente
+import eu.stgm.wisper.rapportino.Sede
+import eu.stgm.wisper.rapportino.Sessione
+import eu.stgm.wisper.rapportino.StatoCopie
+import eu.stgm.wisper.rapportino.Utente
+import eu.stgm.wisper.rapportino.UtenteSalvato
 import eu.stgm.wisper.rapportino.Rapportino
 import eu.stgm.wisper.rapportino.Salvataggio
 import eu.stgm.wisper.rapportino.Stato
@@ -168,6 +183,86 @@ interface Dati {
      * le modifiche ancora in coda. Gli id che non si trovano si saltano.
      */
     fun perStampa(idLocali: List<String>): DatiStampa
+
+    // ------------------------------------------------------------- il gestionale (fase 1)
+
+    /**
+     * Chi e' entrato e cosa puo' fare. Le schermate nascondono voci e pulsanti
+     * secondo [Sessione.permessi]; la garanzia la da' il server.
+     */
+    val sessione: StateFlow<Sessione>
+
+    /** La pagina iniziale: l'ultima letta (resta anche senza rete). Null finche' non c'e'. */
+    val dashboard: StateFlow<Dashboard?>
+
+    /** Rilegge la dashboard (la mette in [dashboard]); un errore va in [aggiornamento]. */
+    fun aggiornaDashboard()
+
+    /** Rilegge le anagrafiche con gli archiviati dentro (per l'elenco degli archiviati). */
+    fun aggiornaArchiviati()
+
+    /** Archivia ([archivia] vero) o ripristina un cliente o un fornitore. */
+    suspend fun archiviaSoggetto(id: String, archivia: Boolean): Result<Unit>
+
+    /** Chiede al registro delle imprese nome e indirizzo di una partita IVA. */
+    suspend fun controllaPartitaIva(partitaIva: String): Result<DatiPartitaIva>
+
+    suspend fun salvaReferente(r: Referente): Result<Referente>
+    suspend fun togliReferente(id: String): Result<Unit>
+    suspend fun salvaSede(s: Sede): Result<Sede>
+    suspend fun archiviaSede(id: String, archivia: Boolean): Result<Unit>
+
+    suspend fun salvaPrestazione(p: Prestazione): Result<Prestazione>
+    suspend fun togliPrestazione(id: String): Result<Unit>
+
+    /** Le prestazioni della commessa nell'ordine dato (id). */
+    suspend fun ordinaPrestazioni(idCommessa: String, ordine: List<String>): Result<Unit>
+
+    /** Copia dati, prestazioni (avanzamento a zero) e persone in una commessa nuova, col codice nuovo. */
+    suspend fun duplicaCommessa(id: String, comeModello: Boolean): Result<Commessa>
+    suspend fun archiviaCommessa(id: String, archivia: Boolean): Result<Unit>
+
+    /** Tutti gli utenti, con email, ruolo, ultimo accesso e se sono attivi. */
+    suspend fun utenti(): Result<List<Utente>>
+
+    /**
+     * Crea ([Utente.id] vuoto) o cambia un utente. Con [password] non vuota la
+     * password diventa quella (la iniziale, o una nuova): si mostra una volta sola.
+     */
+    suspend fun salvaUtente(u: Utente, password: String = ""): Result<UtenteSalvato>
+
+    /** I dispositivi collegati di un utente. */
+    suspend fun dispositivi(idUtente: String): Result<List<Dispositivo>>
+    suspend fun scollega(idDispositivo: String): Result<Unit>
+
+    /** I permessi di ogni ruolo. */
+    suspend fun permessiRuoli(): Result<Map<String, Permessi>>
+    suspend fun salvaPermesso(ruolo: String, modulo: String, livello: Int): Result<Unit>
+
+    suspend fun registro(filtro: FiltroRegistro): Result<PaginaRegistro>
+
+    suspend fun salvaNumerazione(n: Numerazione): Result<Numerazione>
+
+    suspend fun cestino(): Result<List<FileCestino>>
+    suspend fun ripristinaFile(id: String): Result<Unit>
+
+    suspend fun copie(): Result<StatoCopie>
+    suspend fun copiaAdesso(): Result<StatoCopie>
+
+    /**
+     * Un file per Excel (CSV con ;) di [cosa]: "rapportini", "clienti",
+     * "fornitori", "commesse", "registro". Torna il file nella cartella dei PDF,
+     * pronto per il foglio Condividi.
+     */
+    suspend fun esporta(cosa: String, filtro: FiltroRegistro? = null): Result<File>
+
+    suspend fun cambiaPassword(vecchia: String, nuova: String): Result<Unit>
+
+    /** Un rapportino annullato torna allo stato di prima (firmato solo se la firma c'è ancora). */
+    suspend fun ripristinaRapportino(idLocale: String): Result<Rapportino>
+
+    /** Esce da questo telefono: i rapportini in attesa restano e partono dopo il prossimo accesso. */
+    suspend fun esci(): Result<Unit>
 }
 
 /**

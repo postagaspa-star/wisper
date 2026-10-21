@@ -31,10 +31,25 @@ import eu.stgm.wisper.rapportino.DocumentiCommessa
 import eu.stgm.wisper.rapportino.FileRemoto
 import eu.stgm.wisper.rapportino.Immagini
 import eu.stgm.wisper.rapportino.Numeri
-import eu.stgm.wisper.rapportino.PonteFoglio
+import eu.stgm.wisper.rapportino.PonteServer
 import eu.stgm.wisper.rapportino.Rapportino
 import eu.stgm.wisper.rapportino.Salvataggio
 import eu.stgm.wisper.rapportino.Stato
+import eu.stgm.wisper.rapportino.Dashboard
+import eu.stgm.wisper.rapportino.DatiPartitaIva
+import eu.stgm.wisper.rapportino.Dispositivo
+import eu.stgm.wisper.rapportino.FileCestino
+import eu.stgm.wisper.rapportino.FiltroRegistro
+import eu.stgm.wisper.rapportino.Numerazione
+import eu.stgm.wisper.rapportino.PaginaRegistro
+import eu.stgm.wisper.rapportino.Permessi
+import eu.stgm.wisper.rapportino.Prestazione
+import eu.stgm.wisper.rapportino.Referente
+import eu.stgm.wisper.rapportino.Sede
+import eu.stgm.wisper.rapportino.Sessione
+import eu.stgm.wisper.rapportino.StatoCopie
+import eu.stgm.wisper.rapportino.Utente
+import eu.stgm.wisper.rapportino.UtenteSalvato
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -78,11 +93,13 @@ data class Vista(
 )
 
 /**
- * Tutti i dati dell'app e il loro viaggio verso il foglio.
+ * Tutti i dati dell'app e il loro viaggio verso il server di Wisper (dalla fase 1
+ * del gestionale; prima era il foglio Google, e molti nomi qui dentro lo ricordano).
  *
- * Le schermate leggono da qui e chiedono a qui; nessuna parla col foglio da
+ * Le schermate leggono da qui e chiedono a qui; nessuna parla col server da
  * sola. Ogni modifica va prima nella [CodaInvii] (cioe' su disco) e solo dopo
- * parte: cosi' quello che si vede e' sempre quello che e' al sicuro.
+ * parte: cosi' quello che si vede e' sempre quello che e' al sicuro. Se l'accesso
+ * scade la coda si ferma e aspetta che si rientri, senza perdere niente.
  *
  * Le cose dell'ufficio (clienti, commesse, impostazioni, documenti, email) invece
  * si fanno in diretta e tornano un Result: sono rare, si fanno con calma, e
@@ -91,7 +108,7 @@ data class Vista(
 class Archivio(private val ctx: Context) : Dati {
 
     val configurazione = Configurazione(ctx)
-    private val ponte = PonteFoglio({ configurazione.url }, { configurazione.codice }, {
+    private val ponte = PonteServer({ configurazione.server }, { configurazione.token }, {
         mapOf(
             "disp" to configurazione.dispositivo,
             "dispNome" to configurazione.nomeDispositivo,
@@ -136,11 +153,120 @@ class Archivio(private val ctx: Context) : Dati {
                 componi(unisci(_storicoFoglio.value, _dalFoglio.value), _coda.value, _anagrafiche.value),
             )
 
-    /** Chi compila: il nome di questo telefono, o quello scritto nelle impostazioni del foglio. */
-    override val tecnico: String
-        get() = configurazione.tecnico.ifBlank { _anagrafiche.value.tecnico }
+    /**
+     * Chi è entrato e cosa può fare: quello che il server ha detto l'ultima volta
+     * (resta anche senza rete). [Sessione.NESSUNA] = si deve entrare; con
+     * [Sessione.scaduta] la schermata di accesso dice "Sei uscito da questo dispositivo".
+     */
+    private val _sessione = MutableStateFlow(configurazione.sessioneSalvata())
+    override val sessione: StateFlow<Sessione> = _sessione.asStateFlow()
 
+    /** La dashboard del server, l'ultima letta (anche dopo un riavvio senza rete). */
+    private val _dashboard = MutableStateFlow(copia.dashboard()?.let { runCatching { Dashboard.daJson(it) }.getOrNull() })
+    override val dashboard: StateFlow<Dashboard?> = _dashboard.asStateFlow()
+    private val leggoDashboard = java.util.concurrent.atomic.AtomicBoolean(false)
+
+    override fun aggiornaDashboard() {
+        if (!ponte.configurato || !leggoDashboard.compareAndSet(false, true)) return
+        scope.launch {
+            try {
+                leggiDashboard()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: PonteServer.AccessoScaduto) {
+                segnaUscito()
+            } catch (_: Exception) {
+                // Senza rete resta quella di prima; l'errore lo dice la lettura generale.
+            } finally {
+                leggoDashboard.set(false)
+            }
+        }
+    }
+
+    private suspend fun leggiDashboard() {
+        val j = ponte.dashboard()
+        _dashboard.value = Dashboard.daJson(j)
+        copia.scriviDashboard(j)
+    }
+
+    /** Le anagrafiche arrivano già con archiviati e modelli: non c'è altro da leggere. */
+    override fun aggiornaArchiviati() = Unit
+
+    /** Chi compila: chi è entrato (il server mette comunque il suo nome); senza accesso, quello di questo telefono. */
+    override val tecnico: String
+        get() = _sessione.value.utente.nome.ifBlank { configurazione.tecnico.ifBlank { _anagrafiche.value.tecnico } }
+
+    /** C'è l'indirizzo del server e un token: si può parlare col server. */
     val configurato: Boolean get() = ponte.configurato
+
+    /**
+     * Entra con email e password. Se entra un'altra persona, le copie sul telefono
+     * (rapportini, anagrafiche, immagini) si rifanno da capo: ognuno vede solo il
+     * suo. La coda dei rapportini non si tocca: parte adesso, col nuovo accesso.
+     *
+     * Un no del server (password sbagliata, troppi tentativi, utente disattivato)
+     * torna come [PonteServer.Rifiutato]; la rete come un altro errore.
+     */
+    suspend fun entra(email: String, password: String, server: String = configurazione.server): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            if (server.trim() != configurazione.server) configurazione.server = server.trim()
+            configurazione.ultimaEmail = email.trim()
+            val a = ponte.accedi(email, password)
+            if (configurazione.idUltimoUtente.isNotBlank() && configurazione.idUltimoUtente != a.utente.id) svuotaCopie()
+            configurazione.token = a.token
+            configurazione.uscitoPerScadenza = false
+            val s = Sessione(a.utente, a.permessi)
+            configurazione.salvaSessione(s)
+            _sessione.value = s
+            provaONull { aggiornaIo() }
+            aggiorna()
+            Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /** Cambia l'indirizzo del server: il token di prima non vale lì, si rientra. */
+    fun cambiaServer(nuovo: String) {
+        configurazione.server = nuovo.trim()
+        esciQui(perScadenza = false)
+    }
+
+    /** Il server ha detto "accesso scaduto": si torna alla schermata di accesso, la coda aspetta. */
+    private fun segnaUscito() {
+        if (configurazione.token.isBlank() && _sessione.value.utente.id.isBlank()) return
+        esciQui(perScadenza = true)
+        _aggiornamento.update { it.copy(inCorso = false, errore = "Sei uscito da questo dispositivo: entra di nuovo") }
+    }
+
+    private fun esciQui(perScadenza: Boolean) {
+        configurazione.token = ""
+        configurazione.uscitoPerScadenza = perScadenza
+        _sessione.value = Sessione.NESSUNA.copy(scaduta = perScadenza)
+    }
+
+    /** Un'altra persona: via le copie lette dal server (non la coda, che è ancora da mandare). */
+    private fun svuotaCopie() {
+        copia.svuota()
+        _dalFoglio.value = emptyList()
+        _storicoFoglio.value = emptyList()
+        _anagrafiche.value = Anagrafiche()
+        _dashboard.value = null
+    }
+
+    /** Chi sono e cosa posso: i permessi cambiati da Amministrazione valgono subito. */
+    private suspend fun aggiornaIo() {
+        val io = ponte.io()
+        configurazione.titolare = io.titolare
+        configurazione.ragioneSociale = io.ragioneSociale
+        if (io.utente.id.isNotBlank()) {
+            val s = Sessione(io.utente, io.permessi)
+            configurazione.salvaSessione(s)
+            _sessione.value = s
+        }
+    }
 
     /**
      * Quando ogni rapportino e' stato scritto qui l'ultima volta (un contatore,
@@ -167,13 +293,12 @@ class Archivio(private val ctx: Context) : Dati {
 
     private suspend fun aggiornaOra(mese: YearMonth? = null, tutti: Boolean = false) {
         if (!ponte.configurato) {
-            _aggiornamento.update {
-                it.copy(inCorso = false, errore = "Manca l'indirizzo o il codice del foglio: aprili dalle impostazioni")
-            }
+            _aggiornamento.update { it.copy(inCorso = false, errore = "Entra in Wisper per leggere i dati") }
             return
         }
         _aggiornamento.update { it.copy(inCorso = true) }
         try {
+            aggiornaIo()
             val ana = ponte.anagrafiche()
             _anagrafiche.value = ana
             copia.scriviAnagrafiche(ana)
@@ -208,8 +333,11 @@ class Archivio(private val ctx: Context) : Dati {
                 }
             }
             _aggiornamento.value = Aggiornamento(ultimo = LocalDateTime.now())
+            if (!tutti) provaONull { leggiDashboard() }
         } catch (e: CancellationException) {
             throw e
+        } catch (e: PonteServer.AccessoScaduto) {
+            segnaUscito()
         } catch (e: Exception) {
             _aggiornamento.update { it.copy(inCorso = false, errore = spiega(e)) }
         }
@@ -264,8 +392,7 @@ class Archivio(private val ctx: Context) : Dati {
 
     // ------------------------------------------------------------- modifiche
 
-    /** "Collega il computer": l'email col file di collegamento. Serve la rete. */
-    suspend fun collegaComputer(): Result<String> = runCatching { ponte.collegaComputer() }
+
 
     override fun salva(r: Rapportino) {
         coda.salva(r)
@@ -428,25 +555,32 @@ class Archivio(private val ctx: Context) : Dati {
 
     // ------------------------------------------------------------- l'ufficio, in diretta
 
+    /** Un cliente o un fornitore, con tutti i campi (salvaSoggetto, §12.5). */
     override suspend fun salvaCliente(cliente: Cliente, nuovo: Boolean): Result<Salvataggio<Cliente>> = inDiretta {
-        if (cliente.nome.isBlank()) throw PonteFoglio.RifiutatoDalFoglio("Scrivi il nome del cliente")
-        val salvato = if (nuovo) {
-            val creato = ponte.creaCliente(cliente)
-            // creaCliente scrive l'anagrafica; viaggio, km e tariffe vanno con un aggiornamento,
-            // come fa il computer. Uno che c'era gia' non si tocca.
-            if (creato.giaEsisteva) creato else Salvataggio(ponte.aggiornaCliente(cliente.copy(id = creato.dato.id)))
-        } else {
-            if (cliente.id.isBlank()) throw PonteFoglio.RifiutatoDalFoglio("Manca il codice del cliente")
-            Salvataggio(ponte.aggiornaCliente(cliente))
-        }
-        mettiInAnagrafica { a -> a.copy(clienti = sostituisci(a.clienti, salvato.dato) { it.id == salvato.dato.id }) }
+        if (cliente.nome.isBlank()) throw PonteServer.Rifiutato("Scrivi il nome o la ragione sociale")
+        if (!nuovo && cliente.id.isBlank()) throw PonteServer.Rifiutato("Manca il codice del cliente")
+        val salvato = ponte.salvaSoggetto(cliente, nuovo, costi)
+        mettiInAnagrafica { a -> conSoggetto(a, salvato.dato) }
         rileggiAnagrafiche()
         salvato
     }
 
+    /** Chi è entrato vede i soldi: solo allora tariffe e importi si mandano. */
+    private val costi: Boolean get() = _sessione.value.permessi.costi
+
+    /** Un soggetto al suo posto: clienti, fornitori, archiviati. */
+    private fun conSoggetto(a: Anagrafiche, s: Cliente): Anagrafiche {
+        fun dentro(l: List<Cliente>, si: Boolean) = if (si) sostituisci(l, s) { it.id == s.id } else l.filterNot { it.id == s.id }
+        return a.copy(
+            clienti = dentro(a.clienti, s.cliente && !s.archiviato),
+            fornitori = dentro(a.fornitori, s.fornitore && !s.archiviato),
+            archiviati = dentro(a.archiviati, s.archiviato),
+        )
+    }
+
     override suspend fun salvaCommessa(commessa: Commessa, nuova: Boolean): Result<Salvataggio<Commessa>> = inDiretta {
-        if (commessa.idCliente.isBlank()) throw PonteFoglio.RifiutatoDalFoglio("Scegli il cliente della commessa")
-        if (commessa.descrizione.isBlank()) throw PonteFoglio.RifiutatoDalFoglio("Scrivi come si chiama la commessa")
+        if (commessa.idCliente.isBlank()) throw PonteServer.Rifiutato("Scegli il cliente della commessa")
+        if (commessa.descrizione.isBlank()) throw PonteServer.Rifiutato("Scrivi come si chiama la commessa")
         val ana = _anagrafiche.value
         val cliente = ana.cliente(commessa.idCliente)
         val salvata = if (nuova) {
@@ -454,10 +588,10 @@ class Archivio(private val ctx: Context) : Dati {
             // il computer l'ha dato a un'altra, lo script prende il primo libero invece di dire di no.
             val proposto = ana.prossimoCodiceCommessa(LocalDate.now().year)
             val codice = commessa.id.trim().uppercase().takeUnless { it == proposto }.orEmpty()
-            ponte.creaCommessa(commessa.copy(id = codice), cliente)
+            ponte.creaCommessa(commessa.copy(id = codice), cliente, costi)
         } else {
-            if (commessa.id.isBlank()) throw PonteFoglio.RifiutatoDalFoglio("Manca il codice della commessa")
-            Salvataggio(ponte.aggiornaCommessa(commessa, cliente))
+            if (commessa.id.isBlank()) throw PonteServer.Rifiutato("Manca il codice della commessa")
+            Salvataggio(ponte.aggiornaCommessa(commessa, cliente, costi))
         }
         mettiInAnagrafica { a ->
             a.copy(commesse = sostituisci(a.commesse, salvata.dato) { it.id.equals(salvata.dato.id, ignoreCase = true) })
@@ -470,7 +604,7 @@ class Archivio(private val ctx: Context) : Dati {
         val pronti = valori.mapValues { (k, v) ->
             val t = v.trim()
             if (k in Anagrafiche.IMPOSTAZIONI_NUMERICHE && t.isNotEmpty()) {
-                Numeri.leggi(t) ?: throw PonteFoglio.RifiutatoDalFoglio(
+                Numeri.leggi(t) ?: throw PonteServer.Rifiutato(
                     if (k == Anagrafiche.EURO_KM) "Il rimborso km dev'essere un numero, per esempio 0,76"
                     else "Il costo orario dev'essere un numero, per esempio 22"
                 )
@@ -503,19 +637,19 @@ class Archivio(private val ctx: Context) : Dati {
 
     override suspend fun caricaFoglioFirmato(idLocale: String, uri: Uri, firmatario: String): Result<Rapportino> = inDiretta {
         val chi = firmatario.trim()
-        if (chi.isEmpty()) throw PonteFoglio.RifiutatoDalFoglio("Scrivi il nome di chi ha firmato")
-        val v = compostiOra()[idLocale] ?: throw PonteFoglio.RifiutatoDalFoglio("Rapportino non trovato")
+        if (chi.isEmpty()) throw PonteServer.Rifiutato("Scrivi il nome di chi ha firmato")
+        val v = compostiOra()[idLocale] ?: throw PonteServer.Rifiutato("Rapportino non trovato")
         // Lo script non sostituisce una firma che c'e' gia': terrebbe quella vecchia senza dirlo.
         if (v.firmaInAttesa != null || (v.rapportino.firma != null && v.rapportino.bloccato)) {
-            throw PonteFoglio.RifiutatoDalFoglio("Il rapportino ha già una firma: riportalo in bozza per caricarne un'altra")
+            throw PonteServer.Rifiutato("Il rapportino ha già una firma: riportalo in bozza per caricarne un'altra")
         }
         val tipo = ctx.contentResolver.getType(uri)
         if (tipo != null && !tipo.startsWith("image/")) {
-            throw PonteFoglio.RifiutatoDalFoglio("Serve una foto o un'immagine del foglio firmato")
+            throw PonteServer.Rifiutato("Serve una foto o un'immagine del foglio firmato")
         }
         prontiSulFoglio(listOf(idLocale), "La firma non è stata caricata")
         val remoto = remotoDi(idLocale)
-            ?: throw PonteFoglio.RifiutatoDalFoglio("Il rapportino non è ancora arrivato sul foglio: riprova tra poco")
+            ?: throw PonteServer.Rifiutato("Il rapportino non è ancora arrivato al server: riprova tra poco")
         // Ridotta e raddrizzata come gli scontrini: si legge benissimo e parte in fretta.
         val (idFile, file) = Immagini.preparaFoto(ctx, uri)
         try {
@@ -552,7 +686,7 @@ class Archivio(private val ctx: Context) : Dati {
         aMe: Boolean,
     ): Result<List<Rapportino>> = inDiretta(email = true) {
         if (!aMe && a.isBlank()) {
-            throw PonteFoglio.RifiutatoDalFoglio("Manca l'indirizzo: scrivilo qui (lo puoi salvare nella scheda del cliente)")
+            throw PonteServer.Rifiutato("Manca l'indirizzo: scrivilo qui (lo puoi salvare nella scheda del cliente)")
         }
         // Le modifiche in coda di questi rapportini partono prima: l'email li segna
         // inviati, e dopo il foglio rifiuterebbe una correzione arrivata in ritardo.
@@ -574,10 +708,13 @@ class Archivio(private val ctx: Context) : Dati {
             ponte.file(id)
         } catch (e: CancellationException) {
             throw e
-        } catch (e: PonteFoglio.RifiutatoDalFoglio) {
-            // Lo script ha risposto: se dice di no per il codice o il collegamento e' un errore;
-            // se dice di no per il file (non c'e' piu', e' nel cestino, e' fuori dalla cartella
-            // Wisper) il file non c'e', e il PDF si fa senza, come sul computer.
+        } catch (e: PonteServer.AccessoScaduto) {
+            segnaUscito()
+            throw Exception(NON_SCARICA + "sei uscito da questo dispositivo: entra di nuovo", e)
+        } catch (e: PonteServer.Rifiutato) {
+            // Il server ha risposto: se dice di no per il collegamento e' un errore; se dice
+            // di no per il file (non c'e' piu', e' nel cestino, non e' ancora stato copiato da
+            // Drive, non lo puoi vedere) il file non c'e', e il PDF si fa senza, come sul computer.
             if (erroreDiCollegamento(e.message.orEmpty())) throw Exception(NON_SCARICA + spiegaInDiretta(e), e)
             return@withContext null
         } catch (e: Exception) {
@@ -588,10 +725,10 @@ class Archivio(private val ctx: Context) : Dati {
         scaricato
     }
 
-    /** I no dello script che non riguardano il file: il codice, il foglio, l'indirizzo. */
+    /** I no che non riguardano il file: l'indirizzo, una risposta che non è del server. */
     private fun erroreDiCollegamento(messaggio: String): Boolean {
         val m = messaggio.lowercase()
-        return listOf("codice", "foglio non preparato", "indirizzo", "risposta non valida").any { it in m }
+        return listOf("indirizzo", "risposta non valida").any { it in m }
     }
 
     override fun perStampa(idLocali: List<String>): DatiStampa {
@@ -620,6 +757,9 @@ class Archivio(private val ctx: Context) : Dati {
                 Result.success(lavoro())
             } catch (e: CancellationException) {
                 throw e
+            } catch (e: PonteServer.AccessoScaduto) {
+                segnaUscito()
+                Result.failure(Exception("Sei uscito da questo dispositivo: entra di nuovo", e))
             } catch (e: Exception) {
                 Result.failure(Exception(spiegaInDiretta(e, email), e))
             }
@@ -634,11 +774,11 @@ class Archivio(private val ctx: Context) : Dati {
         if (coda.tutte().none { it.idLocale in ids }) return
         mandaCoda()
         if (coda.tutte().none { it.idLocale in ids }) return
-        throw PonteFoglio.RifiutatoDalFoglio(
+        throw PonteServer.Rifiutato(
             if (coda.tutte().any { it.rifiutata }) {
-                "Prima va sistemata una modifica che il foglio ha rifiutato (la vedi in Oggi). $cosaNonEPartito"
+                "Prima va sistemata una modifica che il server ha rifiutato (la vedi nella Dashboard). $cosaNonEPartito"
             } else {
-                "Le ultime modifiche di questi rapportini non sono ancora arrivate al foglio. $cosaNonEPartito: riprova quando c'è rete"
+                "Le ultime modifiche di questi rapportini non sono ancora arrivate al server. $cosaNonEPartito: riprova quando c'è rete"
             }
         )
     }
@@ -672,7 +812,7 @@ class Archivio(private val ctx: Context) : Dati {
                 }
             }
         }
-        if (dimensione > MASSIMO_DOCUMENTO) throw PonteFoglio.RifiutatoDalFoglio(TROPPO_GRANDE)
+        if (dimensione > MASSIMO_DOCUMENTO) throw PonteServer.Rifiutato(TROPPO_GRANDE)
         val dati = cr.openInputStream(uri)?.use { input ->
             // Letto a pezzi con un limite: un file enorme non deve riempire la memoria.
             val out = java.io.ByteArrayOutputStream()
@@ -681,10 +821,10 @@ class Archivio(private val ctx: Context) : Dati {
                 val n = input.read(pezzo)
                 if (n < 0) break
                 out.write(pezzo, 0, n)
-                if (out.size() > MASSIMO_DOCUMENTO) throw PonteFoglio.RifiutatoDalFoglio(TROPPO_GRANDE)
+                if (out.size() > MASSIMO_DOCUMENTO) throw PonteServer.Rifiutato(TROPPO_GRANDE)
             }
             out.toByteArray()
-        } ?: throw PonteFoglio.RifiutatoDalFoglio("Non riesco a leggere il file")
+        } ?: throw PonteServer.Rifiutato("Non riesco a leggere il file")
         val n = nome?.takeIf { it.isNotBlank() } ?: uri.lastPathSegment?.substringAfterLast('/')?.takeIf { it.isNotBlank() } ?: "documento"
         return Triple(n, cr.getType(uri) ?: mimeDi(n), dati)
     }
@@ -703,9 +843,146 @@ class Archivio(private val ctx: Context) : Dati {
         else -> "application/octet-stream"
     }
 
+    // ------------------------------------------------------------- il gestionale (fase 1, §12)
+
+    override suspend fun archiviaSoggetto(id: String, archivia: Boolean): Result<Unit> = inDiretta {
+        val s = ponte.archiviaSoggetto(id, archivia)
+        val prima = _anagrafiche.value.soggetto(id)
+        mettiInAnagrafica { a -> conSoggetto(a, if (s.nome.isNotBlank()) s else (prima ?: s).copy(archiviato = archivia)) }
+        rileggiAnagrafiche()
+    }
+
+    override suspend fun controllaPartitaIva(partitaIva: String): Result<DatiPartitaIva> = inDiretta { ponte.controllaPartitaIva(partitaIva) }
+
+    override suspend fun salvaReferente(r: Referente): Result<Referente> = inDiretta {
+        val salvato = ponte.salvaReferente(r)
+        mettiInAnagrafica { a -> a.copy(referenti = sostituisci(a.referenti, salvato) { it.id == salvato.id }) }
+        salvato
+    }
+
+    override suspend fun togliReferente(id: String): Result<Unit> = inDiretta {
+        ponte.togliReferente(id)
+        mettiInAnagrafica { a -> a.copy(referenti = a.referenti.filterNot { it.id == id }) }
+    }
+
+    override suspend fun salvaSede(s: Sede): Result<Sede> = inDiretta {
+        val salvata = ponte.salvaSede(s)
+        mettiInAnagrafica { a -> a.copy(sedi = sostituisci(a.sedi, salvata) { it.id == salvata.id }) }
+        salvata
+    }
+
+    override suspend fun archiviaSede(id: String, archivia: Boolean): Result<Unit> = inDiretta {
+        ponte.archiviaSede(id, archivia)
+        mettiInAnagrafica { a -> a.copy(sedi = a.sedi.map { if (it.id == id) it.copy(archiviata = archivia) else it }) }
+    }
+
+    override suspend fun salvaPrestazione(p: Prestazione): Result<Prestazione> = inDiretta {
+        val salvata = ponte.salvaPrestazione(p, costi)
+        // Senza i soldi il server non manda il valore: si tiene quello che c'era (che è comunque vuoto).
+        mettiInAnagrafica { a -> a.copy(prestazioni = sostituisci(a.prestazioni, salvata) { it.id == salvata.id }) }
+        salvata
+    }
+
+    override suspend fun togliPrestazione(id: String): Result<Unit> = inDiretta {
+        ponte.togliPrestazione(id)
+        mettiInAnagrafica { a -> a.copy(prestazioni = a.prestazioni.filterNot { it.id == id }) }
+    }
+
+    override suspend fun ordinaPrestazioni(idCommessa: String, ordine: List<String>): Result<Unit> = inDiretta {
+        val nuove = ponte.ordinaPrestazioni(idCommessa, ordine)
+        mettiInAnagrafica { a ->
+            if (nuove.isEmpty()) a.copy(prestazioni = a.prestazioni.map { p -> ordine.indexOf(p.id).takeIf { it >= 0 }?.let { p.copy(ordine = it + 1) } ?: p })
+            else a.copy(prestazioni = a.prestazioni.filterNot { it.idCommessa.equals(idCommessa, ignoreCase = true) } + nuove)
+        }
+    }
+
+    override suspend fun duplicaCommessa(id: String, comeModello: Boolean): Result<Commessa> = inDiretta {
+        val nuova = ponte.duplicaCommessa(id, comeModello)
+        mettiInAnagrafica { a -> a.copy(commesse = sostituisci(a.commesse, nuova) { it.id.equals(nuova.id, ignoreCase = true) }) }
+        rileggiAnagrafiche()
+        nuova
+    }
+
+    override suspend fun archiviaCommessa(id: String, archivia: Boolean): Result<Unit> = inDiretta {
+        ponte.archiviaCommessa(id, archivia)
+        mettiInAnagrafica { a -> a.copy(commesse = a.commesse.map { if (it.id.equals(id, ignoreCase = true)) it.copy(archiviata = archivia) else it }) }
+        rileggiAnagrafiche()
+    }
+
+    override suspend fun utenti(): Result<List<Utente>> = inDiretta { ponte.utenti() }
+
+    /**
+     * Un utente nuovo riceve la password iniziale dal server; per uno che c'è già,
+     * una [password] non vuota vuol dire "Nuova password" (la sceglie il server).
+     */
+    override suspend fun salvaUtente(u: Utente, password: String): Result<UtenteSalvato> = inDiretta {
+        if (u.id.isNotBlank() && password.isNotBlank()) {
+            UtenteSalvato(u, ponte.nuovaPassword(u.id))
+        } else {
+            val s = ponte.salvaUtente(u)
+            rileggiAnagrafiche()
+            s
+        }
+    }
+
+    override suspend fun dispositivi(idUtente: String): Result<List<Dispositivo>> = inDiretta { ponte.sessioni(idUtente) }
+    override suspend fun scollega(idDispositivo: String): Result<Unit> = inDiretta { ponte.revocaSessione(idDispositivo) }
+    override suspend fun permessiRuoli(): Result<Map<String, Permessi>> = inDiretta { ponte.permessi() }
+
+    override suspend fun salvaPermesso(ruolo: String, modulo: String, livello: Int): Result<Unit> = inDiretta {
+        ponte.salvaPermesso(ruolo, modulo, livello)
+        // Se è il ruolo di chi è entrato, vale subito anche qui.
+        if (_sessione.value.utente.ruolo == ruolo) provaONull { aggiornaIo() }
+    }
+
+    override suspend fun registro(filtro: FiltroRegistro): Result<PaginaRegistro> = inDiretta { ponte.registro(filtro) }
+
+    override suspend fun salvaNumerazione(n: Numerazione): Result<Numerazione> = inDiretta {
+        val salvata = ponte.salvaNumerazione(n)
+        mettiInAnagrafica { a -> a.copy(numerazioni = sostituisci(a.numerazioni, salvata) { it.tipo == salvata.tipo }) }
+        salvata
+    }
+
+    override suspend fun cestino(): Result<List<FileCestino>> = inDiretta { ponte.cestino() }
+    override suspend fun ripristinaFile(id: String): Result<Unit> = inDiretta { ponte.ripristinaFile(id) }
+    override suspend fun copie(): Result<StatoCopie> = inDiretta { ponte.copie() }
+
+    override suspend fun copiaAdesso(): Result<StatoCopie> = inDiretta {
+        ponte.copiaAdesso()
+        ponte.copie()
+    }
+
+    /** Il file per Excel nella cartella dei PDF: si condivide col foglio Condividi di Android. */
+    override suspend fun esporta(cosa: String, filtro: FiltroRegistro?): Result<File> = inDiretta {
+        val (nome, _, byte) = ponte.esporta(cosa, filtro)
+        val cartella = File(ctx.cacheDir, "pdf").apply { mkdirs() }
+        val sicuro = nome.replace(Regex("""[^A-Za-z0-9._ -]"""), "_").ifBlank { "wisper-$cosa.csv" }
+        File(cartella, sicuro).apply { writeBytes(byte) }
+    }
+
+    override suspend fun cambiaPassword(vecchia: String, nuova: String): Result<Unit> = inDiretta { ponte.cambiaPassword(vecchia, nuova) }
+
+    override suspend fun ripristinaRapportino(idLocale: String): Result<Rapportino> = inDiretta {
+        val r = ponte.ripristinaRapportino(chiaveFoglio(idLocale))
+        sostituisciRemoti(listOf(r))
+        r
+    }
+
+    /**
+     * Esce da questo telefono. Se il server non si raggiunge si esce lo stesso
+     * qui (il token resta valido sul server finché non lo si scollega da
+     * Amministrazione). I rapportini in attesa restano e partono dopo il prossimo accesso.
+     */
+    override suspend fun esci(): Result<Unit> = withContext(Dispatchers.IO) {
+        provaONull { ponte.esci() }
+        esciQui(perScadenza = false)
+        Result.success(Unit)
+    }
+
     // ------------------------------------------------------------- invio
 
-    enum class Esito { TUTTO_INVIATO, RETE, RIFIUTATO }
+    /** ACCESSO: l'accesso è scaduto, la coda aspetta che si rientri (niente è scartato). */
+    enum class Esito { TUTTO_INVIATO, RETE, RIFIUTATO, ACCESSO }
 
     /**
      * Ci pensa WorkManager: parte appena c'e' rete, anche ad app chiusa, e se la
@@ -717,6 +994,8 @@ class Archivio(private val ctx: Context) : Dati {
      */
     fun programmaInvio(ritardoSecondi: Long = 0) {
         if (coda.tutte().none { !it.rifiutata }) return
+        // Senza accesso non si prova nemmeno: dopo l'accesso entra() fa ripartire tutto.
+        if (!ponte.configurato) return
         val lavoro = OneTimeWorkRequestBuilder<InviaCoda>()
             .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
@@ -761,14 +1040,18 @@ class Archivio(private val ctx: Context) : Dati {
                     _coda.value = coda.tutte()
                 } catch (e: CancellationException) {
                     throw e
-                } catch (e: PonteFoglio.RifiutatoDalFoglio) {
+                } catch (e: PonteServer.AccessoScaduto) {
+                    // Non è un no sul rapportino: resta in coda così com'è, e parte dopo il prossimo accesso.
+                    segnaUscito()
+                    return@withLock Esito.ACCESSO
+                } catch (e: PonteServer.Rifiutato) {
                     if (gruppo.size > 1) {
                         unoAllaVolta = true
                         continue
                     }
                     coda.aggiorna(op.copy(errore = e.message ?: "rifiutato"))
                     _coda.value = coda.tutte()
-                    avvisa(ID_RIFIUTATO, "Il foglio ha rifiutato un rapportino", e.message.orEmpty(), importante = true)
+                    avvisa(ID_RIFIUTATO, "Il server ha rifiutato un rapportino", e.message.orEmpty(), importante = true)
                     return@withLock Esito.RIFIUTATO
                 } catch (e: Exception) {
                     val tentativi = op.tentativi + 1
@@ -776,7 +1059,7 @@ class Archivio(private val ctx: Context) : Dati {
                     _coda.value = coda.tutte()
                     if (tentativi == AVVISO_DOPO_TENTATIVI) {
                         avvisa(
-                            ID_NON_ANCORA, "Rapportini non ancora sul foglio",
+                            ID_NON_ANCORA, "Rapportini non ancora partiti",
                             "Sono al sicuro sul telefono. Partono da soli appena c'è rete.", importante = false,
                         )
                     }
@@ -799,7 +1082,7 @@ class Archivio(private val ctx: Context) : Dati {
 
             CodaInvii.Tipo.FOTO -> {
                 val file = File(op.percorso)
-                if (!file.exists()) throw PonteFoglio.RifiutatoDalFoglio("La foto non è più sul telefono")
+                if (!file.exists()) throw PonteServer.Rifiutato("La foto non è più sul telefono")
                 val remoto = remotoDi(op.idLocale)
                 val f = ponte.caricaFile("spesa", op.idLocale, remoto?.id.orEmpty(), op.idFile, file, "image/jpeg")
                 // La copia locale resta, col nome del file su Drive: le foto di
@@ -810,7 +1093,7 @@ class Archivio(private val ctx: Context) : Dati {
 
             CodaInvii.Tipo.FIRMA -> {
                 val file = File(op.percorso)
-                if (!file.exists()) throw PonteFoglio.RifiutatoDalFoglio("La firma non è più sul telefono")
+                if (!file.exists()) throw PonteServer.Rifiutato("La firma non è più sul telefono")
                 val remoto = remotoDi(op.idLocale)
                 val f = ponte.caricaFile(
                     "firma", op.idLocale, remoto?.id.orEmpty(), op.idFile, file, "image/png",
@@ -984,15 +1267,30 @@ class Archivio(private val ctx: Context) : Dati {
 
         /** Un documento della commessa: oltre, la richiesta allo script diventa troppo pesante per il telefono. */
         private const val MASSIMO_DOCUMENTO = 10L * 1024 * 1024
-        private const val TROPPO_GRANDE = "Il file è troppo grande per il foglio: al massimo 10 MB"
+        private const val TROPPO_GRANDE = "Il file è troppo grande: al massimo 10 MB"
         private const val NON_SCARICA = "Non riesco a scaricare un'immagine del PDF (una firma o uno scontrino). "
+
 
         /** Un errore detto in modo che si capisca cosa fare. */
         fun spiega(e: Exception): String = when (e) {
-            is PonteFoglio.RifiutatoDalFoglio -> e.message.orEmpty()
-            is java.net.UnknownHostException, is java.net.ConnectException -> "Niente rete: si aggiorna appena torna"
-            is java.net.SocketTimeoutException -> "Il foglio non ha risposto in tempo"
+            is PonteServer.Rifiutato -> e.message.orEmpty()
+            is PonteServer.AccessoScaduto -> "Sei uscito da questo dispositivo: entra di nuovo"
+            is java.net.UnknownHostException, is java.net.ConnectException, is java.net.NoRouteToHostException ->
+                "Il server non risponde: controlla la rete e riprova"
+            is java.net.SocketTimeoutException -> "Il server non ha risposto in tempo"
+            is PonteServer.ServizioNonRaggiunto -> e.message.orEmpty()
             else -> e.message ?: e.javaClass.simpleName
+        }
+
+        /**
+         * Cosa fare dopo un errore mandando la coda: [Esito.RIFIUTATO] il server ha
+         * detto di no (anche per un permesso), [Esito.ACCESSO] si deve rientrare
+         * (la coda aspetta), [Esito.RETE] si riprova.
+         */
+        fun esitoDi(e: Exception): Esito = when (e) {
+            is PonteServer.AccessoScaduto -> Esito.ACCESSO
+            is PonteServer.Rifiutato -> Esito.RIFIUTATO
+            else -> Esito.RETE
         }
 
         /**
@@ -1001,14 +1299,16 @@ class Archivio(private val ctx: Context) : Dati {
          * se la risposta non e' arrivata forse si'.
          */
         fun spiegaInDiretta(e: Exception, email: Boolean = false): String = when (e) {
-            is PonteFoglio.RifiutatoDalFoglio -> e.message.orEmpty().replaceFirstChar { it.uppercase() }.ifBlank { "Il foglio ha detto di no" }
+            is PonteServer.Rifiutato -> e.message.orEmpty().replaceFirstChar { it.uppercase() }.ifBlank { "Il server ha detto di no" }
+            is PonteServer.ServizioNonRaggiunto -> e.message.orEmpty().ifBlank { "Un servizio non risponde: riprova più tardi" }
+            is PonteServer.AccessoScaduto -> "Sei uscito da questo dispositivo: entra di nuovo"
             is java.net.UnknownHostException, is java.net.ConnectException, is java.net.NoRouteToHostException ->
                 if (email) "Niente rete: l'email non è partita. Riprova quando c'è campo"
-                else "Niente rete: per questo serve la connessione. Riprova quando c'è campo"
+                else "Serve la rete per salvare: riprova quando c'è"
             is java.net.SocketTimeoutException, is java.io.IOException ->
-                if (email) "Il foglio non ha risposto e l'email potrebbe essere partita lo stesso: guarda nella posta inviata prima di riprovare"
-                else if (e is java.net.SocketTimeoutException) "Il foglio non ha risposto in tempo: riprova tra poco"
-                else "Il foglio non ha risposto bene (${e.message ?: "errore di rete"}): riprova tra poco"
+                if (email) "Il server non ha risposto e l'email potrebbe essere partita lo stesso: guarda nella posta inviata prima di riprovare"
+                else if (e is java.net.SocketTimeoutException) "Il server non ha risposto in tempo: riprova tra poco"
+                else "Il server non ha risposto bene (${e.message ?: "errore di rete"}): riprova tra poco"
             is IllegalArgumentException -> e.message ?: "Non riesco a leggere il file"
             else -> e.message ?: e.javaClass.simpleName
         }
@@ -1030,6 +1330,7 @@ class InviaCoda(ctx: Context, parametri: WorkerParameters) : CoroutineWorker(ctx
         val archivio = (applicationContext as WisperApp).archivio
         return when (archivio.mandaCoda()) {
             Archivio.Esito.RETE -> Result.retry()
+            // ACCESSO: si aspetta il prossimo accesso, che fa ripartire la coda; RIFIUTATO: decide chi usa l'app.
             else -> Result.success()
         }
     }

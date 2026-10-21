@@ -45,6 +45,10 @@ class Intervallo {
     return this;
   }
   setValue(v) { this.foglio.scrivi(this.riga, this.colonna, v); return this; }
+  clearContent() {
+    for (let r = 0; r < this.righe; r++) for (let c = 0; c < this.colonne; c++) this.foglio.scrivi(this.riga + r, this.colonna + c, '');
+    return this;
+  }
   setFontWeight() { return this; }
 }
 
@@ -206,9 +210,50 @@ const MailApp = {
   getRemainingDailyQuota: () => 100,
 };
 
+/**
+ * UrlFetchApp e' sincrono, Node no: la chiamata vera la fa un secondo processo
+ * Node, aspettato fino alla fine. Basta per il ponte verso il server di prova.
+ * Le prove possono sostituirla con modulo.urlFetch = (url, opzioni) => ({ codice, testo }).
+ */
+const { execFileSync } = require('node:child_process');
+function urlFetchVero(url, opzioni) {
+  const script = 'let d="";process.stdin.on("data",x=>d+=x).on("end",async()=>{const o=JSON.parse(d);' +
+    'try{const r=await fetch(o.url,{method:o.metodo,headers:o.intestazioni,body:o.corpo});' +
+    'process.stdout.write(JSON.stringify({codice:r.status,testo:await r.text()}))}' +
+    'catch(e){process.stdout.write(JSON.stringify({errore:e.message}))}})';
+  const intestazioni = Object.assign({}, opzioni.headers || {});
+  if (opzioni.contentType) intestazioni['Content-Type'] = opzioni.contentType;
+  const fuori = JSON.parse(execFileSync(process.execPath, ['-e', script], {
+    input: JSON.stringify({ url, metodo: (opzioni.method || 'get').toUpperCase(), intestazioni, corpo: opzioni.payload }),
+    timeout: 30000,
+  }).toString());
+  if (fuori.errore) throw new Error('Indirizzo non raggiungibile: ' + url);
+  return fuori;
+}
+const modulo = { urlFetch: urlFetchVero, chiamate: [] };
+const UrlFetchApp = {
+  fetch(url, opzioni) {
+    modulo.chiamate.push({ url, opzioni: opzioni || {} });
+    const r = modulo.urlFetch(url, opzioni || {});
+    return { getResponseCode: () => r.codice, getContentText: () => r.testo };
+  },
+};
+
+// Gli attivatori: si ricordano e basta.
+const attivatori = [];
+const ScriptApp = {
+  getProjectTriggers: () => attivatori.slice(),
+  deleteTrigger: t => { attivatori.splice(attivatori.indexOf(t), 1); },
+  newTrigger: funzione => {
+    const t = { funzione, getHandlerFunction: () => funzione };
+    const catena = { timeBased: () => catena, everyDays: () => catena, atHour: o => { t.ora = o; return catena; }, create: () => { attivatori.push(t); return t; } };
+    return catena;
+  },
+};
+
 const contesto = {
   SpreadsheetApp: { getActiveSpreadsheet: () => Cartella },
-  DriveApp, PropertiesService, LockService, CacheService, Utilities, MailApp,
+  DriveApp, PropertiesService, LockService, CacheService, Utilities, MailApp, UrlFetchApp, ScriptApp,
   Session: { getEffectiveUser: () => ({ getEmail: () => 'proprietario@example.com' }) },
   ContentService: {
     MimeType: { JSON: 'application/json' },
@@ -220,6 +265,9 @@ const contesto = {
 vm.createContext(contesto);
 // WISPER_SCRIPT: un altro Code.gs (per esempio quello di prima, per vedere che le prove lo bocciano).
 vm.runInContext(fs.readFileSync(process.env.WISPER_SCRIPT || path.join(__dirname, '..', 'Code.gs'), 'utf8'), contesto, { filename: 'Code.gs' });
+// Il secondo file del progetto Apps Script: il ponte verso il server e il postino.
+const filePonte = path.join(__dirname, '..', 'Ponte.gs');
+if (fs.existsSync(filePonte)) vm.runInContext(fs.readFileSync(filePonte, 'utf8'), contesto, { filename: 'Ponte.gs' });
 
 // ------------------------------------------------------------------ dati di esempio
 
@@ -250,7 +298,7 @@ function semina() {
 semina();
 
 // Le prove (registro.test.js) lo usano senza server: lo script, le schede, la posta.
-module.exports = { contesto, fogli, proprieta, memoria, CARTELLA_POSTA };
+module.exports = { contesto, fogli, proprieta, memoria, CARTELLA_POSTA, modulo, attivatori };
 if (require.main !== module) return;
 
 // ------------------------------------------------------------------ il server
@@ -275,7 +323,9 @@ http.createServer((richiesta, risposta) => {
         out = contesto.doPost({ postData: { contents: corpo } });
       }
     } catch (e) {
-      out = { testo: JSON.stringify({ ok: false, errore: 'finto google: ' + e.message }) };
+      // Come Google: uno script che si ferma con un errore risponde con una pagina HTML,
+      // che le app trattano come rete (riprovano). Il ponte conta su questo.
+      out = { testo: '<!DOCTYPE html><html><body>Errore dello script: ' + e.message + '</body></html>' };
     }
     const azione = url.searchParams.get('azione') || (() => { try { return JSON.parse(corpo).azione; } catch (e) { return ''; } })();
     console.log(richiesta.method, azione || '(anagrafiche)', out.testo.length + ' byte');

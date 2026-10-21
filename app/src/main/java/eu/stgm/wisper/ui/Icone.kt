@@ -105,4 +105,33 @@ object Icone {
         "M16 4.5a3.5 3.5 0 0 1 0 7M18 14a6 6 0 0 1 3.5 6",
     )
     val cartella = tratto("cartella", 2.2f, "M5 5h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z")
+
+    // Il gestionale, fase 1 (docs/prototipo/Gestionale-fase1.html, le stesse del computer)
+    val menu = tratto("menu", 2.2f, "M4 6h16M4 12h16M4 18h10")
+    val dashboard = tratto("dashboard", 2.2f, "M4 4h7v7H4z", "M13 4h7v4h-7z", "M13 10h7v10h-7z", "M4 13h7v7H4z")
+    val clienti = tratto(
+        "clienti", 2.2f,
+        "M16 19v-1.5a3.5 3.5 0 0 0-3.5-3.5h-5A3.5 3.5 0 0 0 4 17.5V19", "M10 10.5a3 3 0 1 0 0-6a3 3 0 1 0 0 6z",
+        "M20 19v-1.5a3.5 3.5 0 0 0-2.5-3.35", "M15.5 4.6a3 3 0 0 1 0 5.8",
+    )
+    val commesse = tratto("commesse", 2.2f, "M3 7.5A1.5 1.5 0 0 1 4.5 6H9l2 2h8.5A1.5 1.5 0 0 1 21 9.5v9a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18.5z")
+    val ore = tratto("ore", 2.2f, "M12 7v5l3 2", "M12 3a9 9 0 1 1 0 18a9 9 0 1 1 0-18z")
+    val fatturazione = tratto("fatturazione", 2.2f, "M7 3h10v18l-2.5-1.5L12 21l-2.5-1.5L7 21z", "M10 8h4M10 12h4")
+    val amministrazione = tratto(
+        "amministrazione", 2.2f,
+        "M12 15a3 3 0 1 0 0-6a3 3 0 1 0 0 6z",
+        "M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68 1.65 1.65 0 0 0 10 3.17V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z",
+    )
+    val allarme = tratto("allarme", 2.2f, "M12 9v4M12 17h.01", "M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z")
+    val lista = tratto("lista", 2.2f, "M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01")
+    val telefono = tratto("telefono", 2.2f, "M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2")
+    val email = tratto("email", 2.2f, "M4 6h16v12H4z", "M4 7l8 6 8-6")
+    val luogo = tratto("luogo", 2.2f, "M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z", "M12 12a2.5 2.5 0 1 0 0-5a2.5 2.5 0 1 0 0 5z")
+    val scudo = tratto("scudo", 2.2f, "M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z")
+    val scarica = tratto("scarica", 2.2f, "M12 3v12M7 10l5 5 5-5M5 21h14")
+    val esci = tratto("esci", 2.2f, "M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3", "M10 17l5-5-5-5M15 12H3")
+    val occhio = tratto("occhio", 2.2f, "M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z", "M12 15a3 3 0 1 0 0-6a3 3 0 1 0 0 6z")
+    val occhioChiuso = tratto("occhioChiuso", 2.2f, "M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z", "M12 15a3 3 0 1 0 0-6a3 3 0 1 0 0 6z", "M4 4l16 16")
+    val numero = tratto("numero", 2.2f, "M5 9h14M5 15h14M10 3L8 21M16 3l-2 18")
+    val su = tratto("su", 2.4f, "M6 15l6-6 6 6")
 }

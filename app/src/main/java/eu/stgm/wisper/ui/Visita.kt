@@ -80,8 +80,10 @@ class Visita {
     )
 
     val passi = listOf(
-        Passo("giorno", "Il tuo giorno", "Qui vedi subito se il rapportino di oggi è scritto.", false, "oggi"),
-        Passo("scrivi", "Scrivi il rapportino", "Tocca il pulsante giallo.", true, "oggi"),
+        Passo("menu", "Il menu", "Clienti, commesse, rapportini e fatturazione: tocca Menu, o scorri dal bordo sinistro.", false, "dashboard"),
+        Passo("cosa-fare", "La Dashboard", "Qui vedi cosa fare adesso: ogni riga porta dove si sistema.", false, "dashboard"),
+        Passo("giorno", "Il tuo giorno", "Qui vedi subito se il rapportino di oggi è scritto.", false, "dashboard"),
+        Passo("scrivi", "Scrivi il rapportino", "Tocca il pulsante giallo.", true, "dashboard"),
         Passo("recente-0", "Per chi", "I clienti di questi giorni sono già qui. Tocca Elettrodinamica.", true, "rapportino"),
         Passo("ore-6", "Le ore", "Tocca 6 h, poi aggiusti con più e meno.", true, "rapportino"),
         Passo("km-ultimi", "I chilometri", "Wisper ricorda i km dell'ultima volta. Toccali.", true, "rapportino"),
@@ -90,9 +92,8 @@ class Visita {
         Passo("scontrino", "Gli scontrini", "Fotografa lo scontrino subito, o aggiungilo dopo.", false, "rapportino"),
         Passo("avanti", "Il riepilogo", "Tocca Avanti per vedere tutto prima di salvare.", true, "rapportino"),
         Passo("firma", "La firma", "Il cliente firma col dito sul tuo telefono.", false, "rapportino"),
-        Passo("manca", "I giorni che mancano", "Un giorno senza rapportino si vede subito: toccalo per scriverlo.", false, "oggi"),
-        Passo("sezione-ufficio", "L'ufficio", "Fine mese, commesse e clienti: quello che fa il computer, anche qui.", false, "oggi"),
-        Passo(null, "Ecco fatto", "Adesso Wisper lavora con i tuoi rapportini veri.", false, "oggi"),
+        Passo("manca", "I giorni che mancano", "Un giorno senza rapportino si vede subito: toccalo per scriverlo.", false, "dashboard"),
+        Passo(null, "Ecco fatto", "Adesso Wisper lavora con i tuoi dati veri.", false, "dashboard"),
     )
 
     var attiva by mutableStateOf(false)
@@ -117,7 +118,7 @@ class Visita {
         bersagli.clear()
         indice = 0
         attiva = true
-        vaiA("oggi")
+        vaiA("dashboard")
     }
 
     fun avanti() {

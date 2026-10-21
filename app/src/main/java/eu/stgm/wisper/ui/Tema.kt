@@ -52,6 +52,14 @@ data class ColoriWisper(
     val rossoTesto: Color,
     val budget: Color = Color(0xFFE59F00),
     val velo: Color,
+    // ---- il gestionale (fase 1, docs/prototipo/Gestionale-fase1.html) ----
+    /** Il cerchio con le iniziali di chi e' entrato, e di utenti e referenti. */
+    val ambraFondo: Color = Color(0xFFFBF3E3),
+    val ambraTesto: Color = Color(0xFF8A5A12),
+    /** Il fondo della "cosa piu' urgente" e delle righe scelte. */
+    val scelta: Color = Color(0xFFFFF8E5),
+    /** Il velo del menu laterale: nero al 45%, al 60% nel tema scuro. */
+    val veloMenu: Color = Color(0x73000000),
 )
 
 val Chiaro = ColoriWisper(
@@ -104,6 +112,10 @@ val Scuro = ColoriWisper(
     rossoTenue = Color(0xFF3A1C1C),
     rossoTesto = Color(0xFFFFA8A8),
     velo = Color(0xA6000000),
+    ambraFondo = Color(0xFF33281A),
+    ambraTesto = Color(0xFFF2C27A),
+    scelta = Color(0xFF2A2414),
+    veloMenu = Color(0x99000000),
 )
 
 /**

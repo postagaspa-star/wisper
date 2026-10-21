@@ -8,21 +8,30 @@
  *
  * Gli elementi da illuminare hanno l'attributo data-visita="nome". Le pagine
  * chiamano Visita.azione("nome") quando l'azione è fatta davvero.
+ *
+ * Dalla fase 1 si parte dalla barra laterale e dalla Dashboard, poi i passi di
+ * prima. I passi che il ruolo di chi fa la visita non può fare (serve: modulo e
+ * livello) si saltano: un collaboratore non prepara riepiloghi.
  */
 (function (radice) {
   'use strict';
 
-  const PASSI = [
-    { bersaglio: 'da-fatturare', titolo: 'Da fatturare', frase: 'Qui vedi subito quanto c\'è da fatturare questo mese.' },
-    { bersaglio: 'prepara-riepilogo', titolo: 'Il riepilogo', frase: 'Una scheda per chi paga, coi suoi rapportini. Fai clic su Prepara riepilogo.', fai: true },
-    { bersaglio: 'invia-email', titolo: 'Invia', frase: 'Il PDF parte per email con un clic. È un esempio: non parte niente.', fai: true },
-    { bersaglio: 'segna-fatturati', titolo: 'Dopo la fattura', frase: 'Quando hai fatto la fattura, segnali qui.', fai: true },
-    { bersaglio: 'nav-rapportini', titolo: 'I rapportini', frase: 'Tutti i rapportini, divisi per chi paga. Fai clic su Rapportini.', fai: true },
-    { bersaglio: 'segmento-firmare', titolo: 'Da firmare', frase: 'Restano solo quelli che il cliente non ha ancora firmato.', fai: true },
-    { bersaglio: 'riga-rapportino', titolo: 'Un rapportino', frase: 'Fai clic su una riga per aprirla.', fai: true },
-    { bersaglio: 'azione-gialla', titolo: 'La cosa da fare', frase: 'Il pulsante giallo è sempre la cosa da fare adesso.' },
-    { bersaglio: null, titolo: 'Ecco fatto', frase: 'Adesso Wisper Ufficio lavora con i tuoi rapportini veri.' },
+  const FATTURA = ['fatturazione', 2];
+  const TUTTI_I_PASSI = [
+    { bersaglio: 'lato', titolo: 'Il menu', frase: 'Tutte le parti di Wisper sono qui. Ctrl+B lo richiude a icone.' },
+    { bersaglio: 'dashboard', titolo: 'La Dashboard', frase: 'Qui vedi cosa fare adesso: ogni riga ti porta dove si sistema.', serve: ['dashboard', 1] },
+    { bersaglio: 'nav-fatturazione', titolo: 'Fatturazione', frase: 'Quello che c\'è da fatturare. Fai clic su Fatturazione.', fai: true, serve: FATTURA },
+    { bersaglio: 'da-fatturare', titolo: 'Da fatturare', frase: 'Qui vedi subito quanto c\'è da fatturare questo mese.', serve: FATTURA },
+    { bersaglio: 'prepara-riepilogo', titolo: 'Il riepilogo', frase: 'Una scheda per chi paga, coi suoi rapportini. Fai clic su Prepara riepilogo.', fai: true, serve: FATTURA },
+    { bersaglio: 'invia-email', titolo: 'Invia', frase: 'Il PDF parte per email con un clic. È un esempio: non parte niente.', fai: true, serve: FATTURA },
+    { bersaglio: 'segna-fatturati', titolo: 'Dopo la fattura', frase: 'Quando hai fatto la fattura, segnali qui.', fai: true, serve: FATTURA },
+    { bersaglio: 'nav-rapportini', titolo: 'I rapportini', frase: 'Tutti i rapportini, divisi per chi paga. Fai clic su Ore e rapportini.', fai: true, serve: ['rapportini', 1] },
+    { bersaglio: 'segmento-firmare', titolo: 'Da firmare', frase: 'Restano solo quelli che il cliente non ha ancora firmato.', fai: true, serve: ['rapportini', 1] },
+    { bersaglio: 'riga-rapportino', titolo: 'Un rapportino', frase: 'Fai clic su una riga per aprirla.', fai: true, serve: ['rapportini', 1] },
+    { bersaglio: 'azione-gialla', titolo: 'La cosa da fare', frase: 'Il pulsante giallo è sempre la cosa da fare adesso.', serve: ['rapportini', 1] },
+    { bersaglio: null, titolo: 'Ecco fatto', frase: 'Adesso Wisper Ufficio lavora con i tuoi dati veri.' },
   ];
+  let PASSI = TUTTI_I_PASSI;
 
   const MARGINE = 8;
   let attiva = false;
@@ -182,7 +191,8 @@
 
   function inizia(callback) {
     if (attiva) return;
-    quando = Object.assign({ inizio: () => {}, fine: () => {} }, callback || {});
+    quando = Object.assign({ inizio: () => {}, fine: () => {}, puo: () => true }, callback || {});
+    PASSI = TUTTI_I_PASSI.filter(p => !p.serve || quando.puo(p.serve));
     attiva = true;
     indice = 0;
     quando.inizio();
@@ -204,7 +214,7 @@
   }
 
   radice.WisperVisita = {
-    inizia, azione, salta: fine,
+    inizia, azione, salta: fine, TUTTI_I_PASSI,
     get attiva() { return attiva; },
   };
 })(window);

@@ -1,5 +1,9 @@
 # Wisper 0.4.0: l'ufficio sul telefono
 
+> Dalla fase 1 del gestionale (ramo `gestionale`, ottobre 2026) la barra in basso lascia il posto al menu laterale e
+> la casa è la Dashboard: vedi [`docs/gestionale/fase1-schermate.md`](gestionale/fase1-schermate.md). Le pagine
+> descritte qui restano, dentro le voci nuove del menu.
+
 Tutto quello che fa Wisper Ufficio, anche sul telefono, per quando Manuel è fuori. Il computer resta il posto
 principale; sul telefono l'ufficio è una sezione accanto al lavoro di campo, che non cambia.
 

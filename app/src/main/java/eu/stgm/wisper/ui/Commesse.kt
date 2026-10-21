@@ -7,6 +7,8 @@ import android.net.Uri
 import android.provider.OpenableColumns
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -39,6 +41,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -68,6 +71,9 @@ import eu.stgm.wisper.rapportino.Conti
 import eu.stgm.wisper.rapportino.Conti.Cruscotto
 import eu.stgm.wisper.rapportino.Conti.Livello
 import eu.stgm.wisper.rapportino.DocumentiCommessa
+import eu.stgm.wisper.rapportino.Moduli
+import eu.stgm.wisper.rapportino.Prestazione
+import eu.stgm.wisper.rapportino.Ruoli
 import eu.stgm.wisper.rapportino.Numeri
 import eu.stgm.wisper.rapportino.Rapportino
 import eu.stgm.wisper.rapportino.Stato
@@ -91,19 +97,37 @@ import kotlin.math.roundToInt
 
 private val IT = Locale.ITALY
 
-/** Le cinque schede della pagina di una commessa. */
-private enum class SchedaDiCommessa { PANORAMICA, RAPPORTINI, COSTI, FATTURARE, DOCUMENTI }
+/** Le schede della pagina di una commessa. */
+internal enum class SchedaDiCommessa { PANORAMICA, PRESTAZIONI, RAPPORTINI, DOCUMENTI, COSTI, FATTURARE }
 
 /**
- * Quello che resta scelto mentre si va e si torna, come sul computer: il segmento
- * e la ricerca dell'elenco, la scheda della commessa. Le pagine si ricreano a ogni
- * passo della pila, quindi non basta remember.
+ * Quello che resta scelto mentre si va e si torna, come sul computer: il segmento,
+ * il filtro e la ricerca dell'elenco, la scheda di ogni commessa. Le pagine si
+ * ricreano a ogni passo della pila, quindi non basta remember.
  */
-private object RicordoCommesse {
-    /** "APERTA", "SOSPESA", "CHIUSA"; vuoto = tutte. */
+internal object RicordoCommesse {
+    /** "APERTA", "SOSPESA", "CHIUSA", "ARCHIVIO". */
     var segmento by mutableStateOf("APERTA")
     var cerca by mutableStateOf("")
-    var scheda by mutableStateOf(SchedaDiCommessa.PANORAMICA)
+
+    /** "" tutte, "ritardo" quelle oltre la fine prevista, "responsabile" quelle senza responsabile. */
+    var filtro by mutableStateOf("")
+    val schede = mutableStateMapOf<String, SchedaDiCommessa>()
+
+    /** Dalla Dashboard: "aperte", "sospese", "chiuse", "archivio", "ritardo", "responsabile". */
+    fun mostra(f: String) {
+        cerca = ""
+        val (s, x) = when (f.lowercase()) {
+            "sospese", "sospesa" -> "SOSPESA" to ""
+            "chiuse", "chiusa" -> "CHIUSA" to ""
+            "archivio", "archiviate" -> "ARCHIVIO" to ""
+            "ritardo", "inritardo", "scadute" -> "APERTA" to "ritardo"
+            "responsabile", "senzaresponsabile" -> "APERTA" to "responsabile"
+            else -> "APERTA" to ""
+        }
+        segmento = s
+        filtro = x
+    }
 }
 
 /**
@@ -132,65 +156,72 @@ private fun ChiediStorico(dati: Dati) {
 @Composable
 fun SchermataCommesse(dati: Dati, nav: Navigatore) {
     val c = W.colori
+    val perm = LocalPermessi.current
     val ana by dati.anagrafiche.collectAsStateWithLifecycle()
     val storico by dati.storico.collectAsStateWithLifecycle()
     val oggi = LocalDate.now()
     val segmento = RicordoCommesse.segmento
+    val filtro = RicordoCommesse.filtro
     val cruscotti = remember(ana, storico) {
         val tutti = storico.conConti()
         ana.commesse.associate { it.id to Conti.cruscotto(it, tutti, ana, oggi) }
     }
     ChiediStorico(dati)
 
-    // Come sul computer: codice, nome, cliente e indirizzo; i numerini contano dopo la ricerca.
+    // Come sul computer: codice, nome, cliente e indirizzo; i numerini contano dopo la ricerca. I modelli non ci sono.
     val testo = Anagrafiche.normalizza(RicordoCommesse.cerca)
     val trovate = ana.commesse.filter { m ->
-        testo.isEmpty() || Anagrafiche.normalizza(listOf(m.id, m.descrizione, ana.cliente(m.idCliente)?.nome.orEmpty(), m.indirizzo).joinToString(" ")).contains(testo)
+        !m.modello && (testo.isEmpty() || Anagrafiche.normalizza(listOf(m.id, m.descrizione, ana.cliente(m.idCliente)?.nome.orEmpty(), m.indirizzo).joinToString(" ")).contains(testo))
     }
-    fun passa(m: Commessa, s: String) = s.isEmpty() || m.stato.equals(s, ignoreCase = true)
-    val mostrate = trovate.filter { passa(it, segmento) }.sortedByDescending { it.id }
-    val nascoste = trovate.size - mostrate.size
+    fun nelSegmento(m: Commessa, s: String) = if (s == "ARCHIVIO") m.archiviata else !m.archiviata && m.stato.equals(s, ignoreCase = true)
+    fun passaFiltro(m: Commessa) = when (filtro) {
+        "ritardo" -> m.finePrevista?.isBefore(oggi) == true
+        "responsabile" -> m.idResponsabile.isBlank()
+        else -> true
+    }
+    val mostrate = trovate.filter { nelSegmento(it, segmento) && passaFiltro(it) }.sortedByDescending { it.id }
+    val puo = perm.modifica(Moduli.COMMESSE)
 
     Box(Modifier.fillMaxSize().background(c.fondo)) {
         Column(
-            Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(MarginePagina).padding(bottom = SpazioSottoBarra),
+            Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(MarginePagina)
+                .padding(bottom = if (puo) SpazioSottoBarra else 40.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             Testata(onIndietro = { nav.indietro() })
             TitoloPagina("Commesse")
-            CampoCerca(RicordoCommesse.cerca, { RicordoCommesse.cerca = it }, "Codice, commessa, cliente")
-            Segmenti(
-                listOf("APERTA" to "Aperte", "SOSPESA" to "Sospese", "CHIUSA" to "Chiuse", "" to "Tutte")
-                    .map { (s, nome) -> s to "$nome ${trovate.count { passa(it, s) }}" },
-                segmento, { RicordoCommesse.segmento = it },
+            SegmentiScorrevoli(
+                listOf("APERTA" to "Aperte", "SOSPESA" to "Sospese", "CHIUSA" to "Chiuse", "ARCHIVIO" to "Archivio")
+                    .map { (s, nome) -> s to "$nome · ${trovate.count { nelSegmento(it, s) }}" },
+                segmento, { RicordoCommesse.segmento = it; RicordoCommesse.filtro = "" },
             )
+            CampoCerca(RicordoCommesse.cerca, { RicordoCommesse.cerca = it }, "Codice, commessa, cliente")
+            if (filtro.isNotBlank()) {
+                ChipFiltro(if (filtro == "ritardo") "In ritardo" else "Senza responsabile", { RicordoCommesse.filtro = "" })
+            }
             if (mostrate.isEmpty()) {
-                TestoVuoto("Nessuna commessa")
+                TestoVuoto(if (segmento == "ARCHIVIO") "Nessuna commessa archiviata" else "Nessuna commessa")
             } else {
                 SchedaElenco {
                     mostrate.forEachIndexed { i, m ->
                         val k = cruscotti[m.id] ?: Conti.cruscotto(m, emptyList(), ana, oggi)
-                        RigaCommessa(m, ana.cliente(m.idCliente)?.nome ?: m.idCliente, k) { nav.vai("commessa/${m.id}") }
+                        RigaCommessa(m, ana.cliente(m.idCliente)?.nome ?: m.idCliente, k, perm.costi) { nav.vai("commessa/${m.id}") }
                         if (i < mostrate.lastIndex) LineaElenco()
                     }
                 }
             }
-            if (nascoste > 0) {
-                PulsanteTesto(
-                    (if (nascoste == 1) "Una commessa è nascosta dal filtro" else "$nascoste commesse sono nascoste dal filtro") + " · Mostrale",
-                    { RicordoCommesse.segmento = "" }, Modifier.fillMaxWidth(),
-                )
-            }
         }
-        FondoConPulsante(Modifier.align(Alignment.BottomCenter)) {
-            PulsantePrincipale("Nuova commessa", { nav.vai("commessa-nuova") }, icona = Icone.piu)
+        if (puo) {
+            FondoConPulsante(Modifier.align(Alignment.BottomCenter)) {
+                PulsantePrincipale("Nuova commessa", { nav.vai("commessa-nuova") }, icona = Icone.piu)
+            }
         }
     }
 }
 
 /** Una commessa nell'elenco: codice, nome e cliente, la parola che serve, le ore sul budget. */
 @Composable
-private fun RigaCommessa(m: Commessa, cliente: String, k: Cruscotto, onClick: () -> Unit) {
+private fun RigaCommessa(m: Commessa, cliente: String, k: Cruscotto, costi: Boolean, onClick: () -> Unit) {
     val c = W.colori
     val budgetOre = k.budgetOre ?: 0.0
     Column(
@@ -208,10 +239,10 @@ private fun RigaCommessa(m: Commessa, cliente: String, k: Cruscotto, onClick: ()
         if (budgetOre > 0) BarraBudget(k.ore, budgetOre, alta = false)
         Row(Modifier.fillMaxWidth()) {
             Text(
-                if (budgetOre > 0) "${Testo.ore(k.ore)} di ${Testo.ore(budgetOre)}" else Testo.ore(k.ore),
+                if (budgetOre > 0) "${Testo.ore(k.ore)} di ${Testo.ore(budgetOre)}" else "${Testo.ore(k.ore)}, senza budget",
                 style = Testi.piccolo, color = c.tenue, modifier = Modifier.weight(1f),
             )
-            if (k.costo.lavoroNoto) Text("margine ${Testo.euroTondi(k.margine)}", style = Testi.piccolo, color = c.tenue)
+            if (costi && k.costo.lavoroNoto) Text("margine ${Testo.euroTondi(k.margine)}", style = Testi.piccolo, color = c.tenue)
         }
     }
 }
@@ -231,6 +262,9 @@ private fun GiudizioBudget(k: Cruscotto) {
 @Composable
 fun SchermataCommessa(dati: Dati, nav: Navigatore, id: String) {
     val c = W.colori
+    val perm = LocalPermessi.current
+    val costi = perm.costi
+    val puo = perm.modifica(Moduli.COMMESSE)
     val ana by dati.anagrafiche.collectAsStateWithLifecycle()
     val storico by dati.storico.collectAsStateWithLifecycle()
     val avvisi = LocalAvvisi.current
@@ -245,14 +279,29 @@ fun SchermataCommessa(dati: Dati, nav: Navigatore, id: String) {
     ChiediStorico(dati)
     // Le righe dei rapportini vogliono la Vista: il conto rifatto sul telefono e la nuvola se non è ancora partito.
     val viste = remember(storico) { storico.associateBy { it.rapportino.idLocale } }
+    val prestazioni = ana.prestazioniDi(m.id)
     var menu by remember { mutableStateOf(false) }
     var daConfermare by remember { mutableStateOf<String?>(null) }
     var inCorso by remember { mutableStateOf(false) }
 
+    // Si apre su Prestazioni se ce ne sono, altrimenti su Panoramica; Costi e Da fatturare solo con i soldi.
+    val schede = buildList {
+        add(SchedaDiCommessa.PANORAMICA to "Panoramica")
+        add(SchedaDiCommessa.PRESTAZIONI to "Prestazioni · ${prestazioni.size}")
+        add(SchedaDiCommessa.RAPPORTINI to "Rapportini · ${k.rapportini.size}")
+        add(SchedaDiCommessa.DOCUMENTI to "Documenti")
+        if (costi) {
+            add(SchedaDiCommessa.COSTI to "Costi")
+            add(SchedaDiCommessa.FATTURARE to "Da fatturare")
+        }
+    }
+    val scheda = (RicordoCommesse.schede[m.id] ?: if (prestazioni.isNotEmpty()) SchedaDiCommessa.PRESTAZIONI else SchedaDiCommessa.PANORAMICA)
+        .let { s -> if (schede.any { it.first == s }) s else SchedaDiCommessa.PANORAMICA }
+
     fun cambiaStato(st: String) {
         val prima = m
         inCorso = true
-        // Va al foglio in diretta: intanto si dice che si sta facendo.
+        // Va al server in diretta: intanto si dice che si sta facendo.
         avvisi.mostra("Aggiorno la commessa…")
         ambitoScritture.launch {
             dati.salvaCommessa(m.copy(stato = st), false)
@@ -270,46 +319,74 @@ fun SchermataCommessa(dati: Dati, nav: Navigatore, id: String) {
         }
     }
 
+    fun archivia(si: Boolean) {
+        inCorso = true
+        ambitoScritture.launch {
+            dati.archiviaCommessa(m.id, si)
+                .onSuccess {
+                    if (si) avvisi.mostra("Commessa archiviata") {
+                        ambitoScritture.launch { dati.archiviaCommessa(m.id, false).onFailure { avvisi.mostra(messaggioErrore(it, "Non sono riuscito a ripristinarla: riprova")) } }
+                    } else avvisi.mostra("Commessa ripristinata")
+                }
+                .onFailure { avvisi.mostra(messaggioErrore(it, "La commessa non è cambiata: riprova")) }
+            inCorso = false
+        }
+    }
+
+    fun duplica(comeModello: Boolean) {
+        inCorso = true
+        avvisi.mostra(if (comeModello) "Preparo il modello…" else "Duplico la commessa…")
+        ambitoScritture.launch {
+            dati.duplicaCommessa(m.id, comeModello)
+                .onSuccess { nuova ->
+                    if (comeModello) avvisi.mostra("Modello ${nuova.id} pronto: lo trovi in Nuova commessa")
+                    else {
+                        avvisi.mostra("Creata ${nuova.id}")
+                        nav.vai("commessa/${nuova.id}")
+                    }
+                }
+                .onFailure { avvisi.mostra(messaggioErrore(it, "La commessa non è stata duplicata: riprova")) }
+            inCorso = false
+        }
+    }
+
+    val scrivi = m.aperta && perm.modifica(Moduli.RAPPORTINI)
     Box(Modifier.fillMaxSize().background(c.fondo)) {
         Column(
             Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(MarginePagina)
-                .padding(bottom = if (m.aperta) SpazioSottoBarra else 40.dp),
+                .padding(bottom = if (scrivi) SpazioSottoBarra else 40.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             Testata(onIndietro = { nav.indietro() }) {
-                ParolaStatoCommessa(m.stato)
-                PulsanteTondo(Icone.altro, "Altro", { if (!inCorso) menu = true })
+                if (puo) PulsanteTondo(Icone.altro, "Altre azioni", { if (!inCorso) menu = true })
             }
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                CodiceCommessa(m.id)
-                Text(m.descrizione, style = Testi.titoloPagina, color = c.testo)
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    CodiceCommessa(m.id)
+                    ParolaStatoCommessa(m.stato)
+                    if (m.archiviata) ParolaGrigia("Archiviata")
+                    if (m.modello) ParolaGrigia("Modello")
+                }
+                Text(m.descrizione, style = Testi.titoloPagina.copy(fontSize = 26.sp, lineHeight = 30.sp), color = c.testo)
                 val sotto = listOfNotNull(
                     cliente?.nome ?: m.idCliente.takeIf { it.isNotBlank() },
-                    m.indirizzo.takeIf { it.isNotBlank() },
-                    m.inizio?.let { i -> "dal ${giornoMese(i)}" + (m.finePrevista?.let { " al ${giornoMese(it)}" } ?: "") },
+                    ana.sede(m.idSede)?.nome ?: m.indirizzo.takeIf { it.isNotBlank() },
                 )
                 if (sotto.isNotEmpty()) Text(sotto.joinToString(" · "), style = Testi.secondarioGrande, color = c.tenue)
             }
-            SchedePillole(
-                listOf(
-                    SchedaDiCommessa.PANORAMICA to "Panoramica",
-                    SchedaDiCommessa.RAPPORTINI to "Rapportini · ${k.rapportini.size}",
-                    SchedaDiCommessa.COSTI to "Costi",
-                    SchedaDiCommessa.FATTURARE to "Da fatturare",
-                    SchedaDiCommessa.DOCUMENTI to "Documenti",
-                ),
-                RicordoCommesse.scheda, { RicordoCommesse.scheda = it },
-            )
-            when (RicordoCommesse.scheda) {
-                SchedaDiCommessa.PANORAMICA -> PanoramicaCommessa(m, k)
-                SchedaDiCommessa.RAPPORTINI -> RapportiniCommessa(k, viste, nav)
+            SchedaPersone(m, ana)
+            SegmentiScorrevoli(schede, scheda, { RicordoCommesse.schede[m.id] = it })
+            when (scheda) {
+                SchedaDiCommessa.PANORAMICA -> PanoramicaCommessa(m, k, costi)
+                SchedaDiCommessa.PRESTAZIONI -> PrestazioniCommessa(dati, m, prestazioni, costi, puo)
+                SchedaDiCommessa.RAPPORTINI -> RapportiniCommessa(k, viste, nav, costi)
                 SchedaDiCommessa.COSTI -> CostiCommessa(m, k, cliente, ana, nav)
                 SchedaDiCommessa.FATTURARE -> DaFatturareCommessa(dati, k, viste, nav)
                 SchedaDiCommessa.DOCUMENTI -> DocumentiCommessa(dati, m)
             }
         }
         // Solo le aperte si propongono nei rapportini nuovi: dalle altre non se ne scrive uno.
-        if (m.aperta) {
+        if (scrivi) {
             FondoConPulsante(Modifier.align(Alignment.BottomCenter)) {
                 PulsantePrincipale("Scrivi un rapportino", { nav.nuovoRapportino(idCliente = m.idCliente, idCommessa = m.id) }, icona = Icone.piu)
             }
@@ -318,13 +395,20 @@ fun SchermataCommessa(dati: Dati, nav: Navigatore, id: String) {
 
     if (menu) {
         FoglioDalBasso({ menu = false }) {
+            Text("Altre azioni", style = Testi.titoloScheda, color = c.testo)
             VoceMenu(Icone.matita, "Modifica", { menu = false; nav.vai("commessa-modifica/${m.id}") })
-            if (m.aperta) {
-                VoceMenu(Icone.pausa, "Sospendi", { menu = false; daConfermare = "SOSPESA" })
-                VoceMenu(Icone.lucchetto, "Chiudi la commessa", { menu = false; daConfermare = "CHIUSA" })
-            } else {
-                VoceMenu(Icone.riapri, "Riapri", { menu = false; daConfermare = "APERTA" })
+            VoceMenu(Icone.copia, "Duplica", { menu = false; duplica(false) })
+            if (!m.modello) VoceMenu(Icone.copia, "Duplica come modello", { menu = false; duplica(true) })
+            if (!m.archiviata && !m.modello) {
+                if (m.stato.equals("APERTA", ignoreCase = true)) {
+                    VoceMenu(Icone.pausa, "Sospendi", { menu = false; daConfermare = "SOSPESA" })
+                    VoceMenu(Icone.lucchetto, "Chiudi la commessa", { menu = false; daConfermare = "CHIUSA" })
+                } else {
+                    VoceMenu(Icone.riapri, "Riapri", { menu = false; daConfermare = "APERTA" })
+                }
             }
+            if (m.archiviata) VoceMenu(Icone.riapri, "Ripristina", { menu = false; archivia(false) })
+            else VoceMenu(Icone.cartella, "Archivia", { menu = false; daConfermare = "ARCHIVIA" })
         }
     }
     daConfermare?.let { st ->
@@ -336,13 +420,61 @@ fun SchermataCommessa(dati: Dati, nav: Navigatore, id: String) {
                 "Il lavoro è finito: non si propone più nei rapportini nuovi. Ore, costi e rapportini restano, e si può riaprire.",
                 "Chiudi",
             )
+            "ARCHIVIA" -> Triple(
+                "Archiviare ${m.id}?",
+                "Non compare più fra le commesse e nei rapportini nuovi. Ore, costi e rapportini restano; si ripristina dall'Archivio.",
+                "Archivia",
+            )
             else -> Triple("Riaprire la commessa?", "Torna fra quelle proposte nei rapportini.", "Riapri")
         }
-        FoglioConferma(titolo, testo, azione, onConferma = { daConfermare = null; cambiaStato(st) }, onAnnulla = { daConfermare = null })
+        FoglioConferma(titolo, testo, azione, onConferma = {
+            daConfermare = null
+            if (st == "ARCHIVIA") archivia(true) else cambiaStato(st)
+        }, onAnnulla = { daConfermare = null })
     }
 }
 
-/** Una commessa che non c'è (cancellata dal foglio, o un indirizzo vecchio). */
+/** Una parola grigia in pillola: "Archiviata", "Modello", "Disattivato". */
+@Composable
+internal fun ParolaGrigia(testo: String, modifier: Modifier = Modifier) {
+    val c = W.colori
+    Text(testo, style = Testi.pillola, color = c.testo2, modifier = modifier.clip(RoundedCornerShape(50)).background(c.superficie2).padding(horizontal = 9.dp, vertical = 3.dp))
+}
+
+/** Responsabile, persone e fine prevista: chi se ne occupa e per quando. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun SchedaPersone(m: Commessa, ana: Anagrafiche) {
+    val c = W.colori
+    Scheda(orizzontale = 18.dp, verticale = 16.dp) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text("Responsabile", style = Testi.piccolo, color = c.tenue)
+                val resp = ana.utente(m.idResponsabile)
+                if (resp != null) Text(resp.nome, style = Testi.forte.copy(fontWeight = FontWeight.Bold), color = c.testo)
+                else Text("da scegliere", style = Testi.forte.copy(fontWeight = FontWeight.Bold), color = c.gialloTesto)
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text("Persone", style = Testi.piccolo, color = c.tenue)
+                val persone = m.persone.mapNotNull { ana.utente(it) }
+                if (persone.isEmpty()) Text("—", style = Testi.forte.copy(fontWeight = FontWeight.Bold), color = c.testo)
+                else Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.semantics(mergeDescendants = true) {
+                    contentDescription = "Persone: " + persone.joinToString(", ") { it.nome }
+                }) { persone.forEach { CerchioPersona(it.iniziali, 32.dp) } }
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text("Fine prevista", style = Testi.piccolo, color = c.tenue)
+                Text(m.finePrevista?.let { giornoLungo(it) } ?: "—", style = Testi.forte.copy(fontWeight = FontWeight.Bold), color = c.testo)
+            }
+        }
+    }
+}
+
+/** "venerdì 24 ottobre", con l'anno se non è quest'anno. */
+private fun giornoLungo(d: LocalDate): String =
+    d.format(DateTimeFormatter.ofPattern(if (d.year == LocalDate.now().year) "EEEE d MMMM" else "d MMMM yyyy", IT))
+
+/** Una commessa che non c'è (cancellata, o un indirizzo vecchio). */
 @Composable
 private fun PaginaSenzaCommessa(id: String, nav: Navigatore) {
     Column(Modifier.fillMaxSize().background(W.colori.fondo).padding(MarginePagina), verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -352,14 +484,243 @@ private fun PaginaSenzaCommessa(id: String, nav: Navigatore) {
     }
 }
 
+// ---------------------------------------------------------------------------------- Prestazioni
+
+/**
+ * Le prestazioni della commessa (§5): quanto è fatto in euro, poi una riga per
+ * prestazione col valore, la barra, la percentuale e la parola. Con il permesso
+ * di scrittura +10% e Segna fatta; un tocco apre la modifica.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun PrestazioniCommessa(dati: Dati, m: Commessa, prestazioni: List<Prestazione>, costi: Boolean, puo: Boolean) {
+    val c = W.colori
+    val avvisi = LocalAvvisi.current
+    var modifica by remember { mutableStateOf<Prestazione?>(null) }
+
+    fun avanza(p: Prestazione, nuovo: Int, annullabile: Boolean) {
+        ambitoScritture.launch {
+            dati.salvaPrestazione(p.copy(avanzamento = nuovo.coerceIn(0, 100)))
+                .onSuccess {
+                    if (annullabile) avvisi.mostra("${p.nome}: fatta") {
+                        ambitoScritture.launch { dati.salvaPrestazione(p).onFailure { avvisi.mostra(messaggioErrore(it, "Non sono riuscito a rimetterla com'era")) } }
+                    }
+                }
+                .onFailure { avvisi.mostra(messaggioErrore(it, "La prestazione non è cambiata: riprova")) }
+        }
+    }
+
+    if (prestazioni.isNotEmpty()) {
+        if (costi) {
+            val totale = prestazioni.sumOf { it.valore ?: 0.0 }
+            val fatto = prestazioni.sumOf { (it.valore ?: 0.0) * it.avanzamento / 100.0 }
+            Scheda(orizzontale = 18.dp, verticale = 18.dp, spazio = 10.dp) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(Testo.euro(fatto), style = Testi.numeroGrande.copy(letterSpacing = (-0.5).sp), color = c.testo, modifier = Modifier.alignByBaseline())
+                    Text(
+                        "fatto su ${Testo.euro(totale)}" + (m.importoContratto?.takeIf { it > 0 }?.let { " · contratto ${Testo.euro(it)}" } ?: ""),
+                        style = Testi.secondarioGrande, color = c.tenue, modifier = Modifier.alignByBaseline(),
+                    )
+                }
+                BarraAvanzamento(if (totale > 0) (fatto / totale).toFloat() else 0f)
+            }
+        }
+        Scheda(orizzontale = 18.dp, verticale = 0.dp, raggio = 22.dp, spazio = 0.dp) {
+            prestazioni.forEachIndexed { i, p ->
+                if (i > 0) LineaElenco()
+                RigaPrestazione(
+                    p, costi, puo,
+                    onTocca = { modifica = p },
+                    onPiuDieci = { avanza(p, p.avanzamento + 10, annullabile = p.avanzamento + 10 >= 100) },
+                    onFatta = { avanza(p, 100, annullabile = true) },
+                )
+            }
+        }
+    } else {
+        Scheda(orizzontale = 18.dp, verticale = 16.dp) {
+            Text(
+                "Nessuna prestazione. Dividi la commessa in prestazioni (sopralluogo, progetto, direzione lavori…) per seguirne valore e avanzamento.",
+                style = Testi.secondarioGrande, color = c.tenue,
+            )
+        }
+    }
+    if (puo) {
+        PulsanteBordo("Aggiungi una prestazione", { modifica = Prestazione("", m.id, "") }, icona = Icone.piu, altezza = 48.dp)
+    }
+
+    modifica?.let { p ->
+        FoglioPrestazione(
+            p, prestazioni, costi,
+            onSalva = { nuova, chiudi ->
+                ambitoScritture.launch {
+                    dati.salvaPrestazione(nuova)
+                        .onSuccess { chiudi(null); if (p.id.isBlank()) avvisi.mostra("Aggiunta ${nuova.nome}") }
+                        .onFailure { chiudi(messaggioErrore(it, "La prestazione non è stata salvata: riprova")) }
+                }
+            },
+            onTogli = {
+                modifica = null
+                ambitoScritture.launch {
+                    dati.togliPrestazione(p.id)
+                        .onSuccess { avvisi.mostra("Tolta ${p.nome}") }
+                        .onFailure { avvisi.mostra(messaggioErrore(it, "La prestazione non è stata tolta: riprova")) }
+                }
+            },
+            onSposta = { verso ->
+                val ids = prestazioni.map { it.id }.toMutableList()
+                val i = ids.indexOf(p.id)
+                val j = i + verso
+                if (i >= 0 && j in ids.indices) {
+                    ids.add(j, ids.removeAt(i))
+                    ambitoScritture.launch { dati.ordinaPrestazioni(m.id, ids).onFailure { avvisi.mostra(messaggioErrore(it, "L'ordine non è cambiato: riprova")) } }
+                }
+            },
+            onChiudi = { modifica = null },
+        )
+    }
+}
+
+@Composable
+private fun RigaPrestazione(p: Prestazione, costi: Boolean, puo: Boolean, onTocca: () -> Unit, onPiuDieci: () -> Unit, onFatta: () -> Unit) {
+    val c = W.colori
+    Column(
+        Modifier.fillMaxWidth().let { if (puo) it.clickable(onClick = onTocca) else it }.padding(vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text(p.nome, style = Testi.forte, color = c.testo, modifier = Modifier.weight(1f))
+            if (costi && p.valore != null) Text(Testo.euro(p.valore), style = Testi.secondarioGrande.copy(fontWeight = FontWeight.ExtraBold), color = c.testo)
+        }
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            BarraAvanzamento(p.avanzamento / 100f, Modifier.weight(1f))
+            Text("${p.avanzamento}%", style = Testi.secondario.copy(fontWeight = FontWeight.ExtraBold), color = c.testo, textAlign = TextAlign.End, modifier = Modifier.width(42.dp))
+            ParolaPrestazione(p.stato)
+        }
+        if (puo && !p.fatta) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                PulsanteBordo("+10%", onPiuDieci, altezza = 40.dp, stile = Testi.secondario.copy(fontWeight = FontWeight.Bold))
+                PulsanteBordo("Segna fatta", onFatta, altezza = 40.dp, stile = Testi.secondario.copy(fontWeight = FontWeight.Bold))
+            }
+        }
+    }
+}
+
+/** Da fare (grigia), In corso (giallo tenue), Fatta (verde). */
+@Composable
+private fun ParolaPrestazione(stato: String) {
+    val c = W.colori
+    val (parola, testo, fondo) = when (stato) {
+        Prestazione.FATTA -> Triple("Fatta", c.firmatoTesto, c.firmatoFondo)
+        Prestazione.IN_CORSO -> Triple("In corso", c.gialloTesto, c.gialloTenue)
+        else -> Triple("Da fare", c.testo2, c.superficie2)
+    }
+    Text(parola, style = Testi.piccolo.copy(fontWeight = FontWeight.ExtraBold), color = testo, maxLines = 1,
+        modifier = Modifier.clip(RoundedCornerShape(50)).background(fondo).padding(horizontal = 10.dp, vertical = 4.dp))
+}
+
+/** La barra nera dell'avanzamento, alta 8, che si riempie piano. */
+@Composable
+private fun BarraAvanzamento(quota: Float, modifier: Modifier = Modifier) {
+    val c = W.colori
+    val q by animateFloatAsState(quota.coerceIn(0f, 1f), tween(400), label = "avanzamento")
+    Box(
+        modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)).background(if (c.scuro) c.bordoScheda else Color(0xFFE2E1DD))
+            .semantics { contentDescription = "${(quota * 100).roundToInt()}% fatto" },
+    ) {
+        Box(Modifier.fillMaxWidth(q).fillMaxHeight().clip(RoundedCornerShape(4.dp)).background(c.testo))
+    }
+}
+
+/**
+ * Il foglio di una prestazione: nome, descrizione, valore, avanzamento a passi di
+ * 5 (lo stato segue), Sposta su/giù per l'ordine, Togli.
+ */
+@Composable
+private fun FoglioPrestazione(
+    p: Prestazione,
+    tutte: List<Prestazione>,
+    costi: Boolean,
+    onSalva: (Prestazione, (String?) -> Unit) -> Unit,
+    onTogli: () -> Unit,
+    onSposta: (Int) -> Unit,
+    onChiudi: () -> Unit,
+) {
+    val c = W.colori
+    val nuova = p.id.isBlank()
+    var nome by remember(p.id) { mutableStateOf(p.nome) }
+    var descrizione by remember(p.id) { mutableStateOf(p.descrizione) }
+    var valore by remember(p.id) { mutableStateOf(Numeri.scrivi(p.valore)) }
+    var avanzamento by remember(p.id) { mutableIntStateOf(p.avanzamento) }
+    var errore by remember(p.id) { mutableStateOf<String?>(null) }
+    var salvo by remember(p.id) { mutableStateOf(false) }
+    var togliere by remember(p.id) { mutableStateOf(false) }
+    val posizione = tutte.indexOfFirst { it.id == p.id }
+    val errNome = if (errore == "nome") "Scrivi il nome della prestazione" else null
+    val errValore = erroreNumero(valore)
+
+    FoglioDalBasso(onChiudi) {
+        Text(if (nuova) "Nuova prestazione" else "Modifica la prestazione", style = Testi.titoloScheda, color = c.testo)
+        CampoTesto(nome, { nome = it; if (errore == "nome") errore = null }, "Nome", Modifier.fillMaxWidth(), segnaposto = "Progetto esecutivo", errore = errNome)
+        CampoTesto(descrizione, { descrizione = it }, "Descrizione", Modifier.fillMaxWidth(), righe = 2)
+        if (costi) CampoTesto(valore, { valore = it }, "Valore", Modifier.fillMaxWidth(), segnaposto = "—", tastiera = KeyboardType.Decimal, suffisso = "€", errore = errValore)
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text("Avanzamento", style = Testi.forte, color = c.testo)
+                ParolaPrestazione(Prestazione.statoDi(avanzamento))
+            }
+            Box(
+                Modifier.size(52.dp).clip(CircleShape).background(c.superficie2).clickable { avanzamento = (avanzamento - 5).coerceAtLeast(0) }
+                    .semantics { contentDescription = "Meno 5 per cento" },
+                contentAlignment = Alignment.Center,
+            ) { Icon(Icone.meno, null, tint = c.testo, modifier = Modifier.size(24.dp)) }
+            Text("$avanzamento%", style = Testi.numeroGrande, color = c.testo, textAlign = TextAlign.Center, modifier = Modifier.width(84.dp))
+            Box(
+                Modifier.size(52.dp).clip(CircleShape).background(c.superficie2).clickable { avanzamento = (avanzamento + 5).coerceAtMost(100) }
+                    .semantics { contentDescription = "Più 5 per cento" },
+                contentAlignment = Alignment.Center,
+            ) { Icon(Icone.piu, null, tint = c.testo, modifier = Modifier.size(24.dp)) }
+        }
+        if (!nuova && tutte.size > 1) {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                if (posizione > 0) PulsanteBordo("Sposta su", { onSposta(-1) }, Modifier.weight(1f), icona = Icone.su, altezza = 48.dp)
+                if (posizione in 0 until tutte.lastIndex) PulsanteBordo("Sposta giù", { onSposta(1) }, Modifier.weight(1f), icona = Icone.giu, altezza = 48.dp)
+            }
+        }
+        if (errore != null && errore != "nome") Text(errore!!, style = Testi.secondario, color = c.rossoTesto)
+        if (togliere) {
+            Text("Togliere ${p.nome}? Il suo valore esce dalla commessa.", style = Testi.testo, color = c.testo2)
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                PulsanteBordo("Annulla", { togliere = false }, Modifier.weight(1f), altezza = 52.dp)
+                Box(
+                    Modifier.weight(1f).height(52.dp).clip(RoundedCornerShape(16.dp)).background(c.rossoPieno).clickable(onClick = onTogli),
+                    contentAlignment = Alignment.Center,
+                ) { Text("Togli", style = Testi.pulsanteSecondario.copy(fontWeight = FontWeight.ExtraBold), color = Color.White) }
+            }
+        } else {
+            PulsantePrincipale(if (salvo) "Salvo…" else "Salva", {
+                if (salvo) return@PulsantePrincipale
+                if (nome.isBlank()) { errore = "nome"; return@PulsantePrincipale }
+                if (errValore != null) return@PulsantePrincipale
+                salvo = true
+                errore = null
+                onSalva(
+                    p.copy(nome = nome.trim(), descrizione = descrizione.trim(), valore = if (costi) leggiNumero(valore) else p.valore, avanzamento = avanzamento),
+                ) { e -> salvo = false; if (e == null) onChiudi() else errore = e }
+            }, altezza = 56.dp, abilitato = !salvo)
+            if (!nuova) PulsanteTesto("Togli", { togliere = true }, Modifier.fillMaxWidth(), colore = c.rossoTesto)
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------------- Panoramica
 
 @Composable
-private fun PanoramicaCommessa(m: Commessa, k: Cruscotto) {
+private fun PanoramicaCommessa(m: Commessa, k: Cruscotto, costi: Boolean) {
     val c = W.colori
     val b = k.previsto
     val budgetOre = k.budgetOre ?: 0.0
-    val conBudget = b.ore != null || b.euro != null || b.prezzo != null
+    // Senza il permesso dei soldi si vedono solo le ore.
+    val conBudget = costi && (b.ore != null || b.euro != null || b.prezzo != null)
 
     // Budget: le ore fatte su quelle previste, poi budget, costo previsto, margine e i prezzi all'ora.
     Scheda(spazio = 14.dp) {
@@ -397,7 +758,7 @@ private fun PanoramicaCommessa(m: Commessa, k: Cruscotto) {
     }
 
     // I tre numeri del cruscotto: quanto vale, quanto è costata finora, cosa resta.
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    if (costi) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         val budgetEuro = m.budgetEuro ?: b.euro ?: 0.0
         RiquadroConti(
             "Valore atteso", Testo.euroTondi(k.valoreAtteso), Modifier.weight(1f),
@@ -413,14 +774,14 @@ private fun PanoramicaCommessa(m: Commessa, k: Cruscotto) {
             rosso = k.costo.lavoroNoto && k.margine < 0,
         )
     }
-    when {
-        !k.costo.lavoroNoto -> Text("Per costo e margine manca il tuo costo orario: scrivilo nelle Impostazioni", style = Testi.secondario, color = c.tenue)
+    if (costi) when {
+        !k.costo.lavoroNoto -> Text("Per costo e margine manca il tuo costo orario: scrivilo in Amministrazione › Tariffe e rimborsi", style = Testi.secondario, color = c.tenue)
         k.margine < 0 -> Text("Costa più di quanto vale", style = Testi.secondario, color = c.rossoTesto)
         k.margineDaBudget -> Text("Il margine conta già ${Testo.euroTondi(k.costoAtteso)} di costi previsti", style = Testi.secondario, color = c.tenue)
     }
 
     // Fatturazione: fatturato, pronto da fatturare, ancora da firmare.
-    Scheda(spazio = 14.dp) {
+    if (costi) Scheda(spazio = 14.dp) {
         Text("Fatturazione", style = Testi.titoloSezione, color = c.testo)
         BarraFatturazione(k.fatturato, k.prontoDaFatturare, k.inBozza)
         Legenda(
@@ -565,32 +926,32 @@ private fun Settimane(settimane: List<Pair<LocalDate, Double>>) {
 // ---------------------------------------------------------------------------------- Rapportini
 
 @Composable
-private fun RapportiniCommessa(k: Cruscotto, viste: Map<String, Vista>, nav: Navigatore) {
+private fun RapportiniCommessa(k: Cruscotto, viste: Map<String, Vista>, nav: Navigatore, costi: Boolean) {
     val c = W.colori
     val rr = k.rapportini.sortedWith(compareByDescending<Rapportino> { it.data }.thenByDescending { it.id })
     if (rr.isEmpty()) {
         TestoVuoto("Ancora nessun rapportino")
         return
     }
-    Text("${Testo.ore(rr.sumOf { it.oreTotali })} · ${Testo.euro(rr.sumOf { totaleDi(it) })}", style = Testi.secondario, color = c.tenue)
-    ElencoRapportini(rr, viste, nav)
+    Text(Testo.ore(rr.sumOf { it.oreTotali }) + if (costi) " · ${Testo.euro(rr.sumOf { totaleDi(it) })}" else "", style = Testi.secondario, color = c.tenue)
+    ElencoRapportini(rr, viste, nav, costi)
 }
 
 /** I rapportini in una scheda, come nel Mese: giorno, lavoro, ore e codice, importo e stato. */
 @Composable
-private fun ElencoRapportini(rr: List<Rapportino>, viste: Map<String, Vista>, nav: Navigatore) {
+private fun ElencoRapportini(rr: List<Rapportino>, viste: Map<String, Vista>, nav: Navigatore, costi: Boolean = true) {
     SchedaElenco {
         rr.forEachIndexed { i, r ->
-            RigaRapportinoCommessa(r, viste[r.idLocale]) { nav.apriRapportino(r.idLocale) }
+            RigaRapportinoCommessa(r, viste[r.idLocale], costi) { nav.apriRapportino(r.idLocale) }
             if (i < rr.lastIndex) LineaElenco()
         }
     }
 }
 
 @Composable
-private fun RigaRapportinoCommessa(r: Rapportino, v: Vista?, onClick: () -> Unit) {
+private fun RigaRapportinoCommessa(r: Rapportino, v: Vista?, costi: Boolean, onClick: () -> Unit) {
     val c = W.colori
-    val totale = r.conto?.totale
+    val totale = r.conto?.totale?.takeIf { costi }
     Row(
         Modifier.fillMaxWidth().heightIn(min = 72.dp).clickable(onClick = onClick).padding(vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -709,7 +1070,7 @@ private fun DaFatturareCommessa(dati: Dati, k: Cruscotto, viste: Map<String, Vis
         return
     }
     ElencoRapportini(da, viste, nav)
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+    if (LocalPermessi.current.modifica(Moduli.FATTURAZIONE)) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         PulsanteBordo("Segna fatturati", { conferma = true }, Modifier.weight(1f))
         PulsanteGialloMedio("Prepara riepilogo", { nav.vai("invio/scelti/" + da.joinToString(",") { it.idLocale }) }, Modifier.weight(1f))
     }
@@ -728,8 +1089,8 @@ private fun DaFatturareCommessa(dati: Dati, k: Cruscotto, viste: Map<String, Vis
                         // Ognuno torna com'era dove si può: un firmato già partito come fatturato il foglio non lo rifà firmato.
                         val tornati = dati.annullaCambioStato(cambio)
                         val restano = cambio.quanti - tornati
-                        if (restano == 1) avvisi.mostra("1 rapportino resta fatturato: il foglio non lo riporta a firmato")
-                        else if (restano > 1) avvisi.mostra("$restano rapportini restano fatturati: il foglio non li riporta a firmati")
+                        if (restano == 1) avvisi.mostra("1 rapportino resta fatturato: il server non lo riporta a firmato")
+                        else if (restano > 1) avvisi.mostra("$restano rapportini restano fatturati: il server non li riporta a firmati")
                     }
                 }
             },
@@ -803,20 +1164,42 @@ private fun DocumentiCommessa(dati: Dati, m: Commessa) {
                     sotto = d.data?.let { it.format(DateTimeFormatter.ofPattern("d MMMM yyyy", IT)) },
                     icona = if (d.mime.startsWith("image/")) Icone.galleria else Icone.pdf,
                     freccia = false,
-                    onClick = { apriIndirizzo(ctx, d.url, avvisi) },
+                    onClick = { apriDocumento(ctx, dati, d, avvisi) },
                 )
                 if (i < dd.lastIndex) LineaElenco()
             }
         }
     }
+    // La cartella su Drive c'è solo per le commesse di prima del server (i documenti vecchi stanno ancora lì).
+    val cartella = (stato as? CartellaCommessa.Letta)?.documenti?.cartella?.takeIf { it.isNotBlank() } ?: m.cartella
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        PulsanteBordo("Cartella su Drive", {
-            val cartella = (stato as? CartellaCommessa.Letta)?.documenti?.cartella?.takeIf { it.isNotBlank() } ?: m.cartella
-            if (cartella.isBlank()) avvisi.mostra("La cartella su Drive non è ancora pronta: riprova fra poco")
-            else apriIndirizzo(ctx, cartella, avvisi)
-        }, Modifier.weight(1f), icona = Icone.cartella)
-        // "Carica" è corto: prende il suo posto e lascia il resto alla cartella, anche sui telefoni stretti.
-        PulsanteBordo(if (carico) "Carico…" else "Carica", { if (!carico) scegli.launch("*/*") }, icona = Icone.carica)
+        if (cartella.startsWith("http")) PulsanteBordo("Cartella su Drive", { apriIndirizzo(ctx, cartella, avvisi) }, Modifier.weight(1f), icona = Icone.cartella)
+        if (LocalPermessi.current.modifica(Moduli.COMMESSE)) {
+            PulsanteBordo(if (carico) "Carico…" else "Carica un documento", { if (!carico) scegli.launch("*/*") }, Modifier.weight(1f), icona = Icone.carica)
+        }
+    }
+}
+
+/**
+ * Apre un documento: quelli del server (/file/<id>) vogliono l'accesso, quindi
+ * si scaricano nella cartella dei PDF e si aprono con l'app che li sa leggere;
+ * quelli di Drive di prima si aprono col loro indirizzo.
+ */
+private fun apriDocumento(ctx: Context, dati: Dati, d: eu.stgm.wisper.rapportino.Documento, avvisi: Avvisi) {
+    if (d.url.startsWith("http")) { apriIndirizzo(ctx, d.url, avvisi); return }
+    val id = eu.stgm.wisper.rapportino.FileRemoto.idDaUrl(d.url).ifBlank { d.id }
+    avvisi.mostra("Apro ${d.nome}…")
+    ambitoScritture.launch {
+        val scaricato = runCatching { dati.file(id) }
+        val (byte, mime) = scaricato.getOrNull() ?: run {
+            avvisi.mostra(scaricato.exceptionOrNull()?.message ?: "Il documento non c'è più")
+            return@launch
+        }
+        val f = runCatching {
+            val cartella = java.io.File(ctx.cacheDir, "pdf").apply { mkdirs() }
+            java.io.File(cartella, d.nome.replace(Regex("""[^A-Za-z0-9._ -]"""), "_").ifBlank { id }).apply { writeBytes(byte) }
+        }.getOrNull() ?: run { avvisi.mostra("Non riesco a salvare il documento sul telefono"); return@launch }
+        if (!eu.stgm.wisper.rapportino.Stampa.apri(ctx, f, d.mime.ifBlank { mime })) avvisi.mostra("Nessuna app apre questo file")
     }
 }
 
@@ -867,6 +1250,17 @@ fun SchermataModificaCommessa(dati: Dati, nav: Navigatore, id: String?, idClient
     var costo by rememberSaveable { mutableStateOf(Numeri.scrivi(esistente?.costoOrario)) }
     var km by rememberSaveable { mutableStateOf(Numeri.scrivi(esistente?.euroKm)) }
     var note by rememberSaveable { mutableStateOf(esistente?.note.orEmpty()) }
+    var idSede by rememberSaveable { mutableStateOf(esistente?.idSede.orEmpty()) }
+    var idResp by rememberSaveable { mutableStateOf(esistente?.idResponsabile.orEmpty()) }
+    // Gli id delle persone separati da virgola: una lista non si salva se si gira il telefono.
+    var persone by rememberSaveable { mutableStateOf(esistente?.persone.orEmpty().joinToString(",")) }
+    var contratto by rememberSaveable { mutableStateOf(Numeri.scrivi(esistente?.importoContratto)) }
+    var sceltaSede by remember { mutableStateOf(false) }
+    var sceltaResp by remember { mutableStateOf(false) }
+    var sceltaPersone by remember { mutableStateOf(false) }
+    var sceltaModello by remember { mutableStateOf(false) }
+    val costi = LocalPermessi.current.costi
+    val idPersone = persone.split(',').filter { it.isNotBlank() }
     var provato by remember { mutableStateOf(false) }
     var salvo by remember { mutableStateOf(false) }
     var sceltaCliente by remember { mutableStateOf(false) }
@@ -896,7 +1290,7 @@ fun SchermataModificaCommessa(dati: Dati, nav: Navigatore, id: String?, idClient
     val erroreCliente = if (provato && cli == null) "Scegli il cliente" else null
     val erroreNome = if (provato && nome.isBlank()) "Scrivi come si chiama" else null
     val erroreFine = if (dataInizio != null && dataFine != null && dataFine.isBefore(dataInizio)) "Viene prima dell'inizio" else null
-    val erroriNumeri = listOf(ore, prezzoMostrato, budget, costoMostrato, km).map { erroreNumero(it) }
+    val erroriNumeri = listOf(ore, prezzoMostrato, budget, costoMostrato, km, contratto).map { erroreNumero(it) }
 
     // Il margine si rifà a ogni tasto, con le stesse regole della pagina della commessa.
     val prova = (esistente ?: Commessa(id = "", idCliente = "", descrizione = "")).copy(
@@ -928,7 +1322,17 @@ fun SchermataModificaCommessa(dati: Dati, nav: Navigatore, id: String?, idClient
             costoOrario = if (costoFisso != null) esistente?.costoOrario else leggiNumero(costo),
             euroKm = leggiNumero(km),
             note = note.trim(),
-        )
+            idSede = idSede.takeIf { s -> ana.sediDi(cli.id, ancheArchiviate = true).any { it.id == s } }.orEmpty(),
+            idResponsabile = idResp,
+            persone = idPersone,
+            importoContratto = if (costi) leggiNumero(contratto) else esistente?.importoContratto,
+        ).let { pronta ->
+            // Senza il permesso dei soldi quei campi non si vedono: restano com'erano.
+            if (costi) pronta else pronta.copy(
+                prezzoOrario = esistente?.prezzoOrario, budgetEuro = esistente?.budgetEuro,
+                costoOrario = esistente?.costoOrario, euroKm = esistente?.euroKm,
+            )
+        }
         salvo = true
         scope.launch {
             dati.salvaCommessa(m, nuova)
@@ -957,6 +1361,10 @@ fun SchermataModificaCommessa(dati: Dati, nav: Navigatore, id: String?, idClient
         ) {
             Testata(onIndietro = { nav.indietro() }, chiudi = true)
             TitoloPagina(if (nuova) "Nuova commessa" else "Modifica ${esistente?.id}")
+            val modelli = ana.commesse.filter { it.modello && !it.archiviata }
+            if (nuova && modelli.isNotEmpty()) {
+                PulsanteBordo("Da un modello", { sceltaModello = true }, Modifier.fillMaxWidth(), icona = Icone.copia, altezza = 48.dp)
+            }
 
             CampoCliente(cli, erroreCliente) { sceltaCliente = true }
             CampoTesto(nome, { nome = it }, "Come si chiama", segnaposto = "Quadro elettrico capannone", errore = erroreNome)
@@ -966,12 +1374,26 @@ fun SchermataModificaCommessa(dati: Dati, nav: Navigatore, id: String?, idClient
                 CampoBloccato("Codice", esistente?.id.orEmpty())
             }
             CampoTesto(indirizzo, { indirizzo = it }, "Indirizzo del cantiere")
+            val sediCliente = cli?.let { ana.sediDi(it.id) }.orEmpty()
+            if (sediCliente.isNotEmpty()) {
+                val sede = sediCliente.firstOrNull { it.id == idSede }
+                CampoScelta("Sede o impianto", sede?.nome ?: "Nessuna", sede == null) { sceltaSede = true }
+            }
+            // Responsabile e persone ci sono quando ci sono gli utenti (il server).
+            if (ana.utenti.isNotEmpty()) {
+                val resp = ana.utente(idResp)
+                CampoScelta("Responsabile", resp?.nome ?: "da scegliere", resp == null, vuotoGiallo = true) { sceltaResp = true }
+                val chi = idPersone.mapNotNull { ana.utente(it) }
+                CampoScelta("Persone", chi.joinToString(", ") { it.nome }.ifBlank { "Nessuna" }, chi.isEmpty()) { sceltaPersone = true }
+            }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 CampoData("Inizio", dataInizio, { calendario = "inizio" }, { inizio = "" }, null, Modifier.weight(1f))
                 CampoData("Fine prevista", dataFine, { calendario = "fine" }, { fine = "" }, erroreFine, Modifier.weight(1f))
             }
 
-            Scheda(spazio = 12.dp) {
+            if (!costi) {
+                CampoTesto(ore, { ore = it }, "Ore previste", segnaposto = "—", tastiera = KeyboardType.Decimal, suffisso = "h", errore = erroriNumeri[0])
+            } else Scheda(spazio = 12.dp) {
                 Text("Budget", style = Testi.titoloSezione, color = c.testo)
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     CampoTesto(ore, { ore = it; ricalcola("ore") }, "Ore previste", Modifier.weight(1f), segnaposto = "—", tastiera = KeyboardType.Decimal, suffisso = "h", errore = erroriNumeri[0])
@@ -981,6 +1403,7 @@ fun SchermataModificaCommessa(dati: Dati, nav: Navigatore, id: String?, idClient
                     )
                 }
                 CampoTesto(budget, { budget = it; ricalcola("euro") }, "Budget", segnaposto = "—", tastiera = KeyboardType.Decimal, suffisso = "€", errore = erroriNumeri[2])
+                CampoTesto(contratto, { contratto = it }, "Importo del contratto", segnaposto = "—", tastiera = KeyboardType.Decimal, suffisso = "€", errore = erroriNumeri[5])
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     // Vuoti = quelli delle impostazioni, che si vedono in grigio.
                     CampoTesto(
@@ -1005,10 +1428,97 @@ fun SchermataModificaCommessa(dati: Dati, nav: Navigatore, id: String?, idClient
 
     if (sceltaCliente) {
         SceltaCliente(ana, idCli, onScelto = { nuovo ->
+            if (nuovo.id != idCli) idSede = ""
             idCli = nuovo.id
             sceltaCliente = false
             ricalcola("prezzo", nuovo.tariffaFissa)
         }, onChiudi = { sceltaCliente = false })
+    }
+    if (sceltaSede) {
+        FoglioDalBasso({ sceltaSede = false }) {
+            Text("Sede o impianto", style = Testi.titoloScheda, color = c.testo)
+            Column(Modifier.fillMaxWidth().heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
+                RigaVoce(
+                    "Nessuna", freccia = false,
+                    fine = if (idSede.isBlank()) ({ Icon(Icone.spunta, "Scelta", tint = c.testo, modifier = Modifier.size(20.dp)) }) else null,
+                    onClick = { idSede = ""; sceltaSede = false },
+                )
+                cli?.let { ana.sediDi(it.id) }.orEmpty().forEach { s ->
+                    LineaElenco()
+                    RigaVoce(
+                        s.nome, sotto = (if (s.impianto) "Impianto · " else "Sede · ") + s.indirizzoCompleto, icona = Icone.luogo, freccia = false,
+                        fine = if (s.id == idSede) ({ Icon(Icone.spunta, "Scelta", tint = c.testo, modifier = Modifier.size(20.dp)) }) else null,
+                        onClick = {
+                            idSede = s.id
+                            if (indirizzo.isBlank()) indirizzo = s.indirizzoCompleto
+                            sceltaSede = false
+                        },
+                    )
+                }
+            }
+        }
+    }
+    if (sceltaResp) {
+        FoglioDalBasso({ sceltaResp = false }) {
+            Text("Responsabile", style = Testi.titoloScheda, color = c.testo)
+            Column(Modifier.fillMaxWidth().heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
+                ana.utenti.filter { it.attivo }.forEachIndexed { i, u ->
+                    if (i > 0) LineaElenco()
+                    RigaVoce(
+                        u.nome, sotto = Ruoli.nome(u.ruolo), freccia = false,
+                        inizio = { CerchioPersona(u.iniziali, 40.dp) },
+                        fine = if (u.id == idResp) ({ Icon(Icone.spunta, "Scelto", tint = c.testo, modifier = Modifier.size(20.dp)) }) else null,
+                        onClick = { idResp = u.id; sceltaResp = false },
+                    )
+                }
+            }
+        }
+    }
+    if (sceltaPersone) {
+        FoglioDalBasso({ sceltaPersone = false }) {
+            Text("Persone", style = Testi.titoloScheda, color = c.testo)
+            Column(Modifier.fillMaxWidth().heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
+                ana.utenti.filter { it.attivo }.forEachIndexed { i, u ->
+                    if (i > 0) LineaElenco()
+                    val dentro = u.id in idPersone
+                    RigaVoce(
+                        u.nome, sotto = Ruoli.nome(u.ruolo), freccia = false,
+                        inizio = { CerchioPersona(u.iniziali, 40.dp) },
+                        fine = { CasellaScelta(dentro) },
+                        onClick = { persone = (if (dentro) idPersone - u.id else idPersone + u.id).joinToString(",") },
+                    )
+                }
+            }
+            PulsantePrincipale("Fatto", { sceltaPersone = false }, altezza = 56.dp)
+        }
+    }
+    if (sceltaModello) {
+        FoglioDalBasso({ sceltaModello = false }) {
+            Text("Da un modello", style = Testi.titoloScheda, color = c.testo)
+            Column(Modifier.fillMaxWidth().heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
+                ana.commesse.filter { it.modello && !it.archiviata }.forEachIndexed { i, mod ->
+                    if (i > 0) LineaElenco()
+                    RigaVoce(
+                        mod.descrizione.removePrefix("Modello: "), sotto = ana.cliente(mod.idCliente)?.nome,
+                        inizio = { CodiceCommessa(mod.id) },
+                        onClick = {
+                            sceltaModello = false
+                            salvo = true
+                            scope.launch {
+                                dati.duplicaCommessa(mod.id, comeModello = false)
+                                    .onSuccess { nuova ->
+                                        avvisi.mostra("Creata ${nuova.id} dal modello: controlla i dati")
+                                        nav.indietro()
+                                        nav.vai("commessa-modifica/${nuova.id}")
+                                    }
+                                    .onFailure { avvisi.mostra(messaggioErrore(it, "La commessa non è stata creata: riprova")) }
+                                salvo = false
+                            }
+                        },
+                    )
+                }
+            }
+        }
     }
     calendario?.let { quale ->
         ScegliGiorno(
@@ -1038,6 +1548,42 @@ private fun RigaMarginePrevisto(margine: Double?, margineOrario: Double?, costoP
         )
         if (pezzi.isNotEmpty()) Text(pezzi.joinToString(" · "), style = Testi.secondario, color = if (rosso) c.rossoTesto else c.tenue)
     }
+}
+
+/** Un campo che si sceglie da un elenco (sede, responsabile, persone): il valore e "Cambia". */
+@Composable
+private fun CampoScelta(etichetta: String, valore: String, vuoto: Boolean, vuotoGiallo: Boolean = false, onClick: () -> Unit) {
+    val c = W.colori
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(etichetta, style = Testi.secondarioGrande.copy(fontWeight = FontWeight.Bold), color = c.testo)
+        Row(
+            Modifier.fillMaxWidth().heightIn(min = 56.dp).clip(RoundedCornerShape(16.dp)).background(c.scheda)
+                .border(1.5.dp, c.bordoCampo, RoundedCornerShape(16.dp))
+                .clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 10.dp)
+                .semantics(mergeDescendants = true) { contentDescription = "$etichetta: $valore" },
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(
+                valore, style = Testi.testoGrande,
+                color = when { vuoto && vuotoGiallo -> c.gialloTesto; vuoto -> c.moltoTenue; else -> c.testo },
+                modifier = Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis,
+            )
+            Text(if (vuoto) "Scegli" else "Cambia", style = Testi.secondarioGrande.copy(fontWeight = FontWeight.Bold), color = c.gialloTesto)
+        }
+    }
+}
+
+/** La casella di una scelta multipla: vuota col bordo, piena e scura con la spunta. */
+@Composable
+internal fun CasellaScelta(scelta: Boolean) {
+    val c = W.colori
+    Box(
+        Modifier.size(26.dp).clip(RoundedCornerShape(8.dp))
+            .background(if (scelta) c.testo else c.scheda)
+            .border(2.dp, if (scelta) c.testo else c.bordoCampo, RoundedCornerShape(8.dp)),
+        contentAlignment = Alignment.Center,
+    ) { if (scelta) Icon(Icone.spunta, null, tint = c.scheda, modifier = Modifier.size(16.dp)) }
 }
 
 /** Il cliente della commessa: si tocca e si sceglie dall'elenco, con la sua tariffa sotto il nome. */

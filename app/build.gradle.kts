@@ -42,6 +42,8 @@ android {
         val conIndirizzo = project.hasProperty("conIndirizzo")
         buildConfigField("String", "SHEET_URL", "\"${if (conIndirizzo) chiave("sheetUrl") else ""}\"")
         buildConfigField("String", "SHEET_CODICE", "\"${if (conIndirizzo) chiave("sheetCodice") else ""}\"")
+        // L'indirizzo del server del gestionale (fase 1): come quello del foglio, solo nelle build di casa.
+        buildConfigField("String", "SERVER_URL", "\"${if (conIndirizzo) chiave("serverUrl") else ""}\"")
 
         // L'elenco firmato delle versioni (NuoveVersioni.kt). Per le prove se ne usa
         // un altro: ./gradlew assembleDebug -PaggiornamentiUrl=http://10.0.2.2:8767/aggiornamento.json
@@ -66,6 +68,8 @@ android {
         debug {
             buildConfigField("String", "SHEET_URL", "\"${chiave("sheetUrl")}\"")
             buildConfigField("String", "SHEET_CODICE", "\"${chiave("sheetCodice")}\"")
+            // Senza serverUrl in wisper-keys, il server di prova sul computer visto dall'emulatore.
+            buildConfigField("String", "SERVER_URL", "\"${chiave("serverUrl").ifBlank { "http://10.0.2.2:8400" }}\"")
         }
         release {
             // R8 rompe le cose in modi che scopri solo sull'APK finale, e non

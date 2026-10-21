@@ -288,10 +288,14 @@ data class FileRemoto(val id: String, val url: String) {
     companion object {
         fun daJson(o: JSONObject) = FileRemoto(o.testo("id"), o.testo("url"))
 
-        /** L'id di un file di Drive dal suo indirizzo (.../d/<id>/view), come idDaUrl() nello script. */
+        /**
+         * L'id di un file dal suo indirizzo: quello del server ("/file/<id>") o
+         * quello di Drive dei rapportini di prima (.../d/<id>/view), come idDaUrl() nello script.
+         */
         fun idDaUrl(url: String?): String {
             val u = url.orEmpty()
-            return (Regex("""/d/([A-Za-z0-9_-]{10,})""").find(u) ?: Regex("""[?&]id=([A-Za-z0-9_-]{10,})""").find(u))
+            return (Regex("""/file/([A-Za-z0-9_-]+)""").find(u) ?: Regex("""/d/([A-Za-z0-9_-]{10,})""").find(u)
+                ?: Regex("""[?&]id=([A-Za-z0-9_-]{10,})""").find(u))
                 ?.groupValues?.get(1).orEmpty()
         }
     }

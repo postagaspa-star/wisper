@@ -1,0 +1,141 @@
+/*
+ * Quello che serve a tutte le prove: un server di prova vero (HTTP su una
+ * porta libera, database in memoria coi dati di esempio), un postino finto che
+ * scrive su disco e un finto VIES. Niente internet, niente Google.
+ */
+'use strict';
+
+process.env.TZ = 'Europe/Rome';
+
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const http = require('node:http');
+const { avvia } = require('../src/avvio');
+const { scriviSuDisco } = require('../src/postino');
+
+const SEGRETO = 'segreto-di-prova';
+
+function cartellaNuova(nome) {
+  return fs.mkdtempSync(path.join(os.tmpdir(), 'wisper-' + (nome || 'prove') + '-'));
+}
+
+function ascolta(server) {
+  return new Promise(r => server.listen(0, '127.0.0.1', () => r('http://127.0.0.1:' + server.address().port)));
+}
+
+function chiudi(server) {
+  return new Promise(r => {
+    server.close(() => r());
+    if (server.closeAllConnections) server.closeAllConnections();
+  });
+}
+
+/**
+ * Un server di prova. opzioni.prova (di base vero): coi dati di semina();
+ * opzioni.env: le variabili del .env (di base SEGRETO_SERVER = SEGRETO).
+ */
+async function serverDiProva(opzioni) {
+  opzioni = opzioni || {};
+  const dati = opzioni.dati || cartellaNuova('server');
+  const env = Object.assign({ SEGRETO_SERVER: SEGRETO }, opzioni.env || {});
+  const { wisper, server } = avvia({ dati, prova: opzioni.prova !== false, env, pianifica: false });
+  const url = await ascolta(server);
+
+  async function chiama(token, corpo) {
+    const r = await fetch(url + '/exec', {
+      method: 'POST',
+      headers: Object.assign({ 'Content-Type': 'text/plain;charset=utf-8' }, token ? { Authorization: 'Bearer ' + token } : {}),
+      body: JSON.stringify(corpo),
+    });
+    return r.json();
+  }
+  async function leggi(token, parametri) {
+    const q = new URLSearchParams(parametri).toString();
+    const r = await fetch(url + '/exec?' + q, { headers: token ? { Authorization: 'Bearer ' + token } : {} });
+    return r.json();
+  }
+  async function accedi(email, password) {
+    const r = await chiama(null, { azione: 'accedi', email, password: password === undefined ? 'prova' : password, disp: 'prove-' + email, dispNome: 'prove automatiche', app: 'prove' });
+    if (!r.ok) throw new Error('accedi ' + email + ': ' + r.errore);
+    return r.token;
+  }
+  /** Una funzione che fa le richieste come quella persona: manuel('salvaRapportino', {...}). */
+  async function come(email, password) {
+    const token = await accedi(email, password);
+    const f = (azione, dati) => chiama(token, Object.assign({ azione }, dati || {}));
+    f.token = token;
+    f.leggi = parametri => leggi(token, parametri);
+    f.file = id => fetch(url + '/file/' + id, { headers: { Authorization: 'Bearer ' + token } });
+    return f;
+  }
+  async function ponte(corpo, segreto) {
+    const r = await fetch(url + '/ponte', {
+      method: 'POST',
+      headers: { 'X-Wisper-Segreto': segreto === undefined ? SEGRETO : segreto, 'Content-Type': 'application/json' },
+      body: JSON.stringify(corpo),
+    });
+    return { stato: r.status, json: await r.json() };
+  }
+  return {
+    url, wisper, server, dati, chiama, leggi, accedi, come, ponte,
+    ferma: async () => { await chiudi(server); wisper.chiudi(); },
+  };
+}
+
+/**
+ * Il postino finto in HTTP: risponde come lo script (docs/gestionale/postino.md)
+ * e scrive su disco quello che il vero spedirebbe. rompi = true: risponde male.
+ */
+async function postinoFinto(segreto) {
+  const cartella = cartellaNuova('postino');
+  // rompi: tutto risponde male; rompiSolo: solo quell'azione (per vedere che l'avviso parte lo stesso).
+  const stato = { rompi: false, rompiSolo: '', richieste: [] };
+  const server = http.createServer((req, res) => {
+    let corpo = '';
+    req.on('data', p => { corpo += p; });
+    req.on('end', () => {
+      let d = {};
+      try { d = JSON.parse(corpo); } catch (e) { /* vuoto */ }
+      stato.richieste.push({ azione: d.azione, scheda: d.scheda, cartella: d.cartella, nome: d.nome, alProprietario: d.alProprietario, oggetto: d.oggetto });
+      let r;
+      if (stato.rompi || (stato.rompiSolo && stato.rompiSolo === d.azione)) r = { ok: false, errore: 'Drive pieno (finto)' };
+      else if (d.segreto !== (segreto || SEGRETO)) r = { ok: false, errore: 'Segreto sbagliato' };
+      else r = scriviSuDisco(cartella, d);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(r));
+    });
+  });
+  const url = await ascolta(server);
+  return Object.assign(stato, { url, cartella, ferma: () => chiudi(server) });
+}
+
+/**
+ * Il servizio europeo VIES, finto: risponde come la sua API REST per i numeri
+ * che conosce, dice "non valida" agli altri, e per 00000000000 non risponde.
+ */
+async function viesFinto() {
+  const conosciute = {
+    '01234567897': { name: 'MATERIALE ELETTRICO ESEMPIO S.R.L.', address: 'VIA DEI FORNITORI 3 \n36016 THIENE VI\n' },
+    '09876543217': { name: 'NOLEGGI PIATTAFORME PROVA S.N.C.', address: 'VIA DELLE PROVE 5\n36015 SCHIO VI' },
+  };
+  const chiamate = [];
+  const server = http.createServer((req, res) => {
+    const m = req.url.match(/\/ms\/([A-Z]{2})\/vat\/([A-Z0-9]+)$/);
+    chiamate.push(req.url);
+    if (!m) { res.writeHead(404); return res.end('{}'); }
+    if (m[2] === '00000000000') { res.writeHead(500); return res.end('{"errorWrappers":[{"error":"MS_UNAVAILABLE"}]}'); }
+    const nota = conosciute[m[2]];
+    const r = nota ? { isValid: true, userError: 'VALID', name: nota.name, address: nota.address, vatNumber: m[2] }
+      : { isValid: false, userError: 'INVALID', name: '---', address: '---', vatNumber: m[2] };
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(r));
+  });
+  const url = await ascolta(server);
+  return { url, chiamate, ferma: () => chiudi(server) };
+}
+
+/** Un PNG piccolissimo (1x1), per le foto e le firme di prova. */
+const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64');
+
+module.exports = { serverDiProva, postinoFinto, viesFinto, cartellaNuova, ascolta, chiudi, SEGRETO, PNG };

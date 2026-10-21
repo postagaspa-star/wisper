@@ -4,7 +4,10 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.time.LocalDate
 
-/** Un cliente come sta nel foglio. */
+/**
+ * Un cliente o un fornitore (dalla fase 1 un'anagrafica sola, i "soggetti"):
+ * [cliente] e [fornitore] possono essere veri tutti e due.
+ */
 data class Cliente(
     val id: String,
     val nome: String,
@@ -29,7 +32,26 @@ data class Cliente(
     /** Quanto costa a te un'ora per questo cliente, sempre uguale (Elettrodinamica). Vince sul costo della commessa. */
     val costoFisso: Double? = null,
     val note: String = "",
+    // ---- il gestionale (fase 1) ----
+    val cliente: Boolean = true,
+    val fornitore: Boolean = false,
+    val pec: String = "",
+    val codiceFiscale: String = "",
+    val codiceSdi: String = "",
+    val cap: String = "",
+    val citta: String = "",
+    val provincia: String = "",
+    val nazione: String = "IT",
+    val archiviato: Boolean = false,
 ) {
+    /** "C001 · Thiene": la citta', o l'indirizzo se la citta' non c'e' ancora (i clienti del foglio). */
+    val luogo: String get() = citta.ifBlank { indirizzo }
+
+    /** "Via dell'Industria 12, 36016 Thiene (VI)". */
+    val indirizzoCompleto: String
+        get() = listOf(indirizzo, listOf(cap, citta).filter { it.isNotBlank() }.joinToString(" ") + (if (provincia.isNotBlank()) " ($provincia)" else ""))
+            .map { it.trim() }.filter { it.isNotBlank() }.joinToString(", ")
+
     /** Nella forma dello script (leggiClienti): per la copia sul telefono e per i PDF. */
     fun aJson(): JSONObject = JSONObject()
         .put("id", id).put("nome", nome).put("alias", JSONArray(alias))
@@ -42,9 +64,12 @@ data class Cliente(
         .put("kmRimborsati", kmRimborsati ?: JSONObject.NULL)
         .put("maggExtra", maggExtra ?: JSONObject.NULL)
         .put("note", note)
+        .put("cliente", cliente).put("fornitore", fornitore).put("pec", pec)
+        .put("codiceFiscale", codiceFiscale).put("codiceSdi", codiceSdi).put("cap", cap)
+        .put("citta", citta).put("provincia", provincia).put("nazione", nazione).put("archiviato", archiviato)
 
     companion object {
-        fun daJson(c: JSONObject) = Cliente(
+        fun daJson(c: JSONObject, comeFornitore: Boolean = false) = Cliente(
             id = c.testo("id"),
             nome = c.testo("nome"),
             alias = c.optJSONArray("alias").let { a ->
@@ -62,6 +87,17 @@ data class Cliente(
             partitaIva = c.testo("partitaIva"),
             costoFisso = c.numero("costoFisso"),
             note = c.testo("note"),
+            // Senza i due campi (il foglio di prima) e' un cliente, o un fornitore se arriva dall'elenco dei fornitori.
+            cliente = if (c.has("cliente")) c.vero("cliente") else !comeFornitore,
+            fornitore = if (c.has("fornitore")) c.vero("fornitore") else comeFornitore,
+            pec = c.testo("pec"),
+            codiceFiscale = c.testo("codiceFiscale"),
+            codiceSdi = c.testo("codiceSdi"),
+            cap = c.testo("cap"),
+            citta = c.testo("citta"),
+            provincia = c.testo("provincia"),
+            nazione = c.testo("nazione").ifBlank { "IT" },
+            archiviato = c.vero("archiviato"),
         )
     }
 }
@@ -90,9 +126,23 @@ data class Commessa(
     /** Il codice di prima dei 26ST (P2601, M001): un rapportino vecchio in coda lo usa ancora. */
     val codicePrecedente: String = "",
     val note: String = "",
+    // ---- il gestionale (fase 1) ----
+    /** La sede o l'impianto del cliente dove si lavora; vuoto = nessuno. */
+    val idSede: String = "",
+    /** L'utente responsabile; vuoto = da scegliere. */
+    val idResponsabile: String = "",
+    /** Gli utenti che ci lavorano. */
+    val persone: List<String> = emptyList(),
+    val importoContratto: Double? = null,
+    val archiviata: Boolean = false,
+    /** Una commessa modello: non compare negli elenchi normali, si usa per farne di nuove. */
+    val modello: Boolean = false,
 ) {
-    /** Solo le aperte si propongono nei rapportini nuovi. Le sospese e le chiuse restano sul foglio. */
-    val aperta: Boolean get() = stato.equals("APERTA", ignoreCase = true)
+    /**
+     * Solo le aperte si propongono nei rapportini nuovi. Le sospese e le chiuse
+     * restano sul foglio; le archiviate e i modelli non si propongono mai.
+     */
+    val aperta: Boolean get() = stato.equals("APERTA", ignoreCase = true) && !archiviata && !modello
     val sospesa: Boolean get() = stato.equals("SOSPESA", ignoreCase = true)
     val chiusa: Boolean get() = stato.equals("CHIUSA", ignoreCase = true)
 
@@ -114,6 +164,9 @@ data class Commessa(
         .put("cartella", cartella)
         .put("codicePrecedente", codicePrecedente)
         .put("note", note)
+        .put("sedeId", idSede).put("responsabileId", idResponsabile).put("persone", JSONArray(persone))
+        .put("importoContratto", importoContratto ?: JSONObject.NULL)
+        .put("archiviata", archiviata).put("modello", modello)
 
     companion object {
         /** Gli stati che lo script accetta, in ordine. */
@@ -135,6 +188,20 @@ data class Commessa(
             cartella = m.testo("cartella"),
             codicePrecedente = m.testo("codicePrecedente"),
             note = m.testo("note"),
+            idSede = m.testo("sedeId").ifBlank { m.testo("idSede") },
+            idResponsabile = m.testo("responsabileId").ifBlank { m.testo("idResponsabile") },
+            persone = m.optJSONArray("persone")?.let { a ->
+                (0 until a.length()).mapNotNull { i ->
+                    when (val v = a.opt(i)) {
+                        is JSONObject -> v.testo("id").ifBlank { v.testo("utenteId") }
+                        null -> null
+                        else -> v.toString()
+                    }?.takeIf { it.isNotBlank() }
+                }
+            }.orEmpty(),
+            importoContratto = m.numero("importoContratto"),
+            archiviata = m.vero("archiviata"),
+            modello = m.vero("modello"),
         )
     }
 }
@@ -149,13 +216,30 @@ data class Gruppo(
     val maggExtra: Double = 0.0,
 )
 
-/** Quello che il foglio sa oltre ai rapportini. */
+/**
+ * Quello che il foglio (dalla fase 1 il server) sa oltre ai rapportini.
+ *
+ * [clienti] sono i clienti attivi: gli archiviati stanno in [archiviati], cosi'
+ * non si propongono nei rapportini nuovi. [commesse] le ha tutte, anche
+ * archiviate e modelli (vedi [Commessa.aperta]).
+ */
 data class Anagrafiche(
     val clienti: List<Cliente> = emptyList(),
     val commesse: List<Commessa> = emptyList(),
     val gruppi: List<Gruppo> = emptyList(),
     /** La scheda Impostazioni: CHIAVE -> valore, sempre testo ("0.76", "SI"). Le chiavi sono in [Anagrafiche.Companion]. */
     val impostazioni: Map<String, String> = emptyMap(),
+    // ---- il gestionale (fase 1) ----
+    /** I fornitori attivi (uno che e' anche cliente sta in tutti e due gli elenchi). */
+    val fornitori: List<Cliente> = emptyList(),
+    /** Clienti e fornitori archiviati. */
+    val archiviati: List<Cliente> = emptyList(),
+    val referenti: List<Referente> = emptyList(),
+    val sedi: List<Sede> = emptyList(),
+    val prestazioni: List<Prestazione> = emptyList(),
+    /** Solo nome e ruolo: per responsabili, persone e la frase "Chiedi a". */
+    val utenti: List<Utente> = emptyList(),
+    val numerazioni: List<Numerazione> = emptyList(),
 ) {
     val euroKm: Double get() = Numeri.leggi(impostazioni[EURO_KM]) ?: 0.0
     val ticketAttivo: Boolean get() = impostazioni[TICKET_ATTIVO].equals("SI", ignoreCase = true)
@@ -176,6 +260,7 @@ data class Anagrafiche(
 
     fun cliente(id: String, nome: String = ""): Cliente? =
         clienti.firstOrNull { id.isNotBlank() && it.id == id }
+            ?: archiviati.firstOrNull { id.isNotBlank() && it.id == id }
             ?: nome.takeIf { it.isNotBlank() }?.let { n ->
                 val chiave = normalizza(n)
                 clienti.firstOrNull { c -> (listOf(c.nome) + c.alias).any { normalizza(it) == chiave } }
@@ -183,6 +268,39 @@ data class Anagrafiche(
 
     /** Il cliente di una commessa. */
     fun clienteDi(commessa: Commessa?): Cliente? = commessa?.let { cliente(it.idCliente) }
+
+    /** Clienti e fornitori, attivi e archiviati, una volta sola ciascuno. */
+    val soggetti: List<Cliente> get() = (clienti + fornitori + archiviati).distinctBy { it.id }
+
+    /** Un cliente o un fornitore per codice, anche archiviato. */
+    fun soggetto(id: String): Cliente? = if (id.isBlank()) null else soggetti.firstOrNull { it.id == id }
+
+    fun referentiDi(idSoggetto: String): List<Referente> = referenti.filter { it.idSoggetto == idSoggetto }.sortedBy { it.ordine }
+    fun sediDi(idSoggetto: String, ancheArchiviate: Boolean = false): List<Sede> =
+        sedi.filter { it.idSoggetto == idSoggetto && (ancheArchiviate || !it.archiviata) }
+    fun sede(id: String): Sede? = if (id.isBlank()) null else sedi.firstOrNull { it.id == id }
+    fun prestazioniDi(idCommessa: String): List<Prestazione> =
+        prestazioni.filter { it.idCommessa.equals(idCommessa, ignoreCase = true) }.sortedWith(compareBy({ it.ordine }, { it.id }))
+    fun utente(id: String): Utente? = if (id.isBlank()) null else utenti.firstOrNull { it.id == id }
+    fun numerazione(tipo: String): Numerazione? = numerazioni.firstOrNull { it.tipo == tipo }
+
+    /** Il nome del titolare per "Chiedi a Manuel": il primo titolare attivo. */
+    val titolare: String get() = utenti.firstOrNull { it.ruolo == Ruoli.TITOLARE && it.attivo }?.nome?.substringBefore(' ').orEmpty()
+
+    /**
+     * Un altro soggetto con lo stesso nome, uno degli altri nomi, o la stessa
+     * partita IVA: il doppione da aprire invece di crearne uno nuovo.
+     */
+    fun doppioneDi(nome: String, alias: List<String>, partitaIva: String, tranne: String = ""): Cliente? {
+        val chiavi = (listOf(nome) + alias).map(::normalizza).filter { it.isNotEmpty() }.toSet()
+        val piva = partitaIva.filter { it.isLetterOrDigit() }.uppercase()
+        return soggetti.firstOrNull { s ->
+            s.id != tranne && (
+                (listOf(s.nome) + s.alias).any { normalizza(it) in chiavi } ||
+                    (piva.isNotEmpty() && s.partitaIva.filter { it.isLetterOrDigit() }.uppercase() == piva)
+                )
+        }
+    }
 
     fun commesseAperteDi(idCliente: String): List<Commessa> =
         commesse.filter { it.idCliente == idCliente && it.aperta }
@@ -225,6 +343,7 @@ data class Anagrafiche(
      * ne sceglie un altro.
      */
     fun prossimoCodiceCommessa(anno: Int): String {
+        numerazione("commessa")?.let { n -> if (n.formato.isNotBlank()) return n.prossimoNumero(anno) }
         val max = commesse.mapNotNull { CODICE_COMMESSA.find(it.id.trim().uppercase())?.groupValues?.get(1)?.toIntOrNull() }.maxOrNull() ?: 0
         val n = max + 1
         return "%02d".format(anno % 100) + "ST" + (if (n < 1000) "%03d".format(n) else n.toString())
@@ -255,8 +374,29 @@ data class Anagrafiche(
         /** 26ST047: anno, ST (Studio Tecnico GM), numero. */
         private val CODICE_COMMESSA = Regex("""^\d{2}ST(\d+)$""")
 
-        fun daJson(o: JSONObject) = Anagrafiche(
-            clienti = o.optJSONArray("clienti").oggetti().map(Cliente::daJson).filter { it.nome.isNotBlank() },
+        fun daJson(o: JSONObject): Anagrafiche {
+            val clienti = o.optJSONArray("clienti").oggetti().map { Cliente.daJson(it) }.filter { it.nome.isNotBlank() }
+            val fornitori = o.optJSONArray("fornitori").oggetti().map { Cliente.daJson(it, comeFornitore = true) }.filter { it.nome.isNotBlank() }
+            val dichiarati = o.optJSONArray("archiviati").oggetti().map { Cliente.daJson(it).copy(archiviato = true) }
+            // Con "archiviati: true" il server puo' mandarli dentro gli elenchi, col loro segno.
+            val archiviati = (dichiarati + (clienti + fornitori).filter { it.archiviato }).distinctBy { it.id }
+            return daJsonCon(o, clienti.filterNot { it.archiviato }, fornitori.filterNot { it.archiviato }, archiviati)
+        }
+
+        private fun daJsonCon(o: JSONObject, clientiAttivi: List<Cliente>, fornitoriAttivi: List<Cliente>, archiviati: List<Cliente>) = Anagrafiche(
+            clienti = clientiAttivi,
+            fornitori = fornitoriAttivi,
+            archiviati = archiviati,
+            referenti = o.optJSONArray("referenti").oggetti().map(Referente::daJson),
+            sedi = o.optJSONArray("sedi").oggetti().map(Sede::daJson),
+            prestazioni = o.optJSONArray("prestazioni").oggetti().map(Prestazione::daJson),
+            utenti = o.optJSONArray("utenti").oggetti().map(Utente::daJson),
+            numerazioni = o.optJSONArray("numerazioni").oggetti().map(Numerazione::daJson).ifEmpty {
+                // Il server puo' mandarle come oggetto { commessa: {...}, rapportino: {...} }.
+                o.optJSONObject("numerazioni")?.let { n ->
+                    n.keys().asSequence().mapNotNull { k -> n.optJSONObject(k)?.let { x -> Numerazione.daJson(x).let { if (it.tipo.isBlank()) it.copy(tipo = k) else it } } }.toList()
+                }.orEmpty()
+            },
             commesse = o.optJSONArray("commesse").oggetti().map(Commessa::daJson).filter { it.id.isNotBlank() },
             gruppi = o.optJSONArray("gruppi").oggetti().map { g ->
                 Gruppo(
@@ -295,4 +435,11 @@ data class Anagrafiche(
             }
         })
         .put("impostazioni", JSONObject(impostazioni))
+        .put("fornitori", JSONArray().apply { fornitori.forEach { put(it.aJson()) } })
+        .put("archiviati", JSONArray().apply { archiviati.forEach { put(it.aJson()) } })
+        .put("referenti", JSONArray().apply { referenti.forEach { put(it.aJson()) } })
+        .put("sedi", JSONArray().apply { sedi.forEach { put(it.aJson()) } })
+        .put("prestazioni", JSONArray().apply { prestazioni.forEach { put(it.aJson()) } })
+        .put("utenti", JSONArray().apply { utenti.forEach { put(it.aJson()) } })
+        .put("numerazioni", JSONArray().apply { numerazioni.forEach { put(it.aJson()) } })
 }

@@ -268,17 +268,27 @@ public sealed class Finestra : Form, Ponte.IFinestra
         return (Path.GetFileName(finestra.FileName), File.ReadAllBytes(finestra.FileName));
     }
 
-    /// <summary>Il percorso di un file scelto a mano (qui: il file di collegamento dell'email).</summary>
-    public string? ScegliPercorso(string filtro)
+    /// <summary>Dove salvare un file (un'esportazione per Excel, un documento): la finestra Salva di Windows.</summary>
+    public string? SalvaFile(string nomeProposto)
     {
-        using var finestra = new OpenFileDialog
+        var estensione = Path.GetExtension(nomeProposto).TrimStart('.').ToLowerInvariant();
+        string? scelto = null;
+        // Le richieste dell'interfaccia arrivano su un altro filo: la finestra di Windows va aperta sul suo.
+        Invoke(() =>
         {
-            Title = "Scegli il file dell'email",
-            Filter = "Collegamento a Wisper (*.wisper)|*.wisper|Tutti i file|*.*",
-            InitialDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads"),
-            Multiselect = false,
-        };
-        return finestra.ShowDialog(this) == DialogResult.OK ? finestra.FileName : null;
+            using var finestra = new SaveFileDialog
+            {
+                Title = "Salva",
+                FileName = nomeProposto,
+                Filter = estensione == "csv" ? "File per Excel (*.csv)|*.csv|Tutti i file|*.*" : "Tutti i file|*.*",
+                DefaultExt = estensione,
+                AddExtension = true,
+                OverwritePrompt = true,
+                InitialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+            };
+            scelto = finestra.ShowDialog(this) == DialogResult.OK ? finestra.FileName : null;
+        });
+        return scelto;
     }
 
     private void MostraMessaggio(string testo)

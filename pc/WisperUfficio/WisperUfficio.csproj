@@ -55,9 +55,9 @@
     <EmbeddedResource Include="Risorse\wisper.ico" LogicalName="WisperUfficio.wisper.ico" />
   </ItemGroup>
 
-  <!-- L'indirizzo del foglio, solo in un exe di casa (crea-pacchetto.ps1 -ConIndirizzo): mai in quello che si pubblica. -->
-  <ItemGroup Condition="'$(IndirizzoFoglio)' != ''">
-    <AssemblyMetadata Include="IndirizzoFoglio" Value="$(IndirizzoFoglio)" />
+  <!-- L'indirizzo del server, solo in un exe di casa (crea-pacchetto.ps1 -ConIndirizzo): mai in quello che si pubblica. -->
+  <ItemGroup Condition="'$(IndirizzoServer)' != ''">
+    <AssemblyMetadata Include="IndirizzoServer" Value="$(IndirizzoServer)" />
   </ItemGroup>
 
   <!--

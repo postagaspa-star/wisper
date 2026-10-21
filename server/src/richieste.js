@@ -1,0 +1,206 @@
+/*
+ * L'ingresso: ogni richiesta passa di qui, come in Code.gs passava da
+ * rispondi(). Qui, e solo qui, si controllano accesso e permessi: ogni azione
+ * dice di quale modulo ha bisogno e a che livello, e se manca il server dice di
+ * no prima di fare qualunque cosa.
+ *
+ * Le risposte sono sempre {ok: true, ...} o {ok: false, errore: "frase da
+ * mostrare"}; in piu' accesso:false (rientrare) e permesso:false (chiedere).
+ * Chi non ha "costi" riceve le risposte senza i campi dei soldi.
+ */
+'use strict';
+
+const { Rifiuto, senzaPermesso, testo, messaggio } = require('./utili');
+const { togliCosti } = require('./permessi');
+
+const scrive = (modulo, cosa, fn) => ({ modulo, livello: 2, cosa, scrive: true, fn });
+const legge = (modulo, cosa, fn) => ({ modulo, livello: 1, cosa, fn });
+const nonServePiu = { fn: () => { throw new Rifiuto('Non serve più'); } };
+const siVuole = v => v === true || v === '1' || v === 'true';
+
+/**
+ * Tutte le azioni: quelle di oggi (stessi nomi, stesse risposte di Code.gs) e
+ * quelle nuove della fase 1. "scrive": tutto in una transazione, o niente.
+ */
+const AZIONI = {
+  // --- accesso
+  accedi: { pubblica: true, asincrona: true, soloPost: true, fn: (w, d) => w.accedi(d) },
+  esci: { soloPost: true, fn: w => w.esci() },
+  io: { fn: w => w.io() },
+  cambiaPassword: { asincrona: true, soloPost: true, fn: (w, d) => w.cambiaPassword(d) },
+
+  // --- le azioni di oggi
+  anagrafiche: { fn: (w, d) => w.rispostaAnagrafiche(d) },
+  rapportini: legge('rapportini', 'vedere i rapportini', (w, d) => ({
+    ok: true,
+    rapportini: w.leggiRapportini(d.da, d.a, siVuole(d.tutti), { idCliente: d.idCliente, idCommessa: d.idCommessa }),
+  })),
+  file: { fn: (w, d) => ({ ok: true, file: w.leggiFile(d.id) }) },
+  documenti: legge('documenti', 'vedere i documenti', (w, d) => w.documentiCommessa(d.idCommessa)),
+  salvaRapportino: scrive('rapportini', 'scrivere i rapportini', (w, d) => ({ ok: true, rapportino: w.salvaRapportino(d.rapportino || {}) })),
+  caricaFile: {
+    scrive: true,
+    // Il permesso dipende da cosa si carica.
+    controllo: d => (d.tipo === 'documento' ? ['documenti', 2, 'caricare documenti']
+      : d.tipo === 'firmaTecnico' ? ['amministrazione', 2, 'cambiare la firma del tecnico']
+        : ['rapportini', 2, 'caricare foto e firme dei rapportini']),
+    fn: (w, d) => ({ ok: true, file: w.caricaFile(d) }),
+  },
+  togliFile: scrive('rapportini', 'togliere le foto dei rapportini', (w, d) => ({ ok: true, rapportino: w.togliFile(d.id, d.fileId) })),
+  stato: scrive('rapportini', 'cambiare lo stato dei rapportini', (w, d) => ({ ok: true, rapportini: w.cambiaStato(d.ids || [d.id], d.stato) })),
+  creaCliente: scrive('clienti', 'creare clienti', (w, d) => ({ ok: true, cliente: w.creaCliente(d) })),
+  aggiornaCliente: scrive('clienti', 'cambiare i clienti', (w, d) => ({ ok: true, cliente: w.aggiornaCliente(d.id, d.campi || {}) })),
+  creaCommessa: scrive('commesse', 'creare commesse', (w, d) => ({ ok: true, commessa: w.creaCommessa(d) })),
+  aggiornaCommessa: scrive('commesse', 'cambiare le commesse', (w, d) => ({ ok: true, commessa: w.aggiornaCommessa(d.id, d.campi || {}) })),
+  // Il nome che usava il primo Wisper: resta valido.
+  statoCommessa: scrive('commesse', 'cambiare le commesse', (w, d) => ({ ok: true, commessa: w.aggiornaCommessa(d.idCommessa, { stato: d.stato }) })),
+  salvaImpostazioni: scrive('amministrazione', 'cambiare le impostazioni', (w, d) => ({ ok: true, impostazioni: w.salvaImpostazioni(d.valori || {}) })),
+  inviaEmail: { modulo: 'rapportini', livello: 2, cosa: 'mandare email', asincrona: true, soloPost: true, fn: async (w, d) => ({ ok: true, rapportini: await w.inviaEmail(d) }) },
+  salvaGruppo: nonServePiu,
+  collegaComputer: nonServePiu,
+
+  // --- amministrazione
+  utenti: legge('amministrazione', 'vedere gli utenti', w => ({ ok: true, utenti: w.leggiUtenti() })),
+  salvaUtente: { modulo: 'amministrazione', livello: 2, cosa: 'cambiare gli utenti', asincrona: true, soloPost: true, fn: (w, d) => w.salvaUtente(d.utente || d) },
+  nuovaPassword: { modulo: 'amministrazione', livello: 2, cosa: 'cambiare le password degli altri', asincrona: true, soloPost: true, fn: (w, d) => w.nuovaPassword(d.idUtente) },
+  sessioni: { modulo: 'amministrazione', livello: 2, cosa: 'vedere i dispositivi collegati', fn: (w, d) => ({ ok: true, sessioni: w.leggiSessioni(d.idUtente) }) },
+  revocaSessione: scrive('amministrazione', 'scollegare i dispositivi', (w, d) => w.revocaSessione(d.id)),
+  permessi: legge('amministrazione', 'vedere i permessi', w => w.leggiPermessi()),
+  salvaPermessi: scrive('amministrazione', 'cambiare i permessi', (w, d) => w.salvaPermessi(d)),
+  registro: legge('amministrazione', 'vedere il registro', (w, d) => w.leggiRegistro(d)),
+  accessi: legge('amministrazione', 'vedere gli accessi', (w, d) => w.leggiAccessi(d)),
+  numerazioni: legge('amministrazione', 'vedere le numerazioni', w => ({ ok: true, numerazioni: w.leggiNumerazioni() })),
+  salvaNumerazione: scrive('amministrazione', 'cambiare le numerazioni', (w, d) => ({ ok: true, numerazione: w.salvaNumerazione(d) })),
+  cestino: { modulo: 'amministrazione', livello: 2, cosa: 'vedere il cestino', fn: w => ({ ok: true, file: w.cestino() }) },
+  ripristinaFile: scrive('amministrazione', 'ripristinare i file', (w, d) => ({ ok: true, file: w.ripristinaFile(d.id) })),
+  copie: legge('amministrazione', 'vedere le copie', w => w.leggiCopie()),
+  copiaAdesso: { modulo: 'amministrazione', livello: 2, cosa: 'fare una copia', asincrona: true, soloPost: true, fn: async w => ({ ok: true, copia: await w.copiaDiSicurezza('a mano') }) },
+
+  // --- dashboard
+  dashboard: legge('dashboard', 'vedere la dashboard', (w, d) => w.dashboard(d)),
+
+  // --- clienti e fornitori
+  salvaSoggetto: scrive('clienti', 'cambiare clienti e fornitori', (w, d) => ({ ok: true, soggetto: w.salvaSoggetto(d.soggetto || {}) })),
+  archiviaSoggetto: scrive('clienti', 'archiviare clienti e fornitori', (w, d) => ({ ok: true, soggetto: w.archiviaSoggetto(d.id, true) })),
+  ripristinaSoggetto: scrive('clienti', 'ripristinare clienti e fornitori', (w, d) => ({ ok: true, soggetto: w.archiviaSoggetto(d.id, false) })),
+  salvaReferente: scrive('clienti', 'cambiare i referenti', (w, d) => ({ ok: true, referente: w.salvaReferente(d.referente || {}) })),
+  togliReferente: scrive('clienti', 'togliere i referenti', (w, d) => { w.togliReferente(d.id); return { ok: true }; }),
+  salvaSede: scrive('clienti', 'cambiare sedi e impianti', (w, d) => ({ ok: true, sede: w.salvaSede(d.sede || {}) })),
+  archiviaSede: scrive('clienti', 'archiviare sedi e impianti', (w, d) => ({ ok: true, sede: w.archiviaSede(d.id, d.archiviata) })),
+  controllaPartitaIva: { modulo: 'clienti', livello: 1, cosa: 'controllare le partite IVA', asincrona: true, fn: (w, d) => w.controllaPartitaIva(d) },
+
+  // --- commesse
+  salvaPrestazione: scrive('commesse', 'cambiare le prestazioni', (w, d) => ({ ok: true, prestazione: w.salvaPrestazione(d.prestazione || {}) })),
+  togliPrestazione: scrive('commesse', 'togliere le prestazioni', (w, d) => { w.togliPrestazione(d.id); return { ok: true }; }),
+  ordinaPrestazioni: scrive('commesse', 'cambiare le prestazioni', (w, d) => ({ ok: true, prestazioni: w.ordinaPrestazioni(d.idCommessa, d.ids) })),
+  duplicaCommessa: scrive('commesse', 'creare commesse', (w, d) => ({ ok: true, commessa: w.duplicaCommessa(d) })),
+  archiviaCommessa: scrive('commesse', 'archiviare le commesse', (w, d) => ({ ok: true, commessa: w.archiviaCommessa(d.id, true) })),
+  ripristinaCommessa: scrive('commesse', 'ripristinare le commesse', (w, d) => ({ ok: true, commessa: w.archiviaCommessa(d.id, false) })),
+
+  // --- rapportini
+  ripristinaRapportino: scrive('rapportini', 'ripristinare i rapportini', (w, d) => ({ ok: true, rapportino: w.ripristinaRapportino(d.id) })),
+
+  // --- esportazione: il permesso dipende da cosa (lo controlla esporta)
+  esporta: { fn: (w, d) => w.esporta(d) },
+};
+
+/**
+ * Le URL dei file per le versioni vecchie (ponte): telefono e computer di
+ * prima ricavano l'id dal link di Drive (".../d/<id>/view"). Gli id dei file
+ * copiati da Drive sono quelli di Drive, quindi per loro il link e' vero; per
+ * i nuovi serve solo a leggere l'id, che poi chiedono con l'azione "file".
+ */
+function perIlPonte(x) {
+  if (typeof x === 'string') {
+    const m = x.match(/^\/file\/([A-Za-z0-9_-]+)$/);
+    return m ? 'https://drive.google.com/file/d/' + m[1] + '/view' : x;
+  }
+  if (Array.isArray(x)) return x.map(perIlPonte);
+  if (x && typeof x === 'object') {
+    const o = {};
+    for (const k of Object.keys(x)) o[k] = perIlPonte(x[k]);
+    return o;
+  }
+  return x;
+}
+
+/**
+ * Esegue una richiesta e torna la risposta (sempre un oggetto).
+ * @param d        la richiesta: {azione, ...}
+ * @param opzioni  {token, get} oppure {ponte: true} (le versioni vecchie, come il titolare)
+ */
+async function esegui(w, d, opzioni) {
+  d = d && typeof d === 'object' ? d : {};
+  opzioni = opzioni || {};
+  const azione = testo(d.azione) || 'anagrafiche';
+  const voce = Object.prototype.hasOwnProperty.call(AZIONI, azione) ? AZIONI[azione] : null;
+  const perRegistro = Object.assign({}, d, { azione });
+  // Con una GET solo le letture, come doGet() dello script: una password o una scrittura
+  // in un indirizzo finirebbero nei registri di chiunque stia in mezzo.
+  if (opzioni.get && voce && (voce.scrive || voce.soloPost)) {
+    return { ok: false, errore: 'Questa azione vuole una POST' };
+  }
+  delete perRegistro.codice;
+
+  let utente = null;
+  let sessione = null;
+  let permessi = null;
+  if (!voce || !voce.pubblica) {
+    if (opzioni.ponte) {
+      utente = w.titolare();
+      if (!utente) {
+        w.registraAccesso(perRegistro, 'rifiutato', null);
+        return { ok: false, errore: 'Nessun titolare attivo sul server: crealo con node server/strumenti/utente.js --titolare' };
+      }
+    } else {
+      const s = w.utenteDaToken(opzioni.token);
+      if (!s) {
+        w.registraAccesso(perRegistro, 'accesso negato', null);
+        return { ok: false, errore: 'Accesso scaduto: entra di nuovo', accesso: false };
+      }
+      utente = s.utente;
+      sessione = s.sessione;
+      // Il dispositivo l'ha detto all'accesso: vale anche per le richieste che non lo ripetono.
+      if (!testo(perRegistro.disp)) perRegistro.disp = s.disp;
+      if (!testo(perRegistro.dispNome)) perRegistro.dispNome = s.dispNome;
+      if (!testo(perRegistro.app)) perRegistro.app = s.app;
+    }
+    permessi = w.permessiDi(utente.ruolo);
+  }
+  if (!voce) {
+    w.registraAccesso(perRegistro, 'errore', utente);
+    return { ok: false, errore: 'Azione sconosciuta: ' + azione };
+  }
+
+  const chi = {
+    utente, permessi, sessione, ponte: !!opzioni.ponte, azione,
+    disp: testo(perRegistro.disp), dispNome: testo(perRegistro.dispNome), app: testo(perRegistro.app),
+  };
+  return w.come(chi, async () => {
+    let risposta;
+    let esito = 'ok';
+    try {
+      const serve = voce.modulo ? [voce.modulo, voce.livello, voce.cosa] : voce.controllo ? voce.controllo(d) : null;
+      if (serve && permessi && (permessi[serve[0]] || 0) < serve[1]) throw senzaPermesso(serve[2]);
+      if (voce.asincrona) risposta = await voce.fn(w, d);
+      else if (voce.scrive) risposta = w.db.transazione(() => voce.fn(w, d));
+      else risposta = voce.fn(w, d);
+    } catch (err) {
+      if (err instanceof Rifiuto) {
+        risposta = Object.assign({ ok: false, errore: err.message }, err.extra);
+        esito = err.esito || (err.extra.permesso === false ? 'permesso negato' : 'errore');
+      } else {
+        console.error('[errore] ' + azione + ': ' + (err && err.stack ? err.stack : err));
+        risposta = { ok: false, errore: 'Errore del server: ' + messaggio(err) };
+        esito = 'errore';
+      }
+    }
+    if (permessi && !permessi.costi) risposta = togliCosti(risposta);
+    if (opzioni.ponte) risposta = perIlPonte(risposta);
+    const chiE = utente || (azione === 'accedi' && risposta.ok ? risposta.utente : null);
+    w.registraAccesso(perRegistro, opzioni.ponte && esito === 'ok' ? 'ponte' : esito, chiE);
+    return risposta;
+  });
+}
+
+module.exports = { esegui, AZIONI, perIlPonte };

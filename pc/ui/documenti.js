@@ -29,8 +29,13 @@
     return String(s || '').replace(/[\\"]/g, '').replace(/[\r\n]+/g, ' ');
   }
 
+  /**
+   * L'id di un file dal suo indirizzo: quello di Drive (".../d/<id>/view", il foglio)
+   * o quello del server ("/file/<id>", dalla 0.5: per esempio la firma del tecnico).
+   */
   function idDaUrl(url) {
-    const m = String(url || '').match(/\/d\/([A-Za-z0-9_-]{10,})/);
+    const s = String(url || '');
+    const m = s.match(/\/d\/([A-Za-z0-9_-]{10,})/) || s.match(/^\/file\/([A-Za-z0-9_-]{10,})/);
     return m ? m[1] : '';
   }
 

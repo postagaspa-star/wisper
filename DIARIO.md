@@ -11,6 +11,7 @@ mai dati veri di clienti.
 
 | Data | Versione | In breve |
 |------|----------|----------|
+| 21/10/2026 | gestionale, fase 1 (non pubblicata) | [Il nucleo del gestionale: server sul NAS, accesso per persona, Dashboard](#gestionale-fase-1) |
 | 21/10/2026 | 0.4.0 | [Tutto l'ufficio anche sul telefono](#v0-4-0) |
 | 20/10/2026 | solo foglio | [Il foglio trova l'email del proprietario anche senza il permesso apposta](#permesso-email) |
 | 20/10/2026 | solo foglio | [L'email per collegare il computer serve anche a installare Wisper Ufficio](#installa-da-email) |
@@ -24,6 +25,73 @@ mai dati veri di clienti.
 | 26/09–14/10/2026 | 0.1 | [Un rapportino confermato non si perde più](#coda) |
 | 7–9/08/2026 | 0.1.0 | [Hackathon NGN Hacks: la versione a voce, senza mani](#v0-1-0) |
 | marzo–giugno 2026 | prima del repository | [Le prime versioni](#prima) |
+
+---
+
+<a id="gestionale-fase-1"></a>
+## 21 ottobre 2026 · gestionale, fase 1 · Il nucleo: server sul NAS, accesso per persona, Dashboard
+
+**Perché.** Il papà ha scritto le specifiche del gestionale completo dello studio (`docs/specifiche-stgm.md`: 18
+moduli, riferimento Pleya). La fase 0 ha confrontato Wisper con le specifiche
+([analisi](https://claude.ai/artifact/QVfYKsoDJt79DEzeTvoxid)) e Andrea ha deciso: dati su un server nel NAS di casa,
+niente iPhone per ora, ogni modulo sia sul telefono sia sul computer, codice commessa 26ST001, menu laterale anche sul
+telefono. Poi: *"A me serve però che tu completi tutto il progetto nella sua interezza"*. La fase 1 è il nucleo: le
+fondamenta, la Dashboard, clienti e fornitori, commesse, amministrazione. Prima la ricerca e il
+[prototipo](https://claude.ai/artifact/FjmuFjBhALHkEGs2urSBEy) (`docs/prototipo/Gestionale-fase1.html`), poi il codice.
+
+**Cosa cambia.**
+
+- **Un server vero al posto del foglio** (`server/`, Node.js con un database SQLite, in Docker sul NAS). Parla come lo
+  script del foglio, con le stesse azioni e gli stessi conti, provati sugli stessi casi. Il foglio non sparisce: dopo il
+  cambio riceverà ogni notte una copia dei dati da leggere, e lo script farà da ponte per le versioni vecchie e da
+  postino per le email (`apps-script/Ponte.gs`).
+- **Si entra con nome e password**, una persona per volta, invece del codice uguale per tutti. Quattro ruoli
+  (titolare, amministrazione, collaboratore, lettura) e permessi per modulo, decisi dal server: il collaboratore non
+  riceve proprio tariffe, totali e margini, e vede solo i suoi rapportini.
+- **Menu laterale** al posto della barra in basso sul telefono, e sul computer con la possibilità di richiuderlo a
+  icone. Le voci seguono l'ordine delle specifiche e ci sono solo quelle che funzionano davvero.
+- **La Dashboard è la pagina iniziale**: la cosa più urgente, poi Urgenti, Questa settimana, Da pianificare, e i
+  numeri delle commesse; ogni riga porta dove si sistema. Sul telefono in cima resta "Il tuo giorno", la vecchia Oggi.
+- **Clienti e fornitori** in un'anagrafica sola: codice fiscale, SDI, PEC, referenti, sedi e impianti, controllo della
+  partita IVA sul servizio europeo, doppioni anche per partita IVA, archiviazione al posto della cancellazione.
+- **Commesse per prestazioni** (sopralluogo, progetto, direzione lavori…), ognuna col suo valore e avanzamento; il
+  responsabile e le persone; duplica e modelli; archivio.
+- **Amministrazione** al posto delle Impostazioni: utenti, ruoli e permessi, numerazioni, il registro attività
+  (chi ha cambiato cosa, da cosa a cosa), copie di sicurezza ed esportazioni per Excel, cestino.
+- **Un difetto vecchio trovato e corretto**: in Wisper Ufficio fino alla 0.3.6 un budget di 2.500 € compariva nel
+  modulo della commessa come "2.500" e, salvando, diventava 2,50 €. I totali dei rapportini non erano toccati; il
+  passaggio dei dati segnala le commesse rovinate.
+- Il server di prova è sul NAS (vuoto, raggiungibile solo in casa). Il passaggio dei dati veri si fa una sera scelta
+  con Manuel, dopo la prova generale su una copia del foglio.
+
+Prove: server 99, script del foglio 65, telefono 105, computer 51, tutte verdi; schermate vere sull'emulatore e con
+Edge senza finestra, coi dati di esempio del server di prova.
+
+<p>
+<img src="docs/diario/2026-10-21-gest-tel-accesso.png" width="220" alt="Telefono: accesso con nome e password">
+<img src="docs/diario/2026-10-21-gest-tel-dashboard.png" width="220" alt="Telefono: la Dashboard col tuo giorno">
+<img src="docs/diario/2026-10-21-gest-tel-menu.png" width="220" alt="Telefono: il menu laterale">
+</p>
+
+<p>
+<img src="docs/diario/2026-10-21-gest-tel-cliente.png" width="220" alt="Telefono: la scheda del cliente">
+<img src="docs/diario/2026-10-21-gest-tel-prestazioni.png" width="220" alt="Telefono: le prestazioni della commessa">
+<img src="docs/diario/2026-10-21-gest-tel-permessi.png" width="220" alt="Telefono: ruoli e permessi">
+</p>
+
+<img src="docs/diario/2026-10-21-gest-tel-scuro.png" width="220" alt="Telefono: la Dashboard del collaboratore, tema scuro">
+
+<img src="docs/diario/2026-10-21-gest-pc-dashboard.png" width="720" alt="Wisper Ufficio: la Dashboard">
+
+<img src="docs/diario/2026-10-21-gest-pc-prestazioni.png" width="720" alt="Wisper Ufficio: le prestazioni della commessa">
+
+<img src="docs/diario/2026-10-21-gest-pc-cliente.png" width="720" alt="Wisper Ufficio: i referenti del cliente">
+
+<img src="docs/diario/2026-10-21-gest-pc-permessi.png" width="720" alt="Wisper Ufficio: ruoli e permessi">
+
+<img src="docs/diario/2026-10-21-gest-pc-registro.png" width="720" alt="Wisper Ufficio: il registro attività">
+
+Versione: non ancora pubblicata (ramo `gestionale`).
 
 ---
 

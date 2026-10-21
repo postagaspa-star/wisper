@@ -1,0 +1,338 @@
+/*
+ * I rapportini: salvaRapportino, la lettura, gli stati. Le regole sono quelle
+ * di Code.gs, riga per riga (idLocale che non crea doppioni, stati bloccati,
+ * prima i controlli e poi le creazioni, tariffe congelate nella riga, tariffa
+ * libera ricordata, prezzo della commessa dal primo rapportino, numero
+ * RAP/aaaa/nnnn per anno della data).
+ *
+ * In piu' della fase 1: ogni rapportino sa chi l'ha scritto (utente_id), un
+ * collaboratore vede e scrive solo i suoi, e un annullato si ripristina com'era.
+ */
+'use strict';
+
+const {
+  Rifiuto, senzaPermesso, testo, numero, numeroONull, siNoONull, normalizza, adesso, dataIso, dataDaIso,
+  dataOraIso, oggi,
+} = require('../utili');
+const { ELETTRODINAMICA, STATI, STATI_BLOCCATI, regoleDi, calcola, tariffaProposta } = require('../conti');
+
+const urlFile = id => '/file/' + id;
+
+module.exports = {
+  /** Il prossimo numero dell'anno della data (non di quando arriva): RAP/2026/0001, RAP/2026/0002... */
+  prossimoNumeroRapportino(anno) {
+    const codici = this.db.righe('SELECT id FROM rapportini').map(r => r.id);
+    return this.prossimoNumero('rapportino', codici, anno);
+  },
+
+  /** Per idLocale se c'e', altrimenti per numero: come trovaRiga() di Code.gs. */
+  trovaRiga(id, idLocale) {
+    if (testo(idLocale)) {
+      const perLocale = this.db.riga('SELECT * FROM rapportini WHERE id_locale = ?', testo(idLocale));
+      if (perLocale) return perLocale;
+    }
+    if (testo(id)) return this.db.riga('SELECT * FROM rapportini WHERE id = ?', testo(id));
+    return null;
+  },
+
+  /** Un collaboratore tocca solo i suoi. */
+  controllaSuo(riga, cosa) {
+    if (!this.soloSuoi()) return;
+    const c = this.chi();
+    if (riga.utente_id !== c.utente.id) throw senzaPermesso(cosa || 'toccare i rapportini degli altri');
+  },
+
+  /**
+   * Crea o aggiorna un rapportino.
+   *
+   * Il telefono manda sempre lo stesso idLocale per lo stesso rapportino: alla
+   * prima volta si crea la riga, dalla seconda la si aggiorna. Cosi' un invio
+   * ripetuto perche' la risposta si era persa per strada non scrive una seconda
+   * riga, e riaprire un rapportino per correggerlo e' la stessa operazione.
+   *
+   * Se il cliente o la commessa non esistono ancora (creati sul telefono senza
+   * campo) si creano qui, prima della riga.
+   */
+  salvaRapportino(r) {
+    if (!r.idLocale && !r.id) throw new Rifiuto('Manca l\'identificativo del rapportino');
+    const esistente = this.trovaRiga(r.id, r.idLocale);
+    if (esistente) this.controllaSuo(esistente, 'modificare i rapportini degli altri');
+
+    if (esistente && STATI_BLOCCATI.indexOf(testo(esistente.stato).toUpperCase()) >= 0) {
+      throw new Rifiuto('Il rapportino ' + esistente.id + ' e\' gia\' firmato: riportalo in bozza per modificarlo');
+    }
+
+    const clienti = this.leggiClienti({ archiviati: true });
+    let cliente = this.trovaCliente(clienti, testo(r.idCliente), testo(r.cliente));
+    if (!cliente && !testo(r.cliente)) throw new Rifiuto('Manca il cliente');
+    // Un cliente nuovo "del gruppo Elettrodinamica" (un telefono rimasto alla 0.3.3)
+    // e' Elettrodinamica: si fattura a lei.
+    if (!cliente && normalizza(r.gruppo) === normalizza(ELETTRODINAMICA.nome)) {
+      cliente = this.trovaCliente(clienti, '', ELETTRODINAMICA.nome);
+    }
+
+    // Prima i controlli, poi le creazioni: un rapportino rifiutato non deve
+    // lasciare un cliente o una commessa nati per lui. (In piu', tutto sta in
+    // una transazione: se qualcosa va storto dopo, non resta niente a meta'.)
+    const impostazioni = this.leggiImpostazioni();
+    const commesse = this.leggiCommesse({ archiviati: true, modelli: true });
+    const codiceScelto = testo(r.idCommessa).toUpperCase();
+    let commessa = !codiceScelto ? null : commesse.filter(m =>
+      // Anche col codice di prima dei 26ST: un rapportino rimasto in coda su un telefono.
+      m.id.toUpperCase() === codiceScelto || m.codicePrecedente.toUpperCase() === codiceScelto)[0] || null;
+    this.serveCrearePerRapportino(cliente, commessa, r);
+
+    let regole = regoleDi(cliente, this.leggiGruppi(), impostazioni, commessa);
+
+    // Chi non vede i prezzi (un collaboratore) non decide la tariffa: resta
+    // quella gia' scritta, o si prende quella che il computer proporrebbe.
+    if (!this.vedeCosti() && regole.tariffaFissa === null) {
+      const stessa = esistente && cliente && esistente.id_cliente === cliente.id &&
+        testo(esistente.id_commessa).toUpperCase() === (commessa ? commessa.id.toUpperCase() : '');
+      const t = stessa && numero(esistente.tariffa) > 0 ? numero(esistente.tariffa)
+        : tariffaProposta(cliente, this.tariffeDelCliente(cliente), commessa);
+      r = Object.assign({}, r, { tariffa: t });
+      if (!(numero(t) > 0)) {
+        throw new Rifiuto('Manca la tariffa oraria per ' + (cliente ? cliente.nome : testo(r.cliente)) +
+          ': chiedi al titolare di scriverla nella commessa o nel cliente');
+      }
+    }
+    if (regole.tariffaFissa === null && !(numero(r.tariffa) > 0)) {
+      throw new Rifiuto('Manca la tariffa oraria per ' + (cliente ? cliente.nome : testo(r.cliente)));
+    }
+    const data = r.data ? dataDaIso(r.data) : oggi();
+
+    if (!cliente) cliente = this.creaCliente({ nome: r.cliente });
+
+    // Una commessa nata sul telefono arriva con la descrizione e il codice che il
+    // telefono le ha dato (codiceProposto): si usa quello, se e' ancora libero.
+    if (!commessa && testo(r.commessa)) {
+      commessa = this.creaCommessa({ idCliente: cliente.id, descrizione: r.commessa, id: testo(r.codiceProposto), idProposto: true });
+      regole = regoleDi(cliente, this.leggiGruppi(), impostazioni, commessa);
+    }
+
+    // Le tariffe di un rapportino gia' scritto non cambiano se cambiano le
+    // impostazioni: aggiornare l'ACI a gennaio non deve riscrivere luglio.
+    // Si ricalcola con le regole di oggi solo se sono cambiati il cliente o la commessa.
+    const stessaCommessa = testo(esistente && esistente.id_commessa).toUpperCase() === (commessa ? commessa.id.toUpperCase() : '');
+    if (esistente && testo(esistente.id_cliente) === cliente.id && stessaCommessa && esistente.euro_km !== null) {
+      regole.euroKm = numero(esistente.euro_km);
+      regole.maggExtra = numero(esistente.magg_extra);
+      regole.pagaViaggio = siNoONull(esistente.paga_viaggio) === true;
+      regole.kmRimborsati = siNoONull(esistente.km_rimborsati) !== false;
+      regole.costoOrario = numeroONull(esistente.costo_orario);
+      if (regole.tariffaFissa !== null) regole.tariffaFissa = numero(esistente.tariffa);
+    }
+
+    const conto = calcola(r, regole);
+    const ora = adesso();
+    const c = this.chi();
+    // Un collaboratore scrive solo per se': il suo nome, non quello dello studio.
+    const tecnico = this.soloSuoi() ? c.utente.nome : (testo(r.tecnico) || testo(impostazioni.TECNICO));
+    const valori = {
+      id_locale: testo(r.idLocale) || (esistente ? esistente.id_locale : null) || null,
+      data: data,
+      tecnico: tecnico,
+      id_cliente: cliente.id,
+      cliente: cliente.nome,
+      gruppo: regole.gruppo,
+      id_commessa: commessa ? commessa.id : '',
+      // Nella colonna COMMESSA il codice: e' quello che si cerca.
+      commessa: commessa ? commessa.id : '',
+      ticket: testo(r.ticket),
+      luogo: testo(r.luogo),
+      descrizione: testo(r.descrizione),
+      ore_lavoro: numero(r.oreLavoro),
+      ore_extra: numero(r.oreExtra),
+      ore_viaggio: numero(r.oreViaggio),
+      ore_totali: conto.oreTotali,
+      km: numero(r.km),
+      spese: numero(r.spese),
+      note_spese: testo(r.noteSpese),
+      tariffa: conto.tariffa,
+      paga_viaggio: regole.pagaViaggio ? 1 : 0,
+      km_rimborsati: regole.kmRimborsati ? 1 : 0,
+      euro_km: numero(regole.euroKm),
+      magg_extra: numero(regole.maggExtra),
+      compenso_ore: conto.compensoOre,
+      rimborso_km: conto.rimborsoKm,
+      totale: conto.totale,
+      costo_orario: regole.costoOrario === null || regole.costoOrario === undefined ? null : numero(regole.costoOrario),
+      note_interne: testo(r.noteInterne),
+      modificato: ora,
+    };
+
+    let id;
+    if (esistente) {
+      id = esistente.id;
+      this.aggiorna('rapportini', id, valori);
+    } else {
+      const numeroNuovo = this.prossimoNumeroRapportino(Number(data.slice(0, 4)));
+      id = numeroNuovo.codice;
+      this.inserisci('rapportini', Object.assign({ id, stato: 'BOZZA', creato: ora, utente_id: c.utente ? c.utente.id : null }, valori));
+      this.segnaNumero('rapportino', numeroNuovo.numero);
+    }
+
+    // La tariffa libera si ricorda: al prossimo rapportino per questo cliente
+    // il telefono la propone gia' scritta.
+    if (regole.tariffaFissa === null && conto.tariffa > 0 && cliente.ultimaTariffa !== conto.tariffa) {
+      this.aggiornaCliente(cliente.id, { ultimaTariffa: conto.tariffa });
+    }
+    // Una commessa senza prezzo prende quello del suo primo rapportino, scritto dal
+    // telefono o dal computer: dal secondo in poi si propone quello.
+    if (regole.tariffaFissa === null && conto.tariffa > 0 && commessa && commessa.prezzoOrario === null) {
+      this.aggiornaCommessa(commessa.id, { prezzoOrario: conto.tariffa });
+    }
+
+    return this.rapportinoPerId(id);
+  },
+
+  /** Le tariffe gia' usate per un cliente (per proporle a chi non vede i prezzi). */
+  tariffeDelCliente(cliente) {
+    if (!cliente) return [];
+    return this.db.righe('SELECT id_cliente, tariffa, data FROM rapportini WHERE id_cliente = ? AND tariffa > 0', cliente.id)
+      .map(x => ({ idCliente: x.id_cliente, tariffa: x.tariffa, data: x.data || '' }));
+  },
+
+  rapportinoPerId(id) {
+    const r = this.db.riga('SELECT * FROM rapportini WHERE id = ?', id);
+    return r ? this.rapportinoDaRiga(r) : null;
+  },
+
+  /** Le foto di ogni rapportino (i file "spesa" non cestinati, in ordine di arrivo) e le descrizioni delle commesse. */
+  aiutiRapportini(id) {
+    const foto = {};
+    const righe = id
+      ? this.db.righe("SELECT id, rapportino_id FROM file WHERE tipo = 'spesa' AND cestinato IS NULL AND rapportino_id = ? ORDER BY creato, rowid", id)
+      : this.db.righe("SELECT id, rapportino_id FROM file WHERE tipo = 'spesa' AND cestinato IS NULL AND rapportino_id IS NOT NULL ORDER BY creato, rowid");
+    for (const f of righe) (foto[f.rapportino_id] = foto[f.rapportino_id] || []).push({ id: f.id, url: urlFile(f.id) });
+    const descrizioni = {};
+    for (const m of this.db.righe('SELECT id, descrizione FROM commesse')) descrizioni[m.id.toUpperCase()] = m.descrizione;
+    return { foto, descrizioni };
+  },
+
+  /** La riga come la mandava rapportinoDaRiga() dello script, piu' chi l'ha scritto. */
+  rapportinoDaRiga(r, aiuti) {
+    aiuti = aiuti || this.aiutiRapportini(r.id);
+    const descrizione = testo(r.id_commessa) ? aiuti.descrizioni[testo(r.id_commessa).toUpperCase()] || '' : '';
+    return {
+      id: testo(r.id),
+      idLocale: testo(r.id_locale),
+      data: dataIso(r.data),
+      tecnico: testo(r.tecnico),
+      idCliente: testo(r.id_cliente),
+      cliente: testo(r.cliente),
+      gruppo: testo(r.gruppo),
+      idCommessa: testo(r.id_commessa),
+      // Nella riga c'e' il codice; qui si manda la descrizione.
+      commessa: descrizione || testo(r.commessa),
+      ticket: testo(r.ticket),
+      luogo: testo(r.luogo),
+      descrizione: testo(r.descrizione),
+      oreLavoro: numero(r.ore_lavoro),
+      oreExtra: numero(r.ore_extra),
+      oreViaggio: numero(r.ore_viaggio),
+      oreTotali: numero(r.ore_totali) || numero(r.ore_lavoro) + numero(r.ore_extra) + numero(r.ore_viaggio),
+      km: numero(r.km),
+      spese: numero(r.spese),
+      noteSpese: testo(r.note_spese),
+      foto: aiuti.foto[r.id] || [],
+      tariffa: numero(r.tariffa),
+      pagaViaggio: siNoONull(r.paga_viaggio) === true,
+      kmRimborsati: siNoONull(r.km_rimborsati) !== false,
+      euroKm: numero(r.euro_km),
+      maggExtra: numero(r.magg_extra),
+      compensoOre: numero(r.compenso_ore),
+      rimborsoKm: numero(r.rimborso_km),
+      totale: numero(r.totale),
+      costoOrario: numeroONull(r.costo_orario),
+      noteInterne: testo(r.note_interne),
+      firma: testo(r.firma) ? { id: r.firma, url: urlFile(r.firma) } : null,
+      firmatario: testo(r.firmatario),
+      firmatoIl: dataOraIso(r.firmato_il),
+      stato: testo(r.stato).toUpperCase() || 'BOZZA',
+      inviatoIl: dataOraIso(r.inviato_il),
+      fatturatoIl: dataOraIso(r.fatturato_il),
+      creato: dataOraIso(r.creato),
+      modificato: dataOraIso(r.modificato),
+      // Fase 1
+      idUtente: r.utente_id === null ? null : r.utente_id,
+      statoPrima: testo(r.stato_prima),
+    };
+  },
+
+  /**
+   * I rapportini fra due date (aaaa-mm-gg, comprese), i piu' recenti prima.
+   * Gli annullati non si mandano, a meno di chiederli. Un collaboratore riceve
+   * solo i suoi.
+   */
+  leggiRapportini(da, a, ancheAnnullati, filtro) {
+    const f = filtro || {};
+    const condizioni = [];
+    const parametri = [];
+    if (this.soloSuoi()) {
+      condizioni.push('utente_id = ?');
+      parametri.push(this.chi().utente.id);
+    }
+    if (!ancheAnnullati) condizioni.push("UPPER(stato) <> 'ANNULLATO'");
+    // Come lo script: una riga senza data passa i filtri delle date.
+    if (testo(da)) { condizioni.push("(data IS NULL OR data = '' OR data >= ?)"); parametri.push(testo(da)); }
+    if (testo(a)) { condizioni.push("(data IS NULL OR data = '' OR data <= ?)"); parametri.push(testo(a)); }
+    if (testo(f.idCliente)) { condizioni.push('id_cliente = ?'); parametri.push(testo(f.idCliente)); }
+    if (testo(f.idCommessa)) { condizioni.push('id_commessa = ?'); parametri.push(testo(f.idCommessa)); }
+    const sql = 'SELECT * FROM rapportini' + (condizioni.length ? ' WHERE ' + condizioni.join(' AND ') : '');
+    const aiuti = this.aiutiRapportini();
+    return this.db.righe(sql, ...parametri)
+      .map(r => this.rapportinoDaRiga(r, aiuti))
+      .sort((x, y) => (x.data < y.data ? 1 : x.data > y.data ? -1 : (x.creato < y.creato ? 1 : -1)));
+  },
+
+  /**
+   * Cambia lo stato di uno o piu' rapportini (il riepilogo di luglio si segna
+   * fatturato tutto insieme). Tornare in BOZZA toglie la firma: il cliente ha
+   * firmato quello che c'era, e se il rapportino cambia quella firma non vale
+   * piu'. Annullare ricorda lo stato di prima, per ripristinarlo.
+   */
+  cambiaStato(ids, stato) {
+    const nuovo = testo(stato).toUpperCase();
+    if (STATI.indexOf(nuovo) < 0) throw new Rifiuto('Stato non valido: ' + nuovo);
+    if (nuovo === 'FIRMATO') throw new Rifiuto('Per firmare serve la firma: caricala dal rapportino');
+    if (nuovo === 'FATTURATO' && this.livello('fatturazione') < 2) throw senzaPermesso('segnare i rapportini come fatturati');
+    const ora = adesso();
+    return (ids || []).map(id => {
+      const riga = this.trovaRiga(id, id);
+      if (!riga) throw new Rifiuto('Rapportino ' + id + ' non trovato');
+      this.controllaSuo(riga, 'cambiare lo stato dei rapportini degli altri');
+      const valori = { stato: nuovo, modificato: ora };
+      if (nuovo === 'BOZZA') {
+        valori.firma = '';
+        valori.firmatario = '';
+        valori.firmato_il = '';
+        valori.inviato_il = '';
+        valori.fatturato_il = '';
+      }
+      if (nuovo === 'INVIATO') {
+        valori.inviato_il = ora;
+        valori.fatturato_il = '';
+      }
+      if (nuovo === 'FATTURATO') valori.fatturato_il = ora;
+      const attuale = testo(riga.stato).toUpperCase() || 'BOZZA';
+      if (nuovo === 'ANNULLATO' && attuale !== 'ANNULLATO') valori.stato_prima = attuale;
+      this.aggiorna('rapportini', riga.id, valori);
+      return this.rapportinoPerId(riga.id);
+    });
+  },
+
+  /** Un rapportino annullato torna com'era prima (stato, firma, date: l'annullamento non le aveva toccate). */
+  ripristinaRapportino(id) {
+    const riga = this.trovaRiga(id, id);
+    if (!riga) throw new Rifiuto('Rapportino ' + id + ' non trovato');
+    this.controllaSuo(riga, 'ripristinare i rapportini degli altri');
+    if (testo(riga.stato).toUpperCase() !== 'ANNULLATO') throw new Rifiuto('Il rapportino ' + riga.id + ' non è annullato');
+    const prima = testo(riga.stato_prima).toUpperCase();
+    // Un rapportino che era firmato torna firmato solo se la firma c'e' ancora.
+    const stato = STATI.indexOf(prima) >= 0 && prima !== 'ANNULLATO' && (prima !== 'FIRMATO' || testo(riga.firma)) ? prima : 'BOZZA';
+    this.aggiorna('rapportini', riga.id, { stato, stato_prima: '', modificato: adesso() });
+    return this.rapportinoPerId(riga.id);
+  },
+};

@@ -1,5 +1,11 @@
 # Wisper — aspetto e uso
 
+> **Dalla fase 1 del gestionale (ottobre 2026)** navigazione e pagine nuove sono in
+> [`docs/gestionale/fase1-schermate.md`](gestionale/fase1-schermate.md), che vince su questa guida per §2
+> (navigazione del telefono: menu laterale al posto della barra in basso), §3 (la casa è la Dashboard; Oggi diventa
+> la scheda "Il tuo giorno") e §8 (barra laterale del computer, voci e Fine mese spostato in Fatturazione). Tutto il
+> resto di questa guida vale ancora.
+
 Guida comune all'app Android e al programma per il computer (Wisper Ufficio). La direzione è il **prototipo
 approvato da Andrea il 15/10/2026**: la tela https://claude.ai/artifact/2Kk6nEnfHGpRfEabwjYk7G, copiata in
 `docs/prototipo/` (Main = Oggi, Rapportino, Firma, Mese, Ufficio = fine mese, UfficioRapportini). Chi costruisce

@@ -156,6 +156,11 @@ fun SchermataRapportino(
     }
 
     val bloccato = stato.base.bloccato
+    // Senza il permesso dei soldi (il collaboratore) niente tariffa, totale e conto: ore, km e spese sì.
+    val costi = LocalPermessi.current.costi
+    // Chi vede i rapportini solo in lettura non cambia niente; segnare fatturato è della fatturazione.
+    val scrive = LocalPermessi.current.modifica(eu.stgm.wisper.rapportino.Moduli.RAPPORTINI)
+    val fattura = LocalPermessi.current.modifica(eu.stgm.wisper.rapportino.Moduli.FATTURAZIONE)
     val clienteScelto: Cliente? = ana.cliente(stato.idCliente, if (stato.idCliente.isBlank()) stato.cliente else "")
     val regole = ana.regoleDi(clienteScelto, ana.commessa(stato.idCommessa))
     // La tariffa da proporre: il prezzo della commessa, se ce l'ha; altrimenti l'ultima del cliente.
@@ -200,7 +205,7 @@ fun SchermataRapportino(
     }
 
     fun avanti() {
-        if (!stato.validaPasso(stato.passo, regole)) return
+        if (!stato.validaPasso(stato.passo, regole, costi)) return
         visita?.azione("avanti")
         if (stato.tornaAlRiepilogo) { stato.tornaAlRiepilogo = false; vaiA(4) } else vaiA(stato.passo + 1)
     }
@@ -217,7 +222,7 @@ fun SchermataRapportino(
     fun salva(): Boolean {
         val r = stato.rapportino()
         if (!bloccato) {
-            if (!stato.valida(regole)) {
+            if (!stato.valida(regole, costi)) {
                 val passoConErrore = when {
                     "cliente" in stato.errori -> 1
                     stato.errori.keys.any { it in setOf("oreLavoro", "oreExtra", "oreViaggio", "km", "tariffa") } -> 2
@@ -363,7 +368,7 @@ fun SchermataRapportino(
                     if (stato.passo == 4 && !stato.nuovo) {
                         ParolaStato(stato.base.stato)
                         Spacer(Modifier.width(8.dp))
-                        PulsanteTondo(Icone.altro, "Altre azioni", { menu = true })
+                        if (scrive) PulsanteTondo(Icone.altro, "Altre azioni", { menu = true })
                     } else {
                         Text(if (stato.passo == 4) "Riepilogo" else "Passo ${stato.passo} di 3", style = Testi.secondario.copy(fontWeight = FontWeight.Bold), color = c.tenue)
                     }
@@ -397,7 +402,7 @@ fun SchermataRapportino(
                             1 -> PassoPerChi(stato, dati, viste, ana, regole, onScelto = { visita?.azione(it); vaiA(if (stato.tornaAlRiepilogo) 4 else 2); stato.tornaAlRiepilogo = false })
                             2 -> PassoOre(stato, regole, proposta, ultimiKm, clienteScelto, prezzoCommessa != null)
                             3 -> PassoLavoro(stato, ana.ticketAttivo, vista, onScatta = { scatta() }, onGalleria = { dallaGalleria() }, dati = dati)
-                            else -> PassoRiepilogo(stato, vista, conto, regole, dati, onCambia = { cambiaDa(it) })
+                            else -> PassoRiepilogo(stato, vista, conto, regole, dati, onCambia = { cambiaDa(it) }, solaLettura = !scrive)
                         }
                     }
                 }
@@ -412,16 +417,22 @@ fun SchermataRapportino(
                         Modifier.fillMaxWidth().border(1.dp, c.bordoScheda).padding(start = 20.dp, end = 20.dp, top = 14.dp, bottom = 16.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Column(Modifier.weight(1f).bersaglio("totale")) {
+                        if (costi) Column(Modifier.weight(1f).bersaglio("totale")) {
                             Text("Totale", style = Testi.piccolo.copy(fontWeight = FontWeight.Bold), color = c.tenue)
                             EuroAnimati(conto.totale, Testi.titoloScheda.copy(fontSize = Testi.titoloScheda.fontSize * 1.08f))
-                        }
+                        } else Spacer(Modifier.weight(1f))
                         val pronto = stato.passo != 2 || oreTotali > 0
                         Box(
                             Modifier.width(172.dp).height(60.dp).clip(RoundedCornerShape(18.dp))
                                 .background(if (pronto) c.giallo else c.superficie2).clickable { avanti() }.bersaglio("avanti"),
                             contentAlignment = Alignment.Center,
                         ) { Text("Avanti", style = Testi.pulsante, color = if (pronto) c.suGiallo else c.moltoTenue) }
+                    }
+                    stato.passo == 4 && !scrive -> Column(
+                        Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 16.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        PulsantePrincipale("PDF del rapportino", { pdf(condividi = false) }, icona = Icone.pdf)
                     }
                     stato.passo == 4 && !bloccato -> Column(
                         Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 10.dp),
@@ -445,7 +456,7 @@ fun SchermataRapportino(
                             occupato != null -> PulsantePrincipale(occupato, {}, abilitato = false)
                             stato.base.stato == Stato.FIRMATO ->
                                 PulsantePrincipale("Invia al cliente", { onInvia(stato.base.idLocale) }, icona = Icone.invia)
-                            stato.base.stato == Stato.INVIATO ->
+                            stato.base.stato == Stato.INVIATO && fattura ->
                                 PulsantePrincipale("Segna fatturato", { segna(Stato.FATTURATO, "Rapportino fatturato") }, icona = Icone.spunta)
                             else -> PulsantePrincipale("PDF del rapportino", { pdf(condividi = false) }, icona = Icone.pdf)
                         }
@@ -468,7 +479,7 @@ fun SchermataRapportino(
     if (chiediElimina) {
         FoglioConferma(
             titolo = "Eliminare il rapportino?",
-            testo = "Sul foglio resta, segnato come annullato: si recupera da lì.",
+            testo = "Sul server resta, segnato come annullato: si recupera da lì.",
             azione = "Elimina",
             onConferma = {
                 chiediElimina = false
@@ -798,8 +809,8 @@ private fun ColumnScope.PassoOre(
         if (!regole.kmRimborsati) Text("Questo cliente non rimborsa i km", style = Testi.piccolo, color = c.tenue)
     }
 
-    // La tariffa: fissa per il gruppo, o quella scritta qui (proposta: l'ultima usata).
-    Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+    // La tariffa: fissa per il gruppo, o quella scritta qui (proposta: l'ultima usata). Solo con i soldi.
+    if (LocalPermessi.current.costi) Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text(if (regole.tariffaFissa != null) "Tariffa fissa ${stato.cliente}" else "Tariffa oraria", style = Testi.secondarioGrande.copy(fontWeight = FontWeight.Bold), color = c.testo)
             if (regole.tariffaFissa == null) Text(
@@ -939,15 +950,17 @@ private fun ColumnScope.PassoRiepilogo(
     regole: eu.stgm.wisper.rapportino.Regole,
     dati: Dati,
     onCambia: (Int) -> Unit,
+    /** Chi vede i rapportini solo in lettura: niente "Cambia". */
+    solaLettura: Boolean = false,
 ) {
     val c = W.colori
     val ctx = LocalContext.current
-    val bloccato = stato.base.bloccato
+    val bloccato = stato.base.bloccato || solaLettura
     val r = stato.rapportino()
 
     if (!stato.nuovo) Scheda { Passi(stato.base.stato) }
     vista?.errore?.takeIf { it.isNotBlank() }?.let {
-        Text("Il foglio non l'ha accettato: $it", style = Testi.secondario, color = c.rossoTesto)
+        Text("Il server non l'ha accettato: $it", style = Testi.secondario, color = c.rossoTesto)
     }
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Text(dataLungaIt(stato.data), style = Testi.secondarioGrande, color = c.tenue)
@@ -976,7 +989,7 @@ private fun ColumnScope.PassoRiepilogo(
         }
     }
 
-    Scheda(verticale = 16.dp, spazio = 8.dp) {
+    if (LocalPermessi.current.costi) Scheda(verticale = 16.dp, spazio = 8.dp) {
         val orePagate = r.oreLavoro + r.oreExtra + if (conto.pagaViaggio || regole.pagaViaggio) r.oreViaggio else 0.0
         RigaConto("Ore · ${Numeri.ore(orePagate)} × ${Numeri.scrivi(conto.tariffa)} €", Numeri.euro(conto.compensoOre))
         RigaConto("Km · ${Numeri.scrivi(r.km)} × ${Numeri.scrivi(conto.euroKm)} €", Numeri.euro(conto.rimborsoKm))
@@ -988,7 +1001,7 @@ private fun ColumnScope.PassoRiepilogo(
         }
     }
 
-    if (bloccato) {
+    if (stato.base.bloccato) {
         val quando = stato.base.firmatoIl.takeIf { it.isNotBlank() }?.let {
             runCatching { LocalDateTime.parse(it).format(DateTimeFormatter.ofPattern("dd/MM 'alle' HH:mm")) }.getOrNull()
         }

@@ -128,9 +128,9 @@ object Stampa {
      * Apre il PDF con l'app del telefono che legge i PDF. Falso se non ce n'è una
      * (Android mostra comunque "Nessuna app": chi chiama può suggerire Condividi).
      */
-    fun apri(ctx: Context, pdf: File): Boolean {
+    fun apri(ctx: Context, pdf: File, tipo: String = "application/pdf"): Boolean {
         val vedi = Intent(Intent.ACTION_VIEW)
-            .setDataAndType(indirizzo(ctx, pdf), "application/pdf")
+            .setDataAndType(indirizzo(ctx, pdf), tipo)
             .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         return try {
             avvia(ctx, vedi)
@@ -144,11 +144,12 @@ object Stampa {
     /**
      * Il foglio "Condividi" di Android col PDF allegato. [titolo] è il documento
      * ("Rapportino RAP/2026/0003 del 05/07/2026"): fa da oggetto se si sceglie l'email.
+     * [tipo] per i file che non sono PDF (i CSV per Excel di Amministrazione).
      */
-    fun condividi(ctx: Context, pdf: File, titolo: String) {
+    fun condividi(ctx: Context, pdf: File, titolo: String, tipo: String = "application/pdf") {
         val uri = indirizzo(ctx, pdf)
         val manda = Intent(Intent.ACTION_SEND)
-            .setType("application/pdf")
+            .setType(tipo)
             .putExtra(Intent.EXTRA_STREAM, uri)
             .putExtra(Intent.EXTRA_SUBJECT, titolo)
             .putExtra(Intent.EXTRA_TITLE, titolo)

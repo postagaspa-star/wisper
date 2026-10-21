@@ -1,0 +1,60 @@
+# Wisper sul NAS: /volume1/docker/Wisper-NAS, progetto "wisper".
+#   cp .env.esempio .env   (e mettici i valori veri: mai su GitHub)
+#   docker compose up -d --build
+#   docker compose exec wisper node strumenti/utente.js --titolare "Nome Cognome" email
+#
+# Due contenitori, come Sol e Pactum:
+#  - wisper: il server (porta 8400 in casa, dati in ./dati);
+#  - wisper-tailscale: lo raggiunge da fuori in HTTPS (https://wisper.<tailnet>.ts.net),
+#    senza aprire porte sul router.
+name: wisper
+
+services:
+  wisper:
+    build: .
+    image: wisper-server:0.5.0
+    container_name: wisper
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      TZ: Europe/Rome
+    ports:
+      # In casa sulla porta 8400 per le prove; quando c'e' Tailscale si puo' chiudere
+      # a "127.0.0.1:8400:8400" (come Sol), cosi' le password non girano in chiaro sul Wi-Fi.
+      - "8400:8400"
+    volumes:
+      - ./dati:/data
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
+
+  wisper-tailscale:
+    image: tailscale/tailscale:latest
+    container_name: wisper-tailscale
+    hostname: wisper
+    restart: unless-stopped
+    environment:
+      TS_AUTHKEY: ${TS_AUTHKEY}
+      TS_HOSTNAME: wisper
+      TS_AUTH_ONCE: "true"
+      TS_STATE_DIR: /var/lib/tailscale
+      TS_SERVE_CONFIG: /config/tailscale-serve.json
+      TS_USERSPACE: "true"
+    volumes:
+      - tailscale-stato:/var/lib/tailscale
+      - ./tailscale-serve.json:/config/tailscale-serve.json:ro
+    depends_on:
+      - wisper
+    # Parte solo quando c'e' la chiave di Tailscale nel .env:
+    #   docker compose --profile fuori up -d wisper-tailscale
+    profiles: ["fuori"]
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"
+
+volumes:
+  tailscale-stato:

@@ -26,6 +26,7 @@ class CopiaLocale(cartella: File) {
     private val fileAnagrafiche = File(cartella, "anagrafiche.json")
     private val fileRapportini = File(cartella, "rapportini.json")
     private val fileStorico = File(cartella, "storico.json")
+    private val fileDashboard = File(cartella, "dashboard.json")
 
     /** Le immagini dei PDF (firme, scontrini, la firma del compilatore) gia' scaricate: si chiedono una volta sola. */
     private val cartellaFile = File(cartella, "file-foglio")
@@ -71,6 +72,24 @@ class CopiaLocale(cartella: File) {
     /** Qui un elenco vuoto si scrive: e' la risposta di un foglio senza rapportini, non un errore. */
     fun scriviStorico(lista: List<Rapportino>) {
         scriviAtomico(fileStorico, JSONArray().apply { lista.forEach { put(it.aJson()) } }.toString())
+    }
+
+    /** L'ultima dashboard letta dal server, com'era (JSON), o null. */
+    fun dashboard(): JSONObject? = try {
+        if (!fileDashboard.exists()) null else JSONObject(fileDashboard.readText())
+    } catch (_: Exception) {
+        null
+    }
+
+    fun scriviDashboard(o: JSONObject) = scriviAtomico(fileDashboard, o.toString())
+
+    /**
+     * Via tutto quello che si è letto (quando entra un'altra persona): ognuno vede
+     * solo il suo. La coda dei rapportini da mandare sta altrove e non si tocca.
+     */
+    fun svuota() {
+        listOf(fileAnagrafiche, fileRapportini, fileStorico, fileDashboard).forEach { runCatching { it.delete() } }
+        runCatching { cartellaFile.listFiles()?.forEach { it.delete() } }
     }
 
     /** Un file del foglio gia' scaricato: i byte e il tipo, o null. */

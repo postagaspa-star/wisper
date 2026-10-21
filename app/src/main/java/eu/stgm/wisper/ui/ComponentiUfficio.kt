@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -69,15 +70,23 @@ import kotlinx.coroutines.delay
  * invece di ombre, giallo solo sull'azione principale, una parola per ogni stato.
  */
 
-/** Quanto spazio lasciare in fondo alle pagine che hanno la barra delle sezioni e un pulsante sopra. */
-val SpazioSottoBarra = 170.dp
+/** Quanto spazio lasciare in fondo alle pagine che hanno il pulsante giallo che galleggia in basso. */
+val SpazioSottoBarra = 116.dp
 
 /** Margini di una pagina: 20 ai lati come tutto il telefono. */
 val MarginePagina = PaddingValues(start = 20.dp, end = 20.dp, top = 10.dp)
 
-/** La testata delle pagine interne: indietro (o chiudi, nei compiti) a sinistra, le azioni a destra. */
+/**
+ * La testata delle pagine: nei compiti la × a sinistra e le azioni a destra; nelle
+ * altre pagine indietro col nome della sezione e il cerchio con le iniziali (o Menu,
+ * se la pagina è la prima della sua sezione: vedi [TestataInterna]).
+ */
 @Composable
 fun Testata(onIndietro: () -> Unit, chiudi: Boolean = false, azioni: @Composable RowScope.() -> Unit = {}) {
+    if (!chiudi && LocalGuscio.current != null) {
+        TestataInterna(onIndietro, azioni)
+        return
+    }
     Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
         PulsanteTondo(if (chiudi) Icone.chiudi else Icone.indietro, if (chiudi) "Chiudi" else "Indietro", onIndietro)
         Spacer(Modifier.weight(1f))
@@ -117,6 +126,40 @@ fun <T> Segmenti(opzioni: List<Pair<T, String>>, scelto: T, onScelta: (T) -> Uni
                     nome, style = Testi.secondarioGrande.copy(fontWeight = if (su) FontWeight.ExtraBold else FontWeight.Bold),
                     color = if (su) c.testo else c.testo2, maxLines = 1, overflow = TextOverflow.Ellipsis,
                 )
+            }
+        }
+    }
+}
+
+/**
+ * I segmenti del gestionale (prototipo, .segmenti): riempiono la riga quando ci
+ * stanno, altrimenti ognuno prende il suo posto e la riga scorre di lato
+ * ("Dati | Referenti · 2 | Sedi e impianti · 3 | Commesse · 3").
+ */
+@Composable
+fun <T> SegmentiScorrevoli(opzioni: List<Pair<T, String>>, scelto: T, onScelta: (T) -> Unit, modifier: Modifier = Modifier) {
+    val c = W.colori
+    BoxWithConstraints(modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(c.superficie2)) {
+        val minimo = ((maxWidth - 8.dp - 4.dp * (opzioni.size - 1).coerceAtLeast(0)) / opzioni.size.coerceAtLeast(1))
+        Row(
+            Modifier.horizontalScroll(rememberScrollState()).padding(4.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            opzioni.forEach { (valore, nome) ->
+                val su = valore == scelto
+                Box(
+                    Modifier.widthIn(min = minimo).height(44.dp).clip(RoundedCornerShape(10.dp))
+                        .background(if (su) c.scheda else Color.Transparent)
+                        .clickable { onScelta(valore) }
+                        .semantics { role = Role.Tab; selected = su }
+                        .padding(horizontal = 12.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        nome, style = Testi.secondario.copy(fontWeight = if (su) FontWeight.ExtraBold else FontWeight.Bold),
+                        color = if (su) c.testo else c.testo2, maxLines = 1,
+                    )
+                }
             }
         }
     }
@@ -431,14 +474,18 @@ fun FoglioConferma(titolo: String, testo: String?, azione: String, onConferma: (
     }
 }
 
-/** Il pulsante principale che galleggia sopra la barra delle sezioni, su una sfumatura del fondo. */
+/**
+ * Il pulsante principale che galleggia in fondo alla pagina, su una sfumatura del
+ * fondo. Dalla fase 1 non c'è più la barra in basso: [sopraBarra] resta per le
+ * pagine che non pensano da sole al bordo di Android.
+ */
 @Composable
 fun FondoConPulsante(modifier: Modifier = Modifier, sopraBarra: Boolean = true, contenuto: @Composable ColumnScope.() -> Unit) {
     val c = W.colori
     Column(
         modifier.fillMaxWidth()
             .background(Brush.verticalGradient(0f to c.fondo.copy(alpha = 0f), 0.3f to c.fondo))
-            .padding(start = 20.dp, end = 20.dp, top = 14.dp, bottom = if (sopraBarra) 12.dp else 22.dp)
+            .padding(start = 20.dp, end = 20.dp, top = 14.dp, bottom = 20.dp)
             .let { if (sopraBarra) it else it.navigationBarsPadding() },
         verticalArrangement = Arrangement.spacedBy(8.dp),
         content = contenuto,

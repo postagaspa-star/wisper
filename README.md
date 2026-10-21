@@ -12,6 +12,26 @@ projects (here *commesse*, the word my father uses) and the team's reports.
 Every version, with its date, the reason behind it and screenshots, is in the
 diary: [DIARIO.md](DIARIO.md) (in Italian).
 
+## Becoming the studio's management system
+
+My father wrote the specification of a complete management system for the studio
+(`docs/specifiche-stgm.md`, in Italian: 18 modules, from clients and jobs to quotes,
+invoices, people and a client portal). Wisper is growing into it phase by phase, on the
+`gestionale` branch, without losing anything it does today. The plan and the decisions
+are in `docs/gestionale/`; every phase has its entry in the diary.
+
+Phase 1 (October 2026, not released yet) replaces the Google Sheet with a small server on
+the home NAS (`server/`: Node.js 24 with its built-in SQLite, no npm dependencies, in
+Docker). It speaks the same protocol as the sheet script, so the phone and the office
+program changed little, but now everyone signs in with their own name and password, and
+the server decides what each role may see: a collaborator never receives rates, totals or
+margins. Both apps got a side menu, a Dashboard as the home page ("what needs doing now"),
+clients and suppliers with contacts and sites, jobs split into professional services with
+their value and progress, and an administration area with users, roles, numbering, an
+activity log and backups. The sheet stays: after the switch it receives a nightly copy of
+the data, and its script keeps forwarding old app versions to the server and sending email
+from the studio's Gmail (`apps-script/Ponte.gs`).
+
 ## What changed
 
 The first Wisper, built for NGN Hacks 2026, was voice only: a wake word, a

@@ -107,26 +107,35 @@ public static class Installazione
         k.SetValue("NoRepair", 1, RegistryValueKind.DWord);
         var dimensione = new FileInfo(luoghi.Exe).Length / 1024;
         k.SetValue("EstimatedSize", (int)Math.Min(int.MaxValue, dimensione), RegistryValueKind.DWord);
-        AssociaFileCollegamento(luoghi.Exe);
+        TogliAssociazioneVecchia();
     }
 
     private const string TipoCollegamento = "WisperUfficio.Collegamento";
+    private const string EstensioneVecchia = ".wisper";
 
     /// <summary>
-    /// I file .wisper (il collegamento che arriva per email) si aprono con Wisper Ufficio:
-    /// col doppio clic il programma si collega da solo al foglio. Solo per questo utente.
+    /// Fino alla 0.4 i file .wisper (il collegamento al foglio che arrivava per email) si
+    /// aprivano con Wisper Ufficio. Dalla 0.5 si entra con email e password: l'associazione
+    /// si toglie, ma solo se è ancora la nostra (non si tocca quella di un altro programma).
     /// </summary>
-    private static void AssociaFileCollegamento(string exe)
+    private static void TogliAssociazioneVecchia()
     {
-        using (var est = Registry.CurrentUser.CreateSubKey(@"Software\Classes\" + Collegamento.Estensione))
-            est.SetValue("", TipoCollegamento);
-        using (var tipo = Registry.CurrentUser.CreateSubKey(@"Software\Classes\" + TipoCollegamento))
+        try
         {
-            tipo.SetValue("", "Collegamento a Wisper Ufficio");
-            using (var icona = tipo.CreateSubKey("DefaultIcon")) icona.SetValue("", $"\"{exe}\",0");
-            using (var cmd = tipo.CreateSubKey(@"shell\open\command")) cmd.SetValue("", $"\"{exe}\" \"%1\"");
+            using (var est = Registry.CurrentUser.OpenSubKey(@"Software\Classes\" + EstensioneVecchia))
+            {
+                if (est == null) return;
+                if (est.GetValue("") as string != TipoCollegamento) return;
+            }
+            Registry.CurrentUser.DeleteSubKeyTree(@"Software\Classes\" + TipoCollegamento, throwOnMissingSubKey: false);
+            Registry.CurrentUser.DeleteSubKeyTree(@"Software\Classes\" + EstensioneVecchia, throwOnMissingSubKey: false);
+            SHChangeNotify(0x08000000, 0, IntPtr.Zero, IntPtr.Zero); // SHCNE_ASSOCCHANGED: Esplora risorse se ne accorge subito
+            Log.Info("tolta l'associazione dei file .wisper (non servono più)");
         }
-        SHChangeNotify(0x08000000, 0, IntPtr.Zero, IntPtr.Zero); // SHCNE_ASSOCCHANGED: Esplora risorse se ne accorge subito
+        catch (Exception e) when (e is UnauthorizedAccessException or System.Security.SecurityException or IOException)
+        {
+            Log.Errore("associazione .wisper non tolta", e);
+        }
     }
 
     [System.Runtime.InteropServices.DllImport("shell32.dll")]
@@ -134,7 +143,7 @@ public static class Installazione
 
     /// <summary>
     /// Da Impostazioni › App installate: via le icone, la voce e il programma. I dati
-    /// (collegamento al foglio, copie delle foto) e i PDF in Documenti\Wisper restano.
+    /// (indirizzo del server, copie delle foto) e i PDF in Documenti\Wisper restano.
     /// </summary>
     public static void Disinstalla(Luoghi luoghi)
     {
@@ -146,7 +155,7 @@ public static class Installazione
         {
             Registry.CurrentUser.DeleteSubKeyTree(ChiaveDisinstalla, throwOnMissingSubKey: false);
             Registry.CurrentUser.DeleteSubKeyTree(@"Software\Classes\" + TipoCollegamento, throwOnMissingSubKey: false);
-            Registry.CurrentUser.DeleteSubKeyTree(@"Software\Classes\" + Collegamento.Estensione, throwOnMissingSubKey: false);
+            Registry.CurrentUser.DeleteSubKeyTree(@"Software\Classes\" + EstensioneVecchia, throwOnMissingSubKey: false);
         }
         // L'exe in uso non si può cancellare: lo fa PowerShell appena questo programma si è chiuso
         // (dopo che si è letto il messaggio "è stato tolto").
