@@ -569,3 +569,384 @@ continuare il numero), `sessioni.id`, la tabella `copie`, la tabella `gruppi` (s
 fare gli stessi conti di `regoleDi`). Le foto di un rapportino non hanno una colonna: sono i suoi file `spesa` non
 cestinati; la colonna `firma` ha l'id del file della firma. Le impostazioni tengono il valore in JSON (un numero resta
 numero, una partita IVA resta testo). Il registro non si modifica né si cancella (lo impediscono due trigger).
+
+## 13. Fase 2: le risposte, campo per campo
+
+Preventivi, listino, attività e calendario (accordo in [`fase2.md`](fase2.md)). Valgono le regole comuni della §12.1:
+`ok`, `permesso:false`, date `"2026-10-21"`, istanti `"2026-10-21T14:30:00"` (ora italiana, senza fuso), e **senza
+`costi` i campi dei soldi non ci sono** (né valori né chiavi). Campi dei soldi nuovi: `prezzo`, `importo`,
+`subtotale`, `sommaVoci`, `scontoPercentuale`, `scontoEuro`, `scontoDaPercentuale`, `imponibile`, `contributo`,
+`baseIva`, `iva`, `restoScadenze`, `conti` (tutto l'oggetto), `preventiviInAttesa`, più quelli di prima (`totale`,
+`valore`, `importoContratto`...). Nel registro le colonne `prezzo`, `importo`, `sconto_percentuale`, `sconto_euro`,
+`valore`.
+
+Gli esempi sono le risposte vere del server di prova (`node server/src/avvio.js --prova ...`, 22/10/2026), accorciate
+dove un elenco si ripete; i dati di esempio hanno le date contate da oggi, quindi giorni e numeri cambiano col
+giorno in cui lo si accende. Le azioni che scrivono vogliono una POST (§12.1).
+
+### 13.1 Impostazioni e numerazione nuove
+
+`anagrafiche.impostazioni` ha in più: `POLIZZA_COMPAGNIA`, `POLIZZA_NUMERO`, `POLIZZA_MASSIMALE` (testi),
+`TITOLI` (testo), `IVA` (22), `EPPI_INTEGRATIVO` (5), `RITENUTA` (20, si usa dalla fase 4),
+`PREVENTIVO_VALIDITA_GIORNI` (30), `PREVENTIVO_CONDIZIONI` (testo). Si salvano con `salvaImpostazioni` come le altre.
+`numerazioni` ha in più `{"tipo": "preventivo", "formato": "PR/{AAAA}/{NNN}", "annuale": true, "ultimo": 13,
+"prossimo": "PR/2026/014"}` (riparte ogni anno, per l'anno della data del preventivo).
+
+### 13.2 Listino
+
+`listino {tutte?: true}` (preventivi 1; `tutte` = anche quelle archiviate):
+```json
+{"ok": true, "listino": [
+  {"id": 1, "codice": "SOP", "nome": "Sopralluogo e rilievo", "descrizione": "", "modo": "corpo", "unita": "",
+   "prezzo": 350, "attivo": true, "ordine": 1},
+  {"id": 8, "codice": "CON", "nome": "Ore di consulenza", "descrizione": "", "modo": "ore", "unita": "ore",
+   "prezzo": null, "attivo": true, "ordine": 8}]}
+```
+`modo`: `corpo` | `ore` | `quantita`. `prezzo: null` = senza prezzo (si mostra in giallo scuro). Si parte con le 8
+prestazioni tipiche senza prezzo.
+`salvaVoceListino {voce: {id?, codice, nome, descrizione, modo, unita, prezzo, ordine?}}` (preventivi 2; `prezzo`
+lo scrive solo chi ha `costi`) → `{"ok": true, "voce": {...}}`. Errori: `"Nome: scrivi il nome della prestazione"`,
+`"Modo: corpo, ore o quantita"`, `"Prezzo: non può essere negativo"`.
+`archiviaVoceListino {id, archiviata?}` (di base archivia; `archiviata: false` la rimette) → `{"ok": true, "voce": {...}}`.
+
+### 13.3 Preventivi: l'elenco
+
+`preventivi {stato?, cliente?, testo?, anno?, sostituiti?, modelli?}` (preventivi 1). `stato`: `BOZZA` | `INVIATO`
+(solo quelli non scaduti) | `SCADUTO` | `ACCETTATO` | `RIFIUTATO` | `SOSTITUITO` | `MODELLO`; senza `stato` tutti
+tranne le revisioni vecchie (`sostituiti: true` per averle) e i modelli (`modelli: true` per averli insieme agli
+altri). `cliente` = id del cliente, `testo` cerca in numero, oggetto e nome del cliente, `anno` = anno della data.
+I più recenti prima.
+```json
+{"ok": true, "oggi": "2026-10-22", "preventivi": [
+  {"id": 4, "numero": "PR/2026/012", "revisione": 1, "etichetta": "PR/2026/012 rev. 1", "idCliente": "C002",
+   "cliente": "Rossi Impianti Srl", "oggetto": "Adeguamento impianto elettrico capannone", "data": "2026-10-15",
+   "scadenza": "2026-10-28", "stato": "INVIATO", "statoVisto": "INVIATO", "scaduto": false, "giorniAllaScadenza": 6,
+   "inviatoIl": "2026-10-15T10:00:00", "accettatoIl": "", "idCommessa": "", "modello": false, "senzaPrezzo": 0,
+   "imponibile": 3350, "totale": 4291.35, "modificato": "2026-10-15T10:00:00"},
+  {"id": 1, "numero": "PR/2026/007", "revisione": 0, "etichetta": "PR/2026/007", "statoVisto": "SCADUTO", "stato": "INVIATO",
+   "scaduto": true, "giorniAllaScadenza": -16, "...": "..."}]}
+```
+- `id` è il numero interno (si usa in tutte le azioni); `numero` + `revisione` sono quelli da mostrare;
+  `etichetta` è già pronta (`"PR/2026/012"` per la revisione 0, `"Modello"` per un modello).
+- `stato` è quello salvato: `BOZZA` | `INVIATO` | `ACCETTATO` | `RIFIUTATO` | `SOSTITUITO`. **`statoVisto`** è quello
+  da mostrare: uguale, ma `SCADUTO` per un INVIATO con la scadenza passata (`scaduto: true`). Colori: Bozza grigia,
+  Inviato blu, Accettato verde, Scaduto ambra, Rifiutato rosso tenue, Sostituito grigio.
+- `giorniAllaScadenza`: giorni da oggi alla scadenza (negativo se passata), `null` senza scadenza.
+- `senzaPrezzo`: quante voci non hanno prezzo (anche senza `costi`).
+
+### 13.4 Preventivi: la pagina
+
+`preventivo {id}` (preventivi 1; `id` interno, oppure il numero `"PR/2026/012"` = l'ultima revisione):
+```json
+{"ok": true, "preventivo": {
+  "id": 4, "numero": "PR/2026/012", "revisione": 1, "etichetta": "PR/2026/012 rev. 1", "idCliente": "C002",
+  "cliente": "Rossi Impianti Srl", "oggetto": "Adeguamento impianto elettrico capannone", "data": "2026-10-15",
+  "scadenza": "2026-10-28", "stato": "INVIATO", "statoVisto": "INVIATO", "scaduto": false, "giorniAllaScadenza": 6,
+  "inviatoIl": "2026-10-15T10:00:00", "accettatoIl": "", "idCommessa": "", "modello": false, "senzaPrezzo": 0,
+  "imponibile": 3350, "totale": 4291.35, "modificato": "2026-10-15T10:00:00",
+  "idSede": 3, "idReferente": 3,
+  "introduzione": "Come concordato al sopralluogo, ecco la proposta per l'adeguamento dell'impianto elettrico del capannone.",
+  "complessita": "media", "complessitaNota": "",
+  "oneriPrevisti": "Pratiche presso il distributore di energia e il Comune, a carico del cliente",
+  "condizioni": "Il compenso è quello delle voci, a corpo o a ore come scritto. Sono escluse le spese non elencate. I pagamenti seguono le scadenze indicate. Il preventivo vale fino alla data di scadenza.",
+  "scontoPercentuale": 0, "scontoEuro": 0, "eppiPercentuale": 5, "ivaPercentuale": 22,
+  "accettatoDa": "", "accettazioneModo": "", "firma": null, "rifiutatoIl": "", "motivoRifiuto": "",
+  "noteInterne": "", "idUtente": 1, "creato": "2026-10-15T09:12:00", "modificabile": false,
+  "sezioni": [
+    {"id": 7, "titolo": "Progettazione", "ordine": 1, "voci": ["..."], "subtotale": 2250},
+    {"id": 8, "titolo": "Cantiere", "ordine": 2, "voci": [
+      {"id": 13, "idSezione": 8, "idListino": 4, "descrizione": "Direzione lavori", "modo": "ore", "quantita": 16,
+       "unita": "ore", "prezzo": 45, "scontoPercentuale": 0, "facoltativa": false, "alternativa": "", "scelta": false,
+       "ordine": 1, "importo": 720, "conta": true},
+      {"id": 14, "idSezione": 8, "idListino": 5, "descrizione": "Dichiarazione di rispondenza", "modo": "corpo",
+       "quantita": 1, "unita": "", "prezzo": 450, "scontoPercentuale": 0, "facoltativa": true, "alternativa": "",
+       "scelta": false, "ordine": 2, "importo": 450, "conta": false},
+      {"id": 15, "idSezione": 8, "idListino": 7, "descrizione": "Collaudo con strumenti propri", "modo": "corpo",
+       "quantita": 1, "unita": "", "prezzo": 380, "scontoPercentuale": 0, "facoltativa": false,
+       "alternativa": "collaudo", "scelta": true, "ordine": 3, "importo": 380, "conta": true},
+      {"id": 16, "idSezione": 8, "idListino": null, "descrizione": "Collaudo con laboratorio esterno", "modo": "corpo",
+       "quantita": 1, "unita": "", "prezzo": 620, "scontoPercentuale": 0, "facoltativa": false,
+       "alternativa": "collaudo", "scelta": false, "ordine": 4, "importo": 620, "conta": false}],
+     "subtotale": 1100}],
+  "scadenzePagamento": [
+    {"id": 7, "descrizione": "30% alla firma", "tipo": "percentuale", "valore": 30, "quando": "firma", "data": "",
+     "importo": 1005, "stato": "prevista", "ordine": 1, "idCommessa": ""},
+    {"id": 8, "descrizione": "40% a fine progetto", "tipo": "percentuale", "valore": 40, "quando": "avanzamento",
+     "data": "", "importo": 1340, "stato": "prevista", "ordine": 2, "idCommessa": ""},
+    {"id": 9, "descrizione": "Saldo a fine lavori", "tipo": "percentuale", "valore": 30, "quando": "fine", "data": "",
+     "importo": 1005, "stato": "prevista", "ordine": 3, "idCommessa": ""}],
+  "conti": {"sommaVoci": 3350, "scontoDaPercentuale": 0, "scontoEuro": 0, "imponibile": 3350, "eppiPercentuale": 5,
+    "contributo": 167.5, "baseIva": 3517.5, "ivaPercentuale": 22, "iva": 773.85, "totale": 4291.35, "oreVoci": 16,
+    "senzaPrezzo": 0, "restoScadenze": 0},
+  "revisioni": [
+    {"id": 3, "revisione": 0, "etichetta": "PR/2026/012", "stato": "SOSTITUITO", "data": "2026-10-12", "totale": 3689.28},
+    {"id": 4, "revisione": 1, "etichetta": "PR/2026/012 rev. 1", "stato": "INVIATO", "data": "2026-10-15", "totale": 4291.35}],
+  "mancano": []}}
+```
+Una bozza con qualcosa da sistemare (PR/2026/013 dei dati di esempio):
+`"mancano": [{"campo": "prezzi", "testo": "1 voce è senza prezzo: la legge vuole il compenso di ogni prestazione"},
+{"campo": "complessita", "testo": "Il grado di complessità dell'incarico: bassa, media o alta"}, {"campo": "oneri",
+"testo": "Gli oneri ipotizzabili, dall'incarico alla fine dei lavori"}]`; per la polizza e i titoli le frasi sono
+`"Gli estremi della polizza professionale: scrivili in Amministrazione › Dati dello studio"` e `"Titoli e
+specializzazioni: scrivili in Amministrazione › Dati dello studio"`.
+- `importo` di una voce = quantità × prezzo × (1 − sconto voce), al centesimo; `conta` = entra nei conti (le voci
+  normali sempre; le facoltative se `scelta`; di un gruppo di `alternativa` uguale solo quella `scelta`).
+  `subtotale` di una sezione = le sue voci che contano.
+- `modificabile`: `true` solo in BOZZA (e per i modelli); negli altri stati le voci non si cambiano.
+- `importo` di una scadenza: `percentuale` = imponibile × valore / 100; `importo` = valore. Sempre la parte
+  **imponibile** (senza contributo e IVA). `restoScadenze` = imponibile − somma delle scadenze (0 = coprono tutto).
+- `revisioni`: tutte le revisioni dello stesso numero, dalla prima (c'è anche questa).
+- `mancano`: ciò che la legge chiede e manca, `campo` tra `cliente`, `oggetto`, `voci`, `prezzi`, `complessita`,
+  `oneri`, `polizza`, `titoli`; vuoto = a posto. Le frasi sono pronte da mostrare.
+- `firma`: `{"id": "...", "url": "/file/..."}` (la firma o il documento d'accettazione) o `null`.
+
+**I conti** sono quelli di `server/src/conti.js` → `contiPreventivo(preventivo)`, con i casi in
+`server/prove/casi-preventivo.json` (telefono e computer li rifanno per l'anteprima e passano gli stessi casi):
+`sommaVoci` = somma degli importi delle voci che contano; `scontoDaPercentuale` = sommaVoci × sconto% / 100;
+`imponibile` = sommaVoci − scontoDaPercentuale − scontoEuro; `contributo` = imponibile × EPPI / 100; `baseIva` =
+imponibile + contributo; `iva` = baseIva × IVA / 100; `totale` = baseIva + iva. **Ogni pezzo arrotondato al
+centesimo prima di sommare**, con `centesimi(n) = Math.round(n * 100) / 100` (lo stesso di Conti.kt).
+
+### 13.5 Preventivi: le azioni
+
+Tutte (preventivi 2) rispondono `{"ok": true, "preventivo": {...come in preventivo}}` se non è scritto altro.
+
+`salvaPreventivo {preventivo: {id?, idCliente, idSede?, idReferente?, oggetto, introduzione?, complessita?,
+complessitaNota?, oneriPrevisti?, condizioni?, data?, scadenza?, scontoPercentuale?, scontoEuro?, noteInterne?,
+modello?, sezioni?: [{id?, titolo, voci: [{id?, idListino?, descrizione, modo, quantita, unita?, prezzo?,
+scontoPercentuale?, facoltativa?, alternativa?, scelta?}]}], scadenzePagamento?: [{id?, descrizione?, tipo, valore,
+quando, data?}]}}`:
+- senza `id` crea una BOZZA col numero nuovo (`PR/aaaa/nnn`), data di oggi, scadenza = data +
+  `PREVENTIVO_VALIDITA_GIORNI`, condizioni = `PREVENTIVO_CONDIZIONI`, e **EPPI e IVA congelati** dalle impostazioni
+  di adesso. `modello: true` crea un modello (senza numero, senza cliente obbligatorio);
+- con `id` cambia solo i campi mandati; **`sezioni` e `scadenzePagamento`, se ci sono, sono l'elenco intero** (nell'ordine
+  in cui arrivano: quelle senza `id` si creano, quelle che mancano si tolgono). Solo in BOZZA;
+- una voce col `idListino` e senza `prezzo` prende il prezzo del listino; di un gruppo di alternative ne resta scelta
+  una sola (la prima scelta, o la prima del gruppo se nessuna lo è);
+- prezzi e sconti li scrive solo chi ha `costi` (chi non li vede, salvando, lascia quelli che c'erano).
+Errori: `"Cliente: scegli il cliente"`, `"Oggetto: scrivi di cosa si tratta"`, `"Voce: scrivi la descrizione"`,
+`"Modo: corpo, ore o quantita"`, `"Quantità: non può essere negativa"`, `"Sconto: da 0 a 100"`, `"Sconto: è più
+grande del totale delle voci"`, `"Scadenza: deve venire dopo la data del preventivo"`, `"Complessità: bassa, media o
+alta"`, e negli altri stati `"Il preventivo PR/2026/012 è già stato inviato: per cambiarlo fai una nuova revisione"`
+(o `"...è già accettato"`, `"...è stato rifiutato: per riproporlo usa Riapri"`, `"...è stato sostituito da una
+revisione più nuova"`).
+
+`duplicaPreventivo {id, comeModello?, idCliente?}` → una BOZZA nuova (numero nuovo, data di oggi, EPPI e IVA di
+adesso) con le stesse sezioni, voci e scadenze; `comeModello: true` fa un modello. Da un modello nasce il preventivo
+vero ("Da un modello"): con `idCliente` per il cliente.
+
+`nuovaRevisione {id}` (da INVIATO, anche scaduto, o RIFIUTATO) → la revisione nuova in BOZZA: stesso numero,
+`revisione` + 1, stessi contenuti e stessi EPPI e IVA, data di oggi e scadenza nuova; la vecchia diventa SOSTITUITO e
+resta da consultare. Errori: `"È ancora in bozza: cambiala direttamente"`, `"È già accettato: non si fanno revisioni"`.
+
+`inviaPreventivo {id, a, cc?, oggetto?, messaggio?, allegati: [{nome, mime, base64}], aMe?, conferma?}` (asincrona,
+solo POST): come `inviaEmail` (il PDF lo fa l'app e lo manda in `allegati`), poi segna INVIATO (`inviatoIl`). Da BOZZA
+o INVIATO (rimandarlo non cambia `inviatoIl`). Con `aMe: true` va solo a chi scrive e non cambia niente.
+`segnaInviato {id, conferma?}`: segna INVIATO senza email.
+Se `mancano` non è vuoto la risposta è (vera, sul PR/2026/013) `{"ok": false, "errore": "Prima di inviarlo manca: i
+prezzi, il grado di complessità, gli oneri ipotizzabili", "mancano": [...come in preventivo...], "serveConferma":
+true}` e non parte niente: con `conferma: true` si invia lo stesso. (Il controllo vale per una BOZZA; rimandare un
+INVIATO non lo rifà.)
+Altri errori: `"Manca l'indirizzo del cliente"`, `"È un modello: prima fai un preventivo da questo modello"`, `"La
+scadenza è già passata: cambiala prima di inviarlo"`, `"Le email non sono collegate..."` (come `inviaEmail`, con
+`rete: true` se il postino non risponde).
+
+`accettaPreventivo {id, modo, nome, scelte?: {"8": true, "9": false, "10": true}, firma?: {base64, mime, idFile}}`
+(da INVIATO, anche scaduto): `modo` = `firma` | `email` | `documento` | `voce`; `nome` = chi ha accettato; `scelte` =
+per ogni voce facoltativa o alternativa (id della voce) se il cliente la vuole; `firma` = l'immagine della firma (modo
+`firma`, obbligatoria) o il documento firmato (modo `documento`, facoltativo), salvato come file di tipo
+`preventivo`. Diventa ACCETTATO con `accettatoIl`, `accettatoDa`, `accettazioneModo`, `firma`; i conti e le scadenze
+si rifanno con le scelte (sul PR/2026/012 con la DiRi e il collaudo esterno: `"conti": {"sommaVoci": 4040,
+"imponibile": 4040, "contributo": 202, "baseIva": 4242, "iva": 933.24, "totale": 5175.24, ...}`, scadenze 1212, 1616,
+1212). Un gruppo di alternative può restare senza scelta (il cliente non ne vuole nessuna); due scelte no. Ripetuta
+uguale (stesso `nome` e `modo`: la coda del telefono) risponde ok senza rifare niente. Errori: `"Nome:
+scrivi chi ha accettato"`, `"Come ha accettato? firma, email, documento o voce"`, `"Per la firma serve il tratto del
+cliente"`, `"Di «collaudo» se ne sceglie una sola"`, `"Il preventivo PR/2026/013 non è ancora stato inviato"`.
+
+`rifiutaPreventivo {id, motivo?}` (da INVIATO) → RIFIUTATO con `rifiutatoIl` e `motivoRifiuto`.
+`riapriPreventivo {id}` (da RIFIUTATO) → come `nuovaRevisione`: torna la revisione nuova in BOZZA.
+
+`creaCommessaDaPreventivo {id}` (commesse 2, e preventivi 1), da ACCETTATO, **una volta sola**:
+```json
+{"ok": true,
+ "commessa": {"id": "26ST003", "idCliente": "C002", "descrizione": "Adeguamento impianto elettrico capannone",
+   "stato": "APERTA", "indirizzo": "Via delle Prove 5, Thiene", "budgetOre": 16, "budgetEuro": null, "prezzoOrario": 45,
+   "costoOrario": null, "euroKm": null, "inizio": "2026-10-22", "finePrevista": "", "cartella": "", "codicePrecedente": "",
+   "note": "Dal preventivo PR/2026/012 rev. 1", "sedeId": 3, "responsabileId": 1, "importoContratto": 4040,
+   "persone": [], "archiviata": false, "modello": false, "creato": "2026-10-22T00:21:37", "modificato": "2026-10-22T00:21:37"},
+ "prestazioni": [
+   {"id": 7, "idCommessa": "26ST003", "nome": "Sopralluogo e rilievo", "descrizione": "Progettazione", "valore": 350,
+    "avanzamento": 0, "stato": "da_fare", "ordine": 1},
+   {"id": 11, "idCommessa": "26ST003", "nome": "Collaudo con laboratorio esterno", "descrizione": "Cantiere",
+    "valore": 620, "avanzamento": 0, "stato": "da_fare", "ordine": 5}],
+ "preventivo": {"id": 4, "idCommessa": "26ST003", "scadenzePagamento": [{"id": 7, "importo": 1212, "idCommessa": "26ST003", "...": "..."}], "...": "..."}}
+```
+(`commessa` ha tutti i campi di una commessa di `anagrafiche`.) Codice nuovo 26ST…, cliente, sede (e l'indirizzo
+della sede), descrizione = oggetto, note = "Dal preventivo …", importo del contratto = imponibile, responsabile = chi
+la crea, nessuna persona; prestazioni = le voci che contano (nome =
+descrizione della voce, descrizione = titolo della sezione, valore = importo della voce, con gli sconti sul totale
+divisi in proporzione così che la somma sia l'importo del contratto); ore previste = somma delle voci a ore; prezzo
+orario = quello delle voci a ore se è uno solo (dopo lo sconto della voce), altrimenti vuoto; le scadenze di pagamento
+passano alla commessa (`idCommessa`). Errori: `"Il preventivo PR/2026/010 è già diventato la commessa 26ST002"`,
+`"Il preventivo PR/2026/012 non è accettato"`.
+
+### 13.6 Attività: l'elenco
+
+`attivita {da?, a?, assegnata?, mie?, nonAssegnate?, commessa?, cliente?, stato?}` (attivita 1):
+- senza `da`/`a`: le attività aperte (da fare e in corso) di ogni giorno, comprese le scadute e quelle senza data:
+  è la vista **Oggi · Prossimi giorni · Senza data**;
+- con `da` e/o `a` (giorni): quelle del periodo in qualunque stato tranne annullate (il calendario); niente senza data;
+- `stato`: `aperte` (di base senza date) | `da_fare` | `in_corso` | `fatta` | `annullata` | `tutte`;
+- `assegnata` = id utente; `mie: true` = assegnate a me; `nonAssegnate: true` = senza nessuno;
+- un **collaboratore** riceve solo le sue (assegnate a lui o create da lui), le non assegnate e quelle delle commesse
+  dove è responsabile o tra le persone.
+```json
+{"ok": true, "oggi": "2026-10-22", "attivita": [
+  {"id": 3, "titolo": "Sopralluogo quadri del magazzino Batokyo", "descrizione": "", "tipo": "sopralluogo",
+   "idCliente": "C001", "cliente": "Elettrodinamica", "idCommessa": "26ST001", "commessa": "Nuovo magazzino automatico Batokyo",
+   "idPrestazione": null, "assegnataA": 3, "assegnata": "Marco Collaboratore", "creataDa": 1, "priorita": "normale",
+   "stato": "da_fare", "scadenza": "", "inizio": "2026-10-22T14:30:00", "fine": "2026-10-22T16:00:00",
+   "tuttoIlGiorno": false, "luogo": "Zona industriale, Schio", "promemoriaMinuti": 60, "idRicorrenza": null,
+   "occorrenza": "", "ricorrenza": null, "fattaIl": "", "giorno": "2026-10-22", "gruppo": "oggi", "checklist": [],
+   "allegati": [], "puoScrivere": true, "creato": "2026-10-22T00:20:37", "modificato": "2026-10-22T00:20:37"},
+  {"id": 5, "titolo": "Rinnovo polizza professionale", "descrizione": "", "tipo": "attivita", "idCliente": "",
+   "cliente": "", "idCommessa": "", "commessa": "", "idPrestazione": null, "assegnataA": 1,
+   "assegnata": "Manuel Gasparotto", "creataDa": 1, "priorita": "normale", "stato": "da_fare",
+   "scadenza": "2026-10-28", "inizio": "", "fine": "", "tuttoIlGiorno": false, "luogo": "", "promemoriaMinuti": 1440,
+   "idRicorrenza": 1, "occorrenza": "2026-10-28",
+   "ricorrenza": {"regola": "anni", "ogni": 1, "giorniSettimana": [], "inizio": "2026-10-28", "fine": ""},
+   "fattaIl": "", "giorno": "2026-10-28", "gruppo": "prossimi", "checklist": [], "allegati": [],
+   "puoScrivere": true, "creato": "2026-10-22T00:20:37", "modificato": "2026-10-22T00:20:37"}]}
+```
+Una voce della checklist: `{"id": 1, "testo": "Controllare le sezioni dei cavi", "fatta": true, "ordine": 1}`; un
+allegato: `{"id": "D04yLN6e265kAflzujHc6Pa8OL2Q", "nome": "foto.png", "mime": "image/png", "url":
+"/file/D04yLN6e265kAflzujHc6Pa8OL2Q"}`. L'ordine dell'elenco: per giorno (le senza data in fondo), poi ora, poi
+priorità.
+- `tipo`: `attivita` | `appuntamento` | `sopralluogo`; `priorita`: `alta` | `normale` | `bassa`; `stato`: `da_fare` |
+  `in_corso` | `fatta` | `annullata`.
+- Quando: `scadenza` (un giorno) **oppure** `inizio` e `fine` (istanti; con `tuttoIlGiorno: true` conta solo il
+  giorno). `giorno` = il giorno dell'attività (quello di `inizio`, se no la `scadenza`; `""` senza data).
+- `gruppo`: `scadute` (aperta e `giorno` passato) | `oggi` | `prossimi` | `senzaData` | `fatte` | `annullate`.
+- `ricorrenza`: `null` se non si ripete. `regola`: `giorni` | `settimane` | `mesi` | `anni`; `ogni` = ogni quanti;
+  `giorniSettimana` = per le settimane, 1 lunedì … 7 domenica (vuoto = lo stesso giorno della prima); `fine` = ultimo
+  giorno (vuoto = per sempre). Le occorrenze ci sono già per i prossimi 90 giorni (ogni notte si allungano): ognuna è
+  un'attività vera, con `occorrenza` = il suo giorno nella serie.
+- `promemoriaMinuti`: quanti minuti prima avvisare (`null` = niente). Gli avvisi li fanno le app (il server li
+  tiene e basta); per le attività con la sola scadenza il riferimento sono le 9:00 di quel giorno.
+- `puoScrivere`: se chi chiede può cambiarla (un collaboratore solo le sue).
+
+### 13.7 Attività: le azioni
+
+Tutte (attivita 2) rispondono `{"ok": true, "attivita": {...come sopra}}` se non è scritto altro. Un collaboratore
+cambia solo le sue (assegnate a lui o create da lui) e assegna solo a sé o a nessuno (`permesso:false`).
+
+`salvaAttivita {attivita: {id?, titolo, descrizione?, tipo?, idCliente?, idCommessa?, idPrestazione?, assegnataA?,
+priorita?, stato?, scadenza?, inizio?, fine?, tuttoIlGiorno?, luogo?, promemoriaMinuti?, checklist?: [{id?, testo,
+fatta?}], ricorrenza?: {regola, ogni?, giorniSettimana?, fine?} | null}, perRicorrenza?, conferma?}`:
+- senza `id` crea (di base `tipo` attivita, `priorita` normale, `stato` da_fare, `assegnataA` vuoto = non assegnata);
+  con `id` cambia solo i campi mandati. `checklist`, se c'è, è l'elenco intero. Con la commessa e senza cliente, il
+  cliente è quello della commessa. Un appuntamento senza `fine` dura un'ora;
+- con `ricorrenza` nasce la serie: questa è la prima occorrenza (serve una data) e la risposta ha in più
+  `"occorrenze"` = quante ce ne sono adesso nella serie. Vera: `{"titolo": "Controllo estintori", "scadenza":
+  "2026-11-03", "ricorrenza": {"regola": "settimane", "ogni": 2, "giorniSettimana": [2]}}` →
+  `"occorrenze": 6, "attivita": {"idRicorrenza": 3, "occorrenza": "2026-11-03", "ricorrenza": {"regola": "settimane",
+  "ogni": 2, "giorniSettimana": [2], "inizio": "2026-11-03", "fine": ""}, ...}`;
+- su un'occorrenza, `perRicorrenza`: `questa` (di base: solo lei) | `future` (lei e le seguenti: da lì nasce una serie
+  nuova) | `tutte` (tutta la serie). Titolo, persona, priorità, luogo, ora e durata si riportano sulle altre
+  occorrenze aperte; se cambiano il giorno o la regola, le occorrenze aperte da lì in poi si rifanno. Le fatte non si
+  toccano mai. La checklist cambia su questa e sulle occorrenze che nasceranno. `ricorrenza: null` con `future` o
+  `tutte` = non si ripete più (le occorrenze aperte seguenti si tolgono). Con `future` su un'occorrenza che non è la
+  prima, la risposta ha `idRicorrenza` nuovo (la serie di prima finisce il giorno prima) e `occorrenze` della serie
+  nuova. Le occorrenze rifatte hanno id nuovi: un id tolto non torna mai a un'altra attività;
+- **sovrapposizioni**: un'attività con `inizio` e `fine` (non tutto il giorno) che si accavalla con un'altra aperta
+  della stessa persona non si salva (vera): `{"ok": false, "errore": "Si sovrappone a: Riunione di cantiere Batokyo
+  (8:30-10:00)", "sovrapposte": [{"id": 8, "titolo": "Riunione di cantiere Batokyo", "inizio": "2026-10-24T08:30:00",
+  "fine": "2026-10-24T10:00:00", "assegnataA": 1, "assegnata": "Manuel Gasparotto"}], "serveConferma": true}`.
+  Si richiede uguale con `conferma: true` per salvarla lo stesso. Toccarsi (una finisce alle 10:30, l'altra comincia
+  alle 10:30) non è sovrapporsi; una fatta o annullata non conta. Su una ricorrenza si guarda solo l'occorrenza che
+  si sta salvando.
+Errori: `"Titolo: scrivi cosa c'è da fare"`, `"Tipo: attivita, appuntamento o sopralluogo"`, `"Priorità: alta,
+normale o bassa"`, `"Inizio: scrivi quando comincia"` (appuntamento o sopralluogo senza inizio), `"Fine: deve venire
+dopo l'inizio"`, `"Per ripetere un'attività serve la data"`, `"Ripeti: giorni, settimane, mesi o anni"`, `"Persona
+N non trovata"`, `"Commessa X non trovata"`.
+
+`faiAttivita {id, fatta}` → `fatta: true` = fatta (`fattaIl`), `false` = di nuovo da fare (anche da annullata).
+`togliAttivita {id, perRicorrenza?}` → annullata (non si cancella). Su un'occorrenza `questa` (di base) = **salta solo
+questa** (la serie continua); `future` = la serie finisce qui (lei e le seguenti annullate); `tutte` = tutta la serie
+(tranne le fatte). Risponde anche `"tolte": 3`.
+`spuntaChecklist {id, fatta}` (`id` della voce della checklist) → l'attività.
+Allegati: `caricaFile {tipo: "attivita", idAttivita, base64, mime, nome, idFile}` (attivita 2) →
+`{"ok": true, "file": {"id": "...", "url": "/file/...", "nome": "polizza.pdf"}}`; `togliAllegato {id}` (id del file:
+va nel cestino) → l'attività. `GET /file/<id>` come gli altri file (chi vede l'attività).
+
+### 13.8 Dashboard: cosa si aggiunge
+
+- `numeri.preventivi` (solo con preventivi ≥ 1 e non nella vista del collaboratore): `{"bozze": 1, "inviati": 1,
+  "scaduti": 1, "inScadenza": 1, "senzaRisposta": 1, "accettatiSenzaCommessa": 0}`; con `costi` anche
+  `numeri.soldi.preventiviInAttesa` (totale degli inviati non scaduti: `4291.35`).
+- `numeri.attivita`: `{"scadute": 2, "oggi": 2, "settimana": 6, "nonAssegnate": 2, "appuntamentiOggi": 1}` (per il
+  collaboratore le sue: `{"scadute": 0, "oggi": 1, "settimana": 1, "nonAssegnate": 0, "appuntamentiOggi": 1}`).
+- `agenda`: `{"oggi": [...], "settimana": [...]}`, le attività aperte di oggi e dei 7 giorni dopo, in ordine di ora:
+  `{"id": 3, "tipo": "sopralluogo", "titolo": "Sopralluogo quadri del magazzino Batokyo", "giorno": "2026-10-22",
+  "inizio": "2026-10-22T14:30:00", "fine": "2026-10-22T16:00:00", "tuttoIlGiorno": false, "assegnataA": 3,
+  "assegnata": "Marco Collaboratore", "idCommessa": "26ST001", "luogo": "Zona industriale, Schio", "priorita":
+  "normale", "stato": "da_fare"}`.
+- Le voci nuove (vere):
+```json
+{"urgenti": [
+  {"tipo": "attivita", "gravita": "urgente", "titolo": "Chiamare Rossi per il collaudo è scaduta",
+   "dettaglio": "26ST002 · era per ieri · Manuel Gasparotto", "quanto": 1, "unita": "giorni",
+   "collegamento": {"pagina": "attivita", "id": 1}},
+  {"tipo": "preventivo", "gravita": "attenzione", "titolo": "PR/2026/007: nessuna risposta da 45 giorni",
+   "dettaglio": "Quadro di cantiere · Rossi Impianti Srl · scaduto il 06/10", "quanto": 45, "unita": "giorni",
+   "collegamento": {"pagina": "preventivo", "id": 1}}],
+ "settimana": [
+  {"tipo": "sopralluogo", "gravita": "attenzione", "titolo": "Sopralluogo quadri del magazzino Batokyo oggi alle 14:30",
+   "dettaglio": "Marco Collaboratore · Zona industriale, Schio", "quanto": null, "unita": null,
+   "collegamento": {"pagina": "calendario", "filtro": {"giorno": "2026-10-22"}}},
+  {"tipo": "preventivo", "gravita": "attenzione", "titolo": "PR/2026/012 rev. 1 scade fra 6 giorni",
+   "dettaglio": "Rossi Impianti Srl · inviato il 15/10", "quanto": 4291.35, "unita": "euro",
+   "collegamento": {"pagina": "preventivo", "id": 4}},
+  {"tipo": "attivita", "gravita": "info", "titolo": "1 attività da fare oggi", "dettaglio": "Mandare lo schema unifilare a Elettrodinamica",
+   "quanto": 1, "unita": "attivita", "collegamento": {"pagina": "attivita", "filtro": {"gruppo": "oggi"}}},
+  {"tipo": "attivita", "gravita": "info", "titolo": "6 attività nei prossimi 7 giorni",
+   "dettaglio": "Aggiornare lo schema del quadro di linea 2, Riunione di cantiere Batokyo, Completare il preventivo PR/2026/013",
+   "quanto": 6, "unita": "attivita", "collegamento": {"pagina": "calendario", "filtro": {"giorno": "2026-10-23"}}}],
+ "pianificare": [
+  {"tipo": "attivita", "gravita": "info", "titolo": "2 attività non assegnate",
+   "dettaglio": "Completare il preventivo PR/2026/013, Riordinare i cataloghi in ufficio", "quanto": 2, "unita": "attivita",
+   "collegamento": {"pagina": "attivita", "filtro": {"nonAssegnate": true}}},
+  {"tipo": "preventivo", "gravita": "info", "titolo": "1 preventivo in bozza", "dettaglio": "PR/2026/013 Verifica periodica impianto di terra",
+   "quanto": 1, "unita": "preventivi", "collegamento": {"pagina": "preventivi", "filtro": {"stato": "BOZZA"}}}]}
+```
+  `tipo` delle voci nuove: `attivita`, `appuntamento`, `sopralluogo`, `preventivo`. Un accettato senza commessa:
+  `"PR/2026/012 rev. 1: accettato, manca la commessa"` (settimana, `collegamento` alla pagina del preventivo).
+- Voci nuove: **urgenti** = attività scadute (una per una fino a 3, poi una voce sola) e preventivi inviati da più di 15
+  giorni senza risposta; **settimana** = appuntamenti e sopralluoghi di oggi (uno per uno), "N attività da fare oggi",
+  "N attività nei prossimi 7 giorni", preventivi in scadenza entro 7 giorni (`quanto` = totale in euro, solo con
+  `costi`), accettati senza commessa; **da pianificare** = preventivi in bozza, attività non assegnate.
+- `collegamento.pagina` nuove: `preventivi` (filtro `stato`), `preventivo` (`id` interno), `attivita` (`id`, oppure
+  filtro `gruppo` / `nonAssegnate: true`), `calendario` (filtro `giorno`). Unità nuove: `attivita`, `preventivi`.
+- Collaboratore: le sue attività (assegnate a lui); niente preventivi.
+
+### 13.9 Esportazione
+
+`esporta {cosa: "preventivi", ...filtri di preventivi}` (preventivi 1) e `esporta {cosa: "attivita", ...filtri di
+attivita}` (attivita 1): stesso CSV della §12.13. Colonne dei preventivi: Numero, Revisione, Data, Scadenza, Stato,
+Codice cliente, Cliente, Oggetto, Complessità, Imponibile, Contributo integrativo, IVA, Totale (questi quattro solo
+con `costi`), Inviato il, Accettato il, Accettato da, Come, Commessa, Rifiutato il, Motivo. Delle attività: Giorno,
+Titolo, Tipo, Stato, Priorità, Scadenza, Inizio, Fine, Assegnata a, Cliente, Commessa, Luogo, Si ripete, Checklist
+(fatte/totali), Fatta il, Descrizione. Un collaboratore esporta le attività che vede. Senza `stato` le attività
+esportate sono le aperte, come l'elenco: `stato: "tutte"` per averle tutte.
+
+### 13.10 Note per chi legge il database
+
+Tabelle nuove (migrazione `002-preventivi-attivita.sql`, con la copia `wisper.db.prima-2` prima): `listino`,
+`preventivi`, `preventivo_sezioni`, `preventivo_voci`, `scadenze_pagamento`, `ricorrenze`, `attivita`,
+`attivita_checklist`; `file` ha due tipi nuovi (`attivita`, `preventivo`) e le colonne `attivita_id` e
+`preventivo_id` (nel `cestino` i file hanno in più `idAttivita` e `idPreventivo`). In più dell'accordo: `ricorrenze.inizio`
+(il primo giorno della serie), `ricorrenze.creata_da`, `creato` e `modificato`; le tabelle da cui si tolgono righe hanno
+`AUTOINCREMENT`. Nel registro le tabelle nuove si chiamano come qui sopra; le righe tolte hanno la nota `"tolta"` (o
+`"tolta: la ricorrenza è cambiata"`, `"tolta: la serie non si ripete più"`, `"tolta: la serie finisce prima"`).
+L'allungamento delle ricorrenze gira nella pianificazione delle copie: all'avvio del server e ogni notte dopo
+mezzanotte (`[ricorrenze] N occorrenze nuove` nel log).

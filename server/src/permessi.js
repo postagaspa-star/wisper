@@ -54,6 +54,10 @@ const CAMPI_COSTI = new Set([
   'soldi', 'EURO_KM', 'COSTO_ORARIO',
   'tariffa_fissa', 'costo_fisso', 'ultima_tariffa', 'magg_extra', 'euro_km', 'compenso_ore', 'rimborso_km',
   'costo_orario', 'prezzo_orario', 'budget_euro', 'importo_contratto',
+  // Fase 2: preventivi e listino (prezzi, importi delle voci e delle scadenze, sconti, i conti interi).
+  'prezzo', 'importo', 'subtotale', 'sommaVoci', 'scontoPercentuale', 'scontoEuro', 'scontoDaPercentuale',
+  'imponibile', 'contributo', 'baseIva', 'iva', 'restoScadenze', 'conti', 'preventiviInAttesa',
+  'sconto_percentuale', 'sconto_euro',
 ]);
 
 function togliCosti(x) {

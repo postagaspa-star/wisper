@@ -220,6 +220,16 @@ module.exports = {
       const soglia = new Date(adesso.getFullYear(), adesso.getMonth(), adesso.getDate(), h, m);
       this.prossimaCopia = this.ultimaNotturna === oggi() || adesso < soglia
         ? (adesso < soglia ? soglia : new Date(soglia.getTime() + 86400000)) : adesso;
+      // Fase 2: una volta al giorno (e all'avvio) le ricorrenze si allungano fino a 90 giorni da oggi.
+      if (this.ultimoAllungamento !== oggi()) {
+        this.ultimoAllungamento = oggi();
+        try {
+          const n = this.allungaRicorrenze();
+          if (n) console.log('[ricorrenze] ' + n + ' occorrenze nuove');
+        } catch (err) {
+          console.error('[ricorrenze] non riuscito: ' + messaggio(err));
+        }
+      }
       if (adesso >= soglia && this.ultimaNotturna !== oggi() && !this.copiaInCorso) {
         this.ultimaNotturna = oggi();
         this.copiaDiSicurezza('notturna')

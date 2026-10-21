@@ -31,6 +31,9 @@ public sealed class Finestra : Form, Ponte.IFinestra
     /// <summary>--stampa-prova: il documento da stampare e dove, poi si esce.</summary>
     private readonly (string Html, string Pdf)? stampaProva;
 
+    /// <summary>L'icona accanto all'orologio, solo per le notifiche dei promemoria: creata alla prima.</summary>
+    private NotifyIcon? avvisi;
+
     public Finestra(Ponte ponte, string cartellaUi, string cartellaDatiWebView, (string Html, string Pdf)? stampaProva = null)
     {
         this.stampaProva = stampaProva;
@@ -110,6 +113,46 @@ public sealed class Finestra : Form, Ponte.IFinestra
     }
 
     public void Riavvia() => BeginInvoke(() => ponte.Aggiornamenti?.Riavvia(ponte.ArgomentiDiAvvio));
+
+    /// <summary>
+    /// Un promemoria come notifica di Windows (fase 2). Si usa l'icona accanto all'orologio, che
+    /// Windows 10 e 11 mostrano come notifica nell'angolo; un clic riporta qui Wisper Ufficio.
+    /// Solo mentre il programma è aperto: chiuso, i promemoria li dà il telefono.
+    /// </summary>
+    public void Notifica(string titolo, string testo)
+    {
+        if (IsDisposed) return;
+        BeginInvoke(() =>
+        {
+            try
+            {
+                if (avvisi == null)
+                {
+                    avvisi = new NotifyIcon { Icon = Icon ?? SystemIcons.Information, Text = "Wisper Ufficio", Visible = true };
+                    avvisi.BalloonTipClicked += (_, _) => Davanti();
+                    avvisi.Click += (_, _) => Davanti();
+                }
+                avvisi.ShowBalloonTip(10000, titolo.Length > 0 ? titolo : "Wisper", testo, ToolTipIcon.None);
+            }
+            catch (Exception e)
+            {
+                Log.Errore("notifica non mostrata", e);
+            }
+        });
+    }
+
+    private void Davanti()
+    {
+        if (WindowState == FormWindowState.Minimized) WindowState = FormWindowState.Normal;
+        Activate();
+    }
+
+    protected override void OnFormClosed(FormClosedEventArgs e)
+    {
+        // L'icona accanto all'orologio va tolta, se no resta lì fino al passaggio del mouse.
+        if (avvisi != null) { avvisi.Visible = false; avvisi.Dispose(); avvisi = null; }
+        base.OnFormClosed(e);
+    }
 
     private async void SuRichiesta(object? mittente, CoreWebView2WebResourceRequestedEventArgs e)
     {

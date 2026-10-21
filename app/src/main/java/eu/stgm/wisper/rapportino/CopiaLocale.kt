@@ -83,12 +83,45 @@ class CopiaLocale(cartella: File) {
 
     fun scriviDashboard(o: JSONObject) = scriviAtomico(fileDashboard, o.toString())
 
+    // ---- fase 2: preventivi, listino, attività (l'ultima lettura, per aprirsi anche senza rete)
+
+    private val filePreventivi = File(cartella, "preventivi.json")
+    private val fileDettagli = File(cartella, "preventivi-aperti.json")
+    private val fileListino = File(cartella, "listino.json")
+    private val fileAttivita = File(cartella, "attivita.json")
+
+    fun preventivi(): List<Preventivo> = elenco(filePreventivi).map(Preventivo::daJson)
+    fun scriviPreventivi(l: List<Preventivo>) = scriviAtomico(filePreventivi, JSONArray().apply { l.forEach { put(it.grezzo ?: it.aJson()) } }.toString())
+
+    /** I preventivi aperti per intero: al massimo gli ultimi 40. */
+    fun dettagliPreventivi(): Map<String, Preventivo> = elenco(fileDettagli).map(Preventivo::daJson).filter { it.id.isNotBlank() }.associateBy { it.id }
+    fun scriviDettagliPreventivi(m: Map<String, Preventivo>) =
+        scriviAtomico(fileDettagli, JSONArray().apply { m.values.toList().takeLast(40).forEach { put(it.grezzo ?: it.aJson()) } }.toString())
+
+    fun listino(): List<VoceListino> = elenco(fileListino).map(VoceListino::daJson)
+    fun scriviListino(l: List<VoceListino>) = scriviAtomico(fileListino, JSONArray().apply { l.forEach { put(it.aJson()) } }.toString())
+
+    fun attivita(): List<Attivita> = elenco(fileAttivita).map(Attivita::daJson)
+    fun scriviAttivita(l: List<Attivita>) = scriviAtomico(fileAttivita, JSONArray().apply {
+        l.forEach { a ->
+            put(a.aJson().put("id", a.id).put("fattaIl", a.fattaIl).put("creataDa", a.creataDa).put("creato", a.creato).put("modificato", a.modificato)
+                .put("allegati", JSONArray().apply { a.allegati.forEach { d -> put(JSONObject().put("id", d.id).put("nome", d.nome).put("url", d.url).put("mime", d.mime)) } }))
+        }
+    }.toString())
+
+    private fun elenco(f: File): List<JSONObject> = try {
+        if (!f.exists()) emptyList() else JSONArray(f.readText()).oggetti()
+    } catch (_: Exception) {
+        emptyList()
+    }
+
     /**
      * Via tutto quello che si è letto (quando entra un'altra persona): ognuno vede
      * solo il suo. La coda dei rapportini da mandare sta altrove e non si tocca.
      */
     fun svuota() {
-        listOf(fileAnagrafiche, fileRapportini, fileStorico, fileDashboard).forEach { runCatching { it.delete() } }
+        listOf(fileAnagrafiche, fileRapportini, fileStorico, fileDashboard, filePreventivi, fileDettagli, fileListino, fileAttivita)
+            .forEach { runCatching { it.delete() } }
         runCatching { cartellaFile.listFiles()?.forEach { it.delete() } }
     }
 

@@ -80,8 +80,9 @@ class Visita {
     )
 
     val passi = listOf(
-        Passo("menu", "Il menu", "Clienti, commesse, rapportini e fatturazione: tocca Menu, o scorri dal bordo sinistro.", false, "dashboard"),
+        Passo("menu", "Il menu", "Clienti, commesse, preventivi, attività e rapportini: tocca Menu, o scorri dal bordo sinistro.", false, "dashboard"),
         Passo("cosa-fare", "La Dashboard", "Qui vedi cosa fare adesso: ogni riga porta dove si sistema.", false, "dashboard"),
+        Passo("settimana", "Questa settimana", "Appuntamenti di oggi, attività e preventivi in scadenza: tocca una riga per aprirla.", false, "dashboard"),
         Passo("giorno", "Il tuo giorno", "Qui vedi subito se il rapportino di oggi è scritto.", false, "dashboard"),
         Passo("scrivi", "Scrivi il rapportino", "Tocca il pulsante giallo.", true, "dashboard"),
         Passo("recente-0", "Per chi", "I clienti di questi giorni sono già qui. Tocca Elettrodinamica.", true, "rapportino"),

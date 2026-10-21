@@ -18,6 +18,11 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import eu.stgm.wisper.rapportino.Allegato
 import eu.stgm.wisper.rapportino.Anagrafiche
+import eu.stgm.wisper.rapportino.Attivita
+import eu.stgm.wisper.rapportino.Moduli
+import eu.stgm.wisper.rapportino.Preventivo
+import eu.stgm.wisper.rapportino.StatoAttivita
+import eu.stgm.wisper.rapportino.VoceListino
 import eu.stgm.wisper.rapportino.Calcolo
 import eu.stgm.wisper.rapportino.Cliente
 import eu.stgm.wisper.rapportino.CodaInvii
@@ -65,6 +70,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import org.json.JSONObject
 import java.io.File
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -242,6 +248,8 @@ class Archivio(private val ctx: Context) : Dati {
     }
 
     private fun esciQui(perScadenza: Boolean) {
+        // Chi esce non riceve più i promemoria delle sue attività su questo telefono.
+        Promemoria.programma(ctx, emptyList(), "")
         configurazione.token = ""
         configurazione.uscitoPerScadenza = perScadenza
         _sessione.value = Sessione.NESSUNA.copy(scaduta = perScadenza)
@@ -254,6 +262,11 @@ class Archivio(private val ctx: Context) : Dati {
         _storicoFoglio.value = emptyList()
         _anagrafiche.value = Anagrafiche()
         _dashboard.value = null
+        _preventivi.value = emptyList()
+        _dettagli.value = emptyMap()
+        _listino.value = emptyList()
+        _attivita.value = emptyList()
+        Promemoria.programma(ctx, emptyList(), "")
     }
 
     /** Chi sono e cosa posso: i permessi cambiati da Amministrazione valgono subito. */
@@ -334,6 +347,11 @@ class Archivio(private val ctx: Context) : Dati {
             }
             _aggiornamento.value = Aggiornamento(ultimo = LocalDateTime.now())
             if (!tutti) provaONull { leggiDashboard() }
+            // Fase 2: preventivi e attività, se il ruolo li vede. Senza rete resta l'ultima lettura.
+            if (!tutti) {
+                provaONull { leggiPreventivi() }
+                provaONull { leggiAttivita() }
+            }
         } catch (e: CancellationException) {
             throw e
         } catch (e: PonteServer.AccessoScaduto) {
@@ -605,8 +623,7 @@ class Archivio(private val ctx: Context) : Dati {
             val t = v.trim()
             if (k in Anagrafiche.IMPOSTAZIONI_NUMERICHE && t.isNotEmpty()) {
                 Numeri.leggi(t) ?: throw PonteServer.Rifiutato(
-                    if (k == Anagrafiche.EURO_KM) "Il rimborso km dev'essere un numero, per esempio 0,76"
-                    else "Il costo orario dev'essere un numero, per esempio 22"
+                    Anagrafiche.erroreNumerica(k)
                 )
             } else t
         }
@@ -977,6 +994,232 @@ class Archivio(private val ctx: Context) : Dati {
         provaONull { ponte.esci() }
         esciQui(perScadenza = false)
         Result.success(Unit)
+    }
+
+    // ------------------------------------------------------------- fase 2: preventivi
+
+    private val _preventivi = MutableStateFlow(copia.preventivi())
+    override val preventivi: StateFlow<List<Preventivo>> = _preventivi.asStateFlow()
+    private val _dettagli = MutableStateFlow(copia.dettagliPreventivi())
+    override val dettagliPreventivi: StateFlow<Map<String, Preventivo>> = _dettagli.asStateFlow()
+    private val _listino = MutableStateFlow(copia.listino())
+    override val listino: StateFlow<List<VoceListino>> = _listino.asStateFlow()
+
+    override fun aggiornaPreventivi() {
+        if (!ponte.configurato) return
+        scope.launch {
+            try {
+                leggiPreventivi()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: PonteServer.AccessoScaduto) {
+                segnaUscito()
+            } catch (e: Exception) {
+                _aggiornamento.update { it.copy(inCorso = false, errore = spiega(e)) }
+            }
+        }
+    }
+
+    private suspend fun leggiPreventivi() {
+        if (!_sessione.value.permessi.vede(Moduli.PREVENTIVI)) return
+        // Con i modelli: servono a "Nuovo preventivo · Da un modello".
+        val elenco = ponte.preventivi(modelli = true)
+        _preventivi.value = elenco
+        copia.scriviPreventivi(elenco)
+        provaONull { ponte.listino() }?.let { l -> _listino.value = l; copia.scriviListino(l) }
+    }
+
+    /** Un preventivo arrivato dal server al suo posto: nell'elenco e fra quelli aperti. */
+    private fun mettiPreventivo(p: Preventivo) {
+        if (p.id.isBlank()) return
+        _dettagli.update { (it - p.id) + (p.id to p) }
+        copia.scriviDettagliPreventivi(_dettagli.value)
+        _preventivi.update { l -> if (l.any { it.id == p.id }) l.map { if (it.id == p.id) p else it } else listOf(p) + l }
+        copia.scriviPreventivi(_preventivi.value)
+    }
+
+    override suspend fun preventivo(id: String): Result<Preventivo> = inDiretta {
+        ponte.preventivo(id).also(::mettiPreventivo)
+    }
+
+    override suspend fun salvaVoceListino(v: VoceListino): Result<VoceListino> = inDiretta {
+        if (v.nome.isBlank()) throw PonteServer.Rifiutato("Nome: scrivi il nome della prestazione")
+        val salvata = ponte.salvaVoceListino(v, costi)
+        _listino.update { l -> sostituisci(l, salvata) { it.id == salvata.id } }
+        copia.scriviListino(_listino.value)
+        salvata
+    }
+
+    override suspend fun archiviaVoceListino(id: String): Result<Unit> = inDiretta {
+        ponte.archiviaVoceListino(id)
+        _listino.update { l -> l.filterNot { it.id == id } }
+        copia.scriviListino(_listino.value)
+    }
+
+    override suspend fun salvaPreventivo(p: Preventivo): Result<Preventivo> = inDiretta {
+        if (p.idCliente.isBlank()) throw PonteServer.Rifiutato("Scegli il cliente del preventivo")
+        if (p.oggetto.isBlank()) throw PonteServer.Rifiutato("Scrivi l'oggetto del preventivo")
+        ponte.salvaPreventivo(p, costi).also(::mettiPreventivo)
+    }
+
+    override suspend fun duplicaPreventivo(id: String, comeModello: Boolean): Result<Preventivo> = inDiretta {
+        ponte.duplicaPreventivo(id, comeModello).also(::mettiPreventivo)
+    }
+
+    override suspend fun nuovaRevisione(id: String): Result<Preventivo> = inDiretta {
+        val nuova = ponte.nuovaRevisione(id)
+        mettiPreventivo(nuova)
+        // La vecchia ora è SOSTITUITO: si rilegge l'elenco.
+        provaONull { leggiPreventivi() }
+        nuova
+    }
+
+    override suspend fun inviaPreventivo(
+        id: String, a: String, cc: String, oggetto: String, messaggio: String, pdf: File?, aMe: Boolean, conferma: Boolean,
+    ): Result<Preventivo> =
+        inDiretta(email = true) {
+            if (!aMe && a.isBlank()) throw PonteServer.Rifiutato("Manca l'indirizzo: scrivilo qui (lo puoi salvare nella scheda del cliente)")
+            val allegati = pdf?.let { listOf(Allegato(it.name, "application/pdf", it.readBytes())) }.orEmpty()
+            ponte.inviaPreventivo(id, a, cc, oggetto, messaggio, allegati, aMe, conferma).also { if (!aMe) mettiPreventivo(it) }
+        }
+
+    override suspend fun segnaInviato(id: String, conferma: Boolean): Result<Preventivo> = inDiretta { ponte.segnaInviato(id, conferma).also(::mettiPreventivo) }
+
+    override suspend fun accettaPreventivo(
+        id: String, modo: String, nome: String, scelte: Map<String, Boolean>, firma: ByteArray?, documento: Uri?,
+    ): Result<Preventivo> = inDiretta {
+        val allegato = when {
+            firma != null -> Allegato("firma.png", "image/png", firma)
+            documento != null -> leggiDalTelefono(documento).let { (n, m, d) -> Allegato(n, m, d) }
+            else -> null
+        }
+        ponte.accettaPreventivo(id, modo, nome, scelte, allegato, idFile = java.util.UUID.randomUUID().toString().replace("-", "").take(28))
+            .also(::mettiPreventivo)
+    }
+
+    override suspend fun rifiutaPreventivo(id: String, motivo: String): Result<Preventivo> = inDiretta { ponte.rifiutaPreventivo(id, motivo).also(::mettiPreventivo) }
+
+    override suspend fun riapriPreventivo(id: String): Result<Preventivo> = inDiretta {
+        ponte.riapriPreventivo(id).also { mettiPreventivo(it); provaONull { leggiPreventivi() } }
+    }
+
+    override suspend fun creaCommessaDaPreventivo(id: String): Result<Commessa> = inDiretta {
+        val nata = ponte.creaCommessaDaPreventivo(id)
+        val m = nata.commessa
+        mettiInAnagrafica { a ->
+            a.copy(
+                commesse = sostituisci(a.commesse, m) { it.id.equals(m.id, ignoreCase = true) },
+                prestazioni = a.prestazioni.filterNot { it.idCommessa.equals(m.id, ignoreCase = true) } + nata.prestazioni,
+            )
+        }
+        (nata.preventivo ?: provaONull { ponte.preventivo(id) })?.let(::mettiPreventivo)
+        // Le prestazioni nuove della commessa arrivano con le anagrafiche.
+        rileggiAnagrafiche()
+        m
+    }
+
+    override fun anagrafichePerStampa(): JSONObject = _anagrafiche.value.aJson()
+
+    // ------------------------------------------------------------- fase 2: attività
+
+    private val _attivita = MutableStateFlow(copia.attivita())
+    override val attivita: StateFlow<List<Attivita>> = _attivita.asStateFlow()
+
+    /** La finestra delle attività lette: due mesi indietro e tre avanti, allargata da chi sfoglia il calendario. */
+    @Volatile private var finestraDa: LocalDate = LocalDate.now().minusDays(60)
+    @Volatile private var finestraA: LocalDate = LocalDate.now().plusDays(90)
+
+    override fun aggiornaAttivita(da: LocalDate?, a: LocalDate?) {
+        if (da != null && da.isBefore(finestraDa)) finestraDa = da
+        if (a != null && a.isAfter(finestraA)) finestraA = a
+        if (!ponte.configurato) return
+        scope.launch {
+            try {
+                leggiAttivita()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: PonteServer.AccessoScaduto) {
+                segnaUscito()
+            } catch (e: Exception) {
+                _aggiornamento.update { it.copy(inCorso = false, errore = spiega(e)) }
+            }
+        }
+    }
+
+    private suspend fun leggiAttivita() {
+        if (!_sessione.value.permessi.vede(Moduli.ATTIVITA)) return
+        // Due letture (§13.6): le aperte di ogni giorno, senza data comprese, per l'elenco;
+        // quelle del periodo in ogni stato, per il calendario. Insieme, una volta sola ciascuna.
+        val aperte = ponte.attivita(null, null)
+        val periodo = ponte.attivita(finestraDa, finestraA)
+        val lette = (periodo + aperte).distinctBy { it.id }
+        _attivita.value = lette
+        copia.scriviAttivita(lette)
+        Promemoria.programma(ctx, lette, _sessione.value.utente.id)
+    }
+
+    private fun mettiAttivita(a: Attivita) {
+        _attivita.update { l -> sostituisci(l, a) { it.id == a.id } }
+        copia.scriviAttivita(_attivita.value)
+        Promemoria.programma(ctx, _attivita.value, _sessione.value.utente.id)
+    }
+
+    override suspend fun salvaAttivita(a: Attivita, perRicorrenza: String?, conRicorrenza: Boolean, conferma: Boolean): Result<Attivita> = inDiretta {
+        if (a.titolo.isBlank()) throw PonteServer.Rifiutato("Titolo: scrivi cosa c'è da fare")
+        val salvata = ponte.salvaAttivita(a, perRicorrenza, conRicorrenza, conferma)
+        mettiAttivita(salvata)
+        // Una ricorrente cambia anche le altre occorrenze: si rilegge tutto.
+        if (salvata.ricorrente || a.ricorrente) provaONull { leggiAttivita() }
+        salvata
+    }
+
+    override suspend fun faiAttivita(id: String, fatta: Boolean): Result<Attivita> {
+        val prima = _attivita.value.firstOrNull { it.id == id }
+        // Si vede subito; se il server dice di no torna com'era.
+        if (prima != null) {
+            _attivita.update { l ->
+                l.map { if (it.id == id) it.copy(stato = if (fatta) StatoAttivita.FATTA else StatoAttivita.DA_FARE, fattaIl = if (fatta) LocalDateTime.now().toString() else "") else it }
+            }
+        }
+        val esito = inDiretta { ponte.faiAttivita(id, fatta) }
+        esito.onSuccess { mettiAttivita(it) }.onFailure {
+            if (prima != null) _attivita.update { l -> l.map { x -> if (x.id == id) prima else x } }
+        }
+        return esito
+    }
+
+    override suspend fun togliAttivita(id: String, perRicorrenza: String?): Result<Unit> = inDiretta {
+        ponte.togliAttivita(id, perRicorrenza)
+        _attivita.update { l -> l.map { if (it.id == id) it.copy(stato = StatoAttivita.ANNULLATA) else it } }
+        copia.scriviAttivita(_attivita.value)
+        if (!perRicorrenza.isNullOrBlank() && perRicorrenza != "questa") provaONull { leggiAttivita() }
+        Promemoria.programma(ctx, _attivita.value, _sessione.value.utente.id)
+    }
+
+    override suspend fun spuntaChecklist(idAttivita: String, idVoce: String, fatta: Boolean): Result<Attivita> = inDiretta {
+        val tornata = ponte.spuntaChecklist(idVoce, fatta)
+        val nuova = tornata ?: _attivita.value.firstOrNull { it.id == idAttivita }?.let { a ->
+            a.copy(checklist = a.checklist.map { if (it.id == idVoce) it.copy(fatta = fatta) else it })
+        } ?: throw PonteServer.Rifiutato("Non trovo l'attività")
+        mettiAttivita(nuova)
+        nuova
+    }
+
+    override suspend fun caricaAllegatoAttivita(idAttivita: String, uri: Uri): Result<Attivita> = inDiretta {
+        val (nome, mime, dati) = leggiDalTelefono(uri)
+        val f = ponte.caricaFile("attivita", dati, mime, nome = nome, idAttivita = idAttivita)
+        val a = _attivita.value.firstOrNull { it.id == idAttivita } ?: throw PonteServer.Rifiutato("Non trovo l'attività")
+        val nuova = a.copy(allegati = a.allegati + Documento(f.id, nome, f.url, mime, LocalDateTime.now()))
+        mettiAttivita(nuova)
+        nuova
+    }
+
+    override suspend fun togliAllegatoAttivita(idAttivita: String, idFile: String): Result<Attivita> = inDiretta {
+        val tornata = ponte.togliAllegato(idFile)
+        val nuova = tornata ?: _attivita.value.firstOrNull { it.id == idAttivita }?.let { a -> a.copy(allegati = a.allegati.filterNot { it.id == idFile }) }
+            ?: throw PonteServer.Rifiutato("Non trovo l'attività")
+        mettiAttivita(nuova)
+        nuova
     }
 
     // ------------------------------------------------------------- invio

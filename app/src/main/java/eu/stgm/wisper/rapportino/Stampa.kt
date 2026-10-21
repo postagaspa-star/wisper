@@ -119,6 +119,48 @@ object Stampa {
         )
     }
 
+    /**
+     * Il PDF del preventivo (fase2.md §5), dal modello preventivo() di pc/ui/documenti.js:
+     * [preventivo] nella forma della risposta `preventivo` del server (§13.4), [scelte]
+     * idVoce -> scelta per mostrare il conto con le scelte del cliente.
+     */
+    suspend fun preventivo(
+        ctx: Context,
+        preventivo: JSONObject,
+        anagrafiche: JSONObject,
+        scelte: Map<String, Boolean>? = null,
+        immagine: suspend (String) -> Pair<ByteArray, String>?,
+    ): File {
+        val o = JSONObject()
+        if (scelte != null) o.put("scelte", JSONObject().apply { scelte.forEach { (k, v) -> put(k, v) } })
+        return stampa(
+            ctx,
+            "(typeof WisperDocumenti.preventivo === 'function' ? WisperDocumenti.preventivo($preventivo,$anagrafiche,$o) : '')",
+            nomePreventivo("Preventivo", preventivo, anagrafiche), immagine,
+        )
+    }
+
+    /** L'incarico professionale dal preventivo accettato (incarico() di pc/ui/documenti.js). */
+    suspend fun incarico(
+        ctx: Context,
+        preventivo: JSONObject,
+        anagrafiche: JSONObject,
+        immagine: suspend (String) -> Pair<ByteArray, String>?,
+    ): File = stampa(
+        ctx,
+        "(typeof WisperDocumenti.incarico === 'function' ? WisperDocumenti.incarico($preventivo,$anagrafiche,{}) : '')",
+        nomePreventivo("Incarico", preventivo, anagrafiche), immagine,
+    )
+
+    /** "Preventivo PR-2026-012 rev. 1 Rossi Impianti Srl". */
+    fun nomePreventivo(prefisso: String, p: JSONObject, anagrafiche: JSONObject): String {
+        val numero = testo(p, "numero").ifEmpty { "bozza" } + (testo(p, "revisione").toIntOrNull()?.takeIf { it > 0 }?.let { " rev. $it" } ?: "")
+        val id = testo(p, "idCliente")
+        val cliente = oggetti(anagrafiche.optJSONArray("clienti") ?: JSONArray()).firstOrNull { id.isNotEmpty() && testo(it, "id") == id }
+            ?.let { testo(it, "nome") } ?: testo(p, "cliente")
+        return nomeFile(prefisso, "$numero $cliente")
+    }
+
     private fun opzioni(conImporti: Boolean, conFoto: Boolean) =
         JSONObject().put("conImporti", conImporti).put("conFoto", conFoto)
 

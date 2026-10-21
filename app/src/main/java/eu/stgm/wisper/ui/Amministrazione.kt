@@ -497,6 +497,8 @@ private val SPIEGA_MODULI = mapOf(
     Moduli.DASHBOARD to "La pagina iniziale",
     Moduli.CLIENTI to "Anagrafiche, referenti, sedi",
     Moduli.COMMESSE to "Commesse e prestazioni",
+    Moduli.PREVENTIVI to "Preventivi, listino, incarichi",
+    Moduli.ATTIVITA to "Le attività di tutti o solo le sue",
     Moduli.RAPPORTINI to "I rapportini di tutti o solo i suoi",
     Moduli.FATTURAZIONE to "Da fatturare, riepiloghi",
     Moduli.AMMINISTRAZIONE to "Studio, utenti, permessi, copie",
@@ -529,7 +531,7 @@ private fun PaginaPermessi(dati: Dati, puo: Boolean, onIndietro: () -> Unit) {
             is Lettura.Pronta -> {
                 val p = cambiati[ruolo] ?: lettura.dato[ruolo] ?: Permessi.iniziali(ruolo)
                 Scheda(orizzontale = 18.dp, verticale = 4.dp, raggio = 22.dp, spazio = 0.dp) {
-                    (Moduli.FASE1 + Moduli.COSTI).forEachIndexed { i, m ->
+                    (Moduli.FUNZIONANTI + Moduli.COSTI).forEachIndexed { i, m ->
                         if (i > 0) LineaElenco()
                         Row(
                             Modifier.fillMaxWidth().heightIn(min = 60.dp).padding(vertical = 8.dp),
@@ -616,7 +618,7 @@ private fun PaginaNumerazioni(dati: Dati, puo: Boolean, onIndietro: () -> Unit) 
         TitoloPagina("Numerazioni")
         elenco.forEach { n ->
             Scheda(orizzontale = 18.dp, verticale = 18.dp, raggio = 22.dp, spazio = 12.dp) {
-                Etichetta(if (n.tipo == "commessa") "Commesse" else if (n.tipo == "rapportino") "Rapportini" else n.tipo)
+                Etichetta(when (n.tipo) { "commessa" -> "Commesse"; "rapportino" -> "Rapportini"; "preventivo" -> "Preventivi"; else -> n.tipo })
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(
                         n.prossimoNumero(anno), style = Testi.forte.copy(fontSize = 16.sp), color = if (c.scuro) c.suGiallo else c.giallo,
@@ -1058,7 +1060,10 @@ private fun PaginaCopie(dati: Dati, puo: Boolean, onIndietro: () -> Unit) {
         }
         Etichetta("Esporta per Excel")
         Scheda(orizzontale = 18.dp, verticale = 0.dp, raggio = 22.dp, spazio = 0.dp) {
-            listOf("rapportini" to "Rapportini", "clienti" to "Clienti e fornitori", "commesse" to "Commesse").forEachIndexed { i, (cosa, nome) ->
+            val perm = LocalPermessi.current
+            (listOf("rapportini" to "Rapportini", "clienti" to "Clienti e fornitori", "commesse" to "Commesse") +
+                (if (perm.vede(Moduli.PREVENTIVI)) listOf("preventivi" to "Preventivi") else emptyList()) +
+                (if (perm.vede(Moduli.ATTIVITA)) listOf("attivita" to "Attività") else emptyList())).forEachIndexed { i, (cosa, nome) ->
                 if (i > 0) LineaElenco()
                 RigaVoce(
                     nome, sotto = if (esporto == cosa) "Preparo il file…" else "Un file che Excel apre così com'è", icona = Icone.scarica, freccia = false,

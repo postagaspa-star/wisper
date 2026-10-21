@@ -11,6 +11,7 @@ mai dati veri di clienti.
 
 | Data | Versione | In breve |
 |------|----------|----------|
+| 22/10/2026 | gestionale, fase 2 (non pubblicata) | [Preventivi, attività e calendario](#gestionale-fase-2) |
 | 21/10/2026 | gestionale, fase 1 (non pubblicata) | [Il nucleo del gestionale: server sul NAS, accesso per persona, Dashboard](#gestionale-fase-1) |
 | 21/10/2026 | 0.4.0 | [Tutto l'ufficio anche sul telefono](#v0-4-0) |
 | 20/10/2026 | solo foglio | [Il foglio trova l'email del proprietario anche senza il permesso apposta](#permesso-email) |
@@ -25,6 +26,75 @@ mai dati veri di clienti.
 | 26/09–14/10/2026 | 0.1 | [Un rapportino confermato non si perde più](#coda) |
 | 7–9/08/2026 | 0.1.0 | [Hackathon NGN Hacks: la versione a voce, senza mani](#v0-1-0) |
 | marzo–giugno 2026 | prima del repository | [Le prime versioni](#prima) |
+
+---
+
+<a id="gestionale-fase-2"></a>
+## 22 ottobre 2026 · gestionale, fase 2 · Preventivi, attività e calendario
+
+**Perché.** Seconda fase del gestionale (`docs/specifiche-stgm.md`, moduli 04 e 05). Oggi il preventivo lo fa Manuel
+a parte, e quando il cliente accetta la commessa si riscrive da capo in Wisper; gli impegni stanno nella testa o nel
+calendario del telefono. Prima la ricerca (`docs/gestionale/ricerca-fase2.md`) e il
+[prototipo](https://claude.ai/artifact/SsMoJy36R14bq7fHYAdFEb) (`docs/prototipo/Gestionale-fase2.html`), poi il
+codice, sul server, sul telefono e sul computer.
+
+**Cosa cambia.**
+
+- **Preventivi** (PR/2026/013, la numerazione riparte ogni anno): sezioni con subtotali, voci a corpo, a ore o a
+  quantità prese dal **listino** dello studio, sconti, scadenza, condizioni e scadenze di pagamento (acconto, a fine
+  progetto, saldo). Il conto (imponibile, contributo integrativo EPPI 5%, IVA 22%) lo fa solo il server, provato su
+  16 casi che telefono e computer devono ritrovare al centesimo. Le aliquote stanno in Amministrazione › Fisco e
+  preventivi e vanno confermate col commercialista.
+- **Il preventivo dice da solo cosa chiede la legge** (DL 1/2012 art. 9, L. 124/2017): grado di complessità, voci
+  senza prezzo, oneri ipotizzabili, polizza professionale, titoli. Se manca qualcosa lo segna prima dell'invio.
+- **Il cliente sceglie**: voci facoltative con la casella e alternative "una di queste"; il totale si aggiorna mentre
+  si segna l'accettazione.
+- **Dopo l'invio i prezzi non cambiano**: per cambiarli si fa una revisione (rev. 1) e quella prima resta da
+  consultare. PDF e invio per email come per i riepiloghi.
+- **Accettazione in quattro modi** (firma sul telefono o sul computer, risposta per email, documento firmato, a voce),
+  con il nome di chi accetta. Poi **"Crea la commessa"**: cliente, prestazioni, valori, ore e scadenze di pagamento
+  passano nella commessa nuova (26ST003) senza riscrivere niente. Provato: PR/2026/012 da 4.291,35 € diventa
+  4.867,80 € con la dichiarazione di rispondenza scelta, e la commessa nasce con 5 prestazioni e 3.800 € di contratto.
+- **Contratti** (gli incarichi accettati) e **modelli di offerta** per ripartire da un preventivo già fatto.
+- **Attività**: mie, della squadra, non assegnate; per commessa o dello studio senza commessa; priorità, scadenza,
+  checklist, allegati, promemoria. Raggruppate in Oggi, Prossimi giorni, Più avanti: di un'attività che si ripete si
+  vede solo la prossima volta, così l'elenco non si riempie di copie. Cambiando una ricorrenza si sceglie "solo
+  questa", "da questa in poi" o "tutte".
+- **Calendario** giorno, settimana e mese, con appuntamenti e sopralluoghi; sul computer anche la **pianificazione
+  della settimana** per persona, con le attività non assegnate a parte.
+- **La Dashboard** aggiunge attività scadute, appuntamenti di oggi, preventivi senza risposta, in scadenza, in bozza
+  e accettati senza commessa; ogni riga porta dove si sistema. Il collaboratore vede solo le sue attività e niente
+  preventivi.
+- Il server sul NAS è aggiornato (versione 0.5.0, ancora vuoto, solo in casa); il database ha fatto da solo la copia
+  prima di aggiungere le tabelle nuove.
+
+Prove: server 131, script del foglio 65, telefono 136, computer 99 (con i 16 casi dei preventivi), tutte verdi; il giro
+completo preventivo → accettazione → commessa → attività cliccato sull'emulatore e, in 13 passi, su Wisper Ufficio
+contro il server di prova. Schermate coi dati di esempio. Da provare ancora sul telefono vero: i promemoria delle
+attività; sul computer non è stato guardato l'avviso di Windows.
+
+<p>
+<img src="docs/diario/2026-10-22-gest2-tel-preventivo.png" width="220" alt="Telefono: la pagina del preventivo">
+<img src="docs/diario/2026-10-22-gest2-tel-accetta.png" width="220" alt="Telefono: come ha accettato e cosa ha scelto">
+<img src="docs/diario/2026-10-22-gest2-tel-commessa.png" width="220" alt="Telefono: la commessa nata dal preventivo">
+</p>
+
+<p>
+<img src="docs/diario/2026-10-22-gest2-tel-attivita.png" width="220" alt="Telefono: le attività di oggi e dei prossimi giorni">
+<img src="docs/diario/2026-10-22-gest2-tel-calendario.png" width="220" alt="Telefono: il calendario">
+</p>
+
+<img src="docs/diario/2026-10-22-gest2-pc-preventivi.png" width="720" alt="Wisper Ufficio: l'elenco dei preventivi">
+
+<img src="docs/diario/2026-10-22-gest2-pc-editor.png" width="720" alt="Wisper Ufficio: il preventivo in bozza con cosa chiede la legge">
+
+<img src="docs/diario/2026-10-22-gest2-pc-accetta.png" width="720" alt="Wisper Ufficio: l'accettazione con le scelte del cliente">
+
+<img src="docs/diario/2026-10-22-gest2-pc-calendario.png" width="720" alt="Wisper Ufficio: il calendario del mese">
+
+<img src="docs/diario/2026-10-22-gest2-pc-pianificazione.png" width="720" alt="Wisper Ufficio: la pianificazione della settimana">
+
+Versione: non ancora pubblicata (ramo `gestionale`).
 
 ---
 

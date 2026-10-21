@@ -298,7 +298,7 @@ async function main() {
     passo('la password iniziale vale per entrare');
     await vai('#amministrazione/utenti/' + giorgio.id);
     await clicca('Collaboratore');
-    assert.match(await valuta("document.querySelector('.finestra').innerText"), /Non vedrà: Fatturazione, Amministrazione/);
+    assert.match(await valuta("document.querySelector('.finestra').innerText"), /Non vedrà: Preventivi e contratti, Fatturazione, Amministrazione/);
     await clicca('Cambia il ruolo', '.finestra');
     await aspetta(800);
     assert.equal((await server('utenti')).utenti.find(u => u.id === giorgio.id).ruolo, 'collaboratore');

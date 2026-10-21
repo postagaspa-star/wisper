@@ -3,6 +3,9 @@ package eu.stgm.wisper
 import android.graphics.Bitmap
 import android.net.Uri
 import eu.stgm.wisper.rapportino.Anagrafiche
+import eu.stgm.wisper.rapportino.Attivita
+import eu.stgm.wisper.rapportino.Preventivo
+import eu.stgm.wisper.rapportino.VoceListino
 import eu.stgm.wisper.rapportino.Cliente
 import eu.stgm.wisper.rapportino.CodaInvii
 import eu.stgm.wisper.rapportino.Commessa
@@ -31,6 +34,7 @@ import kotlinx.coroutines.flow.StateFlow
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+import java.time.LocalDate
 import java.time.YearMonth
 
 /**
@@ -263,6 +267,99 @@ interface Dati {
 
     /** Esce da questo telefono: i rapportini in attesa restano e partono dopo il prossimo accesso. */
     suspend fun esci(): Result<Unit>
+
+    // ------------------------------------------------------------- fase 2: preventivi (docs/gestionale/fase2.md)
+
+    /** L'elenco dei preventivi con totale e stato (anche SCADUTO), l'ultimo letto: resta anche senza rete. */
+    val preventivi: StateFlow<List<Preventivo>>
+
+    /** I preventivi aperti per intero (sezioni, voci, conti, revisioni), gli ultimi letti, per id. */
+    val dettagliPreventivi: StateFlow<Map<String, Preventivo>>
+
+    /** Il listino delle prestazioni dello studio. */
+    val listino: StateFlow<List<VoceListino>>
+
+    /** Rilegge elenco dei preventivi e listino; un errore va in [aggiornamento]. */
+    fun aggiornaPreventivi()
+
+    /** Un preventivo per intero (lo mette anche in [dettagliPreventivi]). */
+    suspend fun preventivo(id: String): Result<Preventivo>
+
+    suspend fun salvaVoceListino(v: VoceListino): Result<VoceListino>
+    suspend fun archiviaVoceListino(id: String): Result<Unit>
+
+    /** Crea (id vuoto) o aggiorna una bozza: testata, sezioni, voci e scadenze in una volta. */
+    suspend fun salvaPreventivo(p: Preventivo): Result<Preventivo>
+
+    suspend fun duplicaPreventivo(id: String, comeModello: Boolean): Result<Preventivo>
+
+    /** Una revisione nuova dello stesso numero, in bozza; la vecchia diventa SOSTITUITO. */
+    suspend fun nuovaRevisione(id: String): Result<Preventivo>
+
+    /**
+     * Manda il preventivo col PDF allegato e lo segna INVIATO. Come per i
+     * rapportini non si ripete mai da sola. Con [aMe] la manda solo allo studio.
+     */
+    suspend fun inviaPreventivo(
+        id: String, a: String, cc: String, oggetto: String, messaggio: String, pdf: File?, aMe: Boolean = false, conferma: Boolean = false,
+    ): Result<Preventivo>
+
+    /** Segna INVIATO senza email. Con quello che manca per la legge il server chiede conferma (vedi PonteServer.DaConfermare). */
+    suspend fun segnaInviato(id: String, conferma: Boolean = false): Result<Preventivo>
+
+    /**
+     * Il cliente ha accettato: [modo] "firma", "email", "documento" o "voce";
+     * [scelte] idVoce -> scelta per facoltative e alternative; [firma] il PNG
+     * della firma col dito, [documento] il foglio firmato scelto dal telefono.
+     */
+    suspend fun accettaPreventivo(
+        id: String,
+        modo: String,
+        nome: String,
+        scelte: Map<String, Boolean>,
+        firma: ByteArray? = null,
+        documento: Uri? = null,
+    ): Result<Preventivo>
+
+    suspend fun rifiutaPreventivo(id: String, motivo: String): Result<Preventivo>
+
+    /** Da RIFIUTATO di nuovo in bozza, con una revisione nuova. */
+    suspend fun riapriPreventivo(id: String): Result<Preventivo>
+
+    /** La commessa nuova dal preventivo accettato (una volta sola): cliente, prestazioni, valori, scadenze. */
+    suspend fun creaCommessaDaPreventivo(id: String): Result<Commessa>
+
+    /** Le anagrafiche nella forma dei modelli dei PDF (pc/ui/documenti.js), per preventivo e incarico. */
+    fun anagrafichePerStampa(): JSONObject
+
+    // ------------------------------------------------------------- fase 2: attività e calendario
+
+    /** Le attività lette (la finestra attorno a oggi e quelle senza data), l'ultima lettura. */
+    val attivita: StateFlow<List<Attivita>>
+
+    /** Rilegge le attività; con [da] e [a] allarga la finestra (il calendario che sfoglia). */
+    fun aggiornaAttivita(da: LocalDate? = null, a: LocalDate? = null)
+
+    /**
+     * Crea o cambia; per una ricorrente [perRicorrenza] è "questa", "future" o
+     * "tutte"; [conRicorrenza] manda la regola (nuova o cambiata); [conferma]
+     * salva anche un appuntamento che si accavalla (il server lo chiede prima).
+     */
+    suspend fun salvaAttivita(a: Attivita, perRicorrenza: String? = null, conRicorrenza: Boolean = true, conferma: Boolean = false): Result<Attivita>
+
+    /** Fatta o di nuovo da fare: si vede subito, e se il server dice di no torna com'era. */
+    suspend fun faiAttivita(id: String, fatta: Boolean): Result<Attivita>
+
+    /** Annulla l'attività (non si cancella: resta nel registro). */
+    suspend fun togliAttivita(id: String, perRicorrenza: String? = null): Result<Unit>
+
+    suspend fun spuntaChecklist(idAttivita: String, idVoce: String, fatta: Boolean): Result<Attivita>
+
+    /** Allega un file scelto dal telefono (al massimo 10 MB). */
+    suspend fun caricaAllegatoAttivita(idAttivita: String, uri: Uri): Result<Attivita>
+
+    /** Toglie un allegato (va nel cestino). */
+    suspend fun togliAllegatoAttivita(idAttivita: String, idFile: String): Result<Attivita>
 }
 
 /**

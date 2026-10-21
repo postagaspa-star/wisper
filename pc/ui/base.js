@@ -44,6 +44,7 @@
   const ICONE = {
     indietro: '<path d="M15 6l-6 6 6 6"/>',
     avanti: '<path d="M9 6l6 6-6 6"/>',
+    giu: '<path d="M6 9l6 6 6-6"/>',
     chiudi: '<path d="M6 6l12 12M18 6L6 18"/>',
     spunta: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
     cerca: '<circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4-4"/>',
@@ -77,6 +78,15 @@
     trascina: '<circle cx="9" cy="6" r="1.4" fill="currentColor" stroke="none"/><circle cx="15" cy="6" r="1.4" fill="currentColor" stroke="none"/><circle cx="9" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="15" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="9" cy="18" r="1.4" fill="currentColor" stroke="none"/><circle cx="15" cy="18" r="1.4" fill="currentColor" stroke="none"/>',
     chiave: '<path d="M15 9a4 4 0 1 1-3.2 6.4L5 22H2v-3l6.6-6.8A4 4 0 0 1 15 9zM16 8h.01"/>',
     app: '<path d="M5 4h14v16H5zM9 18h6"/>',
+    // fase 2: preventivi, attività e calendario (dal prototipo Gestionale-fase2.html)
+    preventivo: '<path d="M7 3h7l4 4v14H7zM14 3v4h4M10 12h5M10 16h5"/>',
+    ripeti: '<path d="M17 2l3 3-3 3M3 11V9a4 4 0 0 1 4-4h13M7 22l-3-3 3-3M21 13v2a4 4 0 0 1-4 4H4"/>',
+    campana: '<path d="M6 16V11a6 6 0 1 1 12 0v5l2 2H4zM10 20a2 2 0 0 0 4 0"/>',
+    orologio: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
+    graffetta: '<path d="M20 11.5l-8.2 8.2a5 5 0 0 1-7-7l8.5-8.5a3.3 3.3 0 0 1 4.7 4.7l-8.4 8.4a1.7 1.7 0 0 1-2.4-2.4L15 7.1"/>',
+    persone: '<path d="M4 6h16M4 12h16M4 18h16M9 3v18"/>',
+    libro: '<path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3zM5 17a3 3 0 0 1 3-3h11"/>',
+    contratto: '<path d="M7 3h10v18H7zM10 8h4M10 12h4M10 16h2"/>',
   };
 
   function icona(nome, dim, spessore) {

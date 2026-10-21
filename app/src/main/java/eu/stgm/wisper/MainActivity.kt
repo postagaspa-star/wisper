@@ -51,6 +51,18 @@ import eu.stgm.wisper.ui.BordoMenu
 import eu.stgm.wisper.ui.BozzaModulo
 import eu.stgm.wisper.ui.CassettoMenu
 import eu.stgm.wisper.ui.FiltroRapportini
+import eu.stgm.wisper.ui.FirmaPreventivoInAttesa
+import eu.stgm.wisper.ui.SchermataAttivita
+import eu.stgm.wisper.ui.SchermataCalendario
+import eu.stgm.wisper.ui.SchermataContratti
+import eu.stgm.wisper.ui.SchermataDettaglioAttivita
+import eu.stgm.wisper.ui.SchermataEditorPreventivo
+import eu.stgm.wisper.ui.SchermataFirmaPreventivo
+import eu.stgm.wisper.ui.SchermataInvioPreventivo
+import eu.stgm.wisper.ui.SchermataListino
+import eu.stgm.wisper.ui.SchermataModificaAttivita
+import eu.stgm.wisper.ui.SchermataPreventivi
+import eu.stgm.wisper.ui.SchermataPreventivo
 import eu.stgm.wisper.ui.FoglioTu
 import eu.stgm.wisper.ui.Guscio
 import eu.stgm.wisper.ui.LocalAvvisi
@@ -115,7 +127,23 @@ class MainActivity : ComponentActivity() {
         }
 
         val archivio = (application as WisperApp).archivio
+        leggiPromemoria(intent)
         setContent { Wisper(archivio, this) }
+    }
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        leggiPromemoria(intent)
+    }
+
+    /** Toccando la notifica di un promemoria si apre quell'attività. */
+    private fun leggiPromemoria(intent: android.content.Intent?) {
+        intent?.getStringExtra(Promemoria.EXTRA_ATTIVITA)?.takeIf { it.isNotBlank() }?.let { attivitaDaAprire.value = it }
+    }
+
+    companion object {
+        /** L'attività da aprire arrivando da un promemoria: la legge la schermata e la vuota. */
+        val attivitaDaAprire = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
     }
 
     override fun onResume() {
@@ -249,7 +277,18 @@ private fun Wisper(archivio: Archivio, attivita: ComponentActivity) {
             },
             onApriRapportino = ::apri,
             onNuovoRapportino = { g, cli, com -> nuovo(g, cli, com) },
+            onFirmaPreventivo = { id -> pagina = "firma-preventivo:$id" },
         )
+
+        // Da un promemoria: la voce Attività, sull'attività.
+        val daAprire by MainActivity.attivitaDaAprire.collectAsStateWithLifecycle()
+        LaunchedEffect(daAprire, pagina) {
+            val id = daAprire ?: return@LaunchedEffect
+            if (pagina != "sezioni" || visita.attiva) return@LaunchedEffect
+            MainActivity.attivitaDaAprire.value = null
+            mettiPila(Sezione.ATTIVITA, listOf("attivita/$id"))
+            sezioneNome = Sezione.ATTIVITA.name
+        }
 
         // Indietro: prima la pila della voce, poi si torna alla Dashboard; dalla Dashboard esce dall'app.
         BackHandler(enabled = pagina == "sezioni" && (pila(sezione).isNotEmpty() || sezione != Sezione.DASHBOARD)) {
@@ -371,6 +410,31 @@ private fun Wisper(archivio: Archivio, attivita: ComponentActivity) {
                             )
                         }
 
+                        p.startsWith("firma-preventivo:") -> {
+                            val id = p.removePrefix("firma-preventivo:")
+                            val prev = dati.dettagliPreventivi.value[id] ?: dati.preventivi.value.firstOrNull { it.id == id }
+                            val nomeCliente = prev?.let { ana.cliente(it.idCliente)?.nome ?: it.nomeCliente }.orEmpty()
+                            SchermataFirmaPreventivo(
+                                sopra = listOf(nomeCliente, prev?.numero.orEmpty()).filter { it.isNotBlank() }.joinToString(" · "),
+                                oggetto = prev?.oggetto.orEmpty(),
+                                // Mai i soldi: il telefono adesso è in mano al cliente.
+                                dettaglio = prev?.let { pv -> listOfNotNull(pv.data?.let { "Preventivo del " + it.format(DateTimeFormatter.ofPattern("d MMMM yyyy", java.util.Locale.ITALY)) }, pv.scadenza?.let { "valido fino al " + it.format(DateTimeFormatter.ofPattern("d MMMM", java.util.Locale.ITALY)) }).joinToString(" · ") }.orEmpty(),
+                                nome = if (FirmaPreventivoInAttesa.id == id) FirmaPreventivoInAttesa.nome else "",
+                                onConferma = { disegno, nome ->
+                                    val scelte = if (FirmaPreventivoInAttesa.id == id) FirmaPreventivoInAttesa.scelte else emptyMap()
+                                    pagina = "sezioni"
+                                    avvisi.mostra("Salvo la firma…")
+                                    scope.launch {
+                                        val png = java.io.ByteArrayOutputStream().use { out -> disegno.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, out); out.toByteArray() }
+                                        dati.accettaPreventivo(id, "firma", nome, scelte, firma = png)
+                                            .onSuccess { avvisi.mostra("Firmato: preventivo accettato") }
+                                            .onFailure { avvisi.mostra(it.message?.takeIf { m -> m.isNotBlank() } ?: "La firma non è stata salvata: riprova") }
+                                    }
+                                },
+                                onAnnulla = { pagina = "sezioni" },
+                            )
+                        }
+
                         p.startsWith("firma:") -> {
                             val idLocale = p.removePrefix("firma:")
                             val r = (dati.viste.value.firstOrNull { it.rapportino.idLocale == idLocale } ?: dati.storico.value.firstOrNull { it.rapportino.idLocale == idLocale })?.rapportino
@@ -434,13 +498,25 @@ private fun PaginaSezione(
             Sezione.DASHBOARD -> SchermataDashboard(dati, nav, onNuovo, onComeIeri)
             Sezione.CLIENTI -> SchermataClienti(dati, nav)
             Sezione.COMMESSE -> SchermataCommesse(dati, nav)
+            Sezione.PREVENTIVI -> SchermataPreventivi(dati, nav)
+            Sezione.ATTIVITA -> SchermataAttivita(dati, nav)
             Sezione.RAPPORTINI -> SchermataRapportini(dati, nav, filtro, onFiltro)
             Sezione.FATTURAZIONE -> SchermataUfficio(dati, nav)
             Sezione.AMMINISTRAZIONE -> SchermataAmministrazione(dati, archivio, nav)
         }
         rotta.startsWith("amm/") -> PaginaAmministrazione(rotta.removePrefix("amm/"), dati, archivio, nav, tema, onTema, onVisita)
         rotta == "impostazioni" -> PaginaAmministrazione("app", dati, archivio, nav, tema, onTema, onVisita)
+        rotta.startsWith("invio/preventivo/") -> SchermataInvioPreventivo(dati, nav, rotta.removePrefix("invio/preventivo/"))
         rotta.startsWith("invio/") -> SchermataInvio(dati, nav, rotta.removePrefix("invio/"))
+        rotta == "preventivi" -> SchermataPreventivi(dati, nav)
+        rotta.startsWith("preventivo/") -> SchermataPreventivo(dati, nav, rotta.removePrefix("preventivo/"))
+        rotta.startsWith("preventivo-nuovo") || rotta.startsWith("preventivo-modifica/") -> SchermataEditorPreventivo(dati, nav, rotta)
+        rotta == "listino" -> SchermataListino(dati, nav)
+        rotta == "contratti" -> SchermataContratti(dati, nav)
+        rotta == "attivita" -> SchermataAttivita(dati, nav)
+        rotta.startsWith("attivita/") -> SchermataDettaglioAttivita(dati, nav, rotta.removePrefix("attivita/"))
+        rotta.startsWith("attivita-nuova") || rotta.startsWith("attivita-modifica/") -> SchermataModificaAttivita(dati, nav, rotta)
+        rotta.startsWith("calendario") -> SchermataCalendario(dati, nav, rotta.removePrefix("calendario").removePrefix("/"))
         rotta == "commesse" -> SchermataCommesse(dati, nav)
         rotta.startsWith("commessa/") -> SchermataCommessa(dati, nav, rotta.removePrefix("commessa/"))
         rotta.startsWith("commessa-modifica/") -> SchermataModificaCommessa(dati, nav, rotta.removePrefix("commessa-modifica/"), null)

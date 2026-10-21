@@ -14,6 +14,11 @@
     <!-- Da Android 12: le versioni dopo la prima si installano senza chiedere niente,
          perché a installarle è Wisper stesso (e solo se l'app è chiusa). -->
     <uses-permission android:name="android.permission.UPDATE_PACKAGES_WITHOUT_USER_ACTION" />
+    <!-- I promemoria delle attività e degli appuntamenti (Promemoria.kt): la sveglia di
+         Android all'ora giusta, anche ad app chiusa, e di nuovo dopo un riavvio. -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <application
         android:name=".WisperApp"
@@ -37,6 +42,15 @@
 
         <!-- Le risposte dell'installazione di una versione nuova. -->
         <receiver android:name=".EsitoInstallazione" android:exported="false" />
+
+        <!-- I promemoria: la notifica all'ora scelta, e le sveglie rimesse dopo un riavvio. -->
+        <receiver android:name=".AvvisoPromemoria" android:exported="false" />
+        <receiver android:name=".RiavvioPromemoria" android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
 
         <!-- La fotocamera scrive la foto dello scontrino direttamente in un
              file dell'app: serve un indirizzo che possa raggiungere. -->

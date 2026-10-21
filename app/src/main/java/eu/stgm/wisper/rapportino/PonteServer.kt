@@ -60,6 +60,13 @@ class PonteServer(
     /** `rete: true`: il server c'è, ma un servizio dietro di lui no (il registro europeo, il postino). Si riprova. */
     class ServizioNonRaggiunto(messaggio: String) : IOException(messaggio)
 
+    /**
+     * `serveConferma: true` (§13.5, §13.7): il server si e' fermato per chiedere se
+     * si vuole davvero (manca qualcosa per la legge, un appuntamento si accavalla).
+     * Si richiede uguale con `conferma: true`. [risposta] ha `mancano` o `sovrapposte`.
+     */
+    class DaConfermare(messaggio: String, val risposta: JSONObject) : Rifiutato(messaggio)
+
     /** Quello che dà [accedi]. */
     data class Accesso(val token: String, val utente: Utente, val permessi: Permessi)
 
@@ -173,6 +180,8 @@ class PonteServer(
         firmatoIl: String = "",
         idCommessa: String = "",
         nome: String = "",
+        idAttivita: String = "",
+        idPreventivo: String = "",
     ): FileRemoto = withContext(Dispatchers.IO) {
         if (dati.isEmpty()) throw Rifiutato("Il file è vuoto")
         val corpo = JSONObject()
@@ -186,6 +195,8 @@ class PonteServer(
             .put("firmatario", firmatario)
             .put("firmatoIl", firmatoIl)
         if (idCommessa.isNotBlank()) corpo.put("idCommessa", idCommessa)
+        if (idAttivita.isNotBlank()) corpo.put("idAttivita", idJson(idAttivita))
+        if (idPreventivo.isNotBlank()) corpo.put("idPreventivo", idJson(idPreventivo))
         if (nome.isNotBlank()) corpo.put("nome", nome)
         val f = scrivi(corpo).optJSONObject("file") ?: throw Rifiutato("Il server non ha salvato il file")
         FileRemoto.daJson(f)
@@ -573,6 +584,213 @@ class PonteServer(
         CopiaSicurezza.daJson(r.optJSONObject("copia") ?: JSONObject())
     }
 
+    // ------------------------------------------------------------- fase 2: preventivi (fase2.md §4, architettura.md §13)
+
+    suspend fun listino(): List<VoceListino> = withContext(Dispatchers.IO) {
+        val r = leggi("listino")
+        (r.optJSONArray("listino") ?: r.optJSONArray("voci")).oggetti().map(VoceListino::daJson)
+    }
+
+    /** Il prezzo si manda solo con il permesso dei soldi. */
+    suspend fun salvaVoceListino(v: VoceListino, costi: Boolean): VoceListino = withContext(Dispatchers.IO) {
+        val o = JSONObject().put("nome", v.nome.trim()).put("codice", v.codice.trim()).put("descrizione", v.descrizione.trim())
+            .put("modo", v.modo).put("unita", v.unita.trim()).put("ordine", v.ordine)
+        if (costi) o.put("prezzo", v.prezzo ?: JSONObject.NULL)
+        if (v.id.isNotBlank()) o.put("id", idJson(v.id))
+        val r = scrivi(JSONObject().put("azione", "salvaVoceListino").put("voce", o))
+        VoceListino.daJson(r.optJSONObject("voce") ?: r.optJSONObject("listino") ?: throw Rifiutato("Il server non ha restituito la voce del listino"))
+    }
+
+    suspend fun archiviaVoceListino(id: String, archiviata: Boolean = true): Unit = withContext(Dispatchers.IO) {
+        scrivi(JSONObject().put("azione", "archiviaVoceListino").put("id", idJson(id)).put("archiviata", archiviata)); Unit
+    }
+
+    /** L'elenco, con totali e stato calcolato (anche SCADUTO). */
+    suspend fun preventivi(stato: String = "", testo: String = "", anno: Int? = null, modelli: Boolean = false): List<Preventivo> = withContext(Dispatchers.IO) {
+        val parametri = buildList {
+            if (modelli) add("modelli" to "1")
+            if (stato.isNotBlank()) add("stato" to stato)
+            if (testo.isNotBlank()) add("testo" to testo)
+            if (anno != null) add("anno" to anno.toString())
+        }
+        leggi("preventivi", *parametri.toTypedArray()).optJSONArray("preventivi").oggetti().map(Preventivo::daJson)
+    }
+
+    /** Tutto il preventivo: sezioni, voci, scadenze, revisioni, conti e quello che manca per la legge. */
+    suspend fun preventivo(id: String): Preventivo = withContext(Dispatchers.IO) {
+        Preventivo.daJson(leggi("preventivo", "id" to id))
+    }
+
+    suspend fun salvaPreventivo(p: Preventivo, costi: Boolean): Preventivo = withContext(Dispatchers.IO) {
+        conPreventivo(scrivi(JSONObject().put("azione", "salvaPreventivo").put("preventivo", perSalvare(p, costi))))
+    }
+
+    suspend fun duplicaPreventivo(id: String, comeModello: Boolean): Preventivo = withContext(Dispatchers.IO) {
+        conPreventivo(scrivi(JSONObject().put("azione", "duplicaPreventivo").put("id", idJson(id)).put("comeModello", comeModello)))
+    }
+
+    suspend fun nuovaRevisione(id: String): Preventivo = withContext(Dispatchers.IO) {
+        conPreventivo(scrivi(JSONObject().put("azione", "nuovaRevisione").put("id", idJson(id))))
+    }
+
+    /** L'email col PDF: come inviaEmail, MAI ripetuta da sola. */
+    suspend fun inviaPreventivo(
+        id: String, a: String, cc: String, oggetto: String, messaggio: String, allegati: List<Allegato>, aMe: Boolean, conferma: Boolean = false,
+    ): Preventivo =
+        withContext(Dispatchers.IO) {
+            val corpo = JSONObject().put("azione", "inviaPreventivo").put("id", idJson(id))
+                .put("a", a.trim()).put("cc", cc.trim()).put("oggetto", oggetto).put("messaggio", messaggio)
+                .put("allegati", JSONArray().apply {
+                    allegati.forEach { put(JSONObject().put("nome", it.nome).put("mime", it.mime).put("base64", Base64.getEncoder().encodeToString(it.dati))) }
+                })
+                .put("aMe", aMe)
+            if (conferma) corpo.put("conferma", true)
+            conPreventivo(scrivi(corpo))
+        }
+
+    suspend fun segnaInviato(id: String, conferma: Boolean = false): Preventivo = withContext(Dispatchers.IO) {
+        val corpo = JSONObject().put("azione", "segnaInviato").put("id", idJson(id))
+        if (conferma) corpo.put("conferma", true)
+        conPreventivo(scrivi(corpo))
+    }
+
+    /**
+     * [firma]: il PNG della firma col dito o il foglio firmato ({base64, mime, idFile}).
+     * [idFile] resta lo stesso a ogni tentativo: ripetuta uguale, il server non rifà niente.
+     */
+    suspend fun accettaPreventivo(id: String, modo: String, nome: String, scelte: Map<String, Boolean>, firma: Allegato? = null, idFile: String = ""): Preventivo =
+        withContext(Dispatchers.IO) {
+            val corpo = JSONObject().put("azione", "accettaPreventivo").put("id", idJson(id)).put("modo", modo).put("nome", nome.trim())
+                .put("scelte", JSONObject().apply { scelte.forEach { (k, v) -> put(k, v) } })
+            if (firma != null) {
+                corpo.put(
+                    "firma",
+                    JSONObject().put("nome", firma.nome).put("mime", firma.mime).put("base64", Base64.getEncoder().encodeToString(firma.dati))
+                        .apply { if (idFile.isNotBlank()) put("idFile", idFile) },
+                )
+            }
+            conPreventivo(scrivi(corpo))
+        }
+
+    suspend fun rifiutaPreventivo(id: String, motivo: String): Preventivo = withContext(Dispatchers.IO) {
+        conPreventivo(scrivi(JSONObject().put("azione", "rifiutaPreventivo").put("id", idJson(id)).put("motivo", motivo.trim())))
+    }
+
+    suspend fun riapriPreventivo(id: String): Preventivo = withContext(Dispatchers.IO) {
+        conPreventivo(scrivi(JSONObject().put("azione", "riapriPreventivo").put("id", idJson(id))))
+    }
+
+    /** Quello che torna da creaCommessaDaPreventivo (§13.5). */
+    data class CommessaNata(val commessa: Commessa, val prestazioni: List<Prestazione>, val preventivo: Preventivo?)
+
+    /** La commessa nuova con le sue prestazioni, e il preventivo che ora la conosce. */
+    suspend fun creaCommessaDaPreventivo(id: String): CommessaNata = withContext(Dispatchers.IO) {
+        val r = scrivi(JSONObject().put("azione", "creaCommessaDaPreventivo").put("id", idJson(id)))
+        val m = Commessa.daJson(r.optJSONObject("commessa") ?: throw Rifiutato("Il server non ha restituito la commessa"))
+        CommessaNata(m, r.optJSONArray("prestazioni").oggetti().map(Prestazione::daJson), r.optJSONObject("preventivo")?.let(Preventivo::daJson))
+    }
+
+    private fun conPreventivo(r: JSONObject): Preventivo {
+        val p = r.optJSONObject("preventivo") ?: throw Rifiutato("Il server non ha restituito il preventivo")
+        if (!p.has("mancano") && r.has("mancano")) p.put("mancano", r.get("mancano"))
+        if (!p.has("conti") && r.has("conti")) p.put("conti", r.get("conti"))
+        return Preventivo.daJson(p)
+    }
+
+    /** Il preventivo da salvare: testata, sezioni con le voci, scadenze. I prezzi e gli sconti solo con i soldi. */
+    internal fun perSalvare(p: Preventivo, costi: Boolean): JSONObject {
+        val o = JSONObject()
+            .put("idCliente", p.idCliente)
+            .put("idSede", p.idSede.takeIf { it.isNotBlank() }?.let(::idJson) ?: JSONObject.NULL)
+            .put("idReferente", p.idReferente.takeIf { it.isNotBlank() }?.let(::idJson) ?: JSONObject.NULL)
+            .put("oggetto", p.oggetto.trim()).put("introduzione", p.introduzione.trim())
+            .put("complessita", p.complessita).put("complessitaNota", p.complessitaNota.trim())
+            .put("oneriPrevisti", p.oneriPrevisti.trim()).put("condizioni", p.condizioni.trim())
+            .put("modello", p.modello).put("noteInterne", p.noteInterne.trim())
+        // Senza data e scadenza un preventivo nuovo prende oggi e la validità delle impostazioni.
+        p.data?.let { o.put("data", it.toString()) }
+        p.scadenza?.let { o.put("scadenza", it.toString()) }
+        o
+            .put("sezioni", JSONArray().apply {
+                p.sezioni.forEachIndexed { i, s ->
+                    val js = JSONObject().put("titolo", s.titolo.trim()).put("ordine", i + 1)
+                    if (s.id.isNotBlank() && !s.id.startsWith(NUOVO)) js.put("id", idJson(s.id))
+                    js.put("voci", JSONArray().apply {
+                        s.voci.forEachIndexed { j, v ->
+                            val jv = JSONObject().put("descrizione", v.descrizione.trim()).put("modo", v.modo).put("quantita", v.quantita)
+                                .put("unita", v.unita.trim()).put("facoltativa", v.facoltativa)
+                                .put("alternativa", v.alternativa.trim()).put("scelta", v.scelta).put("ordine", j + 1)
+                                .put("idListino", v.idListino.takeIf { it.isNotBlank() }?.let(::idJson) ?: JSONObject.NULL)
+                            if (costi) jv.put("prezzo", v.prezzo ?: JSONObject.NULL).put("scontoPercentuale", v.scontoPercentuale)
+                            if (v.id.isNotBlank() && !v.id.startsWith(NUOVO)) jv.put("id", idJson(v.id))
+                            put(jv)
+                        }
+                    })
+                    put(js)
+                }
+            })
+            .put("scadenzePagamento", JSONArray().apply {
+                p.scadenzePagamento.forEach { s ->
+                    val js = JSONObject().put("descrizione", s.descrizione.trim()).put("tipo", s.tipo).put("valore", s.valore)
+                        .put("quando", s.quando).put("data", s.data?.toString() ?: "")
+                    if (s.id.isNotBlank() && !s.id.startsWith(NUOVO)) js.put("id", idJson(s.id))
+                    put(js)
+                }
+            })
+        if (costi) o.put("scontoPercentuale", p.scontoPercentuale).put("scontoEuro", p.scontoEuro)
+        if (p.id.isNotBlank()) o.put("id", idJson(p.id))
+        return o
+    }
+
+    // ------------------------------------------------------------- fase 2: attività
+
+    /**
+     * Senza [da] e [a]: le aperte di ogni giorno, scadute e senza data comprese (l'elenco);
+     * con le date: quelle del periodo in ogni stato tranne le annullate (il calendario).
+     */
+    suspend fun attivita(da: LocalDate?, a: LocalDate?, assegnata: String = "", commessa: String = ""): List<Attivita> = withContext(Dispatchers.IO) {
+        val parametri = buildList {
+            if (da != null) add("da" to da.toString())
+            if (a != null) add("a" to a.toString())
+            if (assegnata.isNotBlank()) add("assegnata" to assegnata)
+            if (commessa.isNotBlank()) add("commessa" to commessa)
+        }
+        leggi("attivita", *parametri.toTypedArray()).optJSONArray("attivita").oggetti().map(Attivita::daJson)
+    }
+
+    /** [conRicorrenza]: manda la regola (nuova o cambiata); [conferma]: salva anche se si accavalla. */
+    suspend fun salvaAttivita(a: Attivita, perRicorrenza: String? = null, conRicorrenza: Boolean = true, conferma: Boolean = false): Attivita =
+        withContext(Dispatchers.IO) {
+            val corpo = JSONObject().put("azione", "salvaAttivita").put("attivita", a.perSalvare(conRicorrenza))
+            if (!perRicorrenza.isNullOrBlank()) corpo.put("perRicorrenza", perRicorrenza)
+            if (conferma) corpo.put("conferma", true)
+            conAttivita(scrivi(corpo))
+        }
+
+    /** Toglie un allegato (va nel cestino): torna l'attività. */
+    suspend fun togliAllegato(idFile: String): Attivita? = withContext(Dispatchers.IO) {
+        scrivi(JSONObject().put("azione", "togliAllegato").put("id", idFile)).optJSONObject("attivita")?.let(Attivita::daJson)
+    }
+
+    suspend fun faiAttivita(id: String, fatta: Boolean): Attivita = withContext(Dispatchers.IO) {
+        conAttivita(scrivi(JSONObject().put("azione", "faiAttivita").put("id", idJson(id)).put("fatta", fatta)))
+    }
+
+    suspend fun togliAttivita(id: String, perRicorrenza: String? = null): Unit = withContext(Dispatchers.IO) {
+        val corpo = JSONObject().put("azione", "togliAttivita").put("id", idJson(id))
+        if (!perRicorrenza.isNullOrBlank()) corpo.put("perRicorrenza", perRicorrenza)
+        scrivi(corpo); Unit
+    }
+
+    /** [idVoce] e' la voce della checklist; torna l'attività com'è adesso. */
+    suspend fun spuntaChecklist(idVoce: String, fatta: Boolean): Attivita? = withContext(Dispatchers.IO) {
+        scrivi(JSONObject().put("azione", "spuntaChecklist").put("id", idJson(idVoce)).put("fatta", fatta))
+            .optJSONObject("attivita")?.let(Attivita::daJson)
+    }
+
+    private fun conAttivita(r: JSONObject): Attivita =
+        Attivita.daJson(r.optJSONObject("attivita") ?: throw Rifiutato("Il server non ha restituito l'attività"))
+
     // ------------------------------------------------------------- interno
 
     /** L'indirizzo base, senza la barra e senza /exec in fondo. */
@@ -643,6 +861,7 @@ class PonteServer(
                     json.has("accesso") && !json.optBoolean("accesso", true) -> throw AccessoScaduto(errore)
                     json.has("permesso") && !json.optBoolean("permesso", true) -> throw PermessoNegato(errore)
                     json.optBoolean("rete", false) -> throw ServizioNonRaggiunto(errore)
+                    json.optBoolean("serveConferma", false) -> throw DaConfermare(errore, json)
                     else -> throw Rifiutato(errore)
                 }
             }
@@ -653,6 +872,9 @@ class PonteServer(
     companion object {
         /** Gli id del database sono numeri: si mandano come numeri quando lo sono. */
         fun idJson(id: String): Any = id.trim().toLongOrNull() ?: id.trim()
+
+        /** Il segno degli id nati sul telefono (sezioni, voci, scadenze ancora da salvare): non si mandano al server. */
+        const val NUOVO = "nuovo-"
     }
 }
 

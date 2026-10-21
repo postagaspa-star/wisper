@@ -51,6 +51,8 @@ const SEMPRE_TESTO = ['partitaIva', 'telefono', 'PARTITA_IVA', 'TELEFONO'];
 const NUMERAZIONI_INIZIALI = [
   { tipo: 'commessa', formato: '{AA}ST{NNN}', annuale: 0 },
   { tipo: 'rapportino', formato: 'RAP/{AAAA}/{NNNN}', annuale: 1 },
+  // Fase 2 (la mette anche la migrazione 002): riparte ogni anno, le revisioni tengono il numero.
+  { tipo: 'preventivo', formato: 'PR/{AAAA}/{NNN}', annuale: 1 },
 ];
 
 /** Mai nel registro: la password (anche se scrypt) e i token. */
@@ -340,6 +342,7 @@ module.exports = {
 };
 
 // Le azioni, divise per argomento: ognuna aggiunge i suoi metodi al server.
-for (const parte of ['anagrafiche', 'rapportini', 'file', 'accesso', 'amministrazione', 'dashboard', 'esporta', 'copie', 'email', 'vies']) {
+for (const parte of ['anagrafiche', 'rapportini', 'file', 'accesso', 'amministrazione', 'dashboard', 'esporta', 'copie', 'email', 'vies',
+  'preventivi', 'attivita']) {
   Object.assign(Wisper.prototype, require('./azioni/' + parte));
 }

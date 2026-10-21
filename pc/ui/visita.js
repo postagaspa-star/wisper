@@ -20,6 +20,9 @@
   const TUTTI_I_PASSI = [
     { bersaglio: 'lato', titolo: 'Il menu', frase: 'Tutte le parti di Wisper sono qui. Ctrl+B lo richiude a icone.' },
     { bersaglio: 'dashboard', titolo: 'La Dashboard', frase: 'Qui vedi cosa fare adesso: ogni riga ti porta dove si sistema.', serve: ['dashboard', 1] },
+    // Fase 2: due passi, uno da fare e uno da leggere.
+    { bersaglio: 'nav-preventivi', titolo: 'Preventivi', frase: 'Preventivi con i conti, l\'IVA e cosa chiede la legge. Fai clic su Preventivi e contratti.', fai: true, serve: ['preventivi', 1] },
+    { bersaglio: 'nav-attivita', titolo: 'Attività e calendario', frase: 'Le cose da fare oggi, gli appuntamenti e la settimana di tutti sono qui.', serve: ['attivita', 1] },
     { bersaglio: 'nav-fatturazione', titolo: 'Fatturazione', frase: 'Quello che c\'è da fatturare. Fai clic su Fatturazione.', fai: true, serve: FATTURA },
     { bersaglio: 'da-fatturare', titolo: 'Da fatturare', frase: 'Qui vedi subito quanto c\'è da fatturare questo mese.', serve: FATTURA },
     { bersaglio: 'prepara-riepilogo', titolo: 'Il riepilogo', frase: 'Una scheda per chi paga, coi suoi rapportini. Fai clic su Prepara riepilogo.', fai: true, serve: FATTURA },

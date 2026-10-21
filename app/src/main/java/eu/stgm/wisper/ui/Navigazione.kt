@@ -63,6 +63,8 @@ enum class Sezione(val nome: String, val icona: ImageVector, val modulo: String)
     DASHBOARD("Dashboard", Icone.dashboard, Moduli.DASHBOARD),
     CLIENTI("Clienti e fornitori", Icone.clienti, Moduli.CLIENTI),
     COMMESSE("Progetti e commesse", Icone.commesse, Moduli.COMMESSE),
+    PREVENTIVI("Preventivi e contratti", Icone.preventivo, Moduli.PREVENTIVI),
+    ATTIVITA("Attività e calendario", Icone.calendario, Moduli.ATTIVITA),
     RAPPORTINI("Ore e rapportini", Icone.ore, Moduli.RAPPORTINI),
     FATTURAZIONE("Fatturazione", Icone.fatturazione, Moduli.FATTURAZIONE),
     AMMINISTRAZIONE("Amministrazione", Icone.amministrazione, Moduli.AMMINISTRAZIONE),
@@ -90,6 +92,7 @@ class Navigatore(
     private val onSezione: (Sezione, FiltroRapportini?) -> Unit,
     private val onApriRapportino: (String) -> Unit,
     private val onNuovoRapportino: (LocalDate, String?, String?) -> Unit,
+    private val onFirmaPreventivo: (String) -> Unit = {},
 ) {
     fun vai(rotta: String) = onVai(rotta)
     fun indietro() = onIndietro()
@@ -103,12 +106,17 @@ class Navigatore(
     /** Un rapportino nuovo, già col cliente e la commessa quando si parte da una commessa. */
     fun nuovoRapportino(giorno: LocalDate = LocalDate.now(), idCliente: String? = null, idCommessa: String? = null) =
         onNuovoRapportino(giorno, idCliente, idCommessa)
+
+    /** La firma del cliente per accettare un preventivo, a tutto schermo come quella del rapportino. */
+    fun firmaPreventivo(id: String) = onFirmaPreventivo(id)
 }
 
 /** Le rotte "compito" (moduli, invio): a tutto schermo, niente menu, si esce con la ×. */
 fun rottaCompito(rotta: String?): Boolean =
     rotta != null && (rotta.startsWith("invio/") || rotta.startsWith("commessa-modifica/") || rotta.startsWith("commessa-nuova") ||
-        rotta.startsWith("cliente-modifica/") || rotta.startsWith("cliente-nuovo") || rotta.startsWith("fornitore-nuovo"))
+        rotta.startsWith("cliente-modifica/") || rotta.startsWith("cliente-nuovo") || rotta.startsWith("fornitore-nuovo") ||
+        rotta.startsWith("preventivo-modifica/") || rotta.startsWith("preventivo-nuovo") ||
+        rotta.startsWith("attivita-modifica/") || rotta.startsWith("attivita-nuova"))
 
 /** La sezione di una pagina interna: dice il nome piccolo accanto a "indietro" e il permesso che serve. */
 fun sezioneDiRotta(rotta: String?, base: Sezione): Sezione = when {
@@ -116,6 +124,8 @@ fun sezioneDiRotta(rotta: String?, base: Sezione): Sezione = when {
     rotta == "amm/app" -> base
     rotta.startsWith("client") || rotta.startsWith("fornitor") || rotta.startsWith("soggett") -> Sezione.CLIENTI
     rotta.startsWith("commess") -> Sezione.COMMESSE
+    rotta.startsWith("preventiv") || rotta == "listino" || rotta == "contratti" || rotta.startsWith("invio/preventivo") -> Sezione.PREVENTIVI
+    rotta.startsWith("attivita") || rotta.startsWith("calendario") -> Sezione.ATTIVITA
     rotta.startsWith("amm/") -> Sezione.AMMINISTRAZIONE
     else -> base
 }

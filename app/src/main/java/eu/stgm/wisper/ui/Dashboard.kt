@@ -117,7 +117,7 @@ fun SchermataDashboard(
                     if (prima != null) CosaPiuUrgente(prima, Modifier.bersaglio("cosa-fare")) { apri(prima.collegamento) }
                     val urgenti = d.urgenti.drop(1)
                     if (urgenti.isNotEmpty()) SezioneDashboard("Urgenti", urgenti, if (prima == null) Modifier.bersaglio("cosa-fare") else Modifier) { apri(it) }
-                    if (d.settimana.isNotEmpty()) SezioneDashboard("Questa settimana", d.settimana) { apri(it) }
+                    if (d.settimana.isNotEmpty()) SezioneDashboard("Questa settimana", d.settimana, Modifier.bersaglio("settimana")) { apri(it) }
                     if (perm.vede(Moduli.COMMESSE)) NumeriDelleCommesse(d.commesse) { filtro -> apri(Collegamento("commesse", filtro = filtro)) }
                     if (d.pianificare.isNotEmpty()) SezioneDashboard("Da pianificare", d.pianificare) { apri(it) }
                     if (d.vuota) NienteDaSistemare(if (prima == null) Modifier.bersaglio("cosa-fare") else Modifier)
@@ -174,6 +174,18 @@ fun apriCollegamento(col: Collegamento?, nav: Navigatore, rapportini: List<Rappo
             val giorno = runCatching { LocalDate.parse((col.id.ifBlank { col.filtro }).take(10)) }.getOrNull() ?: LocalDate.now()
             nav.nuovoRapportino(giorno)
         }
+        // Fase 2 (architettura.md §13.8): preventivi, attività, calendario.
+        "preventivo" -> if (col.id.isNotBlank()) nav.vai("preventivo/${col.id}") else nav.sezione(Sezione.PREVENTIVI)
+        "preventivi" -> {
+            RicordoPreventivi.mostra(p["stato"].orEmpty())
+            nav.sezione(Sezione.PREVENTIVI)
+        }
+        "attivita" -> if (col.id.isNotBlank()) nav.vai("attivita/${col.id}") else {
+            if (p["nonAssegnate"] == "true") RicordoAttivita.segmento = QualiAttivita.LIBERE
+            else if (p["gruppo"] != null && RicordoAttivita.segmento == QualiAttivita.LIBERE) RicordoAttivita.segmento = QualiAttivita.MIE
+            nav.sezione(Sezione.ATTIVITA)
+        }
+        "calendario" -> nav.vai("calendario/" + (p["giorno"] ?: col.id).orEmpty())
         "fatturazione" -> nav.sezione(Sezione.FATTURAZIONE)
         "amministrazione" -> nav.sezione(Sezione.AMMINISTRAZIONE)
         "copie" -> nav.vai("amm/copie")
@@ -211,6 +223,10 @@ private fun azioneDi(col: Collegamento?): String = when (col?.pagina?.lowercase(
     "rapportino" -> "Apri il rapportino"
     "nuovorapportino", "rapportino-nuovo", "giorno" -> "Scrivi il rapportino"
     "copie" -> "Vedi le copie"
+    "preventivo" -> "Apri il preventivo"
+    "preventivi" -> "Vedi i preventivi"
+    "attivita" -> if (col.id.isNotBlank()) "Apri l'attività" else "Vedi le attività"
+    "calendario" -> "Apri il calendario"
     else -> "Apri"
 }
 
@@ -281,6 +297,9 @@ private fun iconaDi(v: VoceDashboard): ImageVector = when (v.tipo.lowercase()) {
     "responsabile", "persone" -> Icone.clienti
     "copia", "copie" -> Icone.scudo
     "budget" -> if (v.gravita == "urgente") Icone.allarme else Icone.lista
+    "preventivo", "preventivi" -> Icone.preventivo
+    "appuntamento", "sopralluogo", "agenda" -> Icone.calendario
+    "attivita" -> if (v.gravita == "urgente") Icone.allarme else Icone.lista
     else -> when (v.gravita.lowercase()) {
         "urgente" -> Icone.allarme
         "attenzione" -> Icone.avviso

@@ -32,6 +32,9 @@ public sealed class Ponte
         (string Nome, byte[] Dati)? ScegliFile(string filtro);
         string? SalvaFile(string nomeProposto);
         void Riavvia();
+
+        /// <summary>Un promemoria (fase 2): la notifica di Windows, finché il programma è aperto.</summary>
+        void Notifica(string titolo, string testo);
     }
 
     public IFinestra? Finestra { get; set; }
@@ -231,6 +234,16 @@ public sealed class Ponte
 
             case "apri-documento":
                 return await ApriDocumentoAsync(o).ConfigureAwait(false);
+
+            case "notifica":
+            {
+                // Solo testo corto: titolo e una riga, come un promemoria. Niente link, niente azioni.
+                var titolo = Testo(o?["titolo"]);
+                var testo = Testo(o?["testo"]);
+                if (testo.Length == 0) return Json(400, Errore("Manca il testo"));
+                Finestra?.Notifica(titolo.Length > 63 ? titolo[..63] : titolo, testo.Length > 250 ? testo[..250] : testo);
+                return Json(200, new JsonObject { ["ok"] = true });
+            }
 
             default:
                 return Json(404, Errore("sconosciuto"));

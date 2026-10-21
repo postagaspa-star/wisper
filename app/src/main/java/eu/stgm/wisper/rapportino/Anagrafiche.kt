@@ -366,7 +366,15 @@ data class Anagrafiche(
         const val EMAIL_AVVISI = "EMAIL_AVVISI"
 
         /** Quelle che lo script vuole come numero: il computer le manda cosi', e cosi' anche il telefono. */
-        val IMPOSTAZIONI_NUMERICHE = setOf(EURO_KM, COSTO_ORARIO)
+        val IMPOSTAZIONI_NUMERICHE = setOf(EURO_KM, COSTO_ORARIO, "IVA", "EPPI_INTEGRATIVO", "RITENUTA", "PREVENTIVO_VALIDITA_GIORNI")
+
+        /** L'errore di un'impostazione numerica scritta male. */
+        fun erroreNumerica(chiave: String): String = when (chiave) {
+            EURO_KM -> "Il rimborso km dev'essere un numero, per esempio 0,76"
+            COSTO_ORARIO -> "Il costo orario dev'essere un numero, per esempio 22"
+            "PREVENTIVO_VALIDITA_GIORNI" -> "I giorni devono essere un numero, per esempio 30"
+            else -> "Dev'essere un numero, per esempio 22"
+        }
 
         /** "Rossi Impianti S.r.l." e "rossi impianti srl" sono lo stesso cliente. */
         fun normalizza(s: String): String = s.lowercase().replace(Regex("[^a-z0-9]"), "")

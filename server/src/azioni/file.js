@@ -24,6 +24,9 @@ function fileDaRiga(f) {
     id: f.id, nome: f.nome, mime: f.mime, byte: f.byte, tipo: f.tipo, idRapportino: f.rapportino_id || '',
     idCommessa: f.commessa_id || '', url: urlFile(f.id), copiato: !!f.percorso, creato: dataOraIso(f.creato),
     cestinato: dataOraIso(f.cestinato),
+    // Fase 2
+    idAttivita: f.attivita_id === null || f.attivita_id === undefined ? null : f.attivita_id,
+    idPreventivo: f.preventivo_id === null || f.preventivo_id === undefined ? null : f.preventivo_id,
   };
 }
 
@@ -37,7 +40,7 @@ module.exports = {
    * file a meta' non c'e' mai) e la riga nella tabella. Il contenuto non va mai
    * nel registro: solo nome, tipo e grandezza.
    */
-  salvaFile({ dati, nome, mime, tipo, rapportinoId, commessaId, idClient }) {
+  salvaFile({ dati, nome, mime, tipo, rapportinoId, commessaId, idClient, attivitaId, preventivoId }) {
     const id = idCasuale();
     const finale = this.percorsoFile(id);
     const temporaneo = finale + '.scrivendo';
@@ -47,6 +50,7 @@ module.exports = {
       id, nome: nome || id, mime: mime || 'application/octet-stream', byte: dati.length, sha256: sha256(dati),
       percorso: id, tipo, rapportino_id: rapportinoId || null, commessa_id: commessaId || null,
       id_client: idClient || null, creato: adesso(),
+      attivita_id: attivitaId || null, preventivo_id: preventivoId || null,
     });
     return this.db.riga('SELECT * FROM file WHERE id = ?', id);
   },
@@ -67,6 +71,7 @@ module.exports = {
    *                   rapportino diventa FIRMATO
    *  - 'firmaTecnico' la firma del compilatore, una volta per tutte
    *  - 'documento'    un documento della commessa d.idCommessa
+   *  - 'attivita'     un allegato dell'attivita' d.idAttivita (fase 2)
    * d.idFile nasce sul telefono ed e' lo stesso a ogni tentativo: se il file
    * c'e' gia' non se ne crea un secondo.
    */
@@ -90,6 +95,18 @@ module.exports = {
       if (!commessa) throw new Rifiuto('Commessa ' + d.idCommessa + ' non trovata');
       const f = this.fileGiaArrivato('documento', d.idFile, '', commessa.id) ||
         this.salvaFile({ dati, nome: testo(d.nome) || 'documento', mime, tipo, commessaId: commessa.id, idClient: testo(d.idFile) });
+      return { id: f.id, url: urlFile(f.id), nome: f.nome };
+    }
+
+    if (tipo === 'attivita') {
+      const a = this.db.riga('SELECT * FROM attivita WHERE id = ?', Number(d.idAttivita) || 0);
+      if (!a) throw new Rifiuto('Attività ' + testo(d.idAttivita) + ' non trovata');
+      this.controllaSua(a, 'caricare allegati sulle attività degli altri');
+      const gia = testo(d.idFile)
+        ? this.db.riga("SELECT * FROM file WHERE tipo = 'attivita' AND attivita_id = ? AND id_client = ? AND cestinato IS NULL", a.id, testo(d.idFile))
+        : null;
+      const f = gia || this.salvaFile({ dati, nome: testo(d.nome) || 'allegato' + estensione, mime, tipo, attivitaId: a.id, idClient: testo(d.idFile) });
+      if (!gia) this.aggiorna('attivita', a.id, { modificato: adesso() });
       return { id: f.id, url: urlFile(f.id), nome: f.nome };
     }
 
@@ -156,6 +173,12 @@ module.exports = {
       return true;
     }
     if (f.tipo === 'documento') return this.livello('documenti') >= 1;
+    if (f.tipo === 'attivita') {
+      if (this.livello('attivita') < 1) return false;
+      const a = this.db.riga('SELECT * FROM attivita WHERE id = ?', f.attivita_id || 0);
+      return !!a && this.vedeAttivita(a);
+    }
+    if (f.tipo === 'preventivo') return this.livello('preventivi') >= 1;
     return this.livello('rapportini') >= 1 || this.livello('documenti') >= 1;
   },
 

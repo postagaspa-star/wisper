@@ -134,4 +134,12 @@ object Icone {
     val occhioChiuso = tratto("occhioChiuso", 2.2f, "M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z", "M12 15a3 3 0 1 0 0-6a3 3 0 1 0 0 6z", "M4 4l16 16")
     val numero = tratto("numero", 2.2f, "M5 9h14M5 15h14M10 3L8 21M16 3l-2 18")
     val su = tratto("su", 2.4f, "M6 15l6-6 6 6")
+
+    // Il gestionale, fase 2 (docs/prototipo/Gestionale-fase2.html)
+    val preventivo = tratto("preventivo", 2.2f, "M7 3h7l4 4v14H7z", "M14 3v4h4M10 12h5M10 16h5")
+    val ripeti = tratto("ripeti", 2.2f, "M17 2l3 3-3 3", "M3 11V9a4 4 0 0 1 4-4h13", "M7 22l-3-3 3-3", "M21 13v2a4 4 0 0 1-4 4H4")
+    val campanella = tratto("campanella", 2.2f, "M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9", "M10.3 21a1.94 1.94 0 0 0 3.4 0")
+    val graffetta = tratto("graffetta", 2.2f, "M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48")
+    val bandiera = tratto("bandiera", 2.2f, "M5 21V4", "M5 4h11l-2 4 2 4H5")
+    val orologio = tratto("orologio", 2.2f, "M12 7v5l3 2", "M12 3a9 9 0 1 1 0 18a9 9 0 1 1 0-18z")
 }

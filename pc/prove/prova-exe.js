@@ -117,7 +117,9 @@ async function main() {
     console.log('ok  token salvato cifrato (' + dopo.token.length + ' caratteri), indirizzo di prova non salvato');
 
     // 6. Le pagine, una per una, senza errori; Laura (amministrazione in lettura) non vede i pulsanti per cambiare utenti.
-    for (const hash of ['#clienti', '#clienti/C002', '#commesse', '#commesse/26ST001', '#rapportini', '#fatturazione', '#amministrazione', '#amministrazione/utenti', '#amministrazione/permessi', '#amministrazione/registro', '#amministrazione/copie']) {
+    // Dalla fase 2 anche preventivi, listino, contratti, attività, calendario e pianificazione.
+    for (const hash of ['#clienti', '#clienti/C002', '#commesse', '#commesse/26ST001', '#rapportini', '#fatturazione', '#amministrazione', '#amministrazione/utenti', '#amministrazione/permessi', '#amministrazione/registro', '#amministrazione/copie',
+      '#preventivi', '#preventivi/' + encodeURIComponent('PR/' + new Date().getFullYear() + '/012'), '#preventivi/listino', '#preventivi/contratti', '#attivita', '#attivita/calendario', '#attivita/pianificazione']) {
       await valuta("location.hash = '" + hash + "'; true");
       await aspetta(900);
       const testo = await valuta("document.querySelector('#principale').innerText.slice(0, 80).replace(/\\s+/g, ' ')");
@@ -134,6 +136,12 @@ async function main() {
     console.log('ok  /file/<id> risponde ' + file + ' per un file che non c\'è');
 
     // 8. Esci: la chiave sparisce dal disco e si torna alla pagina di accesso.
+    // Fase 2: il promemoria come notifica di Windows (l'icona accanto all'orologio). Qui si guarda solo la risposta.
+    const notifica = await valuta("fetch('/locale/notifica', { method: 'POST', body: JSON.stringify({ titolo: 'Wisper · promemoria', testo: 'Prova del promemoria (Wisper Ufficio di prova)' }) }).then(r => r.json())");
+    if (!notifica || notifica.ok !== true) throw new Error('La notifica non è partita: ' + JSON.stringify(notifica));
+    const senzaTesto = await valuta("fetch('/locale/notifica', { method: 'POST', body: '{}' }).then(r => r.status)");
+    if (senzaTesto !== 400) throw new Error('Una notifica senza testo deve dire 400, non ' + senzaTesto);
+    console.log('ok  notifica di Windows: il programma risponde, senza testo la rifiuta');
     await valuta("fetch('/locale/esci', { method: 'POST', body: '{}' }).then(r => r.json())");
     const fuori = JSON.parse(fs.readFileSync(conf, 'utf8'));
     assert.equal(fuori.token, '', 'dopo Esci il token non c\'è più');

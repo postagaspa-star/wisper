@@ -9,8 +9,9 @@
  */
 'use strict';
 
-const { Rifiuto, senzaPermesso, testo, oggi } = require('../utili');
+const { Rifiuto, senzaPermesso, testo, oggi, dataOraIso } = require('../utili');
 const { togliCosti } = require('../permessi');
+const { statoVistoPreventivo } = require('./preventivi');
 
 /** Una cella: i numeri con la virgola, il testo tra virgolette se serve. */
 function cella(v) {
@@ -73,13 +74,35 @@ const COLONNE = {
   ],
 };
 
+// Fase 2: preventivi e attivita'.
+COLONNE.preventivi = [
+  ['Numero', p => p.riga.numero], ['Revisione', p => p.riga.revisione], ['Data', p => data(p.riga.data)], ['Scadenza', p => data(p.riga.scadenza)],
+  ['Stato', p => STATO_A_PAROLE[p.statoVisto] || p.statoVisto], ['Codice cliente', p => p.riga.cliente_id], ['Cliente', p => p.cliente],
+  ['Oggetto', p => p.riga.oggetto], ['Complessità', p => p.riga.complessita], ['Imponibile', p => p.conti.imponibile, true],
+  ['Contributo integrativo', p => p.conti.contributo, true], ['IVA', p => p.conti.iva, true], ['Totale', p => p.conti.totale, true],
+  ['Inviato il', p => dataOra(p.inviatoIl)], ['Accettato il', p => dataOra(p.accettatoIl)], ['Accettato da', p => p.riga.accettato_da],
+  ['Come', p => p.riga.accettazione_modo], ['Commessa', p => p.riga.commessa_id], ['Rifiutato il', p => dataOra(p.rifiutatoIl)],
+  ['Motivo', p => p.riga.motivo_rifiuto],
+];
+COLONNE.attivita = [
+  ['Giorno', a => data(a.giorno)], ['Titolo', a => a.titolo], ['Tipo', a => a.tipo], ['Stato', a => a.stato.replace('_', ' ')],
+  ['Priorità', a => a.priorita], ['Scadenza', a => data(a.scadenza)], ['Inizio', a => dataOra(a.inizio)], ['Fine', a => dataOra(a.fine)],
+  ['Assegnata a', a => a.assegnata], ['Cliente', a => a.cliente], ['Commessa', a => a.idCommessa], ['Luogo', a => a.luogo],
+  ['Si ripete', a => !!a.ricorrenza], ['Checklist', a => (a.checklist.length ? a.checklist.filter(c => c.fatta).length + '/' + a.checklist.length : '')],
+  ['Fatta il', a => dataOra(a.fattaIl)], ['Descrizione', a => a.descrizione],
+];
+const STATO_A_PAROLE = { BOZZA: 'Bozza', INVIATO: 'Inviato', SCADUTO: 'Scaduto', ACCETTATO: 'Accettato', RIFIUTATO: 'Rifiutato', SOSTITUITO: 'Sostituito' };
+
 /** Di quale modulo serve almeno la lettura, per ogni cosa da esportare. */
-const MODULO = { rapportini: 'rapportini', clienti: 'clienti', fornitori: 'clienti', commesse: 'commesse', registro: 'amministrazione' };
+const MODULO = {
+  rapportini: 'rapportini', clienti: 'clienti', fornitori: 'clienti', commesse: 'commesse', registro: 'amministrazione',
+  preventivi: 'preventivi', attivita: 'attivita',
+};
 
 module.exports = {
   esporta(d) {
     const cosa = testo(d.cosa);
-    if (!MODULO[cosa]) throw new Rifiuto('Cosa esportare? rapportini, clienti, fornitori, commesse o registro');
+    if (!MODULO[cosa]) throw new Rifiuto('Cosa esportare? rapportini, clienti, fornitori, commesse, registro, preventivi o attivita');
     if (this.livello(MODULO[cosa]) < 1) throw senzaPermesso('esportare ' + cosa);
     const costi = this.vedeCosti();
     const scegli = lista => lista.filter(c => costi || !c[2]);
@@ -102,6 +125,15 @@ module.exports = {
       righe = this.leggiCommesse({ archiviati: true, modelli: true }).map(m => Object.assign({}, m, {
         nomeCliente: nomi[m.idCliente] || '', nomeResponsabile: m.responsabileId ? utenti[m.responsabileId] || '' : '',
       }));
+    } else if (cosa === 'preventivi') {
+      colonne = scegli(COLONNE.preventivi);
+      righe = this.elencoPreventivi(d).map(p => Object.assign(p, {
+        statoVisto: statoVistoPreventivo(p.riga), inviatoIl: dataOraIso(p.riga.inviato_il),
+        accettatoIl: dataOraIso(p.riga.accettato_il), rifiutatoIl: dataOraIso(p.riga.rifiutato_il),
+      }));
+    } else if (cosa === 'attivita') {
+      colonne = COLONNE.attivita;
+      righe = this.leggiAttivita(d);
     } else {
       colonne = COLONNE.registro;
       righe = [];

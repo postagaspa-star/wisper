@@ -25,6 +25,8 @@
       { k: 'permessi', titolo: 'Ruoli e permessi', icona: 'scudo' },
       { k: 'numerazioni', titolo: 'Numerazioni', icona: 'numero' },
       { k: 'tariffe', titolo: 'Tariffe e rimborsi', icona: 'fatturazione', soldi: true },
+      // fase 2: IVA, contributo EPPI, validità e condizioni dei preventivi
+      { k: 'fisco', titolo: 'Fisco e preventivi', icona: 'preventivo', soldi: true },
       { k: 'registro', titolo: 'Registro attività', icona: 'lista' },
       { k: 'copie', titolo: 'Copie ed esportazioni', icona: 'scarica' },
       { k: 'cestino', titolo: 'Cestino', icona: 'cestino', scrive: true },
@@ -36,8 +38,8 @@
       const dove = sotto + '/' + (id || '');
       if (M.dove !== dove) { M.utenti = null; M.permessi = null; M.copie = null; M.cestino = null; M.sessioni = {}; M.dove = dove; }
       if (sotto && sotto !== 'app' && !puo('amministrazione')) { aggiungi(pagina, [h('div', { class: 'calmo grande' }, icona('scudo', 22, 2.2), 'Non hai il permesso per vedere questa pagina. Chiedi a ' + W.titolare() + '.')]); return; }
-      if ((sotto === 'tariffe' && !soldi()) || (sotto === 'cestino' && !scrive())) { aggiungi(pagina, [h('div', { class: 'calmo grande' }, icona('scudo', 22, 2.2), 'Non hai il permesso per vedere questa pagina. Chiedi a ' + W.titolare() + '.')]); return; }
-      const fn = { studio, utenti: id ? paginaUtente : elencoUtenti, permessi, numerazioni, tariffe, registro, copie, cestino, app }[sotto];
+      if (((sotto === 'tariffe' || sotto === 'fisco') && !soldi()) || (sotto === 'cestino' && !scrive())) { aggiungi(pagina, [h('div', { class: 'calmo grande' }, icona('scudo', 22, 2.2), 'Non hai il permesso per vedere questa pagina. Chiedi a ' + W.titolare() + '.')]); return; }
+      const fn = { studio, utenti: id ? paginaUtente : elencoUtenti, permessi, numerazioni, tariffe, fisco, registro, copie, cestino, app }[sotto];
       if (!fn) { elenco(pagina); return; }
       if (sotto !== 'app' || puo('amministrazione')) {
         aggiungi(pagina, [h('div', { class: 'indietro-riga' },
@@ -76,7 +78,10 @@
         studio: [imp.RAGIONE_SOCIALE, idFirma(imp.FIRMA_TECNICO) ? 'la tua firma c\'è' : 'manca la tua firma'].filter(Boolean).join(' · '),
         utenti: utenti.length ? (utenti.length === 1 ? '1 persona' : utenti.length + ' persone') + ' · ' + (attivi === 1 ? '1 attiva' : attivi + ' attive') : 'Chi entra in Wisper',
         permessi: 'Titolare, Amministrazione, Collaboratore, Lettura',
-        numerazioni: [num('commessa') ? 'Commesse ' + prossimo('commessa') : '', num('rapportino') ? 'Rapportini ' + prossimo('rapportino') : ''].filter(Boolean).join(' · ') || 'Codici di commesse e rapportini',
+        numerazioni: [num('commessa') ? 'Commesse ' + prossimo('commessa') : '', num('rapportino') ? 'Rapportini ' + prossimo('rapportino') : '',
+          num('preventivo') ? 'Preventivi ' + prossimo('preventivo') : ''].filter(Boolean).join(' · ') || 'Codici di commesse e rapportini',
+        fisco: 'IVA ' + (imp.IVA !== undefined && imp.IVA !== '' ? C.numero(imp.IVA) + '%' : 'da scrivere') + ' · contributo EPPI ' + (imp.EPPI_INTEGRATIVO !== undefined && imp.EPPI_INTEGRATIVO !== '' ? C.numero(imp.EPPI_INTEGRATIVO) + '%' : 'da scrivere') +
+          ' · preventivi validi ' + (imp.PREVENTIVO_VALIDITA_GIORNI || 30) + ' giorni',
         tariffe: 'Rimborso km ' + (imp.EURO_KM !== undefined && imp.EURO_KM !== '' ? C.numero(imp.EURO_KM) + ' €' : 'da scrivere') + ' · costo orario ' + (imp.COSTO_ORARIO ? C.numero(imp.COSTO_ORARIO) + ' €' : 'da scrivere'),
         registro: 'Chi ha cambiato cosa',
         copie: ultimaCopia(M.copie) ? descriviCopia(ultimaCopia(M.copie)) : 'Copie di ogni notte, file per Excel',
@@ -114,6 +119,9 @@
         return campo(etichetta, campi[chiave]);
       };
       const firma = idFirma(imp.FIRMA_TECNICO);
+      const areaTitoli = h('textarea', { rows: 3, disabled: sola });
+      areaTitoli.value = imp.TITOLI || '';
+      campi.TITOLI = areaTitoli;
       aggiungi(pagina, [h('div', { class: 'testata' }, h('h1', null, 'Dati dello studio')),
         h('div', { class: 'stretta-820 sezione' },
           h('div', { class: 'scheda' }, h('h2', null, 'Intestazione dei PDF'),
@@ -122,6 +130,12 @@
               h('div', { class: 'riga-campi' }, input('INDIRIZZO', 'Indirizzo'), input('PARTITA_IVA', 'Partita IVA')),
               h('div', { class: 'riga-campi' }, input('EMAIL', 'Email per le risposte'), input('TELEFONO', 'Telefono'), input('PEC', 'PEC')),
               sola ? null : h('div', null, h('button', { type: 'button', class: 'btn giallo', onclick: () => salvaImpostazioni(campi, ['RAGIONE_SOCIALE', 'TECNICO', 'INDIRIZZO', 'PARTITA_IVA', 'EMAIL', 'TELEFONO', 'PEC']) }, 'Salva')))),
+          h('div', { class: 'scheda' }, h('h2', null, 'Polizza e titoli'),
+            h('div', { class: 'fila' },
+              h('div', { class: 'riga-campi' }, input('POLIZZA_COMPAGNIA', 'Compagnia della polizza professionale'), input('POLIZZA_NUMERO', 'Numero della polizza'), input('POLIZZA_MASSIMALE', 'Massimale')),
+              campo('Titoli e specializzazioni', areaTitoli),
+              sola ? null : h('div', null, h('button', { type: 'button', class: 'btn', onclick: () => salvaImpostazioni(campi, ['POLIZZA_COMPAGNIA', 'POLIZZA_NUMERO', 'POLIZZA_MASSIMALE', 'TITOLI'],
+                'Salvato: polizza e titoli vanno nei preventivi nuovi') }, 'Salva')))),
           h('div', { class: 'scheda' }, h('h2', null, 'La tua firma'),
             h('div', { class: 'fila' },
               firma ? h('img', { class: 'firma-tecnico', src: '/file/' + firma, alt: 'La tua firma' }) : h('div', { class: 'secondario' }, 'Non ancora caricata: sui rapportini resta lo spazio vuoto.'),
@@ -137,7 +151,7 @@
       const valori = {};
       chiavi.forEach(k => {
         let x = campi[k].type === 'checkbox' ? (campi[k].checked ? 'SI' : 'NO') : campi[k].value.trim();
-        if (['EURO_KM', 'COSTO_ORARIO'].indexOf(k) >= 0 && x !== '') x = C.num(x);
+        if (['EURO_KM', 'COSTO_ORARIO', 'IVA', 'EPPI_INTEGRATIVO', 'RITENUTA', 'PREVENTIVO_VALIDITA_GIORNI'].indexOf(k) >= 0 && x !== '') x = C.num(x);
         valori[k] = x;
       });
       const ris = await lavora('Salvo', () => Rete.post('/server/salvaImpostazioni', { valori }));
@@ -164,6 +178,39 @@
             h('label', { class: 'spunta-campo' }, campi.TICKET_ATTIVO, 'Campo ticket nei rapportini'),
             sola ? null : h('div', null, h('button', { type: 'button', class: 'btn giallo', onclick: () => salvaImpostazioni(campi, ['EURO_KM', 'AUTO', 'COSTO_ORARIO', 'TICKET_ATTIVO'],
               'Salvato. Vale per i rapportini nuovi: quelli già scritti tengono il rimborso con cui sono nati') }, 'Salva')))))]);
+    }
+
+    // ===================================================================== fisco e preventivi
+
+    /**
+     * IVA, contributo integrativo EPPI (dei periti industriali: entra nella base IVA,
+     * da confermare col commercialista), ritenuta (dalla fase 4), validità e condizioni
+     * dei preventivi. Valgono per i preventivi nuovi: quelli già scritti tengono i loro.
+     */
+    function fisco(pagina) {
+      const imp = S.ana.impostazioni;
+      const sola = !scrive();
+      const campi = {};
+      const input = (chiave, etichetta, suffisso) => {
+        const valore = imp[chiave] === undefined || imp[chiave] === null ? '' : imp[chiave];
+        campi[chiave] = h('input', { type: 'text', value: typeof valore === 'number' ? R.numeroCampo(valore) : String(valore), disabled: sola, inputmode: suffisso ? 'decimal' : null });
+        return campo(etichetta, suffisso ? conSuffisso(campi[chiave], suffisso) : campi[chiave]);
+      };
+      campi.PREVENTIVO_CONDIZIONI = h('textarea', { rows: 4, disabled: sola });
+      campi.PREVENTIVO_CONDIZIONI.value = imp.PREVENTIVO_CONDIZIONI || '';
+      aggiungi(pagina, [h('div', { class: 'testata' }, h('h1', null, 'Fisco e preventivi')),
+        h('div', { class: 'stretta-820 sezione' },
+          h('div', { class: 'scheda' }, h('h2', null, 'Imposte e contributi'),
+            h('div', { class: 'fila' },
+              h('div', { class: 'riga-campi' }, input('IVA', 'IVA', '%'), input('EPPI_INTEGRATIVO', 'Contributo integrativo EPPI', '%'), input('RITENUTA', 'Ritenuta d\'acconto', '%')),
+              sola ? null : h('div', null, h('button', { type: 'button', class: 'btn', onclick: () => salvaImpostazioni(campi, ['IVA', 'EPPI_INTEGRATIVO', 'RITENUTA'],
+                'Salvato. Vale per i preventivi nuovi: quelli già scritti tengono IVA e contributo con cui sono nati') }, 'Salva')))),
+          h('div', { class: 'scheda' }, h('h2', null, 'Preventivi'),
+            h('div', { class: 'fila' },
+              h('div', { class: 'riga-campi' }, input('PREVENTIVO_VALIDITA_GIORNI', 'Validità di un preventivo', 'giorni'), h('span')),
+              campo('Condizioni che si propongono', campi.PREVENTIVO_CONDIZIONI),
+              sola ? null : h('div', null, h('button', { type: 'button', class: 'btn', onclick: () => salvaImpostazioni(campi, ['PREVENTIVO_VALIDITA_GIORNI', 'PREVENTIVO_CONDIZIONI'],
+                'Salvato: vale per i preventivi nuovi') }, 'Salva')))))]);
     }
 
     // ===================================================================== utenti
@@ -390,7 +437,7 @@
 
     // ===================================================================== numerazioni
 
-    const NOMI_NUMERAZIONE = { commessa: 'Commesse', rapportino: 'Rapportini' };
+    const NOMI_NUMERAZIONE = { commessa: 'Commesse', rapportino: 'Rapportini', preventivo: 'Preventivi' };
 
     function prossimoNumero(n) {
       const m = String(n.prossimo || '').match(/(\d+)\D*$/);

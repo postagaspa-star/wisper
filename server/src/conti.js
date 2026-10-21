@@ -155,7 +155,98 @@ function partitaIvaItalianaValida(v) {
   return somma % 10 === 0;
 }
 
+// ------------------------------------------------------------------ i conti del preventivo (fase 2)
+
+/** L'importo di una voce: quantita' x prezzo x (1 - sconto della voce), al centesimo. */
+function importoVoce(v) {
+  return centesimi(numero(v.quantita) * numero(v.prezzo) * (1 - numero(v.scontoPercentuale) / 100));
+}
+
+/** Il nome del gruppo di alternative: senza badare a maiuscole e spazi ("Collaudo " = "collaudo"). */
+const gruppoAlternativa = v => testo(v.alternativa).toLowerCase().replace(/\s+/g, ' ');
+
+/**
+ * Quali voci contano: le normali sempre, le facoltative se il cliente le vuole
+ * (scelta), e di ogni gruppo di alternative solo la prima scelta. Torna un
+ * elenco di vero/falso nello stesso ordine delle voci.
+ */
+function vociCheContano(voci) {
+  const presi = {};
+  return voci.map(v => {
+    const g = gruppoAlternativa(v);
+    if (g) {
+      if (!v.scelta || presi[g]) return false;
+      presi[g] = true;
+      return true;
+    }
+    if (v.facoltativa) return !!v.scelta;
+    return true;
+  });
+}
+
+/**
+ * Il conto di un preventivo, solo qui: telefono e computer lo rifanno uguale
+ * per l'anteprima, con i casi di server/prove/casi-preventivo.json.
+ *
+ * p = {scontoPercentuale, scontoEuro, eppiPercentuale, ivaPercentuale,
+ *      sezioni: [{voci: [{quantita, prezzo, scontoPercentuale, facoltativa, alternativa, scelta, modo}]}],
+ *      scadenzePagamento: [{tipo: 'percentuale'|'importo', valore}]}
+ *
+ * Ogni pezzo si arrotonda al centesimo PRIMA di sommare, come i rapportini:
+ * il totale e' sempre la somma esatta dei pezzi scritti sul PDF.
+ */
+function contiPreventivo(p) {
+  const sezioni = (p.sezioni || []).map(s => s.voci || []);
+  const tutte = [].concat(...sezioni);
+  const contano = vociCheContano(tutte);
+  let i = 0;
+  let somma = 0;
+  let ore = 0;
+  const voci = [];
+  const subtotali = sezioni.map(lista => {
+    let sub = 0;
+    for (const v of lista) {
+      const importo = importoVoce(v);
+      const conta = contano[i++];
+      voci.push({ importo, conta });
+      if (conta) {
+        sub = centesimi(sub + importo);
+        if (v.modo === 'ore') ore += numero(v.quantita);
+      }
+    }
+    somma = centesimi(somma + sub);
+    return sub;
+  });
+  const scontoDaPercentuale = centesimi(somma * numero(p.scontoPercentuale) / 100);
+  const scontoEuro = centesimi(numero(p.scontoEuro));
+  const imponibile = centesimi(somma - scontoDaPercentuale - scontoEuro);
+  const contributo = centesimi(imponibile * numero(p.eppiPercentuale) / 100);
+  const baseIva = centesimi(imponibile + contributo);
+  const iva = centesimi(baseIva * numero(p.ivaPercentuale) / 100);
+  const scadenze = (p.scadenzePagamento || []).map(s => (s.tipo === 'importo'
+    ? centesimi(numero(s.valore)) : centesimi(imponibile * numero(s.valore) / 100)));
+  return {
+    sommaVoci: somma,
+    scontoDaPercentuale,
+    scontoEuro,
+    imponibile,
+    eppiPercentuale: numero(p.eppiPercentuale),
+    contributo,
+    baseIva,
+    ivaPercentuale: numero(p.ivaPercentuale),
+    iva,
+    totale: centesimi(baseIva + iva),
+    oreVoci: Math.round(ore * 100) / 100,
+    senzaPrezzo: tutte.filter(v => !(numero(v.prezzo) > 0)).length,
+    restoScadenze: centesimi(imponibile - scadenze.reduce((a, b) => centesimi(a + b), 0)),
+    voci,
+    sezioni: subtotali,
+    scadenze,
+  };
+}
+
 module.exports = {
   ELETTRODINAMICA, STATI, STATI_BLOCCATI, regoleDi, calcola, prossimoCodice, RE_CODICE_COMMESSA,
   tariffaProposta, prezzoOrarioDi, costoOrarioDi, budgetDi, partitaIvaItalianaValida,
+  importoVoce, vociCheContano, gruppoAlternativa, contiPreventivo,
 };

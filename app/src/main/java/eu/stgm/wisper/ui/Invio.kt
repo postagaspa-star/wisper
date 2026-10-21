@@ -151,7 +151,7 @@ private fun titoloPeriodo(lista: List<Rapportino>): String {
 }
 
 /** L'esito dell'ultimo PDF fatto, legato alle scelte con cui lo si è fatto. */
-private class EsitoPdf(val chiave: String, val file: File?, val errore: String?)
+internal class EsitoPdf(val chiave: String, val file: File?, val errore: String?)
 
 /**
  * Prepara il riepilogo, o invia un rapportino solo (docs/telefono-ufficio.md,
@@ -441,7 +441,7 @@ private suspend fun creaPdf(ctx: Context, dati: Dati, idLocali: List<String>, si
  * Le pagine del PDF come immagini, larghe [larghezza] pixel, al massimo [massimo].
  * Torna anche quante pagine ha il PDF. Il fondo è bianco: il PDF è trasparente.
  */
-private fun disegnaPagine(file: File, larghezza: Int, massimo: Int): Pair<List<Bitmap>, Int> {
+internal fun disegnaPagine(file: File, larghezza: Int, massimo: Int): Pair<List<Bitmap>, Int> {
     val fd = ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
     val lettore = try {
         PdfRenderer(fd)
@@ -474,7 +474,7 @@ private fun disegnaPagine(file: File, larghezza: Int, massimo: Int): Pair<List<B
  * di prima, velata; la prima volta un segnaposto calmo. Un tocco la ingrandisce.
  */
 @Composable
-private fun CornicePdf(immagine: ImageBitmap?, pronto: EsitoPdf?, onIngrandisci: () -> Unit, onRiprova: () -> Unit) {
+internal fun CornicePdf(immagine: ImageBitmap?, pronto: EsitoPdf?, onIngrandisci: () -> Unit, onRiprova: () -> Unit) {
     val c = W.colori
     val errore = pronto?.errore
     val rapporto = immagine?.let { it.width.toFloat() / it.height } ?: (210f / 297f)
@@ -544,7 +544,7 @@ private fun SegnapostoPagina() {
  * o con un doppio tocco, da spostare con un dito. Si chiude con la × o con Indietro.
  */
 @Composable
-private fun AnteprimaGrande(file: File, prima: ImageBitmap?, onChiudi: () -> Unit) {
+internal fun AnteprimaGrande(file: File, prima: ImageBitmap?, onChiudi: () -> Unit) {
     val c = W.colori
     var pagine by remember(file) { mutableStateOf(listOfNotNull(prima)) }
     var quante by remember(file) { mutableIntStateOf(1) }

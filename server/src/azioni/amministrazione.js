@@ -267,7 +267,8 @@ module.exports = {
     const anno = new Date().getFullYear();
     return this.db.righe('SELECT * FROM numerazioni ORDER BY tipo').map(n => {
       const prossimo = n.tipo === 'commessa' ? this.prossimoCodiceCommessa(anno)
-        : n.tipo === 'rapportino' ? this.prossimoNumeroRapportino(anno) : null;
+        : n.tipo === 'rapportino' ? this.prossimoNumeroRapportino(anno)
+          : n.tipo === 'preventivo' ? this.prossimoNumeroPreventivo(anno) : null;
       return {
         tipo: n.tipo, formato: n.formato, annuale: n.annuale === 1, ultimo: n.ultimo,
         prossimo: prossimo ? prossimo.codice : '',

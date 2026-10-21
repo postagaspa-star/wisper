@@ -10,7 +10,7 @@
  */
 'use strict';
 
-const { Rifiuto, senzaPermesso, testo, messaggio } = require('./utili');
+const { Rifiuto, senzaPermesso, testo, messaggio, oggi } = require('./utili');
 const { togliCosti } = require('./permessi');
 
 const scrive = (modulo, cosa, fn) => ({ modulo, livello: 2, cosa, scrive: true, fn });
@@ -20,7 +20,7 @@ const siVuole = v => v === true || v === '1' || v === 'true';
 
 /**
  * Tutte le azioni: quelle di oggi (stessi nomi, stesse risposte di Code.gs) e
- * quelle nuove della fase 1. "scrive": tutto in una transazione, o niente.
+ * quelle nuove delle fasi 1 e 2. "scrive": tutto in una transazione, o niente.
  */
 const AZIONI = {
   // --- accesso
@@ -43,7 +43,8 @@ const AZIONI = {
     // Il permesso dipende da cosa si carica.
     controllo: d => (d.tipo === 'documento' ? ['documenti', 2, 'caricare documenti']
       : d.tipo === 'firmaTecnico' ? ['amministrazione', 2, 'cambiare la firma del tecnico']
-        : ['rapportini', 2, 'caricare foto e firme dei rapportini']),
+        : d.tipo === 'attivita' ? ['attivita', 2, 'caricare allegati sulle attività']
+          : ['rapportini', 2, 'caricare foto e firme dei rapportini']),
     fn: (w, d) => ({ ok: true, file: w.caricaFile(d) }),
   },
   togliFile: scrive('rapportini', 'togliere le foto dei rapportini', (w, d) => ({ ok: true, rapportino: w.togliFile(d.id, d.fileId) })),
@@ -102,6 +103,30 @@ const AZIONI = {
 
   // --- esportazione: il permesso dipende da cosa (lo controlla esporta)
   esporta: { fn: (w, d) => w.esporta(d) },
+
+  // --- preventivi e listino (fase 2)
+  listino: legge('preventivi', 'vedere il listino', (w, d) => ({ ok: true, listino: w.leggiListino(siVuole(d.tutte)) })),
+  salvaVoceListino: scrive('preventivi', 'cambiare il listino', (w, d) => ({ ok: true, voce: w.salvaVoceListino(d.voce || {}) })),
+  archiviaVoceListino: scrive('preventivi', 'cambiare il listino', (w, d) => ({ ok: true, voce: w.archiviaVoceListino(d.id, d.archiviata) })),
+  preventivi: legge('preventivi', 'vedere i preventivi', (w, d) => ({ ok: true, oggi: oggi(), preventivi: w.leggiPreventivi(d) })),
+  preventivo: legge('preventivi', 'vedere i preventivi', (w, d) => ({ ok: true, preventivo: w.preventivoCompleto(w.rigaPreventivo(d.id)) })),
+  salvaPreventivo: scrive('preventivi', 'scrivere i preventivi', (w, d) => ({ ok: true, preventivo: w.salvaPreventivo(d.preventivo || {}) })),
+  duplicaPreventivo: scrive('preventivi', 'scrivere i preventivi', (w, d) => ({ ok: true, preventivo: w.duplicaPreventivo(d) })),
+  nuovaRevisione: scrive('preventivi', 'scrivere i preventivi', (w, d) => ({ ok: true, preventivo: w.nuovaRevisione(d.id) })),
+  segnaInviato: scrive('preventivi', 'segnare inviati i preventivi', (w, d) => ({ ok: true, preventivo: w.segnaInviato(d) })),
+  inviaPreventivo: { modulo: 'preventivi', livello: 2, cosa: 'mandare i preventivi', asincrona: true, soloPost: true, fn: (w, d) => w.inviaPreventivo(d) },
+  accettaPreventivo: scrive('preventivi', 'segnare accettati i preventivi', (w, d) => ({ ok: true, preventivo: w.accettaPreventivo(d) })),
+  rifiutaPreventivo: scrive('preventivi', 'segnare rifiutati i preventivi', (w, d) => ({ ok: true, preventivo: w.rifiutaPreventivo(d) })),
+  riapriPreventivo: scrive('preventivi', 'riaprire i preventivi', (w, d) => ({ ok: true, preventivo: w.riapriPreventivo(d) })),
+  creaCommessaDaPreventivo: scrive('commesse', 'creare commesse', (w, d) => w.creaCommessaDaPreventivo(d)),
+
+  // --- attivita' e calendario (fase 2)
+  attivita: legge('attivita', 'vedere le attività', (w, d) => ({ ok: true, oggi: oggi(), attivita: w.leggiAttivita(d) })),
+  salvaAttivita: scrive('attivita', 'scrivere le attività', (w, d) => w.salvaAttivita(d)),
+  faiAttivita: scrive('attivita', 'scrivere le attività', (w, d) => w.faiAttivita(d)),
+  togliAttivita: scrive('attivita', 'togliere le attività', (w, d) => w.togliAttivita(d)),
+  spuntaChecklist: scrive('attivita', 'scrivere le attività', (w, d) => w.spuntaChecklist(d)),
+  togliAllegato: scrive('attivita', 'togliere gli allegati delle attività', (w, d) => w.togliAllegato(d)),
 };
 
 /**

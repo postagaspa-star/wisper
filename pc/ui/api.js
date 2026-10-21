@@ -39,6 +39,8 @@
         if (dati && dati.accesso === false) err.accesso = false;
         // permesso:false = il ruolo non lo permette.
         if (dati && dati.permesso === false) err.permesso = false;
+        // La risposta intera: serveConferma, mancano, sovrapposte (fase 2) servono a chi ha chiamato.
+        if (dati) err.dati = dati;
         throw err;
       }
       return dati;

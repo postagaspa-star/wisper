@@ -19,6 +19,8 @@ object Moduli {
     const val DASHBOARD = "dashboard"
     const val CLIENTI = "clienti"
     const val COMMESSE = "commesse"
+    const val PREVENTIVI = "preventivi"
+    const val ATTIVITA = "attivita"
     const val RAPPORTINI = "rapportini"
     const val FATTURAZIONE = "fatturazione"
     const val AMMINISTRAZIONE = "amministrazione"
@@ -29,6 +31,9 @@ object Moduli {
 
     /** Quelli che funzionano nella fase 1, nell'ordine del menu. */
     val FASE1 = listOf(DASHBOARD, CLIENTI, COMMESSE, RAPPORTINI, FATTURAZIONE, AMMINISTRAZIONE)
+
+    /** Quelli che funzionano dalla fase 2 (preventivi e attivita'), nell'ordine del menu. */
+    val FUNZIONANTI = listOf(DASHBOARD, CLIENTI, COMMESSE, PREVENTIVI, ATTIVITA, RAPPORTINI, FATTURAZIONE, AMMINISTRAZIONE)
 }
 
 /** I quattro ruoli, con la frase che li spiega (docs/gestionale/fase1-schermate.md §7). */
@@ -103,26 +108,27 @@ data class Permessi(val livelli: Map<String, Int>) {
 
     companion object {
         /** Tutto: il foglio di prima (un codice solo) e il titolare. */
-        val TUTTO = Permessi((Moduli.FASE1 + Moduli.COSTI + Moduli.RISERVATI).associateWith { 2 })
+        val TUTTO = Permessi((Moduli.FUNZIONANTI + Moduli.COSTI + Moduli.RISERVATI).associateWith { 2 })
 
         fun daJson(o: JSONObject?): Permessi =
             Permessi(o?.keys()?.asSequence()?.associateWith { k -> o.optInt(k, 0).coerceIn(0, 2) } ?: emptyMap())
 
         /** I valori iniziali dell'accordo (architettura.md §3), gli stessi del server. */
         fun iniziali(ruolo: String): Permessi {
-            val p = (Moduli.FASE1 + Moduli.COSTI + Moduli.RISERVATI).associateWith { 0 }.toMutableMap()
+            val p = (Moduli.FUNZIONANTI + Moduli.COSTI + Moduli.RISERVATI).associateWith { 0 }.toMutableMap()
             when (ruolo) {
                 Ruoli.TITOLARE -> p.keys.forEach { p[it] = 2 }
                 Ruoli.AMMINISTRAZIONE -> {
-                    Moduli.FASE1.forEach { p[it] = 2 }
+                    Moduli.FUNZIONANTI.forEach { p[it] = 2 }
                     p[Moduli.AMMINISTRAZIONE] = 1
                     p[Moduli.COSTI] = 2
                 }
                 Ruoli.COLLABORATORE -> {
                     p[Moduli.DASHBOARD] = 1; p[Moduli.CLIENTI] = 1; p[Moduli.COMMESSE] = 1; p[Moduli.RAPPORTINI] = 2
+                    p[Moduli.ATTIVITA] = 2
                 }
                 Ruoli.LETTURA -> {
-                    Moduli.FASE1.forEach { p[it] = 1 }
+                    Moduli.FUNZIONANTI.forEach { p[it] = 1 }
                     p[Moduli.AMMINISTRAZIONE] = 0
                     p[Moduli.COSTI] = 1
                 }

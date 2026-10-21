@@ -2,7 +2,25 @@ package eu.stgm.wisper
 
 import android.graphics.Bitmap
 import android.net.Uri
+import eu.stgm.wisper.rapportino.Agenda
 import eu.stgm.wisper.rapportino.Anagrafiche
+import eu.stgm.wisper.rapportino.Attivita
+import eu.stgm.wisper.rapportino.ContiPreventivo
+import eu.stgm.wisper.rapportino.CosaFareFase2
+import eu.stgm.wisper.rapportino.ModoVoce
+import eu.stgm.wisper.rapportino.PonteServer
+import eu.stgm.wisper.rapportino.Preventivo
+import eu.stgm.wisper.rapportino.Priorita
+import eu.stgm.wisper.rapportino.RevisionePreventivo
+import eu.stgm.wisper.rapportino.Ricorrenza
+import eu.stgm.wisper.rapportino.ScadenzaPagamento
+import eu.stgm.wisper.rapportino.SezionePreventivo
+import eu.stgm.wisper.rapportino.StatoAttivita
+import eu.stgm.wisper.rapportino.StatoPreventivo
+import eu.stgm.wisper.rapportino.TipoAttivita
+import eu.stgm.wisper.rapportino.VoceChecklist
+import eu.stgm.wisper.rapportino.VoceListino
+import eu.stgm.wisper.rapportino.VocePreventivo
 import eu.stgm.wisper.rapportino.Calcolo
 import eu.stgm.wisper.rapportino.CampoCambiato
 import eu.stgm.wisper.rapportino.Cliente
@@ -170,12 +188,17 @@ class DatiEsempio(oggi: LocalDate = LocalDate.now(), private val cartella: File?
             numerazioni = listOf(
                 Numerazione("commessa", "{AA}ST{NNN}", 47, annuale = false),
                 Numerazione("rapportino", "RAP/{AAAA}/{NNNN}", 142, annuale = true),
+                Numerazione("preventivo", "PR/{AAAA}/{NNN}", 13, annuale = true),
             ),
             impostazioni = mapOf(
                 "EURO_KM" to "0.76", "TECNICO" to "Manuel Gasparotto", "AUTO" to "Volvo XC40", "COSTO_ORARIO" to "22",
                 "TICKET_ATTIVO" to "NO", "RAGIONE_SOCIALE" to "Studio Tecnico GM", "INDIRIZZO" to "Via Esempio 1, Marostica (VI)",
                 "PARTITA_IVA" to "00000000000", "EMAIL" to "studio@esempio.it", "TELEFONO" to "0424 000 000",
                 "PEC" to "", "FIRMA_TECNICO" to "",
+                "POLIZZA_COMPAGNIA" to "Esempio Assicurazioni", "POLIZZA_NUMERO" to "123456", "POLIZZA_MASSIMALE" to "1.000.000 €",
+                "TITOLI" to "Perito industriale iscritto al Collegio dei periti industriali di Vicenza", "IVA" to "22", "EPPI_INTEGRATIVO" to "5",
+                "RITENUTA" to "20", "PREVENTIVO_VALIDITA_GIORNI" to "30",
+                "PREVENTIVO_CONDIZIONI" to "Pagamenti a 30 giorni data fattura. Sono esclusi i materiali e le opere murarie.",
             ),
         )
     )
@@ -362,7 +385,10 @@ class DatiEsempio(oggi: LocalDate = LocalDate.now(), private val cartella: File?
     override fun aggiornaArchiviati() = Unit
 
     override fun aggiornaDashboard() {
-        _dashboard.value = CosaFare.calcola(ana, _viste.value.conConti())
+        val base = CosaFare.calcola(ana, _viste.value.conConti())
+        // Le voci della fase 2 (preventivi, attività, appuntamenti), come le manda il server (§13.8).
+        val fase2 = CosaFareFase2.calcola(_preventivi.value, _attivita.value, ana, conti = { it.conto(ContiPreventivo.iva(ana.impostazioni), ContiPreventivo.eppi(ana.impostazioni)).totale })
+        _dashboard.value = CosaFareFase2.unisci(base, fase2)
     }
 
     override fun tariffaProposta(cliente: Cliente?, nomeCliente: String): Double? = cliente?.ultimaTariffa
@@ -486,8 +512,7 @@ class DatiEsempio(oggi: LocalDate = LocalDate.now(), private val cartella: File?
             val t = v.trim()
             if (k in Anagrafiche.IMPOSTAZIONI_NUMERICHE && t.isNotEmpty()) {
                 val n = Numeri.leggi(t) ?: return errore(
-                    if (k == Anagrafiche.EURO_KM) "Il rimborso km dev'essere un numero, per esempio 0,76"
-                    else "Il costo orario dev'essere un numero, per esempio 22"
+                    Anagrafiche.erroreNumerica(k)
                 )
                 n.toString()
             } else t
@@ -724,6 +749,371 @@ class DatiEsempio(oggi: LocalDate = LocalDate.now(), private val cartella: File?
 
     override suspend fun ripristinaRapportino(idLocale: String): Result<Rapportino> = errore("Nella visita i rapportini annullati non si recuperano")
 
+    // ------------------------------------------------------------- fase 2: preventivi e attività, in memoria
+
+    private val annoOggi = oggi.year
+    private val oggiEsempio = oggi
+
+    private val _listino = MutableStateFlow(
+        listOf(
+            VoceListino("L1", "Sopralluogo e rilievo", "SOP", modo = ModoVoce.CORPO, prezzo = 350.0, ordine = 1),
+            VoceListino("L2", "Progetto preliminare", "PRE", modo = ModoVoce.CORPO, prezzo = 600.0, ordine = 2),
+            VoceListino("L3", "Progetto esecutivo", "ESE", modo = ModoVoce.CORPO, prezzo = 1900.0, ordine = 3),
+            VoceListino("L4", "Direzione lavori", "DL", modo = ModoVoce.ORE, unita = "ore", prezzo = 45.0, ordine = 4),
+            VoceListino("L5", "Dichiarazione di rispondenza (DiRi)", "DIRI", modo = ModoVoce.CORPO, prezzo = 450.0, ordine = 5),
+            VoceListino("L6", "Verifiche periodiche", "VER", modo = ModoVoce.CORPO, prezzo = null, ordine = 6),
+            VoceListino("L7", "Collaudo", "COL", modo = ModoVoce.CORPO, prezzo = 380.0, ordine = 7),
+            VoceListino("L8", "Ore di consulenza", "CON", modo = ModoVoce.ORE, unita = "ore", prezzo = 45.0, ordine = 8),
+        )
+    )
+    override val listino: StateFlow<List<VoceListino>> = _listino.asStateFlow()
+
+    private fun numero(n: Int) = "PR/$annoOggi/" + "%03d".format(n)
+
+    private val preventivoRossi = Preventivo(
+        id = "P5", numero = numero(12), revisione = 1, idCliente = "C002", idSede = "S4", idReferente = "R3",
+        oggetto = "Adeguamento impianto elettrico capannone", complessita = "media",
+        oneriPrevisti = "Pratiche presso il distributore e il Comune, a carico del cliente",
+        condizioni = "Pagamenti a 30 giorni data fattura. Sono esclusi i materiali e le opere murarie.",
+        data = oggi.minusDays(7), scadenza = oggi.plusDays(6), stato = StatoPreventivo.INVIATO,
+        eppiPercentuale = 5.0, ivaPercentuale = 22.0, inviatoIl = oggi.minusDays(7).atTime(10, 0).format(ISO_ORA),
+        sezioni = listOf(
+            SezionePreventivo("SZ1", "Progettazione", listOf(
+                VocePreventivo("V1", "Sopralluogo e rilievo", ModoVoce.CORPO, 1.0, prezzo = 350.0, idListino = "L1", ordine = 1),
+                VocePreventivo("V2", "Progetto esecutivo impianto elettrico", ModoVoce.CORPO, 1.0, prezzo = 1900.0, idListino = "L3", ordine = 2),
+            ), 1),
+            SezionePreventivo("SZ2", "Cantiere", listOf(
+                VocePreventivo("V3", "Direzione lavori", ModoVoce.ORE, 16.0, "ore", 45.0, idListino = "L4", ordine = 1),
+                VocePreventivo("V4", "Dichiarazione di rispondenza", ModoVoce.CORPO, 1.0, prezzo = 450.0, facoltativa = true, idListino = "L5", ordine = 2),
+                VocePreventivo("V5", "Collaudo con strumenti propri", ModoVoce.CORPO, 1.0, prezzo = 380.0, alternativa = "collaudo", scelta = true, ordine = 3),
+                VocePreventivo("V6", "Collaudo con laboratorio esterno", ModoVoce.CORPO, 1.0, prezzo = 620.0, alternativa = "collaudo", ordine = 4),
+            ), 2),
+        ),
+        scadenzePagamento = listOf(
+            ScadenzaPagamento("SP1", "30% alla firma", ScadenzaPagamento.PERCENTUALE, 30.0, ScadenzaPagamento.FIRMA),
+            ScadenzaPagamento("SP2", "40% a fine progetto", ScadenzaPagamento.PERCENTUALE, 40.0, ScadenzaPagamento.AVANZAMENTO),
+            ScadenzaPagamento("SP3", "Saldo a fine lavori", ScadenzaPagamento.PERCENTUALE, 30.0, ScadenzaPagamento.FINE),
+        ),
+    )
+
+    private val _tuttiPreventivi = MutableStateFlow(
+        listOf(
+            preventivoRossi,
+            preventivoRossi.copy(
+                id = "P4", revisione = 0, data = oggi.minusDays(10), scadenza = oggi.plusDays(20), stato = StatoPreventivo.SOSTITUITO,
+                inviatoIl = oggi.minusDays(10).atTime(9, 0).format(ISO_ORA),
+                sezioni = preventivoRossi.sezioni.map { s -> s.copy(voci = s.voci.map { if (it.id == "V2") it.copy(prezzo = 1700.0) else it }) },
+            ),
+            Preventivo(
+                id = "P6", numero = numero(13), idCliente = "C001", oggetto = "Verifica periodica impianto di terra",
+                data = oggi.minusDays(1), scadenza = oggi.plusDays(29), stato = StatoPreventivo.BOZZA, eppiPercentuale = 5.0, ivaPercentuale = 22.0,
+                sezioni = listOf(SezionePreventivo("SZ3", "Verifica", listOf(VocePreventivo("V7", "Verifiche periodiche", prezzo = null, idListino = "L6", ordine = 1)), 1)),
+            ),
+            Preventivo(
+                id = "P3", numero = numero(10), idCliente = "C003", idSede = "S5", oggetto = "Fotovoltaico 6 kW", complessita = "bassa",
+                oneriPrevisti = "Pratica GSE a carico del cliente", data = oggi.minusDays(19), scadenza = oggi.plusDays(11),
+                stato = StatoPreventivo.ACCETTATO, eppiPercentuale = 5.0, ivaPercentuale = 22.0, idCommessa = "26ST047",
+                inviatoIl = oggi.minusDays(19).atTime(11, 0).format(ISO_ORA), accettatoIl = oggi.minusDays(15).atTime(17, 30).format(ISO_ORA),
+                accettatoDa = "Mario Bianchi", accettazioneModo = "voce",
+                sezioni = listOf(SezionePreventivo("SZ4", "Progetto", listOf(VocePreventivo("V8", "Progetto preliminare", prezzo = 600.0, idListino = "L2", ordine = 1)), 1)),
+            ),
+            Preventivo(
+                id = "P2", numero = numero(7), idCliente = "C002", oggetto = "Quadro di cantiere", complessita = "bassa",
+                data = oggi.minusDays(46), scadenza = oggi.minusDays(16), stato = StatoPreventivo.INVIATO, eppiPercentuale = 5.0, ivaPercentuale = 22.0,
+                inviatoIl = oggi.minusDays(46).atTime(9, 30).format(ISO_ORA),
+                sezioni = listOf(SezionePreventivo("SZ5", "Progetto", listOf(VocePreventivo("V9", "Progetto quadro", prezzo = 900.0, ordine = 1)), 1)),
+            ),
+            Preventivo(
+                id = "M1", oggetto = "Verifica impianto di messa a terra (DPR 462/01)", modello = true, complessita = "bassa",
+                stato = StatoPreventivo.BOZZA, eppiPercentuale = 5.0, ivaPercentuale = 22.0,
+                sezioni = listOf(SezionePreventivo("SZ6", "Verifica", listOf(
+                    VocePreventivo("V10", "Sopralluogo e misure", prezzo = 350.0, idListino = "L1", ordine = 1),
+                    VocePreventivo("V11", "Relazione di verifica", prezzo = 250.0, ordine = 2),
+                ), 1)),
+            ),
+        )
+    )
+
+    /** Le revisioni di ogni preventivo: tutte quelle dello stesso numero, dalla prima. */
+    private fun conRevisioni(p: Preventivo): Preventivo {
+        if (p.numero.isBlank()) return p
+        val stesse = _tuttiPreventivi.value.filter { it.numero == p.numero && !it.modello }.sortedBy { it.revisione }
+        return p.copy(revisioni = stesse.map { RevisionePreventivo(it.id, it.revisione, it.stato, it.data, it.numeroCompleto, it.conto().totale) })
+    }
+
+    private fun elencoPreventivi(): List<Preventivo> =
+        _tuttiPreventivi.value.filter { it.stato != StatoPreventivo.SOSTITUITO }.sortedWith(compareByDescending<Preventivo> { it.data ?: LocalDate.MIN }.thenByDescending { it.numero })
+
+    private val _preventivi = MutableStateFlow(elencoPreventivi())
+    override val preventivi: StateFlow<List<Preventivo>> = _preventivi.asStateFlow()
+    private val _dettagliPreventivi = MutableStateFlow<Map<String, Preventivo>>(emptyMap())
+    override val dettagliPreventivi: StateFlow<Map<String, Preventivo>> = _dettagliPreventivi.asStateFlow()
+
+    private fun mettiPreventivo(p: Preventivo): Preventivo {
+        _tuttiPreventivi.value = _tuttiPreventivi.value.filterNot { it.id == p.id } + p
+        _preventivi.value = elencoPreventivi()
+        val completo = conRevisioni(p)
+        _dettagliPreventivi.value = _dettagliPreventivi.value + (p.id to completo)
+        aggiornaDashboard()
+        return completo
+    }
+
+    private fun preventivoDi(id: String): Preventivo? = _tuttiPreventivi.value.firstOrNull { it.id == id }
+
+    override fun aggiornaPreventivi() = Unit
+
+    override suspend fun preventivo(id: String): Result<Preventivo> {
+        val p = preventivoDi(id) ?: return errore("Non trovo il preventivo")
+        val completo = conRevisioni(p)
+        _dettagliPreventivi.value = _dettagliPreventivi.value + (id to completo)
+        return Result.success(completo)
+    }
+
+    override suspend fun salvaVoceListino(v: VoceListino): Result<VoceListino> {
+        if (v.nome.isBlank()) return errore("Nome: scrivi il nome della prestazione")
+        if ((v.prezzo ?: 0.0) < 0) return errore("Prezzo: non può essere negativo")
+        val nuova = if (v.id.isBlank()) v.copy(id = "L${System.nanoTime()}", ordine = _listino.value.size + 1) else v
+        _listino.value = _listino.value.filterNot { it.id == nuova.id } + nuova
+        _listino.value = _listino.value.sortedBy { it.ordine }
+        return Result.success(nuova)
+    }
+
+    override suspend fun archiviaVoceListino(id: String): Result<Unit> {
+        _listino.value = _listino.value.filterNot { it.id == id }
+        return Result.success(Unit)
+    }
+
+    private fun prossimoNumero(): String {
+        val n = _tuttiPreventivi.value.mapNotNull { Regex("""^PR/$annoOggi/(\d+)$""").find(it.numero)?.groupValues?.get(1)?.toIntOrNull() }.maxOrNull() ?: 0
+        return numero(n + 1)
+    }
+
+    /** Gli id nati sul telefono diventano id "veri", come farebbe il server. */
+    private fun conId(p: Preventivo): Preventivo = p.copy(
+        sezioni = p.sezioni.map { s ->
+            s.copy(
+                id = s.id.takeUnless { it.isBlank() || it.startsWith(PonteServer.NUOVO) } ?: "SZ${System.nanoTime()}",
+                voci = s.voci.map { v -> v.copy(id = v.id.takeUnless { it.isBlank() || it.startsWith(PonteServer.NUOVO) } ?: "V${System.nanoTime()}") },
+            )
+        },
+        scadenzePagamento = p.scadenzePagamento.map { x -> x.copy(id = x.id.takeUnless { it.isBlank() || it.startsWith(PonteServer.NUOVO) } ?: "SP${System.nanoTime()}", importo = null) },
+    )
+
+    override suspend fun salvaPreventivo(p: Preventivo): Result<Preventivo> {
+        if (!p.modello && p.idCliente.isBlank()) return errore("Cliente: scegli il cliente")
+        if (p.oggetto.isBlank()) return errore("Oggetto: scrivi di cosa si tratta")
+        if (p.voci.any { it.descrizione.isBlank() }) return errore("Voce: scrivi la descrizione")
+        if (p.id.isBlank()) {
+            val imp = ana.impostazioni
+            val nuovo = conId(p).copy(
+                id = "P${System.nanoTime()}", numero = if (p.modello) "" else prossimoNumero(), revisione = 0,
+                data = p.data ?: LocalDate.now(), scadenza = p.scadenza ?: LocalDate.now().plusDays(ContiPreventivo.validita(imp)),
+                condizioni = p.condizioni.ifBlank { imp[ContiPreventivo.PREVENTIVO_CONDIZIONI].orEmpty() },
+                stato = StatoPreventivo.BOZZA, eppiPercentuale = ContiPreventivo.eppi(imp), ivaPercentuale = ContiPreventivo.iva(imp),
+            )
+            return Result.success(mettiPreventivo(nuovo))
+        }
+        val prima = preventivoDi(p.id) ?: return errore("Non trovo il preventivo")
+        if (!prima.bozza && !prima.modello) return errore("Il preventivo ${prima.numero} è già stato inviato: per cambiarlo fai una nuova revisione")
+        return Result.success(mettiPreventivo(conId(p).copy(stato = prima.stato, numero = prima.numero, revisione = prima.revisione)))
+    }
+
+    override suspend fun duplicaPreventivo(id: String, comeModello: Boolean): Result<Preventivo> {
+        val p = preventivoDi(id) ?: return errore("Non trovo il preventivo")
+        val imp = ana.impostazioni
+        val copia = conId(p.copy(
+            sezioni = p.sezioni.map { s -> s.copy(id = "", voci = s.voci.map { it.copy(id = "") }) },
+            scadenzePagamento = p.scadenzePagamento.map { it.copy(id = "") },
+        )).copy(
+            id = "P${System.nanoTime()}", numero = if (comeModello) "" else prossimoNumero(), revisione = 0, modello = comeModello,
+            data = LocalDate.now(), scadenza = LocalDate.now().plusDays(ContiPreventivo.validita(imp)), stato = StatoPreventivo.BOZZA,
+            inviatoIl = "", accettatoIl = "", accettatoDa = "", accettazioneModo = "", idFirma = "", idCommessa = "", rifiutatoIl = "", motivoRifiuto = "",
+            eppiPercentuale = ContiPreventivo.eppi(imp), ivaPercentuale = ContiPreventivo.iva(imp),
+        )
+        return Result.success(mettiPreventivo(copia))
+    }
+
+    override suspend fun nuovaRevisione(id: String): Result<Preventivo> {
+        val p = preventivoDi(id) ?: return errore("Non trovo il preventivo")
+        if (p.bozza) return errore("È ancora in bozza: cambiala direttamente")
+        if (p.stato == StatoPreventivo.ACCETTATO) return errore("È già accettato: non si fanno revisioni")
+        mettiPreventivo(p.copy(stato = StatoPreventivo.SOSTITUITO))
+        val nuova = conId(p.copy(sezioni = p.sezioni.map { s -> s.copy(id = "", voci = s.voci.map { it.copy(id = "") }) }, scadenzePagamento = p.scadenzePagamento.map { it.copy(id = "") }))
+            .copy(
+                id = "P${System.nanoTime()}", revisione = p.revisione + 1, stato = StatoPreventivo.BOZZA, data = LocalDate.now(),
+                scadenza = LocalDate.now().plusDays(ContiPreventivo.validita(ana.impostazioni)), inviatoIl = "", rifiutatoIl = "", motivoRifiuto = "",
+            )
+        return Result.success(mettiPreventivo(nuova))
+    }
+
+    /** Quello che manca per la legge, come lo direbbe il server: si ferma l'invio e chiede conferma. */
+    private fun controllaLegge(p: Preventivo, conferma: Boolean): Throwable? {
+        if (conferma) return null
+        val manca = ContiPreventivo.legge(p, ana.impostazioni).filter { !it.ok }
+        if (manca.isEmpty()) return null
+        return PonteServer.DaConfermare(
+            "Prima di inviarlo manca: " + manca.joinToString(", ") { it.nome.lowercase() },
+            org.json.JSONObject().put("serveConferma", true),
+        )
+    }
+
+    override suspend fun inviaPreventivo(id: String, a: String, cc: String, oggetto: String, messaggio: String, pdf: File?, aMe: Boolean, conferma: Boolean): Result<Preventivo> {
+        val p = preventivoDi(id) ?: return errore("Non trovo il preventivo")
+        if (!aMe && a.isBlank()) return errore("Manca l'indirizzo del cliente")
+        if (aMe) return Result.success(conRevisioni(p))
+        controllaLegge(p, conferma)?.let { return Result.failure(it) }
+        return Result.success(mettiPreventivo(p.copy(stato = StatoPreventivo.INVIATO, inviatoIl = p.inviatoIl.ifBlank { adesso() })))
+    }
+
+    override suspend fun segnaInviato(id: String, conferma: Boolean): Result<Preventivo> {
+        val p = preventivoDi(id) ?: return errore("Non trovo il preventivo")
+        controllaLegge(p, conferma)?.let { return Result.failure(it) }
+        return Result.success(mettiPreventivo(p.copy(stato = StatoPreventivo.INVIATO, inviatoIl = p.inviatoIl.ifBlank { adesso() })))
+    }
+
+    override suspend fun accettaPreventivo(id: String, modo: String, nome: String, scelte: Map<String, Boolean>, firma: ByteArray?, documento: Uri?): Result<Preventivo> {
+        val p = preventivoDi(id) ?: return errore("Non trovo il preventivo")
+        if (nome.isBlank()) return errore("Nome: scrivi chi ha accettato")
+        if (p.stato != StatoPreventivo.INVIATO) return errore("Il preventivo ${p.numero} non è ancora stato inviato")
+        val voci = ContiPreventivo.conScelte(p.voci, scelte)
+        val sezioni = p.sezioni.map { s -> s.copy(voci = s.voci.map { v -> voci.first { it.id == v.id } }) }
+        return Result.success(
+            mettiPreventivo(
+                p.copy(
+                    sezioni = sezioni, stato = StatoPreventivo.ACCETTATO, accettatoIl = adesso(), accettatoDa = nome.trim(),
+                    accettazioneModo = modo, idFirma = if (firma != null || documento != null) "esempio-firma" else "",
+                )
+            )
+        )
+    }
+
+    override suspend fun rifiutaPreventivo(id: String, motivo: String): Result<Preventivo> {
+        val p = preventivoDi(id) ?: return errore("Non trovo il preventivo")
+        return Result.success(mettiPreventivo(p.copy(stato = StatoPreventivo.RIFIUTATO, rifiutatoIl = adesso(), motivoRifiuto = motivo.trim())))
+    }
+
+    override suspend fun riapriPreventivo(id: String): Result<Preventivo> = nuovaRevisione(id)
+
+    override suspend fun creaCommessaDaPreventivo(id: String): Result<Commessa> {
+        val p = preventivoDi(id) ?: return errore("Non trovo il preventivo")
+        if (p.stato != StatoPreventivo.ACCETTATO) return errore("Il preventivo ${p.numero} non è accettato")
+        if (p.idCommessa.isNotBlank()) return errore("Il preventivo ${p.numero} è già diventato la commessa ${p.idCommessa}")
+        val k = p.conto()
+        val codice = ana.prossimoCodiceCommessa(LocalDate.now().year)
+        val contate = p.sezioni.flatMap { s -> s.voci.filter(ContiPreventivo::conta).map { s to it } }
+        val oreVoci = contate.map { it.second }.filter { it.modo == ModoVoce.ORE }
+        val prezzi = oreVoci.mapNotNull { v -> v.prezzo?.let { ContiPreventivo.centesimi(it * (1 - v.scontoPercentuale / 100)) } }.distinct()
+        // Gli sconti sul totale si dividono in proporzione: la somma delle prestazioni è l'importo del contratto.
+        val quota = if (k.somma > 0) k.imponibile / k.somma else 1.0
+        val m = Commessa(
+            codice, p.idCliente, p.oggetto, "APERTA", ana.sede(p.idSede)?.indirizzoCompleto.orEmpty(),
+            budgetOre = oreVoci.sumOf { it.quantita }.takeIf { it > 0 }, prezzoOrario = prezzi.singleOrNull(),
+            inizio = LocalDate.now(), idSede = p.idSede, idResponsabile = "1", importoContratto = k.imponibile,
+        )
+        val prestazioni = contate.mapIndexed { i, (s, v) ->
+            Prestazione("P${System.nanoTime()}$i", codice, v.descrizione, s.titolo, ContiPreventivo.centesimi(ContiPreventivo.importoVoce(v) * quota), 0, i + 1)
+        }
+        _ana.value = ana.copy(commesse = ana.commesse + m, prestazioni = ana.prestazioni + prestazioni, numerazioni = conUltimo("commessa"))
+        mettiPreventivo(p.copy(idCommessa = codice))
+        return Result.success(m)
+    }
+
+    override fun anagrafichePerStampa(): org.json.JSONObject = ana.aJson()
+
+    // ---- le attività
+
+    private fun alle(h: Int, m: Int = 0) = oggiEsempio.atTime(h, m)
+
+    private val _attivita = MutableStateFlow(
+        listOf(
+            Attivita("A1", "Chiamare Rossi per il collaudo", tipo = TipoAttivita.ATTIVITA, idCliente = "C002", idCommessa = "26ST045",
+                assegnataA = "1", creataDa = "1", priorita = Priorita.ALTA, scadenza = feriale(oggi.minusDays(1))),
+            Attivita("A2", "Sopralluogo cabina MT Acme", tipo = TipoAttivita.SOPRALLUOGO, idCliente = "C001", idCommessa = "26ST046",
+                assegnataA = "3", creataDa = "1", inizio = alle(14, 30), fine = alle(16, 0), luogo = "Zanè", promemoriaMinuti = 60,
+                checklist = listOf(VoceChecklist("K1", "Foto del quadro MT", ordine = 1), VoceChecklist("K2", "Misura della resistenza di terra", ordine = 2))),
+            Attivita("A3", "Mandare lo schema unifilare a Elettrodinamica", idCliente = "C001", idCommessa = "26ST044",
+                assegnataA = "1", creataDa = "1", scadenza = oggi),
+            Attivita("A4", "Rinnovo polizza professionale", assegnataA = "1", creataDa = "1", scadenza = oggi.plusDays(6),
+                promemoriaMinuti = 1440, idRicorrenza = "R1", ricorrenza = Ricorrenza(Ricorrenza.ANNI), occorrenza = oggi.plusDays(6),
+                checklist = listOf(VoceChecklist("K3", "Chiedere il preventivo alla compagnia", ordine = 1))),
+            Attivita("A5", "Preparare il preventivo per Bianchi", idCliente = "C003", creataDa = "1", scadenza = oggi.plusDays(8)),
+            Attivita("A6", "Riordinare i cataloghi in ufficio", creataDa = "1", priorita = Priorita.BASSA),
+            Attivita("A7", "Riunione cantiere Batokyo", tipo = TipoAttivita.APPUNTAMENTO, idCliente = "C001", idCommessa = "26ST044",
+                assegnataA = "1", creataDa = "1", inizio = alle(8, 30), fine = alle(10, 0), luogo = "Magazzino automatico"),
+            Attivita("A8", "Collaudo quadro capannone", tipo = TipoAttivita.SOPRALLUOGO, idCliente = "C002", idCommessa = "26ST045",
+                assegnataA = "1", creataDa = "1", inizio = oggi.plusDays(1).atTime(9, 0), fine = oggi.plusDays(1).atTime(12, 0), luogo = "Bassano del Grappa"),
+            Attivita("A9", "Telefonata Elettrodinamica", tipo = TipoAttivita.APPUNTAMENTO, idCliente = "C001", assegnataA = "1", creataDa = "1",
+                inizio = oggi.minusDays(2).atTime(10, 0), fine = oggi.minusDays(2).atTime(11, 0), stato = StatoAttivita.FATTA,
+                fattaIl = oggi.minusDays(2).atTime(11, 0).format(ISO_ORA)),
+            Attivita("A10", "Rilievo fotovoltaico Bianchi", tipo = TipoAttivita.SOPRALLUOGO, idCliente = "C003", idCommessa = "26ST047",
+                assegnataA = "1", creataDa = "1", inizio = oggi.minusDays(3).atTime(15, 0), fine = oggi.minusDays(3).atTime(17, 0),
+                stato = StatoAttivita.FATTA, fattaIl = oggi.minusDays(3).atTime(17, 0).format(ISO_ORA)),
+        )
+    )
+    override val attivita: StateFlow<List<Attivita>> = _attivita.asStateFlow()
+
+    override fun aggiornaAttivita(da: LocalDate?, a: LocalDate?) = Unit
+
+    private fun mettiAttivita(a: Attivita): Attivita {
+        _attivita.value = _attivita.value.filterNot { it.id == a.id } + a
+        aggiornaDashboard()
+        return a
+    }
+
+    override suspend fun salvaAttivita(a: Attivita, perRicorrenza: String?, conRicorrenza: Boolean, conferma: Boolean): Result<Attivita> {
+        if (a.titolo.isBlank()) return errore("Titolo: scrivi cosa c'è da fare")
+        if (a.tipo != TipoAttivita.ATTIVITA && a.inizio == null) return errore("Inizio: scrivi quando comincia")
+        if (a.inizio != null && a.fine != null && !a.fine.isAfter(a.inizio)) return errore("Fine: deve venire dopo l'inizio")
+        if (a.ricorrenza != null && a.giorno == null) return errore("Per ripetere un'attività serve la data")
+        val conFine = if (a.inizio != null && a.fine == null && a.tipo != TipoAttivita.ATTIVITA) a.copy(fine = a.inizio.plusHours(1)) else a
+        val sovrapposte = Agenda.sovrapposti(conFine, _attivita.value)
+        if (!conferma && sovrapposte.isNotEmpty()) {
+            val s = sovrapposte.first()
+            return Result.failure(
+                PonteServer.DaConfermare(
+                    "Si sovrappone a: ${s.titolo} (${s.inizio!!.format(DateTimeFormatter.ofPattern("H:mm"))}-${(s.fine ?: s.inizio.plusHours(1)).format(DateTimeFormatter.ofPattern("H:mm"))})",
+                    org.json.JSONObject().put("serveConferma", true),
+                )
+            )
+        }
+        val nuova = conFine.copy(
+            id = a.id.ifBlank { "A${System.nanoTime()}" },
+            creataDa = a.creataDa.ifBlank { "1" },
+            idCliente = a.idCliente.ifBlank { ana.commessa(a.idCommessa)?.idCliente.orEmpty() },
+            checklist = a.checklist.mapIndexed { i, v -> v.copy(id = v.id.takeUnless { it.isBlank() || it.startsWith(PonteServer.NUOVO) } ?: "K${System.nanoTime()}$i", ordine = i + 1) },
+            idRicorrenza = if (a.ricorrenza != null) a.idRicorrenza.ifBlank { "R${System.nanoTime()}" } else "",
+            occorrenza = if (a.ricorrenza != null) a.giorno else null,
+        )
+        return Result.success(mettiAttivita(nuova))
+    }
+
+    override suspend fun faiAttivita(id: String, fatta: Boolean): Result<Attivita> {
+        val a = _attivita.value.firstOrNull { it.id == id } ?: return errore("Non trovo l'attività")
+        return Result.success(mettiAttivita(a.copy(stato = if (fatta) StatoAttivita.FATTA else StatoAttivita.DA_FARE, fattaIl = if (fatta) adesso() else "")))
+    }
+
+    override suspend fun togliAttivita(id: String, perRicorrenza: String?): Result<Unit> {
+        val a = _attivita.value.firstOrNull { it.id == id } ?: return errore("Non trovo l'attività")
+        mettiAttivita(a.copy(stato = StatoAttivita.ANNULLATA))
+        return Result.success(Unit)
+    }
+
+    override suspend fun spuntaChecklist(idAttivita: String, idVoce: String, fatta: Boolean): Result<Attivita> {
+        val a = _attivita.value.firstOrNull { it.id == idAttivita } ?: return errore("Non trovo l'attività")
+        return Result.success(mettiAttivita(a.copy(checklist = a.checklist.map { if (it.id == idVoce) it.copy(fatta = fatta) else it })))
+    }
+
+    override suspend fun caricaAllegatoAttivita(idAttivita: String, uri: Uri): Result<Attivita> {
+        val a = _attivita.value.firstOrNull { it.id == idAttivita } ?: return errore("Non trovo l'attività")
+        val nome = uri.lastPathSegment?.substringAfterLast('/')?.takeIf { it.isNotBlank() } ?: "Allegato"
+        return Result.success(mettiAttivita(a.copy(allegati = a.allegati + Documento("esempio-all-${System.nanoTime()}", nome, "", "", LocalDateTime.now()))))
+    }
+
+    override suspend fun togliAllegatoAttivita(idAttivita: String, idFile: String): Result<Attivita> {
+        val a = _attivita.value.firstOrNull { it.id == idAttivita } ?: return errore("Non trovo l'attività")
+        return Result.success(mettiAttivita(a.copy(allegati = a.allegati.filterNot { it.id == idFile })))
+    }
+
     private fun <T> errore(messaggio: String): Result<T> = Result.failure(Exception(messaggio))
 
     init {
@@ -740,6 +1130,8 @@ internal fun nomeModulo(modulo: String): String = when (modulo) {
     Moduli.DASHBOARD -> "Dashboard"
     Moduli.CLIENTI -> "Clienti e fornitori"
     Moduli.COMMESSE -> "Progetti e commesse"
+    Moduli.PREVENTIVI -> "Preventivi e contratti"
+    Moduli.ATTIVITA -> "Attività e calendario"
     Moduli.RAPPORTINI -> "Ore e rapportini"
     Moduli.FATTURAZIONE -> "Fatturazione"
     Moduli.AMMINISTRAZIONE -> "Amministrazione"

@@ -189,7 +189,8 @@ test('il registro: chi, cosa, prima e dopo, solo i campi cambiati; non si cambia
   assert.throws(() => s.wisper.db.esegui('DELETE FROM registro'), /Il registro non si cancella/);
   const perPersona = await manuel('registro', { utente: 3 });
   assert.ok(perPersona.righe.length >= 2 && perPersona.righe.every(x => x.idUtente === 3), 'i rapportini di Marco');
-  const oggi = new Date().toISOString().slice(0, 10);
+  // Il giorno italiano, come lo scrive il server (fra mezzanotte e le 2 quello UTC e' ancora ieri).
+  const oggi = require('../src/utili').oggi();
   assert.ok((await manuel('registro', { da: oggi, a: oggi })).quante > 0);
 });
 
@@ -230,7 +231,7 @@ test('esporta: CSV per Excel con punto e virgola, BOM, virgola nei decimali', as
   assert.ok(m.includes('26ST001;C001;Elettrodinamica;Nuovo magazzino automatico Batokyo'));
   const reg = await manuel('esporta', { cosa: 'registro' });
   assert.ok(reg.righe > 10);
-  assert.equal((await manuel('esporta', { cosa: 'boh' })).errore, 'Cosa esportare? rapportini, clienti, fornitori, commesse o registro');
+  assert.equal((await manuel('esporta', { cosa: 'boh' })).errore, 'Cosa esportare? rapportini, clienti, fornitori, commesse, registro, preventivi o attivita');
 });
 
 // ------------------------------------------------------------------ dashboard
@@ -241,7 +242,8 @@ test('dashboard: tre sezioni di voci con gravita e collegamento; per il titolare
   for (const k of ['urgenti', 'settimana', 'pianificare']) assert.ok(Array.isArray(d[k]), k);
   const voci = [].concat(d.urgenti, d.settimana, d.pianificare);
   assert.ok(voci.length > 0);
-  const pagine = ['dashboard', 'clienti', 'cliente', 'commesse', 'commessa', 'rapportini', 'fatturazione', 'amministrazione'];
+  const pagine = ['dashboard', 'clienti', 'cliente', 'commesse', 'commessa', 'rapportini', 'fatturazione', 'amministrazione',
+    'preventivi', 'preventivo', 'attivita', 'calendario'];
   for (const v of voci) {
     assert.ok(['urgente', 'attenzione', 'info', 'soldi'].includes(v.gravita), JSON.stringify(v));
     assert.ok(pagine.includes(v.collegamento.pagina), JSON.stringify(v));

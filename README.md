@@ -32,6 +32,17 @@ activity log and backups. The sheet stays: after the switch it receives a nightl
 the data, and its script keeps forwarding old app versions to the server and sending email
 from the studio's Gmail (`apps-script/Ponte.gs`).
 
+Phase 2 adds quotes, tasks and the calendar. A quote is built from sections and items
+taken from the studio's price list; the client can tick optional items and pick one of
+several alternatives, and the server alone does the maths (fee, the engineers' pension
+contribution, VAT), checked against shared cases that the phone and the office program
+must match to the cent. The quote also lists what Italian law requires a professional's
+quote to state and flags what is missing before it is sent. Once sent, prices are frozen
+(a change means a new revision). An accepted quote becomes a job in one step, with its
+services, values and payment schedule. Tasks can be personal, for the team or
+unassigned, with checklists, attachments, reminders and safe recurrence; the calendar
+has day, week and month views, and the office program adds a weekly plan per person.
+
 ## What changed
 
 The first Wisper, built for NGN Hacks 2026, was voice only: a wake word, a

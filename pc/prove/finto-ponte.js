@@ -145,6 +145,8 @@ async function locale(nome, o) {
     case 'cartella-pdf': return { ok: true };
     case 'apri': return { ok: true };
     case 'apri-documento': console.log('[apri documento]', o.nome); return { ok: true };
+    // Il promemoria: nel programma vero è una notifica di Windows.
+    case 'notifica': console.log('[notifica]', o.titolo, '·', o.testo); return { ok: true };
     case 'scegli-file': return { ok: true, nome: 'scontrino.png', mime: 'image/png', base64: IMMAGINE.toString('base64') };
     case 'salva-file': {
       // Qui la finestra Salva di Windows non c'è: il file va nella cartella delle stampe.

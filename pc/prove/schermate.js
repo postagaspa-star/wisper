@@ -58,6 +58,26 @@ const PAGINE = [
   { nome: 'copie', hash: '#amministrazione/copie' },
   { nome: 'cestino', hash: '#amministrazione/cestino' },
   { nome: 'app', hash: '#amministrazione/app' },
+  // fase 2: preventivi, attività e calendario
+  { nome: 'preventivi', hash: '#preventivi' },
+  { nome: 'preventivo', hash: '#preventivi/' + encodeURIComponent('PR/' + new Date().getFullYear() + '/012') },
+  { nome: 'preventivo-menu', hash: '#preventivi/' + encodeURIComponent('PR/' + new Date().getFullYear() + '/012'), fai: "document.querySelector('.testata .tondo[aria-label=\"Altre azioni\"]').click()", dopo: "document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))" },
+  { nome: 'preventivo-accetta', hash: '#preventivi/' + encodeURIComponent('PR/' + new Date().getFullYear() + '/012'), fai: "[...document.querySelectorAll('.btn.giallo')].find(b => /Segna accettato/.test(b.textContent)).click()", dopo: "document.querySelectorAll('.velo').forEach(v => v.remove())" },
+  { nome: 'preventivo-invio', hash: '#preventivi/' + encodeURIComponent('PR/' + new Date().getFullYear() + '/013'), fai: "[...document.querySelectorAll('.btn.giallo')].find(b => /Invia al cliente/.test(b.textContent)).click(); await new Promise(r => setTimeout(r, 400)); [...document.querySelectorAll('.finestra .btn.giallo')].find(b => /Mandalo/.test(b.textContent)).click()", dopo: "document.querySelectorAll('.velo').forEach(v => v.remove())" },
+  { nome: 'preventivo-editor', hash: '#preventivi/' + encodeURIComponent('PR/' + new Date().getFullYear() + '/012') + '/modifica' },
+  { nome: 'preventivo-editor-bozza', hash: '#preventivi/' + encodeURIComponent('PR/' + new Date().getFullYear() + '/013') + '/modifica' },
+  { nome: 'preventivo-nuovo', hash: '#preventivi/nuovo', fai: "document.querySelector('.piede-sez .btn').click()", dopo: "document.querySelectorAll('.menu').forEach(m => m.remove())" },
+  { nome: 'preventivo-crea-commessa', hash: '#preventivi/' + encodeURIComponent('PR/' + new Date().getFullYear() + '/009'), fai: "[...document.querySelectorAll('.btn.giallo')].find(b => /Crea la commessa/.test(b.textContent)).click()", dopo: "document.querySelectorAll('.velo').forEach(v => v.remove())" },
+  { nome: 'listino', hash: '#preventivi/listino' },
+  { nome: 'contratti', hash: '#preventivi/contratti' },
+  { nome: 'attivita', hash: '#attivita' },
+  { nome: 'attivita-squadra', hash: '#attivita', fai: "document.querySelectorAll('.segmenti button')[1].click()" },
+  { nome: 'attivita-modulo', hash: '#attivita', fai: "document.querySelectorAll('.riga-attivita')[1].click()", dopo: "document.querySelectorAll('.velo').forEach(v => v.remove())" },
+  { nome: 'attivita-nuova', hash: '#attivita', fai: "[...document.querySelectorAll('.btn.giallo')].find(b => /Nuova attività/.test(b.textContent)).click()", dopo: "document.querySelectorAll('.velo').forEach(v => v.remove())" },
+  { nome: 'calendario', hash: '#attivita/calendario' },
+  { nome: 'calendario-mese', hash: '#attivita/calendario', fai: "[...document.querySelectorAll('.segmenti button')].find(b => b.textContent === 'Mese').click()", dopo: "[...document.querySelectorAll('.segmenti button')].find(b => b.textContent === 'Settimana').click()" },
+  { nome: 'calendario-giorno', hash: '#attivita/calendario', fai: "[...document.querySelectorAll('.segmenti button')].find(b => b.textContent === 'Giorno').click()", dopo: "[...document.querySelectorAll('.segmenti button')].find(b => b.textContent === 'Settimana').click()" },
+  { nome: 'pianificazione', hash: '#attivita/pianificazione' },
 ];
 
 const aspetta = ms => new Promise(r => setTimeout(r, ms));
@@ -122,7 +142,7 @@ async function main() {
       } else {
         await valuta("fetch('/locale/stato').then(r => r.json()).then(s => s.entrato ? true : fetch('/locale/accedi', { method: 'POST', body: JSON.stringify({ email: '" + email + "', password: 'prova' }) }).then(r => r.json()))");
         await vai(p.hash);
-        if (p.fai) { await valuta(p.fai); await aspetta(500); }
+        if (p.fai) { await valuta('(async () => { ' + p.fai + ' })()'); await aspetta(600); }
       }
       const foto = await cdp('Page.captureScreenshot', { format: 'png' });
       const file = path.join(USCITA, p.nome + (SCURO ? '-scuro' : '') + (CHI !== 'manuel' ? '-' + CHI : '') + '.png');

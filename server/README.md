@@ -29,6 +29,14 @@ script is in [`docs/gestionale/postino.md`](../docs/gestionale/postino.md).
 - **Bridge** (`POST /ponte`, `X-Wisper-Segreto`): old app versions still calling the sheet are forwarded here by the
   script and run as the owner.
 - CSV export for Excel, a dashboard ("what do I do now?"), VAT number check through the EU VIES service.
+- **Phase 2: quotes, tasks and calendar** (`docs/gestionale/fase2.md`, responses in `architettura.md` §13): a price
+  list, quotes `PR/yyyy/nnn` with sections, optional and alternative items, discounts, EPPI and VAT frozen at creation,
+  the legal checklist (`mancano`), revisions (the old one becomes SOSTITUITO), sending with the PDF, acceptance with the
+  client's choices and signature, and the accepted quote turned into a job once (work phases, contract amount, hours,
+  hourly price, payment schedule). The quote maths live only here (`contiPreventivo` in `src/conti.js`), with the
+  shared cases in `prove/casi-preventivo.json`. Tasks, appointments and site visits with checklists, attachments,
+  overlap warnings for the same person, and recurring series (occurrences kept 90 days ahead and extended every night;
+  edit "this / following / all", skip one).
 
 No npm dependencies: only Node 24 built-in modules.
 
@@ -42,7 +50,9 @@ node server/src/avvio.js --dati ./dati-prova --prova         # sample data, in m
 `--prova` starts with the same sample data as the fake Google (`apps-script/prove/finto-google.js`) plus suppliers,
 contacts, sites, work phases and four test users, all with password `prova`: `manuel@esempio.it` (titolare),
 `laura@esempio.it` (amministrazione), `marco@esempio.it` (collaboratore, with two reports of his own),
-`lettura@esempio.it` (read-only). E-mails and backups go to `<data>/posta-finta/`. Phone emulator:
+`lettura@esempio.it` (read-only), and the quotes and tasks of the phase 2 prototype with dates counted from today (a
+sent quote expiring in 6 days, an expired one, a draft without price, an accepted one, overdue and recurring tasks, an
+appointment and a site visit). E-mails and backups go to `<data>/posta-finta/`. Phone emulator:
 `http://10.0.2.2:8400`; computer: `http://localhost:8400`.
 
 On the NAS (`/volume1/docker/Wisper-NAS`): copy `.env.esempio` to `.env` with the real values, then
@@ -68,5 +78,6 @@ node --test server/prove/
 Calculation cases shared with the script and the apps (`apps-script/prove/casi-calcolo.json`), the data rules of the
 script's tests, "must not see / must not write" for every role, audit log, numbering, archive and restore, import of
 the fake Google's sheets (also a pre-0.3.5 sheet) with totals checked to the cent, `copia-drive` against the fake
-Google, backups through a fake postman, restore, migrations, the bridge with right and wrong secret. Nothing in the
-tests touches Google or the internet.
+Google, backups through a fake postman, restore, migrations, the bridge with right and wrong secret; for phase 2 the
+quote cases, revisions and lock, acceptance with choices, the job created once, recurrences (this/following/all,
+skip), overlaps and every role on the new actions. Nothing in the tests touches Google or the internet.

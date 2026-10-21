@@ -22,6 +22,7 @@
   const Api = window.WisperApi;
   const Visita = window.WisperVisita;
   const Esempio = window.WisperEsempio;
+  const RA = window.WisperRegoleAttivita;
   const { $, h, aggiungi, svuota, icona, tondo, iniziali, stato, avviso, lavora, finestra, conferma, apriMenu, chiudiMenu,
     campo, conSuffisso, selezione, segmenti, cerca, riga, quadrato, segnaposto } = B;
 
@@ -81,6 +82,7 @@
     if (r && r.ok === false) {
       const e = new Error(r.errore || 'Non si può');
       e.permesso = r.permesso;
+      e.dati = r;
       return Promise.reject(e);
     }
     return Promise.resolve(r);
@@ -218,6 +220,7 @@
       }
     });
     if (fatto) await caricaDashboard();
+    if (fatto) { rileggiPromemoria().then(controllaPromemoria); }
     aggiornaStatoServer();
     if (silenzioso) ridisegna(); else mostra();
     if (fatto && !S.esempio && !visitaVista()) setTimeout(iniziaVisita, 400);
@@ -300,6 +303,8 @@
     const nome = percorso().split('/')[0];
     if (nome === 'rapportini') Visita.azione('nav-rapportini');
     if (nome === 'fatturazione') Visita.azione('nav-fatturazione');
+    if (nome === 'preventivi') Visita.azione('nav-preventivi');
+    if (nome === 'attivita') Visita.azione('nav-attivita');
   });
 
   /** Cambio di pagina: si chiude il pannello e si ridisegna da capo. */
@@ -346,6 +351,15 @@
     }
     if (d.hash === '#fatturazione' && f && f.mese) S.mese = f.mese;
     if (d.hash === '#clienti' && f) S.filtriSoggetti = Object.assign({ tipo: 'clienti', testo: '', archiviati: false }, f);
+    // Fase 2: il segmento dei preventivi, il segmento o il giorno delle attività.
+    if (d.hash === '#preventivi' && f) {
+      const seg = f.segmento || { BOZZA: 'bozze', INVIATO: 'inviati', SCADUTO: 'scaduti', ACCETTATO: 'accettati' }[String(f.stato || '').toUpperCase()];
+      if (seg) Preventivi.M.filtri.segmento = seg;
+    }
+    // Le attività: "non assegnate" è il segmento Non assegnate; un gruppo (oggi) è di tutti, o solo mio per il collaboratore.
+    if (d.hash.indexOf('#attivita') === 0) {
+      S.filtroAttivita = f ? Object.assign({}, f, f.nonAssegnate ? { segmento: 'libere' } : f.gruppo && !f.segmento ? { segmento: S.dash && S.dash.per === 'collaboratore' ? 'mie' : 'squadra' } : {}) : null;
+    }
     vai(d.hash);
   }
 
@@ -381,7 +395,24 @@
     else if (nome === 'rapportini') vistaRapportini(pagina);
     else if (nome === 'fatturazione') vistaFatturazione(pagina);
     else if (nome === 'amministrazione') Amministrazione.vista(pagina, a1 || '', a2 ? decodeURIComponent(a2) : '');
+    else if (nome === 'preventivi') Preventivi.vista(pagina, a1 ? decodeURIComponent(a1) : '', a2 || '');
+    else if (nome === 'attivita') { const f = S.filtroAttivita; S.filtroAttivita = null; Attivita.vista(pagina, a1 ? decodeURIComponent(a1) : '', f); }
     else vistaDashboard(pagina);
+  }
+
+  /**
+   * Una scrittura che il server può fermare per chiedere conferma (fase 2: un preventivo a cui manca
+   * qualcosa per legge, un appuntamento che si sovrappone): risponde serveConferma; si chiede alla
+   * persona (domanda, con la risposta del server) e, se dice sì, si rimanda con conferma: true.
+   */
+  async function scriviConConferma(testo, percorso, corpo, domanda) {
+    const prova = c => lavora(testo, async () => {
+      try { return await Rete.post(percorso, c); } catch (e) { if (e && e.dati && e.dati.serveConferma) return { daConfermare: e.dati }; throw e; }
+    });
+    const ris = await prova(corpo);
+    if (!ris || !ris.daConfermare) return ris;
+    if (!(await domanda(ris.daConfermare))) return null;
+    return prova(Object.assign({}, corpo, { conferma: true }));
   }
 
   /** Il nome del titolare da citare: quello che dice il server, altrimenti il primo titolare attivo. */
@@ -664,7 +695,8 @@
     if (v.tipo === 'commessa') return v.gravita === 'urgente' ? 'allarme' : 'commesse';
     return { budget: 'allarme', scadenza: 'calendario', firma: 'firma', giorno: 'calendario', giorni: 'calendario', fatturare: 'fatturazione',
       fatturazione: 'fatturazione', responsabile: 'clienti', sdi: 'fatturazione', cliente: 'clienti', rapportini: 'firma', rapportino: 'rapportini',
-      prestazioni: 'lista' }[v.tipo] ||
+      prestazioni: 'lista', preventivo: 'preventivo', preventivi: 'preventivo', attivita: 'lista', appuntamento: 'calendario', sopralluogo: 'luogo',
+      calendario: 'calendario', listino: 'libro' }[v.tipo] ||
       ({ urgente: 'allarme', attenzione: 'calendario', soldi: 'fatturazione' }[v.gravita] || 'lista');
   }
 
@@ -1632,10 +1664,58 @@
     mostra, ridisegna, disegnaPagina, vai, vaiA, vaiARapportini, ricaricaAnagrafiche, caricaDashboard, accogli,
     riquadro, apriPannello, moduloRapportino, preparaInvio, cambiaStato, tabellaRapportini, apriFile,
     iniziaVisita, cercaAggiornamenti, riavvia, statoAggiornamenti, mostraLicenza, esci, filtriCommesse, titolare,
+    // fase 2
+    senzaPermesso, nomeFile, prossimoCodiceCommessa, attivitaLette, scriviConConferma,
   };
   const Clienti = window.WisperClienti(W);
   const Commesse = window.WisperCommesse(W);
   const Amministrazione = window.WisperAmministrazione(W);
+  const Preventivi = window.WisperPreventivi(W);
+  const Attivita = window.WisperAttivita(W);
+
+  // ======================================================================= promemoria
+
+  /*
+   * I promemoria delle proprie attività (fase2.md §5): un avviso nel programma e una
+   * notifica di Windows, finché Wisper Ufficio è aperto. Le attività dei prossimi
+   * giorni si rileggono ogni cinque minuti; ogni mezzo minuto si guarda se ne scatta
+   * uno. Quelli già dati si ricordano (anche chiudendo e riaprendo il programma).
+   */
+  const CHIAVE_PROMEMORIA = 'wisper-promemoria-visti';
+  let attivitaMie = [];
+  function attivitaLette(lista) {
+    const idIo = S.io && S.io.utente && S.io.utente.id;
+    if (!S.esempio) attivitaMie = (lista || []).filter(a => String(a.assegnataA) === String(idIo));
+  }
+  function promemoriaVisti() {
+    try { return JSON.parse(localStorage.getItem(CHIAVE_PROMEMORIA) || '{}') || {}; } catch (e) { return {}; }
+  }
+  function segnaVisto(chiave) {
+    const visti = promemoriaVisti();
+    visti[chiave] = Date.now();
+    // Si tengono solo quelli degli ultimi tre giorni.
+    Object.keys(visti).forEach(k => { if (Date.now() - visti[k] > 3 * 86400000) delete visti[k]; });
+    try { localStorage.setItem(CHIAVE_PROMEMORIA, JSON.stringify(visti)); } catch (e) { /* li ridice, pazienza */ }
+  }
+  async function rileggiPromemoria() {
+    if (S.esempio || !S.entrato || !S.caricato || !puo('attivita') || !(S.io && S.io.utente)) return;
+    try {
+      const r = await Api.get('/server/attivita?da=' + RA.piuGiorni(C.oggiIso(), -1) + '&a=' + RA.piuGiorni(C.oggiIso(), 2) + '&assegnata=' + encodeURIComponent(S.io.utente.id));
+      attivitaLette((r.attivita || []).map(RA.normalizzaAttivita));
+    } catch (e) { /* senza rete si riprova alla prossima */ }
+  }
+  function controllaPromemoria() {
+    if (S.esempio || !S.entrato || Visita.attiva || !(S.io && S.io.utente)) return;
+    RA.promemoriaDaDare(attivitaMie, new Date(), S.io.utente.id, promemoriaVisti()).forEach(({ a, chiave }) => {
+      segnaVisto(chiave);
+      const quando = RA.conOrario(a) && a.inizio && !a.tuttoIlGiorno ? (RA.giornoDi(a) === C.oggiIso() ? 'oggi alle ' : RA.quandoBreve(RA.giornoDi(a)) + ' alle ') + RA.ora(a.inizio) : 'per ' + RA.quandoBreve(RA.giornoDi(a));
+      const testo = a.titolo + ' · ' + quando;
+      avviso('Promemoria: ' + testo, false, 12000, { testo: 'Apri', fn: () => vai('#attivita/' + encodeURIComponent(a.id)) });
+      Api.post('/locale/notifica', { titolo: 'Wisper · promemoria', testo }).catch(() => null);
+    });
+  }
+  setInterval(rileggiPromemoria, 5 * 60000);
+  setInterval(controllaPromemoria, 30000);
 
   function statoAggiornamenti() {
     const a = S.aggiornamento;
@@ -1669,6 +1749,12 @@
     try { return localStorage.getItem(CHIAVE_VISITA) === '1'; } catch (e) { return true; }
   }
 
+  /** Preventivi e attività tenuti in memoria dalle loro pagine: si rileggono dalla sorgente giusta (vera o di esempio). */
+  function svuotaFase2() {
+    Object.assign(Preventivi.M, { lista: null, listino: null, aperti: {}, bozza: null, chiave: '' });
+    Object.assign(Attivita.M, { aperte: null, periodo: null, da: '', a: '' });
+  }
+
   function iniziaVisita() {
     // Gira sui dati di esempio, con i permessi veri di chi la fa: i passi che il suo ruolo non può fare si saltano.
     if (Visita.attiva || !S.io) return;
@@ -1685,6 +1771,7 @@
         S.mese = meseDiOggi();
         S.filtri = filtriRapportini();
         S.filtriCommesse = filtriCommesse();
+        svuotaFase2();
         document.querySelectorAll('.velo').forEach(x => x.remove());
         vai('#dashboard');
       },
@@ -1694,6 +1781,7 @@
         chiudiMenu();
         S.esempio = null;
         if (S.veri) { Object.assign(S, S.veri); S.veri = null; }
+        svuotaFase2();
         vai('#dashboard');
         if (S.entrato) leggiTutto(true);
       },

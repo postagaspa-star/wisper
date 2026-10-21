@@ -92,6 +92,14 @@
       '.foto { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }' +
       '.foto figure { margin: 0; break-inside: avoid; border: 1px solid #E6E5E1; border-radius: 8px; padding: 6px; }' +
       '.foto img { width: 100%; max-height: 330px; object-fit: contain; } .foto figcaption { font-size: 9px; color: #5F5F67; margin-top: 4px; }' +
+      // Preventivo e incarico (fase 2): sezioni con il subtotale, voci facoltative e alternative marcate.
+      'h3.sez { font-size: 11.5px; font-weight: 800; margin: 14px 0 4px; letter-spacing: -0.1px; }' +
+      'table.voci td.desc { width: 52%; } table.voci tfoot td { font-weight: 700; border-top: 1px solid #1B1B1F; }' +
+      'tr.fuori td { color: #8A8A92; } tr.fuori td.n { text-decoration: line-through; }' +
+      '.segno { display: inline-block; font-size: 8px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; border: 1px solid #8A8A92; color: #3F3F46; border-radius: 4px; padding: 0 4px; margin-left: 4px; }' +
+      '.articolo { margin-bottom: 10px; break-inside: avoid; } .articolo h3 { font-size: 11.5px; font-weight: 800; margin: 0 0 3px; }' +
+      '.articolo .testo { white-space: pre-wrap; font-size: 10.5px; }' +
+      '.due-blocchi { display: flex; gap: 12px; } .due-blocchi .blocco { flex: 1; }' +
       '</style>';
   }
 
@@ -257,7 +265,201 @@
     return pagina(imp, 'Riepilogo ' + (periodo || ''), corpo);
   }
 
-  const Documenti = { rapportino, riepilogo, esc, idDaUrl };
+  // ======================================================================= preventivo e incarico (fase 2)
+
+  const COMPLESSITA = { bassa: 'Bassa', media: 'Media', alta: 'Alta' };
+  const QUANDO_PAGARE = { firma: 'alla firma', avanzamento: 'ad avanzamento dei lavori', fine: 'a fine lavori', data: 'alla data' };
+
+  /** Il numero con la revisione: "PR/2026/012 rev. 1". */
+  function numeroPreventivo(p) {
+    return (p.numero || 'Preventivo') + (Number(p.revisione) > 0 ? ' rev. ' + p.revisione : '');
+  }
+
+  /** Le sezioni con le loro voci, in ordine (accetta anche le voci in un elenco solo, con idSezione). */
+  function sezioniDi(p) {
+    const ordina = l => (l || []).slice().sort((a, b) => (Number(a.ordine) || 0) - (Number(b.ordine) || 0));
+    const sezioni = ordina(p.sezioni).map(s => Object.assign({}, s, { voci: ordina(s.voci) }));
+    if (Array.isArray(p.voci) && p.voci.length) {
+      sezioni.forEach(s => { s.voci = ordina(p.voci.filter(v => String(v.idSezione) === String(s.id))); });
+      const sciolte = ordina(p.voci.filter(v => !sezioni.some(s => String(s.id) === String(v.idSezione))));
+      if (sciolte.length) sezioni.push({ id: '', titolo: '', voci: sciolte });
+    }
+    return sezioni;
+  }
+
+  function quantitaVoce(v) {
+    const q = C.num(v.quantita === undefined || v.quantita === null || v.quantita === '' ? 1 : v.quantita);
+    if (v.modo === 'ore') return C.numero(q) + ' h';
+    if (v.modo === 'quantita') return C.numero(q) + (v.unita ? ' ' + v.unita : '');
+    return 'a corpo';
+  }
+
+  /** La tabella di una sezione: le voci che non contano (facoltative non scelte, alternative scartate) in grigio. */
+  function tabellaSezione(s, conti, accettato, contaDi) {
+    let righe = '';
+    s.voci.forEach(v => {
+      const conta = contaDi(v);
+      const segni = [];
+      if (C.gruppoAlternativa(v)) segni.push(conta ? 'scelta' : 'in alternativa');
+      else if (v.facoltativa === true || v.facoltativa === 1) segni.push(conta ? 'facoltativa, compresa' : (accettato ? 'facoltativa, non scelta' : 'facoltativa'));
+      const sconto = C.num(v.scontoPercentuale);
+      const prezzo = v.modo === 'corpo' || !v.modo ? C.euro(v.prezzo) : C.euro(v.prezzo) + (v.modo === 'ore' ? '/h' : (v.unita ? '/' + v.unita : ''));
+      righe += '<tr class="' + (conta ? '' : 'fuori') + '"><td class="desc">' + esc(v.descrizione || '') +
+        segni.map(x => '<span class="segno">' + esc(x) + '</span>').join('') + '</td>' +
+        '<td class="n">' + esc(quantitaVoce(v)) + '</td><td class="n">' + esc(prezzo) + '</td>' +
+        '<td class="n">' + (sconto ? esc('−' + C.numero(sconto) + '%') : '') + '</td>' +
+        '<td class="n">' + esc(C.euro(C.importoVoce(v))) + '</td></tr>';
+    });
+    const sub = conti.perSezione[String(s.id === undefined ? '' : s.id)] || 0;
+    return (s.titolo ? '<h3 class="sez">' + esc(s.titolo) + '</h3>' : '') +
+      '<table class="voci"><thead><tr><th>Prestazione</th><th class="n">Quantità</th><th class="n">Prezzo</th><th class="n">Sconto</th><th class="n">Importo</th></tr></thead>' +
+      '<tbody>' + righe + '</tbody><tfoot><tr><td colspan="4">' + esc(s.titolo ? 'Totale ' + s.titolo.toLowerCase() : 'Totale') + '</td><td class="n">' + esc(C.euro(sub)) + '</td></tr></tfoot></table>';
+  }
+
+  function tabellaConto(p, k) {
+    const righe = [];
+    if (k.sconto > 0) {
+      righe.push(['Totale delle prestazioni', k.sommaVoci]);
+      if (k.scontoDaPercentuale > 0) righe.push(['Sconto ' + C.numero(p.scontoPercentuale) + '%', -k.scontoDaPercentuale]);
+      if (k.scontoEuro > 0) righe.push(['Sconto', -k.scontoEuro]);
+    }
+    righe.push(['Imponibile', k.imponibile]);
+    righe.push(['Contributo integrativo EPPI ' + C.numero(p.eppiPercentuale) + '%', k.contributo]);
+    righe.push(['IVA ' + C.numero(p.ivaPercentuale) + '% su ' + C.euro(k.baseIva), k.iva]);
+    return '<table class="conto"><tbody>' + righe.map(r => '<tr><td>' + esc(r[0]) + '</td><td class="n">' + esc(C.euro(r[1])) + '</td></tr>').join('') +
+      '<tr class="tot"><td>Totale</td><td class="n">' + esc(C.euro(k.totale)) + '</td></tr></tbody></table>';
+  }
+
+  function tabellaScadenze(p, k) {
+    const lista = p.scadenzePagamento || [];
+    if (!lista.length) return '';
+    return '<table><thead><tr><th>Pagamento</th><th>Quando</th><th class="n">Quota</th><th class="n">Importo</th></tr></thead><tbody>' +
+      lista.map(s => '<tr><td>' + esc(s.descrizione || '') + '</td><td>' + esc(s.quando === 'data' && s.data ? 'il ' + C.data(s.data) : (QUANDO_PAGARE[s.quando] || '')) + '</td>' +
+        '<td class="n">' + esc(s.tipo === 'importo' ? '' : C.numero(s.valore) + '%') + '</td>' +
+        '<td class="n">' + esc(C.euro(s.importo !== undefined && s.importo !== null && s.importo !== '' ? s.importo : C.importoScadenza(s, k.imponibile))) + '</td></tr>').join('') +
+      '</tbody></table>';
+  }
+
+  /** "Polizza Compagnia n. 123, massimale 1.000.000 €" e i titoli: li chiede la legge (L. 124/2017). */
+  function polizzaETitoli(imp) {
+    const polizza = [imp.POLIZZA_COMPAGNIA, imp.POLIZZA_NUMERO ? 'n. ' + imp.POLIZZA_NUMERO : '',
+      imp.POLIZZA_MASSIMALE !== undefined && imp.POLIZZA_MASSIMALE !== null && imp.POLIZZA_MASSIMALE !== '' ? 'massimale ' + (typeof imp.POLIZZA_MASSIMALE === 'number' ? C.euro(imp.POLIZZA_MASSIMALE) : imp.POLIZZA_MASSIMALE) : '']
+      .filter(Boolean).join(', ');
+    return { polizza, titoli: String(imp.TITOLI || '').trim() };
+  }
+
+  function clienteDi(p, ana) {
+    return (ana.clienti || ana.soggetti || []).find(c => c.id === p.idCliente) || { nome: p.cliente || '' };
+  }
+
+  function righeCliente(c, ana, p) {
+    const sede = (ana.sedi || []).find(s => String(s.id) === String(p.idSede !== undefined ? p.idSede : p.sedeId));
+    const referente = (ana.referenti || []).find(r => String(r.id) === String(p.idReferente !== undefined ? p.idReferente : p.referenteId));
+    const indirizzo = [c.indirizzo, [c.cap, c.citta].filter(Boolean).join(' ') + (c.provincia ? ' (' + c.provincia + ')' : '')].filter(x => String(x || '').trim()).join(', ');
+    return [indirizzo, c.partitaIva ? 'P.IVA ' + c.partitaIva : (c.codiceFiscale ? 'C.F. ' + c.codiceFiscale : ''),
+      c.pec ? 'PEC ' + c.pec : c.email, sede ? 'Presso: ' + sede.nome + (sede.citta ? ', ' + sede.citta : '') : '',
+      referente ? 'Alla cortese attenzione di ' + referente.nome : ''];
+  }
+
+  function firmeDocumento(p, imp, etichettaStudio) {
+    const firmaTecnico = idDaUrl(imp.FIRMA_TECNICO);
+    const firmaCliente = p.firma && (p.firma.id || idDaUrl(p.firma.url));
+    return '<div class="firme">' +
+      '<div class="firma"><div class="spazio">' + immagine(firmaTecnico, 'sig') + '</div>' +
+      '<div class="chi">' + esc(etichettaStudio) + ' · ' + esc(imp.TECNICO || imp.RAGIONE_SOCIALE || '') + '</div></div>' +
+      '<div class="firma"><div class="spazio">' + immagine(firmaCliente, 'sig') + '</div>' +
+      '<div class="chi">Per accettazione' + (p.accettatoDa ? ' · ' + esc(p.accettatoDa) : '') +
+      (p.accettatoIl ? ' · il ' + esc(C.data(p.accettatoIl)) : ' · data') + '</div></div></div>';
+  }
+
+  /**
+   * Il preventivo (docs/gestionale/fase2.md §5): intestazione, cliente, oggetto,
+   * complessità, sezioni e voci con gli importi (facoltative e alternative marcate),
+   * il conto con il contributo EPPI e l'IVA, le scadenze di pagamento, gli oneri
+   * previsti, le condizioni, la validità, polizza e titoli, lo spazio per la firma.
+   * Tutto quello che chiede la legge per i professionisti (DL 1/2012 art. 9, L. 124/2017).
+   * opzioni: scelte { idVoce: true|false } per mostrare il conto con le scelte del cliente.
+   */
+  function preventivo(p0, ana, opzioni) {
+    const o = opzioni || {};
+    const imp = ana.impostazioni || {};
+    const sezioni0 = sezioniDi(p0);
+    const tutte = C.applicaScelte(sezioni0.reduce((a, s) => a.concat(s.voci.map(v => Object.assign({ idSezione: s.id }, v))), []), o.scelte);
+    const sezioni = sezioni0.map(s => Object.assign({}, s, { voci: tutte.filter(v => String(v.idSezione) === String(s.id)) }));
+    const p = p0;
+    const k = C.contiPreventivo(p, tutte);
+    const cliente = clienteDi(p, ana);
+    const accettato = p.stato === 'ACCETTATO';
+    const validita = p.scadenza ? 'valido fino al ' + C.data(p.scadenza) : '';
+    let corpo = intestazione(imp, 'Preventivo', numeroPreventivo(p), ['del ' + C.data(p.data), validita].filter(Boolean).join(' · '));
+    corpo += '<div class="parti">' + mittente(imp) + destinatario(cliente.nome || '', righeCliente(cliente, ana, p)) + '</div>';
+    corpo += '<div class="barra">Oggetto: ' + esc(p.oggetto || '') + '</div>';
+    if (p.introduzione) corpo += '<div class="blocco"><div class="testo">' + esc(p.introduzione) + '</div></div>';
+    corpo += '<div class="griglia">' +
+      cella('Grado di complessità', COMPLESSITA[p.complessita] || '—') +
+      cella('Data', C.data(p.data)) +
+      cella('Validità', p.scadenza ? 'fino al ' + C.data(p.scadenza) : '—') +
+      cella('Totale', C.euro(k.totale)) +
+      '</div>';
+    if (p.complessitaNota) corpo += '<div class="blocco"><div class="etichetta">La complessità dell\'incarico</div><div class="testo">' + esc(p.complessitaNota) + '</div></div>';
+    const contano = C.vociCheContano(tutte);
+    const contaDi = v => contano[tutte.indexOf(v)];
+    sezioni.forEach(s => { if (s.voci.length) corpo += tabellaSezione(s, k, accettato, contaDi); });
+    corpo += tabellaConto(p, k);
+    corpo += '<div class="sotto-riga" style="margin:-6px 0 12px">Importi comprensivi di spese. Contributo integrativo e IVA come indicati; le voci facoltative non scelte e le alternative scartate non sono nel totale.</div>';
+    if ((p.scadenzePagamento || []).length) corpo += '<h3 class="sez">Pagamenti</h3>' + tabellaScadenze(p, k);
+    const pt = polizzaETitoli(imp);
+    corpo += '<div class="due-blocchi">' +
+      '<div class="blocco"><div class="etichetta">Oneri ipotizzabili dal conferimento alla conclusione</div><div class="testo">' + esc(p.oneriPrevisti || 'Nessun onere oltre a quelli indicati.') + '</div></div>' +
+      '<div class="blocco"><div class="etichetta">Polizza professionale e titoli</div><div class="testo">' + esc(
+        (pt.polizza ? 'Polizza: ' + pt.polizza : 'Polizza: —') + '\n' + (pt.titoli || 'Titoli: —')) + '</div></div></div>';
+    if (p.condizioni) corpo += '<div class="blocco"><div class="etichetta">Condizioni</div><div class="testo">' + esc(p.condizioni) + '</div></div>';
+    if (p.scadenza) corpo += '<div class="blocco"><div class="etichetta">Validità dell\'offerta</div><div class="testo">' + esc('Questa offerta vale fino al ' + C.data(p.scadenza) + '. Dopo l\'accettazione i prezzi non cambiano.') + '</div></div>';
+    corpo += firmeDocumento(p, imp, 'Per lo studio');
+    return pagina(imp, 'Preventivo ' + numeroPreventivo(p), corpo);
+  }
+
+  /**
+   * L'incarico professionale, dal preventivo accettato: le parti, l'oggetto, le
+   * prestazioni scelte con i loro importi, il compenso, i pagamenti, gli oneri, le
+   * condizioni, la polizza e i titoli, e le firme.
+   */
+  function incarico(p, ana, opzioni) {
+    const imp = ana.impostazioni || {};
+    const sezioni = sezioniDi(p);
+    const voci = sezioni.reduce((a, s) => a.concat(s.voci.map(v => Object.assign({ idSezione: s.id }, v))), []);
+    const k = C.contiPreventivo(p, voci);
+    const contano = C.vociCheContano(voci);
+    const contate = voci.filter((v, i) => contano[i]);
+    const cliente = clienteDi(p, ana);
+    const pt = polizzaETitoli(imp);
+    const MODI = { firma: 'firmato dal cliente', email: 'accettato per email', documento: 'con il documento firmato', voce: 'accettato a voce' };
+    let corpo = intestazione(imp, 'Incarico professionale', numeroPreventivo(p),
+      ['dal preventivo del ' + C.data(p.data), p.accettatoIl ? 'accettato il ' + C.data(p.accettatoIl) : ''].filter(Boolean).join(' · '));
+    corpo += '<div class="parti">' +
+      '<div class="parte"><div class="etichetta">Il professionista</div><div class="nome">' + esc(imp.RAGIONE_SOCIALE || '') + '</div>' +
+      [imp.TECNICO, imp.INDIRIZZO, imp.PARTITA_IVA ? 'P.IVA ' + imp.PARTITA_IVA : '', imp.PEC ? 'PEC ' + imp.PEC : imp.EMAIL].filter(Boolean).map(r => '<div>' + esc(r) + '</div>').join('') + '</div>' +
+      '<div class="parte"><div class="etichetta">Il committente</div><div class="nome">' + esc(cliente.nome || '') + '</div>' +
+      righeCliente(cliente, ana, p).filter(Boolean).map(r => '<div>' + esc(r) + '</div>').join('') + '</div></div>';
+    let n = 0;
+    const articolo = (titolo, html) => '<div class="articolo"><h3>' + (++n) + '. ' + esc(titolo) + '</h3>' + html + '</div>';
+    corpo += articolo('Oggetto dell\'incarico', '<div class="testo">' + esc(p.oggetto || '') + (p.introduzione ? '\n' + p.introduzione : '') + '</div>' +
+      '<div class="sotto-riga">Grado di complessità: ' + esc((COMPLESSITA[p.complessita] || '—').toLowerCase()) + (p.complessitaNota ? ' · ' + esc(p.complessitaNota) : '') + '</div>');
+    corpo += articolo('Prestazioni', '<table class="voci"><thead><tr><th>Prestazione</th><th class="n">Quantità</th><th class="n">Importo</th></tr></thead><tbody>' +
+      contate.map(v => '<tr><td class="desc">' + esc(v.descrizione || '') + '</td><td class="n">' + esc(quantitaVoce(v)) + '</td><td class="n">' + esc(C.euro(C.importoVoce(v))) + '</td></tr>').join('') +
+      '</tbody></table>');
+    corpo += articolo('Compenso', tabellaConto(p, k));
+    if ((p.scadenzePagamento || []).length) corpo += articolo('Pagamenti', tabellaScadenze(p, k));
+    corpo += articolo('Oneri ipotizzabili', '<div class="testo">' + esc(p.oneriPrevisti || 'Nessun onere oltre a quelli indicati.') + '</div>');
+    if (p.condizioni) corpo += articolo('Condizioni', '<div class="testo">' + esc(p.condizioni) + '</div>');
+    corpo += articolo('Polizza professionale e titoli', '<div class="testo">' + esc((pt.polizza ? 'Polizza: ' + pt.polizza : 'Polizza: —') + '\n' + (pt.titoli || 'Titoli: —')) + '</div>');
+    corpo += '<div class="sotto-riga">L\'incarico riprende il preventivo ' + esc(numeroPreventivo(p)) +
+      (p.accettazioneModo ? ', ' + esc(MODI[p.accettazioneModo] || '') : '') + (p.accettatoDa ? ' da ' + esc(p.accettatoDa) : '') + '.</div>';
+    corpo += firmeDocumento(p, imp, 'Il professionista');
+    return pagina(imp, 'Incarico ' + numeroPreventivo(p), corpo);
+  }
+
+  const Documenti = { rapportino, riepilogo, preventivo, incarico, numeroPreventivo, esc, idDaUrl };
   if (typeof module !== 'undefined' && module.exports) module.exports = Documenti;
   else radice.WisperDocumenti = Documenti;
 })(typeof window !== 'undefined' ? window : globalThis);

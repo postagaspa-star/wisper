@@ -15,6 +15,8 @@
 
   const C = radice.WisperConti || (typeof require === 'function' ? require('./conti.js') : null);
   const R = radice.WisperRegole || (typeof require === 'function' ? require('./regole.js') : null);
+  const RP = radice.WisperRegolePreventivi || (typeof require === 'function' ? require('./regole-preventivi.js') : null);
+  const RA = radice.WisperRegoleAttivita || (typeof require === 'function' ? require('./regole-attivita.js') : null);
 
   const due = n => String(n).padStart(2, '0');
   const iso = d => d.getFullYear() + '-' + due(d.getMonth() + 1) + '-' + due(d.getDate());
@@ -47,19 +49,21 @@
   /** I permessi iniziali dei quattro ruoli (architettura §3), per i moduli che ci sono. */
   function permessiDi(ruolo) {
     const p = {};
-    const tutti = ['dashboard', 'clienti', 'commesse', 'rapportini', 'fatturazione', 'documenti', 'amministrazione', 'costi', 'riservati'];
+    const tutti = ['dashboard', 'clienti', 'commesse', 'preventivi', 'attivita', 'rapportini', 'fatturazione', 'documenti', 'amministrazione', 'costi', 'riservati'];
     tutti.forEach(m => { p[m] = 0; });
     if (ruolo === 'titolare') tutti.forEach(m => { p[m] = 2; });
-    if (ruolo === 'amministrazione') Object.assign(p, { dashboard: 2, clienti: 2, commesse: 2, rapportini: 2, fatturazione: 2, documenti: 2, amministrazione: 1, costi: 2 });
-    if (ruolo === 'collaboratore') Object.assign(p, { dashboard: 1, clienti: 1, commesse: 1, rapportini: 2, documenti: 1 });
-    if (ruolo === 'lettura') Object.assign(p, { dashboard: 1, clienti: 1, commesse: 1, rapportini: 1, fatturazione: 1, documenti: 1, costi: 1 });
+    if (ruolo === 'amministrazione') Object.assign(p, { dashboard: 2, clienti: 2, commesse: 2, preventivi: 2, attivita: 2, rapportini: 2, fatturazione: 2, documenti: 2, amministrazione: 1, costi: 2 });
+    if (ruolo === 'collaboratore') Object.assign(p, { dashboard: 1, clienti: 1, commesse: 1, attivita: 2, rapportini: 2, documenti: 1 });
+    if (ruolo === 'lettura') Object.assign(p, { dashboard: 1, clienti: 1, commesse: 1, preventivi: 1, attivita: 1, rapportini: 1, fatturazione: 1, documenti: 1, costi: 1 });
     return p;
   }
 
   // I campi dei soldi: senza il permesso "costi" il server li toglie (architettura §3).
   const CAMPI_COSTI = new Set(['tariffa', 'tariffaFissa', 'costoFisso', 'ultimaTariffa', 'maggExtra', 'euroKm', 'compensoOre',
     'rimborsoKm', 'totale', 'costoOrario', 'prezzoOrario', 'budgetEuro', 'importoContratto', 'valore', 'soldi', 'quanto',
-    'EURO_KM', 'COSTO_ORARIO']);
+    'EURO_KM', 'COSTO_ORARIO',
+    // fase 2: i soldi dei preventivi
+    'prezzo', 'importo', 'imponibile', 'contributo', 'conti', 'scontoEuro', 'IVA', 'EPPI_INTEGRATIVO', 'RITENUTA']);
   function togliCosti(x) {
     if (Array.isArray(x)) return x.map(togliCosti);
     if (x && typeof x === 'object') {
@@ -82,6 +86,11 @@
       RAGIONE_SOCIALE: 'Studio Tecnico GM', TECNICO: 'Manuel Gasparotto', INDIRIZZO: 'Via Roma 1, 36063 Marostica (VI)',
       PARTITA_IVA: '03123456786', EMAIL: 'studio@esempio.it', TELEFONO: '0424 000 000', PEC: 'studio@pec.esempio.it',
       EURO_KM: 0.76, AUTO: 'Volvo XC40', COSTO_ORARIO: 18, TICKET_ATTIVO: 'NO', FIRMA_TECNICO: '',
+      // fase 2: quello che il preventivo chiede per legge, e le regole fiscali
+      POLIZZA_COMPAGNIA: 'Assicurazioni Esempio Spa', POLIZZA_NUMERO: '0012345', POLIZZA_MASSIMALE: '1.000.000 €',
+      TITOLI: 'Perito industriale iscritto al Collegio dei Periti Industriali di Vicenza. Progettazione elettrotecnica e automazione.',
+      IVA: 22, EPPI_INTEGRATIVO: 5, RITENUTA: 20, PREVENTIVO_VALIDITA_GIORNI: 30,
+      PREVENTIVO_CONDIZIONI: 'Prezzi validi per le prestazioni descritte. Le varianti richieste durante i lavori si quotano a parte. Pagamenti a 30 giorni dalla fattura.',
     };
     const utenti = [
       { id: 1, nome: 'Manuel Gasparotto', email: 'manuel@esempio.it', ruolo: 'titolare', attivo: true, ultimoAccesso: istante(oggi, 0, '08:12') },
@@ -166,6 +175,7 @@
     const numerazioni = [
       { tipo: 'commessa', formato: '{AA}ST{NNN}', annuale: false, ultimo: 47 },
       { tipo: 'rapportino', formato: 'RAP/{AAAA}/{NNNN}', annuale: true, ultimo: 0 },
+      { tipo: 'preventivo', formato: 'PR/{AAAA}/{NNN}', annuale: true, ultimo: 13 },
     ];
     const ana = { clienti: [], fornitori: [], soggetti, commesse, referenti, sedi, prestazioni, utenti, numerazioni, gruppi: [], impostazioni };
 
@@ -240,12 +250,86 @@
       { id: 'f-cest-2', nome: 'Schema unifilare v1.pdf', mime: 'application/pdf', tipo: 'documento', idRapportino: '', idCommessa: c44, cestinato: istante(oggi, -6, '15:40') },
     ];
 
+    // ------------------------------------------------------------- fase 2: listino, preventivi, attività
+    const listino = [
+      ['SR', 'Sopralluogo e rilievo', 'corpo', '', 350], ['PP', 'Progetto preliminare', 'corpo', '', 600], ['PE', 'Progetto esecutivo', 'corpo', '', 1900],
+      ['DL', 'Direzione lavori', 'ore', 'h', 45], ['DIRI', 'Dichiarazione di rispondenza (DiRi)', 'corpo', '', 450], ['VP', 'Verifiche periodiche', 'corpo', '', null],
+      ['CO', 'Collaudo', 'corpo', '', 380], ['OC', 'Ore di consulenza', 'ore', 'h', 45],
+    ].map((x, i) => ({ id: i + 1, codice: x[0], nome: x[1], descrizione: '', modo: x[2], unita: x[3], prezzo: x[4], attivo: true, ordine: i + 1 }));
+    const vp = (id, descrizione, modo, quantita, prezzo, extra) => Object.assign({ id, idListino: null, descrizione, modo, quantita, unita: modo === 'ore' ? 'h' : '', prezzo,
+      scontoPercentuale: 0, facoltativa: false, alternativa: '', scelta: false }, extra || {});
+    const pr = (n, extra) => Object.assign({
+      numero: 'PR/' + anno + '/' + String(n).padStart(3, '0'), revisione: 0, idSede: null, idReferente: null, introduzione: '', complessita: 'media', complessitaNota: '',
+      oneriPrevisti: '', condizioni: impostazioni.PREVENTIVO_CONDIZIONI, scontoPercentuale: 0, scontoEuro: 0, eppiPercentuale: 5, ivaPercentuale: 22,
+      inviatoIl: '', accettatoIl: '', accettatoDa: '', accettazioneModo: '', firma: null, rifiutatoIl: '', motivoRifiuto: '', idCommessa: '', modello: false,
+      noteInterne: '', idUtente: 1, scadenzePagamento: [], sezioni: [],
+    }, extra);
+    const sezioniPr12 = () => [
+      { id: 1, titolo: 'Progettazione', ordine: 1, voci: [vp(1, 'Sopralluogo e rilievo', 'corpo', 1, 350, { idListino: 1 }), vp(2, 'Progetto esecutivo impianto elettrico', 'corpo', 1, 1900, { idListino: 3 })] },
+      { id: 2, titolo: 'Cantiere', ordine: 2, voci: [vp(3, 'Direzione lavori', 'ore', 16, 45, { idListino: 4 }), vp(4, 'Dichiarazione di rispondenza (DiRi)', 'corpo', 1, 450, { facoltativa: true, idListino: 5 }),
+        vp(5, 'Collaudo con strumenti propri', 'corpo', 1, 380, { alternativa: 'Collaudo', scelta: true, idListino: 7 }), vp(6, 'Collaudo con laboratorio esterno', 'corpo', 1, 620, { alternativa: 'Collaudo' })] },
+    ];
+    const scadenze12 = [
+      { id: 1, descrizione: 'Acconto', tipo: 'percentuale', valore: 30, quando: 'firma', data: '', stato: 'prevista' },
+      { id: 2, descrizione: 'A fine progetto', tipo: 'percentuale', valore: 40, quando: 'avanzamento', data: '', stato: 'prevista' },
+      { id: 3, descrizione: 'Saldo', tipo: 'percentuale', valore: 30, quando: 'fine', data: '', stato: 'prevista' },
+    ];
+    const preventivi = [
+      pr(12, { id: 11, revisione: 0, stato: 'SOSTITUITO', idCliente: 'C002', idSede: 4, idReferente: 3, oggetto: 'Adeguamento impianto elettrico capannone', data: giorno(oggi, -16), scadenza: giorno(oggi, 14),
+        inviatoIl: istante(oggi, -16, '10:00'), sezioni: sezioniPr12().map(s => Object.assign(s, { id: s.id + 100, voci: s.voci.map(v => Object.assign(v, { id: v.id + 100, prezzo: v.id === 2 ? 2100 : v.prezzo })) })), scadenzePagamento: [] }),
+      pr(12, { id: 12, revisione: 1, stato: 'INVIATO', idCliente: 'C002', idSede: 4, idReferente: 3, oggetto: 'Adeguamento impianto elettrico capannone', data: giorno(oggi, -9), scadenza: giorno(oggi, 6),
+        introduzione: 'Come d\'accordo al telefono, la proposta per l\'adeguamento dell\'impianto elettrico del capannone di via Nuova.',
+        complessitaNota: 'Impianto esistente senza documentazione: serve il rilievo completo prima del progetto.',
+        oneriPrevisti: 'Eventuali diritti per la pratica in Comune, a carico del committente.', inviatoIl: istante(oggi, -9, '11:20'), sezioni: sezioniPr12(), scadenzePagamento: scadenze12.map(x => Object.assign({}, x)) }),
+      pr(13, { id: 13, stato: 'BOZZA', idCliente: 'C001', idSede: 3, oggetto: 'Verifica periodica impianto di terra', data: giorno(oggi, -1), scadenza: giorno(oggi, 29), complessita: 'bassa',
+        sezioni: [{ id: 3, titolo: 'Verifica', ordine: 1, voci: [vp(7, 'Verifiche periodiche', 'corpo', 1, null, { idListino: 6 })] }] }),
+      pr(10, { id: 10, stato: 'ACCETTATO', idCliente: 'C003', idSede: 5, oggetto: 'Fotovoltaico 6 kW', data: giorno(oggi, -20), scadenza: giorno(oggi, 10), complessita: 'bassa',
+        oneriPrevisti: 'Nessuno oltre a quelli indicati.', inviatoIl: istante(oggi, -20, '09:00'), accettatoIl: istante(oggi, -15, '18:00'), accettatoDa: 'Mario Bianchi', accettazioneModo: 'email', idCommessa: aa + 'ST047',
+        sezioni: [{ id: 4, titolo: 'Progetto', ordine: 1, voci: [vp(8, 'Progetto preliminare', 'corpo', 1, 600, { idListino: 2 })] }] }),
+      pr(9, { id: 9, stato: 'ACCETTATO', idCliente: 'C001', idSede: 2, oggetto: 'Revisione quadri del magazzino', data: giorno(oggi, -12), scadenza: giorno(oggi, 18),
+        oneriPrevisti: 'Nessuno oltre a quelli indicati.', inviatoIl: istante(oggi, -12, '09:00'), accettatoIl: istante(oggi, -2, '17:30'), accettatoDa: 'Giulia Dal Santo', accettazioneModo: 'documento',
+        sezioni: [{ id: 5, titolo: 'Prestazioni', ordine: 1, voci: [vp(9, 'Sopralluogo e rilievo', 'corpo', 1, 350, { idListino: 1 }), vp(10, 'Ore di consulenza', 'ore', 12, 45, { idListino: 8 })] }],
+        scadenzePagamento: [{ id: 4, descrizione: 'Alla firma', tipo: 'percentuale', valore: 50, quando: 'firma', data: '', stato: 'prevista' }, { id: 5, descrizione: 'Saldo', tipo: 'percentuale', valore: 50, quando: 'fine', data: '', stato: 'prevista' }] }),
+      pr(7, { id: 7, stato: 'INVIATO', idCliente: 'C002', oggetto: 'Quadro di cantiere', data: giorno(oggi, -46), scadenza: giorno(oggi, -16), oneriPrevisti: 'Nessuno.', inviatoIl: istante(oggi, -46, '09:00'),
+        sezioni: [{ id: 6, titolo: 'Progetto', ordine: 1, voci: [vp(11, 'Progetto quadro', 'corpo', 1, 900)] }] }),
+      pr(0, { id: 20, numero: '', modello: true, stato: 'BOZZA', idCliente: '', oggetto: 'Verifica periodica impianto di terra (modello)', data: giorno(oggi, -60), scadenza: '', complessita: 'bassa',
+        sezioni: [{ id: 7, titolo: 'Verifica', ordine: 1, voci: [vp(12, 'Sopralluogo e rilievo', 'corpo', 1, 350, { idListino: 1 }), vp(13, 'Verifiche periodiche', 'corpo', 1, null, { idListino: 6 })] }] }),
+    ];
+
+    // Le attività: date vicine a oggi, così il calendario della settimana è sempre pieno.
+    const lunediProssimo = (() => { const d = new Date(oggi + 'T12:00:00'); d.setDate(d.getDate() + ((8 - d.getDay()) % 7 || 7)); return iso(d); })();
+    const att = (id, titolo, extra) => Object.assign({ id, titolo, descrizione: '', tipo: 'attivita', idCliente: '', idCommessa: '', idPrestazione: null, assegnataA: null, creataDa: 1,
+      priorita: 'normale', stato: 'da_fare', scadenza: '', inizio: '', fine: '', tuttoIlGiorno: false, luogo: '', promemoriaMinuti: null, idRicorrenza: null, occorrenza: '',
+      fattaIl: '', checklist: [], allegati: [], creato: istante(oggi, -3, '09:00'), modificato: '' }, extra);
+    const attivita = [
+      att(1, 'Chiamare Rossi per il collaudo', { idCliente: 'C002', idCommessa: c45, assegnataA: 1, priorita: 'alta', scadenza: giorno(oggi, -1) }),
+      att(2, 'Sopralluogo cabina MT Acme', { tipo: 'sopralluogo', idCliente: 'C001', idCommessa: c46, assegnataA: 3, inizio: istante(oggi, 0, '14:30'), fine: istante(oggi, 0, '16:00'), luogo: 'Via Roma 40, Zanè', promemoriaMinuti: 60 }),
+      att(3, 'Mandare lo schema unifilare a Elettrodinamica', { idCliente: 'C001', idCommessa: c44, assegnataA: 1, scadenza: oggi, promemoriaMinuti: 0,
+        checklist: [{ id: 1, testo: 'Aggiornare la revisione', fatta: true, ordine: 1 }, { id: 2, testo: 'Esportare in PDF', fatta: false, ordine: 2 }, { id: 3, testo: 'Mandare a Giulia', fatta: false, ordine: 3 }] }),
+      att(4, 'Rinnovo polizza professionale', { assegnataA: 1, scadenza: lunediProssimo, idRicorrenza: 1, occorrenza: lunediProssimo, priorita: 'alta' }),
+      att(5, 'Preparare il preventivo per Bianchi', { idCliente: 'C003', scadenza: giorno(oggi, 6) }),
+      att(6, 'Riordinare i cataloghi in ufficio', { priorita: 'bassa' }),
+      att(7, 'Riunione cantiere Batokyo', { tipo: 'appuntamento', idCliente: 'C001', idCommessa: c44, assegnataA: 1, inizio: istante(oggi, 0, '08:30'), fine: istante(oggi, 0, '10:00'), luogo: 'Magazzino automatico, Schio', promemoriaMinuti: 15 }),
+      att(8, 'Collaudo quadro capannone', { tipo: 'appuntamento', idCliente: 'C002', idCommessa: c45, assegnataA: 1, inizio: istante(oggi, 1, '09:00'), fine: istante(oggi, 1, '12:00'), luogo: 'Via Nuova 3, Bassano del Grappa' }),
+      att(9, 'Telefonata con Elettrodinamica', { tipo: 'appuntamento', idCliente: 'C001', assegnataA: 1, inizio: istante(oggi, -1, '10:00'), fine: istante(oggi, -1, '11:00'), stato: 'fatta', fattaIl: istante(oggi, -1, '11:00') }),
+      att(10, 'Rilievo fotovoltaico Bianchi', { tipo: 'sopralluogo', idCliente: 'C003', idCommessa: c47, assegnataA: 1, inizio: istante(oggi, -2, '15:00'), fine: istante(oggi, -2, '17:00'), stato: 'fatta', fattaIl: istante(oggi, -2, '17:00') }),
+      att(11, 'Verifica impianto di terra', { tipo: 'sopralluogo', idCliente: 'C002', idCommessa: aa + 'ST041', assegnataA: 3, inizio: istante(oggi, 3, '09:00'), fine: istante(oggi, 3, '11:30'), luogo: 'Capannone, Bassano del Grappa' }),
+      att(12, 'Rilievo Batokyo', { tipo: 'sopralluogo', idCliente: 'C001', idCommessa: c44, assegnataA: 3, inizio: istante(oggi, 2, '08:00'), fine: istante(oggi, 2, '12:00') }),
+    ];
+    // Una ricorrenza settimanale: le occorrenze dei prossimi 90 giorni, come le crea il server.
+    const ricorrenze = [{ id: 1, regola: 'anni', ogni: 1, giorniSettimana: [], fine: '' }, { id: 2, regola: 'settimane', ogni: 1, giorniSettimana: [1], fine: '' }];
+    let nAtt = 100;
+    for (let g = lunediProssimo; g <= giorno(oggi, 90); g = giorno(g, 7)) {
+      attivita.push(att(++nAtt, 'Controllare la PEC dello studio', { assegnataA: 2, scadenza: g, idRicorrenza: 2, occorrenza: g, priorita: 'bassa' }));
+    }
+
     // Chi entra: l'utente vero della visita, oppure uno degli utenti di prova.
     const scelto = { manuel: 1, laura: 2, marco: 3, lettura: 4 }[o.chi || 'manuel'] || 1;
     const io = o.utente ? Object.assign({}, o.utente) : copia(utenti.find(u => u.id === scelto));
     if (!o.utente && io.ruolo === 'lettura') io.attivo = true;
     const permessiIo = o.permessi ? Object.assign({}, o.permessi) : permessiDi(io.ruolo);
-    return { oggi, ana, rapportini, registro, copie, cestino, sessioni, permessi, io, permessiIo, contatori: { s: 10, r: 10, p: 20, f: 10, u: 4, reg: nr, sess: 10 } };
+    return { oggi, ana, rapportini, registro, copie, cestino, sessioni, permessi, io, permessiIo, listino, preventivi, attivita, ricorrenze,
+      contatori: { s: 10, r: 10, p: 20, f: 10, u: 4, reg: nr, sess: 10, prev: 30, sez: 50, voce: 200, scad: 20, att: nAtt + 10, chk: 20, lis: 20, ric: 10 } };
   }
 
   // ======================================================================= dashboard
@@ -345,6 +429,7 @@
         pianificare.push({ tipo: 'sdi', gravita: 'info', titolo: s.nome.replace(/ Srl$/, '') + ': mancano codice SDI e PEC', dettaglio: 'Serviranno per le fatture', collegamento: { pagina: 'cliente', id: s.id } });
       });
     }
+    dashboardFase2(dati, { urgenti, settimana, pianificare, mio, soldi, nome });
     const conta = R.contaCommesse(commesse, oggi);
     return { ok: true, per: mio ? 'collaboratore' : 'titolare', oggi, urgenti, settimana, pianificare,
       numeri: { commesse: { aperte: conta.aperte, sospese: conta.sospese, chiuse: conta.chiuse, inRitardo: conta.inRitardo }, giorniSenzaRapportino: senzaRapportino } };
@@ -366,6 +451,12 @@
     permessi: ['amministrazione', 1], salvaPermessi: ['amministrazione', 2], registro: ['amministrazione', 1],
     numerazioni: ['amministrazione', 1], salvaNumerazione: ['amministrazione', 2], cestino: ['amministrazione', 2], ripristinaFile: ['amministrazione', 2],
     copie: ['amministrazione', 1], copiaAdesso: ['amministrazione', 2], salvaImpostazioni: ['amministrazione', 2], esporta: null, cambiaPassword: null,
+    // fase 2
+    listino: ['preventivi', 1], salvaVoceListino: ['preventivi', 2], archiviaVoceListino: ['preventivi', 2],
+    preventivi: ['preventivi', 1], preventivo: ['preventivi', 1], salvaPreventivo: ['preventivi', 2], duplicaPreventivo: ['preventivi', 2],
+    nuovaRevisione: ['preventivi', 2], inviaPreventivo: ['preventivi', 2], segnaInviato: ['preventivi', 2], accettaPreventivo: ['preventivi', 2],
+    rifiutaPreventivo: ['preventivi', 2], riapriPreventivo: ['preventivi', 2], creaCommessaDaPreventivo: ['commesse', 2],
+    attivita: ['attivita', 1], salvaAttivita: ['attivita', 2], faiAttivita: ['attivita', 2], togliAttivita: ['attivita', 2], spuntaChecklist: ['attivita', 2],
   };
 
   /** I nomi delle colonne del database ("ultimaTariffa" -> "ultima_tariffa"), come nel registro vero. */
@@ -504,8 +595,15 @@
         scrivi(dati, 'salvaRapportino', 'rapportini', nuovo.id, nuovo.id, null, { oreLavoro: nuovo.oreLavoro });
         return { ok: true, rapportino: nuovo };
       }
-      case 'caricaFile':
-        return { ok: true, file: { id: 'esempio' + Date.now(), url: '' } };
+      case 'caricaFile': {
+        const file = { id: 'esempio' + Date.now(), nome: b.nome || 'file', mime: b.mime || '', url: '' };
+        if (b.tipo === 'attivita') { const x = trova(dati.attivita, b.idAttivita); if (x) x.allegati.push(file); }
+        return { ok: true, file };
+      }
+      case 'togliFile': {
+        dati.attivita.forEach(x => { x.allegati = x.allegati.filter(f => f.id !== b.id); });
+        return { ok: true };
+      }
       case 'ripristinaRapportino': {
         const r = dati.rapportini.find(x => x.id === b.id || x.idLocale === b.id);
         if (!r) return { ok: false, errore: 'Rapportino non trovato' };
@@ -748,7 +846,432 @@
       case 'esporta':
         return esporta(dati, b);
       default:
+        return fase2(dati, azione, b);
+    }
+  }
+
+  // ======================================================================= fase 2: preventivi e attività
+
+  const vociDi = p => (p.sezioni || []).reduce((a, s) => a.concat(s.voci.map(v => Object.assign({ idSezione: s.id }, v))), []);
+
+  const etichettaPrev = p => (p.modello ? 'Modello' : p.numero + (p.revisione > 0 ? ' rev. ' + p.revisione : ''));
+
+  /** Cosa chiede la legge e manca (§13.4: campo e frase pronta). */
+  function mancanoPrev(dati, p) {
+    const imp = dati.ana.impostazioni;
+    const voci = vociDi(p);
+    const m = [];
+    if (!p.idCliente && !p.modello) m.push({ campo: 'cliente', testo: 'Il cliente: sceglilo' });
+    if (!String(p.oggetto || '').trim()) m.push({ campo: 'oggetto', testo: 'L\'oggetto: scrivi di cosa si tratta' });
+    if (!voci.length) m.push({ campo: 'voci', testo: 'Le voci: aggiungi almeno una prestazione' });
+    const senza = voci.filter(v => !(C.num(v.prezzo) > 0)).length;
+    if (senza) m.push({ campo: 'prezzi', testo: senza === 1 ? '1 voce senza prezzo' : senza + ' voci senza prezzo' });
+    if (!p.complessita) m.push({ campo: 'complessita', testo: 'Il grado di complessità dell\'incarico' });
+    if (!String(p.oneriPrevisti || '').trim()) m.push({ campo: 'oneri', testo: 'Gli oneri ipotizzabili dal conferimento alla conclusione' });
+    if (!imp.POLIZZA_COMPAGNIA || !imp.POLIZZA_NUMERO) m.push({ campo: 'polizza', testo: 'Gli estremi della polizza professionale: scrivili in Amministrazione › Dati dello studio' });
+    if (!imp.TITOLI) m.push({ campo: 'titoli', testo: 'I titoli e le specializzazioni: scrivili in Amministrazione › Dati dello studio' });
+    return m;
+  }
+
+  /** La riga dell'elenco (§13.3): senza sezioni e voci, col totale e lo stato da mostrare. */
+  function prevRiassunto(dati, p) {
+    const k = C.contiPreventivo(p, vociDi(p));
+    const c = dati.ana.soggetti.find(s => s.id === p.idCliente);
+    const scaduto = p.stato === 'INVIATO' && !!p.scadenza && p.scadenza < dati.oggi;
+    return { id: p.id, numero: p.numero, revisione: p.revisione, etichetta: etichettaPrev(p), idCliente: p.idCliente, cliente: c ? c.nome : '', oggetto: p.oggetto,
+      data: p.data, scadenza: p.scadenza, stato: p.stato, statoVisto: scaduto ? 'SCADUTO' : p.stato, scaduto, giorniAllaScadenza: p.scadenza ? RP.giorniFra(dati.oggi, p.scadenza) : null,
+      inviatoIl: p.inviatoIl, accettatoIl: p.accettatoIl, idCommessa: p.idCommessa, modello: p.modello, senzaPrezzo: k.senzaPrezzo, imponibile: k.imponibile, totale: k.totale,
+      modificato: p.modificato || p.creato || '' };
+  }
+
+  /** Un preventivo come lo manda il server con l'azione "preventivo" (§13.4). */
+  function prevCompleto(dati, p) {
+    const x = Object.assign(copia(p), prevRiassunto(dati, p));
+    const k = C.contiPreventivo(x, vociDi(x));
+    let i = 0;
+    x.sezioni.forEach(s => {
+      s.voci.forEach(v => { v.idSezione = s.id; v.importo = k.voci[i].importo; v.conta = k.voci[i].conta; i++; });
+      s.subtotale = k.perSezione[String(s.id)] || 0;
+    });
+    x.scadenzePagamento.forEach((s, j) => { s.importo = k.scadenze[j]; s.idCommessa = s.idCommessa || ''; });
+    x.conti = { sommaVoci: k.sommaVoci, scontoDaPercentuale: k.scontoDaPercentuale, scontoEuro: k.scontoEuro, imponibile: k.imponibile, eppiPercentuale: k.eppiPercentuale,
+      contributo: k.contributo, baseIva: k.baseIva, ivaPercentuale: k.ivaPercentuale, iva: k.iva, totale: k.totale, oreVoci: k.oreVoci, senzaPrezzo: k.senzaPrezzo, restoScadenze: k.restoScadenze };
+    x.modificabile = x.stato === 'BOZZA' || x.modello;
+    x.revisioni = x.numero ? dati.preventivi.filter(q => q.numero === p.numero && !q.modello).sort((a, b) => a.revisione - b.revisione)
+      .map(q => ({ id: q.id, revisione: q.revisione, etichetta: etichettaPrev(q), stato: q.stato, data: q.data, totale: C.contiPreventivo(q, vociDi(q)).totale })) : [];
+    x.mancano = mancanoPrev(dati, x);
+    return x;
+  }
+
+  function prossimoNumeroPrev(dati, data) {
+    const n = dati.ana.numerazioni.find(x => x.tipo === 'preventivo');
+    const anno = Number(String(data || dati.oggi).slice(0, 4));
+    const usati = dati.preventivi.filter(p => String(p.numero).indexOf('/' + anno + '/') > 0).map(p => Number(String(p.numero).split('/').pop()) || 0);
+    n.ultimo = Math.max(0, ...usati) + 1;
+    return R.formattaNumero(n.formato, n.ultimo, anno);
+  }
+
+  /** Dà gli id veri a sezioni, voci e scadenze nuove (senza id o con quelli provvisori dell'interfaccia). */
+  function conIdVeri(dati, p) {
+    const nuovo = id => id === undefined || id === null || id === '' || /^[a-z]+-/.test(String(id));
+    p.sezioni = (p.sezioni || []).map((s, i) => Object.assign({}, s, {
+      id: nuovo(s.id) ? ++dati.contatori.sez : s.id, ordine: i + 1,
+      voci: (s.voci || []).map((v, j) => Object.assign({ unita: '', scontoPercentuale: 0, facoltativa: false, alternativa: '', scelta: false, idListino: null }, v, { id: nuovo(v.id) ? ++dati.contatori.voce : v.id, ordine: j + 1 })),
+    }));
+    p.scadenzePagamento = (p.scadenzePagamento || []).map((s, i) => Object.assign({ stato: 'prevista' }, s, { id: nuovo(s.id) ? ++dati.contatori.scad : s.id, ordine: i + 1 }));
+    return p;
+  }
+
+  /** Una copia per una revisione o un duplicato: id nuovi a tutto. */
+  function copiaPrev(dati, p, extra) {
+    const x = copia(p);
+    x.sezioni.forEach(s => { s.id = null; s.voci.forEach(v => { v.id = null; }); });
+    x.scadenzePagamento.forEach(s => { s.id = null; });
+    Object.assign(x, { id: ++dati.contatori.prev, stato: 'BOZZA', inviatoIl: '', accettatoIl: '', accettatoDa: '', accettazioneModo: '', firma: null,
+      rifiutatoIl: '', motivoRifiuto: '', idCommessa: '', creato: new Date().toISOString().slice(0, 19), modificato: '' }, extra || {});
+    return conIdVeri(dati, x);
+  }
+
+  /** Le attività che il ruolo vede: il collaboratore le sue, quelle libere e quelle delle commesse dove è tra le persone. */
+  function attivitaVisibili(dati) {
+    if (dati.io.ruolo !== 'collaboratore') return dati.attivita;
+    const sue = new Set(dati.ana.commesse.filter(m => (m.persone || []).indexOf(dati.io.id) >= 0 || m.responsabileId === dati.io.id).map(m => m.id));
+    return dati.attivita.filter(a => a.assegnataA === null || a.assegnataA === dati.io.id || (a.idCommessa && sue.has(a.idCommessa)));
+  }
+
+  /** Un'attività come la manda il server (§13.6): con i nomi, il giorno, il gruppo, la serie e se si può cambiare. */
+  function attivitaCompleta(dati, x) {
+    const a = dati.ana;
+    const u = a.utenti.find(y => y.id === x.assegnataA);
+    const c = a.soggetti.find(y => y.id === x.idCliente);
+    const m = a.commesse.find(y => y.id === x.idCommessa);
+    const r = x.idRicorrenza ? dati.ricorrenze.find(y => y.id === x.idRicorrenza) : null;
+    const g = RA.giornoDi(x);
+    // Il server non ha "Più avanti" (§13.6): quelle oltre la settimana per lui sono "prossimi".
+    const gruppo = x.stato === 'fatta' ? 'fatte' : x.stato === 'annullata' ? 'annullate' : RA.gruppoDi(x, dati.oggi).replace('piuAvanti', 'prossimi');
+    const mio = dati.io.ruolo === 'collaboratore';
+    return Object.assign(copia(x), { assegnata: u ? u.nome : '', cliente: c ? c.nome : '', commessa: m ? m.descrizione : '', giorno: g, gruppo,
+      ricorrenza: r ? { regola: r.regola, ogni: r.ogni, giorniSettimana: Array.isArray(r.giorniSettimana) ? r.giorniSettimana : String(r.giorniSettimana || '').split(',').filter(Boolean).map(Number), inizio: r.inizio || '', fine: r.fine || '' } : null,
+      puoScrivere: R.puo(dati.permessiIo, 'attivita', 2) && (!mio || x.assegnataA === null || x.assegnataA === dati.io.id || x.creataDa === dati.io.id) });
+  }
+
+  /** Le azioni nuove della fase 2 (fase2.md §4), sui dati di esempio. */
+  function fase2(dati, azione, b) {
+    const a = dati.ana;
+    const adesso = new Date().toISOString().slice(0, 19);
+    const trova = (lista, id) => lista.find(x => String(x.id) === String(id));
+    // Come il server: l'id interno, oppure il numero ("PR/2026/012" = l'ultima revisione).
+    const prev = id => trova(dati.preventivi, id) || dati.preventivi.filter(p => p.numero && p.numero === String(id)).sort((x, y) => y.revisione - x.revisione)[0];
+    const mio = dati.io.ruolo === 'collaboratore';
+    switch (azione) {
+      // ------------------------------------------------- listino
+      case 'listino':
+        return { ok: true, listino: dati.listino.filter(l => l.attivo || b.tutte === true || b.tutte === '1' || b.tutte === 'true') };
+      case 'salvaVoceListino': {
+        const x = Object.assign({}, b.voce || {});
+        if (!String(x.nome || '').trim()) return { ok: false, errore: 'Nome: scrivi il nome della prestazione' };
+        const es = x.id ? trova(dati.listino, x.id) : null;
+        if (es) { Object.assign(es, x); scrivi(dati, azione, 'listino', es.id, es.nome, {}, { nome: es.nome }); return { ok: true, voce: es }; }
+        const nuova = Object.assign({ codice: '', descrizione: '', modo: 'corpo', unita: '', prezzo: null, attivo: true, ordine: dati.listino.length + 1 }, x, { id: ++dati.contatori.lis });
+        dati.listino.push(nuova);
+        scrivi(dati, azione, 'listino', nuova.id, nuova.nome, null, { nome: nuova.nome });
+        return { ok: true, voce: nuova };
+      }
+      case 'archiviaVoceListino': {
+        const x = trova(dati.listino, b.id);
+        if (!x) return { ok: false, errore: 'Non la trovo' };
+        x.attivo = b.archiviata === false || b.archiviata === 'false';
+        return { ok: true, voce: x };
+      }
+
+      // ------------------------------------------------- preventivi
+      case 'preventivi': {
+        const si = x => x === true || x === '1' || x === 'true';
+        const st = String(b.stato || '').toUpperCase();
+        const lista = dati.preventivi.map(p => prevRiassunto(dati, p)).filter(p => {
+          if (b.cliente && p.idCliente !== b.cliente) return false;
+          if (b.anno && String(p.data).slice(0, 4) !== String(b.anno)) return false;
+          if (st === 'MODELLO') return p.modello;
+          if (st) return !p.modello && p.statoVisto === st;
+          if (p.modello) return si(b.modelli);
+          return p.stato !== 'SOSTITUITO' || si(b.sostituiti);
+        }).sort((a, b2) => String(b2.data).localeCompare(String(a.data)));
+        return { ok: true, oggi: dati.oggi, preventivi: lista };
+      }
+      case 'preventivo': {
+        const p = prev(b.id);
+        return p ? { ok: true, preventivo: prevCompleto(dati, p) } : { ok: false, errore: 'Preventivo non trovato' };
+      }
+      case 'salvaPreventivo': {
+        const x = Object.assign({}, b.preventivo || {});
+        const es = x.id ? prev(x.id) : null;
+        if (es) {
+          if (es.stato !== 'BOZZA') return { ok: false, errore: 'Il preventivo ' + es.numero + ' è già stato inviato: per cambiarlo fai una nuova revisione' };
+          Object.assign(es, conIdVeri(dati, Object.assign({}, es, x, { stato: 'BOZZA', modificato: adesso })));
+          scrivi(dati, azione, 'preventivi', es.id, es.numero, {}, { oggetto: es.oggetto });
+          return { ok: true, preventivo: prevCompleto(dati, es) };
+        }
+        const data = x.data || dati.oggi;
+        const nuovo = conIdVeri(dati, Object.assign({
+          revisione: 0, stato: 'BOZZA', idSede: null, idReferente: null, introduzione: '', complessita: '', complessitaNota: '', oneriPrevisti: '',
+          condizioni: a.impostazioni.PREVENTIVO_CONDIZIONI || '', scontoPercentuale: 0, scontoEuro: 0, inviatoIl: '', accettatoIl: '', accettatoDa: '', accettazioneModo: '',
+          firma: null, rifiutatoIl: '', motivoRifiuto: '', idCommessa: '', modello: false, noteInterne: '', idUtente: dati.io.id, sezioni: [], scadenzePagamento: [],
+        }, x, {
+          id: ++dati.contatori.prev, data, scadenza: x.scadenza || RP.piuGiorni(data, Number(a.impostazioni.PREVENTIVO_VALIDITA_GIORNI) || 30),
+          numero: x.modello ? '' : prossimoNumeroPrev(dati, data), eppiPercentuale: C.num(a.impostazioni.EPPI_INTEGRATIVO), ivaPercentuale: C.num(a.impostazioni.IVA),
+          creato: adesso, modificato: '',
+        }));
+        dati.preventivi.push(nuovo);
+        scrivi(dati, azione, 'preventivi', nuovo.id, nuovo.numero, null, { oggetto: nuovo.oggetto });
+        return { ok: true, preventivo: prevCompleto(dati, nuovo) };
+      }
+      case 'duplicaPreventivo': {
+        const p = prev(b.id);
+        if (!p) return { ok: false, errore: 'Preventivo non trovato' };
+        const data = dati.oggi;
+        const comeModello = !!b.comeModello;
+        const x = copiaPrev(dati, p, { revisione: 0, modello: comeModello, data, scadenza: comeModello ? '' : RP.piuGiorni(data, Number(a.impostazioni.PREVENTIVO_VALIDITA_GIORNI) || 30),
+          numero: comeModello ? '' : prossimoNumeroPrev(dati, data), idCliente: comeModello ? '' : (b.idCliente || p.idCliente),
+          oggetto: comeModello && !p.modello ? p.oggetto + ' (modello)' : p.oggetto,
+          eppiPercentuale: C.num(a.impostazioni.EPPI_INTEGRATIVO), ivaPercentuale: C.num(a.impostazioni.IVA) });
+        dati.preventivi.push(x);
+        scrivi(dati, azione, 'preventivi', x.id, x.numero || 'modello', null, { da: p.numero });
+        return { ok: true, preventivo: prevCompleto(dati, x) };
+      }
+      case 'nuovaRevisione':
+      case 'riapriPreventivo': {
+        const p = prev(b.id);
+        if (!p) return { ok: false, errore: 'Preventivo non trovato' };
+        if (azione === 'nuovaRevisione' && p.stato === 'BOZZA') return { ok: false, errore: 'È ancora in bozza: cambiala direttamente' };
+        if (azione === 'nuovaRevisione' && p.stato === 'ACCETTATO') return { ok: false, errore: 'È già accettato: non si fanno revisioni' };
+        if (azione === 'riapriPreventivo' && p.stato !== 'RIFIUTATO') return { ok: false, errore: 'Si riapre un preventivo rifiutato' };
+        const ultima = Math.max(...dati.preventivi.filter(q => q.numero === p.numero).map(q => q.revisione));
+        const x = copiaPrev(dati, p, { revisione: ultima + 1, data: dati.oggi, scadenza: RP.piuGiorni(dati.oggi, Number(a.impostazioni.PREVENTIVO_VALIDITA_GIORNI) || 30) });
+        p.stato = 'SOSTITUITO';
+        dati.preventivi.push(x);
+        scrivi(dati, azione, 'preventivi', x.id, x.numero, { revisione: p.revisione }, { revisione: x.revisione });
+        return { ok: true, preventivo: prevCompleto(dati, x), sostituito: prevRiassunto(dati, p) };
+      }
+      case 'inviaPreventivo':
+      case 'segnaInviato': {
+        const p = prev(b.id);
+        if (!p) return { ok: false, errore: 'Preventivo non trovato' };
+        if (p.stato !== 'BOZZA' && p.stato !== 'INVIATO') return { ok: false, errore: 'Questo preventivo non si invia più' };
+        if (azione === 'inviaPreventivo' && b.aMe) return { ok: true, preventivo: prevCompleto(dati, p) };
+        const manca = p.stato === 'BOZZA' ? mancanoPrev(dati, p) : [];
+        if (manca.length && !(b.conferma === true || b.conferma === 'true')) {
+          return { ok: false, errore: 'Prima di inviarlo manca: ' + manca.map(m => (RP.NOMI_MANCANO[m.campo] || m.campo).toLowerCase()).join(', '), mancano: manca, serveConferma: true };
+        }
+        p.stato = 'INVIATO';
+        p.inviatoIl = adesso;
+        scrivi(dati, azione, 'preventivi', p.id, p.numero, { stato: 'BOZZA' }, { stato: 'INVIATO' });
+        return { ok: true, preventivo: prevCompleto(dati, p) };
+      }
+      case 'accettaPreventivo': {
+        const p = prev(b.id);
+        if (!p) return { ok: false, errore: 'Preventivo non trovato' };
+        if (p.stato !== 'INVIATO') return { ok: false, errore: 'Il preventivo ' + p.numero + ' non è ancora stato inviato' };
+        if (!String(b.nome || '').trim()) return { ok: false, errore: 'Nome: scrivi chi ha accettato' };
+        if (['firma', 'email', 'documento', 'voce'].indexOf(b.modo) < 0) return { ok: false, errore: 'Come ha accettato? firma, email, documento o voce' };
+        if (b.modo === 'firma' && !(b.firma && b.firma.base64)) return { ok: false, errore: 'Per la firma serve il tratto del cliente' };
+        const scelte = C.applicaScelte(vociDi(p), b.scelte || {});
+        const doppie = Object.entries(RP.gruppiAlternative(scelte)).find(([, l]) => l.filter(v => v.scelta).length > 1);
+        if (doppie) return { ok: false, errore: 'Di «' + doppie[0] + '» se ne sceglie una sola' };
+        p.sezioni.forEach(s => s.voci.forEach(v => { const n = scelte.find(x => String(x.id) === String(v.id)); if (n) v.scelta = n.scelta; }));
+        Object.assign(p, { stato: 'ACCETTATO', accettatoIl: adesso, accettatoDa: String(b.nome).trim(), accettazioneModo: b.modo || 'voce',
+          firma: b.firma && b.firma.base64 ? { id: 'esempio-firma-' + p.id, url: '' } : null });
+        scrivi(dati, azione, 'preventivi', p.id, p.numero, { stato: 'INVIATO' }, { stato: 'ACCETTATO' });
+        return { ok: true, preventivo: prevCompleto(dati, p) };
+      }
+      case 'rifiutaPreventivo': {
+        const p = prev(b.id);
+        if (!p) return { ok: false, errore: 'Preventivo non trovato' };
+        Object.assign(p, { stato: 'RIFIUTATO', rifiutatoIl: adesso, motivoRifiuto: b.motivo || '' });
+        scrivi(dati, azione, 'preventivi', p.id, p.numero, { stato: 'INVIATO' }, { stato: 'RIFIUTATO' });
+        return { ok: true, preventivo: prevCompleto(dati, p) };
+      }
+      case 'creaCommessaDaPreventivo': {
+        const p = prev(b.id);
+        if (!p) return { ok: false, errore: 'Preventivo non trovato' };
+        if (p.idCommessa) return { ok: false, errore: 'Il preventivo ' + p.numero + ' è già diventato la commessa ' + p.idCommessa };
+        if (p.stato !== 'ACCETTATO') return { ok: false, errore: 'Il preventivo ' + p.numero + ' non è accettato' };
+        const ant = RP.anteprimaCommessa(p, vociDi(p));
+        const id = prossimoCodice(dati);
+        const m = { id, idCliente: p.idCliente, descrizione: p.oggetto, stato: 'APERTA', indirizzo: '', budgetOre: ant.budgetOre, budgetEuro: null, prezzoOrario: ant.prezzoOrario,
+          costoOrario: null, euroKm: null, inizio: dati.oggi, finePrevista: '', cartella: '', codicePrecedente: '', note: 'Dal preventivo ' + p.numero, sedeId: p.idSede,
+          responsabileId: dati.io.id, persone: [dati.io.id], importoContratto: ant.importoContratto, archiviata: false, modello: false };
+        a.commesse.push(m);
+        const contano = C.vociCheContano(vociDi(p));
+        const sezioneDi = vociDi(p).filter((v, i) => contano[i]).map(v => (p.sezioni.find(s => s.id === v.idSezione) || {}).titolo || '');
+        ant.prestazioni.forEach((x, i) => { dati.contatori.p += 1; a.prestazioni.push({ id: dati.contatori.p, idCommessa: id, nome: x.nome, descrizione: sezioneDi[i], valore: x.valore, avanzamento: 0, stato: 'da_fare', ordine: i + 1 }); });
+        p.scadenzePagamento.forEach(s => { s.idCommessa = id; });
+        p.idCommessa = id;
+        scrivi(dati, azione, 'commesse', id, m.descrizione, null, { da: p.numero });
+        return { ok: true, commessa: m, prestazioni: a.prestazioni.filter(x => x.idCommessa === id), preventivo: prevCompleto(dati, p) };
+      }
+
+      // ------------------------------------------------- attività
+      case 'attivita': {
+        const si = x => x === true || x === '1' || x === 'true';
+        let lista = attivitaVisibili(dati);
+        if (b.da || b.a) lista = lista.filter(x => { const g = RA.giornoDi(x); return g && x.stato !== 'annullata' && (!b.da || g >= b.da) && (!b.a || g <= b.a); });
+        else if (!b.stato || b.stato === 'aperte') lista = lista.filter(x => x.stato === 'da_fare' || x.stato === 'in_corso');
+        if (b.stato && b.stato !== 'aperte' && b.stato !== 'tutte') lista = lista.filter(x => x.stato === b.stato);
+        if (b.assegnata) lista = lista.filter(x => String(x.assegnataA) === String(b.assegnata));
+        if (si(b.mie)) lista = lista.filter(x => String(x.assegnataA) === String(dati.io.id));
+        if (si(b.nonAssegnate)) lista = lista.filter(x => x.assegnataA === null);
+        if (b.commessa) lista = lista.filter(x => x.idCommessa === b.commessa);
+        if (b.cliente) lista = lista.filter(x => x.idCliente === b.cliente);
+        return { ok: true, oggi: dati.oggi, attivita: lista.map(x => attivitaCompleta(dati, x)) };
+      }
+      case 'salvaAttivita': {
+        const x = Object.assign({}, b.attivita || {});
+        if (!String(x.titolo || '').trim()) return { ok: false, errore: 'Titolo: scrivi cosa c\'è da fare' };
+        const es = x.id ? trova(dati.attivita, x.id) : null;
+        if (mio && es && es.assegnataA !== null && es.assegnataA !== dati.io.id) return { ok: false, errore: 'Non hai il permesso per cambiare le attività degli altri: chiedi al titolare', permesso: false };
+        if (mio && x.assegnataA !== undefined && x.assegnataA !== null && x.assegnataA !== dati.io.id) return { ok: false, errore: 'Non hai il permesso per dare attività agli altri: chiedi al titolare', permesso: false };
+        const ric = x.ricorrenza;
+        delete x.ricorrenza;
+        // Le sovrapposizioni (§13.7): la stessa persona, lo stesso tempo; si salva solo con conferma.
+        const prova = Object.assign({}, es || {}, x);
+        if (prova.inizio && !prova.tuttoIlGiorno && prova.tipo !== 'attivita' && !(b.conferma === true || b.conferma === 'true')) {
+          const sopra = RA.sovrapposti(prova, dati.attivita);
+          if (sopra.length) {
+            return { ok: false, errore: 'Si sovrappone a: ' + sopra.map(y => y.titolo + ' (' + RA.ora(y.inizio) + '-' + RA.ora(y.fine) + ')').join(', '), serveConferma: true,
+              sovrapposte: sopra.map(y => ({ id: y.id, titolo: y.titolo, inizio: y.inizio, fine: y.fine, assegnataA: y.assegnataA, assegnata: (a.utenti.find(u => u.id === y.assegnataA) || {}).nome || '' })) };
+          }
+        }
+        if (es) {
+          const prima = { titolo: es.titolo };
+          Object.assign(es, x, { modificato: adesso });
+          // Una ricorrenza: "da questa in poi" o "tutte" portano i cambi (non le date) anche alle altre volte.
+          if (es.idRicorrenza && (b.perRicorrenza === 'future' || b.perRicorrenza === 'tutte')) {
+            const senzaDate = Object.assign({}, x);
+            ['id', 'scadenza', 'inizio', 'fine', 'occorrenza', 'stato', 'fattaIl', 'checklist', 'allegati'].forEach(k => delete senzaDate[k]);
+            dati.attivita.filter(y => y !== es && String(y.idRicorrenza) === String(es.idRicorrenza) && (b.perRicorrenza === 'tutte' || RA.giornoDi(y) >= RA.giornoDi(es)))
+              .forEach(y => Object.assign(y, senzaDate));
+          } else if (es.idRicorrenza && b.perRicorrenza === 'questa') {
+            es.idRicorrenza = es.idRicorrenza; // resta nella serie, cambiata da sola
+          }
+          scrivi(dati, azione, 'attivita', es.id, es.titolo, prima, { titolo: es.titolo });
+          return { ok: true, attivita: attivitaCompleta(dati, es) };
+        }
+        const nuova = Object.assign({ descrizione: '', tipo: 'attivita', idCliente: '', idCommessa: '', idPrestazione: null, assegnataA: null, priorita: 'normale', stato: 'da_fare',
+          scadenza: '', inizio: '', fine: '', tuttoIlGiorno: false, luogo: '', promemoriaMinuti: null, idRicorrenza: null, occorrenza: '', fattaIl: '', checklist: [], allegati: [] },
+        x, { id: ++dati.contatori.att, creataDa: dati.io.id, creato: adesso, modificato: '' });
+        nuova.checklist = (nuova.checklist || []).map((c, i) => Object.assign({}, c, { id: c.id && !/^[a-z]+-/.test(String(c.id)) ? c.id : ++dati.contatori.chk, ordine: i + 1 }));
+        dati.attivita.push(nuova);
+        if (ric && ric.regola) {
+          const primo = RA.giornoDi(nuova) || dati.oggi;
+          if (!RA.giornoDi(nuova)) return { ok: false, errore: 'Per ripetere un\'attività serve la data' };
+          const r = Object.assign({ ogni: 1, giorniSettimana: [], fine: '' }, ric, { id: ++dati.contatori.ric, inizio: primo });
+          dati.ricorrenze.push(r);
+          nuova.idRicorrenza = r.id;
+          nuova.occorrenza = primo;
+          RA.prossimeDate(r, primo, 200).filter(g => g > primo && g <= RA.piuGiorni(dati.oggi, 90)).forEach(g => {
+            const y = copia(nuova);
+            y.id = ++dati.contatori.att;
+            y.occorrenza = g;
+            const sposta = s => s ? g + String(s).slice(10) : s;
+            if (y.scadenza) y.scadenza = g;
+            y.inizio = sposta(y.inizio);
+            y.fine = sposta(y.fine);
+            y.checklist.forEach(c => { c.id = ++dati.contatori.chk; c.fatta = false; });
+            dati.attivita.push(y);
+          });
+        }
+        scrivi(dati, azione, 'attivita', nuova.id, nuova.titolo, null, { titolo: nuova.titolo });
+        const risposta = { ok: true, attivita: attivitaCompleta(dati, nuova) };
+        if (nuova.idRicorrenza) risposta.occorrenze = dati.attivita.filter(y => y.idRicorrenza === nuova.idRicorrenza).length;
+        return risposta;
+      }
+      case 'faiAttivita': {
+        const x = trova(dati.attivita, b.id);
+        if (!x) return { ok: false, errore: 'Attività non trovata' };
+        x.stato = b.fatta === false ? 'da_fare' : 'fatta';
+        x.fattaIl = x.stato === 'fatta' ? adesso : '';
+        scrivi(dati, azione, 'attivita', x.id, x.titolo, { stato: b.fatta === false ? 'fatta' : 'da_fare' }, { stato: x.stato });
+        return { ok: true, attivita: attivitaCompleta(dati, x) };
+      }
+      case 'togliAttivita': {
+        const x = trova(dati.attivita, b.id);
+        if (!x) return { ok: false, errore: 'Attività non trovata' };
+        const quali = x.idRicorrenza && (b.perRicorrenza === 'future' || b.perRicorrenza === 'tutte')
+          ? dati.attivita.filter(y => String(y.idRicorrenza) === String(x.idRicorrenza) && (b.perRicorrenza === 'tutte' || RA.giornoDi(y) >= RA.giornoDi(x))) : [x];
+        quali.forEach(y => { y.stato = 'annullata'; });
+        scrivi(dati, azione, 'attivita', x.id, x.titolo, { stato: 'da_fare' }, { stato: 'annullata' });
+        return { ok: true, attivita: attivitaCompleta(dati, x), tolte: quali.length };
+      }
+      case 'spuntaChecklist': {
+        const x = b.idAttivita ? trova(dati.attivita, b.idAttivita) : dati.attivita.find(y => y.checklist.some(c => String(c.id) === String(b.id)));
+        const c = x && x.checklist.find(y => String(y.id) === String(b.id));
+        if (!c) return { ok: false, errore: 'Voce non trovata' };
+        c.fatta = !!b.fatta;
+        return { ok: true, attivita: attivitaCompleta(dati, x) };
+      }
+      case 'togliAllegato': {
+        const x = dati.attivita.find(y => (y.allegati || []).some(f => f.id === b.id));
+        if (!x) return { ok: false, errore: 'Allegato non trovato' };
+        x.allegati = x.allegati.filter(f => f.id !== b.id);
+        return { ok: true, attivita: attivitaCompleta(dati, x) };
+      }
+      default:
         return { ok: true };
+    }
+  }
+
+  /** Le voci della Dashboard della fase 2 (fase2.md §4), come le calcola il server. */
+  function dashboardFase2(dati, d) {
+    const oggi = dati.oggi;
+    const fra7 = giorno(oggi, 7);
+    const io = dati.io.id;
+    if (R.puo(dati.permessiIo, 'attivita')) {
+      const mie = attivitaVisibili(dati).filter(a => a.stato !== 'fatta' && a.stato !== 'annullata' && (d.mio ? a.assegnataA === io : true));
+      const scadute = mie.filter(a => RA.gruppoDi(a, oggi) === 'scadute');
+      // Una per una fino a 3, poi una voce sola.
+      (scadute.length > 3 ? [] : scadute).slice().reverse().forEach(a => {
+        const chi = dati.ana.utenti.find(u => u.id === a.assegnataA);
+        const giorni = RA.giorniFra(RA.giornoDi(a), oggi);
+        d.urgenti.unshift({ tipo: 'attivita', gravita: 'urgente', titolo: a.titolo + ' è scaduta',
+          dettaglio: [a.idCommessa, 'era per ' + RA.quandoBreve(RA.giornoDi(a), oggi), chi ? chi.nome : ''].filter(Boolean).join(' · '), quanto: giorni, unita: 'giorni', collegamento: { pagina: 'attivita', id: a.id } });
+      });
+      if (scadute.length > 3) d.urgenti.unshift({ tipo: 'attivita', gravita: 'urgente', titolo: scadute.length + ' attività scadute', dettaglio: scadute.slice(0, 3).map(a => a.titolo).join(', '),
+        quanto: scadute.length, unita: 'attivita', collegamento: { pagina: 'attivita', filtro: { gruppo: 'scadute' } } });
+      mie.filter(a => RA.giornoDi(a) === oggi && RA.conOrario(a) && a.inizio && !a.tuttoIlGiorno).reverse().forEach(a => {
+        const chi = dati.ana.utenti.find(u => u.id === a.assegnataA);
+        d.settimana.unshift({ tipo: a.tipo, gravita: 'attenzione', titolo: a.titolo + ' oggi alle ' + RA.ora(a.inizio), dettaglio: [chi ? chi.nome : 'Da assegnare', a.luogo].filter(Boolean).join(' · '),
+          quanto: null, unita: null, collegamento: { pagina: 'calendario', filtro: { giorno: oggi } } });
+      });
+      const diOggi = mie.filter(a => RA.giornoDi(a) === oggi && !RA.conOrario(a));
+      if (diOggi.length) d.settimana.push({ tipo: 'attivita', gravita: 'info', titolo: diOggi.length === 1 ? '1 attività da fare oggi' : diOggi.length + ' attività da fare oggi',
+        dettaglio: diOggi.slice(0, 3).map(a => a.titolo).join(', '), quanto: diOggi.length, unita: 'attivita', collegamento: { pagina: 'attivita', filtro: { gruppo: 'oggi' } } });
+      const prossimi = RA.raggruppa(mie.filter(a => RA.giornoDi(a) > oggi && RA.giornoDi(a) <= fra7), oggi).reduce((t, g) => t.concat(g.voci), []);
+      if (prossimi.length) d.settimana.push({ tipo: 'attivita', gravita: 'info', titolo: prossimi.length === 1 ? '1 attività nei prossimi 7 giorni' : prossimi.length + ' attività nei prossimi 7 giorni',
+        dettaglio: prossimi.slice(0, 3).map(a => a.titolo).join(', '), quanto: prossimi.length, unita: 'attivita', collegamento: { pagina: 'calendario', filtro: { giorno: giorno(oggi, 1) } } });
+      const libere = attivitaVisibili(dati).filter(a => a.assegnataA === null && a.stato === 'da_fare');
+      if (libere.length && !d.mio) d.pianificare.unshift({ tipo: 'attivita', gravita: 'info', titolo: libere.length === 1 ? '1 attività non assegnata' : libere.length + ' attività non assegnate',
+        dettaglio: libere.slice(0, 2).map(a => a.titolo).join(', '), quanto: libere.length, unita: 'attivita', collegamento: { pagina: 'attivita', filtro: { nonAssegnate: true } } });
+    }
+    if (R.puo(dati.permessiIo, 'preventivi') && !d.mio) {
+      const vivi = dati.preventivi.filter(p => !p.modello);
+      vivi.filter(p => p.stato === 'INVIATO' && p.scadenza >= oggi && p.scadenza <= fra7).forEach(p => {
+        const n = RP.giorniFra(oggi, p.scadenza);
+        d.settimana.push({ tipo: 'preventivo', gravita: 'attenzione', titolo: etichettaPrev(p) + (n === 0 ? ' scade oggi' : ' scade fra ' + n + (n === 1 ? ' giorno' : ' giorni')),
+          dettaglio: d.nome(p.idCliente) + ' · inviato il ' + C.data(p.inviatoIl).slice(0, 5), quanto: d.soldi ? C.contiPreventivo(p, vociDi(p)).totale : null, unita: d.soldi ? 'euro' : null,
+          collegamento: { pagina: 'preventivo', id: p.id } });
+      });
+      vivi.filter(p => p.stato === 'INVIATO' && p.inviatoIl && String(p.inviatoIl).slice(0, 10) <= giorno(oggi, -15)).forEach(p => {
+        const n = RP.giorniFra(String(p.inviatoIl).slice(0, 10), oggi);
+        d.urgenti.push({ tipo: 'preventivo', gravita: 'attenzione', titolo: etichettaPrev(p) + ': nessuna risposta da ' + n + ' giorni',
+          dettaglio: [p.oggetto, d.nome(p.idCliente), p.scadenza < oggi ? 'scaduto il ' + C.data(p.scadenza).slice(0, 5) : ''].filter(Boolean).join(' · '), quanto: n, unita: 'giorni', collegamento: { pagina: 'preventivo', id: p.id } });
+      });
+      vivi.filter(p => p.stato === 'ACCETTATO' && !p.idCommessa).forEach(p => {
+        d.settimana.push({ tipo: 'preventivo', gravita: 'attenzione', titolo: etichettaPrev(p) + ': accettato, manca la commessa', dettaglio: d.nome(p.idCliente) + ' · ' + p.oggetto,
+          quanto: d.soldi ? C.contiPreventivo(p, vociDi(p)).imponibile : null, unita: d.soldi ? 'euro' : null, collegamento: { pagina: 'preventivo', id: p.id } });
+      });
+      const bozze = vivi.filter(p => p.stato === 'BOZZA');
+      if (bozze.length) d.pianificare.push({ tipo: 'preventivo', gravita: 'info', titolo: bozze.length === 1 ? '1 preventivo in bozza' : bozze.length + ' preventivi in bozza',
+        dettaglio: bozze.map(p => p.numero + ' ' + p.oggetto).join(', '), quanto: bozze.length, unita: 'preventivi', collegamento: { pagina: 'preventivi', filtro: { stato: 'BOZZA' } } });
     }
   }
 
@@ -765,6 +1288,13 @@
     } else if (b.cosa === 'commesse') {
       intest = ['Codice', 'Commessa', 'Cliente', 'Stato', 'Ore previste'].concat(soldi ? ['Importo del contratto'] : []);
       righe = a.commesse.filter(m => !m.modello).map(m => [m.id, m.descrizione, (a.soggetti.find(s => s.id === m.idCliente) || {}).nome, m.stato, m.budgetOre || ''].concat(soldi ? [m.importoContratto || ''] : []));
+    } else if (b.cosa === 'preventivi') {
+      intest = ['Numero', 'Revisione', 'Data', 'Cliente', 'Oggetto', 'Stato', 'Scadenza'].concat(soldi ? ['Imponibile', 'Totale'] : []);
+      righe = dati.preventivi.filter(p => !p.modello).map(p => { const r = prevRiassunto(dati, p); return [r.numero, r.revisione, C.data(r.data), r.cliente, r.oggetto, r.scaduto ? 'SCADUTO' : r.stato, C.data(r.scadenza)]
+        .concat(soldi ? [r.imponibile, r.totale] : []); });
+    } else if (b.cosa === 'attivita') {
+      intest = ['Titolo', 'Tipo', 'Giorno', 'Inizio', 'Fine', 'Chi', 'Commessa', 'Priorità', 'Stato'];
+      righe = attivitaVisibili(dati).map(x => [x.titolo, x.tipo, C.data(RA.giornoDi(x)), RA.ora(x.inizio), RA.ora(x.fine), (a.utenti.find(u => u.id === x.assegnataA) || {}).nome || '', x.idCommessa, x.priorita, x.stato]);
     } else if (b.cosa === 'registro') {
       intest = ['Quando', 'Chi', 'Azione', 'Su cosa', 'Prima', 'Dopo'];
       righe = dati.registro.map(v => [v.quando.replace('T', ' ').slice(0, 16), v.utente.nome, v.azione, v.nome, JSON.stringify(v.prima || ''), JSON.stringify(v.dopo || '')]);

@@ -17,9 +17,10 @@ const ruolo = r => E.permessiDi(r);
 
 test('permessi: le voci del menu nell\'ordine delle specifiche, solo quelle del ruolo', () => {
   assert.deepEqual(R.vociMenu(ruolo('titolare')).map(v => v.nome),
-    ['Dashboard', 'Clienti e fornitori', 'Progetti e commesse', 'Ore e rapportini', 'Fatturazione', 'Amministrazione']);
-  assert.deepEqual(R.vociMenu(ruolo('collaboratore')).map(v => v.modulo), ['dashboard', 'clienti', 'commesse', 'rapportini']);
-  assert.deepEqual(R.vociMenu(ruolo('lettura')).map(v => v.modulo), ['dashboard', 'clienti', 'commesse', 'rapportini', 'fatturazione']);
+    ['Dashboard', 'Clienti e fornitori', 'Progetti e commesse', 'Preventivi e contratti', 'Attività e calendario', 'Ore e rapportini', 'Fatturazione', 'Amministrazione']);
+  // Fase 2: il collaboratore vede Attività e calendario, non i preventivi.
+  assert.deepEqual(R.vociMenu(ruolo('collaboratore')).map(v => v.modulo), ['dashboard', 'clienti', 'commesse', 'attivita', 'rapportini']);
+  assert.deepEqual(R.vociMenu(ruolo('lettura')).map(v => v.modulo), ['dashboard', 'clienti', 'commesse', 'preventivi', 'attivita', 'rapportini', 'fatturazione']);
   assert.ok(R.vociMenu(ruolo('amministrazione')).some(v => v.modulo === 'amministrazione'), 'amministrazione in lettura la vede');
   assert.deepEqual(R.vociMenu(null), []);
 });
@@ -41,7 +42,7 @@ test('permessi: livelli, pagine permesse, l\'app è di tutti', () => {
   assert.equal(R.moduloDi(''), 'dashboard');
   assert.equal(R.primaPagina(c), 'dashboard');
   assert.equal(R.primaPagina({}), 'amministrazione/app');
-  assert.deepEqual(Object.keys(R.permessiTutti()).sort(), ['amministrazione', 'commesse', 'costi', 'clienti', 'dashboard', 'fatturazione', 'rapportini', 'riservati'].sort());
+  assert.deepEqual(Object.keys(R.permessiTutti()).sort(), ['amministrazione', 'attivita', 'commesse', 'costi', 'clienti', 'dashboard', 'fatturazione', 'preventivi', 'rapportini', 'riservati'].sort());
 });
 
 test('permessi: il titolare da chiamare e l\'ultimo titolare che non si toglie', () => {
@@ -59,9 +60,9 @@ test('permessi: il titolare da chiamare e l\'ultimo titolare che non si toglie',
 
 test('permessi: cosa vedrà chi cambia ruolo, a parole', () => {
   const f = R.descriviRuolo(ruolo('collaboratore'));
-  assert.match(f, /Potrà cambiare: Ore e rapportini\./);
+  assert.match(f, /Potrà cambiare: Attività e calendario, Ore e rapportini\./);
   assert.match(f, /Solo da leggere: Dashboard, Clienti e fornitori, Progetti e commesse\./);
-  assert.match(f, /Non vedrà: Fatturazione, Amministrazione\./);
+  assert.match(f, /Non vedrà: Preventivi e contratti, Fatturazione, Amministrazione\./);
   assert.match(f, /Senza importi\.$/);
   assert.match(R.descriviRuolo(ruolo('titolare')), /Vede gli importi\.$/);
 });

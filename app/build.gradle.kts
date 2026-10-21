@@ -147,4 +147,6 @@ dependencies {
 
     testImplementation(libs.junit)
     testImplementation(libs.org.json)
+    // Un server finto vero (HTTP su una porta locale) per le prove delle azioni della fase 2.
+    testImplementation("com.squareup.okhttp3:mockwebserver:${libs.versions.okhttp.get()}")
 }

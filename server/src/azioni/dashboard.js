@@ -8,12 +8,15 @@
  *  - gravita: 'urgente' | 'attenzione' | 'soldi' | 'info'
  *  - quanto/unita: il numero a destra, se c'e' (euro, ore, giorni, rapportini)
  *  - collegamento: {pagina, id?, filtro?}; pagina tra dashboard, clienti,
- *    cliente, commesse, commessa, rapportini, fatturazione, amministrazione
+ *    cliente, commesse, commessa, rapportini, fatturazione, amministrazione e,
+ *    dalla fase 2, preventivi, preventivo, attivita, calendario
  */
 'use strict';
 
-const { testo, numero, centesimi, oggi, piuGiorni } = require('../utili');
+const { testo, numero, centesimi, oggi, piuGiorni, dataOraIso, dataIso } = require('../utili');
 const { budgetDi } = require('../conti');
+const { giornoAttivita } = require('./attivita');
+const { etichettaPreventivo, statoVistoPreventivo } = require('./preventivi');
 
 const ORDINE = { urgente: 0, soldi: 1, attenzione: 2, info: 3 };
 const MASSIMO_PER_SEZIONE = 20;
@@ -182,6 +185,10 @@ module.exports = {
       };
     }
 
+    // ------------------------------------------------------------ fase 2: attivita' e preventivi
+    const fase2 = this.dashboardFase2({ mie, costi, io, adesso, voce, urgenti, settimana, pianificare });
+    if (soldi && fase2.preventiviInAttesa !== undefined) soldi.preventiviInAttesa = fase2.preventiviInAttesa;
+
     const oreDa = da => Math.round(rapportini.filter(r => r.data && r.data >= da && r.data <= adesso)
       .reduce((s, r) => s + (numero(r.ore_totali) || numero(r.ore_lavoro) + numero(r.ore_extra) + numero(r.ore_viaggio)), 0) * 100) / 100;
 
@@ -206,6 +213,116 @@ module.exports = {
       pianificare: ordina(pianificare),
     };
     if (soldi) risposta.numeri.soldi = soldi;
+    if (fase2.preventivi) risposta.numeri.preventivi = fase2.preventivi;
+    if (fase2.attivita) risposta.numeri.attivita = fase2.attivita;
+    if (fase2.agenda) risposta.agenda = fase2.agenda;
     return risposta;
+  },
+
+  /**
+   * Le voci della fase 2: attivita' scadute (urgenti), appuntamenti e attivita'
+   * di oggi e dei prossimi giorni, preventivi in scadenza, senza risposta,
+   * accettati senza commessa, bozze e attivita' non assegnate. Il collaboratore
+   * vede le sue attivita' e niente preventivi.
+   */
+  dashboardFase2({ mie, costi, io, adesso, voce, urgenti, settimana, pianificare }) {
+    const fuori = {};
+    if (this.livello('attivita') > 0) {
+      let aperte = this.righeAttivita({});
+      if (mie) aperte = aperte.filter(a => a.assegnata_a === io);
+      const nomi = {};
+      this.db.righe('SELECT id, nome FROM utenti').forEach(u => { nomi[u.id] = u.nome; });
+      const tra7 = piuGiorni(adesso, 7);
+      const g = a => giornoAttivita(a);
+      const perOra = (x, y) => (g(x) < g(y) ? -1 : g(x) > g(y) ? 1 : (x.inizio || '~') < (y.inizio || '~') ? -1 : 1);
+      const scadute = aperte.filter(a => g(a) && g(a) < adesso).sort(perOra);
+      const diOggi = aperte.filter(a => g(a) === adesso).sort(perOra);
+      const prossime = aperte.filter(a => g(a) > adesso && g(a) <= tra7).sort(perOra);
+      const nonAssegnate = aperte.filter(a => a.assegnata_a === null);
+      const appuntamenti = diOggi.filter(a => a.tipo !== 'attivita' && a.inizio && !a.tutto_il_giorno);
+      const breve = a => ({
+        id: a.id, tipo: a.tipo, titolo: a.titolo, giorno: g(a), inizio: dataOraIso(a.inizio), fine: dataOraIso(a.fine),
+        tuttoIlGiorno: a.tutto_il_giorno === 1, assegnataA: a.assegnata_a, assegnata: a.assegnata_a ? nomi[a.assegnata_a] || '' : '',
+        idCommessa: a.commessa_id, luogo: a.luogo, priorita: a.priorita, stato: a.stato,
+      });
+      const ora = ist => { const o = dataOraIso(ist).slice(11, 16); return Number(o.slice(0, 2)) + ':' + o.slice(3); };
+      if (scadute.length && scadute.length <= 3) {
+        for (const a of scadute) {
+          const giorni = Math.round((Date.parse(adesso + 'T12:00:00') - Date.parse(g(a) + 'T12:00:00')) / 86400000);
+          voce(urgenti, { tipo: 'attivita', gravita: 'urgente', titolo: a.titolo + ' è scaduta',
+            dettaglio: [a.commessa_id, giorni === 1 ? 'era per ieri' : 'era per il ' + dataBreve(g(a)), a.assegnata_a ? nomi[a.assegnata_a] : 'non assegnata'].filter(Boolean).join(' · '),
+            quanto: giorni, unita: 'giorni', collegamento: { pagina: 'attivita', id: a.id } });
+        }
+      } else if (scadute.length) {
+        voce(urgenti, { tipo: 'attivita', gravita: 'urgente', titolo: plurale(scadute.length, 'attività scaduta', 'attività scadute'),
+          dettaglio: 'La più vecchia era per il ' + dataBreve(g(scadute[0])), quanto: scadute.length, unita: 'attivita',
+          collegamento: { pagina: 'attivita', filtro: { gruppo: 'scadute' } } });
+      }
+      for (const a of appuntamenti) {
+        voce(settimana, { tipo: a.tipo, gravita: 'attenzione', titolo: a.titolo + ' oggi alle ' + ora(a.inizio),
+          dettaglio: [a.assegnata_a ? nomi[a.assegnata_a] : '', a.luogo].filter(Boolean).join(' · '),
+          collegamento: { pagina: 'calendario', filtro: { giorno: adesso } } });
+      }
+      const altreOggi = diOggi.filter(a => appuntamenti.indexOf(a) < 0);
+      if (altreOggi.length) {
+        voce(settimana, { tipo: 'attivita', gravita: 'info', titolo: plurale(altreOggi.length, 'attività da fare oggi', 'attività da fare oggi'),
+          dettaglio: altreOggi.slice(0, 3).map(a => a.titolo).join(', '), quanto: altreOggi.length, unita: 'attivita',
+          collegamento: { pagina: 'attivita', filtro: { gruppo: 'oggi' } } });
+      }
+      if (prossime.length) {
+        voce(settimana, { tipo: 'attivita', gravita: 'info', titolo: plurale(prossime.length, 'attività nei prossimi 7 giorni', 'attività nei prossimi 7 giorni'),
+          dettaglio: prossime.slice(0, 3).map(a => a.titolo).join(', '), quanto: prossime.length, unita: 'attivita',
+          collegamento: { pagina: 'calendario', filtro: { giorno: piuGiorni(adesso, 1) } } });
+      }
+      if (!mie && nonAssegnate.length) {
+        voce(pianificare, { tipo: 'attivita', gravita: 'info', titolo: plurale(nonAssegnate.length, 'attività non assegnata', 'attività non assegnate'),
+          dettaglio: nonAssegnate.slice(0, 3).map(a => a.titolo).join(', '), quanto: nonAssegnate.length, unita: 'attivita',
+          collegamento: { pagina: 'attivita', filtro: { nonAssegnate: true } } });
+      }
+      fuori.attivita = { scadute: scadute.length, oggi: diOggi.length, settimana: prossime.length, nonAssegnate: nonAssegnate.length, appuntamentiOggi: appuntamenti.length };
+      fuori.agenda = { oggi: diOggi.map(breve), settimana: prossime.map(breve) };
+    }
+
+    if (!mie && this.livello('preventivi') > 0) {
+      const elenco = this.elencoPreventivi({});
+      const giorniDa = iso => Math.round((Date.parse(adesso + 'T12:00:00') - Date.parse(iso + 'T12:00:00')) / 86400000);
+      const quindiciFa = piuGiorni(adesso, -15);
+      const stato = x => statoVistoPreventivo(x.riga);
+      const bozze = elenco.filter(x => stato(x) === 'BOZZA');
+      const inviati = elenco.filter(x => stato(x) === 'INVIATO');
+      const scaduti = elenco.filter(x => stato(x) === 'SCADUTO');
+      const senzaRisposta = elenco.filter(x => x.riga.stato === 'INVIATO' && x.riga.inviato_il && dataIso(x.riga.inviato_il) < quindiciFa);
+      const inScadenza = inviati.filter(x => x.riga.scadenza && x.riga.scadenza <= piuGiorni(adesso, 7));
+      const accettati = elenco.filter(x => x.riga.stato === 'ACCETTATO' && !x.riga.commessa_id);
+      for (const x of senzaRisposta) {
+        const giorni = giorniDa(dataIso(x.riga.inviato_il));
+        voce(urgenti, { tipo: 'preventivo', gravita: 'attenzione', titolo: etichettaPreventivo(x.riga) + ': nessuna risposta da ' + giorni + ' giorni',
+          dettaglio: [x.riga.oggetto, x.cliente, stato(x) === 'SCADUTO' ? 'scaduto il ' + dataBreve(x.riga.scadenza) : ''].filter(Boolean).join(' · '),
+          quanto: giorni, unita: 'giorni', collegamento: { pagina: 'preventivo', id: x.riga.id } });
+      }
+      for (const x of inScadenza) {
+        if (senzaRisposta.indexOf(x) >= 0) continue;
+        const giorni = -giorniDa(x.riga.scadenza);
+        voce(settimana, { tipo: 'preventivo', gravita: 'attenzione',
+          titolo: etichettaPreventivo(x.riga) + (giorni === 0 ? ' scade oggi' : giorni === 1 ? ' scade domani' : ' scade fra ' + giorni + ' giorni'),
+          dettaglio: [x.cliente, x.riga.inviato_il ? 'inviato il ' + dataBreve(dataIso(x.riga.inviato_il)) : ''].filter(Boolean).join(' · '),
+          quanto: costi ? x.conti.totale : null, unita: costi ? 'euro' : null, collegamento: { pagina: 'preventivo', id: x.riga.id } });
+      }
+      for (const x of accettati) {
+        voce(settimana, { tipo: 'preventivo', gravita: 'attenzione', titolo: etichettaPreventivo(x.riga) + ': accettato, manca la commessa',
+          dettaglio: [x.riga.oggetto, x.cliente].filter(Boolean).join(' · '), collegamento: { pagina: 'preventivo', id: x.riga.id } });
+      }
+      if (bozze.length) {
+        voce(pianificare, { tipo: 'preventivo', gravita: 'info', titolo: plurale(bozze.length, 'preventivo in bozza', 'preventivi in bozza'),
+          dettaglio: bozze.slice(0, 3).map(x => etichettaPreventivo(x.riga) + ' ' + x.riga.oggetto).join(', '), quanto: bozze.length, unita: 'preventivi',
+          collegamento: { pagina: 'preventivi', filtro: { stato: 'BOZZA' } } });
+      }
+      fuori.preventivi = {
+        bozze: bozze.length, inviati: inviati.length, scaduti: scaduti.length, inScadenza: inScadenza.length,
+        senzaRisposta: senzaRisposta.length, accettatiSenzaCommessa: accettati.length,
+      };
+      if (costi) fuori.preventiviInAttesa = centesimi(inviati.reduce((somma, x) => somma + x.conti.totale, 0));
+    }
+    return fuori;
   },
 };

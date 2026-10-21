@@ -148,6 +148,21 @@ fun PaginaStudio(dati: Dati, puoCambiare: Boolean, onIndietro: () -> Unit) {
                 }) else null)
             }
         }
+        TitoloSezione("Per i preventivi")
+        SchedaElenco {
+            VOCI_PREVENTIVI.forEachIndexed { i, v ->
+                if (i > 0) LineaElenco()
+                val valore = ana.impostazione(v.chiave)
+                RigaVoce(
+                    v.titolo, sotto = valore.ifBlank { "—" }.let { if (v.suffisso != null && valore.isNotBlank()) "$it ${v.suffisso}" else it },
+                    freccia = puoCambiare,
+                    onClick = if (puoCambiare) ({
+                        modifica = Modifica(v.titolo, valore, chiave = v.chiave, tastiera = v.tastiera, righe = v.righe, suffisso = v.suffisso,
+                            conferma = if (v.chiave in listOf("IVA", "EPPI_INTEGRATIVO")) "Salvato. Vale per i preventivi nuovi: quelli già scritti tengono la percentuale con cui sono nati" else "Salvato")
+                    }) else null,
+                )
+            }
+        }
         TitoloSezione("La tua firma")
         Scheda(orizzontale = 20.dp, verticale = 18.dp, raggio = 24.dp, spazio = 14.dp) {
             FirmaTecnico(dati, ana.idFirmaTecnico)
@@ -367,7 +382,22 @@ fun PaginaApp(
 private const val CONFERMA_RIMBORSI = "Salvato. Vale per i rapportini nuovi: quelli già scritti tengono il rimborso con cui sono nati"
 
 /** Una voce dei dati dello studio, come le chiama il computer. */
-private class VoceStudio(val titolo: String, val chiave: String, val tastiera: KeyboardType = KeyboardType.Text)
+private class VoceStudio(val titolo: String, val chiave: String, val tastiera: KeyboardType = KeyboardType.Text, val righe: Int = 1, val suffisso: String? = null)
+
+/**
+ * Quello che la legge chiede in ogni preventivo (fase2.md §2.1, §3): polizza e
+ * titoli, e le percentuali che il preventivo congela quando nasce.
+ */
+private val VOCI_PREVENTIVI = listOf(
+    VoceStudio("Polizza professionale: compagnia", "POLIZZA_COMPAGNIA"),
+    VoceStudio("Numero della polizza", "POLIZZA_NUMERO"),
+    VoceStudio("Massimale", "POLIZZA_MASSIMALE"),
+    VoceStudio("Titoli e specializzazioni", "TITOLI", righe = 3),
+    VoceStudio("IVA", "IVA", KeyboardType.Decimal, suffisso = "%"),
+    VoceStudio("Contributo integrativo EPPI", "EPPI_INTEGRATIVO", KeyboardType.Decimal, suffisso = "%"),
+    VoceStudio("Validità dei preventivi", "PREVENTIVO_VALIDITA_GIORNI", KeyboardType.Number, suffisso = "giorni"),
+    VoceStudio("Condizioni dei preventivi", "PREVENTIVO_CONDIZIONI", righe = 5),
+)
 
 private val VOCI_STUDIO = listOf(
     VoceStudio("Ragione sociale", Anagrafiche.RAGIONE_SOCIALE),

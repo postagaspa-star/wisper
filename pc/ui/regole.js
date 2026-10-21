@@ -31,6 +31,9 @@
     { modulo: 'dashboard', nome: 'Dashboard', spiega: 'La pagina iniziale', icona: 'dashboard' },
     { modulo: 'clienti', nome: 'Clienti e fornitori', spiega: 'Anagrafiche, referenti, sedi', icona: 'clienti' },
     { modulo: 'commesse', nome: 'Progetti e commesse', spiega: 'Commesse e prestazioni', icona: 'commesse' },
+    // Fase 2 (docs/gestionale/fase2.md §5): voci 4 e 5 del menu.
+    { modulo: 'preventivi', nome: 'Preventivi e contratti', spiega: 'Preventivi, listino, incarichi', icona: 'preventivo' },
+    { modulo: 'attivita', nome: 'Attività e calendario', spiega: 'Le attività di tutti o solo le sue', icona: 'calendario' },
     { modulo: 'rapportini', nome: 'Ore e rapportini', spiega: 'I rapportini di tutti o solo i suoi', icona: 'rapportini' },
     { modulo: 'fatturazione', nome: 'Fatturazione', spiega: 'Da fatturare, riepiloghi', icona: 'fatturazione' },
     { modulo: 'amministrazione', nome: 'Amministrazione', spiega: 'Studio, utenti, permessi, copie', icona: 'amministrazione' },
@@ -485,6 +488,14 @@
       case 'rapportino': return { hash: '#rapportini', filtro: Object.assign({ apri: c.id }, c.filtro || {}) };
       case 'fatturazione': return { hash: '#fatturazione', filtro: c.filtro || null };
       case 'amministrazione': return { hash: '#amministrazione' + (c.id ? '/' + id : ''), filtro: null };
+      // Fase 2: preventivi, attività, calendario.
+      case 'preventivi': return { hash: '#preventivi', filtro: c.filtro || null };
+      case 'preventivo': return { hash: '#preventivi/' + id, filtro: null };
+      case 'listino': return { hash: '#preventivi/listino', filtro: null };
+      case 'contratti': return { hash: '#preventivi/contratti', filtro: null };
+      case 'attivita': return { hash: '#attivita' + (c.id ? '/' + id : ''), filtro: c.filtro || null };
+      case 'calendario': return { hash: '#attivita/calendario', filtro: c.filtro || null };
+      case 'pianificazione': return { hash: '#attivita/pianificazione', filtro: c.filtro || null };
       default: return { hash: '#dashboard', filtro: null };
     }
   }
@@ -492,10 +503,12 @@
   /** Il pulsante della cosa più urgente: dice la cosa da fare. */
   function testoAzione(collegamento) {
     const p = (collegamento || {}).pagina;
+    if (p === 'attivita' && collegamento.id) return 'Apri l\'attività';
     return {
       fatturazione: 'Prepara il riepilogo', commessa: 'Apri la commessa', commesse: 'Apri le commesse',
       cliente: 'Apri la scheda', soggetto: 'Apri la scheda', clienti: 'Apri i clienti',
       rapportini: 'Apri i rapportini', rapportino: 'Apri il rapportino', amministrazione: 'Apri',
+      preventivi: 'Apri i preventivi', preventivo: 'Apri il preventivo', attivita: 'Apri le attività', calendario: 'Apri il calendario',
     }[p] || 'Apri';
   }
 
@@ -543,6 +556,9 @@
     rapportini: 'il rapportino', prestazioni: 'la prestazione', referenti: 'il referente', sedi: 'la sede',
     utenti: 'l\'utente', permessi: 'i permessi', impostazioni: 'le impostazioni', numerazioni: 'la numerazione', file: 'il file',
     sessioni: 'il dispositivo', commessa_persone: 'le persone della commessa', tentativi_accesso: 'l\'accesso',
+    // fase 2
+    preventivi: 'il preventivo', preventivo_voci: 'le voci del preventivo', listino: 'la voce del listino', attivita: 'l\'attività',
+    attivita_checklist: 'la checklist', scadenze_pagamento: 'le scadenze di pagamento', ricorrenze: 'la ricorrenza',
   };
 
   function valoreLeggibile(v) {
