@@ -91,6 +91,7 @@ class Visita {
         Passo("avanti", "Il riepilogo", "Tocca Avanti per vedere tutto prima di salvare.", true, "rapportino"),
         Passo("firma", "La firma", "Il cliente firma col dito sul tuo telefono.", false, "rapportino"),
         Passo("manca", "I giorni che mancano", "Un giorno senza rapportino si vede subito: toccalo per scriverlo.", false, "oggi"),
+        Passo("sezione-ufficio", "L'ufficio", "Fine mese, commesse e clienti: quello che fa il computer, anche qui.", false, "oggi"),
         Passo(null, "Ecco fatto", "Adesso Wisper lavora con i tuoi rapportini veri.", false, "oggi"),
     )
 

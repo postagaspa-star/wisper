@@ -41,6 +41,7 @@ import eu.stgm.wisper.Riepiloghi
 import eu.stgm.wisper.Riepiloghi.TipoGiorno
 import eu.stgm.wisper.rapportino.Numeri
 import eu.stgm.wisper.rapportino.Rapportino
+import eu.stgm.wisper.rapportino.Stato
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
@@ -72,6 +73,8 @@ fun SchermataOggi(
     onApri: (String) -> Unit,
     onMese: () -> Unit,
     onImpostazioni: () -> Unit,
+    onFineMese: () -> Unit = {},
+    onDaFirmare: () -> Unit = onMese,
 ) {
     val c = W.colori
     val visita = LocalVisita.current
@@ -93,7 +96,6 @@ fun SchermataOggi(
         Column(
             Modifier
                 .fillMaxSize()
-                .statusBarsPadding()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp)
                 .padding(top = 10.dp, bottom = 90.dp),
@@ -205,13 +207,39 @@ fun SchermataOggi(
                 }
             }
 
+            // ---------------------------------------------------------- fine mese
+            // Negli ultimi giorni del mese, se c'è qualcosa da fatturare: porta all'Ufficio.
+            val pronti = delMese.filter { it.rapportino.stato == Stato.FIRMATO || it.rapportino.stato == Stato.INVIATO }
+            if (pronti.isNotEmpty() && oggi.dayOfMonth >= 20) {
+                val clientiPronti = pronti.map { it.rapportino.idCliente.ifBlank { it.rapportino.cliente } }.distinct().size
+                Row(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(c.scheda)
+                        .border(1.dp, c.bordoScheda, RoundedCornerShape(20.dp)).clickable(onClick = onFineMese)
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(Modifier.size(44.dp).clip(CircleShape).background(c.gialloTenue), contentAlignment = Alignment.Center) {
+                        Icon(Icone.scontrino, null, tint = c.gialloTesto, modifier = Modifier.size(22.dp))
+                    }
+                    Spacer(Modifier.width(14.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text("Fine mese", style = Testi.forte, color = c.testo)
+                        Text(
+                            (if (clientiPronti == 1) "1 cliente da fatturare" else "$clientiPronti clienti da fatturare") + " · " + Numeri.euro(pronti.sumOf { it.conto?.totale ?: 0.0 }),
+                            style = Testi.secondario, color = c.tenue, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    Icon(Icone.freccia, null, tint = c.tenue, modifier = Modifier.size(18.dp))
+                }
+            }
+
             // ---------------------------------------------------------- da far firmare
             if (daFirmare.isNotEmpty()) {
                 val clienti = daFirmare.map { it.rapportino.cliente }.distinct()
                 val giorni = daFirmare.sortedBy { it.rapportino.data }.map { it.rapportino.data.dayOfMonth.toString() }
                 Row(
                     Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(c.scheda)
-                        .border(1.dp, c.bordoScheda, RoundedCornerShape(20.dp)).clickable(onClick = onMese)
+                        .border(1.dp, c.bordoScheda, RoundedCornerShape(20.dp)).clickable(onClick = onDaFirmare)
                         .padding(horizontal = 16.dp, vertical = 14.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -273,7 +301,7 @@ fun SchermataOggi(
         if (inAttesa > 0) {
             PillolaRete(
                 if (inAttesa == 1) "1 rapportino parte appena c'è rete" else "$inAttesa rapportini partono appena c'è rete",
-                Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(horizontal = 20.dp, vertical = 16.dp),
+                Modifier.align(Alignment.BottomCenter).padding(horizontal = 20.dp, vertical = 16.dp),
             )
         }
     }

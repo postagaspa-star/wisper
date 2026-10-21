@@ -212,3 +212,31 @@ test('collegare il computer: un indirizzo strano si rifiuta, e senza codice nien
   assert.equal(r.ok, false);
   assert.equal(r.errore, 'Codice sbagliato');
 });
+
+test('senza il permesso userinfo.email l\'email del proprietario arriva da Drive', () => {
+  // Cosi' risponde Google quando appsscript.json ha gli oauthScopes scritti a mano senza userinfo.email.
+  const vero = contesto.Session;
+  contesto.Session = { getEffectiveUser: () => { throw new Error('Le autorizzazioni specificate non sono sufficienti per chiamare Session.getEffectiveUser.'); } };
+  try {
+    const r = scrivi('collegaComputer', { url: 'https://script.google.com/macros/s/AKfyc-prova_123/exec' }, TELEFONO);
+    assert.equal(r.ok, true, r.errore);
+    assert.equal(r.a, 'proprietario@example.com');
+    // Anche gli avvisi del registro partono: prima si fermavano qui senza dire niente.
+    dimenticaAvvisi();
+    const prima = email().length;
+    leggi({ azione: 'anagrafiche' }, { disp: 'mai-visto-' + Date.now(), dispNome: 'telefono nuovo', app: 'telefono 0.3.6' });
+    const nuove = email().slice(prima);
+    assert.ok(nuove.some(t => /^A: proprietario@example\.com/.test(t) && /dispositivo nuovo/.test(t)), 'manca l\'avviso del dispositivo nuovo');
+    // E la funzione da eseguire a mano dice cosa manca.
+    assert.match(contesto.autorizza(), /Manca il permesso https:\/\/www\.googleapis\.com\/auth\/userinfo\.email[\s\S]*Proprietario secondo Drive: proprietario@example\.com/);
+    // Se neanche Drive risponde, l'errore dice cosa fare.
+    const drive = contesto.DriveApp;
+    contesto.DriveApp = Object.assign({}, drive, { getFileById: () => { throw new Error('Drive non autorizzato'); } });
+    try {
+      const r2 = scrivi('collegaComputer', { url: 'https://script.google.com/macros/s/AKfyc-prova_123/exec' }, TELEFONO);
+      assert.equal(r2.ok, false);
+      assert.match(r2.errore, /esegui la funzione autorizza/);
+    } finally { contesto.DriveApp = drive; }
+  } finally { contesto.Session = vero; }
+  assert.match(contesto.autorizza(), /^Email del proprietario: proprietario@example\.com/);
+});

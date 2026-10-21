@@ -50,5 +50,17 @@
                 android:resource="@xml/percorsi_foto" />
         </provider>
 
+        <!-- I PDF del rapportino e del riepilogo, da aprire o condividere con un'altra
+             app (rapportino/Stampa.kt). Provider a parte: non vede le foto, e viceversa. -->
+        <provider
+            android:name=".rapportino.StampaFile"
+            android:authorities="${applicationId}.pdf"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/percorsi_pdf" />
+        </provider>
+
     </application>
 </manifest>

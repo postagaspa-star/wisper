@@ -1630,8 +1630,7 @@ function collegaComputer(d) {
   var valido = /^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/exec$/.test(url) ||
     /^http:\/\/(localhost|127\.0\.0\.1|10\.0\.2\.2)(:\d+)?\/exec$/.test(url);   // il finto Google delle prove
   if (!valido) throw new Error('Indirizzo del foglio non valido');
-  var a = Session.getEffectiveUser().getEmail();
-  if (!a) throw new Error('Non so a chi mandare l\'email: manca l\'indirizzo del proprietario del foglio');
+  var a = emailProprietario();
   var contenuto = JSON.stringify({
     tipo: 'wisper-collegamento', versione: 1, url: url,
     codice: PropertiesService.getScriptProperties().getProperty('CODICE')
@@ -1655,7 +1654,7 @@ function collegaComputer(d) {
 
 function inviaEmail(d) {
   var aMe = d.aMe === true;
-  var destinatario = aMe ? Session.getEffectiveUser().getEmail() : testo(d.a);
+  var destinatario = aMe ? emailProprietario() : testo(d.a);
   if (!destinatario) throw new Error('Manca l\'indirizzo del cliente');
   var imp = leggiImpostazioni();
   var allegati = (d.allegati || []).map(function (a) {
@@ -1876,12 +1875,56 @@ function avvisaUnaVolta(motivo, secondi, oggetto, corpo) {
 
 /** L'email al proprietario del foglio, e a chi c'e' in EMAIL_AVVISI. */
 function avvisa(oggetto, corpo) {
-  var a = [Session.getEffectiveUser().getEmail()];
+  var a = [emailProprietario()];
   testo(leggiImpostazioni().EMAIL_AVVISI).split(',').forEach(function (x) {
     x = x.trim();
     if (x && a.indexOf(x) < 0) a.push(x);
   });
   MailApp.sendEmail(a.filter(String).join(','), oggetto, corpo, { name: 'Wisper' });
+}
+
+/**
+ * L'email di chi possiede il foglio. Session.getEffectiveUser() vuole il permesso
+ * userinfo.email: un progetto con gli oauthScopes scritti a mano in appsscript.json,
+ * senza quello, si ferma con "Le autorizzazioni specificate non sono sufficienti".
+ * Allora lo si chiede a Drive, che sa di chi e' il foglio col permesso che lo
+ * script ha gia' per le foto.
+ */
+function emailProprietario() {
+  try {
+    var e = Session.getEffectiveUser().getEmail();
+    if (e) return e;
+  } catch (err) { /* permesso mancante: si prova con Drive */ }
+  try {
+    var p = DriveApp.getFileById(SpreadsheetApp.getActiveSpreadsheet().getId()).getOwner();
+    if (p && p.getEmail()) return p.getEmail();
+  } catch (err2) { /* niente neanche da Drive */ }
+  throw new Error('Il foglio non riesce a leggere l\'email del suo proprietario: in Apps Script esegui la funzione autorizza');
+}
+
+/**
+ * Da eseguire a mano nell'editor di Apps Script (in alto scegli "autorizza", poi
+ * Esegui) dopo aver incollato una versione nuova: Google chiede i permessi che
+ * mancano, e il registro di esecuzione dice se l'email del proprietario si legge.
+ * Non cambia niente nel foglio.
+ */
+function autorizza() {
+  var righe = [];
+  try {
+    righe.push('Email del proprietario: ' + Session.getEffectiveUser().getEmail());
+  } catch (e) {
+    righe.push('Manca il permesso https://www.googleapis.com/auth/userinfo.email (' + e.message + '). ' +
+      'Se appsscript.json ha "oauthScopes", aggiungilo li\' e rifai Esegui.');
+  }
+  try {
+    righe.push('Proprietario secondo Drive: ' +
+      DriveApp.getFileById(SpreadsheetApp.getActiveSpreadsheet().getId()).getOwner().getEmail());
+  } catch (e2) {
+    righe.push('Drive non dice di chi e\' il foglio: ' + e2.message);
+  }
+  righe.push('Email che si possono ancora mandare oggi: ' + MailApp.getRemainingDailyQuota());
+  Logger.log(righe.join('\n'));
+  return righe.join('\n');
 }
 
 function quando(d) {

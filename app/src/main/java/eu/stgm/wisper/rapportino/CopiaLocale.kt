@@ -7,7 +7,8 @@ import java.io.File
 
 /**
  * L'ultima versione letta dal foglio, tenuta sul telefono: clienti, commesse,
- * tariffe e i rapportini degli ultimi mesi.
+ * tariffe, i rapportini degli ultimi mesi, tutti i rapportini (lo storico
+ * dell'ufficio) e le immagini gia' scaricate per i PDF.
  *
  * PERCHE' ESISTE, trovato col cronometro in mano il 09/08: il foglio chiamato da
  * freddo ci mette da sette a tredici secondi a rispondere. Aprire l'app e
@@ -24,6 +25,10 @@ class CopiaLocale(cartella: File) {
 
     private val fileAnagrafiche = File(cartella, "anagrafiche.json")
     private val fileRapportini = File(cartella, "rapportini.json")
+    private val fileStorico = File(cartella, "storico.json")
+
+    /** Le immagini dei PDF (firme, scontrini, la firma del compilatore) gia' scaricate: si chiedono una volta sola. */
+    private val cartellaFile = File(cartella, "file-foglio")
 
     fun anagrafiche(): Anagrafiche = try {
         if (!fileAnagrafiche.exists()) Anagrafiche() else Anagrafiche.daJson(JSONObject(fileAnagrafiche.readText()))
@@ -50,6 +55,68 @@ class CopiaLocale(cartella: File) {
 
     fun scriviRapportini(lista: List<Rapportino>) {
         scriviAtomico(fileRapportini, JSONArray().apply { lista.forEach { put(it.aJson()) } }.toString())
+    }
+
+    /**
+     * Tutti i rapportini del foglio, l'ultima volta che li si e' letti tutti (lo
+     * storico dell'ufficio). Vuoto finche' non li si e' letti una volta.
+     */
+    fun storico(): List<Rapportino> = try {
+        if (!fileStorico.exists()) emptyList()
+        else JSONArray(fileStorico.readText()).oggetti().map { Rapportino.daJson(it) }
+    } catch (_: Exception) {
+        emptyList()
+    }
+
+    /** Qui un elenco vuoto si scrive: e' la risposta di un foglio senza rapportini, non un errore. */
+    fun scriviStorico(lista: List<Rapportino>) {
+        scriviAtomico(fileStorico, JSONArray().apply { lista.forEach { put(it.aJson()) } }.toString())
+    }
+
+    /** Un file del foglio gia' scaricato: i byte e il tipo, o null. */
+    fun fileDelFoglio(id: String): Pair<ByteArray, String>? {
+        if (!idValido(id)) return null
+        val f = cartellaFile.listFiles()?.firstOrNull { it.name.startsWith("$id.") } ?: return null
+        return try {
+            f.readBytes() to mimeDa(f.extension)
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    fun scriviFileDelFoglio(id: String, dati: ByteArray, mime: String) {
+        if (!idValido(id) || dati.isEmpty()) return
+        try {
+            cartellaFile.mkdirs()
+            val f = File(cartellaFile, "$id.${estensioneDi(mime)}")
+            val tmp = File(cartellaFile, "$id.tmp")
+            tmp.writeBytes(dati)
+            if (!tmp.renameTo(f)) {
+                f.delete()
+                tmp.renameTo(f)
+            }
+        } catch (_: Exception) {
+            // Come per il resto: se non si scrive, la prossima volta lo si scarica di nuovo.
+        }
+    }
+
+    /** Gli id di Drive sono lettere, cifre, - e _: niente che possa uscire dalla cartella. */
+    private fun idValido(id: String) = id.isNotBlank() && id.all { it.isLetterOrDigit() || it == '-' || it == '_' }
+
+    private fun estensioneDi(mime: String) = when (mime.lowercase()) {
+        "image/png" -> "png"
+        "image/jpeg", "image/jpg" -> "jpg"
+        "image/webp" -> "webp"
+        "application/pdf" -> "pdf"
+        else -> "bin"
+    }
+
+    private fun mimeDa(estensione: String) = when (estensione.lowercase()) {
+        "png" -> "image/png"
+        "jpg" -> "image/jpeg"
+        "webp" -> "image/webp"
+        "pdf" -> "application/pdf"
+        else -> "application/octet-stream"
     }
 
     private fun scriviAtomico(f: File, testo: String) {

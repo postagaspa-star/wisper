@@ -2,6 +2,7 @@ package eu.stgm.wisper.ui
 
 import android.content.Intent
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -41,14 +42,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -85,7 +81,9 @@ import eu.stgm.wisper.rapportino.Calcolo
 import eu.stgm.wisper.rapportino.Cliente
 import eu.stgm.wisper.rapportino.Immagini
 import eu.stgm.wisper.rapportino.Numeri
+import eu.stgm.wisper.rapportino.Stampa
 import eu.stgm.wisper.rapportino.Stato
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.launch
@@ -115,6 +113,12 @@ private fun dataLungaIt(d: LocalDate): String {
  * Il lavoro → Riepilogo. Una cosa per schermata, un pulsante grande in basso,
  * e il totale che si aggiorna mentre si compila. Un rapportino già scritto si
  * apre sul Riepilogo, e da lì "Cambia" porta al passo giusto.
+ *
+ * Firmato, inviato o fatturato, il Riepilogo è il pannello del computer: UN
+ * pulsante giallo per la cosa da fare adesso e il menu ⋯ con le altre, stato per
+ * stato (prototipo menuRapportino, pc/ui/app.js disegnaPannello).
+ *
+ * @param onInvia "Invia al cliente": l'invio del rapportino solo, con l'idLocale.
  */
 @OptIn(ExperimentalMaterial3Api::class, kotlinx.coroutines.FlowPreview::class)
 @Composable
@@ -124,14 +128,19 @@ fun SchermataRapportino(
     bozza: BozzaModulo,
     onFirma: (String) -> Unit,
     onChiudi: () -> Unit,
+    onInvia: (String) -> Unit = {},
 ) {
     val c = W.colori
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     val visita = LocalVisita.current
+    val avvisi = LocalAvvisi.current
     val ana by dati.anagrafiche.collectAsStateWithLifecycle()
     val viste by dati.viste.collectAsStateWithLifecycle()
+    val storico by dati.storico.collectAsStateWithLifecycle()
+    // Un rapportino di un mese vecchio (aperto dalla sezione Rapportini) sta solo nello storico.
     val vista: Vista? = viste.firstOrNull { it.rapportino.idLocale == stato.base.idLocale }
+        ?: storico.firstOrNull { it.rapportino.idLocale == stato.base.idLocale }
 
     // Quello che sa il foglio (numero, stato, foto) può cambiare mentre il modulo
     // è aperto: si aggiorna la base, non i campi che si stanno scrivendo.
@@ -256,6 +265,88 @@ fun SchermataRapportino(
         galleria.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
     }
 
+    // ---- le azioni dell'ufficio (menu ⋯ e pulsante giallo) ----
+    var menu by remember { mutableStateOf(false) }
+    var sceltaScontrino by remember { mutableStateOf(false) }
+    var foglioFirmato by remember { mutableStateOf(false) }
+    var firmatario by rememberSaveable { mutableStateOf("") }
+    var erroreFirmatario by remember { mutableStateOf<String?>(null) }
+    // Il lavoro lungo in corso (il PDF, il foglio firmato che sale): prende il posto del pulsante giallo.
+    var inCorso by remember { mutableStateOf<String?>(null) }
+
+    /** Una bozza cambiata si salva prima: si stampa, si invia e si segna quello che si vede. */
+    fun primaSalva(azione: () -> Unit) {
+        if (!stato.base.bloccato && (stato.cambiato || vista == null) && !salva()) return
+        azione()
+    }
+
+    /** Un cambio di stato dal riepilogo: si vede subito, e l'avviso ha Annulla. */
+    fun segna(nuovo: Stato, testo: String) = primaSalva {
+        val cambio = dati.cambiaStato(listOf(stato.base.idLocale), nuovo)
+        if (cambio.quanti > 0) stato.base = stato.base.copy(stato = nuovo)
+        avvisaCambio(avvisi, dati, cambio, testo)
+    }
+
+    /** Il PDF del rapportino come il pulsante PDF del computer: senza importi e senza scontrini. */
+    fun pdf(condividi: Boolean) {
+        if (inCorso != null) return
+        if (dati.esempio) { avvisi.mostra("Nella visita il PDF non si crea"); return }
+        primaSalva {
+            val idLocale = stato.base.idLocale
+            inCorso = "Preparo il PDF…"
+            scope.launch {
+                val esito = runCatching {
+                    val d = dati.perStampa(listOf(idLocale))
+                    val rj = d.rapportini.firstOrNull() ?: throw Stampa.ErroreStampa("Il rapportino non è sul telefono: aggiorna e riprova")
+                    Stampa.rapportino(ctx, rj, d.anagrafiche, conImporti = false, conFoto = false, immagine = { dati.file(it) })
+                }
+                inCorso = null
+                esito.onSuccess { f ->
+                    val b = stato.base
+                    val titolo = "Rapportino" + (if (b.id.isNotBlank()) " ${b.id}" else "") + " del " + b.data.format(DateTimeFormatter.ofPattern("dd/MM/yyyy"))
+                    if (condividi) Stampa.condividi(ctx, f, titolo)
+                    else if (!Stampa.apri(ctx, f)) avvisi.mostra("Nessuna app apre i PDF: usa Condividi il PDF")
+                }.onFailure { e ->
+                    if (e is CancellationException) throw e
+                    avvisi.mostra((e as? Stampa.ErroreStampa)?.message ?: "Il PDF non si è fatto: riprova tra poco")
+                }
+            }
+        }
+    }
+
+    /** Il foglio firmato a mano vale come firma: sale subito (serve la rete), poi il rapportino è firmato. */
+    fun caricaFoglio(sorgente: Uri, dopo: () -> Unit = {}) {
+        val idLocale = stato.base.idLocale
+        val nome = firmatario.trim()
+        inCorso = "Carico il foglio firmato…"
+        scope.launch {
+            val esito = dati.caricaFoglioFirmato(idLocale, sorgente, nome)
+            dopo()
+            inCorso = null
+            esito.onSuccess { r ->
+                stato.base = stato.base.copy(id = r.id, stato = r.stato, firma = r.firma, firmatario = r.firmatario, firmatoIl = r.firmatoIl)
+                firmatario = ""
+                avvisi.mostra("Firma caricata: il rapportino è firmato")
+            }.onFailure { e -> avvisi.mostra(e.message ?: "Il foglio firmato non è salito: riprova") }
+        }
+    }
+    var scattoFoglio by rememberSaveable { mutableStateOf<String?>(null) }
+    val fotocameraFoglio = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { riuscito ->
+        val percorso = scattoFoglio ?: return@rememberLauncherForActivityResult
+        scattoFoglio = null
+        val scatto = File(percorso)
+        if (riuscito) caricaFoglio(Uri.fromFile(scatto)) { scatto.delete() } else scatto.delete()
+    }
+    val galleriaFoglio = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        if (uri != null) caricaFoglio(uri)
+    }
+    /** Il nome prima del file, come sul computer: senza, la firma non dice di chi è. */
+    fun conFirmatario(azione: () -> Unit) {
+        if (firmatario.isBlank()) { erroreFirmatario = "Scrivi il nome di chi ha firmato"; return }
+        foglioFirmato = false
+        if (dati.esempio) caricaFoglio(Uri.EMPTY) else azione()
+    }
+
     val r = stato.rapportino()
     val conto = if (!stato.cambiato && vista?.conto != null) vista.conto else Calcolo.calcola(r, regole)
     val oreTotali = listOf(stato.oreLavoro, stato.oreExtra, stato.oreViaggio).sumOf { Numeri.leggi(it) ?: 0.0 }
@@ -271,20 +362,8 @@ fun SchermataRapportino(
                     Spacer(Modifier.weight(1f))
                     if (stato.passo == 4 && !stato.nuovo) {
                         ParolaStato(stato.base.stato)
-                        if (!bloccato && stato.base.id.isNotBlank()) {
-                            var menu by remember { mutableStateOf(false) }
-                            Spacer(Modifier.width(8.dp))
-                            Box {
-                                PulsanteTondo(Icons.Default.MoreVert, "Altre azioni", { menu = true })
-                                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                                    DropdownMenuItem(
-                                        text = { Text("Elimina il rapportino", style = Testi.testo) },
-                                        leadingIcon = { Icon(Icons.Default.Delete, null) },
-                                        onClick = { menu = false; chiediElimina = true },
-                                    )
-                                }
-                            }
-                        }
+                        Spacer(Modifier.width(8.dp))
+                        PulsanteTondo(Icone.altro, "Altre azioni", { menu = true })
                     } else {
                         Text(if (stato.passo == 4) "Riepilogo" else "Passo ${stato.passo} di 3", style = Testi.secondario.copy(fontWeight = FontWeight.Bold), color = c.tenue)
                     }
@@ -297,29 +376,33 @@ fun SchermataRapportino(
             }
 
             // ---------------------------------------------------------- i passi
-            AnimatedContent(
-                targetState = stato.passo,
-                transitionSpec = {
-                    if (targetState > initialState) (slideInHorizontally(tween(300)) { it / 4 } + fadeIn(tween(300))) togetherWith
-                        (slideOutHorizontally(tween(300)) { -it / 4 } + fadeOut(tween(200)))
-                    else (slideInHorizontally(tween(300)) { -it / 4 } + fadeIn(tween(300))) togetherWith
-                        (slideOutHorizontally(tween(300)) { it / 4 } + fadeOut(tween(200)))
-                },
-                modifier = Modifier.weight(1f),
-                label = "passi",
-            ) { passo ->
-                Column(
-                    Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)
-                        .padding(top = 16.dp, bottom = 24.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    when (passo) {
-                        1 -> PassoPerChi(stato, dati, viste, ana, regole, onScelto = { visita?.azione(it); vaiA(if (stato.tornaAlRiepilogo) 4 else 2); stato.tornaAlRiepilogo = false })
-                        2 -> PassoOre(stato, regole, proposta, ultimiKm, clienteScelto, prezzoCommessa != null)
-                        3 -> PassoLavoro(stato, ana.ticketAttivo, vista, onScatta = { scatta() }, onGalleria = { dallaGalleria() }, dati = dati)
-                        else -> PassoRiepilogo(stato, vista, conto, regole, onCambia = { cambiaDa(it) })
+            Box(Modifier.weight(1f).fillMaxWidth()) {
+                AnimatedContent(
+                    targetState = stato.passo,
+                    transitionSpec = {
+                        if (targetState > initialState) (slideInHorizontally(tween(300)) { it / 4 } + fadeIn(tween(300))) togetherWith
+                            (slideOutHorizontally(tween(300)) { -it / 4 } + fadeOut(tween(200)))
+                        else (slideInHorizontally(tween(300)) { -it / 4 } + fadeIn(tween(300))) togetherWith
+                            (slideOutHorizontally(tween(300)) { it / 4 } + fadeOut(tween(200)))
+                    },
+                    modifier = Modifier.fillMaxSize(),
+                    label = "passi",
+                ) { passo ->
+                    Column(
+                        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)
+                            .padding(top = 16.dp, bottom = 24.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        when (passo) {
+                            1 -> PassoPerChi(stato, dati, viste, ana, regole, onScelto = { visita?.azione(it); vaiA(if (stato.tornaAlRiepilogo) 4 else 2); stato.tornaAlRiepilogo = false })
+                            2 -> PassoOre(stato, regole, proposta, ultimiKm, clienteScelto, prezzoCommessa != null)
+                            3 -> PassoLavoro(stato, ana.ticketAttivo, vista, onScatta = { scatta() }, onGalleria = { dallaGalleria() }, dati = dati)
+                            else -> PassoRiepilogo(stato, vista, conto, regole, dati, onCambia = { cambiaDa(it) })
+                        }
                     }
                 }
+                // Gli avvisi (Segnato fatturato · Annulla) qui sopra i pulsanti: la pagina è a tutto schermo.
+                StratoAvvisi(avvisi, Modifier.align(Alignment.BottomCenter).padding(bottom = 8.dp))
             }
 
             // ---------------------------------------------------------- in basso
@@ -344,17 +427,29 @@ fun SchermataRapportino(
                         Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 10.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
-                        PulsantePrincipale("Fai firmare al cliente", {
+                        val occupato = inCorso
+                        if (occupato != null) PulsantePrincipale(occupato, {}, abilitato = false)
+                        else PulsantePrincipale("Fai firmare al cliente", {
                             if (salva()) onFirma(stato.base.idLocale)
                         }, Modifier.bersaglio("firma"), icona = Icone.firma)
                         PulsanteTesto("Salva senza firma", { if (salva()) onChiudi() }, colore = c.testo2)
                     }
+                    // UN pulsante giallo, la cosa da fare adesso; il resto è nel menu ⋯.
                     stato.passo == 4 && bloccato -> Column(
-                        Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 10.dp),
+                        Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 16.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        PulsanteBordo("Aggiungi uno scontrino", { scatta() }, Modifier.fillMaxWidth(), icona = Icone.fotocamera, altezza = 60.dp)
-                        PulsanteTesto("Riporta in bozza", { chiediBozza = true }, colore = c.testo2)
+                        val occupato = inCorso
+                        when {
+                            occupato != null -> PulsantePrincipale(occupato, {}, abilitato = false)
+                            stato.base.stato == Stato.FIRMATO ->
+                                PulsantePrincipale("Invia al cliente", { onInvia(stato.base.idLocale) }, icona = Icone.invia)
+                            stato.base.stato == Stato.INVIATO ->
+                                PulsantePrincipale("Segna fatturato", { segna(Stato.FATTURATO, "Rapportino fatturato") }, icona = Icone.spunta)
+                            else -> PulsantePrincipale("PDF del rapportino", { pdf(condividi = false) }, icona = Icone.pdf)
+                        }
+                        PulsanteBordo("Aggiungi uno scontrino", { scatta() }, Modifier.fillMaxWidth(), icona = Icone.fotocamera)
                     }
                 }
             }
@@ -371,28 +466,95 @@ fun SchermataRapportino(
         )
     }
     if (chiediElimina) {
-        AlertDialog(
-            onDismissRequest = { chiediElimina = false },
-            title = { Text("Eliminare il rapportino?", style = Testi.titoloSezione) },
-            text = { Text("Sul foglio resta, segnato come annullato: si recupera da lì.", style = Testi.testo) },
-            confirmButton = { TextButton(onClick = { chiediElimina = false; dati.elimina(stato.base.idLocale); esci() }) { Text("Elimina", color = c.rossoTesto) } },
-            dismissButton = { TextButton(onClick = { chiediElimina = false }) { Text("Annulla", color = c.testo) } },
+        FoglioConferma(
+            titolo = "Eliminare il rapportino?",
+            testo = "Sul foglio resta, segnato come annullato: si recupera da lì.",
+            azione = "Elimina",
+            onConferma = {
+                chiediElimina = false
+                dati.elimina(stato.base.idLocale)
+                avvisi.mostra("Rapportino eliminato")
+                esci()
+            },
+            onAnnulla = { chiediElimina = false },
+            pericolo = true,
         )
     }
     if (chiediBozza) {
-        AlertDialog(
-            onDismissRequest = { chiediBozza = false },
-            title = { Text("Riportare in bozza?", style = Testi.titoloSezione) },
-            text = { Text("La firma del cliente viene tolta: ha firmato il rapportino com'era.", style = Testi.testo) },
-            confirmButton = {
-                TextButton(onClick = {
-                    chiediBozza = false
-                    dati.riportaInBozza(stato.base.idLocale)
-                    stato.base = stato.base.copy(stato = Stato.BOZZA, firma = null, firmatario = "", firmatoIl = "")
-                }) { Text("Riporta in bozza", color = c.testo) }
+        val conFirma = stato.base.firma != null || stato.base.firmatario.isNotBlank() || vista?.firmaInAttesa != null
+        FoglioConferma(
+            titolo = "Riportare in bozza?",
+            testo = if (conFirma) "La firma del cliente viene tolta: ha firmato il rapportino com'era. Dopo la correzione va rifirmato."
+            else "Il rapportino torna modificabile.",
+            azione = "Riporta in bozza",
+            onConferma = {
+                chiediBozza = false
+                dati.riportaInBozza(stato.base.idLocale)
+                stato.base = stato.base.copy(stato = Stato.BOZZA, firma = null, firmatario = "", firmatoIl = "")
+                avvisi.mostra("Riportato in bozza")
             },
-            dismissButton = { TextButton(onClick = { chiediBozza = false }) { Text("Annulla", color = c.testo) } },
+            onAnnulla = { chiediBozza = false },
         )
+    }
+
+    // ---------------------------------------------------------- il menu ⋯, stato per stato come il computer
+    if (menu) {
+        val st = stato.base.stato
+        val bozzaOFirmato = st == Stato.BOZZA || st == Stato.FIRMATO
+        FoglioDalBasso({ menu = false }) {
+            // Il fatturato ha già il PDF come pulsante giallo.
+            if (st != Stato.FATTURATO) VoceMenu(Icone.pdf, "PDF del rapportino", { menu = false; pdf(condividi = false) })
+            VoceMenu(Icone.condividi, "Condividi il PDF", { menu = false; pdf(condividi = true) })
+            if (st == Stato.BOZZA || st == Stato.INVIATO) {
+                VoceMenu(Icone.invia, if (st == Stato.INVIATO) "Invia di nuovo al cliente" else "Invia al cliente", {
+                    menu = false
+                    primaSalva { onInvia(stato.base.idLocale) }
+                })
+            }
+            if (st == Stato.BOZZA) {
+                VoceMenu(Icone.carica, "Carica il foglio firmato", {
+                    menu = false
+                    primaSalva { erroreFirmatario = null; foglioFirmato = true }
+                })
+            }
+            VoceMenu(Icone.scontrino, "Aggiungi uno scontrino", { menu = false; sceltaScontrino = true })
+            if (bozzaOFirmato) {
+                VoceMenu(Icone.invia, "Segna inviato senza email", { menu = false; segna(Stato.INVIATO, "Segnato inviato") })
+                VoceMenu(Icone.spunta, "Segna fatturato", { menu = false; segna(Stato.FATTURATO, "Segnato fatturato") })
+            }
+            if (st == Stato.FATTURATO) {
+                VoceMenu(Icone.indietroStato, "Non ancora fatturato", { menu = false; segna(Stato.INVIATO, "Non più fatturato") })
+            }
+            if (st != Stato.BOZZA) VoceMenu(Icone.indietroStato, "Riporta in bozza", { menu = false; chiediBozza = true })
+            if (st == Stato.BOZZA) VoceMenu(Icone.cestino, "Elimina", { menu = false; chiediElimina = true }, pericolo = true)
+        }
+    }
+
+    if (sceltaScontrino) {
+        FoglioDalBasso({ sceltaScontrino = false }) {
+            Text("Aggiungi uno scontrino", style = Testi.titoloScheda, color = c.testo)
+            VoceMenu(Icone.fotocamera, "Fotografa lo scontrino", { sceltaScontrino = false; scatta() })
+            VoceMenu(Icone.galleria, "Dalla galleria", { sceltaScontrino = false; dallaGalleria() })
+        }
+    }
+
+    if (foglioFirmato) {
+        FoglioDalBasso({ foglioFirmato = false }) {
+            Text("Carica il foglio firmato", style = Testi.titoloScheda, color = c.testo)
+            Text("La foto o la scansione del rapportino firmato a mano.", style = Testi.testo, color = c.testo2)
+            CampoTesto(firmatario, { firmatario = it; erroreFirmatario = null }, "Nome di chi ha firmato", errore = erroreFirmatario)
+            PulsantePrincipale("Fotografa il foglio", {
+                conFirmatario {
+                    val f = Immagini.fileScatto(ctx)
+                    scattoFoglio = f.path
+                    fotocameraFoglio.launch(FileProvider.getUriForFile(ctx, ctx.packageName + ".foto", f))
+                }
+            }, icona = Icone.fotocamera)
+            PulsanteBordo("Dalla galleria", {
+                conFirmatario { galleriaFoglio.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
+            }, Modifier.fillMaxWidth(), icona = Icone.galleria)
+            PulsanteTesto("Annulla", { foglioFirmato = false }, Modifier.fillMaxWidth(), colore = c.testo)
+        }
     }
 }
 
@@ -775,6 +937,7 @@ private fun ColumnScope.PassoRiepilogo(
     vista: Vista?,
     conto: eu.stgm.wisper.rapportino.Conto,
     regole: eu.stgm.wisper.rapportino.Regole,
+    dati: Dati,
     onCambia: (Int) -> Unit,
 ) {
     val c = W.colori
@@ -807,6 +970,10 @@ private fun ColumnScope.PassoRiepilogo(
             if (r.spese > 0 || scontrini > 0) "Spese ${Numeri.euro(r.spese)}" + (if (scontrini > 0) " · $scontrini " + (if (scontrini == 1) "scontrino" else "scontrini") else "") else "Nessuna spesa",
             bloccato,
         ) { onCambia(3) }
+        if (r.luogo.isNotBlank()) {
+            Box(Modifier.fillMaxWidth().height(1.dp).background(c.riga))
+            Text("Luogo · ${r.luogo}", style = Testi.secondario.copy(fontWeight = FontWeight.Medium), color = c.tenue, modifier = Modifier.padding(vertical = 12.dp))
+        }
     }
 
     Scheda(verticale = 16.dp, spazio = 8.dp) {
@@ -825,7 +992,9 @@ private fun ColumnScope.PassoRiepilogo(
         val quando = stato.base.firmatoIl.takeIf { it.isNotBlank() }?.let {
             runCatching { LocalDateTime.parse(it).format(DateTimeFormatter.ofPattern("dd/MM 'alle' HH:mm")) }.getOrNull()
         }
-        if (stato.base.firmatario.isNotBlank() || vista?.firmaInAttesa != null) {
+        val firmaInAttesa = vista?.firmaInAttesa
+        val firmaSulFoglio = stato.base.firma
+        if (stato.base.firmatario.isNotBlank() || firmaInAttesa != null || firmaSulFoglio != null) {
             Scheda {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icone.firma, null, tint = c.firmatoTesto, modifier = Modifier.size(22.dp))
@@ -835,10 +1004,19 @@ private fun ColumnScope.PassoRiepilogo(
                         style = Testi.forte, color = c.testo,
                     )
                 }
-                vista?.firmaInAttesa?.let { f ->
-                    val bmp = produceState<Bitmap?>(null, f.path) { value = withContext(Dispatchers.IO) { Immagini.miniatura(f, 600) } }.value
-                    if (bmp != null) Image(bmp.asImageBitmap(), null, Modifier.fillMaxWidth().height(96.dp).clip(RoundedCornerShape(12.dp)).background(androidx.compose.ui.graphics.Color.White), contentScale = ContentScale.Fit)
-                }
+                // La firma ancora sul telefono, o quella sul foglio (Dati.file la tiene anche per dopo, senza rete).
+                val bmp = produceState<Bitmap?>(null, firmaInAttesa?.path, firmaSulFoglio?.id) {
+                    value = withContext(Dispatchers.IO) {
+                        runCatching {
+                            when {
+                                firmaInAttesa != null -> Immagini.miniatura(firmaInAttesa, 600)
+                                firmaSulFoglio != null && !dati.esempio -> dati.file(firmaSulFoglio.id)?.first?.let { immagineRidotta(it, 1200) }
+                                else -> null
+                            }
+                        }.getOrNull()
+                    }
+                }.value
+                if (bmp != null) Image(bmp.asImageBitmap(), "Firma del cliente", Modifier.fillMaxWidth().height(96.dp).clip(RoundedCornerShape(12.dp)).background(androidx.compose.ui.graphics.Color.White), contentScale = ContentScale.Fit)
             }
         }
         if (stato.base.foto.isNotEmpty() || stato.fotoNuove.isNotEmpty()) {
@@ -848,6 +1026,23 @@ private fun ColumnScope.PassoRiepilogo(
             }
         }
     }
+
+    // Non va sul PDF del cliente: si vede solo qui.
+    if (r.noteInterne.isNotBlank()) {
+        Scheda {
+            Etichetta("Nota per te")
+            Text(r.noteInterne, style = Testi.testo, color = c.testo)
+        }
+    }
+}
+
+/** Un'immagine scaricata (la firma, il foglio firmato) ridotta al lato dato: una scansione intera pesa troppo. */
+private fun immagineRidotta(byte: ByteArray, lato: Int): Bitmap? {
+    val misure = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    BitmapFactory.decodeByteArray(byte, 0, byte.size, misure)
+    var passo = 1
+    while (maxOf(misure.outWidth, misure.outHeight) / (passo * 2) >= lato) passo *= 2
+    return BitmapFactory.decodeByteArray(byte, 0, byte.size, BitmapFactory.Options().apply { inSampleSize = passo })
 }
 
 @Composable

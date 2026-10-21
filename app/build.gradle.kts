@@ -26,8 +26,8 @@ android {
         targetSdk = 35
         // Il codice decide gli aggiornamenti: quello pubblicato deve essere più alto di quello installato.
         // (-PcodiceVersione=4 -PnomeVersione=0.4.0 solo per provare gli aggiornamenti sull'emulatore.)
-        versionCode = (project.findProperty("codiceVersione") as String?)?.toInt() ?: 7
-        versionName = (project.findProperty("nomeVersione") as String?) ?: "0.3.6"
+        versionCode = (project.findProperty("codiceVersione") as String?)?.toInt() ?: 8
+        versionName = (project.findProperty("nomeVersione") as String?) ?: "0.4.0"
 
         // Indirizzo dell'Apps Script che fa da ponte col foglio Google, e il
         // codice senza il quale lo script non risponde (lo crea preparaFoglio()).
@@ -91,6 +91,36 @@ android {
     // cartella assets di chi l'aveva scaricato. Non serve piu', e dentro l'APK
     // lo porterebbe da una decina di MB a sessanta.
     androidResources { ignoreAssetsPatterns += listOf("!modello-it") }
+}
+
+// I PDF del telefono (rapportino/Stampa.kt) escono dagli stessi modelli di Wisper
+// Ufficio: a ogni build si copiano da pc/ui negli asset dell'app, in ufficio/.
+// Una sola sorgente: si cambia documenti.js e cambiano computer e telefono insieme.
+abstract class CopiaModelliPdf : DefaultTask() {
+    @get:InputFile @get:PathSensitive(PathSensitivity.NONE) abstract val documenti: RegularFileProperty
+    @get:InputFile @get:PathSensitive(PathSensitivity.NONE) abstract val conti: RegularFileProperty
+    @get:InputFile @get:PathSensitive(PathSensitivity.NONE) abstract val carattere: RegularFileProperty
+    @get:OutputDirectory abstract val cartella: DirectoryProperty
+
+    @TaskAction
+    fun copia() {
+        val ufficio = cartella.get().asFile.resolve("ufficio")
+        documenti.get().asFile.copyTo(ufficio.resolve("documenti.js"), overwrite = true)
+        conti.get().asFile.copyTo(ufficio.resolve("conti.js"), overwrite = true)
+        carattere.get().asFile.copyTo(ufficio.resolve("font/Figtree.ttf"), overwrite = true)
+    }
+}
+
+androidComponents {
+    onVariants { variant ->
+        val ui = rootProject.layout.projectDirectory.dir("pc/ui")
+        val copia = tasks.register<CopiaModelliPdf>("copiaModelliPdf" + variant.name.replaceFirstChar { it.uppercase() }) {
+            documenti.set(ui.file("documenti.js"))
+            conti.set(ui.file("conti.js"))
+            carattere.set(ui.file("font/Figtree.ttf"))
+        }
+        variant.sources.assets?.addGeneratedSourceDirectory(copia, CopiaModelliPdf::cartella)
+    }
 }
 
 dependencies {

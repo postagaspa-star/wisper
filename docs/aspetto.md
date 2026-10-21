@@ -104,9 +104,14 @@ Contrasti verificati: testo `#1B1B1F` su giallo 12:1; `#5F5F67` su bianco 6,1:1;
   (Android: scala animazioni a 0; computer: `prefers-reduced-motion`).
 
 ## 2. Telefono: navigazione
-Niente barra in basso: **Oggi** è la casa. Da lì: il rapportino (pulsante grande, "Come ieri", un giorno della
-settimana), il **Mese** (riga "Ottobre · 32,5 h · 1.227,40 €" e i giorni fatti), le **Impostazioni** (cerchio
-con le iniziali in alto a destra). Indietro con il pulsante tondo in alto a sinistra e col gesto di sistema.
+Dalla 0.4.0 c'è una **barra in basso con tre voci, sempre con l'etichetta: Oggi · Rapportini · Ufficio**
+(prototipo approvato il 21/10/2026, `docs/prototipo/TelefonoUfficio.html`; tutto il dettaglio in
+`docs/telefono-ufficio.md`). **Oggi** resta la casa e non cambia. **Rapportini** prende il posto del Mese
+(ricerca, mesi, Tutti | Da fatturare | Da firmare, selezione). **Ufficio** porta sul telefono tutto Wisper Ufficio:
+si apre sulla fine del mese, poi Commesse, Clienti e Impostazioni. Barra bianca col bordo sopra, voce aperta su
+giallo tenue, numerino giallo su Ufficio coi clienti da fatturare; sparisce nei moduli e nell'invio (si esce con la
+×). Ogni sezione ha la sua pila di pagine: indietro col pulsante tondo in alto a sinistra e col gesto di sistema;
+toccare la sezione aperta torna alla sua prima pagina. Le Impostazioni si aprono anche dal cerchio con le iniziali.
 
 ## 3. Oggi (casa)
 Come `docs/prototipo/Main.dc.html`:

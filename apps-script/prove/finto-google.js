@@ -87,6 +87,7 @@ function comeFogli(v) {
 
 const fogli = new Map();
 const Cartella = {
+  getId: () => 'foglio-finto',
   getSheetByName: n => fogli.get(n) || null,
   insertSheet: n => { const f = new Foglio(n); fogli.set(n, f); return f; },
   getSheets: () => Array.from(fogli.values()),
@@ -137,7 +138,11 @@ const radiceDrive = new CartellaFinta('Il mio Drive', null);
 const DriveApp = {
   createFolder: n => radiceDrive.createFolder(n),
   getFolderById: id => { const e = elementi.get(id); if (!(e instanceof CartellaFinta)) throw new Error('cartella inesistente'); return e; },
-  getFileById: id => { const e = elementi.get(id); if (!(e instanceof FileFinto)) throw new Error('file inesistente'); return e; },
+  getFileById: id => {
+    // Il foglio stesso, visto da Drive: serve solo a sapere di chi e'.
+    if (id === 'foglio-finto') return { getOwner: () => ({ getEmail: () => 'proprietario@example.com' }) };
+    const e = elementi.get(id); if (!(e instanceof FileFinto)) throw new Error('file inesistente'); return e;
+  },
 };
 
 // ------------------------------------------------------------------ il resto di Google
@@ -198,6 +203,7 @@ const MailApp = {
     (opzioni.attachments || []).forEach(b => fs.writeFileSync(path.join(dir, b.nome), b.bytes));
     console.log('[posta] a ' + a + ': ' + oggetto + ' (' + (opzioni.attachments || []).length + ' allegati) -> ' + dir);
   },
+  getRemainingDailyQuota: () => 100,
 };
 
 const contesto = {

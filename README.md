@@ -44,6 +44,17 @@ said was "this is one step too many".
 - Everything goes to a file first and WorkManager sends it when there is signal,
   even with the app closed. Without signal a calm grey pill says so: "1
   rapportino parte appena c'è rete". Red only if the sheet refuses something.
+- **The office on the phone too** (0.4.0, `docs/telefono-ufficio.md`): a bottom
+  bar *Oggi · Rapportini · Ufficio*. *Ufficio* opens on the month end like the
+  computer (ready to invoice per client, **Prepara riepilogo** with the real PDF
+  as preview, send by email or share, **Segna fatturati** with Annulla), then
+  jobs (budget, margin, the five tabs, Drive documents), clients and every
+  setting. *Rapportini* has search, months, filters and multi-select; an opened
+  report has one yellow button per state and the computer's ⋯ menu. The PDFs are
+  made on the phone from the same templates as the computer (`pc/ui/documenti.js`
+  copied into the app at build time), printed by a hidden WebView. State changes
+  queue offline like reports; emails, clients, jobs and settings need signal, and
+  an email is never retried by itself.
 
 **Wisper Ufficio** (`pc/`, C# .NET 8, WebView2, built like Pactum). The main
 program, because invoicing is done at a desk. One file, `WisperUfficio.exe`, with
@@ -184,6 +195,15 @@ read back right and fixed in the sheet on the first request.
 
 After every change to `Code.gs`: Deploy → Manage deployments → edit → New
 version, or the address keeps serving the old code.
+
+**Permissions.** The script needs to know the sheet owner's email (connect-computer
+email, access-log notices, "send it to me"). `Session.getEffectiveUser()` needs the
+`https://www.googleapis.com/auth/userinfo.email` scope; a project whose
+`appsscript.json` lists `oauthScopes` by hand without it fails with "Le autorizzazioni
+specificate non sono sufficienti". The script then asks Drive who owns the sheet.
+Run `autorizza()` from the editor after pasting a new version: Google asks for any
+missing permission, and the execution log says whether the owner's email can be read
+and how many emails are left for the day. It changes nothing in the sheet.
 
 ## Updates
 

@@ -11,6 +11,8 @@ mai dati veri di clienti.
 
 | Data | Versione | In breve |
 |------|----------|----------|
+| 21/10/2026 | 0.4.0 | [Tutto l'ufficio anche sul telefono](#v0-4-0) |
+| 20/10/2026 | solo foglio | [Il foglio trova l'email del proprietario anche senza il permesso apposta](#permesso-email) |
 | 20/10/2026 | solo foglio | [L'email per collegare il computer serve anche a installare Wisper Ufficio](#installa-da-email) |
 | 20/10/2026 | 0.3.6 | [Il computer si collega dal telefono; la settimana sta sopra a oggi](#v0-3-6) |
 | 20/10/2026 | 0.3.5 | [Codici commessa 26ST, Elettrodinamica a tariffa fissa, budget e margine](#v0-3-5) |
@@ -22,6 +24,98 @@ mai dati veri di clienti.
 | 26/09–14/10/2026 | 0.1 | [Un rapportino confermato non si perde più](#coda) |
 | 7–9/08/2026 | 0.1.0 | [Hackathon NGN Hacks: la versione a voce, senza mani](#v0-1-0) |
 | marzo–giugno 2026 | prima del repository | [Le prime versioni](#prima) |
+
+---
+
+<a id="v0-4-0"></a>
+## 21 ottobre 2026 · 0.4.0 · Tutto l'ufficio anche sul telefono
+
+**Perché.** Il papà ha chiesto di *"portare tutto quello che c'è sul computer anche sul telefono"*, e
+*"letteralmente tutto"*. Il computer resta il posto principale: sul telefono l'ufficio serve quando è in giro,
+per fatturare, guardare una commessa o mandare un PDF. Prima è stato fatto un prototipo da toccare, partendo da una
+ricerca su come le app migliori di questo tipo (fatture, ore, lavori sul campo) mettono l'ufficio sul telefono. Il
+prototipo è stato approvato, poi sono state costruite le schermate vere
+([`docs/telefono-ufficio.md`](docs/telefono-ufficio.md), prototipo in
+[`docs/prototipo/TelefonoUfficio.html`](docs/prototipo/TelefonoUfficio.html)).
+
+**Cosa cambia.**
+
+- **Una barra in basso con tre voci: Oggi · Rapportini · Ufficio.** Oggi non cambia; il numerino giallo su Ufficio
+  dice quanti clienti ci sono da fatturare.
+- **Ufficio** si apre sulla fine del mese, come Wisper Ufficio: da fatturare, da firmare, fatturato; una scheda per
+  cliente con *Prepara riepilogo*; le bozze da far firmare; le commesse vicine al budget o oltre; poi Commesse,
+  Clienti e Impostazioni.
+- **Il riepilogo si prepara e si manda dal telefono.** L'anteprima è il PDF vero, che si apre a tutto schermo con lo
+  zoom. Si sceglie se mettere gli importi e le foto degli scontrini, si cambia il messaggio, e si manda per email; in
+  più *Apri il PDF* e *Condividi* (WhatsApp, Gmail…). Poi *Segna fatturati*, con *Annulla* per qualche secondo.
+- **Rapportini** prende il posto del Mese: ricerca, il mese dal titolo (anche tutti i mesi), *Tutti | Da fatturare |
+  Da firmare*, i filtri che arrivano da un cliente o da una commessa, e *Seleziona* per agire su più rapportini.
+- **Il rapportino aperto** ha un solo pulsante giallo, la cosa da fare adesso (Invia al cliente, Segna fatturato,
+  PDF), e nel menu ⋯ le stesse voci del computer, compreso *Carica il foglio firmato*.
+- **Commesse**: elenco con la barra delle ore sul budget, pagina con le cinque schede del computer (Panoramica,
+  Rapportini, Costi, Da fatturare, Documenti su Drive), modulo con ore, prezzo e budget collegati e il margine che si
+  aggiorna mentre si scrive.
+- **Clienti**: elenco, scheda con i contatti da copiare con un tocco, modifica a pagina intera.
+- **Impostazioni complete**: lo studio, la tua firma (rifatta col dito o da una foto), rimborso km e costo orario, il
+  campo ticket.
+- **I PDF si fanno sul telefono dagli stessi modelli del computer**, copiati nell'app quando la si costruisce:
+  rapportino e riepilogo escono identici.
+- **Senza rete**: i cambi di stato (inviato, fatturato, in bozza) partono appena c'è rete, come i rapportini. Email,
+  clienti, commesse e impostazioni vogliono la rete, e un'email non viene mai ripetuta da sola (partirebbe due volte).
+- La visita guidata ha un passo in più, sull'Ufficio.
+
+Le schermate vengono dall'emulatore, collegato al foglio finto delle prove.
+
+<p>
+<img src="docs/diario/2026-10-21-tel-ufficio.png" width="220" alt="Ufficio: la fine del mese">
+<img src="docs/diario/2026-10-21-tel-invio.png" width="220" alt="Il riepilogo con l'anteprima del PDF">
+<img src="docs/diario/2026-10-21-tel-fatturati.png" width="220" alt="Dopo Segna fatturati, con Annulla">
+</p>
+
+<p>
+<img src="docs/diario/2026-10-21-tel-rapportini.png" width="220" alt="Rapportini: ricerca e filtri">
+<img src="docs/diario/2026-10-21-tel-scelti.png" width="220" alt="Più rapportini scelti">
+<img src="docs/diario/2026-10-21-tel-rapportino-firmato.png" width="220" alt="Un rapportino firmato: Invia al cliente">
+</p>
+
+<p>
+<img src="docs/diario/2026-10-21-tel-pdf-rapportino.png" width="220" alt="Il PDF del rapportino fatto sul telefono">
+<img src="docs/diario/2026-10-21-tel-commessa.png" width="220" alt="La pagina della commessa">
+<img src="docs/diario/2026-10-21-tel-commessa-budget.png" width="220" alt="Il modulo della commessa con il budget">
+</p>
+
+<p>
+<img src="docs/diario/2026-10-21-tel-cliente.png" width="220" alt="La scheda del cliente">
+<img src="docs/diario/2026-10-21-tel-impostazioni.png" width="220" alt="Le impostazioni complete">
+<img src="docs/diario/2026-10-21-tel-ufficio-scuro.png" width="220" alt="Ufficio nel tema scuro">
+</p>
+
+Versione: [v0.4.0](https://github.com/postagaspa-star/wisper/releases/tag/v0.4.0)
+
+---
+
+<a id="permesso-email"></a>
+## 20 ottobre 2026 · solo foglio · L'email del proprietario, anche senza permesso
+
+**Perché.** La prima prova vera di *Collega il computer* si è fermata con questo
+errore: *"Le autorizzazioni specificate non sono sufficienti per chiamare
+Session.getEffectiveUser"*. Per leggere l'email di chi possiede il foglio, Google
+vuole un permesso apposta (`userinfo.email`). Quell'errore di solito vuol dire che
+il progetto Apps Script ha l'elenco dei permessi scritto a mano (in
+`appsscript.json`) e quel permesso manca. Lo stesso errore fermava, senza dire
+niente, anche gli avvisi di sicurezza della 0.3.3 (dispositivo nuovo, troppi codici
+sbagliati): con ogni probabilità dal 17 ottobre non ne è arrivato nessuno.
+
+**Cosa cambia.**
+
+- Se il permesso manca, lo script chiede a Drive di chi è il foglio, con il
+  permesso che ha già per le foto. L'email per collegare il computer, gli avvisi
+  del registro e "manda a me" usano tutti questa strada.
+- Una funzione nuova, `autorizza`, da eseguire a mano nell'editor di Apps Script
+  dopo aver incollato una versione nuova: Google chiede i permessi che mancano, e
+  il registro di esecuzione dice se l'email del proprietario si legge e quante
+  email si possono ancora mandare oggi. Non cambia niente nel foglio.
+- Se nemmeno Drive risponde, il telefono dice di eseguire `autorizza`.
 
 ---
 

@@ -1,0 +1,1001 @@
+<title>Wisper Telefono Ufficio</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap">
+<style>
+/* Un telefono vero da toccare: a tutta pagina sul telefono, incorniciato sul computer. Colori e misure da docs/aspetto.md */
+:root {
+  --fondo: #F4F4F2; --scheda: #FFFFFF; --sup: #E7E6E2; --bordo: #E6E5E1; --bordo-campo: #CFCEC9; --riga: #EFEEEB;
+  --testo: #1B1B1F; --testo2: #3F3F46; --tenue: #5F5F67; --tenuissimo: #8A8A92;
+  --giallo: #FFC53D; --giallo-premuto: #F2B21E; --giallo-tenue: #FFF4D6; --giallo-testo: #8A5A00; --giallo-tratteggio: #B98300;
+  --firmato: #1F6A30; --firmato-f: #EBF7EE; --inviato: #1E4FA8; --inviato-f: #EAF1FD; --fatturato: #3F3F46; --fatturato-f: #E7E6E2;
+  --rosso: #C92A2A; --rosso-f: #FDEEEC; --rosso-t: #9B1C1C; --ambra: #E59F00; --binario: #E2E1DD;
+  --nero: #1B1B1F; --su-nero: #FFFFFF; --velo: rgba(20,20,22,.45); --scelta: #FFF8E5; --cornice: #D9D8D3; --palco: #ECEBE7;
+  --blu-f: #EAF1FD; --blu-t: #1E4FA8; --verde-f: #EBF7EE; --verde-t: #1F6A30; --viola-f: #F1ECFE; --viola-t: #5532C9; --ambra-f: #FBF3E3; --ambra-t: #8A5A12;
+  --font: 'Figtree', system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --fondo: #121214; --scheda: #1C1C1F; --sup: #2A2A2E; --bordo: #2C2C30; --bordo-campo: #46464D; --riga: #2A2A2E;
+  --testo: #F2F2F3; --testo2: #D4D4D8; --tenue: #A1A1AA; --tenuissimo: #71717A;
+  --giallo-tenue: #3A2F14; --giallo-testo: #FFD76A; --giallo-tratteggio: #C99A2A;
+  --firmato: #8CE0A4; --firmato-f: #1E3326; --inviato: #9EC1FF; --inviato-f: #1C2A44; --fatturato: #D4D4D8; --fatturato-f: #2A2A2E;
+  --rosso: #E03131; --rosso-f: #3A1C1C; --rosso-t: #FFA8A8; --binario: #2C2C30;
+  --nero: #F2F2F3; --su-nero: #1B1B1F; --velo: rgba(0,0,0,.6); --scelta: #2A2414; --cornice: #2C2C30; --palco: #0B0B0C;
+  --blu-f: #1C2A44; --blu-t: #9EC1FF; --verde-f: #1E3326; --verde-t: #8CE0A4; --viola-f: #2A2340; --viola-t: #C4B5FD; --ambra-f: #33281A; --ambra-t: #F2C27A;
+  color-scheme: dark;
+} }
+:root[data-theme="dark"] {
+  --fondo: #121214; --scheda: #1C1C1F; --sup: #2A2A2E; --bordo: #2C2C30; --bordo-campo: #46464D; --riga: #2A2A2E;
+  --testo: #F2F2F3; --testo2: #D4D4D8; --tenue: #A1A1AA; --tenuissimo: #71717A;
+  --giallo-tenue: #3A2F14; --giallo-testo: #FFD76A; --giallo-tratteggio: #C99A2A;
+  --firmato: #8CE0A4; --firmato-f: #1E3326; --inviato: #9EC1FF; --inviato-f: #1C2A44; --fatturato: #D4D4D8; --fatturato-f: #2A2A2E;
+  --rosso: #E03131; --rosso-f: #3A1C1C; --rosso-t: #FFA8A8; --binario: #2C2C30;
+  --nero: #F2F2F3; --su-nero: #1B1B1F; --velo: rgba(0,0,0,.6); --scelta: #2A2414; --cornice: #2C2C30; --palco: #0B0B0C;
+  --blu-f: #1C2A44; --blu-t: #9EC1FF; --verde-f: #1E3326; --verde-t: #8CE0A4; --viola-f: #2A2340; --viola-t: #C4B5FD; --ambra-f: #33281A; --ambra-t: #F2C27A;
+  color-scheme: dark;
+}
+html, body { height: 100%; margin: 0; }
+body { background: var(--palco); color: var(--testo); font-family: var(--font); -webkit-tap-highlight-color: transparent; }
+* { box-sizing: border-box; }
+button { font-family: inherit; color: inherit; }
+.palco { min-height: 100%; display: flex; align-items: center; justify-content: center; gap: 40px; padding-block: 24px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.telefono { width: 390px; height: 844px; position: relative; overflow: hidden; background: var(--fondo); border-radius: 44px;
+  border: 10px solid var(--cornice); box-shadow: 0 30px 80px rgba(20,20,22,.18); flex: none; }
+.accanto { max-width: 300px; display: flex; flex-direction: column; gap: 12px; color: var(--testo2); font-size: 15px; line-height: 1.45; }
+.accanto h1 { margin: 0; font-size: 26px; font-weight: 800; letter-spacing: -0.5px; color: var(--testo); text-wrap: balance; }
+.accanto .pill-proto { align-self: flex-start; font-size: 12px; font-weight: 800; letter-spacing: .08em; background: var(--giallo); color: #1B1B1F; border-radius: 999px; padding: 4px 10px; }
+.accanto ol { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; }
+@media (max-width: 760px) { .accanto { display: none; } }
+@media (max-width: 520px) {
+  .palco { padding: 0; display: block; height: 100%; }
+  .telefono { width: 100%; height: 100%; border: none; border-radius: 0; box-shadow: none; }
+}
+
+/* ---------- schermate ---------- */
+.schermi { position: absolute; inset: 0; }
+.schermo { position: absolute; inset: 0; overflow-y: auto; overflow-x: hidden; padding: 10px 20px 120px; display: flex; flex-direction: column; gap: 14px; scrollbar-width: none; }
+.schermo::-webkit-scrollbar { display: none; }
+.schermo > * { flex-shrink: 0; }
+.schermo.con-barra { padding-bottom: 170px; }
+.schermo.compito { padding-bottom: 230px; }
+.entra-avanti { animation: avanti 260ms cubic-bezier(.2,.8,.2,1); }
+.entra-indietro { animation: indietro 260ms cubic-bezier(.2,.8,.2,1); }
+.entra-sfuma { animation: sfuma 200ms ease-out; }
+@keyframes avanti { from { opacity: 0; transform: translateX(28px); } }
+@keyframes indietro { from { opacity: 0; transform: translateX(-28px); } }
+@keyframes sfuma { from { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .entra-avanti, .entra-indietro, .entra-sfuma { animation: none; } * { transition: none !important; } }
+
+.testa { display: flex; align-items: center; justify-content: space-between; min-height: 48px; gap: 8px; }
+.testa .sx, .testa .dx { display: flex; align-items: center; gap: 8px; }
+.marchio { display: flex; align-items: center; gap: 10px; font-size: 19px; font-weight: 800; letter-spacing: -0.3px; }
+.tondo { width: 44px; height: 44px; border-radius: 22px; border: none; background: var(--sup); display: flex; align-items: center; justify-content: center; cursor: pointer; flex: none; font-size: 15px; font-weight: 800; }
+.tondo:focus-visible, .btn:focus-visible, .riga:focus-visible, .tab:focus-visible, .seg button:focus-visible, .chip:focus-visible { outline: 3px solid var(--giallo-testo); outline-offset: 2px; }
+.data { font-size: 15px; font-weight: 600; color: var(--tenue); }
+h1.tit { margin: 0; font-size: 30px; line-height: 1.15; font-weight: 800; letter-spacing: -0.6px; text-wrap: balance; }
+.sotto-tit { font-size: 15px; font-weight: 600; color: var(--tenue); margin-top: -8px; }
+.etichetta { font-size: 12px; font-weight: 700; letter-spacing: .08em; color: var(--tenue); text-transform: uppercase; }
+.sez { display: flex; align-items: baseline; justify-content: space-between; margin-top: 6px; }
+.sez .etichetta { color: var(--testo2); font-weight: 800; font-size: 13px; letter-spacing: .06em; }
+.sez .val { font-size: 15px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.scheda { background: var(--scheda); border: 1px solid var(--bordo); border-radius: 24px; padding: 18px 20px; display: flex; flex-direction: column; gap: 14px; }
+.scheda.stretta { padding: 0 14px; gap: 0; border-radius: 22px; }
+.scheda h2 { margin: 0; font-size: 18px; font-weight: 800; }
+.grande { font-size: 22px; font-weight: 800; letter-spacing: -0.3px; }
+.numero { font-size: 28px; font-weight: 800; letter-spacing: -0.5px; font-variant-numeric: tabular-nums; }
+.tenue { color: var(--tenue); }
+.piccolo { font-size: 14px; font-weight: 500; }
+.riquadri { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 8px; }
+.riquadro { background: var(--scheda); border: 1px solid var(--bordo); border-radius: 18px; padding: 12px 12px; display: flex; flex-direction: column; gap: 2px; text-align: left; cursor: pointer; font: inherit; color: inherit; }
+.riquadro .k { font-size: 13px; font-weight: 700; color: var(--tenue); }
+.riquadro .v { font-size: 20px; font-weight: 800; white-space: nowrap; font-variant-numeric: tabular-nums; letter-spacing: -0.3px; }
+.riquadro .n { font-size: 12px; font-weight: 600; color: var(--tenue); }
+.riquadro.acceso { border-color: var(--giallo-tratteggio); }
+
+.btn { height: 64px; border-radius: 18px; border: none; background: var(--giallo); color: #1B1B1F; display: flex; align-items: center; justify-content: center; gap: 10px; font-size: 18px; font-weight: 800; cursor: pointer; width: 100%; transition: background 150ms; }
+.btn:active { background: var(--giallo-premuto); }
+.btn.medio { height: 52px; font-size: 16px; border-radius: 16px; }
+.btn.bordo { background: transparent; border: 1.5px solid var(--bordo-campo); color: var(--testo); font-size: 16px; font-weight: 700; }
+.btn.testo { background: none; height: 48px; font-size: 16px; font-weight: 700; color: var(--testo); }
+.btn.pericolo { background: var(--rosso); color: #fff; }
+.btn.spento { background: var(--sup); color: var(--tenuissimo); }
+.fila { display: flex; gap: 10px; }
+.fila > * { flex: 1; }
+.galleggia { position: absolute; left: 0; right: 0; bottom: 84px; padding: 14px 20px 12px; background: linear-gradient(color-mix(in srgb, var(--fondo) 0%, transparent), var(--fondo) 30%); z-index: 4; }
+.fondo-compito { position: absolute; left: 0; right: 0; bottom: 0; padding: 14px 20px 22px; background: linear-gradient(color-mix(in srgb, var(--fondo) 0%, transparent), var(--fondo) 24%); z-index: 4; display: flex; flex-direction: column; gap: 6px; }
+
+.riga { display: flex; align-items: center; gap: 12px; min-height: 72px; border: none; border-bottom: 1px solid var(--riga); background: none; width: 100%; text-align: left; padding: 0; cursor: pointer; font: inherit; color: inherit; }
+.riga:last-child { border-bottom: none; }
+.riga .giorno { width: 40px; display: flex; flex-direction: column; align-items: center; flex: none; }
+.riga .giorno b { font-size: 22px; font-weight: 800; line-height: 1.1; }
+.riga .giorno span { font-size: 12px; font-weight: 600; color: var(--tenue); }
+.riga .mezzo { flex: 1; display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.riga .mezzo b { font-size: 16px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.riga .mezzo span { font-size: 14px; color: var(--tenue); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.riga .fine { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex: none; }
+.riga .fine b { font-size: 16px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.riga.scelta { background: var(--scelta); }
+.voce { display: flex; align-items: center; gap: 14px; min-height: 64px; border: none; border-bottom: 1px solid var(--riga); background: none; width: 100%; text-align: left; padding: 8px 0; cursor: pointer; font: inherit; color: inherit; }
+.voce:last-child { border-bottom: none; }
+.voce .mezzo { flex: 1; display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.voce .mezzo b { font-size: 16px; font-weight: 800; }
+.voce .mezzo span { font-size: 14px; color: var(--tenue); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.voce .valore { font-size: 15px; font-weight: 700; color: var(--testo2); text-align: right; font-variant-numeric: tabular-nums; }
+.voce.ferma { cursor: default; }
+
+.stato { font-size: 12px; font-weight: 700; border-radius: 999px; padding: 2px 9px; white-space: nowrap; }
+.stato.bozza { color: var(--giallo-testo); background: var(--giallo-tenue); }
+.stato.firmato { color: var(--firmato); background: var(--firmato-f); }
+.stato.inviato { color: var(--inviato); background: var(--inviato-f); }
+.stato.fatturato { color: var(--fatturato); background: var(--fatturato-f); }
+.stato.aperta { color: var(--firmato); background: var(--firmato-f); }
+.stato.sospesa { color: var(--giallo-testo); background: var(--giallo-tenue); }
+.stato.chiusa { color: var(--fatturato); background: var(--fatturato-f); }
+.stato.avviso { color: var(--giallo-testo); background: var(--giallo-tenue); }
+.stato.oltre { color: var(--rosso-t); background: var(--rosso-f); }
+.codice { font-size: 13px; font-weight: 800; background: var(--nero); color: var(--giallo); border-radius: 8px; padding: 3px 8px; letter-spacing: .02em; font-variant-numeric: tabular-nums; flex: none; }
+:root[data-theme="dark"] .codice { color: #1B1B1F; background: var(--giallo); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .codice { color: #1B1B1F; background: var(--giallo); } }
+.iniz { width: 44px; height: 44px; border-radius: 22px; display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 800; flex: none; }
+.iniz.grande { width: 64px; height: 64px; border-radius: 32px; font-size: 22px; }
+.iniz.blu { background: var(--blu-f); color: var(--blu-t); } .iniz.verde { background: var(--verde-f); color: var(--verde-t); }
+.iniz.viola { background: var(--viola-f); color: var(--viola-t); } .iniz.ambra { background: var(--ambra-f); color: var(--ambra-t); }
+
+.cerca { height: 52px; border-radius: 16px; border: 1.5px solid var(--bordo-campo); background: var(--scheda); display: flex; align-items: center; gap: 10px; padding: 0 14px; }
+.cerca input { border: none; background: none; outline: none; font: inherit; font-size: 16px; font-weight: 500; color: var(--testo); flex: 1; min-width: 0; }
+.cerca:focus-within { border-color: var(--testo); }
+.seg { display: flex; background: var(--sup); border-radius: 14px; padding: 4px; gap: 4px; }
+.seg button { flex: 1; height: 44px; border: none; border-radius: 11px; background: none; font-size: 15px; font-weight: 700; cursor: pointer; color: var(--testo2); white-space: nowrap; }
+.seg button.su { background: var(--scheda); color: var(--testo); font-weight: 800; box-shadow: 0 1px 0 var(--bordo); }
+.seg button .q { font-weight: 600; color: var(--tenue); margin-left: 4px; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { height: 40px; border-radius: 999px; border: none; background: var(--giallo-tenue); color: var(--giallo-testo); display: inline-flex; align-items: center; gap: 6px; padding: 0 8px 0 14px; font-size: 15px; font-weight: 700; cursor: pointer; }
+.riassunto { font-size: 14px; font-weight: 600; color: var(--tenue); font-variant-numeric: tabular-nums; }
+.vuoto { text-align: center; padding: 28px 12px; color: var(--tenue); font-size: 15px; font-weight: 600; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+
+/* barra del budget: valore, lineetta del 100%, colore solo vicino o oltre */
+.budget { position: relative; height: 12px; border-radius: 6px; background: var(--binario); overflow: visible; }
+.budget i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 6px; background: var(--testo); }
+.budget i.vicina { background: var(--ambra); } .budget i.oltre { background: var(--rosso); }
+.budget u { position: absolute; top: -4px; bottom: -4px; width: 3px; border-radius: 2px; background: var(--testo); }
+.budget.basso { height: 8px; } .budget.basso u { top: -3px; bottom: -3px; width: 2px; }
+.tre { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 10px; }
+.tre div { display: flex; flex-direction: column; gap: 2px; }
+.tre .k { font-size: 13px; font-weight: 700; color: var(--tenue); }
+.tre .v { font-size: 19px; font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; letter-spacing: -0.3px; }
+
+/* campi dei moduli */
+.campo { display: flex; flex-direction: column; gap: 6px; }
+.campo label, .campo .lab { font-size: 14px; font-weight: 700; color: var(--testo2); }
+.campo input, .campo textarea { height: 56px; border-radius: 16px; border: 1.5px solid var(--bordo-campo); background: var(--scheda); padding: 0 16px; font: inherit; font-size: 17px; font-weight: 600; color: var(--testo); outline: none; width: 100%; font-variant-numeric: tabular-nums; }
+.campo textarea { height: 96px; padding: 14px 16px; font-weight: 500; line-height: 1.45; resize: none; }
+.campo input:focus, .campo textarea:focus { border-color: var(--testo); }
+.campo .unita { position: relative; }
+.campo .unita input { padding-right: 56px; }
+.campo .unita em { position: absolute; right: 16px; top: 50%; transform: translateY(-50%); font-style: normal; font-weight: 700; color: var(--tenue); font-size: 15px; }
+.campi2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.calcolato input { background: var(--fondo); }
+.interr { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 56px; }
+.interr b { font-size: 16px; font-weight: 800; }
+.sw { width: 52px; height: 32px; border-radius: 16px; background: var(--bordo-campo); position: relative; border: none; cursor: pointer; flex: none; transition: background 150ms; }
+.sw::after { content: ''; position: absolute; top: 4px; left: 4px; width: 24px; height: 24px; border-radius: 12px; background: #fff; transition: transform 180ms; }
+.sw.si { background: var(--testo); } .sw.si::after { transform: translateX(20px); }
+:root[data-theme="dark"] .sw.si::after { background: #1B1B1F; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .sw.si::after { background: #1B1B1F; } }
+.sino { display: flex; background: var(--sup); border-radius: 12px; padding: 3px; }
+.sino button { width: 56px; height: 40px; border: none; border-radius: 10px; background: none; font-weight: 700; font-size: 15px; cursor: pointer; color: var(--testo2); }
+.sino button.su { background: var(--scheda); color: var(--testo); font-weight: 800; }
+.margine-riga { display: flex; justify-content: space-between; align-items: baseline; padding: 12px 14px; border-radius: 14px; background: var(--fondo); font-size: 15px; font-weight: 700; }
+.margine-riga b { font-size: 20px; font-weight: 800; font-variant-numeric: tabular-nums; }
+
+/* passi del rapportino */
+.passi { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.passi div { display: flex; flex-direction: column; gap: 6px; font-size: 12px; font-weight: 700; color: var(--tenue); }
+.passi div i { height: 6px; border-radius: 3px; background: var(--binario); }
+.passi div.fatto i { background: var(--testo); } .passi div.ora { color: var(--testo); font-weight: 800; }
+.passi div.ora i { background: var(--giallo); }
+.lavoro { background: var(--fondo); border-radius: 14px; padding: 12px 14px; font-size: 16px; font-weight: 500; line-height: 1.45; }
+.conto { display: flex; flex-direction: column; gap: 6px; font-variant-numeric: tabular-nums; }
+.conto div { display: flex; justify-content: space-between; font-size: 15px; font-weight: 600; color: var(--testo2); }
+.conto .tot { padding-top: 8px; border-top: 1px solid var(--riga); align-items: baseline; font-size: 16px; font-weight: 800; color: var(--testo); }
+.conto .tot b { font-size: 30px; letter-spacing: -0.5px; }
+
+/* anteprima del PDF */
+.foglio-pdf { background: #fff; color: #1B1B1F; border-radius: 6px; box-shadow: 0 1px 0 rgba(0,0,0,.06), 0 6px 20px rgba(20,20,22,.10); padding: 16px 16px 12px; font-size: 7.5px; line-height: 1.35; aspect-ratio: 210 / 297; display: flex; flex-direction: column; gap: 7px; cursor: zoom-in; width: 100%; max-width: 100%; }
+.foglio-pdf .ph { display: flex; justify-content: space-between; border-bottom: 1px solid #1B1B1F; padding-bottom: 5px; }
+.foglio-pdf .ph b { font-size: 9px; } .foglio-pdf .ph span { text-align: right; color: #5F5F67; }
+.foglio-pdf h3 { margin: 2px 0 0; font-size: 11px; font-weight: 800; }
+.foglio-pdf table, .foglio-pdf td, .foglio-pdf h3, .foglio-pdf b { color: #1B1B1F; }
+.foglio-pdf table { font-size: inherit; width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.foglio-pdf th { text-align: left; font-weight: 700; color: #5F5F67; border-bottom: 1px solid #CFCEC9; padding: 3px 2px; }
+.foglio-pdf td { border-bottom: 1px solid #EFEEEB; padding: 3px 2px; vertical-align: top; }
+.foglio-pdf td.r, .foglio-pdf th.r { white-space: nowrap; }
+.foglio-pdf .r { text-align: right; }
+.foglio-pdf .totale { margin-top: auto; display: flex; justify-content: flex-end; gap: 14px; font-size: 9px; font-weight: 800; border-top: 1px solid #1B1B1F; padding-top: 5px; }
+.foglio-pdf .piede { display: flex; justify-content: space-between; color: #8A8A92; font-size: 6.5px; }
+.anteprima-cornice { background: var(--sup); border-radius: 20px; padding: 18px 46px; }
+
+.titolo-mese { display: flex; align-items: center; gap: 6px; border: none; background: none; padding: 0; cursor: pointer; color: var(--testo); text-align: left; align-self: flex-start; }
+.schede-chip { display: flex; gap: 8px; overflow-x: auto; margin: 0 -20px; padding: 2px 20px; scrollbar-width: none; }
+.schede-chip::-webkit-scrollbar { display: none; }
+.schede-chip button { flex: none; height: 44px; border-radius: 999px; border: 1.5px solid var(--bordo-campo); background: var(--scheda); padding: 0 16px; font-size: 15px; font-weight: 700; cursor: pointer; color: var(--testo2); }
+.schede-chip button.su { background: var(--nero); border-color: var(--nero); color: var(--su-nero); font-weight: 800; }
+/* barra in basso */
+.barra { position: absolute; left: 0; right: 0; bottom: 0; height: 84px; background: var(--scheda); border-top: 1px solid var(--bordo); display: grid; grid-template-columns: repeat(3, 1fr); padding: 6px 8px 14px; z-index: 6; transition: transform 220ms; }
+.barra.via { transform: translateY(100%); }
+.tab { border: none; background: none; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; cursor: pointer; font-size: 13px; font-weight: 700; color: var(--tenue); position: relative; }
+.tab .ico { width: 64px; height: 32px; border-radius: 16px; display: flex; align-items: center; justify-content: center; transition: background 180ms; position: relative; }
+.tab.su { color: var(--testo); font-weight: 800; }
+.tab.su .ico { background: var(--giallo-tenue); }
+.tab .bollo { position: absolute; top: -2px; right: 10px; min-width: 20px; height: 20px; border-radius: 10px; background: var(--giallo); color: #1B1B1F; font-size: 12px; font-weight: 800; display: flex; align-items: center; justify-content: center; padding: 0 5px; border: 2px solid var(--scheda); }
+
+/* fogli dal basso, avvisi */
+.velo { position: absolute; inset: 0; background: var(--velo); z-index: 20; opacity: 0; transition: opacity 200ms; }
+.velo.su { opacity: 1; }
+.foglio { position: absolute; left: 0; right: 0; bottom: 0; background: var(--scheda); border-radius: 28px 28px 0 0; padding: 10px 20px 24px; z-index: 21; transform: translateY(100%); transition: transform 260ms cubic-bezier(.2,.8,.2,1); display: flex; flex-direction: column; gap: 12px; max-height: 88%; overflow-y: auto; }
+.foglio.su { transform: none; }
+.foglio .maniglia { width: 40px; height: 5px; border-radius: 3px; background: var(--bordo-campo); align-self: center; margin-bottom: 4px; }
+.foglio h2 { margin: 0; font-size: 22px; font-weight: 800; letter-spacing: -0.3px; }
+.foglio p { margin: 0; font-size: 16px; line-height: 1.45; color: var(--testo2); }
+.menu-voce { display: flex; align-items: center; gap: 14px; min-height: 56px; border: none; background: none; width: 100%; text-align: left; font-size: 17px; font-weight: 700; cursor: pointer; border-bottom: 1px solid var(--riga); padding: 0 4px; }
+.menu-voce:last-child { border-bottom: none; }
+.menu-voce.rosso { color: var(--rosso-t); }
+.menu-voce.spenta { color: var(--tenuissimo); cursor: default; }
+.avviso { position: absolute; left: 20px; right: 20px; bottom: 100px; background: #1B1B1F; color: #fff; border-radius: 16px; padding: 14px 16px; font-size: 15px; font-weight: 600; display: flex; align-items: center; justify-content: space-between; gap: 12px; z-index: 30; opacity: 0; transform: translateY(12px); transition: opacity 200ms, transform 200ms; pointer-events: none; }
+:root[data-theme="dark"] .avviso { background: #F2F2F3; color: #1B1B1F; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .avviso { background: #F2F2F3; color: #1B1B1F; } }
+.avviso.su { opacity: 1; transform: none; pointer-events: auto; }
+.avviso button { background: none; border: none; color: var(--giallo); font-weight: 800; font-size: 15px; cursor: pointer; padding: 6px; }
+:root[data-theme="dark"] .avviso button { color: #8A5A00; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .avviso button { color: #8A5A00; } }
+.anteprima-grande { position: absolute; inset: 0; z-index: 25; background: var(--velo); display: flex; flex-direction: column; padding: 16px; gap: 12px; }
+.anteprima-grande .foglio-pdf { font-size: 9.5px; cursor: zoom-out; }
+.spunta-ok { width: 22px; height: 22px; border-radius: 11px; background: var(--firmato-f); display: inline-flex; align-items: center; justify-content: center; flex: none; }
+.legenda { display: flex; justify-content: space-between; font-size: 13px; font-weight: 600; color: var(--tenue); font-variant-numeric: tabular-nums; }
+.firma-img { height: 70px; border-bottom: 1.5px solid var(--bordo-campo); display: flex; align-items: flex-end; padding-bottom: 6px; }
+.doc { width: 40px; height: 40px; border-radius: 12px; background: var(--sup); display: flex; align-items: center; justify-content: center; flex: none; }
+.selez { width: 26px; height: 26px; border-radius: 8px; border: 2px solid var(--bordo-campo); display: flex; align-items: center; justify-content: center; flex: none; }
+.selez.si { background: var(--testo); border-color: var(--testo); }
+.barra-scelta { position: absolute; left: 12px; right: 12px; bottom: 96px; background: var(--nero); color: var(--su-nero); border-radius: 20px; padding: 12px 12px 12px 16px; z-index: 7; display: flex; align-items: center; gap: 10px; }
+.barra-scelta .q { flex: 1; display: flex; flex-direction: column; font-size: 15px; font-weight: 800; }
+.barra-scelta .q span { font-size: 13px; font-weight: 600; opacity: .75; font-variant-numeric: tabular-nums; }
+.barra-scelta button { height: 44px; border-radius: 12px; border: none; padding: 0 14px; font-size: 15px; font-weight: 800; cursor: pointer; background: var(--giallo); color: #1B1B1F; }
+.barra-scelta button.sec { background: transparent; color: var(--su-nero); border: 1.5px solid color-mix(in srgb, var(--su-nero) 40%, transparent); }
+</style>
+
+<div class="palco">
+  <div class="telefono" id="tel">
+    <div class="schermi" id="schermi"></div>
+    <nav class="barra" id="barra" aria-label="Sezioni">
+      <button class="tab" data-tab="oggi"><span class="ico" data-ico="oggi"></span>Oggi</button>
+      <button class="tab" data-tab="rapportini"><span class="ico" data-ico="rapportini"></span>Rapportini</button>
+      <button class="tab" data-tab="ufficio"><span class="ico" data-ico="ufficio"></span>Ufficio</button>
+    </nav>
+    <div class="velo" id="velo" hidden></div>
+    <div class="foglio" id="foglio" role="dialog" aria-modal="true" hidden></div>
+    <div class="avviso" id="avviso" role="status"><span id="avviso-testo"></span><button id="avviso-azione" hidden>Annulla</button></div>
+  </div>
+  <aside class="accanto">
+    <span class="pill-proto">PROTOTIPO</span>
+    <h1>L'ufficio di Wisper, sul telefono</h1>
+    <p>Tutto quello che fa Wisper Ufficio, toccabile. Dati di esempio: niente parte, niente si salva.</p>
+    <ol>
+      <li><b>Ufficio</b> in basso: la fine del mese.</li>
+      <li><b>Prepara riepilogo</b>, poi <b>Invia per email</b> e <b>Segna fatturati</b>.</li>
+      <li><b>Rapportini</b>: cerca, filtra, <b>Seleziona</b>.</li>
+      <li>Una commessa, un cliente, le impostazioni.</li>
+    </ol>
+  </aside>
+</div>
+
+<script>
+'use strict';
+// ------------------------------------------------------------------ dati di esempio
+const OGGI = { giorno: 27, nome: 'Martedì 27 ottobre' };
+const CLIENTI = [
+  { id: 'el', nome: 'Elettrodinamica', iniz: 'EL', col: 'blu', fissa: 30, costoFisso: 22, viaggio: false, km: true, piva: '01234560248', indirizzo: 'Via dell\'Industria 12, 36016 Thiene (VI)', email: 'amministrazione@elettrodinamica.example', tel: '0445 000000', alias: ['Batokyo'] },
+  { id: 'ro', nome: 'Rossi Impianti Srl', iniz: 'RI', col: 'verde', fissa: null, ultima: 42, viaggio: false, km: true, piva: '03456780245', indirizzo: 'Via Roma 4, 36063 Marostica (VI)', email: 'ufficio@rossiimpianti.example', tel: '0424 000000', note: 'Fatture a fine mese, riepilogo con gli importi.' },
+  { id: 've', nome: 'Verdi Impianti', iniz: 'VI', col: 'viola', fissa: null, ultima: 45, viaggio: true, km: true, piva: '04567890246', indirizzo: 'Via Monte Grappa 9, 36061 Bassano (VI)', email: 'info@verdiimpianti.example', tel: '' },
+  { id: 'ne', nome: 'Neri Automazioni', iniz: 'NA', col: 'ambra', fissa: null, ultima: 42, viaggio: false, km: true, piva: '05678900247', indirizzo: 'Zona industriale 3, 36010 Zanè (VI)', email: 'amministrazione@neriautomazioni.example', tel: '0445 111111' },
+];
+const COMMESSE = [
+  { cod: '26ST001', nome: 'Nuovo magazzino automatico', cli: 'el', stato: 'aperta', dal: '1 settembre', dove: 'Batokyo, Schio', ore: 18, budgetOre: 60, prezzo: 30, costo: 22, euroKm: 0.76, fatturato: 1850 },
+  { cod: '26ST002', nome: 'Quadro elettrico capannone', cli: 'ro', stato: 'aperta', dal: '2 ottobre', dove: 'Marostica', ore: 34, budgetOre: 40, prezzo: 42, costo: 25, euroKm: 0.9, fatturato: 1050 },
+  { cod: '26ST003', nome: 'Revisione pompe pozzo', cli: 'ro', stato: 'aperta', dal: '19 ottobre', dove: 'Nove', ore: 0, budgetOre: 10, prezzo: 45, costo: 22, euroKm: 0.76, fatturato: 0 },
+  { cod: '26ST004', nome: 'Quadro pompe', cli: 've', stato: 'aperta', dal: '12 ottobre', dove: 'Bassano', ore: 4, budgetOre: 12, prezzo: 45, costo: 22, euroKm: 0.76, fatturato: 0 },
+  { cod: '26ST005', nome: 'Linea di imbottigliamento', cli: 'ne', stato: 'sospesa', dal: '5 ottobre', dove: 'Zanè', ore: 6, budgetOre: 30, prezzo: 42, costo: 22, euroKm: 0.76, fatturato: 0 },
+  { cod: '26ST000', nome: 'Cabina di trasformazione', cli: 'ne', stato: 'chiusa', dal: '3 marzo', dove: 'Zanè', ore: 52, budgetOre: 48, prezzo: 42, costo: 22, euroKm: 0.76, fatturato: 2184 },
+];
+let RAPPORTINI = [
+  { id: 'RAP/2026/0001', m: 10, g: 2, gs: 'ven', cli: 'el', com: '26ST001', lavoro: 'Cablaggio quadro di linea 1', ore: 9, viaggio: 1.5, km: 96, spese: 0, tot: 357.46, stato: 'inviato', firma: 'Mario Verdi' },
+  { id: 'RAP/2026/0003', m: 10, g: 8, gs: 'gio', cli: 'el', com: '26ST001', lavoro: 'Collaudo sensori e messa in servizio nastro', ore: 9, viaggio: 1.5, km: 96, spese: 0, tot: 297.96, stato: 'firmato', firma: 'Mario Verdi' },
+  { id: 'RAP/2026/0004', m: 10, g: 10, gs: 'sab', cli: 'ro', com: '26ST002', lavoro: 'Sostituzione interruttore generale', ore: 3.5, viaggio: 0.5, km: 22, spese: 0, tot: 163.72, stato: 'bozza' },
+  { id: 'RAP/2026/0006', m: 10, g: 15, gs: 'gio', cli: 'ro', com: '26ST002', lavoro: 'Verifica impianto di terra', ore: 3.5, viaggio: 0.5, km: 30, spese: 0, tot: 127.80, stato: 'bozza' },
+  { id: 'RAP/2026/0007', m: 10, g: 20, gs: 'mar', cli: 've', com: '26ST004', lavoro: 'Cablaggio del quadro pompe', ore: 4, viaggio: 0.5, km: 0, spese: 0, tot: 180.00, stato: 'firmato', firma: 'Luca Rossi' },
+  { id: 'RAP/2026/0098', m: 9, g: 28, gs: 'lun', cli: 'ro', com: '26ST002', lavoro: 'Posa delle canaline nel capannone', ore: 4, viaggio: 0.5, km: 22, spese: 0, tot: 187.80, stato: 'firmato', firma: 'Paolo Rossi', luogo: '' },
+  { id: 'RAP/2026/0008', m: 10, g: 22, gs: 'gio', cli: 'ne', com: '26ST005', lavoro: 'Montaggio sensori e prova della linea', ore: 6, viaggio: 1, km: 96, spese: 0, tot: 324.96, stato: 'fatturato', firma: 'Anna Neri' },
+];
+const DOCUMENTI = { '26ST002': [{ nome: 'Schema unifilare rev. B.pdf', quando: '14 ottobre' }, { nome: 'Offerta firmata.pdf', quando: '2 ottobre' }] };
+
+const cliente = id => CLIENTI.find(c => c.id === id);
+const commessa = cod => COMMESSE.find(c => c.cod === cod);
+const euro = n => n.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
+const euroTondo = n => Math.round(n).toLocaleString('it-IT') + ' €';
+const ore = n => n.toLocaleString('it-IT', { maximumFractionDigits: 1 }) + ' h';
+const STATI = { bozza: 'Da firmare', firmato: 'Firmato', inviato: 'Inviato', fatturato: 'Fatturato' };
+const daFatturare = r => r.stato === 'firmato' || r.stato === 'inviato';
+let inviati = {}; // cliente -> email a cui e' partito il riepilogo
+let fatturatiOggi = {};
+
+// ------------------------------------------------------------------ icone a tratto
+const P = {
+  oggi: '<rect x="4" y="5" width="16" height="15" rx="3"/><path d="M8 3v4M16 3v4M4 10h16"/><circle cx="12" cy="15" r="1.6" fill="currentColor"/>',
+  rapportini: '<path d="M7 3h7l4 4v14H7z"/><path d="M14 3v4h4M10 12h5M10 16h5"/>',
+  ufficio: '<rect x="3" y="7" width="18" height="13" rx="3"/><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2M3 13h18"/>',
+  giu: '<path d="M6 9l6 6 6-6"/>', indietro: '<path d="M15 5l-7 7 7 7"/>', avanti: '<path d="M9 6l6 6-6 6"/>', chiudi: '<path d="M6 6l12 12M18 6L6 18"/>',
+  piu: '<path d="M12 5v14M5 12h14"/>', cerca: '<circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/>',
+  altro: '<circle cx="5" cy="12" r="1.6" fill="currentColor"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/><circle cx="19" cy="12" r="1.6" fill="currentColor"/>',
+  spunta: '<path d="M5 12.5l4.5 4.5L19 7.5"/>', firma: '<path d="M4 20c2-6 6-6 8-3s6 3 8-3"/><path d="M14 4l6 6-9 9H5v-6z"/>',
+  ricevuta: '<path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6"/>', invia: '<path d="M4 12l16-8-6 16-2-7z"/>',
+  condividi: '<circle cx="18" cy="5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="19" r="2.5"/><path d="M8.2 10.8l7.6-4.4M8.2 13.2l7.6 4.4"/>',
+  pdf: '<path d="M7 3h7l4 4v14H7z"/><path d="M14 3v4h4"/><path d="M9.5 15.5h5"/>', carica: '<path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/>',
+  matita: '<path d="M4 20h4L19 9l-4-4L4 16z"/>', copia: '<rect x="8" y="8" width="12" height="12" rx="2.5"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/>',
+  indietroStato: '<path d="M9 14L4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/>', cestino: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>',
+  pausa: '<rect x="6" y="5" width="4" height="14" rx="1.5"/><rect x="14" y="5" width="4" height="14" rx="1.5"/>', lucchetto: '<rect x="5" y="11" width="14" height="10" rx="3"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
+  riapri: '<path d="M4 12a8 8 0 0 1 14-5.3L20 9"/><path d="M20 4v5h-5"/><path d="M20 12a8 8 0 0 1-14 5.3L4 15"/>',
+  ingranaggio: '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1L7 17M17 7l2.1-2.1"/>',
+  persone: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 14a6 6 0 0 1 3.5 6"/>',
+  cartella: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+};
+function ico(nome, dim = 20, col = 'currentColor', sp = 2.3) {
+  return `<svg width="${dim}" height="${dim}" viewBox="0 0 24 24" fill="none" stroke="${col}" stroke-width="${sp}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${P[nome]}</svg>`;
+}
+const MARCHIO = '<svg width="32" height="32" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="9" fill="#1B1B1F"/><g fill="#FFC53D"><circle cx="16" cy="7.5" r="2.2"/><circle cx="22" cy="10" r="2.2"/><circle cx="24.5" cy="16" r="2.2"/><circle cx="22" cy="22" r="2.2"/><circle cx="16" cy="24.5" r="2.2"/><circle cx="10" cy="22" r="2.2"/><circle cx="7.5" cy="16" r="2.2"/><circle cx="10" cy="10" r="2.2"/></g><circle cx="16" cy="16" r="3.2" fill="#F2F4F7"/></svg>';
+document.querySelectorAll('[data-ico]').forEach(e => { e.innerHTML = ico(e.dataset.ico, 22); });
+
+// ------------------------------------------------------------------ navigazione: una pila per sezione
+const pile = { oggi: [], rapportini: [], ufficio: [] };
+let tab = 'oggi';
+let filtri = { stato: 'tutti', cli: null, com: null, testo: '', mese: 'Ottobre 2026' };
+let scelta = null; // Set di id quando si seleziona
+let segCommesse = 'aperte';
+
+function vai(id, par = {}) { pile[tab].push({ id, par }); disegna('avanti'); }
+function indietro() { if (pile[tab].length) { pile[tab].pop(); disegna('indietro'); } }
+function apriTab(t) {
+  if (t === tab) { if (pile[t].length) { pile[t] = []; disegna('indietro'); } return; }
+  tab = t; scelta = null; disegna('sfuma');
+}
+document.querySelectorAll('.tab').forEach(b => b.addEventListener('click', () => apriTab(b.dataset.tab)));
+
+const SCHERMI = {};
+function disegna(verso) {
+  const cima = pile[tab][pile[tab].length - 1];
+  const s = cima ? SCHERMI[cima.id](cima.par) : SCHERMI[tab]();
+  const el = document.createElement('div');
+  el.className = 'schermo ' + (s.classe || 'con-barra') + (verso ? ' entra-' + verso : '');
+  el.innerHTML = s.html;
+  const box = document.getElementById('schermi');
+  box.innerHTML = ''; box.appendChild(el);
+  if (s.sopra) { const f = document.createElement('div'); f.innerHTML = s.sopra; [...f.children].forEach(c => box.appendChild(c)); }
+  document.getElementById('barra').classList.toggle('via', s.classe === 'compito');
+  document.querySelectorAll('.tab').forEach(b => b.classList.toggle('su', b.dataset.tab === tab));
+  const bollo = Object.keys(perCliente()).length;
+  document.querySelector('[data-tab="ufficio"] .ico').innerHTML = ico('ufficio', 22) + (bollo ? `<span class="bollo">${bollo}</span>` : '');
+  if (s.dopo) s.dopo(el);
+}
+// Clic dentro le schermate: data-vai, data-azione
+document.getElementById('schermi').addEventListener('click', e => {
+  const t = e.target.closest('[data-vai],[data-azione],[data-tab-vai]');
+  if (!t) return;
+  if (t.dataset.tabVai) { const [tt, f] = t.dataset.tabVai.split(':'); if (f) applicaFiltro(f); if (tt !== tab) { tab = tt; pile[tab] = []; disegna('sfuma'); } else { pile[tab] = []; disegna('sfuma'); } return; }
+  if (t.dataset.vai) { const [id, p] = t.dataset.vai.split(':'); vai(id, p ? { k: p } : {}); return; }
+  AZIONI[t.dataset.azione] && AZIONI[t.dataset.azione](t.dataset.arg, t, e);
+});
+function applicaFiltro(f) {
+  const [k, v] = f.split('=');
+  filtri = { stato: 'tutti', cli: null, com: null, testo: '', mese: filtri.mese };
+  if (k === 'stato') filtri.stato = v; else filtri[k] = v;
+}
+
+// ------------------------------------------------------------------ pezzi ricorrenti
+const testaIndietro = (dx = '') => `<div class="testa"><button class="tondo" data-azione="indietro" aria-label="Indietro">${ico('indietro')}</button><div class="dx">${dx}</div></div>`;
+const testaChiudi = (dx = '') => `<div class="testa"><button class="tondo" data-azione="indietro" aria-label="Chiudi">${ico('chiudi')}</button><div class="dx">${dx}</div></div>`;
+const statoPill = s => `<span class="stato ${s}">${STATI[s] || s}</span>`;
+const freccia = `<span class="tenue">${ico('avanti', 18)}</span>`;
+function rigaRapportino(r, opz = {}) {
+  const c = cliente(r.cli), m = commessa(r.com);
+  const sel = scelta ? `<span class="selez ${scelta.has(r.id) ? 'si' : ''}">${scelta.has(r.id) ? ico('spunta', 16, 'var(--su-nero)', 3) : ''}</span>` : '';
+  return `<button class="riga ${scelta && scelta.has(r.id) ? 'scelta' : ''}" data-azione="${scelta ? 'scegli' : 'apriRapportino'}" data-arg="${r.id}">
+    ${sel}<span class="giorno"><b>${r.g}</b><span>${opz.mese || r.m !== 10 ? ['', '', '', '', '', '', '', '', '', 'set', 'ott'][r.m] : r.gs}</span></span>
+    <span class="mezzo"><b>${opz.lavoro ? r.lavoro : c.nome}</b><span>${ore(r.ore)} · ${m.cod} ${opz.lavoro ? '' : '· ' + r.lavoro}</span></span>
+    <span class="fine"><b>${euro(r.tot)}</b>${statoPill(r.stato)}</span></button>`;
+}
+function barraBudget(m, basso) {
+  const perc = m.budgetOre ? m.ore / m.budgetOre : 0;
+  const larg = Math.min(perc, 1.25) / 1.25 * 100, tacca = 100 / 1.25;
+  const cls = perc > 1 ? 'oltre' : perc >= 0.85 ? 'vicina' : '';
+  return `<div class="budget ${basso ? 'basso' : ''}" role="img" aria-label="${ore(m.ore)} su ${ore(m.budgetOre)}"><i class="${cls}" style="width:${larg}%"></i><u style="left:calc(${tacca}% - 1px)"></u></div>`;
+}
+function giudizio(m) {
+  const p = m.budgetOre ? m.ore / m.budgetOre : 0;
+  if (p > 1) return '<span class="stato oltre">Oltre il budget</span>';
+  if (p >= 0.85) return '<span class="stato avviso">Vicina al budget</span>';
+  return '';
+}
+function conti(m) {
+  const budget = m.budgetOre * m.prezzo, costi = m.budgetOre * m.costo + 6 * 96 * 0.0;
+  const km = RAPPORTINI.filter(r => r.com === m.cod).reduce((a, r) => a + r.km * m.euroKm, 0);
+  return { budget, costi: costi + km, margine: budget - costi - km };
+}
+function perCliente() {
+  const out = {};
+  RAPPORTINI.filter(r => r.m === 10 && daFatturare(r)).forEach(r => { (out[r.cli] = out[r.cli] || []).push(r); });
+  return out;
+}
+
+// ------------------------------------------------------------------ Oggi
+SCHERMI.oggi = () => {
+  const pf = perCliente(), quanti = Object.keys(pf).length, tot = Object.values(pf).flat().reduce((a, r) => a + r.tot, 0);
+  const ott = RAPPORTINI.filter(r => r.m === 10), meseTot = ott.reduce((a, r) => a + r.tot, 0), meseOre = ott.reduce((a, r) => a + r.ore, 0);
+  const bozze = RAPPORTINI.filter(r => r.stato === 'bozza');
+  return { html: `
+    <div class="testa"><div class="marchio">${MARCHIO}Wisper</div><button class="tondo" data-vai="impostazioni" aria-label="Impostazioni">MG</button></div>
+    <div style="display:flex;flex-direction:column;gap:2px"><span class="data">${OGGI.nome}</span><h1 class="tit">Buongiorno, Manuel</h1></div>
+    <div class="scheda">
+      <div style="display:flex;justify-content:space-between;align-items:baseline"><span class="etichetta">Questa settimana</span><span style="font-size:14px;font-weight:700">1 di 2 giorni</span></div>
+      <div style="display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px;text-align:center">
+        ${[['Lun 26', 'fatto', '8 h'], ['Mar 27', 'oggi', 'oggi'], ['Mer 28', 'futuro', ''], ['Gio 29', 'futuro', ''], ['Ven 30', 'futuro', '']].map(([n, s, x]) => `
+          <span style="display:flex;flex-direction:column;align-items:center;gap:6px">
+            <span style="font-size:13px;font-weight:${s === 'oggi' ? 800 : 700};color:${s === 'futuro' ? 'var(--tenuissimo)' : s === 'oggi' ? 'var(--testo)' : 'var(--tenue)'}">${n}</span>
+            ${s === 'fatto' ? `<span style="width:44px;height:44px;border-radius:22px;background:var(--nero);display:flex;align-items:center;justify-content:center">${ico('spunta', 20, 'var(--su-nero)', 3)}</span>`
+              : s === 'oggi' ? '<span style="width:44px;height:44px;border-radius:22px;background:var(--giallo);display:flex;align-items:center;justify-content:center"><span style="width:10px;height:10px;border-radius:5px;background:#1B1B1F"></span></span>'
+              : '<span style="width:44px;height:44px;border-radius:22px;background:var(--sup)"></span>'}
+            <span style="font-size:13px;font-weight:${s === 'oggi' ? 700 : 600};color:${s === 'oggi' ? 'var(--testo)' : 'var(--tenue)'}">${x || '&nbsp;'}</span></span>`).join('')}
+      </div>
+    </div>
+    <div class="scheda">
+      <span class="etichetta">Il rapportino di oggi</span>
+      <span class="grande">Non l'hai ancora scritto</span>
+      <button class="btn" data-azione="finto" data-arg="Il rapportino si scrive come oggi">${ico('piu', 22, '#1B1B1F', 2.4)}Scrivi il rapportino</button>
+    </div>
+    ${quanti ? `<button class="scheda" style="flex-direction:row;align-items:center;gap:14px;padding:14px 16px;border-radius:20px;cursor:pointer;text-align:left;font:inherit;color:inherit" data-tab-vai="ufficio">
+      <span class="iniz" style="background:var(--giallo-tenue);color:var(--giallo-testo)">${ico('ricevuta', 22)}</span>
+      <span style="flex:1;display:flex;flex-direction:column;gap:1px"><b style="font-size:16px;font-weight:800">Fine mese</b><span class="piccolo tenue">${quanti} ${quanti === 1 ? 'cliente' : 'clienti'} da fatturare · ${euro(tot)}</span></span>${freccia}</button>` : ''}
+    ${bozze.length ? `<button class="scheda" style="flex-direction:row;align-items:center;gap:14px;padding:14px 16px;border-radius:20px;cursor:pointer;text-align:left;font:inherit;color:inherit" data-tab-vai="rapportini:stato=bozza">
+      <span class="iniz" style="background:var(--giallo-tenue);color:var(--giallo-testo)">${ico('firma', 22)}</span>
+      <span style="flex:1;display:flex;flex-direction:column;gap:1px"><b style="font-size:16px;font-weight:800">${bozze.length} da far firmare</b><span class="piccolo tenue">Rossi Impianti, ${bozze.map(r => r.g).join(' e ')} ottobre</span></span>${freccia}</button>` : ''}
+    <button style="display:flex;align-items:center;justify-content:space-between;padding:4px 4px 0;border:none;background:none;cursor:pointer;text-align:left;font:inherit;color:inherit" data-tab-vai="rapportini">
+      <span style="display:flex;flex-direction:column;gap:2px"><span class="etichetta">Ottobre</span><span style="font-size:20px;font-weight:800;letter-spacing:-0.2px">${ore(meseOre)} · ${euro(meseTot)}</span></span>
+      <span style="display:flex;align-items:center;gap:4px;font-size:15px;font-weight:700;color:var(--giallo-testo)">Il mese${ico('avanti', 16, 'var(--giallo-testo)', 2.6)}</span></button>` };
+};
+
+// ------------------------------------------------------------------ Rapportini
+SCHERMI.rapportini = () => {
+  const t = filtri.testo.trim().toLowerCase();
+  let lista = RAPPORTINI.slice().sort((a, b) => b.m - a.m || b.g - a.g);
+  if (filtri.mese !== 'Tutti i mesi') lista = lista.filter(r => r.m === (filtri.mese.startsWith('Settembre') ? 9 : 10));
+  if (filtri.stato === 'fatturare') lista = lista.filter(daFatturare);
+  if (filtri.stato === 'bozza') lista = lista.filter(r => r.stato === 'bozza');
+  if (filtri.cli) lista = lista.filter(r => r.cli === filtri.cli);
+  if (filtri.com) lista = lista.filter(r => r.com === filtri.com);
+  if (t) lista = lista.filter(r => [cliente(r.cli).nome, r.lavoro, r.com, r.id, commessa(r.com).nome].join(' ').toLowerCase().includes(t));
+  const gruppi = {};
+  lista.forEach(r => (gruppi[r.cli] = gruppi[r.cli] || []).push(r));
+  const totale = lista.reduce((a, r) => a + r.tot, 0), oreTot = lista.reduce((a, r) => a + r.ore, 0);
+  const chip = filtri.cli ? `<button class="chip" data-azione="togliFiltro" aria-label="Togli il filtro">${cliente(filtri.cli).nome}${ico('chiudi', 16)}</button>`
+    : filtri.com ? `<button class="chip" data-azione="togliFiltro" aria-label="Togli il filtro">${filtri.com} · ${commessa(filtri.com).nome}${ico('chiudi', 16)}</button>` : '';
+  const sel = scelta ? lista.filter(r => scelta.has(r.id)) : [];
+  return {
+    html: `
+    <div class="testa">
+      <div class="sx"><button class="tondo" aria-label="Mese prima" data-azione="finto" data-arg="Settembre 2026">${ico('indietro', 18)}</button><button class="tondo" aria-label="Mese dopo" data-azione="finto" data-arg="Novembre non è ancora cominciato">${ico('avanti', 18)}</button></div>
+      <div class="dx"><button class="btn testo" style="width:auto;padding:0 6px" data-azione="seleziona">${scelta ? 'Fine' : 'Seleziona'}</button></div>
+    </div>
+    <button class="titolo-mese" data-azione="scegliMese" aria-label="Scegli il mese"><h1 class="tit">${filtri.mese}</h1>${ico('giu', 22)}</button>
+    <label class="cerca">${ico('cerca', 20, 'var(--tenue)')}<input id="cerca-rapportini" type="search" placeholder="Cliente, commessa, lavoro, numero" value="${filtri.testo.replace(/"/g, '&quot;')}" autocomplete="off"></label>
+    <div class="seg" role="tablist">
+      ${[['tutti', 'Tutti'], ['fatturare', 'Da fatturare'], ['bozza', 'Da firmare']].map(([k, n]) => `<button role="tab" class="${filtri.stato === k ? 'su' : ''}" data-azione="statoFiltro" data-arg="${k}">${n}</button>`).join('')}
+    </div>
+    ${chip ? `<div class="chips">${chip}</div>` : ''}
+    <div class="riassunto">${lista.length} ${lista.length === 1 ? 'rapportino' : 'rapportini'} · ${ore(oreTot)} · ${euro(totale)}</div>
+    ${lista.length ? Object.entries(gruppi).map(([cli, rr]) => `
+      <div class="sez"><span class="etichetta">${cliente(cli).nome}</span><span class="val">${euro(rr.reduce((a, r) => a + r.tot, 0))}</span></div>
+      <div class="scheda stretta">${rr.map(r => rigaRapportino(r)).join('')}</div>`).join('')
+      : `<div class="vuoto">${ico('cerca', 28, 'var(--tenue)')}Nessun rapportino con questi filtri<button class="btn bordo medio" style="width:auto;padding:0 18px" data-azione="azzera">Togli i filtri</button></div>`}
+    `,
+    sopra: scelta ? `<div class="barra-scelta"><div class="q">${sel.length ? sel.length + (sel.length === 1 ? ' scelto' : ' scelti') : 'Tocca i rapportini'}<span>${sel.length ? euro(sel.reduce((a, r) => a + r.tot, 0)) : 'per sceglierli'}</span></div>
+      <button data-azione2="azioniScelti" ${sel.length ? '' : 'disabled style="opacity:.5"'}>Cosa faccio</button></div>`
+      : `<div class="galleggia"><button class="btn" data-azione2="finto" data-arg="Il rapportino si scrive come oggi">${ico('piu', 22, '#1B1B1F', 2.4)}Nuovo rapportino</button></div>`,
+    dopo: el => {
+      const inp = el.querySelector('#cerca-rapportini');
+      inp.addEventListener('input', () => { filtri.testo = inp.value; const pos = inp.selectionStart; disegna(); const n = document.getElementById('cerca-rapportini'); n.focus(); n.setSelectionRange(pos, pos); });
+    },
+  };
+};
+
+// ------------------------------------------------------------------ Ufficio (fine mese)
+SCHERMI.ufficio = () => {
+  const pf = perCliente();
+  const totDa = Object.values(pf).flat().reduce((a, r) => a + r.tot, 0);
+  const bozze = RAPPORTINI.filter(r => r.m === 10 && r.stato === 'bozza').sort((a, b) => b.g - a.g);
+  const fatt = RAPPORTINI.filter(r => r.m === 10 && r.stato === 'fatturato').reduce((a, r) => a + r.tot, 0);
+  const prima = RAPPORTINI.filter(r => r.m < 10 && daFatturare(r));
+  const guardare = COMMESSE.filter(m => m.stato === 'aperta' && m.budgetOre && m.ore / m.budgetOre >= 0.85);
+  const fattOggi = Object.keys(fatturatiOggi);
+  return { html: `
+    <div class="testa"><div class="sx"><button class="tondo" aria-label="Mese prima" data-azione="finto" data-arg="Settembre 2026">${ico('indietro', 18)}</button><button class="tondo" aria-label="Mese dopo" data-azione="finto" data-arg="Novembre non è ancora cominciato">${ico('avanti', 18)}</button></div><button class="tondo" data-vai="impostazioni" aria-label="Impostazioni">MG</button></div>
+    <div style="display:flex;flex-direction:column;gap:2px"><span class="etichetta">Fine mese</span><h1 class="tit">Ottobre 2026</h1></div>
+    <div class="riquadri">
+      <button class="riquadro ${totDa ? 'acceso' : ''}" data-tab-vai="rapportini:stato=fatturare"><span class="k">Da fatturare</span><span class="v">${euroTondo(totDa)}</span><span class="n">${Object.values(pf).flat().length} rapportini</span></button>
+      <button class="riquadro" data-tab-vai="rapportini:stato=bozza"><span class="k">Da firmare</span><span class="v">${euroTondo(bozze.reduce((a, r) => a + r.tot, 0))}</span><span class="n">${bozze.length} rapportini</span></button>
+      <button class="riquadro" data-azione="finto" data-arg="I rapportini fatturati di ottobre"><span class="k">Fatturato</span><span class="v">${euroTondo(fatt)}</span><span class="n">questo mese</span></button>
+    </div>
+    <div class="sez"><span class="etichetta">Da fatturare</span></div>
+    ${Object.keys(pf).length ? Object.entries(pf).map(([cli, rr]) => {
+      const c = cliente(cli), tot = rr.reduce((a, r) => a + r.tot, 0), h = rr.reduce((a, r) => a + r.ore, 0), km = rr.reduce((a, r) => a + r.km, 0);
+      const inv = inviati[cli];
+      return `<div class="scheda" style="gap:12px">
+        <div style="display:flex;align-items:center;gap:12px"><span class="iniz ${c.col}">${c.iniz}</span>
+          <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:1px"><b style="font-size:17px;font-weight:800">${c.nome}</b><span class="piccolo tenue" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${rr.length} ${rr.length === 1 ? 'rapportino' : 'rapportini'} · ${ore(h)}</span></span>
+          <span class="numero" style="font-size:20px">${euro(tot)}</span></div>
+        ${inv ? `<div style="display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600;color:var(--firmato)"><span class="spunta-ok">${ico('spunta', 14, 'var(--firmato)', 3)}</span><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Riepilogo inviato a ${inv}</span></div>` : ''}
+        <div class="fila"><button class="btn bordo medio" data-tab-vai="rapportini:cli=${cli}">Vedi rapportini</button>
+          ${inv ? `<button class="btn medio" data-azione="chiediFattura" data-arg="${cli}">Segna fatturati</button>` : `<button class="btn medio" data-vai="riepilogo:${cli}">Prepara riepilogo</button>`}</div>
+      </div>`;
+    }).join('') : `<div class="scheda" style="flex-direction:row;align-items:center;gap:12px"><span class="spunta-ok" style="width:32px;height:32px;border-radius:16px">${ico('spunta', 18, 'var(--firmato)', 3)}</span><span style="font-size:16px;font-weight:700">Niente da fatturare per ottobre</span></div>`}
+    ${prima.length ? `<button class="scheda" style="flex-direction:row;align-items:center;gap:12px;padding:14px 16px;border-radius:20px;cursor:pointer;text-align:left;font:inherit;color:inherit" data-azione="vaiMese" data-arg="Settembre 2026"><span style="flex:1;display:flex;flex-direction:column;gap:1px"><b style="font-size:16px;font-weight:800">Restano da fatturare anche ${prima.length === 1 ? '1 rapportino' : prima.length + ' rapportini'} di settembre</b><span class="piccolo tenue">${euro(prima.reduce((a, r) => a + r.tot, 0))}</span></span><span style="font-size:15px;font-weight:700;color:var(--giallo-testo);display:flex;align-items:center;gap:4px">Settembre${ico('avanti', 16, 'var(--giallo-testo)', 2.6)}</span></button>` : ''}
+    ${bozze.length ? `<div class="sez"><span class="etichetta">Da far firmare</span><span class="val">${euro(bozze.reduce((a, r) => a + r.tot, 0))}</span></div><div class="scheda stretta">${bozze.slice(0, 6).map(r => rigaRapportino(r)).join('')}</div>` : ''}
+    ${fattOggi.length ? `<div class="riassunto" style="display:flex;align-items:center;gap:8px">${ico('spunta', 16, 'var(--firmato)', 3)}Fatturato oggi: ${fattOggi.map(k => cliente(k).nome).join(', ')}</div>` : ''}
+    ${guardare.length ? `<div class="sez"><span class="etichetta">Commesse da guardare</span></div>
+      <div class="scheda stretta">${guardare.map(m => `<button class="riga" style="flex-direction:column;align-items:stretch;gap:10px;padding:14px 0" data-vai="commessa:${m.cod}">
+        <span style="display:flex;align-items:center;gap:10px"><span class="codice">${m.cod}</span><b style="flex:1;font-size:16px;font-weight:800;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${m.nome}</b>${giudizio(m)}</span>
+        ${barraBudget(m, true)}<span class="legenda"><span>${ore(m.ore)} di ${ore(m.budgetOre)}</span><span>margine atteso ${euroTondo(conti(m).margine)}</span></span></button>`).join('')}</div>` : ''}
+    <div class="sez"><span class="etichetta">Tutto l'ufficio</span></div>
+    <div class="scheda stretta">
+      <button class="voce" data-vai="commesse"><span class="doc">${ico('cartella', 20)}</span><span class="mezzo"><b>Commesse</b><span>${COMMESSE.filter(m => m.stato === 'aperta').length} aperte · 1 sospesa</span></span>${freccia}</button>
+      <button class="voce" data-vai="clienti"><span class="doc">${ico('persone', 20)}</span><span class="mezzo"><b>Clienti</b><span>${CLIENTI.length} clienti</span></span>${freccia}</button>
+      <button class="voce" data-vai="impostazioni"><span class="doc">${ico('ingranaggio', 20)}</span><span class="mezzo"><b>Impostazioni</b><span>Lo studio, la firma, rimborso km e costi</span></span>${freccia}</button>
+    </div>
+    <button class="riassunto" style="display:flex;align-items:center;justify-content:center;gap:8px;border:none;background:none;cursor:pointer;min-height:44px;font:inherit;font-size:14px;font-weight:600;color:var(--tenue)" data-azione="finto" data-arg="Rileggo il foglio">${ico('spunta', 16, 'var(--firmato)', 3)}Foglio letto alle 9:41 · <span style="color:var(--giallo-testo);font-weight:700">Aggiorna</span></button>` };
+};
+
+// ------------------------------------------------------------------ Prepara riepilogo (o invia un rapportino solo)
+function rigaPdf(r, singolo) { return singolo ? r.lavoro : r.com + ' · ' + r.lavoro; }
+function foglioPdf(chi, conImporti) {
+  const singolo = chi.startsWith('r:');
+  const rr = singolo ? [RAPPORTINI.find(r => r.id === chi.slice(2))] : RAPPORTINI.filter(r => r.cli === chi && r.m === 10 && daFatturare(r)).sort((a, b) => a.g - b.g);
+  const c = cliente(rr[0].cli), tot = rr.reduce((a, r) => a + r.tot, 0);
+  return `<div class="foglio-pdf" data-azione="ingrandisci" data-arg="${chi}">
+    <div class="ph"><span><b>Studio Tecnico GM</b><br>Via dell'Esempio 1, 36016 Thiene (VI)<br>P. IVA 00000000000</span><span>${singolo ? 'Rapportino di lavoro<br><b>' + rr[0].id + '</b>' : 'Riepilogo rapportini<br><b>Ottobre 2026</b>'}</span></div>
+    <h3>Spett.le ${c.nome}</h3><span style="color:#5F5F67">${c.indirizzo}</span>
+    <table><tr><th>Data</th><th>${singolo ? 'Attività svolte' : 'Commessa e lavoro'}</th><th class="r">Ore</th><th class="r">Km</th>${conImporti ? '<th class="r">Importo</th>' : ''}</tr>
+    ${rr.map(r => `<tr><td>${String(r.g).padStart(2, '0')}/${r.m}</td><td>${rigaPdf(r, singolo)}</td><td class="r">${r.ore.toLocaleString('it-IT')}</td><td class="r">${r.km}</td>${conImporti ? `<td class="r">${euro(r.tot)}</td>` : ''}</tr>`).join('')}</table>
+    <div class="totale"><span>${conImporti ? 'Totale' : 'Ore'}</span><span>${conImporti ? euro(tot) : ore(rr.reduce((a, r) => a + r.ore, 0))}</span></div>
+    ${singolo ? '<div class="piede" style="margin-top:6px"><span>Firma del compilatore</span><span>Firma per accettazione</span></div>' : ''}
+    <div class="piede"><span>Studio Tecnico GM · P. IVA 00000000000</span><span>Pagina 1 / 1</span></div></div>`;
+}
+let opzRiepilogo = { importi: true, foto: false, per: null };
+SCHERMI.riepilogo = ({ k }) => {
+  const singolo = k.startsWith('r:');
+  if (opzRiepilogo.per !== k) opzRiepilogo = { importi: !singolo, foto: false, per: k };
+  const rr = singolo ? [RAPPORTINI.find(r => r.id === k.slice(2))] : RAPPORTINI.filter(r => r.cli === k && r.m === 10 && daFatturare(r));
+  const c = cliente(rr[0].cli), tot = rr.reduce((a, r) => a + r.tot, 0);
+  return { classe: 'compito', html: `
+    ${testaChiudi(`<button class="tondo" data-azione="menuRiepilogo" aria-label="Altro">${ico('altro')}</button>`)}
+    <div style="display:flex;flex-direction:column;gap:2px"><span class="data">${c.nome} · ${euro(tot)}</span><h1 class="tit">${singolo ? 'Rapportino ' + rr[0].id.slice(9) : 'Riepilogo di ottobre'}</h1></div>
+    <div class="anteprima-cornice">${foglioPdf(k, opzRiepilogo.importi)}</div>
+    <div class="campo"><label for="a">A</label><input id="a" type="email" inputmode="email" autocapitalize="off" spellcheck="false" value="${c.email}" placeholder="email di ${c.nome}"></div>
+    <div class="scheda" style="padding:6px 18px;gap:0">
+      <div class="interr" style="border-bottom:1px solid var(--riga)"><b>Con gli importi</b><button class="sw ${opzRiepilogo.importi ? 'si' : ''}" role="switch" aria-checked="${opzRiepilogo.importi}" data-azione="opz" data-arg="importi" aria-label="Con gli importi"></button></div>
+      <div class="interr" style="border-bottom:1px solid var(--riga)"><b>Con le foto degli scontrini</b><button class="sw ${opzRiepilogo.foto ? 'si' : ''}" role="switch" aria-checked="${opzRiepilogo.foto}" data-azione="opz" data-arg="foto" aria-label="Con le foto degli scontrini"></button></div>
+      <button class="voce" style="min-height:60px" data-azione="messaggio" data-arg="${k}"><span class="mezzo"><b>Messaggio</b><span>${singolo ? 'Rapportino ' + rr[0].id + ' del ' + rr[0].g + '/10/2026' : 'Rapportini Ottobre 2026 · ' + c.nome}</span></span>${freccia}</button>
+    </div>`,
+    sopra: `<div class="fondo-compito">
+      <button class="btn" data-azione2="invia" data-arg="${k}">${ico('invia', 22, '#1B1B1F', 2.4)}Invia per email</button>
+      <div class="fila"><button class="btn bordo medio" data-azione2="finto" data-arg="Il PDF si apre nel visore del telefono">${ico('pdf', 20)}Apri il PDF</button><button class="btn bordo medio" data-azione2="condividi">${ico('condividi', 20)}Condividi</button></div>
+      <button class="btn testo" style="height:40px;font-size:15px;color:var(--tenue)" data-azione2="senzaEmail" data-arg="${k}">Segna come inviato senza email</button></div>` };
+};
+
+// ------------------------------------------------------------------ Rapportino aperto
+const GIORNI = { lun: 'Lunedì', mar: 'Martedì', mer: 'Mercoledì', gio: 'Giovedì', ven: 'Venerdì', sab: 'Sabato' };
+SCHERMI.rapportino = ({ k }) => {
+  const r = RAPPORTINI.find(x => x.id === k), c = cliente(r.cli), m = commessa(r.com);
+  const ordine = ['bozza', 'firmato', 'inviato', 'fatturato'], i = ordine.indexOf(r.stato);
+  const tariffa = c.fissa || c.ultima;
+  const principale = {
+    bozza: ['Fai firmare al cliente', 'firma', 'finto', 'La firma col dito, come oggi'],
+    firmato: ['Invia al cliente', 'invia', 'inviaUno', r.id],
+    inviato: ['Segna fatturato', 'spunta', 'fatturaUno', r.id],
+    fatturato: ['PDF del rapportino', 'pdf', 'finto', 'Il PDF si apre nel visore del telefono'] }[r.stato];
+  return { html: `
+    ${testaIndietro(`${statoPill(r.stato)}<button class="tondo" data-azione="menuRapportino" data-arg="${r.id}" aria-label="Altro">${ico('altro')}</button>`)}
+    <div style="display:flex;flex-direction:column;gap:2px"><span class="data">${GIORNI[r.gs]} ${r.g} ${r.m === 9 ? 'settembre' : 'ottobre'}</span><h1 class="tit">${r.id}</h1></div>
+    <div class="passi">${['Da firmare', 'Firmato', 'Inviato', 'Fatturato'].map((n, j) => `<div class="${j < i ? 'fatto' : j === i ? 'ora' : ''}"><i></i>${n}</div>`).join('')}</div>
+    <div class="scheda">
+      <div style="display:flex;align-items:center;gap:12px"><span class="iniz ${c.col}">${c.iniz}</span><span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:1px"><b style="font-size:17px;font-weight:800">${c.nome}</b><span class="piccolo tenue">${m.cod} · ${m.nome}</span></span>${r.stato === 'bozza' ? '<span style="font-size:15px;font-weight:700;color:var(--giallo-testo)">Cambia</span>' : ''}</div>
+      <div class="lavoro">${r.lavoro}</div>
+      <div class="tre"><div><span class="k">Lavoro</span><span class="v">${ore(r.ore)}</span></div><div><span class="k">Viaggio</span><span class="v">${ore(r.viaggio)}</span></div><div><span class="k">Km</span><span class="v">${r.km}</span></div></div>
+      ${m.dove ? `<span class="piccolo tenue">Luogo · ${m.dove}</span>` : ''}
+    </div>
+    <div class="scheda conto">
+      <div><span>Ore · ${ore(r.ore)} × ${tariffa} €</span><span>${euro(r.ore * tariffa)}</span></div>
+      ${c.viaggio ? '' : `<div><span>Viaggio non pagato</span><span>—</span></div>`}
+      <div><span>Km · ${r.km} × ${m.euroKm.toLocaleString('it-IT')} €</span><span>${euro(r.km * m.euroKm)}</span></div>
+      <div><span>Spese</span><span>${euro(r.spese)}</span></div>
+      <div class="tot"><span>Totale</span><b>${euro(r.tot)}</b></div>
+    </div>
+    ${r.firma ? `<div class="scheda"><span class="etichetta">Firma del cliente</span><div class="firma-img"><svg width="150" height="50" viewBox="0 0 150 50" fill="none" stroke="var(--testo)" stroke-width="2.2" stroke-linecap="round"><path d="M6 38c10-22 18-30 22-18s-2 22 6 10 12-22 18-8 4 18 14 4 14-16 22-6 10 12 20 2 18-10 30-6"/></svg></div><span class="piccolo tenue">${r.firma} · firmato il ${r.g}/${r.m}/2026 alle 17:40</span></div>` : ''}
+    ${r.id === 'RAP/2026/0003' ? `<div class="scheda"><span class="etichetta">Nota per te</span><span style="font-size:16px;line-height:1.45">Portare il tester nuovo la prossima volta.</span></div>` : ''}
+    `,
+    sopra: `<div class="galleggia"><button class="btn" data-azione2="${principale[2]}" data-arg="${principale[3]}">${ico(principale[1], 22, '#1B1B1F', 2.4)}${principale[0]}</button></div>` };
+};
+
+// ------------------------------------------------------------------ Commesse
+const STATO_COM = { aperta: 'Aperta', sospesa: 'Sospesa', chiusa: 'Chiusa' };
+let cercaCommesse = '';
+SCHERMI.commesse = () => {
+  const passa = (m, s) => s === 'tutte' || m.stato === { aperte: 'aperta', sospese: 'sospesa', chiuse: 'chiusa' }[s];
+  const t = cercaCommesse.trim().toLowerCase();
+  const tutte = COMMESSE.filter(m => !t || [m.cod, m.nome, cliente(m.cli).nome, m.dove].join(' ').toLowerCase().includes(t));
+  const lista = tutte.filter(m => passa(m, segCommesse)).sort((a, b) => b.cod.localeCompare(a.cod));
+  const nascoste = tutte.length - lista.length;
+  return { html: `
+    ${testaIndietro()}
+    <h1 class="tit">Commesse</h1>
+    <label class="cerca">${ico('cerca', 20, 'var(--tenue)')}<input id="cerca-commesse" type="search" placeholder="Codice, commessa, cliente" value="${cercaCommesse.replace(/"/g, '&quot;')}" autocomplete="off"></label>
+    <div class="seg">${['aperte', 'sospese', 'chiuse', 'tutte'].map(s => `<button class="${segCommesse === s ? 'su' : ''}" data-azione="segCommesse" data-arg="${s}" style="font-size:14px">${s[0].toUpperCase() + s.slice(1)}<span class="q">${tutte.filter(m => passa(m, s)).length}</span></button>`).join('')}</div>
+    ${lista.length ? `<div class="scheda stretta">${lista.map(m => `<button class="riga" style="flex-direction:column;align-items:stretch;gap:8px;padding:14px 0" data-vai="commessa:${m.cod}">
+      <span style="display:flex;align-items:center;gap:10px"><span class="codice">${m.cod}</span><span style="flex:1;min-width:0;display:flex;flex-direction:column"><b style="font-size:16px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${m.nome}</b><span class="piccolo tenue">${cliente(m.cli).nome}</span></span>${m.stato !== 'aperta' ? `<span class="stato ${m.stato}">${STATO_COM[m.stato]}</span>` : giudizio(m)}</span>
+      ${barraBudget(m, true)}<span class="legenda"><span>${ore(m.ore)} di ${ore(m.budgetOre)}</span><span>margine ${euroTondo(conti(m).margine)}</span></span></button>`).join('')}</div>` : '<div class="vuoto">Nessuna commessa</div>'}
+    ${nascoste ? `<button class="btn testo" style="font-size:15px;color:var(--giallo-testo)" data-azione="segCommesse" data-arg="tutte">${nascoste === 1 ? 'Una commessa è nascosta dal filtro' : nascoste + ' commesse sono nascoste dal filtro'} · Mostrale</button>` : ''}`,
+    sopra: `<div class="galleggia"><button class="btn" data-azione2="vai" data-arg="modCommessa">${ico('piu', 22, '#1B1B1F', 2.4)}Nuova commessa</button></div>`,
+    dopo: el => { const inp = el.querySelector('#cerca-commesse'); inp.addEventListener('input', () => { cercaCommesse = inp.value; const p = inp.selectionStart; disegna(); const n = document.getElementById('cerca-commesse'); n.focus(); n.setSelectionRange(p, p); }); } };
+};
+let schedaCommessa = 'panoramica';
+SCHERMI.commessa = ({ k }) => {
+  const m = commessa(k), c = cliente(m.cli), cc = conti(m), rr = RAPPORTINI.filter(r => r.com === k).sort((a, b) => b.m - a.m || b.g - a.g);
+  const daFirm = rr.filter(r => r.stato === 'bozza'), daFatt = rr.filter(daFatturare);
+  const somma = l => l.reduce((a, r) => a + r.tot, 0);
+  const schede = [['panoramica', 'Panoramica'], ['rapportini', 'Rapportini · ' + rr.length], ['costi', 'Costi'], ['fatturare', 'Da fatturare'], ['documenti', 'Documenti']];
+  const fattTot = m.fatturato + somma(daFatt) + somma(daFirm) || 1;
+  const settimane = [0, 0, 0, 0, 0, 0, 0, 0, 4, 9, 13.5, 7.5].map((h, i) => ({ h, lun: ['3/8', '10/8', '17/8', '24/8', '31/8', '7/9', '14/9', '21/9', '28/9', '5/10', '12/10', '19/10'][i] }));
+  const corpo = {
+    panoramica: `
+      <div class="scheda">
+        <div style="display:flex;justify-content:space-between;align-items:baseline"><h2>Budget</h2>${giudizio(m) || `<span class="riassunto">${Math.round(m.ore / m.budgetOre * 100)}% delle ore</span>`}</div>
+        <div style="display:flex;align-items:baseline;gap:8px"><span class="numero">${ore(m.ore)}</span><span class="tenue" style="font-size:16px;font-weight:700">di ${ore(m.budgetOre)} previste</span></div>
+        ${barraBudget(m)}
+        <div class="tre" style="margin-top:4px"><div><span class="k">Budget</span><span class="v">${euroTondo(cc.budget)}</span></div><div><span class="k">Costo previsto</span><span class="v">${euroTondo(cc.costi)}</span></div><div><span class="k">Margine</span><span class="v">${euroTondo(cc.margine)}</span></div></div>
+        <span class="riassunto">${m.prezzo} €/h · costo ${m.costo} €/h · margine ${m.prezzo - m.costo} €/h</span>
+      </div>
+      <div class="riquadri">
+        <div class="riquadro" style="cursor:default"><span class="k">Valore atteso</span><span class="v">${euroTondo(cc.budget)}</span><span class="n">il budget</span></div>
+        <div class="riquadro" style="cursor:default"><span class="k">Costo finora</span><span class="v">${euroTondo(m.ore * m.costo)}</span><span class="n">${Math.round(m.ore * m.costo / cc.budget * 100)}% del valore</span></div>
+        <div class="riquadro" style="cursor:default"><span class="k">Margine</span><span class="v">${euroTondo(cc.margine)}</span><span class="n">${Math.round(cc.margine / cc.budget * 100)}%</span></div>
+      </div>
+      <div class="scheda">
+        <h2>Fatturazione</h2>
+        <div class="budget" style="display:flex;overflow:hidden"><i style="position:static;width:${m.fatturato / fattTot * 100}%;border-radius:0"></i><i class="vicina" style="position:static;width:${somma(daFatt) / fattTot * 100}%;border-radius:0"></i></div>
+        <div class="legenda" style="flex-wrap:wrap;gap:6px 14px;justify-content:flex-start"><span>Fatturato ${euroTondo(m.fatturato)}</span><span>Da fatturare ${euroTondo(somma(daFatt))}</span><span>Da firmare ${euroTondo(somma(daFirm))}</span></div>
+      </div>
+      <div class="scheda">
+        <h2>Tempo</h2>
+        <div class="budget basso"><i style="width:62%"></i></div>
+        <div class="legenda"><span>dal ${m.dal}</span><span>mancano 18 giorni · fine 13 novembre</span></div>
+        <span class="etichetta" style="margin-top:6px">Settimana per settimana</span>
+        <div style="display:grid;grid-template-columns:repeat(12,1fr);gap:4px;align-items:end;height:84px">${settimane.map(s => `<div style="display:flex;flex-direction:column;align-items:center;gap:4px;justify-content:flex-end;height:100%"><span style="width:100%;border-radius:4px;background:${s.h ? 'var(--testo)' : 'var(--binario)'};height:${Math.max(4, s.h / 13.5 * 60)}px" title="${s.lun}: ${ore(s.h)}"></span><span style="font-size:9px;font-weight:600;color:var(--tenue)">${s.lun.split('/')[0]}</span></div>`).join('')}</div>
+      </div>
+      <div class="scheda"><h2>Note</h2><span style="font-size:16px;line-height:1.45">Quadro nel locale tecnico a nord. Chiavi dal custode, citofono 2.</span></div>`,
+    rapportini: rr.length ? `<div class="riassunto">${ore(rr.reduce((a, r) => a + r.ore, 0))} · ${euro(somma(rr))}</div><div class="scheda stretta">${rr.map(r => rigaRapportino(r, { lavoro: true })).join('')}</div>` : '<div class="vuoto">Ancora nessun rapportino</div>',
+    costi: `<div class="scheda conto">
+      <div><span>Il tuo lavoro · ${ore(m.ore)} × ${m.costo} €</span><span>${euro(m.ore * m.costo)}</span></div>
+      <div><span>Auto · ${rr.reduce((a, r) => a + r.km, 0)} km × costo ACI</span><span>${euro(rr.reduce((a, r) => a + r.km, 0) * 0.76)}</span></div>
+      <div><span>Spese · ${rr.filter(r => r.spese).length} rapportini</span><span>${euro(rr.reduce((a, r) => a + r.spese, 0))}</span></div>
+      <div class="tot"><span>Costo finora</span><b>${euro(m.ore * m.costo + rr.reduce((a, r) => a + r.km, 0) * 0.76)}</b></div></div>`,
+    fatturare: `<div class="riquadri"><div class="riquadro" style="cursor:default"><span class="k">Pronto</span><span class="v">${euroTondo(somma(daFatt))}</span></div><div class="riquadro" style="cursor:default"><span class="k">Da firmare</span><span class="v">${euroTondo(somma(daFirm))}</span></div><div class="riquadro" style="cursor:default"><span class="k">Fatturato</span><span class="v">${euroTondo(m.fatturato)}</span></div></div>
+      ${daFatt.length ? `<div class="scheda stretta">${daFatt.map(r => rigaRapportino(r, { lavoro: true })).join('')}</div><div class="fila"><button class="btn bordo medio" data-azione="chiediFattura" data-arg="${m.cli}">Segna fatturati</button><button class="btn medio" data-vai="riepilogo:${m.cli}">Prepara riepilogo</button></div>` : '<div class="vuoto">Niente da fatturare</div>'}`,
+    documenti: `<div class="scheda stretta">${(DOCUMENTI[k] || []).map(d => `<button class="voce" data-azione="finto" data-arg="Si apre ${d.nome}"><span class="doc">${ico('pdf', 20)}</span><span class="mezzo"><b style="font-size:15px">${d.nome}</b><span>${d.quando}</span></span></button>`).join('') || '<div class="vuoto">Nessun documento</div>'}</div>
+      <div class="fila"><button class="btn bordo medio" data-azione="finto" data-arg="Si apre la cartella della commessa su Drive">${ico('cartella', 20)}Cartella su Drive</button><button class="btn bordo medio" data-azione="finto" data-arg="Scegli un file o fai una foto: va nella cartella della commessa">${ico('carica', 20)}Carica</button></div>`,
+  }[schedaCommessa];
+  return { html: `
+    ${testaIndietro(`<span class="stato ${m.stato}">${STATO_COM[m.stato]}</span><button class="tondo" data-azione="menuCommessa" data-arg="${k}" aria-label="Altro">${ico('altro')}</button>`)}
+    <div style="display:flex;flex-direction:column;gap:6px"><span class="codice" style="align-self:flex-start">${m.cod}</span><h1 class="tit">${m.nome}</h1><span class="data">${c.nome} · ${m.dove} · dal ${m.dal}</span></div>
+    <div class="schede-chip" role="tablist">${schede.map(([id, n]) => `<button role="tab" class="${schedaCommessa === id ? 'su' : ''}" data-azione="schedaCommessa" data-arg="${id}">${n}</button>`).join('')}</div>
+    ${corpo}`,
+    sopra: m.stato === 'aperta' ? `<div class="galleggia"><button class="btn" data-azione2="finto" data-arg="Il rapportino parte con ${m.cod} già scelta">${ico('piu', 22, '#1B1B1F', 2.4)}Scrivi un rapportino</button></div>` : '' };
+};
+SCHERMI.modCommessa = ({ k }) => {
+  const nuova = !k || k.startsWith('cli=');
+  const m = nuova ? { cod: '26ST006', nome: '', cli: k ? k.slice(4) : 'ro', dove: '', budgetOre: '', prezzo: '', costo: '', euroKm: null, dal: '27/10/2026' } : commessa(k);
+  const c = cliente(m.cli), bloccato = !!c.fissa;
+  const prezzo = bloccato ? c.fissa : m.prezzo, costo = c.costoFisso || m.costo;
+  return { classe: 'compito', html: `
+    ${testaChiudi()}
+    <h1 class="tit">${nuova ? 'Nuova commessa' : 'Modifica ' + m.cod}</h1>
+    <div class="campo"><span class="lab">Cliente</span><button class="voce" style="border:1.5px solid var(--bordo-campo);border-radius:16px;padding:8px 14px;background:var(--scheda)" data-azione="finto" data-arg="Si sceglie dai clienti"><span class="iniz ${c.col}">${c.iniz}</span><span class="mezzo"><b>${c.nome}</b><span>${c.fissa ? 'tariffa fissa ' + c.fissa + ' €/h' : 'tariffa libera'}</span></span><span style="font-size:15px;font-weight:700;color:var(--giallo-testo)">Cambia</span></button></div>
+    <div class="campo"><label for="mc-nome">Come si chiama</label><input id="mc-nome" value="${m.nome}" placeholder="Quadro elettrico capannone"></div>
+    <div class="campo"><label for="mc-cod">Codice</label><div class="unita"><input id="mc-cod" value="${m.cod}" ${nuova ? '' : 'disabled'} style="${nuova ? '' : 'background:var(--fondo);color:var(--tenue)'}">${nuova ? '' : `<em>${ico('lucchetto', 18, 'var(--tenue)')}</em>`}</div></div>
+    <div class="campo"><label for="mc-dove">Indirizzo del cantiere</label><input id="mc-dove" value="${m.dove}" autocomplete="street-address"></div>
+    <div class="campi2"><div class="campo"><label for="mc-inizio">Inizio</label><input id="mc-inizio" value="${nuova ? '27/10/2026' : '02/10/2026'}" inputmode="numeric"></div><div class="campo"><label for="mc-fine">Fine prevista</label><input id="mc-fine" value="${nuova ? '' : '13/11/2026'}" inputmode="numeric" placeholder="—"></div></div>
+    <div class="scheda" style="gap:12px">
+      <h2>Budget</h2>
+      <div class="campi2">
+        <div class="campo"><label for="b-ore">Ore previste</label><div class="unita"><input id="b-ore" inputmode="decimal" value="${m.budgetOre}" placeholder="—"><em>h</em></div></div>
+        <div class="campo"><label for="b-prezzo">Prezzo orario</label><div class="unita"><input id="b-prezzo" inputmode="decimal" value="${prezzo}" ${bloccato ? 'disabled' : ''} placeholder="—"><em>€/h</em></div></div>
+      </div>
+      <div class="campo"><label for="b-budget">Budget</label><div class="unita"><input id="b-budget" inputmode="decimal" value="${m.budgetOre && prezzo ? m.budgetOre * prezzo : ''}" placeholder="—"><em>€</em></div></div>
+      <div class="campi2">
+        <div class="campo"><label for="b-costo">Costo orario</label><div class="unita"><input id="b-costo" inputmode="decimal" value="${costo}" ${c.costoFisso ? 'disabled' : ''} placeholder="15"><em>€/h</em></div></div>
+        <div class="campo"><label for="b-km">Rimborso km</label><div class="unita"><input id="b-km" inputmode="decimal" value="${m.euroKm ? m.euroKm.toLocaleString('it-IT') : ''}" placeholder="0,76"><em>€/km</em></div></div>
+      </div>
+      <div class="margine-riga" style="flex-direction:column;align-items:stretch;gap:2px"><span style="display:flex;justify-content:space-between;align-items:baseline">Margine previsto<b id="b-margine">—</b></span><span class="riassunto" id="b-dettaglio"></span></div>
+    </div>
+    <div class="campo"><label for="mc-note">Note</label><textarea id="mc-note">${nuova ? '' : 'Quadro nel locale tecnico a nord. Chiavi dal custode, citofono 2.'}</textarea></div>`,
+    sopra: `<div class="fondo-compito"><button class="btn" data-azione2="salva" data-arg="${nuova ? 'Creata 26ST006' : 'Salvata ' + m.cod}">${ico('spunta', 22, '#1B1B1F', 2.6)}Salva</button></div>`,
+    dopo: el => {
+      const n = id => parseFloat((el.querySelector('#' + id).value || '').replace(/\./g, '').replace(',', '.')) || 0;
+      const fmt = v => v ? String(Math.round(v * 100) / 100).replace('.', ',') : '';
+      const ricalcola = da => {
+        if (da === 'b-budget' && n('b-prezzo')) el.querySelector('#b-ore').value = fmt(Math.round(n('b-budget') / n('b-prezzo') * 10) / 10);
+        else if (n('b-ore') && n('b-prezzo')) el.querySelector('#b-budget').value = fmt(n('b-ore') * n('b-prezzo'));
+        const costoPrev = n('b-ore') * (n('b-costo') || 15), marg = n('b-budget') - costoPrev;
+        el.querySelector('#b-margine').textContent = n('b-budget') ? euroTondo(marg) : '—';
+        el.querySelector('#b-margine').style.color = marg < 0 ? 'var(--rosso-t)' : '';
+        el.querySelector('#b-dettaglio').textContent = n('b-budget') ? `${fmt(n('b-prezzo') - (n('b-costo') || 15))} €/h di margine · costo previsto ${euroTondo(costoPrev)}` : '';
+      };
+      ['b-ore', 'b-prezzo', 'b-budget', 'b-costo'].forEach(id => el.querySelector('#' + id).addEventListener('input', () => ricalcola(id)));
+      ricalcola();
+    } };
+};
+
+// ------------------------------------------------------------------ Clienti
+let cercaClienti = '';
+SCHERMI.clienti = () => {
+  const t = cercaClienti.trim().toLowerCase();
+  const lista = CLIENTI.filter(c => !t || [c.nome, c.email, c.piva, (c.alias || []).join(' ')].join(' ').toLowerCase().includes(t)).sort((a, b) => a.nome.localeCompare(b.nome));
+  return { html: `
+  ${testaIndietro()}
+  <h1 class="tit">Clienti</h1>
+  <label class="cerca">${ico('cerca', 20, 'var(--tenue)')}<input id="cerca-clienti" type="search" placeholder="Nome, email, partita IVA" value="${cercaClienti.replace(/"/g, '&quot;')}" autocomplete="off"></label>
+  ${lista.length ? `<div class="scheda stretta">${lista.map(c => {
+    const aperte = COMMESSE.filter(m => m.cli === c.id && m.stato === 'aperta').length, ott = RAPPORTINI.filter(r => r.cli === c.id && r.m === 10);
+    return `<button class="riga" data-vai="cliente:${c.id}"><span class="iniz ${c.col}">${c.iniz}</span><span class="mezzo"><b>${c.nome}</b><span>${c.fissa ? c.fissa + ' €/h fissa' : 'libera · ultima ' + c.ultima + ' €/h'}</span></span><span class="fine"><b style="font-size:15px">${euro(ott.reduce((a, r) => a + r.tot, 0))}</b><span class="piccolo tenue" style="font-size:13px">${ore(ott.reduce((a, r) => a + r.ore, 0))} a ottobre</span></span></button>`;
+  }).join('')}</div>` : '<div class="vuoto">Nessun cliente</div>'}`,
+  sopra: `<div class="galleggia"><button class="btn" data-azione2="vai" data-arg="modCliente">${ico('piu', 22, '#1B1B1F', 2.4)}Nuovo cliente</button></div>`,
+  dopo: el => { const inp = el.querySelector('#cerca-clienti'); inp.addEventListener('input', () => { cercaClienti = inp.value; const p = inp.selectionStart; disegna(); const n = document.getElementById('cerca-clienti'); n.focus(); n.setSelectionRange(p, p); }); } };
+};
+SCHERMI.cliente = ({ k }) => {
+  const c = cliente(k), mm = COMMESSE.filter(m => m.cli === k && m.stato !== 'chiusa'), rr = RAPPORTINI.filter(r => r.cli === k && r.m === 10);
+  const riga = (n, v, copia) => `<div class="voce ferma"><span class="mezzo"><span style="font-size:13px;font-weight:700">${n}</span><b style="font-size:16px;white-space:normal;overflow-wrap:anywhere">${v || '<span class="tenue" style="font-weight:600">—</span>'}</b></span>${copia && v ? `<button class="tondo" style="width:44px;height:44px" data-azione="copia" data-arg="${v}" aria-label="Copia ${n}">${ico('copia', 18)}</button>` : ''}</div>`;
+  return { html: `
+    ${testaIndietro(`<button class="btn bordo medio" style="width:auto;padding:0 16px;height:44px" data-azione="vaiCon" data-arg="modCliente:${k}">${ico('matita', 18)}Modifica</button>`)}
+    <div style="display:flex;align-items:center;gap:14px"><span class="iniz grande ${c.col}">${c.iniz}</span><div style="display:flex;flex-direction:column;gap:4px;min-width:0"><h1 class="tit" style="font-size:26px">${c.nome}</h1><span class="data">${c.alias ? 'anche ' + c.alias.join(', ') : c.fissa ? 'Tariffa fissa ' + c.fissa + ' €/h' : 'Tariffa libera · ultima ' + c.ultima + ' €/h'}</span></div></div>
+    <button class="scheda" style="flex-direction:row;align-items:center;gap:14px;padding:14px 16px;border-radius:20px;cursor:pointer;text-align:left;font:inherit;color:inherit" data-tab-vai="rapportini:cli=${k}">
+      <span style="flex:1;display:flex;flex-direction:column;gap:1px"><span class="etichetta">Ottobre</span><b style="font-size:18px;font-weight:800">${ore(rr.reduce((a, r) => a + r.ore, 0))} · ${euro(rr.reduce((a, r) => a + r.tot, 0))}</b></span><span style="font-size:15px;font-weight:700;color:var(--giallo-testo);display:flex;align-items:center;gap:4px">Rapportini${ico('avanti', 16, 'var(--giallo-testo)', 2.6)}</span></button>
+    <div class="scheda stretta">${riga('Email', c.email, true)}${riga('Telefono', c.tel, true)}${riga('Partita IVA', c.piva, true)}${riga('Indirizzo', c.indirizzo)}</div>
+    <div class="sez"><span class="etichetta">Come si paga</span></div>
+    <div class="scheda stretta">
+      <div class="voce ferma"><span class="mezzo"><b>Tariffa</b></span><span class="valore">${c.fissa ? c.fissa + ' €/h fissa' : 'libera · ultima ' + c.ultima + ' €/h'}</span></div>
+      <div class="voce ferma"><span class="mezzo"><b>Costo orario fisso</b></span><span class="valore">${c.costoFisso ? c.costoFisso + ' €/h' : '—'}</span></div>
+      <div class="voce ferma"><span class="mezzo"><b>Viaggio</b></span><span class="valore">${c.viaggio ? 'pagato' : 'non pagato'}</span></div>
+      <div class="voce ferma"><span class="mezzo"><b>Chilometri</b></span><span class="valore">${c.km ? 'rimborsati' : 'non rimborsati'}</span></div>
+    </div>
+    <div class="sez"><span class="etichetta">Commesse</span><button class="btn testo" style="width:auto;height:36px;font-size:14px;color:var(--giallo-testo);padding:0" data-azione="commesseDi" data-arg="${k}">Tutte</button></div>
+    <div class="scheda stretta">${mm.map(m => `<button class="riga" data-vai="commessa:${m.cod}"><span class="codice">${m.cod}</span><span class="mezzo"><b>${m.nome}</b><span>${ore(m.ore)} di ${ore(m.budgetOre)}${m.stato === 'sospesa' ? ' · sospesa' : ''}</span></span>${freccia}</button>`).join('')}
+      <button class="voce" data-azione="vaiCon" data-arg="modCommessa:cli=${k}"><span class="doc">${ico('piu', 20)}</span><span class="mezzo"><b style="font-size:15px">Nuova commessa per ${c.nome}</b></span></button></div>
+    ${c.note ? `<div class="sez"><span class="etichetta">Note</span></div><div class="scheda"><span style="font-size:16px;line-height:1.45">${c.note}</span></div>` : ''}` };
+};
+let modCli = null;
+SCHERMI.modCliente = ({ k }) => {
+  const c = k ? cliente(k) : { nome: '', piva: '', indirizzo: '', email: '', tel: '', fissa: null, costoFisso: null, viaggio: false, km: true, ultima: '' };
+  if (!modCli || modCli.k !== k) modCli = { k, fissa: !!c.fissa, viaggio: c.viaggio, km: c.km };
+  const sino = (chiave, val) => `<div class="sino"><button class="${val ? 'su' : ''}" data-azione="sino" data-arg="${chiave}:1">Sì</button><button class="${!val ? 'su' : ''}" data-azione="sino" data-arg="${chiave}:0">No</button></div>`;
+  return { classe: 'compito', html: `
+    ${testaChiudi()}
+    <h1 class="tit">${k ? 'Modifica il cliente' : 'Nuovo cliente'}</h1>
+    <div class="campo"><label for="cl-nome">Ragione sociale</label><input id="cl-nome" value="${c.nome}"></div>
+    <div class="campo"><label for="cl-email">Email</label><input id="cl-email" type="email" inputmode="email" autocapitalize="off" spellcheck="false" value="${c.email}"></div>
+    <div class="campi2"><div class="campo"><label for="cl-tel">Telefono</label><input id="cl-tel" type="tel" inputmode="tel" value="${c.tel}"></div><div class="campo"><label for="cl-piva">Partita IVA</label><input id="cl-piva" inputmode="numeric" value="${c.piva}" maxlength="11" autocomplete="off" spellcheck="false"></div></div>
+    <div class="campo"><label for="cl-ind">Indirizzo</label><input id="cl-ind" value="${c.indirizzo}" autocomplete="street-address"></div>
+    <div class="campo"><label for="cl-alias">Altri nomi</label><input id="cl-alias" value="${(c.alias || []).join(', ')}" placeholder="—"></div>
+    <div class="scheda" style="gap:10px">
+      <h2>Come si paga</h2>
+      <div class="seg"><button class="${modCli.fissa ? 'su' : ''}" data-azione="tariffa" data-arg="1">Tariffa fissa</button><button class="${!modCli.fissa ? 'su' : ''}" data-azione="tariffa" data-arg="0">Tariffa libera</button></div>
+      ${modCli.fissa ? `<div class="campo"><label for="cl-fissa">Tariffa fissa</label><div class="unita"><input id="cl-fissa" inputmode="decimal" value="${c.fissa || ''}"><em>€/h</em></div></div>` : `<div class="campo"><label for="cl-ultima">Ultima tariffa usata</label><div class="unita"><input id="cl-ultima" inputmode="decimal" value="${c.ultima || ''}" placeholder="—"><em>€/h</em></div></div>`}
+      <div class="campo"><label for="cl-costo">Costo orario fisso</label><div class="unita"><input id="cl-costo" inputmode="decimal" value="${c.costoFisso || ''}" placeholder="—"><em>€/h</em></div></div>
+      <div class="interr"><b>Viaggio pagato</b>${sino('viaggio', modCli.viaggio)}</div>
+      <div class="interr"><b>Km rimborsati</b>${sino('km', modCli.km)}</div>
+    </div>
+    <div class="campo"><label for="cl-note">Note</label><textarea id="cl-note">${c.note || ''}</textarea></div>`,
+    sopra: `<div class="fondo-compito"><button class="btn" data-azione2="salva" data-arg="Salvato ${c.nome || 'il cliente'}">${ico('spunta', 22, '#1B1B1F', 2.6)}Salva</button></div>` };
+};
+
+// ------------------------------------------------------------------ Impostazioni
+let tema = 'auto', ticket = false;
+SCHERMI.impostazioni = () => {
+  const v = (t, val, freccia2 = true, extra = '') => `<button class="voce" data-azione="modifica" data-arg="${t}|${val}"><span class="mezzo"><b>${t}</b><span>${val}</span></span>${extra}${freccia2 ? freccia : ''}</button>`;
+  return { html: `
+    ${testaIndietro()}
+    <h1 class="tit">Impostazioni</h1>
+    <div class="sez"><span class="etichetta">Il foglio</span></div>
+    <div class="scheda stretta">
+      <div class="voce ferma"><span style="width:10px;height:10px;border-radius:5px;background:var(--firmato);flex:none"></span><span class="mezzo"><b>Collegato</b><span>Letto alle 9:41</span></span><button class="btn testo" style="width:auto;height:44px;font-size:15px;color:var(--giallo-testo)" data-azione="finto" data-arg="Rileggo il foglio">Aggiorna</button></div>
+      ${v('Indirizzo', 'script.google.com/…/exec')}${v('Codice', '••••••••')}${v('Collega il computer', 'Un\'email con il file da aprire sul PC')}
+    </div>
+    <div class="sez"><span class="etichetta">Lo studio</span></div>
+    <div class="scheda stretta">${v('Ragione sociale', 'Studio Tecnico GM')}${v('Chi compila', 'Manuel Gasparotto')}${v('Indirizzo', 'Via dell\'Esempio 1, 36016 Thiene (VI)')}${v('Partita IVA', '00000000000')}${v('Email per le risposte', 'studio@example.com')}${v('Telefono', '—')}${v('PEC', '—')}</div>
+    <div class="sez"><span class="etichetta">La tua firma</span></div>
+    <div class="scheda"><div class="firma-img"><svg width="170" height="52" viewBox="0 0 170 52" fill="none" stroke="var(--testo)" stroke-width="2.2" stroke-linecap="round"><path d="M8 40c6-20 14-30 16-18s-6 20 4 12 10-24 16-10-2 18 10 6 12-14 18-4 6 10 16 0 14-12 24-2 12 6 22-4 14-6 26 2"/></svg></div>
+      <div class="fila"><button class="btn bordo medio" data-azione="finto" data-arg="Firma col dito, come quella del cliente">${ico('firma', 18)}Rifai la firma</button><button class="btn bordo medio" data-azione="finto" data-arg="Una foto della firma su carta">${ico('carica', 18)}Da una foto</button></div></div>
+    <div class="sez"><span class="etichetta">Rimborso km e costi</span></div>
+    <div class="scheda stretta">${v('Rimborso km', '0,76 €/km · tabella ACI')}${v('Auto', 'Volvo XC40')}${v('Quanto ti costa un\'ora', '15 €/h')}
+      <div class="interr" style="padding:4px 0"><b>Campo ticket nei rapportini</b><button class="sw ${ticket ? 'si' : ''}" role="switch" aria-checked="${ticket}" data-azione="ticket" aria-label="Campo ticket nei rapportini"></button></div></div>
+    <div class="sez"><span class="etichetta">L'app</span></div>
+    <div class="scheda" style="gap:10px"><b style="font-size:16px">Tema</b>
+      <div class="seg">${[['auto', 'Automatico'], ['light', 'Chiaro'], ['dark', 'Scuro']].map(([kk, n]) => `<button class="${tema === kk ? 'su' : ''}" data-azione="tema" data-arg="${kk}">${n}</button>`).join('')}</div></div>
+    <div class="scheda stretta">${v('Rifai la visita guidata', 'Da capo, coi dati di esempio')}${v('Versione 0.4.0', 'Si aggiorna da sola', false, '<span style="font-size:15px;font-weight:700;color:var(--giallo-testo)">Controlla</span>')}${v('Licenze', 'Carattere Figtree, SIL OFL 1.1')}</div>` };
+};
+
+// ------------------------------------------------------------------ fogli dal basso e avvisi
+const velo = document.getElementById('velo'), foglio = document.getElementById('foglio');
+function apriFoglio(html) {
+  document.getElementById('avviso').classList.remove('su');
+  foglio.innerHTML = '<span class="maniglia"></span>' + html; velo.hidden = false; foglio.hidden = false;
+  requestAnimationFrame(() => { velo.classList.add('su'); foglio.classList.add('su'); });
+  const primo = foglio.querySelector('button'); if (primo) primo.focus({ preventScroll: true });
+}
+function chiudiFoglio() { velo.classList.remove('su'); foglio.classList.remove('su'); setTimeout(() => { velo.hidden = true; foglio.hidden = true; }, 260); }
+velo.addEventListener('click', chiudiFoglio);
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && !foglio.hidden) chiudiFoglio(); });
+foglio.addEventListener('click', e => { const t = e.target.closest('[data-azione]'); if (!t) return; AZIONI[t.dataset.azione] && AZIONI[t.dataset.azione](t.dataset.arg, t, e); });
+let timerAvviso;
+function avvisa(testo, annulla) {
+  const a = document.getElementById('avviso'), b = document.getElementById('avviso-azione');
+  document.getElementById('avviso-testo').textContent = testo;
+  b.hidden = !annulla; b.onclick = () => { annulla(); a.classList.remove('su'); };
+  a.classList.add('su'); clearTimeout(timerAvviso); timerAvviso = setTimeout(() => a.classList.remove('su'), annulla ? 5000 : 3200);
+}
+// I pulsanti sopra le schermate (barre in basso) usano data-azione2 per non passare due volte dal gestore
+document.getElementById('schermi').addEventListener('click', e => {
+  const t = e.target.closest('[data-azione2]'); if (!t || t.disabled) return;
+  const a = t.dataset.azione2;
+  if (a === 'vai') return vai(t.dataset.arg);
+  AZIONI[a] && AZIONI[a](t.dataset.arg, t, e);
+});
+
+// ------------------------------------------------------------------ azioni
+const AZIONI = {
+  indietro,
+  finto: arg => avvisa(arg),
+  vaiCon: arg => { const [id, k] = arg.split(':'); vai(id, k ? { k } : {}); },
+  apriRapportino: id => vai('rapportino', { k: id }),
+  statoFiltro: k => { filtri.stato = k; disegna(); },
+  togliFiltro: () => { filtri.cli = null; filtri.com = null; disegna(); },
+  azzera: () => { filtri = { stato: 'tutti', cli: null, com: null, testo: '', mese: filtri.mese }; disegna(); },
+  seleziona: () => { scelta = scelta ? null : new Set(); disegna(); },
+  scegli: id => { scelta.has(id) ? scelta.delete(id) : scelta.add(id); disegna(); },
+  chiudiFoglio,
+  opz: k => { opzRiepilogo[k] = !opzRiepilogo[k]; disegna(); },
+  ingrandisci: cli => {
+    const g = document.createElement('div'); g.className = 'anteprima-grande';
+    g.innerHTML = `<div class="testa"><button class="tondo" aria-label="Chiudi l'anteprima">${ico('chiudi')}</button></div><div style="flex:1;overflow:auto;display:flex;align-items:flex-start">${foglioPdf(cli, opzRiepilogo.importi)}</div>`;
+    g.addEventListener('click', () => g.remove());
+    document.getElementById('tel').appendChild(g);
+  },
+  messaggio: () => apriFoglio(`<h2>Messaggio</h2>
+    <div class="campo"><label for="m-ogg">Oggetto</label><input id="m-ogg" value="Riepilogo ottobre 2026 · Studio Tecnico GM"></div>
+    <div class="campo"><label for="m-cc">Copia anche a</label><input id="m-cc" type="email" inputmode="email" autocapitalize="off" placeholder="—"></div>
+    <div class="campo"><label for="m-testo">Testo</label><textarea id="m-testo">Buongiorno, in allegato il riepilogo dei lavori di ottobre. Cordiali saluti, Manuel Gasparotto</textarea></div>
+    <button class="btn medio" data-azione="chiudiFoglio">Fatto</button>`),
+  menuRiepilogo: () => apriFoglio(`<button class="menu-voce" data-azione="mandaAMe">${ico('invia', 20)}Mandane una copia a me</button>`),
+  mandaAMe: () => { chiudiFoglio(); avvisa('Copia mandata a te'); },
+  condividi: () => apriFoglio(`<h2>Condividi il PDF</h2><p>Qui si apre il menu Condividi del telefono: WhatsApp, Gmail, Drive e le altre app.</p><button class="btn medio" data-azione="chiudiFoglio">Ho capito</button>`),
+  invia: (chi, t) => {
+    t.disabled = true; t.innerHTML = 'Invio in corso…';
+    const a = document.getElementById('a') ? document.getElementById('a').value : '';
+    setTimeout(() => {
+      if (chi.startsWith('r:')) { const r = RAPPORTINI.find(x => x.id === chi.slice(2)); if (r.stato !== 'fatturato') r.stato = 'inviato'; pile[tab].pop(); disegna('indietro'); avvisa('Rapportino inviato a ' + a); return; }
+      inviati[chi] = a;
+      RAPPORTINI.forEach(r => { if (r.cli === chi && r.m === 10 && r.stato === 'firmato') r.stato = 'inviato'; });
+      pile[tab].pop(); disegna('indietro'); avvisa('Riepilogo inviato a ' + a);
+    }, 700);
+  },
+  senzaEmail: chi => {
+    if (chi.startsWith('r:')) { const r = RAPPORTINI.find(x => x.id === chi.slice(2)); r.stato = 'inviato'; pile[tab].pop(); disegna('indietro'); avvisa('Segnato inviato'); return; }
+    inviati[chi] = 'nessuno, segnato a mano'; RAPPORTINI.forEach(r => { if (r.cli === chi && r.m === 10 && r.stato === 'firmato') r.stato = 'inviato'; }); pile[tab].pop(); disegna('indietro'); avvisa('Segnati inviati');
+  },
+  chiediFattura: cli => {
+    const rr = RAPPORTINI.filter(r => r.cli === cli && r.m === 10 && daFatturare(r));
+    apriFoglio(`<h2>Segnare ${rr.length} rapportini di ${cliente(cli).nome} come fatturati?</h2><p>${euro(rr.reduce((a, r) => a + r.tot, 0))}. Spariscono da Da fatturare.</p>
+      <button class="btn" data-azione="fatturaCliente" data-arg="${cli}">Segna fatturati</button><button class="btn testo" data-azione="chiudiFoglio">Annulla</button>`);
+  },
+  fatturaCliente: cli => {
+    const prima = {}; RAPPORTINI.forEach(r => { if (r.cli === cli && r.m === 10 && daFatturare(r)) { prima[r.id] = r.stato; r.stato = 'fatturato'; } });
+    const inv = inviati[cli]; delete inviati[cli]; fatturatiOggi[cli] = true;
+    chiudiFoglio(); disegna();
+    avvisa('Fatturati', () => { RAPPORTINI.forEach(r => { if (prima[r.id]) r.stato = prima[r.id]; }); inviati[cli] = inv; delete fatturatiOggi[cli]; disegna(); });
+  },
+  inviaUno: id => vai('riepilogo', { k: 'r:' + id }),
+  fatturaUno: id => { const r = RAPPORTINI.find(x => x.id === id), prima = r.stato; r.stato = 'fatturato'; disegna(); avvisa('Rapportino fatturato', () => { r.stato = prima; disegna(); }); },
+  menuRapportino: id => {
+    const r = RAPPORTINI.find(x => x.id === id), st = r.stato;
+    const voce = (az, arg, icona, testo, cls = '') => `<button class="menu-voce ${cls}" data-azione="${az}" data-arg="${arg}">${ico(icona, 20, cls ? 'var(--rosso-t)' : 'currentColor')}${testo}</button>`;
+    apriFoglio([
+      st !== 'fatturato' ? voce('finto', 'Il PDF si apre nel visore del telefono', 'pdf', 'PDF del rapportino') : '',
+      voce('condividi', '', 'condividi', 'Condividi il PDF'),
+      st === 'bozza' || st === 'inviato' ? voce('inviaDalMenu', id, 'invia', st === 'inviato' ? 'Invia di nuovo al cliente' : 'Invia al cliente') : '',
+      st === 'bozza' ? voce('finto', 'Foto o file del foglio firmato a mano, e il nome di chi ha firmato', 'carica', 'Carica il foglio firmato') : '',
+      voce('finto', 'Fotografa lo scontrino o sceglilo dalla galleria', 'ricevuta', 'Aggiungi uno scontrino'),
+      st === 'bozza' || st === 'firmato' ? voce('statoUno', id + ':inviato', 'invia', 'Segna inviato senza email') : '',
+      st === 'bozza' || st === 'firmato' ? voce('statoUno', id + ':fatturato', 'spunta', 'Segna fatturato') : '',
+      st === 'fatturato' ? voce('statoUno', id + ':inviato', 'indietroStato', 'Non ancora fatturato') : '',
+      st !== 'bozza' ? voce('chiediBozza', id, 'indietroStato', 'Riporta in bozza') : '',
+      st === 'bozza' ? voce('chiediElimina', id, 'cestino', 'Elimina', 'rosso') : '',
+    ].join(''));
+  },
+  inviaDalMenu: id => { chiudiFoglio(); vai('riepilogo', { k: 'r:' + id }); },
+  statoUno: arg => {
+    const [id, st] = arg.split(':'), r = RAPPORTINI.find(x => x.id === id), prima = r.stato;
+    r.stato = st; if (st === 'bozza') r.firmaTolta = r.firma, r.firma = null;
+    chiudiFoglio(); disegna();
+    avvisa(st === 'bozza' ? 'Riportato in bozza' : st === 'inviato' ? (prima === 'fatturato' ? 'Non più fatturato' : 'Segnato inviato') : 'Segnato fatturato', () => { r.stato = prima; if (r.firmaTolta) r.firma = r.firmaTolta; disegna(); });
+  },
+  chiediBozza: id => {
+    const r = RAPPORTINI.find(x => x.id === id);
+    apriFoglio(`<h2>Riportare in bozza?</h2><p>${r.firma ? 'La firma del cliente viene tolta: ha firmato il rapportino com\'era. Dopo la correzione va rifirmato.' : 'Il rapportino torna modificabile.'}</p><button class="btn" data-azione="statoUno" data-arg="${id}:bozza">Riporta in bozza</button><button class="btn testo" data-azione="chiudiFoglio">Annulla</button>`);
+  },
+  chiediElimina: () => apriFoglio(`<h2>Eliminare il rapportino?</h2><p>Sul foglio resta, segnato come annullato: si recupera da lì.</p><button class="btn pericolo" data-azione="finto" data-arg="Nel prototipo non si elimina niente">Elimina</button><button class="btn testo" data-azione="chiudiFoglio">Annulla</button>`),
+  menuCommessa: k => {
+    const m = commessa(k);
+    apriFoglio(`
+      <button class="menu-voce" data-azione="modificaCommessa" data-arg="${k}">${ico('matita', 20)}Modifica</button>
+      ${m.stato === 'aperta' ? `<button class="menu-voce" data-azione="statoCommessa" data-arg="${k}:sospesa">${ico('pausa', 20)}Sospendi</button><button class="menu-voce" data-azione="statoCommessa" data-arg="${k}:chiusa">${ico('lucchetto', 20)}Chiudi la commessa</button>`
+        : `<button class="menu-voce" data-azione="statoCommessa" data-arg="${k}:aperta">${ico('riapri', 20)}Riapri</button>`}`);
+  },
+  modificaCommessa: k => { chiudiFoglio(); vai('modCommessa', { k }); },
+  statoCommessa: arg => { const [k, s] = arg.split(':'), m = commessa(k), prima = m.stato; m.stato = s; chiudiFoglio(); disegna(); avvisa({ sospesa: 'Commessa sospesa', chiusa: 'Commessa chiusa', aperta: 'Commessa riaperta' }[s], () => { m.stato = prima; disegna(); }); },
+  segCommesse: s => { segCommesse = s; disegna(); },
+  schedaCommessa: id => { schedaCommessa = id; disegna(); },
+  commesseDi: k => { segCommesse = 'tutte'; cercaCommesse = cliente(k).nome; vai('commesse'); },
+  scegliMese: () => apriFoglio(`<h2>Quale mese</h2>${['Ottobre 2026', 'Settembre 2026', 'Tutti i mesi'].map(m => `<button class="menu-voce" data-azione="mese" data-arg="${m}">${m}${filtri.mese === m ? '<span style="margin-left:auto">' + ico('spunta', 20) + '</span>' : ''}</button>`).join('')}`),
+  mese: m => { filtri.mese = m; chiudiFoglio(); disegna(); },
+  vaiMese: m => { tab = 'rapportini'; pile.rapportini = []; filtri = { stato: 'fatturare', cli: null, com: null, testo: '', mese: m }; disegna('sfuma'); },
+  azioniScelti: () => {
+    const ids = [...scelta], rr = RAPPORTINI.filter(r => ids.includes(r.id));
+    apriFoglio(`<h2>${ids.length} ${ids.length === 1 ? 'rapportino scelto' : 'rapportini scelti'}</h2><p>${euro(rr.reduce((a, r) => a + r.tot, 0))}</p>
+      <button class="menu-voce" data-azione="riepilogoScelti">${ico('pdf', 20)}Prepara riepilogo</button>
+      <button class="menu-voce" data-azione="segnaScelti" data-arg="inviato">${ico('invia', 20)}Segna inviati</button>
+      <button class="menu-voce" data-azione="segnaScelti" data-arg="fatturato">${ico('spunta', 20)}Segna fatturati</button>`);
+  },
+  riepilogoScelti: () => { const r = RAPPORTINI.find(x => scelta.has(x.id)); chiudiFoglio(); scelta = null; vai('riepilogo', { k: r.cli }); },
+  segnaScelti: st => {
+    const ids = [...scelta].filter(id => st !== 'inviato' || RAPPORTINI.find(r => r.id === id).stato !== 'fatturato');
+    apriFoglio(`<h2>Segnare ${ids.length} ${ids.length === 1 ? 'rapportino' : 'rapportini'} come ${st === 'inviato' ? 'inviati' : 'fatturati'}?</h2><p>${euro(RAPPORTINI.filter(r => ids.includes(r.id)).reduce((a, r) => a + r.tot, 0))} in tutto.</p>
+      <button class="btn" data-azione="confermaScelti" data-arg="${st}|${ids.join(',')}">Segna ${st === 'inviato' ? 'inviati' : 'fatturati'}</button><button class="btn testo" data-azione="chiudiFoglio">Annulla</button>`);
+  },
+  confermaScelti: arg => {
+    const [st, lista] = arg.split('|'), ids = lista.split(','), prima = {};
+    RAPPORTINI.forEach(r => { if (ids.includes(r.id)) { prima[r.id] = r.stato; r.stato = st; } });
+    chiudiFoglio(); scelta = null; disegna();
+    avvisa(`${ids.length} ${ids.length === 1 ? 'rapportino segnato' : 'rapportini segnati'} ${st === 'inviato' ? 'inviati' : 'fatturati'}`, () => { RAPPORTINI.forEach(r => { if (prima[r.id]) r.stato = prima[r.id]; }); disegna(); });
+  },
+  modifica: arg => {
+    const [t, v] = arg.split('|');
+    if (t === 'Collega il computer') return avvisa('Come oggi: un\'email col file da aprire sul PC');
+    if (t.startsWith('Versione') || t === 'Licenze' || t === 'Rifai la visita guidata') return avvisa(t === 'Licenze' ? 'Il testo della licenza di Figtree' : t === 'Rifai la visita guidata' ? 'La visita riparte dal primo passo' : 'Cerco una versione nuova');
+    apriFoglio(`<h2>${t}</h2><div class="campo"><input id="mod-val" value="${v === '—' ? '' : v}" aria-label="${t}"></div><button class="btn medio" data-azione="salvaFoglio" data-arg="${t}">Salva</button><button class="btn testo" data-azione="chiudiFoglio">Annulla</button>`);
+  },
+  salvaFoglio: t => { chiudiFoglio(); avvisa(t === 'Rimborso km' || t.startsWith('Quanto ti costa') ? 'Salvato. Vale per i rapportini nuovi' : 'Salvato'); },
+  ticket: () => { ticket = !ticket; disegna(); },
+
+  copia: v => { try { navigator.clipboard.writeText(v).then(() => avvisa('Copiato'), () => avvisa('Copiato')); } catch (e) { avvisa('Copiato'); } },
+  tariffa: v => { modCli.fissa = v === '1'; disegna(); },
+  sino: arg => { const [k, v] = arg.split(':'); modCli[k] = v === '1'; disegna(); },
+  salva: testo => { pile[tab].pop(); disegna('indietro'); avvisa(testo); },
+  tema: k => { tema = k; if (k === 'auto') document.documentElement.removeAttribute('data-theme'); else document.documentElement.setAttribute('data-theme', k); disegna(); },
+};
+disegna();
+</script>

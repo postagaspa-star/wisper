@@ -58,6 +58,16 @@ data class Rapportino(
     /** I conti dello script. Null finche' il foglio non ha risposto. */
     val conto: Conto? = null,
     val modificato: String = "",
+    /** "2026-10-15T17:30:00" quando e' stato segnato inviato; vuoto se non lo e'. */
+    val inviatoIl: String = "",
+    val fatturatoIl: String = "",
+    /** Quando il foglio ha scritto la riga la prima volta. */
+    val creato: String = "",
+    /**
+     * Quanto costava un'ora quando il foglio ha fatto il conto (per il margine
+     * delle commesse). Null = non scritto: vale quello di oggi.
+     */
+    val costoOrario: Double? = null,
 ) {
     /** Firmato, inviato o fatturato: il lavoro non si tocca piu', si riporta in bozza. */
     val bloccato: Boolean get() = stato in Stato.BLOCCATI
@@ -104,6 +114,10 @@ data class Rapportino(
         .put("firmatoIl", firmatoIl)
         .put("stato", stato.name)
         .put("modificato", modificato)
+        .put("inviatoIl", inviatoIl)
+        .put("fatturatoIl", fatturatoIl)
+        .put("creato", creato)
+        .put("costoOrario", costoOrario ?: JSONObject.NULL)
         .apply {
             conto?.let {
                 put("oreTotali", it.oreTotali)
@@ -187,9 +201,71 @@ data class Rapportino(
                 stato = Stato.da(o.testo("stato")),
                 conto = conto,
                 modificato = o.testo("modificato"),
+                inviatoIl = o.testo("inviatoIl"),
+                fatturatoIl = o.testo("fatturatoIl"),
+                creato = o.testo("creato"),
+                costoOrario = o.numero("costoOrario"),
             )
         }
     }
+
+    /**
+     * Il rapportino nella forma esatta in cui lo manda lo script (rapportinoDaRiga):
+     * e' quella che leggono i PDF di pc/ui/documenti.js, quindi i nomi dei campi
+     * non si cambiano. "tariffa" qui e' quella applicata, come sul foglio.
+     *
+     * @param conto quello del foglio, o quello ricalcolato sul telefono se il
+     *        rapportino e' cambiato qui e non e' ancora partito.
+     * @param fotoInAttesa gli id delle foto ancora sul telefono: Dati.file() le
+     *        trova in locale, cosi' il PDF le ha anche senza rete.
+     * @param firmaInAttesa l'id della firma ancora sul telefono, se c'e'.
+     */
+    fun comeDalFoglio(
+        conto: Conto? = this.conto,
+        fotoInAttesa: List<String> = emptyList(),
+        firmaInAttesa: String? = null,
+    ): JSONObject = JSONObject()
+        .put("id", id)
+        .put("idLocale", idLocale)
+        .put("data", data.format(ISO))
+        .put("tecnico", tecnico)
+        .put("idCliente", idCliente)
+        .put("cliente", cliente)
+        .put("gruppo", gruppo)
+        .put("idCommessa", idCommessa)
+        .put("commessa", commessa)
+        .put("ticket", ticket)
+        .put("luogo", luogo)
+        .put("descrizione", descrizione)
+        .put("oreLavoro", oreLavoro)
+        .put("oreExtra", oreExtra)
+        .put("oreViaggio", oreViaggio)
+        .put("oreTotali", conto?.oreTotali ?: oreTotali)
+        .put("km", km)
+        .put("spese", spese)
+        .put("noteSpese", noteSpese)
+        .put("foto", JSONArray().apply {
+            foto.forEach { put(it.aJson()) }
+            fotoInAttesa.forEach { put(FileRemoto(it, "").aJson()) }
+        })
+        .put("tariffa", conto?.tariffa ?: tariffa ?: 0.0)
+        .put("pagaViaggio", conto?.pagaViaggio ?: false)
+        .put("kmRimborsati", conto?.kmRimborsati ?: true)
+        .put("euroKm", conto?.euroKm ?: 0.0)
+        .put("maggExtra", conto?.maggExtra ?: 0.0)
+        .put("compensoOre", conto?.compensoOre ?: 0.0)
+        .put("rimborsoKm", conto?.rimborsoKm ?: 0.0)
+        .put("totale", conto?.totale ?: 0.0)
+        .put("costoOrario", costoOrario ?: JSONObject.NULL)
+        .put("noteInterne", noteInterne)
+        .put("firma", (firmaInAttesa?.let { FileRemoto(it, "") } ?: firma)?.aJson() ?: JSONObject.NULL)
+        .put("firmatario", firmatario)
+        .put("firmatoIl", firmatoIl)
+        .put("stato", stato.name)
+        .put("inviatoIl", inviatoIl)
+        .put("fatturatoIl", fatturatoIl)
+        .put("creato", creato)
+        .put("modificato", modificato)
 }
 
 /** I conti di un rapportino, come li ha fatti il foglio o [Calcolo] sul telefono. */
@@ -211,6 +287,13 @@ data class FileRemoto(val id: String, val url: String) {
 
     companion object {
         fun daJson(o: JSONObject) = FileRemoto(o.testo("id"), o.testo("url"))
+
+        /** L'id di un file di Drive dal suo indirizzo (.../d/<id>/view), come idDaUrl() nello script. */
+        fun idDaUrl(url: String?): String {
+            val u = url.orEmpty()
+            return (Regex("""/d/([A-Za-z0-9_-]{10,})""").find(u) ?: Regex("""[?&]id=([A-Za-z0-9_-]{10,})""").find(u))
+                ?.groupValues?.get(1).orEmpty()
+        }
     }
 }
 
@@ -243,6 +326,10 @@ internal fun JSONObject.numero(campo: String): Double? {
         else -> null
     }?.takeIf { !it.isNaN() }
 }
+
+/** "2026-10-15" (anche "2026-10-15T..."), o null se vuota o non valida. */
+internal fun JSONObject.data(campo: String): LocalDate? =
+    testo(campo).takeIf { it.length >= 10 }?.let { runCatching { LocalDate.parse(it.take(10), Rapportino.ISO) }.getOrNull() }
 
 internal fun JSONObject.booleanoONull(campo: String): Boolean? =
     if (!has(campo) || isNull(campo)) null else optBoolean(campo)

@@ -9,7 +9,37 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import eu.stgm.wisper.rapportino.Stato
+import eu.stgm.wisper.ui.Avvisi
+import eu.stgm.wisper.ui.BarraSezioni
+import eu.stgm.wisper.ui.FiltroRapportini
+import eu.stgm.wisper.ui.LocalAvvisi
+import eu.stgm.wisper.ui.Navigatore
+import eu.stgm.wisper.ui.Sezione
+import eu.stgm.wisper.ui.StratoAvvisi
+import eu.stgm.wisper.ui.rottaCompito
+import eu.stgm.wisper.ui.SchermataUfficio
+import eu.stgm.wisper.ui.SchermataInvio
+import eu.stgm.wisper.ui.SchermataRapportini
+import eu.stgm.wisper.ui.SchermataCommesse
+import eu.stgm.wisper.ui.SchermataCommessa
+import eu.stgm.wisper.ui.SchermataModificaCommessa
+import eu.stgm.wisper.ui.SchermataClienti
+import eu.stgm.wisper.ui.SchermataCliente
+import eu.stgm.wisper.ui.SchermataModificaCliente
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -35,7 +65,6 @@ import eu.stgm.wisper.ui.ModuloStato
 import eu.stgm.wisper.ui.SchermataCollega
 import eu.stgm.wisper.ui.SchermataFirma
 import eu.stgm.wisper.ui.SchermataImpostazioni
-import eu.stgm.wisper.ui.SchermataMese
 import eu.stgm.wisper.ui.SchermataOggi
 import eu.stgm.wisper.ui.SchermataRapportino
 import eu.stgm.wisper.ui.StratoVisita
@@ -44,6 +73,7 @@ import eu.stgm.wisper.ui.Visita
 import eu.stgm.wisper.ui.W
 import kotlinx.coroutines.launch
 import java.time.LocalDate
+import java.time.YearMonth
 
 /** La versione della visita guidata: chi ha visto una visita più vecchia la rivede una volta. */
 private const val VISITA_ATTUALE = 2
@@ -79,15 +109,14 @@ class MainActivity : ComponentActivity() {
 }
 
 /**
- * Le schermate (docs/aspetto.md §2). Niente libreria di navigazione: poche
- * pagine, una stringa che sopravvive alla rotazione.
+ * Le schermate (docs/aspetto.md §2, docs/telefono-ufficio.md). Niente libreria di
+ * navigazione: una stringa per le pagine a tutto schermo e una pila di rotte per
+ * ognuna delle tre sezioni, tutto salvato per la rotazione.
  *
  *  - "collega"       primo avvio, senza indirizzo o codice del foglio
- *  - "oggi"          la casa
- *  - "mese"          i rapportini del mese, per chi paga
+ *  - "sezioni"       Oggi · Rapportini · Ufficio con la barra in basso, ognuna con la sua pila
  *  - "rapportino"    il rapportino aperto (stato in [modulo], su disco in [BozzaModulo])
  *  - "firma:<id>"    la firma del cliente
- *  - "impostazioni"
  */
 @Composable
 private fun Wisper(archivio: Archivio, attivita: ComponentActivity) {
@@ -118,35 +147,86 @@ private fun Wisper(archivio: Archivio, attivita: ComponentActivity) {
                 when {
                     !archivio.configurato -> "collega"
                     modulo != null -> "rapportino"
-                    else -> "oggi"
+                    else -> "sezioni"
                 }
             )
         }
-        if (pagina == "rapportino" && modulo == null) pagina = "oggi"
+        if (pagina == "rapportino" && modulo == null) pagina = "sezioni"
 
-        visita.vaiA = { p -> if (p == "oggi") modulo = null; pagina = p }
+        // Le tre sezioni, ognuna con la sua pila di rotte (una riga per rotta, per salvarle).
+        var sezioneNome by rememberSaveable { mutableStateOf(Sezione.OGGI.name) }
+        val sezione = Sezione.valueOf(sezioneNome)
+        var pileTesto by rememberSaveable { mutableStateOf(List(Sezione.entries.size) { "" }) }
+        fun pila(s: Sezione): List<String> = pileTesto[s.ordinal].split('\n').filter { it.isNotEmpty() }
+        fun mettiPila(s: Sezione, rotte: List<String>) {
+            pileTesto = pileTesto.toMutableList().also { it[s.ordinal] = rotte.joinToString("\n") }
+        }
+        var filtro by remember { mutableStateOf(FiltroRapportini()) }
+        var avanti by remember { mutableStateOf(true) }
+        val avvisi = remember { Avvisi() }
+
+        fun aOggi() {
+            sezioneNome = Sezione.OGGI.name
+            mettiPila(Sezione.OGGI, emptyList())
+            pagina = "sezioni"
+        }
+
+        visita.vaiA = { p -> if (p == "oggi") { modulo = null; aOggi() } else pagina = p }
         visita.allaFine = {
             modulo = null
-            pagina = "oggi"
+            aOggi()
             config.visitaVista = VISITA_ATTUALE
         }
         LaunchedEffect(Unit) {
             if (archivio.configurato && config.visitaVista < VISITA_ATTUALE && modulo == null) visita.inizia()
         }
 
-        fun nuovo(giorno: LocalDate) {
-            modulo = ModuloStato(Rapportino.nuovo(dati.tecnico, giorno), nuovo = true)
+        fun nuovo(giorno: LocalDate, idCliente: String? = null, idCommessa: String? = null) {
+            val ana = dati.anagrafiche.value
+            val com = idCommessa?.let { id -> ana.commesse.firstOrNull { it.id == id } }
+            val cli = (idCliente ?: com?.idCliente)?.let { id -> ana.clienti.firstOrNull { it.id == id } }
+            var r = Rapportino.nuovo(dati.tecnico, giorno)
+            if (cli != null) r = r.copy(idCliente = cli.id, cliente = cli.nome)
+            if (com != null) r = r.copy(idCommessa = com.id, commessa = com.descrizione)
+            modulo = ModuloStato(r, nuovo = true)
             pagina = "rapportino"
         }
 
         fun apri(idLocale: String) {
-            dati.viste.value.firstOrNull { it.rapportino.idLocale == idLocale }?.let { v ->
+            (dati.viste.value.firstOrNull { it.rapportino.idLocale == idLocale } ?: dati.storico.value.firstOrNull { it.rapportino.idLocale == idLocale })?.let { v ->
                 modulo = ModuloStato(v.rapportino, nuovo = false)
                 pagina = "rapportino"
             }
         }
 
-        CompositionLocalProvider(LocalVisita provides visita) {
+        val nav = Navigatore(
+            onVai = { rotta -> avanti = true; mettiPila(sezione, pila(sezione) + rotta) },
+            onIndietro = { avanti = false; mettiPila(sezione, pila(sezione).dropLast(1)) },
+            onSezione = { s, f ->
+                avanti = true
+                if (f != null) filtro = f
+                mettiPila(s, emptyList())
+                sezioneNome = s.name
+                pagina = "sezioni"
+            },
+            onApriRapportino = ::apri,
+            onNuovoRapportino = { g, cli, com -> nuovo(g, cli, com) },
+        )
+
+        // Indietro: prima la pila della sezione, poi si torna a Oggi; da Oggi esce dall'app.
+        BackHandler(enabled = pagina == "sezioni" && (pila(sezione).isNotEmpty() || sezione != Sezione.OGGI)) {
+            if (pila(sezione).isNotEmpty()) nav.indietro() else aOggi()
+        }
+
+        val viste by dati.viste.collectAsStateWithLifecycle()
+        val daFatturare = remember(viste) {
+            val mese = YearMonth.now()
+            viste.map { it.rapportino }
+                .filter { YearMonth.from(it.data) == mese && (it.stato == Stato.FIRMATO || it.stato == Stato.INVIATO) }
+                .map { it.idCliente.ifBlank { it.cliente } }.distinct().size
+        }
+
+        CompositionLocalProvider(LocalVisita provides visita, LocalAvvisi provides avvisi) {
             Box(Modifier.fillMaxSize()) {
                 AnimatedContent(
                     targetState = pagina,
@@ -155,28 +235,46 @@ private fun Wisper(archivio: Archivio, attivita: ComponentActivity) {
                 ) { p ->
                     when {
                         p == "collega" -> SchermataCollega(archivio) {
-                            pagina = "oggi"
+                            aOggi()
                             if (config.visitaVista < VISITA_ATTUALE) visita.inizia()
                         }
 
-                        p == "oggi" -> SchermataOggi(
-                            dati = dati,
-                            onNuovo = ::nuovo,
-                            onComeIeri = { r ->
-                                modulo = ModuloStato(Riepiloghi.comeIeri(r), nuovo = true, tariffaToccata = true, passoIniziale = 4)
-                                pagina = "rapportino"
-                            },
-                            onApri = ::apri,
-                            onMese = { pagina = "mese" },
-                            onImpostazioni = { pagina = "impostazioni" },
-                        )
-
-                        p == "mese" -> SchermataMese(
-                            dati = dati,
-                            onApri = ::apri,
-                            onNuovo = { nuovo(LocalDate.now()) },
-                            onIndietro = { pagina = "oggi" },
-                        )
+                        p == "sezioni" -> {
+                            val cima = pila(sezione).lastOrNull()
+                            Column(Modifier.fillMaxSize().background(W.colori.fondo)) {
+                                Box(Modifier.weight(1f).fillMaxWidth()) {
+                                    AnimatedContent(
+                                        targetState = sezione to cima,
+                                        transitionSpec = {
+                                            if (initialState.first != targetState.first) fadeIn(tween(200)) togetherWith fadeOut(tween(120))
+                                            else if (avanti) (slideInHorizontally(tween(260)) { it / 12 } + fadeIn(tween(260))) togetherWith fadeOut(tween(120))
+                                            else (slideInHorizontally(tween(260)) { -it / 12 } + fadeIn(tween(260))) togetherWith fadeOut(tween(120))
+                                        },
+                                        label = "sezione",
+                                    ) { (s, rotta) ->
+                                        Box(Modifier.fillMaxSize().statusBarsPadding().let { if (rottaCompito(rotta)) it.navigationBarsPadding().imePadding() else it }) {
+                                            PaginaSezione(
+                                                s, rotta, dati, archivio, nav, filtro, { filtro = it }, tema,
+                                                onTema = { tema = it; config.tema = it },
+                                                onVisita = { visita.inizia() },
+                                                onNuovo = { g -> nuovo(g) },
+                                                onComeIeri = { r ->
+                                                    modulo = ModuloStato(Riepiloghi.comeIeri(r), nuovo = true, tariffaToccata = true, passoIniziale = 4)
+                                                    pagina = "rapportino"
+                                                },
+                                            )
+                                        }
+                                    }
+                                    StratoAvvisi(avvisi, Modifier.align(Alignment.BottomCenter).padding(bottom = 8.dp))
+                                }
+                                if (!rottaCompito(cima)) {
+                                    BarraSezioni(sezione, daFatturare, onSezione = { s ->
+                                        if (s == sezione) { avanti = false; mettiPila(s, emptyList()) }
+                                        else { nav.sezione(s) }
+                                    })
+                                }
+                            }
+                        }
 
                         p == "rapportino" -> modulo?.let { m ->
                             SchermataRapportino(
@@ -184,39 +282,83 @@ private fun Wisper(archivio: Archivio, attivita: ComponentActivity) {
                                 stato = m,
                                 bozza = bozza,
                                 onFirma = { idLocale -> pagina = "firma:$idLocale" },
-                                onChiudi = { modulo = null; pagina = "oggi" },
+                                onChiudi = { modulo = null; pagina = "sezioni" },
+                                // "Invia al cliente": si chiude il rapportino e si prepara l'invio nella sezione aperta.
+                                onInvia = { idLocale -> modulo = null; pagina = "sezioni"; nav.vai("invio/rapportino/$idLocale") },
                             )
                         }
 
                         p.startsWith("firma:") -> {
                             val idLocale = p.removePrefix("firma:")
-                            val r = dati.viste.value.firstOrNull { it.rapportino.idLocale == idLocale }?.rapportino
+                            val r = (dati.viste.value.firstOrNull { it.rapportino.idLocale == idLocale } ?: dati.storico.value.firstOrNull { it.rapportino.idLocale == idLocale })?.rapportino
                             SchermataFirma(
                                 rapportino = r,
                                 onConferma = { disegno, nome ->
                                     scope.launch { dati.firma(idLocale, disegno, nome) }
                                     modulo = null
-                                    pagina = "oggi"
+                                    pagina = "sezioni"
                                 },
                                 onAnnulla = {
                                     // Si torna al rapportino, già salvato.
                                     modulo = r?.let { ModuloStato(it, nuovo = false) }
-                                    pagina = if (modulo != null) "rapportino" else "oggi"
+                                    pagina = if (modulo != null) "rapportino" else "sezioni"
                                 },
                             )
                         }
-
-                        p == "impostazioni" -> SchermataImpostazioni(
-                            archivio = archivio,
-                            tema = tema,
-                            onTema = { tema = it; config.tema = it },
-                            onVisita = { visita.inizia() },
-                            onChiudi = { pagina = "oggi" },
-                        )
                     }
                 }
                 StratoVisita(visita)
             }
         }
+    }
+}
+
+/** Quale schermata mostrare in una sezione: la sua prima pagina, o la rotta in cima alla pila. */
+@Composable
+private fun PaginaSezione(
+    sezione: Sezione,
+    rotta: String?,
+    dati: Dati,
+    archivio: Archivio,
+    nav: Navigatore,
+    filtro: FiltroRapportini,
+    onFiltro: (FiltroRapportini) -> Unit,
+    tema: String,
+    onTema: (String) -> Unit,
+    onVisita: () -> Unit,
+    onNuovo: (LocalDate) -> Unit,
+    onComeIeri: (Rapportino) -> Unit,
+) {
+    when {
+        rotta == null -> when (sezione) {
+            Sezione.OGGI -> SchermataOggi(
+                dati = dati,
+                onNuovo = onNuovo,
+                onComeIeri = onComeIeri,
+                onApri = { nav.apriRapportino(it) },
+                onMese = { nav.sezione(Sezione.RAPPORTINI, FiltroRapportini()) },
+                onImpostazioni = { nav.vai("impostazioni") },
+                onFineMese = { nav.sezione(Sezione.UFFICIO) },
+                onDaFirmare = { nav.sezione(Sezione.RAPPORTINI, FiltroRapportini(mese = null, quali = eu.stgm.wisper.ui.Quali.FIRMARE)) },
+            )
+            Sezione.RAPPORTINI -> SchermataRapportini(dati, nav, filtro, onFiltro)
+            Sezione.UFFICIO -> SchermataUfficio(dati, nav)
+        }
+        rotta == "impostazioni" -> SchermataImpostazioni(
+            archivio = archivio,
+            tema = tema,
+            onTema = onTema,
+            onVisita = onVisita,
+            onChiudi = { nav.indietro() },
+        )
+        rotta.startsWith("invio/") -> SchermataInvio(dati, nav, rotta.removePrefix("invio/"))
+        rotta == "commesse" -> SchermataCommesse(dati, nav)
+        rotta.startsWith("commessa/") -> SchermataCommessa(dati, nav, rotta.removePrefix("commessa/"))
+        rotta.startsWith("commessa-modifica/") -> SchermataModificaCommessa(dati, nav, rotta.removePrefix("commessa-modifica/"), null)
+        rotta.startsWith("commessa-nuova") -> SchermataModificaCommessa(dati, nav, null, rotta.removePrefix("commessa-nuova").removePrefix("/").ifBlank { null })
+        rotta == "clienti" -> SchermataClienti(dati, nav)
+        rotta.startsWith("cliente/") -> SchermataCliente(dati, nav, rotta.removePrefix("cliente/"))
+        rotta.startsWith("cliente-modifica/") -> SchermataModificaCliente(dati, nav, rotta.removePrefix("cliente-modifica/"))
+        rotta == "cliente-nuovo" -> SchermataModificaCliente(dati, nav, null)
     }
 }
