@@ -1,0 +1,130 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<FatturaElettronica versione="FPR12" xmlns="http://ivaservizi.agenziaentrate.gov.it/docs/xsd/fatture/v1.2">
+  <FatturaElettronicaHeader>
+    <DatiTrasmissione>
+      <IdTrasmittente>
+        <IdPaese>IT</IdPaese>
+        <IdCodice>00000000000</IdCodice>
+      </IdTrasmittente>
+      <ProgressivoInvio>00047</ProgressivoInvio>
+      <FormatoTrasmissione>FPR12</FormatoTrasmissione>
+      <CodiceDestinatario>AB12CD3</CodiceDestinatario>
+    </DatiTrasmissione>
+    <CedentePrestatore>
+      <DatiAnagrafici>
+        <IdFiscaleIVA>
+          <IdPaese>IT</IdPaese>
+          <IdCodice>00000000000</IdCodice>
+        </IdFiscaleIVA>
+        <CodiceFiscale>00000000000</CodiceFiscale>
+        <Anagrafica>
+          <Denominazione>Studio Tecnico GM</Denominazione>
+        </Anagrafica>
+        <AlboProfessionale>Periti industriali</AlboProfessionale>
+        <ProvinciaAlbo>VI</ProvinciaAlbo>
+        <NumeroIscrizioneAlbo>000</NumeroIscrizioneAlbo>
+        <RegimeFiscale>RF01</RegimeFiscale>
+      </DatiAnagrafici>
+      <Sede>
+        <Indirizzo>Via dell&apos;Esempio 1</Indirizzo>
+        <CAP>36016</CAP>
+        <Comune>Thiene</Comune>
+        <Provincia>VI</Provincia>
+        <Nazione>IT</Nazione>
+      </Sede>
+      <Contatti>
+        <Email>studio@example.com</Email>
+      </Contatti>
+    </CedentePrestatore>
+    <CessionarioCommittente>
+      <DatiAnagrafici>
+        <IdFiscaleIVA>
+          <IdPaese>IT</IdPaese>
+          <IdCodice>02468135799</IdCodice>
+        </IdFiscaleIVA>
+        <Anagrafica>
+          <Denominazione>Elettrodinamica</Denominazione>
+        </Anagrafica>
+      </DatiAnagrafici>
+      <Sede>
+        <Indirizzo>Via dell&apos;Industria 12</Indirizzo>
+        <CAP>36016</CAP>
+        <Comune>Thiene</Comune>
+        <Provincia>VI</Provincia>
+        <Nazione>IT</Nazione>
+      </Sede>
+    </CessionarioCommittente>
+  </FatturaElettronicaHeader>
+  <FatturaElettronicaBody>
+    <DatiGenerali>
+      <DatiGeneraliDocumento>
+        <TipoDocumento>TD01</TipoDocumento>
+        <Divisa>EUR</Divisa>
+        <Data>2026-10-21</Data>
+        <Numero>47/2026</Numero>
+        <DatiRitenuta>
+          <TipoRitenuta>RT01</TipoRitenuta>
+          <ImportoRitenuta>278.78</ImportoRitenuta>
+          <AliquotaRitenuta>20.00</AliquotaRitenuta>
+          <CausalePagamento>A</CausalePagamento>
+        </DatiRitenuta>
+        <DatiCassaPrevidenziale>
+          <TipoCassa>TC17</TipoCassa>
+          <AlCassa>5.00</AlCassa>
+          <ImportoContributoCassa>69.70</ImportoContributoCassa>
+          <ImponibileCassa>1393.92</ImponibileCassa>
+          <AliquotaIVA>22.00</AliquotaIVA>
+        </DatiCassaPrevidenziale>
+        <ImportoTotaleDocumento>1785.62</ImportoTotaleDocumento>
+        <Causale>Attività di settembre 2026</Causale>
+      </DatiGeneraliDocumento>
+    </DatiGenerali>
+    <DatiBeniServizi>
+      <DettaglioLinee>
+        <NumeroLinea>1</NumeroLinea>
+        <Descrizione>Prestazioni professionali di settembre 2026 (6 rapportini)</Descrizione>
+        <Quantita>38.00</Quantita>
+        <UnitaMisura>ore</UnitaMisura>
+        <PrezzoUnitario>30.00</PrezzoUnitario>
+        <PrezzoTotale>1140.00</PrezzoTotale>
+        <AliquotaIVA>22.00</AliquotaIVA>
+        <Ritenuta>SI</Ritenuta>
+      </DettaglioLinee>
+      <DettaglioLinee>
+        <NumeroLinea>2</NumeroLinea>
+        <Descrizione>Rimborso chilometrico di settembre 2026</Descrizione>
+        <Quantita>312.00</Quantita>
+        <UnitaMisura>km</UnitaMisura>
+        <PrezzoUnitario>0.76</PrezzoUnitario>
+        <PrezzoTotale>237.12</PrezzoTotale>
+        <AliquotaIVA>22.00</AliquotaIVA>
+        <Ritenuta>SI</Ritenuta>
+      </DettaglioLinee>
+      <DettaglioLinee>
+        <NumeroLinea>3</NumeroLinea>
+        <Descrizione>Spese di viaggio e materiale di settembre 2026</Descrizione>
+        <Quantita>1.00</Quantita>
+        <PrezzoUnitario>16.80</PrezzoUnitario>
+        <PrezzoTotale>16.80</PrezzoTotale>
+        <AliquotaIVA>22.00</AliquotaIVA>
+        <Ritenuta>SI</Ritenuta>
+      </DettaglioLinee>
+      <DatiRiepilogo>
+        <AliquotaIVA>22.00</AliquotaIVA>
+        <ImponibileImporto>1463.62</ImponibileImporto>
+        <Imposta>322.00</Imposta>
+        <EsigibilitaIVA>I</EsigibilitaIVA>
+      </DatiRiepilogo>
+    </DatiBeniServizi>
+    <DatiPagamento>
+      <CondizioniPagamento>TP02</CondizioniPagamento>
+      <DettaglioPagamento>
+        <ModalitaPagamento>MP05</ModalitaPagamento>
+        <DataScadenzaPagamento>2026-11-20</DataScadenzaPagamento>
+        <ImportoPagamento>1506.84</ImportoPagamento>
+        <IstitutoFinanziario>Banca di esempio</IstitutoFinanziario>
+        <IBAN>IT60X0542811101000000123456</IBAN>
+      </DettaglioPagamento>
+    </DatiPagamento>
+  </FatturaElettronicaBody>
+</FatturaElettronica>

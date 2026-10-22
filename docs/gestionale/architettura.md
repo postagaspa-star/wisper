@@ -1521,3 +1521,898 @@ nota `"migrazione 003: le spese del rapportino diventano una riga di spese"`. Ne
   cambia quanto si fattura al cliente per i km.
 - La Dashboard "ore oltre il budget" e i "giorni senza rapportino" restano come nella fase 1 (contano solo i
   rapportini).
+
+## 15. Fase 4: le risposte, campo per campo
+
+Fatturazione, banche e scadenze (accordo in [`fase4.md`](fase4.md), ricerca in [`ricerca-fase4.md`](ricerca-fase4.md),
+migrazione `004-fatture-banche`, server 0.7.0). Valgono le regole comuni della §12.1: `ok`, `permesso:false`, date
+`"2026-10-22"`, istanti `"2026-10-22T07:32:11"` (ora italiana, senza fuso), le azioni che scrivono vogliono una POST.
+Gli esempi sono le risposte vere del server di prova (`node server/src/avvio.js --prova ...`, 22/10/2026), accorciate
+dove un elenco si ripete. Le fatture dei dati di esempio hanno **date fisse** (38/2026, 39/2026, 45/2026: sono storia
+fiscale, come i rapportini della fase 1); gli impegni che si ripetono vanno sempre avanti.
+
+### 15.1 Regole comuni della fase 4
+
+- **Moduli.** Tutto quello che riguarda fatture, bozze, XML, note di credito, fatture ricevute, scadenze di pagamento
+  delle commesse e riepilogo e' del modulo `fatturazione` (voce 8): leggere 1, scrivere 2. Conti, movimenti, incassi,
+  pagamenti, scadenziario, impegni e situazione sono del modulo `banche` (voce 9): leggere 1, scrivere 2.
+  `confermaRegoleFiscali` vuole `amministrazione` 2 **e** il ruolo titolare.
+- **Il permesso dei soldi.** Tutte le azioni di Fatturazione e di Banche vogliono anche `costi` ≥ 1. Senza:
+  `{"ok": false, "errore": "Per vedere le fatture serve anche il permesso dei soldi: chiedi al titolare", "permesso": false}`
+  (per le banche: `"Per vedere banche e scadenze serve anche il permesso dei soldi: chiedi al titolare"`). Il menu mostra
+  Fatturazione e Banche solo con il modulo ≥ 1 **e** `costi` ≥ 1.
+- **Ruoli** (valori iniziali, nessuno nuovo): titolare e amministrazione `fatturazione` 2 e `banche` 2; lettura 1 e 1
+  (vede tutto ed esporta, nessun pulsante per scrivere, nessun giallo, l'IBAN coperto); collaboratore 0 e 0 (niente voci
+  nel menu, niente voci di soldi nella Dashboard, niente fattura nei rapportini).
+- **Campi dei soldi nuovi** (spariscono, chiavi comprese, per chi non ha `costi`, come §12.1): `compenso`,
+  `anticipazioni`, `bollo`, `bolloAddebitato`, `ritenuta`, `netto`, `incassato`, `residuo`, `parteSenzaIva`,
+  `totaleBozza`, `nettoBozza`, `saldo`, `saldoPrevisto`, `entrate`, `uscite`, `daIncassare`, `daPagare`, `fatturato`,
+  `fattureInBozza`, `incassiSettimana`, `pagamentiSettimana`, `saldoConti` e le colonne `base_iva`, `bollo_addebitato`,
+  `totale_bozza`, `netto_bozza` (piu' quelli di prima: `totale`, `importo`, `iva`, `contributo`, `baseIva`, `conti`...).
+  `scaduto` **no** (vedi §15.20): e' gia' il si'/no dei preventivi, e il "scaduto" in euro sta solo dentro
+  `numeri.soldi` e nelle risposte di Fatturazione e Banche, che senza `costi` non arrivano proprio. Nel riepilogo
+  delle spese (fase 3) `anticipazioni` resta un soldo della persona e si vede anche senza `costi`.
+- **Le parole fisse** sono quelle di fase4.md §13; il server le manda gia' pronte dove servono (`statoVisto`,
+  `etichetta`, `avvisi`, `titolo` e `dettaglio` dello scadenziario e della Dashboard).
+- **Mai un numero fiscale inventato.** Una bozza ha `numero: ""` e `riferimento: "W-15"` (il riferimento di Wisper,
+  `'W-' || id`, lo scrive il database). Il numero arriva dall'XML emesso o lo scrive Manuel (`segnaEmessa`).
+- **Non collegato.** Invio allo SDI, collegamento alla banca e import degli estratti conto non ci sono: le risposte
+  lo dicono con `"collegamento": "non_collegato"` (`conti`, `situazione`) e `"importaEstrattoConto": "non_collegato"`
+  (`movimenti`). Nessuna azione finge di farli.
+- `io` e `/salute` dicono `versioneServer`/`versione` `"0.7.0"`.
+
+### 15.2 Impostazioni, clienti e commesse
+
+`anagrafiche.impostazioni` ha in piu' (si salvano con `salvaImpostazioni`, valore in JSON): `REGIME_FISCALE` (`"RF01"`),
+`TIPO_DOCUMENTO` (`"TD01"`), `RITENUTA_TIPO` (`"RT01"`), `RITENUTA_CAUSALE` (`"A"`), `EPPI_TIPO_CASSA` (`"TC17"`),
+`BOLLO_SOGLIA` (`77.47`), `BOLLO_IMPORTO` (`2`), `BOLLO_RIVALSA` (`true`), `GIORNI_PAGAMENTO` (`30`),
+`PAGAMENTO_FINE_MESE` (`false`), `MODALITA_PAGAMENTO` (`"MP05"`), `PASSAGGIO_USCITE` (`["prospetto","xml"]`),
+`SOGLIA_CASSA` (`3000`), `REGOLE_FISCALI_CONFERMATE` (`null`, oppure `{"data": "2026-11-05", "commercialista": "Studio
+di esempio", "da": 1}`), e i dati dello studio `CODICE_FISCALE`, `STUDIO_CAP`, `STUDIO_COMUNE`, `STUDIO_PROVINCIA`,
+`ALBO`, `ALBO_PROVINCIA`, `ALBO_NUMERO`, `ALBO_DATA` (sempre testo). `INDIRIZZO` resta via e numero: un indirizzo
+scritto tutto insieme ("Via dell'Esempio 1, 36016 Thiene (VI)") nel modello della fattura si taglia al CAP.
+
+- **Cambiare una regola fiscale toglie la conferma**: un `salvaImpostazioni` che cambia davvero il valore di
+  `REGIME_FISCALE`, `TIPO_DOCUMENTO`, `RITENUTA_TIPO`, `RITENUTA_CAUSALE`, `EPPI_TIPO_CASSA`, `BOLLO_SOGLIA`,
+  `BOLLO_IMPORTO`, `BOLLO_RIVALSA`, `GIORNI_PAGAMENTO`, `PAGAMENTO_FINE_MESE`, `MODALITA_PAGAMENTO`, `IVA`,
+  `EPPI_INTEGRATIVO` o `RITENUTA` rimette `REGOLE_FISCALI_CONFERMATE` a `null`, con la nota nel registro
+  `"regole cambiate: la conferma del commercialista non vale più"`. Risalvare lo stesso valore no. `SOGLIA_CASSA` e
+  `PASSAGGIO_USCITE` non sono regole fiscali. `REGOLE_FISCALI_CONFERMATE` non si scrive con `salvaImpostazioni`
+  (`"La conferma delle regole fiscali si segna con "Segna confermate": la segna solo il titolare"`).
+- `confermaRegoleFiscali {data, commercialista}` (amministrazione 2, **solo il titolare**; gli altri `permesso:false`)
+  → `{"ok": true, "regoleConfermate": {"data": "2026-11-05", "commercialista": "Studio di esempio", "da": 1},
+  "impostazioni": {...}}`; registro `"regole confermate dal commercialista il 05/11/2026"`. `{data: null}` la toglie
+  (`"regoleConfermate": null`). Errore: `"Commercialista: scrivi chi ha controllato le regole"`.
+
+Un **cliente** (e un fornitore) ha in piu' (`salvaSoggetto`, `aggiornaCliente`; in `anagrafiche`):
+`"sostitutoImposta": null` (automatico: si' con la partita IVA, no senza; `true`/`false` scritto a mano, per esempio
+`true` per un condominio, `false` per un forfettario; si manda `null` o `"automatico"` per tornare all'automatico),
+`"pagamentoGiorni": null` (da 0 a 365; `null` = `GIORNI_PAGAMENTO`; errore `"Giorni di pagamento: da 0 a 365"`),
+`"pagamentoFineMese": null` (`true`/`false`; `null` = `PAGAMENTO_FINE_MESE`).
+
+Una **commessa** ha in piu' `"modoFatturazione": "ore"` | `"corpo"` | `"misto"` (`creaCommessa`, `aggiornaCommessa`
+`{campi: {modoFatturazione}}`; errore `"Come si fattura: ore, corpo o misto"`). `creaCommessaDaPreventivo` la crea
+`corpo`. La migrazione ha messo `corpo` alle commesse che avevano scadenze di pagamento. A **corpo**: si fatturano solo
+le scadenze di pagamento del contratto (rapportini e ore sono dentro il prezzo, non compaiono in Da fatturare); a
+**ore**: rapportini, ore e spese; **misto**: tutto (il contratto e le ore in piu').
+
+Un **rapportino** ha in piu', solo per chi vede le fatture (`fatturazione` ≥ 1 e `costi`), `"fattura": null` oppure
+`{"id": 15, "riferimento": "W-15", "stato": "bozza", "etichetta": "In bozza W-15"}` (emessa: `"etichetta": "Fattura
+45/2026"`): e' la pillola con il collegamento. Per gli altri la chiave non c'e'.
+
+### 15.3 Da fatturare
+
+`daFatturare {idCliente?, idCommessa?}` (fatturazione 1):
+```json
+{"ok": true, "oggi": "2026-10-22", "totale": 2671.88, "clienti": 2,
+ "gruppi": [
+  {"idCliente": "C002", "cliente": "Rossi Impianti Srl", "sostituto": true, "mancano": [], "totale": 724.6, "voci": [
+   {"tipo": "spesa", "id": 6, "idCommessa": "26ST002", "data": "2026-10-20", "titolo": "Diritti di segreteria del Comune",
+    "dettaglio": "26ST002 · ricevuta intestata al cliente", "pronta": true, "importo": 52, "anticipazione": true, "gruppo": "commessa:26ST002"},
+   {"tipo": "rapportino", "id": "RAP/2026/0013", "idCommessa": "26ST002", "data": "2026-10-21", "titolo": "Collaudo quadro",
+    "dettaglio": "26ST002 · 6,5 ore · 48 km", "pronta": true, "importo": 316.2, "spese": [16, 17], "totaleConSpese": 324.6,
+    "anticipazione": false, "gruppo": "rapportini:C002:2026-10"},
+   {"tipo": "spesa", "id": 16, "idCommessa": "26ST002", "data": "2026-10-21", "titolo": "Pedaggio", "dettaglio": "26ST002 · altro",
+    "idRapportino": "RAP/2026/0013", "pronta": true, "importo": 8.4, "anticipazione": false, "gruppo": "rapportini:C002:2026-10"},
+   {"tipo": "spesa", "id": 17, "titolo": "Corriere per i documenti", "dettaglio": "26ST002 · ricevuta intestata al cliente",
+    "idRapportino": "RAP/2026/0013", "importo": 12, "anticipazione": true, "...": "..."},
+   {"tipo": "ore", "id": 10, "idCommessa": "26ST002", "data": "2026-10-19", "titolo": "Verifica impianto di terra",
+    "dettaglio": "26ST002 · 3 ore × 42,00 €", "pronta": true, "importo": 126, "senzaPrezzo": false, "anticipazione": false,
+    "gruppo": "ore:26ST002:2026-10"}]},
+  {"idCliente": "C001", "cliente": "Elettrodinamica", "sostituto": true, "mancano": [], "totale": 1947.28, "voci": [
+   {"tipo": "rapportino", "id": "RAP/2026/0007", "idCommessa": "", "data": "2026-09-03", "titolo": "Rilievo quadri del magazzino",
+    "dettaglio": "6 ore · 52 km", "pronta": true, "importo": 219.52, "spese": [14], "totaleConSpese": 227.92,
+    "anticipazione": false, "gruppo": "rapportini:C001:2026-09"},
+   "..."]}],
+ "piuAvanti": [{"tipo": "scadenza", "id": 9, "idCommessa": "26ST003", "data": "", "titolo": "Saldo a fine lavori",
+   "dettaglio": "26ST003 · Adeguamento impianto elettrico capannone · PR/2026/012 rev. 1", "quando": "fine", "pronta": false,
+   "importo": 1140, "anticipazione": false, "gruppo": "commessa:26ST003", "idCliente": "C002", "cliente": "Rossi Impianti Srl"}],
+ "inBozza": [{"idFattura": 14, "riferimento": "W-14", "idCliente": "C003", "cliente": "Mario Bianchi", "stato": "pronta", "voci": 0, "totale": 320.25},
+   {"idFattura": 15, "riferimento": "W-15", "idCliente": "C002", "cliente": "Rossi Impianti Srl", "stato": "bozza", "voci": 2, "totale": 2069.12}],
+ "riepiloghi": [{"idCliente": "C001", "mese": "2026-09", "rapportini": 6, "inviatoIl": "2026-09-30T18:05:00"}],
+ "raggruppa": {"C001": "mese", "C002": "rapportino"},
+ "daFirmare": [{"id": "RAP/2026/0003", "idCliente": "C001", "cliente": "Elettrodinamica", "idCommessa": "26ST001",
+   "data": "2026-10-08", "descrizione": "Collaudo sensori e messa in servizio nastro", "ore": 9}]}
+```
+- **Le sorgenti** (fase4.md §5.1): scadenze di pagamento `prevista` di una commessa non archiviata; rapportini
+  `FIRMATO`/`INVIATO` con `statoApprovazione` vuoto o `approvato`, di una commessa `ore`/`misto` (o senza commessa);
+  spese al cliente `approvata`, non fatturate, con un cliente (della spesa, della commessa o del rapportino); ore
+  `fatturabile`, `approvata`, non fatturate, di una commessa `ore`/`misto`. Le riservate (in una bozza o pronta) e le
+  fatturate non ci sono.
+- **Le spese di un rapportino vanno con lui**: compaiono subito dopo di lui (con `idRapportino`), e `preparaFattura`
+  le prende anche se non mandate (e scegliere una sua spesa porta il rapportino). Se il rapportino e' di una commessa a
+  corpo, le sue spese compaiono da sole. Si fattura solo una spesa di un rapportino firmato o inviato.
+- `importo` di un rapportino = compenso ore + rimborso km (+ le spese vecchie senza righe, §5.1); `totaleConSpese` =
+  importo + le sue spese **non anticipate** (= la riga del rapportino in "una riga per rapportino"). `totale` di un
+  gruppo = la somma delle voci `pronta` (ogni spesa e' una voce sua: non si conta due volte).
+- `quando` e `pronta` delle scadenze: `firma` e `avanzamento` pronte; `fine` pronta se la commessa e' CHIUSA;
+  `data` pronta entro 15 giorni. Le non pronte stanno in `piuAvanti` (si possono fatturare lo stesso).
+- `gruppo` qui e' **il gruppo della vista** (per aprire e chiudere): `commessa:26ST003`, `rapportini:C001:2026-09`,
+  `ore:26ST002:2026-10`, `spese:C002` (spese senza commessa). I gruppi delle **righe della bozza** sono altri (§15.5).
+- `mancano` del cliente = quello che servira' al passaggio (§15.6), per saperlo prima. `sostituto` = ritenuta si'/no.
+- `riepiloghi`: per cliente e mese, i rapportini pronti **tutti gia' mandati** (riepilogo inviato) e quando.
+- `raggruppa`: come si raggruppano i rapportini di ogni cliente in `preparaFattura` (di base `mese` per i clienti a
+  tariffa fissa, `rapportino` per gli altri).
+- `daFirmare`: i rapportini in BOZZA (in fondo alla pagina, "Non si fatturano finché non sono firmati").
+- `clienti` = quanti clienti hanno qualcosa di pronto (il numerino giallo del menu).
+
+### 15.4 Una fattura
+
+`fattura {id}` (fatturazione 1; `id` interno, `"W-15"`, il numero `"45/2026"`, oppure `{numero, anno}` mandati come
+`numero` e `anno` senza `id`) → `{"ok": true, "fattura": {...}}`. La bozza W-15 dei dati di esempio, vera:
+```json
+{"id": 15, "riferimento": "W-15", "etichetta": "Bozza W-15", "tipo": "fattura", "tipoDocumento": "TD01", "idCliente": "C002",
+ "cliente": "Rossi Impianti Srl", "idCommessa": "26ST003", "idFatturaCollegata": null, "stato": "bozza", "statoVisto": "Bozza",
+ "pagamento": "da_incassare", "scaduta": false, "giorniScaduta": 0, "data": "2026-10-22", "numero": "", "numeroDa": "",
+ "causale": "40% a fine progetto, commessa 26ST003", "noteInterne": "", "regime": "ordinario", "ivaPercentuale": 22,
+ "eppiPercentuale": 5, "ritenutaPercentuale": 20, "ritenuta": true, "bolloRivalsa": true,
+ "conti": {"righe": [1520, 120], "compenso": 1520, "contributo": 76, "baseIva": 1596, "iva": 351.12, "anticipazioni": 120,
+   "bollo": 2, "bolloAddebitato": 2, "totale": 2069.12, "ritenuta": 304, "netto": 1765.12, "parteSenzaIva": 120},
+ "totaleBozza": null, "nettoBozza": null,
+ "scadenze": [{"id": 8, "data": "2026-11-21", "importo": 1765.12, "modalita": "MP05", "coperta": 0}],
+ "scadenzaAMano": false, "idConto": 1, "conto": "Conto studio …3456", "incassato": 0, "residuo": 1765.12, "daEmettereEntro": "",
+ "esitoSdi": "", "prontaIl": "", "emessaIl": "", "avvisoInviatoIl": "", "regoleConfermate": false,
+ "creato": "2026-10-22T07:32:11", "modificato": "2026-10-22T07:32:11",
+ "righe": [
+  {"id": 12, "ordine": 1, "origine": "bozza", "gruppo": "scadenza:8", "tipo": "compenso",
+   "descrizione": "40% a fine progetto: Adeguamento impianto elettrico capannone (commessa 26ST003, contratto PR/2026/012 rev. 1)",
+   "quantita": 1, "unita": "", "prezzo": 1520, "importo": 1520, "aliquotaIva": 22, "natura": "", "ritenuta": true,
+   "tributoCliente": false, "idCommessa": "26ST003", "periodoDa": "", "periodoA": "", "importoSorgenti": 1520},
+  {"id": 13, "ordine": 2, "origine": "bozza", "gruppo": "spesa:13", "tipo": "anticipazione",
+   "descrizione": "Spesa anticipata per conto del cliente: Pratica di connessione al distributore del 14/10/2026",
+   "quantita": 1, "unita": "", "prezzo": 120, "importo": 120, "aliquotaIva": 0, "natura": "N1", "ritenuta": false, "...": "..."},
+  {"id": 14, "ordine": 3, "origine": "bozza", "gruppo": "", "tipo": "bollo", "descrizione": "Imposta di bollo", "quantita": 1,
+   "unita": "", "prezzo": 2, "importo": 2, "aliquotaIva": 0, "natura": "N1", "importoSorgenti": null, "...": "..."}],
+ "sorgenti": [
+  {"tipo": "scadenza", "id": "8", "gruppo": "scadenza:8", "descrizione": "40% a fine progetto · 26ST003", "importo": 1520,
+   "attiva": true, "liberataIl": "", "liberataPerche": ""},
+  {"tipo": "spesa", "id": "13", "gruppo": "spesa:13", "descrizione": "Pratica di connessione al distributore · 14/10", "importo": 120, "attiva": true, "...": "..."}],
+ "incassi": [], "note": [], "fatturaCollegata": null, "file": null, "nomeFileSdi": "", "esitoIl": "", "motivo": "",
+ "scartataIl": "", "annullataIl": "", "puoScrivere": true, "modificabile": true, "mancano": [], "avvisi": []}
+```
+- `stato` (salvato): `bozza` | `pronta` | `emessa` | `scartata` | `annullata`. **`statoVisto`** (la parola da
+  mostrare): `Bozza`, `Pronta` (con incassi che la coprono: `Pronta · già pagata`), `Emessa`, `Pagata in parte`,
+  `Pagata`, `Scaduta`, `Annullata`, `Scartata`; una nota di credito emessa: `Nota di credito`. Colori di §13.
+- `etichetta`: `"Bozza W-15"`, `"Pronta W-15"`, `"Scartata W-15"`, `"45/2026"` (emessa o annullata), `"Nota di
+  credito 3/2026"`. `tipo`: `fattura` | `nota`. `tipoDocumento`: `TD01`/`TD06` (`TD04` per le note); dopo
+  l'emissione quello dell'XML. `numeroDa`: `""` | `"xml"` | `"mano"`.
+- **I conti** sono quelli salvati (bozza: rifatti a ogni salvataggio da `contiFattura`, §15.18; emessa: quelli
+  dell'XML). `conti.righe` = gli importi delle righe **senza** quella del bollo. Le righe sono quelle che contano:
+  dell'XML se c'e' (`origine: "xml"`), se no della bozza. La riga `tipo: "bollo"` la mette e la toglie il server.
+- **Pagamento** (calcolato, mai salvato, fase4.md §7.1): `incassato` = somma degli abbinamenti dei movimenti non
+  annullati; `residuo` = netto − netto delle note di credito emesse collegate − incassato (mai sotto zero);
+  `pagamento`: `pagata` (residuo ≤ 0) | `in_parte` | `da_incassare` (`""` per le note); `scaduta` = emessa con residuo e
+  la prima rata non coperta prima di oggi (le rate si coprono in ordine di data: `scadenze[].coperta` = quanto di
+  quella rata e' coperto); `giorniScaduta`. Su una bozza o pronta con incassi (avviso di parcella) il residuo si conta
+  sul netto della bozza; quando e' coperta `daEmettereEntro` = giorno dell'incasso che l'ha coperta + 12.
+- Un incasso: `{"idMovimento": 5, "data": "2026-10-12", "importo": 500, "conto": "Conto studio …3456", "verificato": false}`.
+  Una nota collegata: `{"id": 18, "numero": "3/2026", "data": "2026-10-23", "totale": 256.2, "netto": 216.2, "stato": "emessa"}`.
+  `fatturaCollegata` (per una nota): `{"id": 13, "numero": "45/2026", "data": "2026-10-19", "totale": 1460.34}`, se no `null`.
+  `file` (l'XML o il .p7m emesso): `{"id": "PbjKXKRrJ_asPjy68Q7EWxDgJ3s-", "url": "/file/PbjKXKRrJ_asPjy68Q7EWxDgJ3s-",
+  "nome": "IT00000000000_00039.xml"}` (si scarica con `GET /file/<id>`: chi vede le fatture col permesso dei soldi).
+- `righe[].gruppo`: le righe nate insieme dalle stesse sorgenti (`scadenza:8`, `spesa:31`, `rapportini:C001:2026-09`
+  per il mese, `rapportino:RAP/2026/0142` per una riga per rapportino, `ore:26ST045:2026-10:42`); `""` = riga libera.
+  `importoSorgenti` = quanto valeva la riga quando e' nata (la pagina mostra "era 317,88" se l'importo e' cambiato).
+  `ritenuta` della riga = soggetta e cliente sostituto.
+- `sorgenti`: tutte, anche le liberate (`attiva: false` con `liberataIl` e `liberataPerche`: `"tolta dalla bozza"`,
+  `"bozza scartata"`, `"nota di credito 3/2026"`, `"non è nella fattura 49/2026"`).
+- `regoleConfermate`: per una bozza, le regole di adesso; dopo il passaggio, quelle valide quando e' passata.
+- `modificabile`: solo una bozza, per chi scrive. `mancano`: §15.6 (vuoto per un'emessa).
+- `avvisi`: le righe gialle e rosse gia' scritte, `{tipo, testo}`: `emetti` ("Va emessa entro domenica 1 novembre: ha
+  pagato il 20/10"), `scarto` ("Lo SDI l'ha scartata il 23/10: correggila nel programma e importa di nuovo l'XML"),
+  `diversa` ("L'XML emesso è diverso dalla bozza: era 2.069,12 €, è 1.947,12 €").
+
+`fatture {stato?, pagamento?, scadute?, tipo?, idCliente?, idCommessa?, testo?, anno?}` (fatturazione 1) →
+`{"ok": true, "oggi": "...", "fatture": [...]}`: ogni voce come la fattura **senza** `righe`, `sorgenti`, `incassi`,
+`note`, `file`... (le chiavi fino a `modificato`). Bozze e pronte in cima, poi le piu' recenti. `stato`: uno dei cinque
+o `da_emettere` (bozze e pronte); senza, tutte **tranne le scartate**. `pagamento`: `pagata` | `in_parte` |
+`da_incassare` (esatti) oppure `aperta` (emesse con residuo: la pillola "Da incassare"). `scadute: true`. `tipo`:
+`fattura` | `nota`. `testo` cerca in numero, riferimento, cliente, causale. `idCommessa` trova anche le fatture con
+righe di quella commessa.
+
+### 15.5 La bozza
+
+`preparaFattura {idCliente, voci: [{tipo, id}], raggruppa?: "mese"|"rapportino", data?}` (fatturazione 2) →
+`{"ok": true, "fattura": {...§15.4}}`. Le righe di fase4.md §5.2 coi testi dell'accordo, i gruppi di §5.3, i
+parametri fiscali **congelati** (regime, IVA, EPPI, ritenuta e se il cliente e' sostituto, bollo, giorni di
+pagamento del cliente o delle impostazioni, fine mese, modalita', conto predefinito), la causale proposta (`"40% a fine
+progetto, commessa 26ST003"`, `"Prestazioni di settembre 2026"`, `"Rapportino RAP/2026/0142"`, se no `"Prestazioni
+professionali"`), la scadenza calcolata. Le sorgenti diventano riservate. Settembre di Elettrodinamica (vero):
+`"righe"` = le tre del raggruppamento A con `"gruppo": "rapportini:C001:2026-09"`, `"conti"` = il caso 5, 8 sorgenti.
+Errori: `"Scegli almeno una cosa da fatturare"`, `"Una fattura è per un cliente solo"`, `"Cliente C009 non trovato"`,
+`"Raggruppa: mese o rapportino"`, `"Il rapportino RAP/2026/0099 non è più da fatturare"` (o la spesa, la scadenza, le
+ore: cambiata nel frattempo), e **quella di §4.4** quando la sorgente e' gia' in un'altra fattura viva (vera):
+`{"ok": false, "errore": "«40% a fine progetto» di 26ST003 è già nella bozza W-15 per Rossi Impianti Srl"}`
+(`"RAP/2026/0007 è già nella bozza W-16 per Elettrodinamica"`, `"La spesa «Pedaggio» del 03/09 è già..."`, `"Le ore del
+21/10 su 26ST002 sono già..."`; pronta: `"...è già nella fattura W-15 (già passata al programma) per..."`; emessa:
+`"...è già nella fattura 45/2026"`).
+
+`nuovaFattura {idCliente}` (fatturazione 2) → una bozza vuota (righe libere), `causale` `"Prestazioni professionali"`.
+
+`salvaFattura {fattura: {id, data?, scadenza?, giorniPagamento?, fineMese?, idConto?, causale?, noteInterne?,
+ritenuta?, tipoDocumento?, righe?: [{id?, tipo, descrizione, quantita?, unita?, prezzo?, tributoCliente?}]}}`
+(fatturazione 2), solo in bozza → `{"ok": true, "fattura": {...}, "liberate": [{tipo, id, descrizione}]}`.
+- `righe`, se c'e', e' **l'elenco intero nell'ordine voluto**: quelle senza `id` si creano (libere, gruppo `""`),
+  quelle che mancano si tolgono. **Se manca anche solo una riga di un gruppo, si toglie tutto il gruppo** e le sue
+  sorgenti tornano da fatturare (`liberate`, vero: 6 rapportini e 2 spese di settembre). La riga del bollo si ignora
+  (la rifa' il server). Di una riga di un gruppo si cambiano descrizione, quantita' e prezzo; il tipo resta.
+- L'importo di una riga = quantita' × prezzo (quantita' mancante = 1); una riga di un gruppo che non cambia quantita'
+  e prezzo tiene la somma delle sue sorgenti.
+- `scadenza` scritta a mano resta anche cambiando la data (`scadenzaAMano: true`); `scadenza: null` la fa tornare
+  calcolata (data + giorni, poi a fine mese se `fineMese`). `tipoDocumento`: `TD01` o `TD06` (una nota: `TD04`).
+- Errori: `"La fattura W-15 è già stata passata al programma: per cambiarla falla tornare in bozza"`, `"La fattura 45/2026
+  non è una bozza: non si cambia"`, `"Riga: scrivi la descrizione"`, `"Quantità: non può essere negativa"`, `"Prezzo: non
+  può essere negativo"`, `"Riga: compenso o anticipazione"`, `"Giorni di pagamento: da 0 a 365"`, `"Conto 9 non trovato"`,
+  `"Tipo di documento: TD01 o TD06"`.
+
+`scartaFattura {id, motivo?, conferma?}` (fatturazione 2): da bozza o pronta → `scartata`, le sorgenti tornano libere
+(`"bozza scartata"`). Una pronta chiede prima `{"ok": false, "errore": "La W-15 è già nel programma: scartala solo se lì
+non l'hai emessa", "serveConferma": true}`. Un'emessa: `"La fattura 45/2026 è già emessa: per annullarla serve una nota
+di credito"`. Ripetuta su una scartata: ok.
+
+### 15.6 Il passaggio al programma
+
+**Cosa manca** (`mancano: [{campo, testo}]`, in fattura, pacchetto e nei gruppi di Da fatturare), nell'ordine:
+`cliente` "La partita IVA o il codice fiscale del cliente" · `indirizzo` "L'indirizzo del cliente: via, CAP, città e
+provincia" · `destinatario` "Il codice destinatario o la PEC del cliente" (solo con partita IVA) · `studio` "I dati dello
+studio per la fattura: scrivili in Amministrazione › Dati dello studio" · `iban` "L'IBAN del conto su cui farti pagare:
+scrivilo in Banche e scadenze › Conti" (con MP05) · `righe` "Almeno una riga" · `prezzi` "1 riga senza prezzo" / "{n}
+righe senza prezzo" · `totale` "Il totale è zero" · `pa` "Fatture alla pubblica amministrazione: Wisper non le prepara
+ancora" (codice destinatario di 6 caratteri).
+
+`passaAlProgramma {id, conferma?}` (fatturazione 2) → `{"ok": true, "fattura": {...}, "pacchetto": {...§ sotto}}`:
+da bozza a `pronta` (`prontaIl`, nota `"passata al programma"`). Con qualcosa in `mancano` non si passa, niente
+conferma (vera): `{"ok": false, "errore": "Prima di passarla al programma manca: 1 riga senza prezzo; il totale è zero",
+"mancano": [...]}`. Regole non confermate (vera): `{"ok": false, "errore": "Le regole delle fatture non sono ancora
+confermate dal commercialista: passala lo stesso?", "serveConferma": true}`; con `conferma: true` passa e la fattura
+tiene `regoleConfermate: false`. Una pronta ripetuta (la coda del telefono) risponde ok senza cambiare niente.
+
+`pacchetto {id}` (fatturazione 1; anche per una bozza, anteprima, o un'emessa, rivedere) →
+`{"ok": true, "uscite": ["prospetto", "xml"], "modello": {...}, "mancano": [], "prospetto": {...}, "xml": {...}}`.
+`uscite` = le uscite accese (`PASSAGGIO_USCITE`): c'e' una chiave per ognuna, e le app mostrano un pulsante per
+ognuna. Per un'emessa niente `xml` (c'e' quello vero).
+- **Il modello** (fase4.md §8.1), vero per la W-15:
+```json
+{"riferimento": "W-15", "tipoDocumento": "TD01", "divisa": "EUR", "dataProposta": "2026-10-22", "data": "", "numero": "",
+ "prestatore": {"denominazione": "Studio Tecnico GM", "partitaIva": "00000000000", "codiceFiscale": "00000000000", "regimeFiscale": "RF01",
+   "albo": {"nome": "Periti industriali", "provincia": "VI", "numero": "000", "data": ""},
+   "sede": {"indirizzo": "Via dell'Esempio 1", "cap": "36016", "comune": "Thiene", "provincia": "VI", "nazione": "IT"},
+   "pec": "", "email": "studio@example.com"},
+ "committente": {"denominazione": "Rossi Impianti Srl", "nome": "", "cognome": "", "partitaIva": "04455667784", "codiceFiscale": "",
+   "sede": {"indirizzo": "Via Nuova 3", "cap": "36061", "comune": "Bassano del Grappa", "provincia": "VI", "nazione": "IT"},
+   "codiceDestinatario": "0000000", "pec": "rossiimpianti@pec.esempio.it"},
+ "righe": [{"numero": 1, "descrizione": "40% a fine progetto: ...", "quantita": 1, "unitaMisura": "", "prezzoUnitario": 1520,
+   "prezzoTotale": 1520, "aliquotaIva": 22, "natura": "", "ritenuta": true, "periodoDa": "", "periodoA": ""}, "..."],
+ "cassa": {"tipo": "TC17", "aliquota": 5, "imponibile": 1520, "importo": 76, "aliquotaIva": 22, "natura": "", "ritenuta": false},
+ "ritenuta": {"tipo": "RT01", "aliquota": 20, "importo": 304, "causale": "A"},
+ "bollo": {"virtuale": true, "importo": 2},
+ "riepilogo": [{"aliquotaIva": 22, "natura": "", "imponibile": 1596, "imposta": 351.12, "esigibilita": "I", "riferimentoNormativo": ""},
+   {"aliquotaIva": 0, "natura": "N1", "imponibile": 122, "imposta": 0, "esigibilita": "", "riferimentoNormativo": "Escluse ex art. 15 DPR 633/72"}],
+ "totaleDocumento": 2069.12, "nettoAPagare": 1765.12,
+ "pagamento": {"condizioni": "TP02", "dettagli": [{"modalita": "MP05", "scadenza": "2026-11-21", "importo": 1765.12,
+   "iban": "IT60X0542811101000000123456", "istituto": "Banca di esempio"}]},
+ "causale": ["40% a fine progetto, commessa 26ST003. Rif. Wisper W-15"], "fattureCollegate": [], "regoleConfermate": false}
+```
+  `data` e `numero` ci sono solo per un'emessa. Un privato (senza partita IVA): `denominazione` vuota, `nome` e
+  `cognome` dal nome (l'ultima parola e' il cognome), `codiceDestinatario` `"0000000"`. Con il codice SDI: quello; con
+  la sola PEC: `"0000000"` + `pec`. Forfettario: `N2.2` per compenso e contributo, `"Operazione in franchigia da IVA
+  (regime forfettario)"`. Piu' rate: `"condizioni": "TP01"`. Una nota: `"fattureCollegate": [{"idDocumento": "52/2026",
+  "data": "2026-10-23"}]`. **L'IBAN** e' intero solo per chi scrive le fatture (`fatturazione` 2); per gli altri
+  `"IT…3456"` nel modello e nel prospetto, e nell'XML niente IBAN.
+- **Il prospetto** `{"titolo": "Prospetto per il programma delle fatture", "avviso": "Conti da verificare: regole non
+  confermate dal commercialista", "sezioni": [{"titolo": "Cliente", "campi": [{"etichetta": "Denominazione", "valore":
+  "Rossi Impianti Srl"}, {"etichetta": "Partita IVA", "valore": "04455667784"}, ...]}, {"titolo": "Documento", "campi":
+  [{"etichetta": "Tipo", "valore": "Fattura (TD01)"}, {"etichetta": "Data proposta", "valore": "22/10/2026"},
+  {"etichetta": "Numero", "valore": "lo dà il programma"}, {"etichetta": "Causale", "valore": "40% a fine progetto,
+  commessa 26ST003. Rif. Wisper W-15"}]}, ...], "testo": "Conti da verificare: ...\n\nRif. W-15\n\nCLIENTE\nDenominazione:
+  Rossi Impianti Srl\n..."}`. Sezioni nell'ordine: Cliente, Documento, Righe, Cassa previdenziale (se c'e'), Ritenuta,
+  Bollo, Riepilogo IVA, Totali, Pagamento. I campi vuoti non ci sono. Le righe: `"Riga 1 · Descrizione"`, `"Riga 1 ·
+  Quantità"`, `"Riga 1 · Unità di misura"` (se c'e'), `"Riga 1 · Prezzo"`, `"Riga 1 · Totale"`, `"Riga 1 · IVA"` (`"22%"` o
+  `"Senza IVA (N1, art. 15)"`), `"Riga 1 · Ritenuta"` (`"sì"`/`"no"`). Senza ritenuta: `{"etichetta": "Ritenuta", "valore":
+  "no, è un privato"}` (o `"no"`); senza bollo: `"Bollo": "no"`. Una nota: `"Totale della nota"`, `"Netto stornato"`,
+  `"Fattura collegata": "52/2026 del 23/10/2026"`. Importi all'italiana (`"1.520,00"`). `avviso` vuoto con le regole
+  confermate. Il PDF lo fanno le app (`prospettoFattura(modello)`), con i piedi di pagina di fase4.md §8.3.
+- **L'XML da completare** `{"nome": "Bozza W-15 Rossi Impianti Srl - non inviare.xml", "mime": "application/xml",
+  "base64": "..."}`: FatturaPA FPR12 1.2.3 (`server/src/fatturapa.js`, `scriviFatturaPA`), `Numero` = `BOZZA`,
+  `ProgressivoInvio` = `W15`, `IdTrasmittente` = IT + partita IVA dello studio, `Causale` del modello piu' (regole non
+  confermate) `"Conti da verificare: regole non confermate dal commercialista"`, `AltriDatiGestionali` sulla riga 1
+  (`TipoDato` `RIFWISPER`, `RiferimentoTesto` `W-15`: anche cosi' il ritorno si abbina da solo). Solo caratteri Latin-1
+  (lo vuole lo schema: `€` diventa `EUR`), lunghezze dello schema. Mai il nome `IT..._....xml` dei file da trasmettere.
+
+`tornaInBozza {id}` (fatturazione 2): da pronta a bozza (nota `"tornata in bozza"`), solo senza XML abbinato (`"La
+W-15 ha già un XML abbinato: non torna in bozza"`); un'emessa: `"La fattura 45/2026 non è pronta: torna in bozza solo una
+fattura passata al programma e non ancora emessa"`.
+
+`segnaEmessa {id, numero, data?, conferma?}` (fatturazione 2): da bozza o pronta, senza XML. Prima risposta (vera):
+`{"ok": false, "errore": "Il numero lo scrivi tu: deve essere quello che ha dato il tuo programma. Gli importi restano
+quelli della bozza finché non importi l'XML", "serveConferma": true}`; con `conferma: true` diventa `emessa` con
+`numeroDa: "mano"`, la chiave contro i doppioni e gli effetti di §15.10. Errori: `"Numero: scrivi il numero che ha dato
+il programma"`, `"C'è già la fattura 45/2026"` (o `"...la nota di credito 3/2026"`).
+
+`inviaAvviso {id, a, cc?, oggetto?, messaggio?, allegati: [{nome, mime, base64}]}` (fatturazione 2, solo POST, come
+`inviaEmail` col PDF dell'avviso fatto dall'app) → `{"ok": true, "fattura": {...}}` con `avvisoInviatoIl`; non cambia
+lo stato. Solo da bozza o pronta: `"L'avviso di parcella si manda prima di emettere la fattura"`; `"Manca l'indirizzo del
+cliente"`; postino come `inviaEmail` (`rete: true` se non risponde).
+
+### 15.7 Il ritorno dell'XML
+
+`leggiXml {file: [{nome, base64}]}` (fatturazione 2, solo POST) **non cambia niente**: legge, propone e tiene i file
+un'ora (`letture_xml`, cartella `<dati>/letture/`). Vero, lo zip di ottobre dei file d'esempio:
+```json
+{"ok": true, "idLettura": "4oJhyBms8lf-02DlMDdkHE", "scade": "2026-10-22T08:32:34",
+ "documenti": [
+  {"chiave": "f1.1#1", "nomeFile": "IT00000000000_00046.xml.p7m", "tipo": "emessa", "tipoDocumento": "TD01", "numero": "46/2026",
+   "data": "2026-10-22", "controparte": {"nome": "Mario Bianchi", "partitaIva": "", "codiceFiscale": "BNCMRA70C12L840K", "idSoggetto": "C003"},
+   "conti": {"compenso": 250, "contributo": 12.5, "iva": 57.75, "anticipazioni": 0, "bollo": 0, "bolloAddebitato": 0, "totale": 320.25,
+     "ritenuta": 0, "netto": 320.25},
+   "scadenze": [{"data": "2026-11-21", "importo": 320.25}], "righe": [{"descrizione": "Sopralluogo e rilievo: Impianto fotovoltaico", "importo": 250, "natura": ""}],
+   "proposta": {"azione": "abbina", "certezza": "certa", "idFattura": 14, "riferimento": "W-14", "alternative": [], "differenze": [],
+     "righeMancanti": [], "collegabili": [], "libera": []},
+   "avvisi": []},
+  {"chiave": "f1.2#1", "nomeFile": "IT00000000000_00047.xml", "tipo": "emessa", "numero": "47/2026", "data": "2026-10-21",
+   "controparte": {"nome": "Elettrodinamica", "partitaIva": "02468135799", "codiceFiscale": "", "idSoggetto": "C001"},
+   "conti": {"compenso": 1393.92, "totale": 1785.62, "ritenuta": 278.78, "netto": 1506.84, "...": "..."},
+   "proposta": {"azione": "senzaBozza", "certezza": "nessuna", "idFattura": null, "riferimento": "", "alternative": [], "differenze": [],
+     "righeMancanti": [], "libera": [], "collegabili": [
+      {"gruppo": "rapportini:C001:2026-10", "titolo": "Ottobre 2026 · 1 rapportino", "importo": 357.46,
+       "voci": [{"tipo": "rapportino", "id": "RAP/2026/0002"}, {"tipo": "spesa", "id": "1"}], "spuntato": false},
+      {"gruppo": "rapportini:C001:2026-09", "titolo": "Settembre 2026 · 6 rapportini", "importo": 1393.92,
+       "voci": [{"tipo": "rapportino", "id": "RAP/2026/0007"}, "...", {"tipo": "spesa", "id": "15"}], "spuntato": true}]},
+   "avvisi": []},
+  {"chiave": "f1.3#1", "nomeFile": "IT09988776655_0A1B2.xml.p7m", "tipo": "ricevuta", "tipoDocumento": "TD01", "numero": "1301",
+   "data": "2026-10-20", "controparte": {"nome": "Comel Forniture Elettriche", "partitaIva": "09988776655", "codiceFiscale": "09988776655", "idSoggetto": null},
+   "conti": {"totale": 117.58, "imponibile": 96.38, "iva": 21.2, "contributo": 0, "bollo": 0, "ritenuta": 0, "netto": 117.58},
+   "scadenze": [{"data": "2026-11-21", "importo": 117.58}], "righe": ["..."], "proposta": {"azione": "nuova", "categoria": "altro"}, "avvisi": [],
+   "fornitoreNuovo": {"nome": "Comel Forniture Elettriche", "partitaIva": "09988776655", "codiceFiscale": "09988776655",
+     "indirizzo": "Via dei Fornitori 9", "cap": "35100", "citta": "Padova", "provincia": "PD", "nazione": "IT", "pec": ""}},
+  {"chiave": "f1.4#1", "nomeFile": "IT00000000000_00045.xml", "tipo": "emessa", "numero": "45/2026", "...": "...",
+   "proposta": {"azione": "gia", "idFattura": 13, "riferimento": "W-13"}, "avvisi": ["Già importata il 20/10"]}],
+ "scartati": [{"nomeFile": "foto.jpg", "motivo": "Non è un file di fattura: servono .xml, .p7m o .zip"},
+   {"nomeFile": "vecchie.zip", "motivo": "Uno zip dentro lo zip: aprilo e carica i file che ha dentro"}]}
+```
+- **File accettati**: `.xml`, `.p7m`/`.xml.p7m` (busta CMS in DER o BER, anche scritta in base64, anche con il
+  contenuto spezzato in piu' pezzi e la doppia firma; la firma **non si verifica**), `.zip` (anche con piu' file; niente
+  zip dentro zip, voci cifrate o zip64). Al massimo **300 file** (contando le voci degli zip) e **30 MB** per volta
+  (`"Troppi file: al massimo 300 per volta"`, `"File troppo grandi: al massimo 30 MB per volta"`), 10 MB per XML
+  scompattato, 100 MB scompattati in tutto (contro le zip bomb). **Sicurezza**: un `<!DOCTYPE` o un `<!ENTITY` scarta il
+  file (`"Il file ha parti che Wisper non legge per sicurezza (DOCTYPE): non è un XML di fattura normale"`), le entita'
+  sconosciute pure; niente si esegue. Codifiche: UTF-8 (anche col BOM), UTF-16, ISO-8859-1, windows-1252. Prefissi dei
+  nomi qualunque (`p:`, `ns2:`, nessuno). Serve la partita IVA dello studio (`"Scrivi prima la partita IVA dello studio in
+  Amministrazione › Dati dello studio: serve a capire quali fatture sono sue"`).
+- **`chiave`** del documento: `f<n>#<b>` (n = il file caricato da 1, b = il corpo da 1: un **lotto** con due
+  `FatturaElettronicaBody` da' `f1#1` e `f1#2`); per le voci di uno zip `f<zip>.<voce>#<b>`.
+- **`tipo`**: `emessa` (chi la emette e' lo studio), `ricevuta` (chi la riceve e' lo studio), `esito`. Scartati con la
+  frase: `"Non è una fattura dello studio: né chi la emette né chi la riceve è Studio Tecnico GM"`, `"Autofattura o
+  integrazione: Wisper non la gestisce"` (TD16-TD21, TD29), `"Non serve: sono i dati dell'invio, non la fattura"`
+  (metadati), `"Non serve: è un messaggio dello SDI che non riguarda la consegna"`, `"Il file non è un XML leggibile: ..."`,
+  `"La busta firmata (.p7m) non si legge: scarica di nuovo il file dal programma"`.
+- **`conti`** (emessa) come fase4.md §9.1: `compenso` (righe senza natura), `anticipazioni` (N1 tranne il bollo),
+  `bolloAddebitato` (la riga N1 "bollo" uguale a `ImportoBollo`), `contributo`, `iva`, `bollo`, `totale`
+  (`ImportoTotaleDocumento` o la somma del riepilogo), `ritenuta`, `netto` (somma dei pagamenti, o totale − ritenuta).
+  Una ricevuta: `{totale, imponibile, iva, contributo, bollo, ritenuta, netto}` (`imponibile` = righe senza natura e
+  quelle esenti o non imponibili).
+- **`proposta.azione`**: `abbina` | `senzaBozza` | `nuova` (ricevuta) | `gia` | `salta` (esito per un file che non c'e').
+  **`certezza`** (emesse): `certa` (il "Rif. Wisper W-n" in causale, descrizioni o AltriDatiGestionali, di una bozza o
+  pronta di quel cliente e dello stesso tipo; anche: emessa a mano con lo stesso numero e anno, l'XML le si attacca) |
+  `probabile` (bozze e pronte dello stesso cliente e tipo, data dell'XML tra 3 giorni prima del passaggio e 60 dopo,
+  stesso totale ±0,01: prima le pronte, poi la piu' vecchia; le altre uguali in `alternative`) | `diversa` (ci sono
+  candidate ma nessuna col totale uguale: la pronta piu' recente, con `differenze` e `righeMancanti`) | `nessuna`
+  (`senzaBozza`). Nella pagina: **Sicura** / **Probabile** / **Diversa** / **Senza bozza**.
+- `differenze`: `[{campo, bozza, xml}]` per `totale`, `compenso`, `contributo`, `iva`, `ritenuta`, `anticipazioni`,
+  `bollo`, solo quelli diversi. `righeMancanti`: le righe della bozza (non il bollo) che nell'XML non ritrovo (stesso
+  importo e stesso tipo, una per una) `{idRiga, descrizione, importo, tipo, gruppo}`. `libera`: i gruppi gia' spuntati
+  che tornerebbero da fatturare = **solo quelli con TUTTE le righe mancanti** (vera, la 49/2026 contro la W-15):
+  `"differenze": [{"campo": "totale", "bozza": 2069.12, "xml": 1947.12}, {"campo": "anticipazioni", "bozza": 120, "xml": 0},
+  {"campo": "bollo", "bozza": 2, "xml": 0}], "righeMancanti": [{"idRiga": 13, "descrizione": "Spesa anticipata per conto del
+  cliente: Pratica di connessione al distributore del 14/10/2026", "importo": 120, "tipo": "anticipazione", "gruppo":
+  "spesa:13"}], "libera": ["spesa:13"]`.
+- `collegabili` (senza bozza, fatture): le cose libere da fatturare di quel cliente per gruppo (un mese di rapportini
+  con le sue spese, una scadenza, una spesa, le ore di un mese), `{gruppo, titolo, importo (senza le anticipate),
+  voci: [{tipo, id}], spuntato}`: spuntato se l'importo e' uguale al compenso dell'XML.
+- `clienteNuovo` / `fornitoreNuovo`: i dati dell'XML per crearlo (`{nome, partitaIva, codiceFiscale, indirizzo, cap,
+  citta, provincia, nazione, pec}`), quando non c'e' nessun soggetto con quella partita IVA o quel codice fiscale.
+- **Note di credito** (TD04) emesse: `fatturaCollegata: {idFattura, numero}` (da `DatiFattureCollegate`: numero +
+  anno, stesso cliente). Senza bozza: `proposta.gruppiFattura: [{gruppo, importo, sorgenti: [{tipo, id, descrizione}],
+  descrizione}]`, `proposta.totale` (la nota copre tutta la fattura?) e `libera` = tutti i gruppi se totale, nessuno se
+  parziale (con l'avviso `"Nota di credito parziale: scegli cosa torna da fatturare"`). Vera, la 3/2026 (sample 50):
+  `"fatturaCollegata": {"idFattura": 13, "numero": "45/2026"}, "proposta": {"azione": "senzaBozza", "gruppiFattura":
+  [{"gruppo": "scadenza:7", "importo": 1140, "sorgenti": [{"tipo": "scadenza", "id": "7", "descrizione": "30% alla firma ·
+  26ST003"}], "descrizione": "30% alla firma · 26ST003"}], "totale": false, "libera": [], "...": "..."}`.
+- **Ricevute**: `proposta: {"azione": "nuova", "categoria": "consulenze", "idSpesa": 21}` (`idSpesa`: una spesa della
+  fase 3 con lo stesso importo, ±3 giorni, stesso fornitore o descrizione simile), `ricevutaCollegata` per una TD04 di un
+  fornitore. Avvisi: `"Scadenza non scritta nella fattura: messa a 30 giorni"`, `"Potrebbe essere la spesa del 19/10 di
+  659,78 €: collegala per non contarla due volte nei costi"`.
+- **Esiti** (RC consegnata, MC non consegnata, NS scartata), veri: `{"chiave": "f1#1", "nomeFile": "IT00000000000_00045_RC_001.xml",
+  "tipo": "esito", "esito": "consegnata", "nomeFileFattura": "IT00000000000_00045.xml", "data": "2026-10-19", "errori": [],
+  "proposta": {"azione": "abbina", "idFattura": 13, "riferimento": "W-13", "numero": "45/2026"}, "avvisi": []}`. Si
+  abbinano col `NomeFile` salvato quando si e' importato l'XML (anche di un XML della stessa lettura); NS ha `errori:
+  [{codice, descrizione}]` e l'avviso `"Lo SDI ha scartato la fattura 46/2026: torna pronta, da correggere nel programma"`;
+  senza fattura: `azione: "salta"`, `"Esito per un file che Wisper non ha"`.
+- **Doppioni**: la chiave `partitaIvaStudio|tipo|anno|numero` (ricevute: `partitaIvaFornitore|...`) gia' importata →
+  `gia` con `"Già importata il 20/10"` (e `"C'è già con importi diversi: tenuta quella di prima"`); lo stesso XML due
+  volte nella stessa lettura: `"C'è due volte tra i file caricati: la prendo una volta sola"`.
+
+`confermaXml {idLettura, scelte: [{chiave, azione, idFattura?, creaCliente?, idCliente?, idCommessa?, collega?: [{tipo,
+id}], libera?: ["gruppo"...], idSpesa?, categoria?, idFornitore?, note?}]}` (fatturazione 2) →
+`{"ok": true, "conteggi": {"abbinate": 1, "nuove": 1, "ricevute": 1, "note": 0, "esiti": 0, "saltate": 1}, "fatture":
+[...§15.4], "ricevute": [...§15.11], "avvisi": []}`. Tutto in una transazione; **un documento senza scelta si salta**
+(niente si abbina da solo, nemmeno il certa). Ordine: fatture, note di credito, ricevute, esiti. `azione`: `abbina` |
+`senzaBozza` | `nuova` (ricevute; per una ricevuta ogni azione che non e' `salta` vale `nuova`) | `salta`.
+- `abbina` (fattura o nota): `idFattura` (di base quella della proposta). **Vince l'XML**: numero, data, tipo documento,
+  conti, righe (`origine: "xml"`, coi gruppi della bozza dove importo e tipo combaciano) e rate dell'XML; la bozza tiene
+  `totaleBozza`/`nettoBozza` se i conti erano diversi. `libera`: i gruppi che tornano da fatturare, **accettati solo se
+  mancano per intero** dall'XML (gli altri restano fatturati, con l'avviso `"La fattura 49/2026: il gruppo scadenza:8 è
+  (almeno in parte) nell'XML: resta fatturato"`); le loro righe della bozza si tolgono, le sorgenti si liberano (`"non è
+  nella fattura 49/2026"`). Il file originale (xml o p7m) diventa un file `fattura` della fattura (`file`). Registro:
+  `"emessa dall'XML IT00000000000_00046.xml.p7m"`. Poi gli effetti di §15.10.
+- `senzaBozza`: una fattura `emessa` coi dati dell'XML, senza sorgenti, con il cliente trovato, scelto (`idCliente`) o
+  creato dall'XML (`creaCliente: true`; senza: `"La fattura 81/2026: scegli il cliente o crealo dai dati dell'XML"`),
+  la commessa se scelta (`idCommessa`). `collega`: le cose da fatturare che quell'XML ha gia' fatturato (devono essere
+  libere e di quel cliente), legate alla fattura come fatturate. Una nota senza bozza libera i gruppi `libera` della
+  fattura collegata (§15.8).
+- `nuova` (ricevuta): fornitore trovato, scelto (`idFornitore`) o creato dall'XML (codice F...), `categoria`
+  (`materiale` | `consulenze` | `servizi` | `utenze` | `affitto` | `altro`), `idCommessa`, `idSpesa`, `note`.
+- esito `abbina`: RC/MC scrivono `esitoSdi` (`consegnata` | `non_consegnata`) ed `esitoIl`; **NS** riporta la fattura a
+  `pronta` con `esitoSdi: "scartata"`, toglie numero, chiave, file e righe dell'XML (tornano quelle della bozza), toglie
+  gli effetti dell'emissione (le sorgenti restano sue), registro `"scartata dallo SDI"`. L'XML corretto, importato di
+  nuovo, si riabbina (certa).
+- Errori: `"La lettura è scaduta: carica di nuovo i file"` (scaduta, gia' confermata o di un'altra persona), `"La
+  fattura 46/2026: scegli la bozza a cui abbinarla"`, `"... la W-15 non è più una bozza (45/2026)"`, `"... è per Rossi
+  Impianti Srl: la W-14 è per un altro cliente"`, quelli di §4.4.
+
+### 15.8 Note di credito
+
+`preparaNotaCredito {idFattura, tutta?, righe?: [{idRiga, importo?}], motivo}` (fatturazione 2), da una fattura emessa
+→ `{"ok": true, "fattura": {...la nota in bozza, "tornanoDaFatturare": [{gruppo, sorgenti: [{tipo, id, descrizione}]}]}}`.
+`tutta`: tutte le righe (non il bollo, che il server rifa'); `righe`: solo quelle, con un importo piu' piccolo = storno
+parziale (la riga diventa "a corpo"). La nota copia i parametri fiscali della fattura, `tipoDocumento` `TD04`,
+`idFatturaCollegata`, causale `"Nota di credito per la fattura 45/2026: {motivo}"`, righe `"Storno: ..."` / `"Storno
+parziale: ..."`. Vera (200 della 45/2026): `"conti": {"righe": [200], "compenso": 200, "contributo": 10, "baseIva":
+210, "iva": 46.2, "anticipazioni": 0, "bollo": 0, "bolloAddebitato": 0, "totale": 256.2, "ritenuta": 40, "netto": 216.2,
+"parteSenzaIva": 0}` (il caso 12). `tornanoDaFatturare`: i gruppi che la nota storna **per intero** (ogni riga del
+gruppo con lo stesso importo; con `tutta`, tutti i gruppi della fattura, anche quelli delle sorgenti collegate senza
+righe proprie). Si passa al programma come una fattura. Errori: `"Motivo: scrivi perché la correggi"`, `"Si storna al
+massimo quello che c'è: 1.140,00 €"` (per riga, e per tutta la fattura contando le altre note vive o emesse), `"Scegli le
+righe da stornare, o tutta la fattura"`, `"La nota di credito si prepara da una fattura emessa"`.
+
+**Quando la nota e' emessa** (XML o `segnaEmessa`): i gruppi stornati per intero (o, per una nota senza bozza, i gruppi
+scelti in `libera`) tornano da fatturare con gli effetti al contrario (§15.10, nota `"stornato dalla nota di credito
+4/2026"`); se le note emesse coprono tutto il totale, la fattura e' `annullata` (`annullataIl`). Una nota scartata dallo
+SDI rimette le cose come prima della nota (le sorgenti tornano alla fattura, se nel frattempo non sono finite in
+un'altra; la fattura non e' piu' annullata).
+
+### 15.9 Fatturate fuori da Wisper
+
+`segnaFatturataFuori {voci: [{tipo, id}], nota?, annulla?}` (fatturazione 2) → `{"ok": true, "fatte": 2, "voci":
+[{tipo, id}]}`: per il passaggio, le cose gia' fatturate prima di Wisper (rapportino → FATTURATO, scadenza → `fatturata`
+senza fattura, spesa e ore → `fatturata_il`), registro `"fatturata fuori da Wisper: {nota}"`. `annulla: true` toglie il
+segno (solo alle cose segnate cosi'). Una cosa gia' in una fattura: la frase di §4.4. Una spesa di un rapportino si segna
+col suo rapportino (`"La spesa 14 è del rapportino RAP/2026/0007: si segna fatturata col suo rapportino"`); un rapportino
+solo se firmato o inviato.
+
+### 15.10 Effetti dell'emissione e blocchi
+
+**Quando una fattura diventa emessa** (XML abbinato, senza bozza con `collega`, `segnaEmessa`), nella stessa
+transazione, per ogni sorgente attiva: rapportino → `FATTURATO` con `fatturatoIl` = **data della fattura** (le sue
+spese al cliente la seguono); scadenza di pagamento → `stato: "fatturata"`, `fattura_id`; spesa e ore → `fatturata_il` =
+data della fattura. Ogni cambio ha la sua riga nel registro con la nota `"dalla fattura 45/2026 (W-13)"`. **Il
+contrario** (nota di credito che storna, scarto dello SDI): rapportino → `INVIATO` se ha la data d'invio, se no
+`FIRMATO`; scadenza → `prevista`; spesa e ore → `fatturata_il` vuoto; note `"stornato dalla nota di credito 3/2026"` o
+`"la fattura 45/2026 è stata scartata dallo SDI"`.
+
+**Una cosa riservata (bozza, pronta) o fatturata (emessa) non si cambia** (§7.3), con queste frasi (vere):
+- rapportino: `salvaRapportino`, `stato` BOZZA / INVIATO / ANNULLATO, foto nuove (`caricaFile spesa`), `togliFile` →
+  `"Il rapportino RAP/2026/0007 è nella bozza W-16 per Elettrodinamica: toglilo prima dalla bozza"` oppure `"Il rapportino
+  RAP/2026/0007 è nella fattura 52/2026: per cambiarlo serve una nota di credito"`. `stato` FATTURATO su uno riservato:
+  `"Diventa fatturato da solo quando torna l'XML della fattura W-16"`. Su un rapportino non legato a niente FATTURATO
+  resta possibile (quelli fatturati fuori), con la nota `"segnato fatturato a mano, senza fattura in Wisper"`; tornare
+  indietro solo per questi (`"non ancora fatturato: tolto il segno a mano"`). `inviaEmail` manda lo stesso il riepilogo
+  ma non segna inviati i rapportini che stanno in una fattura;
+- spesa: in una bozza o fattura si cambiano solo categoria, descrizione e "l'ho pagata io" (`soloCampi`, come le spese
+  di un rapportino firmato); importo, destinazione, anticipazione, cliente, data no: `"La spesa «Pedaggio» del 03/09 è
+  nella bozza W-16 per Elettrodinamica: toglila prima dalla bozza"` (anche `togliSpesa`);
+- ore: `salvaOre`, `togliOre` → `"Le ore del 21/10 su 26ST002 sono nella bozza W-17 per Rossi Impianti Srl: toglile prima
+  dalla bozza"`; fatturate fuori: `"Fatturate fuori da Wisper il 22/10: non si cambiano"`;
+- approvazioni (`approva`, `respingi`, `annullaApprovazione`): una cosa gia' in una bozza o fattura non si decide piu'
+  (la frase di §4.4);
+- scadenza di pagamento: cambiare importo o toglierla (anche dal preventivo) → `"La scadenza «30% alla firma» di
+  26ST003 è nella fattura 45/2026: per cambiarla serve una nota di credito"`.
+
+### 15.11 Fatture ricevute
+
+`ricevute {stato?: da_pagare|pagate|tutte, idFornitore?, idCommessa?, testo?, anno?}` (fatturazione 1) →
+`{"ok": true, "ricevute": [...]}` (le piu' recenti prima); `ricevuta {id}` → `{"ok": true, "ricevuta": {...}}`. Vera:
+```json
+{"id": 3, "idFornitore": "F003", "fornitore": "Ing. Paolo Verdi", "tipoDocumento": "TD01", "numero": "12", "data": "2026-10-05",
+ "descrizione": "Verifica dei calcoli del quadro", "categoria": "consulenze", "idCommessa": "26ST003",
+ "commessa": "Adeguamento impianto elettrico capannone", "idSpesa": null, "imponibile": 520, "iva": 114.4, "contributo": 0,
+ "bollo": 0, "totale": 634.4, "ritenuta": 100, "netto": 534.4, "pagato": 534.4, "daPagare": 0, "stato": "attiva",
+ "statoVisto": "Pagata", "scaduta": false, "giorniScaduta": 0,
+ "scadenze": [{"id": 3, "data": "2026-10-12", "importo": 534.4, "coperta": 534.4}], "scadenzaStimata": false,
+ "pagamenti": [{"idMovimento": 4, "data": "2026-10-12", "importo": 534.4, "conto": "Conto studio …3456", "verificato": true}],
+ "idRicevutaCollegata": null, "origine": "mano", "file": null, "nomeFileSdi": "", "note": "", "motivo": "", "puoScrivere": true,
+ "creato": "2026-10-22T07:32:11", "modificato": "2026-10-22T07:32:11"}
+```
+`ritenuta` = quella che lo studio trattiene e versa (F24 1040); `netto` = da pagare al fornitore; `daPagare` = netto −
+pagato − netto delle note di credito del fornitore collegate. `statoVisto`: `Da pagare` | `Pagata in parte` | `Pagata` |
+`Scaduta` | `Annullata` | `Nota di credito`. `scadenzaStimata`: la scadenza non era scritta (data + 30 giorni).
+
+`salvaRicevuta {ricevuta: {id?, idFornitore, numero, data, totale, imponibile?, iva?, ritenuta?, scadenze?: [{data,
+importo}], categoria?, idCommessa?, idSpesa?, descrizione?, note?}}` (fatturazione 2) → `{"ok": true, "ricevuta":
+{...}}`. A mano tutto (senza scadenze: una a 30 giorni, stimata; le scadenze devono fare il netto); per quelle arrivate
+dall'XML solo categoria, commessa, spesa, note e le scadenze se erano stimate. Errori: `"Fornitore: scegli il fornitore"`,
+`"Numero: scrivi il numero della fattura"`, `"Totale: scrivi quanto"`, `"Ritenuta: deve essere meno del totale"`, `"Le
+scadenze fanno 50,00 €: devono fare il netto da pagare, 100,00 €"`, `"C'è già la fattura 9 di Noleggi Piattaforme Prova
+Snc"`, `"Le scadenze di questa fattura sono scritte nell'XML: non si cambiano"`, `"Categoria: materiale, consulenze,
+servizi, utenze, affitto o altro"`.
+
+`annullaRicevuta {id, motivo}` (fatturazione 2): non si cancella (`stato: "annullata"`). Errori: `"Motivo: scrivi perché
+la annulli"`, `"Ha già dei pagamenti: annulla prima i movimenti"`.
+
+### 15.12 Scadenze di pagamento, commessa, riepilogo
+
+`scadenzePagamento {idCommessa?, stato?}` (fatturazione 1), vera per 26ST003:
+```json
+{"ok": true, "scadenze": [
+  {"id": 7, "idCommessa": "26ST003", "commessa": "Adeguamento impianto elettrico capannone", "idCliente": "C002", "cliente": "Rossi Impianti Srl",
+   "contratto": "PR/2026/012 rev. 1", "descrizione": "30% alla firma", "quando": "firma", "data": "", "importo": 1140, "stato": "fatturata",
+   "idFattura": 13, "fattura": "45/2026", "fuoriDaWisper": false},
+  {"id": 8, "descrizione": "40% a fine progetto", "quando": "avanzamento", "importo": 1520, "stato": "in_bozza", "idFattura": 15, "fattura": "W-15", "...": "..."},
+  {"id": 9, "descrizione": "Saldo a fine lavori", "quando": "fine", "importo": 1140, "stato": "prevista", "idFattura": null, "fattura": "", "...": "..."}],
+ "commesse": [{"idCommessa": "26ST003", "commessa": "Adeguamento impianto elettrico capannone", "idCliente": "C002", "cliente": "Rossi Impianti Srl",
+   "contratto": 3800, "fatturato": 1140, "scadenze": ["...le stesse..."]}]}
+```
+`stato` visto: `prevista` | `in_bozza` | `fatturata` | `incassata` (la fattura e' pagata). `fuoriDaWisper`: fatturata
+senza fattura in Wisper. `commesse[].fatturato` = le scadenze fatturate o incassate ("1.140,00 fatturati su 3.800,00").
+
+`fatturazioneCommessa {id}` (fatturazione 1), vera: `{"ok": true, "idCommessa": "26ST003", "modoFatturazione": "corpo",
+"contratto": 3800, "fatturato": 1140, "incassato": 0, "daFatturare": 0, "inBozza": 1520, "previsto": 1140, "scadenze":
+[...come sopra...], "fatture": [...riassunti di §15.4: "Bozza W-15", "45/2026"]}`. In compenso (senza contributo e
+IVA): `fatturato` = righe di compenso delle emesse con quella commessa meno le note; `incassato` = gli incassi di quelle
+fatture in proporzione alla parte di questa commessa; `daFatturare` = le cose pronte della commessa; `inBozza` = righe di
+compenso di bozze e pronte; `previsto` = scadenze ancora previste.
+
+`riepilogoFatturato {anno, per: "mese"|"cliente"|"commessa"}` (fatturazione 1), vero per mese:
+`{"ok": true, "anno": 2026, "per": "mese", "righe": [{"chiave": "2026-09", "nome": "settembre 2026", "fatture": 1, "compenso":
+750, "contributo": 37.5, "iva": 173.25, "anticipazioni": 0, "totale": 960.75, "ritenute": 150, "incassato": 1037.76}, ...],
+"totali": {"fatture": 3, "compenso": 2850, "contributo": 142.5, "iva": 658.35, "anticipazioni": 0, "totale": 3650.85,
+"ritenute": 570, "incassato": 1858.01}, "fatturato": 2850, "incassato": 1858.01}`. Le emesse (e annullate) per data, meno
+le note; `fatture` conta le fatture (non le note). `incassato`: i movimenti dell'anno abbinati a fatture (per mese: il
+mese del movimento). Per mese ci sono tutti i mesi fino a quello di oggi; per cliente e commessa dalla piu' grande; per
+commessa `chiave: ""` = `"Più commesse o nessuna"`. `fatturato` e `incassato` sono i due numeri in grande.
+
+### 15.13 Conti e movimenti
+
+`conti {tutti?}` (banche 1), vera: `{"ok": true, "conti": [{"id": 1, "nome": "Conto studio", "banca": "Banca di esempio",
+"ultimeCifre": "3456", "predefinito": true, "soglia": null, "attivo": true, "note": "", "saldo": 8743.55, "saldoAl":
+"2026-10-01", "saldoScritto": 9850, "movimentiDopo": 5, "verificatiDopo": 4, "collegamento": "non_collegato", "creato":
+"...", "modificato": "...", "iban": "IT60X0542811101000000123456"}], "collegamento": "non_collegato"}`. **`iban` intero
+solo a chi ha banche 2** (per gli altri la chiave non c'e'). `saldo` = l'ultimo saldo scritto + entrate − uscite dei
+movimenti non annullati **dopo** quel giorno ("registrato": "dall'ultimo saldo scritto il 01/10 · 5 movimenti dopo");
+senza saldo scritto si contano tutti i movimenti. `soglia: null` = `SOGLIA_CASSA`. `tutti: true` anche i conti chiusi.
+
+`salvaConto {conto: {id?, nome, banca?, iban?, predefinito?, soglia?, attivo?, note?}}` (banche 2) → `{"ok": true,
+"conto": {...}}`. Il primo conto e' il predefinito; un conto predefinito toglie il segno agli altri (uno solo, lo
+garantisce anche un indice del database). Errori: `"Nome: scrivi il nome del conto"`, `"IBAN: non sembra giusto"`
+(modulo 97; l'italiano di 27 caratteri), `"Soglia: non può essere negativa"`.
+
+`aggiornaSaldo {idConto, data?, saldo}` (banche 2) → `{"ok": true, "conto": {...}}`: il saldo letto in banca. Errori:
+`"Saldo: scrivi il saldo letto in banca"`, `"Data: il saldo letto in banca non può essere di un giorno che deve ancora
+venire"`, `"Conto 9 non trovato"`.
+
+`movimenti {da?, a?, idConto?, verso?, categoria?, verificato?, testo?, annullati?, pagina?}` (banche 1), 100 per
+pagina, i piu' recenti prima. Vera: `{"ok": true, "pagina": 1, "pagine": 1, "quante": 5, "entrate": 820.25, "uscite":
+1926.7, "daVerificare": 1, "importaEstrattoConto": "non_collegato", "movimenti": [{"id": 5, "idConto": 1, "conto": "Conto
+studio …3456", "data": "2026-10-12", "verso": "entrata", "importo": 500, "descrizione": "Incasso Rossi Impianti Srl,
+fattura 39/2026 (in parte)", "idSoggetto": "C002", "soggetto": "Rossi Impianti Srl", "categoria": "incasso", "verificato":
+false, "verificatoIl": "", "livello": "registrato", "abbinamenti": [{"tipo": "fattura", "id": 12, "etichetta": "39/2026",
+"importo": 500}], "annullato": false, "motivo": "", "puoScrivere": true, "creato": "...", "modificato": "..."}]}`.
+`livello`: `registrato` | `verificato` (la parola: **Registrato** / **Verificato in banca**). `categoria`: `incasso` |
+`pagamento` | `tributo` | `stipendio` | `giroconto` | `altro`. `testo` cerca in descrizione, soggetto e importo (`"500"`,
+`"500,00"`). Gli annullati solo con `annullati: true`. `entrate`, `uscite`, `daVerificare` del filtro intero.
+
+`salvaMovimento {movimento: {id?, idConto, data, verso, importo, descrizione?, idSoggetto?, categoria?, verificato?,
+abbinamenti?: [{tipo: "fattura"|"ricevuta"|"impegno", id, importo}]}}` (banche 2) → `{"ok": true, "movimento": {...}}`.
+`abbinamenti`, se c'e', e' l'elenco intero. Un bonifico puo' pagare piu' fatture, una fattura avere piu' incassi; una
+fattura (anche bozza o pronta: avviso di parcella) si abbina a un'entrata, una ricevuta a un'uscita, un impegno al suo
+verso; un impegno senza importo prende quello pagato, una proposta pagata e' confermata. Errori (veri): `"La fattura
+45/2026 ha ancora da incassare 1.232,34: non puoi abbinarne 1.300,00"`, `"Hai abbinato 1.100,00 su un movimento di
+1.000,00"`, `"Importo: scrivi quanto"`, `"Conto: scegli il conto"`, `"Entrata o uscita?"`, `"Una fattura si abbina a
+un'entrata"`, `"Una fattura ricevuta si abbina a un'uscita"`, `"Il movimento è annullato: non si cambia"`, `"Il movimento è
+abbinato: per cambiare entrata o uscita togli prima gli abbinamenti"`.
+
+`segnaIncasso {idFattura, importo?, data?, idConto?, verificato?}` e `segnaPagamento {idRicevuta? | idImpegno?, importo?,
+data?, idConto?, verificato?}` (banche 2): la strada corta, il movimento gia' abbinato (importo di base = residuo; meno
+= "in parte"; conto di base il predefinito) → `{"ok": true, "movimento": {...}, "fattura": {...}}` (o `"ricevuta"`,
+`"impegno"`). Descrizioni: `"Incasso Rossi Impianti Srl, fattura 45/2026 (in parte)"` (una pronta: `"..., W-14"`),
+`"Pagamento Ing. Paolo Verdi, fattura 12"`, l'impegno la sua. Errori: `"La fattura 38/2026 è già pagata"`, `"Scegli cosa
+hai pagato: una fattura ricevuta o un impegno"`, `"Conto: prima scrivi il conto in Banche e scadenze › Conti"`, quelli di
+`salvaMovimento`.
+
+`verificaMovimenti {ids, verificato}` (banche 2; di base `true`) → `{"ok": true, "fatte": 1, "movimenti": [...]}`, nota
+`"visto sull'estratto conto"`. `annullaMovimento {id, motivo}` (banche 2) → `{"ok": true, "movimento": {...}}`: toglie i
+suoi abbinamenti (la fattura torna da incassare), registro `"movimento annullato: {motivo}"`; `"Motivo: scrivi perché lo
+annulli"`.
+
+### 15.14 Scadenziario e situazione
+
+`scadenziario {da?, a?, idConto?}` (banche 1; di base da oggi a 90 giorni), vero (accorciato):
+```json
+{"ok": true, "oggi": "2026-10-22", "da": "2026-10-22", "a": "2026-12-10", "saldoOggi": 8743.55, "soglia": 3000, "saldoPartenza": 8743.55,
+ "scaduti": [{"tipo": "fattura", "id": 12, "data": "2026-10-10", "verso": "entrata", "titolo": "39/2026 · Rossi Impianti Srl",
+   "dettaglio": "scaduto da 12 giorni · pagata in parte", "importo": 310.75, "stato": "scaduto", "proposta": false, "contaNelSaldo": false}],
+ "giorni": [
+  {"data": "2026-10-26", "titolo": "Lunedì 26 ottobre", "saldo": 7893.55, "sottoSoglia": false, "righe": [
+    {"tipo": "impegno", "id": 2, "data": "2026-10-26", "verso": "uscita", "titolo": "Affitto ufficio", "dettaglio": "ogni mese",
+     "importo": 850, "stato": "previsto", "proposta": false, "contaNelSaldo": true}]},
+  {"data": "2026-11-16", "titolo": "Lunedì 16 novembre", "saldo": 4053.25, "sottoSoglia": false, "righe": [
+    {"tipo": "ricevuta", "id": 1, "verso": "uscita", "titolo": "Materiale Elettrico Esempio Srl · fattura A/233", "dettaglio": "materiale", "importo": 486, "stato": "previsto", "...": "..."},
+    {"tipo": "impegno", "id": 26, "verso": "uscita", "titolo": "IVA del 3° trimestre", "dettaglio": "codice 6033", "importo": 2380, "stato": "previsto", "...": "..."},
+    {"tipo": "impegno", "id": 40, "verso": "uscita", "titolo": "Ritenute sui compensi pagati a ottobre", "dettaglio": "codice 1040",
+     "importo": 100, "stato": "proposto", "proposta": true, "contaNelSaldo": true}]},
+  {"data": "2026-11-30", "titolo": "Lunedì 30 novembre", "saldo": 1035.59, "sottoSoglia": true, "righe": ["...Secondo acconto IRPEF 3.400..."]}],
+ "senzaData": {"entrate": 4410, "voci": 3}, "primoSottoSoglia": "2026-11-30", "nota": "Gli incassi scaduti non entrano nel saldo previsto"}
+```
+- **Righe**: entrate = rate non coperte delle fatture emesse (`tipo: "fattura"`, `stato` `previsto` o `in_parte`),
+  bozze pronte (`stato: "da_emettere"`, `dettaglio: "da emettere: è nel programma"`), scadenze dei contratti con la data
+  (`tipo: "scadenza"`, `dettaglio: "Dal contratto · 26ST003"`); uscite = rate non coperte delle ricevute (`tipo:
+  "ricevuta"`), impegni non pagati (`tipo: "impegno"`; le proposte `stato: "proposto"`, `proposta: true`; senza importo
+  `importoDaScrivere: true`, `"importo da scrivere"` nel dettaglio, non contano nel saldo). `stato`: `previsto` |
+  `in_parte` | `scaduto` | `da_emettere` | `proposto`. Ogni riga ha `contaNelSaldo`.
+- **Saldo prudente**: si parte dal saldo di oggi dei conti scelti; le **uscite scadute contano oggi** (`saldoPartenza`
+  = saldo di oggi − uscite scadute), le **entrate scadute no**. Ogni giorno ha il saldo di fine giornata; `sottoSoglia`
+  se sotto la soglia (del conto con `idConto`, se no `SOGLIA_CASSA`). `primoSottoSoglia`: il primo giorno (anche oggi,
+  se `saldoPartenza` e' gia' sotto). `titolo` del giorno gia' pronto.
+- `scaduti`: le righe con la data passata e non coperte, in cima (`dettaglio` `"scaduto da 12 giorni · ..."`).
+  `senzaData`: le scadenze dei contratti senza data (non contano). Con `idConto` contano i movimenti di quel conto e le
+  righe senza conto vanno sul predefinito.
+
+`situazione {idConto?}` (banche 1), vera: `{"ok": true, "oggi": "2026-10-22", "saldi": [{"idConto": 1, "nome": "Conto studio
+…3456", "saldo": 8743.55}], "saldoOggi": 8743.55, "soglia": 3000, "daIncassare": 1543.09, "scadutoDaIncassare": 310.75,
+"daPagare30": 4690.3, "scadutoDaPagare": 0, "previsto": {"30": 5285.59, "60": 893.29, "90": -99.01}, "primoSottoSoglia":
+"2026-11-30", "settimane": [{"da": "2026-10-19", "a": "2026-10-25", "entrate": 0, "uscite": 0, "saldo": 8743.55,
+"sottoSoglia": false}, {"da": "2026-10-26", "a": "2026-11-01", "entrate": 0, "uscite": 1582, "saldo": 7161.55, "sottoSoglia":
+false}, "...13 settimane da lunedi' a domenica..."], "fatturatoAnno": 2850, "incassatoAnno": 1858.01, "collegamento":
+"non_collegato"}`. `daIncassare` = residuo delle emesse (di cui `scadutoDaIncassare`); `daPagare30` = ricevute e impegni
+entro 30 giorni (di cui `scadutoDaPagare`); `previsto` = il saldo previsto prudente a 30, 60, 90 giorni; `settimane` =
+entrate e uscite che contano e saldo a fine settimana; `fatturatoAnno` = compenso delle emesse − note.
+
+### 15.15 Impegni: tributi, F24, rate e le proposte di Wisper
+
+`impegni {da?, a?, tipo?, stato?: aperti|pagati|tutti}` (banche 1; di base gli aperti) → `{"ok": true, "impegni":
+[...]}` per scadenza. Uno vero:
+```json
+{"id": 2, "tipo": "rata", "verso": "uscita", "descrizione": "Affitto ufficio", "codice": "", "scadenza": "2026-10-26", "importo": 850,
+ "importoDaScrivere": false, "idConto": null, "conto": "", "idSoggetto": "", "soggetto": "", "idRicorrenza": 3, "occorrenza": "2026-10-26",
+ "ricorrenza": {"regola": "mesi", "ogni": 1, "inizio": "2026-09-26", "fine": ""}, "ripete": "ogni mese", "origine": "mano", "periodo": "",
+ "confermato": true, "proposta": false, "pagato": 0, "daPagare": 850, "stato": "aperto", "statoVisto": "Da pagare", "scaduto": false,
+ "giorniScaduto": 0, "annullato": false, "motivo": "", "note": "", "puoScrivere": true, "creato": "...", "modificato": "..."}
+```
+`tipo`: `f24` | `tributo` | `rata` | `altro`. `stato`: `aperto` | `in_parte` | `pagato` | `annullato`; `statoVisto`: `Da
+pagare` | `Pagato in parte` | `Pagato` | `Scaduto` | `Proposta` | `Annullato`. `ripete`: `"ogni mese"`, `"ogni 3 mesi"`,
+`"ogni anno"`, `""`. `origine`: `mano` | `ritenute` | `bollo`; `periodo` delle proposte: `"2026-10"`, `"2026-T4"`.
+
+`salvaImpegno {impegno: {id?, tipo, descrizione, codice?, scadenza, importo?, verso?, idConto?, idSoggetto?, note?,
+ricorrenza?: {regola: "mesi"|"anni", ogni?, fine?} | null}, perRicorrenza?: "questa"|"future"|"tutte"}` (banche 2) →
+`{"ok": true, "impegno": {...}, "occorrenze": 12}` (`occorrenze` quando nasce o si rifa' una serie). Le serie usano
+`ricorrenze` (`per = 'impegno'`): le occorrenze ci sono per i **prossimi 12 mesi** e si allungano ogni notte. Su
+un'occorrenza: `questa` (di base) cambia solo lei; `future`/`tutte` riportano **i campi cambiati** sulle occorrenze
+aperte (non pagate) da li' in poi / di tutta la serie e su quelle che nasceranno; se cambiano il giorno o la regola, da
+questa nasce una serie nuova (la vecchia finisce il giorno prima, le sue aperte seguenti si annullano: `"tolto: la
+ricorrenza è cambiata"`); `ricorrenza: null` con `future`/`tutte` = non si ripete piu' (le aperte seguenti si
+annullano). Cambiare una proposta di Wisper la conferma. Errori: `"Descrizione: scrivi cosa si paga"`, `"Scadenza:
+scrivi quando"`, `"Importo: non può essere negativo"`, `"Tipo: f24, tributo, rata o altro"`, `"Ripeti: ogni N mesi o
+anni"`, `"Ripeti fino al: deve venire dopo la prima scadenza"`, `"L'impegno è annullato: non si cambia"`.
+
+`confermaImpegno {id, importo?}` (banche 2) → `{"ok": true, "impegno": {...}}` (nota `"proposta confermata"`).
+`togliImpegno {id, perRicorrenza?, motivo?}` (banche 2) → `{"ok": true, "impegno": {...}, "tolti": 2}`: annullato (non
+si cancella); uno con pagamenti no (`"L'impegno ha già dei pagamenti: annulla prima il movimento"`).
+
+**Le proposte di Wisper** (`confermato: false`, pillola **Proposta**), rifatte a ogni pagamento, movimento, fattura
+emessa o annullata, finche' non si confermano:
+- **ritenute da versare**: per ogni mese in cui si sono pagate fatture ricevute con ritenuta, un `f24` codice `1040`,
+  scadenza il 16 del mese dopo (il primo giorno lavorativo: sabato, domenica e feste nazionali, Pasquetta compresa,
+  spostano), importo = le ritenute pagate (in proporzione se pagate in parte), `"Ritenute sui compensi pagati a ottobre"`;
+- **bollo delle fatture elettroniche**: per trimestre, un `f24` codice `2521`-`2524`, importo = il bollo delle fatture
+  emesse nel trimestre, scadenze 31/5, 30/9, 30/11 e fine febbraio dell'anno dopo spostate al primo giorno lavorativo
+  (per il quarto trimestre 2026: `"2027-03-01"`), `"Bollo delle fatture del 4° trimestre (stima: controlla nel portale)"`.
+Una proposta che non serve piu' si annulla da sola (`motivo: "proposta di Wisper che non serve più"`) e torna se
+serve di nuovo; una tolta dalla persona (altro motivo) non torna; una confermata non si tocca piu'. Wisper **non
+calcola** IVA, IRPEF e contributi: li scrive chi li sa.
+
+### 15.16 Dashboard: cosa si aggiunge
+
+Solo per chi vede fatture o banche (modulo ≥ 1) **e** ha `costi`, mai nella vista del collaboratore.
+- `numeri.soldi` in piu' (veri): `"fattureInBozza": 2389.37, "daIncassare": 1543.09, "scaduto": 310.75, "saldoConti":
+  8743.55, "incassiSettimana": 320.25, "pagamentiSettimana": 0, "saldoPrevisto30": 5285.59, "primoSottoSoglia":
+  "2026-11-30"`; **`daFatturare` adesso conta tutte le sorgenti pronte** (`2671.88`), `daFatturareMesiPrima` quelle dei
+  mesi scorsi e `clientiDaFatturare` i clienti con qualcosa di pronto (il numerino giallo di Fatturazione). `inBozza`
+  resta quello di prima (rapportini da firmare), `fatturatoMese` anche (rapportini segnati fatturati nel mese, fase 1).
+- Le voci nuove (vere):
+```json
+{"urgenti": [
+  {"tipo": "fattura", "gravita": "urgente", "titolo": "Fattura 39/2026 scaduta da 12 giorni", "dettaglio": "Rossi Impianti Srl · restano 310,75 di 810,75",
+   "quanto": 310.75, "unita": "euro", "collegamento": {"pagina": "fattura", "id": 12}},
+  {"tipo": "fattura", "gravita": "urgente", "titolo": "Emetti la fattura per Mario Bianchi entro domenica 1 novembre", "dettaglio": "Ha già pagato il 20/10 · W-14",
+   "quanto": 320.25, "unita": "euro", "collegamento": {"pagina": "fattura", "id": 14}},
+  {"tipo": "fatturazione", "gravita": "soldi", "titolo": "Da fatturare dei mesi scorsi", "dettaglio": "8 cose pronte, dal 09/2026",
+   "quanto": 1393.92, "unita": "euro", "collegamento": {"pagina": "fatturazione", "filtro": {"mese": "2026-09"}}}],
+ "settimana": [
+  {"tipo": "fatturazione", "gravita": "soldi", "titolo": "Da fatturare", "dettaglio": "2 clienti · Elettrodinamica, Rossi Impianti Srl",
+   "quanto": 2671.88, "unita": "euro", "collegamento": {"pagina": "fatturazione"}},
+  {"tipo": "fattura", "gravita": "attenzione", "titolo": "1 fattura passata al programma: manca l'XML di ritorno", "dettaglio": "W-14 · Mario Bianchi",
+   "quanto": 1, "unita": "fatture", "collegamento": {"pagina": "fatture", "filtro": {"stato": "pronta"}}},
+  {"tipo": "impegno", "gravita": "attenzione", "titolo": "Pagamenti entro 7 giorni", "dettaglio": "Affitto ufficio lunedì 26, Noleggi Piattaforme Prova Snc mercoledì 28",
+   "quanto": 1582, "unita": "euro", "collegamento": {"pagina": "scadenziario"}}],
+ "pianificare": [
+  {"tipo": "fiscale", "gravita": "info", "titolo": "Regole delle fatture da confermare col commercialista",
+   "dettaglio": "Contributo EPPI, ritenuta, bollo e tipo di documento: finché non sono confermate, ogni conto lo dice", "quanto": null, "unita": null,
+   "collegamento": {"pagina": "amministrazione", "filtro": {"sezione": "fiscale"}}},
+  {"tipo": "cassa", "gravita": "info", "titolo": "Il saldo previsto scende sotto 3.000 € il lunedì 30 novembre", "dettaglio": "Saldo di oggi 8.743,55 · guarda lo scadenziario",
+   "quanto": null, "unita": null, "collegamento": {"pagina": "scadenziario", "filtro": {"giorno": "2026-11-30"}}},
+  {"tipo": "impegno", "gravita": "info", "titolo": "1 proposta di Wisper da confermare", "dettaglio": "Ritenute sui compensi pagati a ottobre",
+   "quanto": 1, "unita": "impegni", "collegamento": {"pagina": "impegni", "filtro": {"proposte": true}}}]}
+```
+- **urgenti**: fatture scadute (una per una fino a 3, poi una voce sola `"5 fatture scadute"` con `collegamento
+  {pagina: "fatture", filtro: {scadute: true}}`); fatture gia' pagate da emettere entro 12 giorni; impegni scaduti non
+  pagati (`"F24 di ottobre scaduto da 3 giorni"`, uno per uno fino a 3, poi `"5 pagamenti scaduti"`, `collegamento
+  {pagina: "impegni", id}`); saldo previsto sotto soglia **entro 14 giorni** (`tipo: "cassa"`, `gravita: "urgente"`,
+  `"Il saldo previsto scende sotto 3.000 € il lunedì 2 novembre"` o `"... già oggi"`); "Da fatturare dei mesi scorsi"
+  (adesso su tutte le sorgenti, scadenze escluse). **questa settimana**: "Da fatturare" (al posto di "Da fatturare
+  questo mese"), incassi attesi entro 7 giorni (`tipo: "cassa"`, `"Incassi attesi entro 7 giorni"`), pagamenti e impegni
+  entro 7 giorni, pronte da piu' di 3 giorni senza XML. **da pianificare**: regole fiscali non confermate (solo titolare
+  e amministrazione), saldo di un conto non aggiornato da 30 giorni (`tipo: "conto"`, `"Aggiorna il saldo di Conto studio
+  …3456"`, `"L'ultimo saldo scritto è del 01/09: leggilo sull'estratto conto"`, `collegamento {pagina: "conti", id}`),
+  nessun conto (`"Scrivi il conto dello studio"`: allora niente avvisi di cassa), saldo sotto soglia oltre 14 giorni,
+  fatture ricevute con la scadenza stimata (`tipo: "ricevuta"`), proposte da confermare.
+- `collegamento.pagina` nuove: `fatture` (filtro `stato`, `pagamento`, `scadute`), `fattura` (`id`), `ricevute`,
+  `ricevuta`, `scadenziario` (filtro `giorno`), `movimenti`, `impegni` (`id`, filtro `proposte`), `conti` (`id`),
+  `situazione`; `fatturazione` resta (Da fatturare, filtro `mese`). `tipo` nuovi: `fattura`, `ricevuta`, `impegno`,
+  `cassa`, `conto`, `fiscale`. Unita' nuove: `fatture`, `impegni`.
+
+### 15.17 Esportazioni
+
+`esporta {cosa: fatture|ricevute|daFatturare|riepilogo|movimenti|scadenziario|impegni, ...i filtri dell'elenco}`
+(lettura del modulo **e** `costi`; senza: la frase di §15.1, `permesso:false`): lo stesso CSV della §12.13
+(`wisper-fatture-2026-10-22.csv`). Colonne:
+- **fatture**: Riferimento, Numero, Data, Tipo (Fattura, Parcella, Nota di credito), Stato (lo `statoVisto`), Cliente,
+  Partita IVA, Commessa, Compenso, Contributo, IVA, Spese anticipate, Bollo (quello addebitato), Totale, Ritenuta, Netto,
+  Incassato, Residuo, Scadenza (la prima rata). Vera: `W-13;45/2026;19/10/2026;Fattura;Emessa;Rossi Impianti
+  Srl;04455667784;26ST003;1140;57;263,34;0;0;1460,34;228;1232,34;0;1232,34;18/11/2026`;
+- **ricevute**: Fornitore, Numero, Data, Tipo, Categoria, Commessa, Imponibile, IVA, Contributo, Totale, Ritenuta,
+  Netto, Pagato, Da pagare, Scadenza, Stato, Note;
+- **daFatturare**: Codice cliente, Cliente, Cosa (Scadenza di pagamento, Rapportino, Spesa, Ore), Codice, Commessa,
+  Data, Titolo, Dettaglio, Pronta, Importo, Spesa anticipata;
+- **riepilogo** (`anno`, `per`): Chiave, Nome, Fatture, Compenso, Contributo, IVA, Spese anticipate, Totale, Ritenute,
+  Incassato;
+- **movimenti**: Data, Conto, Entrata o uscita, Importo, Descrizione, Chi, Categoria, Verificato in banca, Abbinato a,
+  Annullato, Motivo;
+- **scadenziario**: Giorno, Cosa, Dettaglio, Entrata, Uscita, Saldo previsto, Stato, Sotto soglia (prima gli scaduti);
+- **impegni** (di base tutti): Scadenza, Descrizione, Tipo, Codice, Importo, Pagato, Ripete, Stato, Conto, Note.
+
+### 15.18 I conti condivisi
+
+In `server/src/conti.js`, coi casi in **`server/prove/casi-fattura.json`** (telefono `FattureTest.kt` e computer
+`pc/prove/fatture.test.js` lo leggono dal suo posto e devono ritrovare ogni numero al centesimo, `deepEqual` sui campi
+di `atteso`):
+- `contiFattura(f)` (fase4.md §6): `f = {regime, ivaPercentuale, eppiPercentuale, ritenutaPercentuale, ritenuta,
+  bolloSoglia, bolloImporto, bolloRivalsa, righe: [{tipo: 'compenso'|'anticipazione', quantita, prezzo, importo?,
+  tributoCliente?}]}` → `{righe, compenso, contributo, baseIva, iva, anticipazioni, parteSenzaIva, bollo, bolloAddebitato,
+  totale, ritenuta, netto}`. Ogni pezzo al centesimo (`Math.round(n * 100) / 100`) prima di sommare; importo della riga =
+  `importo` se c'e', se no quantita' × prezzo (quantita' mancante = 1, prezzo mancante = 0); una riga `tipo: "bollo"` si
+  salta (la aggiunge il server). Il file ha i **16 casi del contratto** (tutti ritrovati dal codice al primo colpo e
+  controllati di nuovo a mano: nessuno da correggere) e **14 casi limite** del server (17-30: importo gia' fatto contro
+  quantita' × prezzo, quantita' mancante, mezzo centesimo per riga e sul contributo e sulla ritenuta, due spese anticipate
+  che insieme superano la soglia, solo un tributo del cliente, un privato col bollo, la nota di credito totale, la
+  fattura a zero senza righe e con una riga senza prezzo, forfettario sotto e sopra la soglia, EPPI al 2%, la riga del
+  bollo che arriva e non conta).
+- I **raggruppamenti** (le righe che nascono dai rapportini, `righeRapportini`) li prova solo il server: i 4 del
+  contratto (A-D) tornano riga per riga, sorgenti e gruppo compresi.
+- In piu', del server: `rigaScadenza`, `rigaSpesa`, `rigaOre` (i testi di §5.2), `scadenzaFattura(data, giorni,
+  fineMese)`, `primoLavorativo` (le scadenze degli F24), `ibanValido` (modulo 97).
+
+### 15.19 Note per chi legge il database
+
+Tabelle nuove (migrazione `004-fatture-banche.sql` + `004-fatture-banche.js`, con la copia `wisper.db.prima-4`
+prima): `fatture`, `fattura_righe`, `fattura_sorgenti`, `fattura_scadenze`, `fatture_ricevute`, `ricevuta_scadenze`,
+`conti`, `conto_saldi`, `movimenti`, `movimento_abbinamenti`, `impegni`, `letture_xml`. Colonne nuove:
+`soggetti.sostituto_imposta`, `pagamento_giorni`, `pagamento_fine_mese`; `commesse.modo_fatturazione` (CHECK `ore`,
+`corpo`, `misto`); `scadenze_pagamento.fattura_id` (`stato` `prevista` | `fatturata`); `ore.fatturata_il`;
+`ricorrenze.per` (`attivita` | `impegno`: l'allungamento notturno delle attivita' guarda solo le sue, quello degli
+impegni le sue); `file` rifatta coi tipi `fattura` e `ricevuta` e le colonne `fattura_id`, `ricevuta_id` (tenute
+`attivita_id`, `preventivo_id`, `spesa_id`). La `.js` mette `corpo` alle commesse con scadenze di pagamento e lo scrive
+nel registro (`utente: "sistema"`, `azione: "migrazione"`, nota `"migrazione 004: ..."`).
+- **Una cosa si fattura una volta sola, nel database**: `CREATE UNIQUE INDEX fattura_sorgenti_una ON
+  fattura_sorgenti(tipo, sorgente_id) WHERE attiva = 1`. Le prove la mettono alla prova scrivendo a mano, con due
+  richieste nello stesso istante e con due server sullo stesso file.
+- `fatture.riferimento` lo scrive un trigger (`'W-' || id`); `fatture.chiave` (unica, NULL finche' non e' emessa) e
+  `fatture_ricevute.chiave` (unica) contro i doppioni. `conti_un_predefinito`: un solo predefinito. `impegni_occorrenza`
+  (una occorrenza per giorno per serie) e `impegni_proposta` (una proposta per periodo). `movimento_abbinamenti` ha il
+  CHECK "uno solo fra fattura, ricevuta, impegno" e `importo > 0`; `movimenti.importo > 0`.
+- In piu' dell'accordo, perche' servivano: `fattura_righe.importo_sorgenti` ("era 317,88"), `fatture_ricevute.motivo`
+  (dell'annullamento). `letture_xml` non va nel registro; i file in attesa stanno in `<dati>/letture/<id>/` e si tolgono
+  dopo un'ora (alla lettura, alla conferma e ogni minuto nella pianificazione del server). Gli impegni ricorrenti si
+  allungano ogni notte (`[impegni] N scadenze nuove` nel log).
+- Nel registro le tabelle nuove si chiamano come qui sopra (tranne `letture_xml`); le note di §12 di fase4.md
+  (`"passata al programma"`, `"tornata in bozza"`, `"bozza scartata"`, `"emessa dall'XML ..."`, `"emessa: numero scritto
+  a mano"`, `"dalla fattura 45/2026 (W-13)"`, `"stornato dalla nota di credito 3/2026"`, `"scartata dallo SDI"`,
+  `"fatturata fuori da Wisper"`, `"regole confermate dal commercialista il ..."`, `"regole cambiate: la conferma del
+  commercialista non vale più"`, `"movimento annullato: ..."`). Senza `costi`, nel prima/dopo mancano anche le colonne
+  dei soldi nuove.
+- **I file d'esempio** (dati inventati) sono in `server/prove/xml/` e si rifanno con `node server/prove/xml/genera.js`.
+
+**Correzioni del 22/10/2026, dopo le prove di telefono e computer.**
+- `leggiXml` scarta l'XML da completare preparato da Wisper (numero `BOZZA` o vuoto) con il motivo "È l'XML da completare
+  preparato da Wisper, non una fattura emessa: importa l'XML che ti dà il programma dopo averla emessa"; `segnaEmessa`
+  rifiuta il numero `BOZZA` ("Numero: BOZZA non è un numero di fattura, scrivi quello che ha dato il programma").
+- Ogni fattura ha `daRestituire` (euro): quanto il cliente ha pagato in più dopo una nota di credito (incassato + note
+  emesse − netto, se positivo). Finché è sopra zero la Dashboard ha la voce urgente "Fattura 52/2026: 300,00 da
+  restituire o compensare" (`tipo: fattura`, collegamento alla fattura); sparisce quando l'incasso si annulla o si
+  registra la restituzione.
+
+### 15.20 Decisioni prese dove l'accordo non diceva
+
+- **Un gruppo torna da fatturare solo se manca per intero dall'XML.** fase4.md §9.3 dice che "i gruppi di
+  righeMancanti tornano da fatturare": ma un mese di rapportini e' un gruppo di tre righe, e se nell'XML ne manca una
+  sola liberare tutto il gruppo farebbe fatturare due volte le ore gia' fatturate. Scelta piu' sicura per i soldi: si
+  liberano (e si propongono spuntati) solo i gruppi con **tutte** le righe mancanti; gli altri restano fatturati con un
+  avviso, e la parte mancante si fattura con una riga libera.
+- **Note di credito**: un gruppo si libera se la nota storna **ogni** sua riga per intero (con `tutta`: tutti i gruppi).
+  Una nota che copre tutto il totale annulla la fattura ma libera solo i gruppi stornati o scelti (come dice §7.1); per
+  una TD04 importata senza bozza e totale si propongono tutti i gruppi gia' spuntati (si possono togliere). Una nota non
+  storna piu' del totale della fattura, contando le altre note vive o emesse.
+- **Lo scarto dello SDI** riporta la fattura a pronta togliendo anche numero, chiave e file dell'XML scartato (resta tra
+  i file e nel registro): cosi' l'XML corretto, che di solito ha lo stesso numero, si riabbina senza sembrare un doppione.
+  Una nota scartata dallo SDI rimette le sorgenti alla fattura (se nel frattempo non sono finite in un'altra).
+- **Le spese di un rapportino vanno con lui** (anche scegliendone una sola); da sole solo se il rapportino e' di una
+  commessa a corpo, e solo con il rapportino firmato o inviato. La regola della fase 3 che allinea le spese al loro
+  rapportino non tocca piu' la data di fatturazione di una spesa che sta in una fattura sua.
+- **Mandare il riepilogo** (`inviaEmail`) di rapportini che stanno in una fattura: l'email parte, ma non si segnano
+  inviati (cambiare lo stato di una cosa riservata e' bloccato da §7.3).
+- **"scaduto" non e' tra i campi dei soldi** (§11 lo elencava): e' gia' il si'/no dei preventivi, e toglierlo li'
+  avrebbe cambiato la fase 2 per chi ha i preventivi senza i soldi. Il "scaduto" in euro sta solo dove i soldi si vedono.
+- **IBAN**: intero nel modello solo per chi scrive le fatture; chi legge e basta lo vede coperto (`"IT…3456"`) e
+  nell'XML non c'e'. Nelle risposte delle fatture le rate non portano l'IBAN.
+- **Regole fiscali**: cambiarle toglie la conferma solo se il valore cambia davvero (risalvare lo stesso no);
+  `REGOLE_FISCALI_CONFERMATE` non si scrive da Impostazioni.
+- **Le proposte di Wisper** si aggiornano finche' non si confermano; **cambiare** una proposta (`salvaImpegno`) la
+  conferma, cosi' l'aggiornamento automatico non riscrive quello che ha scritto una persona; una tolta dalla persona non
+  torna.
+- **Impegni ricorrenti**: ogni N mesi o anni (non giorni o settimane: tributi e affitti non ne hanno bisogno);
+  `future`/`tutte` riportano solo i campi cambiati, non tutti quelli dell'occorrenza su cui si e' toccato.
+- **`segnaFatturataFuori`** ha `annulla: true` (l'accordo non aveva un modo per correggere un segno sbagliato su spese,
+  ore e scadenze).
+- **Causale proposta**: conta il gruppo del compenso (un acconto con una spesa anticipata accanto resta "40% a fine
+  progetto, commessa 26ST003").
+- **Testi**: "1 ora" e non "1 ore"; i km nella riga del rapportino solo se rimborsati; la riga dei km del mese che non
+  torna al centesimo diventa a corpo con i km nella descrizione.
+- **Dati di esempio**: il PR/2026/012 rev. 1 adesso e' **accettato** (con la DiRi: 3.800 euro) ed e' il contratto della
+  commessa 26ST003, come nel prototipo della fase 4: non e' piu' "inviato, scade fra 6 giorni" (le prove della fase 2
+  che lo usavano provano una sua copia). Elettrodinamica e Rossi hanno partita IVA e indirizzo di fatturazione; ci sono
+  Mario Bianchi (C003, privato) e due fornitori (F003 Ing. Paolo Verdi, F004 Luce e Gas Esempio Spa); 26ST002 e' "misto";
+  i rapportini sono 13 (i sei di settembre di Elettrodinamica, RAP/2026/0007-0012, e il collaudo di Rossi,
+  RAP/2026/0013). Le fatture W-11...W-15 hanno gli id del prototipo.
+- **Non provato**: la validazione dell'XML da completare con lo schema ufficiale FPR12 1.2.3 (serve scaricare lo schema
+  da fatturapa.gov.it: da fare una volta, con il permesso di Andrea, per esempio con `lxml`, che sul PC c'e'); l'ordine
+  degli elementi e' controllato contenitore per contenitore contro lo schema nelle prove di `fatturapa.test.js`. Le
+  regole fiscali restano da confermare col commercialista (fase4.md §15), e il programma di Manuel da sapere (§8.4).

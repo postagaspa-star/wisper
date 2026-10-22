@@ -12,7 +12,7 @@ name: wisper
 services:
   wisper:
     build: .
-    image: wisper-server:0.6.0
+    image: wisper-server:0.7.0
     container_name: wisper
     restart: unless-stopped
     env_file: .env

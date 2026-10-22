@@ -407,6 +407,15 @@ private val VOCI_STUDIO = listOf(
     VoceStudio("Email per le risposte", Anagrafiche.EMAIL, KeyboardType.Email),
     VoceStudio("Telefono", Anagrafiche.TELEFONO, KeyboardType.Phone),
     VoceStudio("PEC", Anagrafiche.PEC, KeyboardType.Email),
+    // Fase 4 (fase4.md §4.1): servono alla fattura (il passaggio al programma li chiede).
+    VoceStudio("Codice fiscale", "CODICE_FISCALE"),
+    VoceStudio("CAP", "STUDIO_CAP", KeyboardType.Number),
+    VoceStudio("Comune", "STUDIO_COMUNE"),
+    VoceStudio("Provincia", "STUDIO_PROVINCIA"),
+    VoceStudio("Albo", "ALBO"),
+    VoceStudio("Provincia dell'albo", "ALBO_PROVINCIA"),
+    VoceStudio("Numero di iscrizione all'albo", "ALBO_NUMERO"),
+    VoceStudio("Data di iscrizione all'albo", "ALBO_DATA"),
 )
 
 /**

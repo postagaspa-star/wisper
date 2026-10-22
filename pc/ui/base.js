@@ -102,6 +102,14 @@
     aereo: '<path d="M10.5 20.5l1.5-1 1.5 1V17l6.5-2.5V12l-6.5 1V6a1.5 1.5 0 0 0-3 0v7L4 12v2.5L10.5 17z"/>',
     taxi: '<path d="M5 13l2-5h10l2 5M4 13h16v5H4zM7 18v2M17 18v2M10 5h4M7.5 15.5h.01M16.5 15.5h.01"/>',
     materiale: '<path d="M4 7.5L12 3l8 4.5v9L12 21l-8-4.5zM4 7.5l8 4.5 8-4.5M12 12v9"/>',
+    // fase 4: fatture, banche e scadenze (dal prototipo Gestionale-fase4.html)
+    banca: '<path d="M3 10l9-6 9 6M5 10v8M9.5 10v8M14.5 10v8M19 10v8M3 20h18"/>',
+    importa: '<path d="M12 21V9M7 14l5-5 5 5M5 3h14"/>',
+    copia: '<path d="M9 9h11v11H9zM5 15H4V4h11v1"/>',
+    scollegato: '<path d="M9 15l-2 2a3 3 0 0 1-4.2-4.2l2-2M15 9l2-2a3 3 0 0 1 4.2 4.2l-2 2M8 4V2M4 8H2M16 20v2M20 16h2"/>',
+    entrata: '<path d="M17 7 7 17M15 17H7V9"/>',
+    uscita: '<path d="M7 17 17 7M9 7h8v8"/>',
+    file: '<path d="M7 3h7l4 4v14H7zM14 3v4h4"/>',
   };
 
   function icona(nome, dim, spessore) {

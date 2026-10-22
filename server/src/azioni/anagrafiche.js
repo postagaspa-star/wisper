@@ -65,8 +65,35 @@ function soggettoDaRiga(r) {
     archiviato: r.archiviato === 1,
     creato: dataOraIso(r.creato),
     modificato: dataOraIso(r.modificato),
+    // Fase 4: null = automatico (sostituto d'imposta se ha la partita IVA; pagamento come nelle impostazioni).
+    sostitutoImposta: r.sostituto_imposta === null || r.sostituto_imposta === undefined ? null : r.sostituto_imposta === 1,
+    pagamentoGiorni: r.pagamento_giorni === null || r.pagamento_giorni === undefined ? null : r.pagamento_giorni,
+    pagamentoFineMese: r.pagamento_fine_mese === null || r.pagamento_fine_mese === undefined ? null : r.pagamento_fine_mese === 1,
   };
 }
+
+/**
+ * Fase 4: i campi della fatturazione del cliente. sostitutoImposta: null o
+ * "automatico" = automatico, si'/no scritto a mano (un condominio si', un
+ * forfettario no); pagamentoGiorni da 0 a 365 o vuoto; pagamentoFineMese si'/no o vuoto.
+ */
+function campiFatturazioneSoggetto(x, v) {
+  if (x.sostitutoImposta !== undefined) {
+    const a = x.sostitutoImposta;
+    v.sostituto_imposta = a === null || a === '' || String(a).toLowerCase() === 'automatico' ? null : unoZero(a);
+  }
+  if (x.pagamentoGiorni !== undefined) {
+    if (vuoto(x.pagamentoGiorni)) v.pagamento_giorni = null;
+    else {
+      const g = Math.round(numero(x.pagamentoGiorni));
+      if (!(g >= 0 && g <= 365)) throw new Rifiuto('Giorni di pagamento: da 0 a 365');
+      v.pagamento_giorni = g;
+    }
+  }
+  if (x.pagamentoFineMese !== undefined) v.pagamento_fine_mese = vuoto(x.pagamentoFineMese) ? null : unoZero(x.pagamentoFineMese);
+}
+
+const MODI_FATTURAZIONE = ['ore', 'corpo', 'misto'];
 
 function commessaDaRiga(r, persone) {
   return {
@@ -94,6 +121,8 @@ function commessaDaRiga(r, persone) {
     modello: r.modello === 1,
     creato: dataOraIso(r.creato),
     modificato: dataOraIso(r.modificato),
+    // Fase 4: come si fattura (ore: rapportini e ore; corpo: le scadenze del contratto; misto: tutti e due).
+    modoFatturazione: r.modo_fatturazione || 'ore',
   };
 }
 
@@ -336,6 +365,7 @@ module.exports = {
     for (const k of Object.keys(CAMPI_NUMERO_SOGGETTO)) {
       if (campi[k] !== undefined) valori[CAMPI_NUMERO_SOGGETTO[k]] = numeroOVuoto(campi[k]);
     }
+    campiFatturazioneSoggetto(campi, valori);
     valori.modificato = adesso();
     this.aggiorna('soggetti', riga.id, valori);
     return this.soggetto(riga.id);
@@ -367,6 +397,7 @@ module.exports = {
       for (const k of Object.keys(CAMPI_NUMERO_SOGGETTO)) if (s[k] !== undefined) v[CAMPI_NUMERO_SOGGETTO[k]] = numeroOVuoto(s[k]);
     }
     for (const k of Object.keys(CAMPI_SINO_SOGGETTO)) if (s[k] !== undefined) v[CAMPI_SINO_SOGGETTO[k]] = unoZero(s[k]);
+    campiFatturazioneSoggetto(s, v);
     if (v.nazione === '') v.nazione = 'IT';
     if (v.nazione === undefined) v.nazione = prima ? prima.nazione : 'IT';
     controllaCampiSoggetto(v);
@@ -534,6 +565,11 @@ module.exports = {
       }
     }
     if (d.importoContratto !== undefined && this.vedeCosti()) v.importo_contratto = numeroOVuoto(d.importoContratto);
+    if (d.modoFatturazione !== undefined) {
+      const m = testo(d.modoFatturazione).toLowerCase();
+      if (MODI_FATTURAZIONE.indexOf(m) < 0) throw new Rifiuto('Come si fattura: ore, corpo o misto');
+      v.modo_fatturazione = m;
+    }
     return v;
   },
 

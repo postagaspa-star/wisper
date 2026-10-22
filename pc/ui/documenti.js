@@ -459,7 +459,172 @@
     return pagina(imp, 'Incarico ' + numeroPreventivo(p), corpo);
   }
 
-  const Documenti = { rapportino, riepilogo, preventivo, incarico, numeroPreventivo, esc, idDaUrl };
+  // ======================================================================= fase 4: il prospetto e l'avviso di parcella
+
+  /*
+   * Il prospetto per il programma delle fatture (fase4.md §8.3, architettura.md §15.6):
+   * tutti i campi della fattura, sezione per sezione, nell'ordine in cui un programma li
+   * chiede. Nasce dal MODELLO del server (pacchetto.modello), lo stesso per telefono e
+   * computer. Le sezioni sono quelle di server/src/passaggio/prospetto.js, riga per riga
+   * (la prova fatture.test.js le confronta): niente numeri ricalcolati qui.
+   */
+  const AVVISO_REGOLE = 'Conti da verificare: regole non confermate dal commercialista';
+  const TIPI_DOCUMENTO = { TD01: 'Fattura', TD06: 'Parcella', TD04: 'Nota di credito', TD05: 'Nota di debito', TD02: 'Acconto su fattura', TD03: 'Acconto su parcella' };
+  const MODALITA_PAGAMENTO = { MP01: 'Contanti', MP02: 'Assegno', MP05: 'Bonifico', MP08: 'Carta di pagamento', MP12: 'RIBA', MP19: 'SEPA Direct Debit', MP23: 'PagoPA' };
+  const CASSE = { TC17: 'EPPI', TC04: 'Inarcassa' };
+  const numIt = v => { const n = typeof v === 'number' ? v : Number(v); return isNaN(n) ? 0 : n; };
+  const numeroIt = (n, minimo, massimo) => numIt(n).toLocaleString('it-IT', {
+    minimumFractionDigits: minimo === undefined ? 0 : minimo, maximumFractionDigits: massimo === undefined ? 2 : massimo, useGrouping: true,
+  });
+  const euroIt = n => numeroIt(n, 2, 2);
+  const dataIt = iso => (iso ? String(iso).slice(8, 10) + '/' + String(iso).slice(5, 7) + '/' + String(iso).slice(0, 4) : '');
+  const percentoIt = n => numeroIt(n, 0, 2) + '%';
+  const ivaRiga = r => (r.natura === 'N1' ? 'Senza IVA (N1, art. 15)' : r.natura ? 'Senza IVA (' + r.natura + ')' : percentoIt(r.aliquotaIva));
+
+  /** Le sezioni del prospetto: [{titolo, campi: [{etichetta, valore}]}], come il server. */
+  function sezioniProspetto(m) {
+    const c = m.committente || {};
+    const sede = c.sede || {};
+    const sezioni = [];
+    const sezione = (titolo, campi) => sezioni.push({ titolo, campi: campi.filter(x => x && x.valore !== undefined && x.valore !== null && x.valore !== '') });
+    const campo = (etichetta, valore) => ({ etichetta, valore: valore === undefined || valore === null ? '' : String(valore) });
+    sezione('Cliente', [
+      c.denominazione ? campo('Denominazione', c.denominazione) : campo('Nome', c.nome),
+      c.denominazione ? null : campo('Cognome', c.cognome),
+      campo('Partita IVA', c.partitaIva), campo('Codice fiscale', c.codiceFiscale), campo('Indirizzo', sede.indirizzo), campo('CAP', sede.cap),
+      campo('Comune', sede.comune), campo('Provincia', sede.provincia), campo('Codice destinatario', c.codiceDestinatario), campo('PEC', c.pec),
+    ]);
+    const collegata = (m.fattureCollegate || [])[0];
+    sezione('Documento', [
+      campo('Tipo', (TIPI_DOCUMENTO[m.tipoDocumento] || 'Documento') + ' (' + m.tipoDocumento + ')'),
+      campo(m.numero ? 'Data' : 'Data proposta', dataIt(m.data || m.dataProposta)),
+      campo('Numero', m.numero || 'lo dà il programma'),
+      collegata ? campo('Fattura collegata', collegata.idDocumento + (collegata.data ? ' del ' + dataIt(collegata.data) : '')) : null,
+      campo('Causale', (m.causale || []).join(' ')),
+    ]);
+    const righe = [];
+    (m.righe || []).forEach(r => {
+      const n = 'Riga ' + r.numero + ' · ';
+      righe.push(campo(n + 'Descrizione', r.descrizione));
+      righe.push(campo(n + 'Quantità', r.quantita === null || r.quantita === undefined ? '' : numeroIt(r.quantita, 0, 8)));
+      if (r.unitaMisura) righe.push(campo(n + 'Unità di misura', r.unitaMisura));
+      righe.push(campo(n + 'Prezzo', euroIt(r.prezzoUnitario)));
+      righe.push(campo(n + 'Totale', euroIt(r.prezzoTotale)));
+      righe.push(campo(n + 'IVA', ivaRiga(r)));
+      righe.push(campo(n + 'Ritenuta', r.ritenuta ? 'sì' : 'no'));
+    });
+    sezione('Righe', righe);
+    if (m.cassa) {
+      sezione('Cassa previdenziale', [
+        campo('Cassa', (CASSE[m.cassa.tipo] || 'Cassa') + ' (' + m.cassa.tipo + ')'), campo('Aliquota', percentoIt(m.cassa.aliquota)),
+        campo('Imponibile', euroIt(m.cassa.imponibile)), campo('Importo', euroIt(m.cassa.importo)),
+        campo('IVA', m.cassa.natura ? 'Senza IVA (' + m.cassa.natura + ')' : percentoIt(m.cassa.aliquotaIva)),
+      ]);
+    }
+    sezione('Ritenuta', m.ritenuta ? [
+      campo('Tipo', m.ritenuta.tipo), campo('Aliquota', percentoIt(m.ritenuta.aliquota)), campo('Causale', m.ritenuta.causale), campo('Importo', euroIt(m.ritenuta.importo)),
+    ] : [campo('Ritenuta', c.partitaIva ? 'no' : 'no, è un privato')]);
+    sezione('Bollo', m.bollo ? [
+      campo('Bollo', m.bollo.virtuale ? 'virtuale' : 'sì'), campo('Importo', euroIt(m.bollo.importo)),
+      campo('Riaddebitato al cliente', (m.righe || []).some(r => /bollo/i.test(r.descrizione) && r.natura === 'N1') ? 'sì' : 'no'),
+    ] : [campo('Bollo', 'no')]);
+    sezione('Riepilogo IVA', (m.riepilogo || []).map(r => campo(
+      r.natura ? 'Senza IVA (' + r.natura + (r.natura === 'N1' ? ', art. 15' : '') + ')' : 'IVA ' + percentoIt(r.aliquotaIva),
+      r.natura ? euroIt(r.imponibile) + (r.riferimentoNormativo ? ' · ' + r.riferimentoNormativo : '') : 'imponibile ' + euroIt(r.imponibile) + ' · imposta ' + euroIt(r.imposta))));
+    sezione('Totali', [
+      campo(m.tipoDocumento === 'TD04' ? 'Totale della nota' : 'Totale della fattura', euroIt(m.totaleDocumento)),
+      campo(m.tipoDocumento === 'TD04' ? 'Netto stornato' : 'Netto da incassare', euroIt(m.nettoAPagare)),
+    ]);
+    const pagamenti = [];
+    ((m.pagamento && m.pagamento.dettagli) || []).forEach((p, i, tutti) => {
+      const n = tutti.length > 1 ? 'Rata ' + (i + 1) + ' · ' : '';
+      pagamenti.push(campo(n + 'Modalità', (MODALITA_PAGAMENTO[p.modalita] || 'Pagamento') + ' (' + p.modalita + ')'));
+      pagamenti.push(campo(n + 'Scadenza', dataIt(p.scadenza)));
+      pagamenti.push(campo(n + 'Importo', euroIt(p.importo)));
+      pagamenti.push(campo(n + 'IBAN', p.iban));
+      pagamenti.push(campo(n + 'Banca', p.istituto));
+    });
+    sezione('Pagamento', pagamenti);
+    return sezioni;
+  }
+
+  /** "Preparato da Wisper il 22/10/2026 · regole fiscali ..." (il piede di ogni pagina). */
+  function piedeProspetto(m, o) {
+    const oggi = o.oggi || new Date().toISOString().slice(0, 10);
+    return 'Preparato da Wisper il ' + dataIt(oggi) + (m.regoleConfermate
+      ? ' · regole fiscali confermate dal commercialista' + (o.confermateIl ? ' il ' + dataIt(o.confermateIl) : '')
+      : ' · regole fiscali NON ancora confermate dal commercialista: conti da verificare');
+  }
+
+  const STILE_PROSPETTO = '<style>' +
+    '.sez-p { margin: 0 0 10px; break-inside: auto; } .sez-p h3 { font-size: 10px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: #5F5F67; margin: 0 0 3px; padding-bottom: 3px; border-bottom: 1.5px solid #1B1B1F; }' +
+    '.sez-p table { margin: 0; } .sez-p td { padding: 4px 4px; } .sez-p td.k { width: 34%; color: #3F3F46; font-weight: 600; } .sez-p td.v { font-weight: 700; }' +
+    '.avviso-p { border: 1.5px solid #1B1B1F; border-radius: 8px; padding: 7px 11px; font-weight: 800; margin-bottom: 12px; }' +
+    '</style>';
+
+  /**
+   * Il PDF del prospetto. opzioni: oggi (aaaa-mm-gg), confermateIl (data della conferma
+   * delle regole). L'intestazione dice che non è una fattura.
+   */
+  function prospettoFattura(modello, opzioni) {
+    const m = modello || {};
+    const o = opzioni || {};
+    const studio = (m.prestatore && m.prestatore.denominazione) || '';
+    const sezioni = sezioniProspetto(m);
+    const nota = m.tipoDocumento === 'TD04';
+    let corpo = '<div class="testa"><div class="azienda">' + esc(studio) + '</div><div class="tipo"><div class="etichetta">Prospetto per il programma delle fatture · non è una fattura</div>' +
+      '<div class="numero">Rif. ' + esc(m.riferimento || '') + '</div><div class="sotto">' + esc((nota ? 'Nota di credito' : TIPI_DOCUMENTO[m.tipoDocumento] || 'Fattura') + ' · ' + (m.numero ? m.numero + ' del ' + dataIt(m.data) : 'data proposta ' + dataIt(m.dataProposta))) + '</div></div></div>';
+    if (!m.regoleConfermate) corpo += '<div class="avviso-p">' + esc(AVVISO_REGOLE) + '</div>';
+    sezioni.forEach(s => {
+      if (!s.campi.length) return;
+      corpo += '<div class="sez-p"><h3>' + esc(s.titolo) + '</h3><table><tbody>' +
+        s.campi.map(x => '<tr><td class="k">' + esc(x.etichetta) + '</td><td class="v">' + esc(x.valore) + '</td></tr>').join('') + '</tbody></table></div>';
+    });
+    return '<!doctype html><html lang="it"><head><meta charset="utf-8"><title>' + esc('Prospetto ' + (m.riferimento || '')) + '</title>' +
+      stile({ RAGIONE_SOCIALE: piedeProspetto(m, o) }) + STILE_PROSPETTO + '</head><body>' + corpo + '</body></html>';
+  }
+
+  /**
+   * L'avviso di parcella (fase4.md §8.3): cliente, righe, totali, netto, IBAN; non è una
+   * fattura ("Documento senza valore fiscale: la fattura si emette al pagamento").
+   */
+  function avvisoParcella(modello, opzioni) {
+    const m = modello || {};
+    const p = m.prestatore || {};
+    const c = m.committente || {};
+    const sp = p.sede || {};
+    const sc = c.sede || {};
+    const piede = 'Documento senza valore fiscale: la fattura si emette al pagamento';
+    const indirizzo = s => [s.indirizzo, [s.cap, s.comune, s.provincia ? '(' + s.provincia + ')' : ''].filter(Boolean).join(' ')].filter(Boolean).join(', ');
+    let corpo = '<div class="testa"><div class="azienda">' + esc(p.denominazione || '') + '</div><div class="tipo"><div class="etichetta">Avviso di parcella</div>' +
+      '<div class="numero">Rif. ' + esc(m.riferimento || '') + '</div><div class="sotto">' + esc('del ' + dataIt(m.dataProposta || m.data)) + '</div></div></div>';
+    corpo += '<div class="parti"><div class="parte"><div class="etichetta">Da</div><div class="nome">' + esc(p.denominazione || '') + '</div>' +
+      [indirizzo(sp), p.partitaIva ? 'P.IVA ' + p.partitaIva : '', p.pec ? 'PEC ' + p.pec : p.email].filter(Boolean).map(r => '<div>' + esc(r) + '</div>').join('') + '</div>' +
+      '<div class="parte"><div class="etichetta">Spett.le</div><div class="nome">' + esc(c.denominazione || [c.nome, c.cognome].filter(Boolean).join(' ')) + '</div>' +
+      [indirizzo(sc), c.partitaIva ? 'P.IVA ' + c.partitaIva : c.codiceFiscale ? 'C.F. ' + c.codiceFiscale : ''].filter(Boolean).map(r => '<div>' + esc(r) + '</div>').join('') + '</div></div>';
+    corpo += '<table class="voci"><thead><tr><th>Descrizione</th><th class="n">Quantità</th><th class="n">Prezzo</th><th class="n">Importo</th></tr></thead><tbody>' +
+      (m.righe || []).map(r => '<tr><td class="desc">' + esc(r.descrizione) + (r.natura ? '<div class="sotto-riga">' + esc(ivaRiga(r)) + '</div>' : '') + '</td><td class="n">' + esc(numeroIt(r.quantita === null || r.quantita === undefined ? 1 : r.quantita, 0, 8) + (r.unitaMisura ? ' ' + r.unitaMisura : '')) +
+        '</td><td class="n">' + esc(euroIt(r.prezzoUnitario)) + ' €</td><td class="n">' + esc(euroIt(r.prezzoTotale)) + ' €</td></tr>').join('') + '</tbody></table>';
+    const riga = (k, v, classe) => '<tr' + (classe ? ' class="' + classe + '"' : '') + '><td>' + esc(k) + '</td><td class="n">' + esc(v) + '</td></tr>';
+    let conto = '';
+    if (m.cassa) conto += riga('Contributo integrativo ' + (CASSE[m.cassa.tipo] || '') + ' ' + percentoIt(m.cassa.aliquota), euroIt(m.cassa.importo) + ' €');
+    (m.riepilogo || []).forEach(r => { if (!r.natura) conto += riga('IVA ' + percentoIt(r.aliquotaIva), euroIt(r.imposta) + ' €'); });
+    conto += riga('Totale', euroIt(m.totaleDocumento) + ' €', 'tot');
+    if (m.ritenuta) conto += riga('Ritenuta ' + percentoIt(m.ritenuta.aliquota) + ' (la trattiene il cliente)', '− ' + euroIt(m.ritenuta.importo) + ' €');
+    conto += riga('Netto da pagare', euroIt(m.nettoAPagare) + ' €', 'tot');
+    corpo += '<table class="conto"><tbody>' + conto + '</tbody></table>';
+    const pag = ((m.pagamento && m.pagamento.dettagli) || [])[0];
+    if (pag) {
+      corpo += '<div class="blocco"><div class="etichetta">Pagamento</div><div class="testo">' + esc([
+        (MODALITA_PAGAMENTO[pag.modalita] || 'Pagamento') + (pag.scadenza ? ' entro il ' + dataIt(pag.scadenza) : ''),
+        pag.iban ? 'IBAN ' + pag.iban : '', pag.istituto || ''].filter(Boolean).join('\n')) + '</div></div>';
+    }
+    corpo += '<div class="blocco"><div class="testo">' + esc(piede) + '</div></div>';
+    return '<!doctype html><html lang="it"><head><meta charset="utf-8"><title>' + esc('Avviso di parcella ' + (m.riferimento || '')) + '</title>' +
+      stile({ RAGIONE_SOCIALE: piede, PARTITA_IVA: '' }) + '</head><body>' + corpo + '</body></html>';
+  }
+
+  const Documenti = { rapportino, riepilogo, preventivo, incarico, numeroPreventivo, esc, idDaUrl, sezioniProspetto, prospettoFattura, avvisoParcella };
   if (typeof module !== 'undefined' && module.exports) module.exports = Documenti;
   else radice.WisperDocumenti = Documenti;
 })(typeof window !== 'undefined' ? window : globalThis);

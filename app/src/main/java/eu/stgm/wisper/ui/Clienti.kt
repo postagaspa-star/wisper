@@ -279,6 +279,17 @@ fun SchermataCliente(dati: Dati, nav: Navigatore, id: String) {
                         add("Chilometri" to if (cl.kmRimborsati != false) "rimborsati" else "non rimborsati")
                         cl.costoFisso?.let { add("Costo orario fisso" to "${Numeri.scrivi(it)} €/h") }
                     }
+                    // Fase 4: come sul computer (pc/ui/clienti.js).
+                    if (cl.cliente && perm.costi && perm.vede(Moduli.FATTURAZIONE) && cl.fatturazioneLetta) {
+                        add("Sostituto d'imposta" to when (cl.sostitutoImposta) {
+                            null -> if (cl.partitaIva.isNotBlank()) "sì (automatico: ha la partita IVA)" else "no (automatico: è un privato)"
+                            true -> "sì"
+                            false -> "no"
+                        })
+                        val giorni = cl.pagamentoGiorni ?: ana.impostazione("GIORNI_PAGAMENTO").toIntOrNull() ?: 30
+                        val fine = cl.pagamentoFineMese ?: (ana.impostazione("PAGAMENTO_FINE_MESE") == "true")
+                        add("Pagamento" to "$giorni giorni" + if (fine) ", fine mese" else "")
+                    }
                 }
                 Scheda(orizzontale = 18.dp, verticale = 18.dp, raggio = 22.dp) { Coppie(coppie) }
                 if (cl.note.isNotBlank()) {
@@ -583,6 +594,11 @@ fun SchermataModificaCliente(dati: Dati, nav: Navigatore, id: String?, fornitore
     var pagaViaggio by rememberSaveable(id) { mutableStateOf(esistente?.pagaViaggio == true) }
     var kmRimborsati by rememberSaveable(id) { mutableStateOf(esistente?.kmRimborsati != false) }
     var note by rememberSaveable(id) { mutableStateOf(esistente?.note.orEmpty()) }
+    // Fase 4: "auto" / "si" / "no" come sul computer; i giorni vuoti = quelli delle impostazioni.
+    var sostituto by rememberSaveable(id) { mutableStateOf(when (esistente?.sostitutoImposta) { true -> "si"; false -> "no"; null -> "auto" }) }
+    var giorniPagamento by rememberSaveable(id) { mutableStateOf(esistente?.pagamentoGiorni?.toString().orEmpty()) }
+    var fineMese by rememberSaveable(id) { mutableStateOf(when (esistente?.pagamentoFineMese) { true -> "si"; false -> "no"; null -> "auto" }) }
+    var fattureToccate by rememberSaveable(id) { mutableStateOf(false) }
     var provato by rememberSaveable(id) { mutableStateOf(false) }
     var salvo by remember { mutableStateOf(false) }
     var erroreSalva by remember { mutableStateOf<String?>(null) }
@@ -591,6 +607,8 @@ fun SchermataModificaCliente(dati: Dati, nav: Navigatore, id: String?, fornitore
     val alias = altriNomi.split(',').map { it.trim() }.filter { it.isNotBlank() }
     val doppione = if (nome.isBlank() && partitaIva.isBlank()) null else ana.doppioneDi(nome, alias, partitaIva, tranne = esistente?.id.orEmpty())
     val conSoldi = eCliente && perm.costi
+    val conFatture = conSoldi && perm.vede(Moduli.FATTURAZIONE)
+    val errGiorni = giorniPagamento.trim().takeIf { it.isNotEmpty() }?.let { t -> if (t.toIntOrNull()?.let { it in 0..365 } != true) "Giorni di pagamento: da 0 a 365" else null }
 
     val errNome = if (provato && nome.isBlank()) "Scrivi il nome o la ragione sociale" else null
     val errTipo = if (provato && !eCliente && !eFornitore) "Scegli se è un cliente, un fornitore o tutti e due" else null
@@ -607,7 +625,7 @@ fun SchermataModificaCliente(dati: Dati, nav: Navigatore, id: String?, fornitore
     }
     val errUltima = if (!conSoldi || fissa) null else erroreNumero(ultimaTariffa)
     val errCosto = if (!conSoldi) null else erroreNumero(costoFisso)
-    val errori = listOfNotNull(errPiva, errSdi, errPec, errEmail, errCap, errProvincia, errFissa, errUltima, errCosto)
+    val errori = listOfNotNull(errPiva, errSdi, errPec, errEmail, errCap, errProvincia, errFissa, errUltima, errCosto, if (conFatture) errGiorni else null)
 
     fun controlla() {
         val p = partitaIva.filter { it.isDigit() }
@@ -655,6 +673,14 @@ fun SchermataModificaCliente(dati: Dati, nav: Navigatore, id: String?, fornitore
                 costoFisso = Numeri.leggi(costoFisso),
                 pagaViaggio = pagaViaggio,
                 kmRimborsati = kmRimborsati,
+            )
+        }.let { s ->
+            // Come il computer: si mandano solo se il modulo li conosce (letti dal server, o toccati qui).
+            if (!conFatture || !(s.fatturazioneLetta || fattureToccate)) s else s.copy(
+                sostitutoImposta = when (sostituto) { "si" -> true; "no" -> false; else -> null },
+                pagamentoGiorni = giorniPagamento.trim().toIntOrNull(),
+                pagamentoFineMese = when (fineMese) { "si" -> true; "no" -> false; else -> null },
+                fatturazioneLetta = true,
             )
         }
         salvo = true
@@ -762,6 +788,26 @@ fun SchermataModificaCliente(dati: Dati, nav: Navigatore, id: String?, fornitore
                     )
                     RigaSiNo("Viaggio pagato", pagaViaggio) { pagaViaggio = it }
                     RigaSiNo("Km rimborsati", kmRimborsati) { kmRimborsati = it }
+                }
+            }
+
+            // ---- fatture (fase 4, solo per chi vede le fatture): sostituto d'imposta e pagamento
+            if (conFatture) {
+                Etichetta("Fatture", Modifier.padding(top = 8.dp))
+                Scheda(orizzontale = 20.dp, verticale = 18.dp, raggio = 24.dp, spazio = 10.dp) {
+                    Text("Sostituto d'imposta", style = Testi.secondarioGrande.copy(fontWeight = FontWeight.Bold), color = c.testo)
+                    Segmenti(listOf("auto" to "Automatico", "si" to "Sì", "no" to "No"), sostituto, { sostituto = it; fattureToccate = true })
+                    if (sostituto == "auto") Text(
+                        if (partitaIva.isNotBlank()) "Sì: ha la partita IVA" else "No: è un privato",
+                        style = Testi.secondario, color = c.tenue,
+                    )
+                    CampoTesto(
+                        giorniPagamento, { giorniPagamento = it.filter { ch -> ch.isDigit() }.take(3); fattureToccate = true }, "Pagamento a",
+                        Modifier.fillMaxWidth(), segnaposto = ana.impostazione("GIORNI_PAGAMENTO").ifBlank { "30" },
+                        tastiera = KeyboardType.Number, suffisso = "giorni", errore = errGiorni,
+                    )
+                    Text("Poi a fine mese", style = Testi.secondarioGrande.copy(fontWeight = FontWeight.Bold), color = c.testo)
+                    Segmenti(listOf("auto" to "Automatico", "si" to "Sì", "no" to "No"), fineMese, { fineMese = it; fattureToccate = true })
                 }
             }
 

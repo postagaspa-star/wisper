@@ -46,7 +46,9 @@ const IMPOSTAZIONI_INIZIALI = [
 ];
 
 /** Le colonne che sono sempre testo, anche quando dentro ci sono solo cifre. */
-const SEMPRE_TESTO = ['partitaIva', 'telefono', 'PARTITA_IVA', 'TELEFONO'];
+const SEMPRE_TESTO = ['partitaIva', 'telefono', 'PARTITA_IVA', 'TELEFONO',
+  // Fase 4: i dati dello studio per le fatture (un CAP o un numero d'albo restano testo).
+  'CODICE_FISCALE', 'STUDIO_CAP', 'ALBO_NUMERO', 'ALBO_PROVINCIA', 'ALBO_DATA'];
 
 const NUMERAZIONI_INIZIALI = [
   { tipo: 'commessa', formato: '{AA}ST{NNN}', annuale: 0 },
@@ -54,6 +56,13 @@ const NUMERAZIONI_INIZIALI = [
   // Fase 2 (la mette anche la migrazione 002): riparte ogni anno, le revisioni tengono il numero.
   { tipo: 'preventivo', formato: 'PR/{AAAA}/{NNN}', annuale: 1 },
 ];
+
+/**
+ * Fase 4: le regole fiscali. Cambiarne una toglie la conferma del commercialista
+ * (REGOLE_FISCALI_CONFERMATE torna null, con la nota nel registro).
+ */
+const REGOLE_FISCALI = ['REGIME_FISCALE', 'TIPO_DOCUMENTO', 'RITENUTA_TIPO', 'RITENUTA_CAUSALE', 'EPPI_TIPO_CASSA', 'BOLLO_SOGLIA',
+  'BOLLO_IMPORTO', 'BOLLO_RIVALSA', 'GIORNI_PAGAMENTO', 'PAGAMENTO_FINE_MESE', 'MODALITA_PAGAMENTO', 'IVA', 'EPPI_INTEGRATIVO', 'RITENUTA'];
 
 /** Mai nel registro: la password (anche se scrypt) e i token. */
 const CAMPI_SEGRETI = ['password_hash', 'token_hash'];
@@ -179,8 +188,8 @@ class Wisper {
       pulisci(prima), pulisci(dopo), note);
   }
 
-  /** Una riga nuova, con la sua annotazione (dopo = i campi scritti, senza quelli vuoti). */
-  inserisci(tabella, valori, chiave) {
+  /** Una riga nuova, con la sua annotazione (dopo = i campi scritti, senza quelli vuoti). nota: per il registro. */
+  inserisci(tabella, valori, chiave, nota) {
     chiave = chiave || 'id';
     const colonne = Object.keys(valori);
     const r = this.db.esegui(
@@ -192,15 +201,16 @@ class Wisper {
       const v = valori[k];
       if (v !== null && v !== undefined && v !== '' && CAMPI_RUMORE.indexOf(k) < 0) dopo[k] = v === true ? 1 : v === false ? 0 : v;
     }
-    this.annota(tabella, id, null, dopo);
+    this.annota(tabella, id, null, dopo, nota);
     return id;
   }
 
   /**
    * Cambia i campi dati di una riga e annota solo quelli cambiati davvero.
-   * Torna quanti campi sono cambiati (0: niente da scrivere).
+   * Torna quanti campi sono cambiati (0: niente da scrivere). nota: per il registro
+   * ("passata al programma", "dalla fattura 45/2026 (W-15)"...).
    */
-  aggiorna(tabella, id, valori, chiave) {
+  aggiorna(tabella, id, valori, chiave, nota) {
     chiave = chiave || 'id';
     const prima = this.db.riga('SELECT * FROM ' + tabella + ' WHERE ' + chiave + ' = ?', id);
     if (!prima) throw new Rifiuto('Riga ' + id + ' non trovata in ' + tabella);
@@ -222,7 +232,7 @@ class Wisper {
       const p = {};
       const d = {};
       veri.forEach(c => { p[c] = vecchi[c]; d[c] = cambiati[c] === true ? 1 : cambiati[c] === false ? 0 : cambiati[c]; });
-      this.annota(tabella, prima[chiave], p, d);
+      this.annota(tabella, prima[chiave], p, d, nota);
     }
     return veri.length;
   }
@@ -245,7 +255,13 @@ class Wisper {
   }
 
   salvaImpostazioni(valori) {
-    for (const k of Object.keys(valori || {})) {
+    valori = valori || {};
+    // Fase 4: la conferma del commercialista la segna solo il titolare (confermaRegoleFiscali), non questo salvataggio.
+    if (Object.prototype.hasOwnProperty.call(valori, 'REGOLE_FISCALI_CONFERMATE') && !this.chi().sistema) {
+      throw new Rifiuto('La conferma delle regole fiscali si segna con "Segna confermate": la segna solo il titolare');
+    }
+    const prima = this.leggiImpostazioni();
+    for (const k of Object.keys(valori)) {
       const chiave = testo(k);
       if (!chiave) continue;
       const v = JSON.stringify(comeLaCella(chiave, valori[k]));
@@ -255,7 +271,14 @@ class Wisper {
         this.inserisci('impostazioni', { chiave, valore: v, descrizione: '' }, 'chiave');
       }
     }
-    return this.leggiImpostazioni();
+    // Fase 4: cambiare una regola fiscale toglie la conferma del commercialista (fase4.md §3.4 e §4.1).
+    const dopo = this.leggiImpostazioni();
+    const cambiata = REGOLE_FISCALI.some(k => Object.prototype.hasOwnProperty.call(valori, k) && JSON.stringify(prima[k]) !== JSON.stringify(dopo[k]));
+    if (cambiata && dopo.REGOLE_FISCALI_CONFERMATE) {
+      this.aggiorna('impostazioni', 'REGOLE_FISCALI_CONFERMATE', { valore: 'null' }, 'chiave', 'regole cambiate: la conferma del commercialista non vale più');
+      return this.leggiImpostazioni();
+    }
+    return dopo;
   }
 
   // ------------------------------------------------------------------ numerazioni
@@ -339,12 +362,12 @@ function comeLaCella(chiave, v) {
 }
 
 module.exports = {
-  Wisper, contesto, SISTEMA, IMPOSTAZIONI_INIZIALI, SEMPRE_TESTO, VERSIONE, uguali, comeLaCella,
+  Wisper, contesto, SISTEMA, IMPOSTAZIONI_INIZIALI, SEMPRE_TESTO, VERSIONE, uguali, comeLaCella, REGOLE_FISCALI,
   schemaFormato, formatta, controllaFormato,
 };
 
 // Le azioni, divise per argomento: ognuna aggiunge i suoi metodi al server.
 for (const parte of ['anagrafiche', 'rapportini', 'file', 'accesso', 'amministrazione', 'dashboard', 'esporta', 'copie', 'email', 'vies',
-  'preventivi', 'attivita', 'ore', 'spese']) {
+  'preventivi', 'attivita', 'ore', 'spese', 'fatture', 'ritorno', 'banche']) {
   Object.assign(Wisper.prototype, require('./azioni/' + parte));
 }

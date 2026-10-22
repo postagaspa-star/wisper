@@ -24,11 +24,13 @@ test.after(async () => { await s.ferma(); await vies.ferma(); });
 test('anagrafiche: le parti di oggi e quelle nuove', async () => {
   const a = await manuel('anagrafiche');
   for (const k of ['clienti', 'commesse', 'gruppi', 'impostazioni', 'fornitori', 'referenti', 'sedi', 'prestazioni', 'utenti', 'numerazioni']) assert.ok(k in a, k);
-  assert.deepEqual(a.fornitori.map(f => f.id), ['F001', 'F002']);
+  // Fase 4: due fornitori in piu' nei dati di esempio (Ing. Paolo Verdi con la ritenuta, Luce e Gas Esempio Spa).
+  assert.deepEqual(a.fornitori.map(f => f.id), ['F001', 'F002', 'F003', 'F004']);
   assert.equal(a.fornitori[0].fornitore, true);
   assert.equal(a.fornitori[0].cliente, false);
   assert.deepEqual(Object.keys(a.utenti[0]).sort(), ['attivo', 'id', 'nome', 'ruolo'], 'degli utenti solo nome e ruolo');
-  assert.equal(a.numerazioni.find(n => n.tipo === 'commessa').prossimo, '26ST003');
+  // Fase 4: il PR/2026/012 rev. 1 accettato e' diventato la commessa 26ST003 (il contratto del prototipo).
+  assert.equal(a.numerazioni.find(n => n.tipo === 'commessa').prossimo, '26ST004');
   assert.equal(a.sedi.filter(x => x.tipo === 'impianto').length, 1);
   assert.equal(a.commesse.find(m => m.id === '26ST001').responsabileId, 1);
   assert.deepEqual(a.commesse.find(m => m.id === '26ST001').persone, [3]);
@@ -51,7 +53,7 @@ test('salvaSoggetto: i controlli dicono quale campo', async () => {
   const estero = await manuel('salvaSoggetto', { soggetto: { nome: 'Fournisseur Sarl', nazione: 'fr', partitaIva: 'FR12345678901', cap: '75001', fornitore: true, cliente: false } });
   assert.equal(estero.ok, true, estero.errore);
   assert.equal(estero.soggetto.nazione, 'FR');
-  assert.equal(estero.soggetto.id, 'F003', 'nato fornitore: codice F');
+  assert.equal(estero.soggetto.id, 'F005', 'nato fornitore: codice F (F003 e F004 sono i fornitori della fase 4)');
 });
 
 test('salvaSoggetto: un doppione per nome o partita IVA restituisce quello che c\'e\'', async () => {
@@ -231,7 +233,7 @@ test('esporta: CSV per Excel con punto e virgola, BOM, virgola nei decimali', as
   assert.ok(m.includes('26ST001;C001;Elettrodinamica;Nuovo magazzino automatico Batokyo'));
   const reg = await manuel('esporta', { cosa: 'registro' });
   assert.ok(reg.righe > 10);
-  assert.equal((await manuel('esporta', { cosa: 'boh' })).errore, 'Cosa esportare? rapportini, clienti, fornitori, commesse, registro, preventivi, attivita, ore, spese, trasferte o rimborsi');
+  assert.equal((await manuel('esporta', { cosa: 'boh' })).errore, 'Cosa esportare? rapportini, clienti, fornitori, commesse, registro, preventivi, attivita, ore, spese, trasferte, rimborsi, fatture, ricevute, daFatturare, riepilogo, movimenti, scadenziario o impegni');
 });
 
 // ------------------------------------------------------------------ dashboard
@@ -243,7 +245,9 @@ test('dashboard: tre sezioni di voci con gravita e collegamento; per il titolare
   const voci = [].concat(d.urgenti, d.settimana, d.pianificare);
   assert.ok(voci.length > 0);
   const pagine = ['dashboard', 'clienti', 'cliente', 'commesse', 'commessa', 'rapportini', 'fatturazione', 'amministrazione',
-    'preventivi', 'preventivo', 'attivita', 'calendario', 'spese'];
+    'preventivi', 'preventivo', 'attivita', 'calendario', 'spese',
+    // Fase 4 (fase4.md §12)
+    'fatture', 'fattura', 'ricevute', 'ricevuta', 'scadenziario', 'movimenti', 'impegni', 'conti', 'situazione'];
   for (const v of voci) {
     assert.ok(['urgente', 'attenzione', 'info', 'soldi'].includes(v.gravita), JSON.stringify(v));
     assert.ok(pagine.includes(v.collegamento.pagina), JSON.stringify(v));

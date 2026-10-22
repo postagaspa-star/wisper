@@ -121,7 +121,10 @@ async function main() {
     for (const hash of ['#clienti', '#clienti/C002', '#commesse', '#commesse/26ST001', '#rapportini', '#fatturazione', '#amministrazione', '#amministrazione/utenti', '#amministrazione/permessi', '#amministrazione/registro', '#amministrazione/copie',
       '#preventivi', '#preventivi/' + encodeURIComponent('PR/' + new Date().getFullYear() + '/012'), '#preventivi/listino', '#preventivi/contratti', '#attivita', '#attivita/calendario', '#attivita/pianificazione',
       // fase 3: ore, timer, approvazioni, statistiche, spese e trasferte, veicoli
-      '#rapportini/ore', '#rapportini/elenco', '#rapportini/approvare', '#rapportini/statistiche', '#spese', '#spese/riepiloghi', '#amministrazione/veicoli']) {
+      '#rapportini/ore', '#rapportini/elenco', '#rapportini/approvare', '#rapportini/statistiche', '#spese', '#spese/riepiloghi', '#amministrazione/veicoli',
+      // fase 4: fatturazione, banche e scadenze
+      '#fatturazione/fatture', '#fatturazione/bozza/15', '#fatturazione/ricevute', '#fatturazione/scadenze', '#fatturazione/riepilogo',
+      '#banche', '#banche/movimenti', '#banche/tributi', '#banche/conti', '#banche/situazione', '#amministrazione/fiscale', '#commesse/26ST003']) {
       await valuta("location.hash = '" + hash + "'; true");
       await aspetta(900);
       const testo = await valuta("document.querySelector('#principale').innerText.slice(0, 80).replace(/\\s+/g, ' ')");

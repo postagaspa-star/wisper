@@ -55,16 +55,17 @@ test('un\'app vecchia legge dal server attraverso lo script', { skip: salta }, (
   assert.equal(a.ok, true, a.errore);
   assert.ok(a.fornitori, 'e\' la risposta del server (ha i fornitori)');
   const r = get({ azione: 'rapportini', tutti: '1' });
-  assert.equal(r.rapportini.length, 6);
+  // 4 dello script, 2 di Marco, 7 della fase 4 (settembre di Elettrodinamica e il collaudo di Rossi).
+  assert.equal(r.rapportini.length, 13);
   assert.equal(typeof r.rapportini[0].totale, 'number', 'come il titolare');
 });
 
 test('un rapportino rimasto in coda su un telefono vecchio arriva sul server', { skip: salta }, () => {
   const r = post({ azione: 'salvaRapportino', rapportino: { idLocale: 'coda-vecchia-1', data: '2026-10-21', cliente: 'Rossi Impianti Srl', tariffa: 40, oreLavoro: 2 } });
   assert.equal(r.ok, true, r.errore);
-  assert.equal(r.rapportino.id, 'RAP/2026/0007');
+  assert.equal(r.rapportino.id, 'RAP/2026/0014');
   const ripetuto = post({ azione: 'salvaRapportino', rapportino: { idLocale: 'coda-vecchia-1', data: '2026-10-21', cliente: 'Rossi Impianti Srl', tariffa: 40, oreLavoro: 2 } });
-  assert.equal(ripetuto.rapportino.id, 'RAP/2026/0007', 'ripetuto: la stessa riga');
+  assert.equal(ripetuto.rapportino.id, 'RAP/2026/0014', 'ripetuto: la stessa riga');
 });
 
 test('col codice sbagliato lo script non inoltra niente', { skip: salta }, () => {

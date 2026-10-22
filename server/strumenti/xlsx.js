@@ -29,26 +29,55 @@ function leggiZip(buf) {
   let p = buf.readUInt32LE(fine + 16);
   const voci = new Map();
   for (let k = 0; k < quante; k++) {
-    if (buf.readUInt32LE(p) !== 0x02014b50) throw new Error('Indice dello zip rovinato');
+    if (p + 46 > buf.length || buf.readUInt32LE(p) !== 0x02014b50) throw new Error('Indice dello zip rovinato');
+    const bandiere = buf.readUInt16LE(p + 8);
     const metodo = buf.readUInt16LE(p + 10);
     const compressa = buf.readUInt32LE(p + 20);
+    const dimensione = buf.readUInt32LE(p + 24);
     const lungNome = buf.readUInt16LE(p + 28);
     const lungExtra = buf.readUInt16LE(p + 30);
     const lungCommento = buf.readUInt16LE(p + 32);
     const locale = buf.readUInt32LE(p + 42);
-    voci.set(buf.toString('utf8', p + 46, p + 46 + lungNome), { metodo, compressa, locale });
+    voci.set(buf.toString('utf8', p + 46, p + 46 + lungNome), {
+      metodo, compressa, dimensione, locale,
+      // Fase 4 (gli zip delle fatture): una voce cifrata non si legge; lo zip64 (file oltre 4 GB) nemmeno.
+      cifrata: (bandiere & 1) === 1,
+      zip64: compressa === 0xFFFFFFFF || dimensione === 0xFFFFFFFF || locale === 0xFFFFFFFF,
+    });
     p += 46 + lungNome + lungExtra + lungCommento;
   }
   return {
     nomi: Array.from(voci.keys()),
-    leggi(nome) {
+    /** Come e' fatta una voce: {metodo, compressa, dimensione (scompattata, come la dichiara l'indice), cifrata, zip64}. */
+    info(nome) {
+      const v = voci.get(nome);
+      return v ? { metodo: v.metodo, compressa: v.compressa, dimensione: v.dimensione, cifrata: v.cifrata, zip64: v.zip64 } : null;
+    },
+    /**
+     * I byte di una voce. opzioni.massimo: oltre questi byte scompattati si
+     * ferma con un errore (difesa dagli zip che dichiarano poco e scompattano
+     * tantissimo), senza riempire la memoria.
+     */
+    leggi(nome, opzioni) {
       const v = voci.get(nome);
       if (!v) return null;
-      if (buf.readUInt32LE(v.locale) !== 0x04034b50) throw new Error('Voce dello zip rovinata: ' + nome);
+      const massimo = opzioni && opzioni.massimo;
+      if (v.locale + 30 > buf.length || buf.readUInt32LE(v.locale) !== 0x04034b50) throw new Error('Voce dello zip rovinata: ' + nome);
       const inizio = v.locale + 30 + buf.readUInt16LE(v.locale + 26) + buf.readUInt16LE(v.locale + 28);
       const dati = buf.subarray(inizio, inizio + v.compressa);
-      if (v.metodo === 0) return Buffer.from(dati);
-      if (v.metodo === 8) return zlib.inflateRawSync(dati);
+      if (v.metodo === 0) {
+        if (massimo && dati.length > massimo) throw new Error('Voce dello zip troppo grande: ' + nome);
+        return Buffer.from(dati);
+      }
+      if (v.metodo === 8) {
+        if (!massimo) return zlib.inflateRawSync(dati);
+        try {
+          return zlib.inflateRawSync(dati, { maxOutputLength: massimo });
+        } catch (err) {
+          if (err && (err.code === 'ERR_BUFFER_TOO_LARGE' || /maxOutputLength|too large/i.test(err.message))) throw new Error('Voce dello zip troppo grande: ' + nome);
+          throw err;
+        }
+      }
       throw new Error('Compressione dello zip non supportata (' + v.metodo + ') in ' + nome);
     },
   };

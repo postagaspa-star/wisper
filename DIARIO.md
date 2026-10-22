@@ -11,6 +11,7 @@ mai dati veri di clienti.
 
 | Data | Versione | In breve |
 |------|----------|----------|
+| 22/10/2026 | gestionale, fase 4 (non pubblicata) | [Fatture, banche e scadenze](#gestionale-fase-4) |
 | 22/10/2026 | gestionale, fase 3 (non pubblicata) | [Ore, timer, spese e trasferte](#gestionale-fase-3) |
 | 22/10/2026 | gestionale, fase 2 (non pubblicata) | [Preventivi, attività e calendario](#gestionale-fase-2) |
 | 21/10/2026 | gestionale, fase 1 (non pubblicata) | [Il nucleo del gestionale: server sul NAS, accesso per persona, Dashboard](#gestionale-fase-1) |
@@ -27,6 +28,64 @@ mai dati veri di clienti.
 | 26/09–14/10/2026 | 0.1 | [Un rapportino confermato non si perde più](#coda) |
 | 7–9/08/2026 | 0.1.0 | [Hackathon NGN Hacks: la versione a voce, senza mani](#v0-1-0) |
 | marzo–giugno 2026 | prima del repository | [Le prime versioni](#prima) |
+
+---
+
+<a id="gestionale-fase-4"></a>
+## 22 ottobre 2026 · gestionale, fase 4 · Fatture, banche e scadenze
+
+**Perché.** Quarta fase del gestionale (`docs/specifiche-stgm.md`, moduli 08 e 09). Andrea ha deciso il 21/10 che
+Wisper **prepara** la fattura e la **emette il programma che Manuel usa già**; l'XML emesso torna in Wisper. La banca
+resta uno scadenziario scritto a mano. Prima la ricerca (`docs/gestionale/ricerca-fase4.md`, fonti fiscali e struttura
+della fattura elettronica) e il prototipo (`docs/prototipo/Gestionale-fase4.html`), poi il codice.
+
+**Cosa cambia.**
+
+- **Da fatturare**: per cliente, le cose pronte: acconti e saldi delle commesse nate dai preventivi, i rapportini del
+  mese (il **fine mese di oggi resta**: "Prepara riepilogo" c'è sempre, e "Prepara la bozza" prende il posto di "Segna
+  fatturati"), le spese da riaddebitare, le ore fatturabili.
+- **La bozza** fa i conti del perito industriale: compenso, contributo integrativo EPPI 5% (dentro la base IVA), IVA
+  22%, ritenuta 20% solo per i clienti sostituti d'imposta (sul compenso senza il contributo), spese anticipate fuori
+  da IVA, bollo da 2 € sopra 77,47 € senza IVA. I conti stanno solo nel server, provati su 30 casi che telefono e
+  computer ritrovano al centesimo. **Finché il commercialista non conferma le regole**, Fatturazione lo dice in cima a
+  ogni pagina e i numeri hanno la pillola "Da confermare".
+- **Mai due volte la stessa cosa in fattura**: ogni rapportino, acconto o spesa sta in una fattura sola, e lo
+  garantisce il database stesso (provato anche con due richieste nello stesso istante). Torna libero solo scartando la
+  bozza o con una nota di credito.
+- **Passa al programma**: un prospetto con "Copia" su ogni campo (va bene con qualunque programma) e un XML da
+  completare per i programmi che lo importano, col numero BOZZA e il nome che dice di non inviarlo. Wisper non inventa
+  mai un numero di fattura; l'invio allo SDI è segnato "non collegato".
+- **Il ritorno dell'XML** (anche firmato `.p7m` o in uno `.zip`, anche dal Condividi del telefono): Wisper propone a
+  quale bozza appartiene (Sicura, Probabile, Diversa, Senza bozza) e niente cambia finché non si conferma riga per riga.
+  Con l'XML la fattura diventa emessa col numero vero e i rapportini passano a FATTURATO. Le fatture fatte fuori da
+  Wisper si collegano a quello che era da fatturare. Le fatture dei fornitori diventano pagamenti da fare.
+- **Note di credito**: liberano quello che stornano; se il cliente aveva già pagato, la fattura e la Dashboard dicono
+  quanto va restituito o compensato.
+- **Banche e scadenze**: scadenziario per giorno con il saldo previsto (prudente: gli incassi scaduti non contano) e i
+  giorni sotto soglia in rosso; incassi e pagamenti anche in parte; tributi e F24 anche ricorrenti; previsto,
+  registrato e verificato in banca sempre distinti. Estratti conto e banca: "non collegato".
+- Server 0.7.0 sul NAS, ancora vuoto, con la copia fatta prima delle tabelle nuove.
+
+Trovati e corretti prima del commit: l'XML da completare, se importato per sbaglio, veniva preso per una fattura emessa
+(ora si scarta con una frase chiara, e il numero BOZZA non si può scrivere neanche a mano); dopo una nota di credito su
+una fattura pagata nessuno avvisava dei soldi da restituire.
+
+Prove: server 280, script del foglio 65, telefono 206, computer 179, tutte verdi; il giro intero da fatturare → bozza →
+programma → XML di ritorno → incasso in parte → nota di credito cliccato sull'emulatore e, in 13 passi, su Wisper
+Ufficio contro il server di prova; conti rifatti a mano sulle schermate. Da fare prima di usarla con fatture vere:
+confermare le regole col commercialista, sapere quale programma usa Manuel, controllare l'XML con lo schema ufficiale.
+
+<p>
+<img src="docs/diario/2026-10-22-gest4-tel-dafatturare.png" width="220" alt="Telefono: da fatturare per cliente">
+</p>
+
+<img src="docs/diario/2026-10-22-gest4-pc-passa.png" width="720" alt="Wisper Ufficio: passa al programma, i campi da copiare">
+
+<img src="docs/diario/2026-10-22-gest4-pc-importa.png" width="720" alt="Wisper Ufficio: l'XML di ritorno e l'abbinamento da confermare">
+
+<img src="docs/diario/2026-10-22-gest4-pc-fattura.png" width="720" alt="Wisper Ufficio: la fattura annullata con i soldi da restituire">
+
+Versione: non ancora pubblicata (ramo `gestionale`).
 
 ---
 

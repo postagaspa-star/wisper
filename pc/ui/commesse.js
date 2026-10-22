@@ -108,7 +108,8 @@
         h('div', { class: 'testata in-alto' },
           h('div', { class: 'titoli' },
             h('div', { class: 'pillole-testa' }, h('span', { class: 'codice' }, m.id), stato(m.stato, true),
-              m.archiviata ? pillola('Archiviata', 'grigio') : null, m.modello ? pillola('Modello', 'grigio') : null),
+              m.archiviata ? pillola('Archiviata', 'grigio') : null, m.modello ? pillola('Modello', 'grigio') : null,
+              soldi() && puo('fatturazione') && m.modoFatturazione ? pillola({ ore: 'A ore', corpo: 'A corpo', misto: 'Misto' }[m.modoFatturazione] || m.modoFatturazione, 'grigio') : null),
             h('h1', { class: 'titolo-scheda' }, m.descrizione),
             h('span', { class: 'sotto-titolo' }, [c ? c.nome : m.idCliente, sede ? sede.nome : m.indirizzo].filter(Boolean).join(' · '))),
           altro,
@@ -128,7 +129,7 @@
         }
         aggiungi(area, [W.tabellaRapportini(C.ordina(k.rapportini, 'data', -1))]);
       } else if (scheda === 'costi' && soldi()) costiCommessa(area, m, k, costoDi(m));
-      else if (scheda === 'dafatturare' && soldi()) daFatturare(area, k);
+      else if (scheda === 'dafatturare' && soldi()) { if (puo('fatturazione') && W.Fatture) W.Fatture.incorporaDaFatturare(area, m.id); else daFatturare(area, k); }
       else if (scheda === 'documenti' && puoDocumenti(1)) documentiCommessa(area, m);
       else panoramica(area, m, k, soldi() ? RO.costiConFase3(k, costoDi(m)) : null);
     }
@@ -422,6 +423,7 @@
             noto && percMargine !== null ? perc(percMargine) + (margine < 0 ? ': costa più di quanto vale'
               : daBudget ? ', dopo ' + C.euro(costoAtteso) + ' di costi previsti' : ', dopo i costi') : '', null, noto && margine < 0))]);
 
+        if (puo('fatturazione') && W.Fatture) { aggiungi(area, [fatturazioneCommessa(m)]); } else {
         const tot = k.fatturato + k.prontoDaFatturare + k.inBozza;
         const pezzo = (x, classe) => tot > 0 && x > 0 ? h('i', { class: classe, style: { width: (x / tot * 100) + '%' } }) : null;
         aggiungi(area, [h('div', { class: 'scheda' },
@@ -431,6 +433,7 @@
             h('span', null, h('i', { style: { background: 'var(--testo)' } }), 'Fatturato ' + C.euro(k.fatturato)),
             h('span', null, h('i', { style: { background: 'var(--firmato)' } }), 'Pronto da fatturare ' + C.euro(k.prontoDaFatturare)),
             h('span', null, h('i', { style: { background: 'var(--bordo-campo)' } }), 'Da far firmare ' + C.euro(k.inBozza))))]);
+        }
       }
 
       const ore = h('div', { class: 'scheda' }, h('h2', null, 'Ore'));
@@ -457,6 +460,39 @@
       aggiungi(ore, [corpoOre]);
       aggiungi(area, [ore]);
       if (m.note) aggiungi(area, [h('div', { class: 'scheda' }, h('h2', null, 'Note'), h('div', { class: 'lavoro' }, m.note))]);
+    }
+
+    /**
+     * La fatturazione della commessa (fase4.md §13.1, architettura.md §15.12): dal server
+     * (fatturazioneCommessa) contratto, fatturato, incassato, da fatturare, in bozza e previsto,
+     * con la barra; accanto le scadenze di pagamento del contratto con lo stato (Prevista ·
+     * In bozza W-15 · Fatturata 45/2026 · Incassata), ognuna col collegamento alla sua fattura.
+     */
+    function fatturazioneCommessa(m) {
+      const zona = h('div', { class: 'due-colonne fatturazione-commessa' }, B.segnaposto(1, 120));
+      Rete.get('/server/fatturazioneCommessa?id=' + encodeURIComponent(m.id)).then(x => {
+        svuota(zona);
+        const RF = radice.WisperRegoleFatture;
+        const base = C.num(x.contratto) || (C.num(x.fatturato) + C.num(x.inBozza) + C.num(x.daFatturare) + C.num(x.previsto));
+        const pezzo = (v, classe) => base > 0 && C.num(v) > 0 ? h('i', { class: classe, style: { width: Math.min(100, C.num(v) / base * 100) + '%' } }) : null;
+        const voce = (colore, testo, v) => h('span', null, h('i', { class: colore }), testo + ' ' + C.euro(v));
+        aggiungi(zona, [h('div', { class: 'scheda' },
+          h('div', { class: 'testa-fatt-commessa' }, h('span', { class: 'etichetta' }, 'Fatturazione'),
+            h('b', null, C.num(x.contratto) ? C.euro(x.contratto) + ' di contratto' : x.modoFatturazione === 'corpo' ? 'senza importo del contratto' : 'a ore')),
+          h('div', { class: 'barra barra-fatt' }, pezzo(x.fatturato, 'fatt'), pezzo(x.inBozza, 'bozza-f'), pezzo(x.daFatturare, 'pronto-f'), pezzo(x.previsto, 'previsto-f')),
+          h('div', { class: 'legenda' }, voce('fatt', 'Fatturato', x.fatturato), voce('bozza-f', 'In bozza', x.inBozza), voce('pronto-f', 'Da fatturare', x.daFatturare), voce('previsto-f', 'Previsto', x.previsto)),
+          h('div', { class: 'secondario' }, 'Incassato ' + C.euro(x.incassato) + ' · importi del compenso, senza contributo e IVA'),
+          C.num(x.daFatturare) > 0 ? h('button', { type: 'button', class: 'btn collegamento', style: { alignSelf: 'flex-start', marginTop: '6px' }, onclick: () => { S.schedaCommessa[m.id] = 'dafatturare'; W.disegnaPagina(); } }, 'Vai a Da fatturare') : null),
+        h('div', { class: 'sezione' }, h('span', { class: 'etichetta' }, 'Scadenze di pagamento'),
+          (x.scadenze || []).length ? h('div', { class: 'scheda righe' }, x.scadenze.map(sc => {
+            const parola = RF.parolaScadenzaPagamento(sc);
+            const quando = sc.quando === 'data' ? (sc.data ? 'il ' + C.data(sc.data) : 'a una data') : ({ firma: 'alla firma', avanzamento: 'ad avanzamento', fine: 'a fine lavori' }[sc.quando] || '');
+            return riga({ titolo: sc.descrizione, sotto: quando + ' · ' + C.euro(sc.importo),
+              destra: pillola(parola, sc.stato === 'prevista' ? 'grigio' : RF.coloreStato(parola)),
+              onclick: sc.idFattura ? () => (sc.stato === 'in_bozza' && /^W-/.test(sc.fattura || '') ? W.vai('#fatturazione/bozza/' + sc.idFattura) : W.Fatture.apriPannello(sc.idFattura)) : null });
+          })) : h('div', { class: 'calmo' }, icona('fatturazione', 20, 2.2), x.modoFatturazione === 'corpo' ? 'Nessuna scadenza nel contratto.' : 'Si fattura a ore: rapportini, ore e spese.'))]);
+      }).catch(e => { if (e && e.accesso === false) return; aggiungi(svuota(zona), [h('div', { class: 'banda calma' }, icona('avviso', 20), h('span', { class: 'spazio' }, (e && e.message) || String(e)))]); });
+      return zona;
     }
 
     function costiCommessa(area, m, k, cc) {
@@ -555,6 +591,11 @@
         .sort((a, b) => a.nome.localeCompare(b.nome, 'it'));
       const utenti = S.ana.utenti.filter(u => u.attivo !== false);
       let persone = (m.persone || []).map(String);
+      // Fase 4 (§15.2): come si fattura. A corpo = solo le scadenze del contratto; a ore = rapportini, ore e spese; misto = tutto.
+      let modo = m.modoFatturazione || 'ore';
+      const zonaModo = h('div');
+      const disegnaModo = () => aggiungi(svuota(zonaModo), [segmenti([['ore', 'A ore'], ['corpo', 'A corpo'], ['misto', 'Misto']], modo, x => { modo = x; disegnaModo(); }, 'piccoli')]);
+      disegnaModo();
       const v = {
         cliente: h('select', null, [h('option', { value: '' }, 'Scegli il cliente')].concat(clienti.map(c => h('option', { value: c.id, selected: c.id === (m.idCliente || S.filtriCommesse.cliente) }, c.nome)))),
         descrizione: h('input', { type: 'text', value: m.descrizione || '' }),
@@ -669,6 +710,7 @@
           campi.budgetEuro = C.numONull(v.budgetEuro.value);
           campi.euroKm = C.numONull(v.euroKm.value);
           campi.importoContratto = C.numONull(v.importo.value);
+          if (W.puo('fatturazione')) campi.modoFatturazione = modo;
           // Prezzo e costo fissi del cliente restano sulla sua scheda, non si copiano sulla commessa.
           if (!v.prezzoOrario.disabled) campi.prezzoOrario = C.numONull(v.prezzoOrario.value);
           if (!v.costoOrario.disabled) campi.costoOrario = C.numONull(v.costoOrario.value);
@@ -704,7 +746,7 @@
           soldi()
             ? [h('div', { class: 'riga-campi' }, campo('Ore previste', v.budgetOre), campo('Prezzo orario (€/h)', v.prezzoOrario), campo('Budget (€)', v.budgetEuro)),
               h('div', { class: 'riga-campi' }, campo('Costo orario (€/h)', v.costoOrario), campo('Importo del contratto (€)', v.importo), campo('Rimborso km (€/km)', v.euroKm)),
-              sottoBudget]
+              sottoBudget, W.puo('fatturazione') ? h('div', { class: 'campo' }, h('label', null, 'Come si fattura'), zonaModo) : null]
             : h('div', { class: 'riga-campi' }, campo('Ore previste', v.budgetOre), h('span')),
           campo('Note', v.note)],
         pulsanti: ['spazio', h('button', { type: 'button', class: 'btn testo grande', onclick: () => chiudi() }, 'Annulla'),

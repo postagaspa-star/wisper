@@ -147,7 +147,16 @@ async function locale(nome, o) {
     case 'apri-documento': console.log('[apri documento]', o.nome); return { ok: true };
     // Il promemoria: nel programma vero è una notifica di Windows.
     case 'notifica': console.log('[notifica]', o.titolo, '·', o.testo); return { ok: true };
-    case 'scegli-file': return { ok: true, nome: 'scontrino.png', mime: 'image/png', base64: IMMAGINE.toString('base64') };
+    case 'scegli-file': {
+      // Fase 4: "Scegli i file" di Importa XML (più file insieme). Qui la finestra di Windows non c'è: si
+      // restituiscono i file di WISPER_XML (percorsi separati da virgole), di base lo zip di ottobre degli esempi.
+      if (o.filtro === 'fatture') {
+        const percorsi = String(process.env.WISPER_XML || path.join(__dirname, '..', '..', 'server', 'prove', 'xml', 'fatture-ottobre.zip')).split(',').map(x => x.trim()).filter(Boolean);
+        const file = percorsi.filter(p => fs.existsSync(p)).map(p => ({ nome: path.basename(p), base64: fs.readFileSync(p).toString('base64') }));
+        return file.length ? { ok: true, file } : { ok: false, annullato: true };
+      }
+      return { ok: true, nome: 'scontrino.png', mime: 'image/png', base64: IMMAGINE.toString('base64') };
+    }
     case 'salva-file': {
       // Qui la finestra Salva di Windows non c'è: il file va nella cartella delle stampe.
       fs.mkdirSync(STAMPE, { recursive: true });

@@ -152,6 +152,18 @@ object Stampa {
         nomePreventivo("Incarico", preventivo, anagrafiche), immagine,
     )
 
+    /**
+     * Un documento della fase 4 (fase4.md §8.3): il prospetto per il programma delle
+     * fatture o l'avviso di parcella. Dal modello di pc/ui/documenti.js quando c'è
+     * ([funzione]: prospettoFattura, avvisoParcella, col modello del pacchetto); finché
+     * il computer non l'ha, dalla pagina [riserva] scritta dal telefono (ProspettoPdf).
+     */
+    suspend fun documentoFase4(ctx: Context, funzione: String, modello: JSONObject, riserva: String, nome: String, opzioni: JSONObject = JSONObject()): File = stampa(
+        ctx,
+        "(typeof WisperDocumenti.$funzione === 'function' ? WisperDocumenti.$funzione($modello,$opzioni) : ${JSONObject.quote(riserva)})",
+        nome,
+    ) { null }
+
     /** "Preventivo PR-2026-012 rev. 1 Rossi Impianti Srl". */
     fun nomePreventivo(prefisso: String, p: JSONObject, anagrafiche: JSONObject): String {
         val numero = testo(p, "numero").ifEmpty { "bozza" } + (testo(p, "revisione").toIntOrNull()?.takeIf { it > 0 }?.let { " rev. $it" } ?: "")

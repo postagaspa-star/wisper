@@ -19,6 +19,8 @@ const { budgetDi } = require('../conti');
 const { giornoAttivita } = require('./attivita');
 const { etichettaPreventivo, statoVistoPreventivo } = require('./preventivi');
 const { contaNeiConti } = require('../conti');
+const C = require('../conti');
+const { giornoLungo } = require('./fatture');
 
 const ORDINE = { urgente: 0, soldi: 1, attenzione: 2, info: 3 };
 const MASSIMO_PER_SEZIONE = 20;
@@ -157,17 +159,19 @@ module.exports = {
 
     // ------------------------------------------------------------ soldi (solo con "costi")
     let soldi;
+    // Fase 4: chi vede le fatture (o le banche) e i soldi ha le voci nuove (§12); "Da fatturare" conta tutte le sorgenti.
+    const fase4 = costi && (this.livello('fatturazione') > 0 || this.livello('banche') > 0);
     if (costi) {
       const somma = lista => centesimi(lista.reduce((s, r) => s + numero(r.totale), 0));
       const deiMesiPrima = daFatturare.filter(r => r.data && r.data.slice(0, 7) < mese);
       const diQuestoMese = daFatturare.filter(r => r.data && r.data.slice(0, 7) === mese);
-      if (deiMesiPrima.length) {
+      if (deiMesiPrima.length && !fase4) {
         const mesePiuVecchio = deiMesiPrima.map(r => r.data.slice(0, 7)).sort()[0];
         voce(urgenti, { tipo: 'fatturazione', gravita: 'soldi', titolo: 'Da fatturare dei mesi scorsi',
           dettaglio: plurale(deiMesiPrima.length, 'rapportino firmato o mandato', 'rapportini firmati o mandati') + ', dal ' + mesePiuVecchio.slice(5, 7) + '/' + mesePiuVecchio.slice(0, 4),
           quanto: somma(deiMesiPrima), unita: 'euro', collegamento: { pagina: 'fatturazione', filtro: { mese: mesePiuVecchio } } });
       }
-      if (diQuestoMese.length) {
+      if (diQuestoMese.length && !fase4) {
         voce(settimana, { tipo: 'fatturazione', gravita: 'soldi', titolo: 'Da fatturare questo mese',
           dettaglio: plurale(diQuestoMese.length, 'rapportino firmato o mandato', 'rapportini firmati o mandati'), quanto: somma(diQuestoMese), unita: 'euro',
           collegamento: { pagina: 'fatturazione', filtro: { mese } } });
@@ -187,6 +191,7 @@ module.exports = {
         fatturatoMese: somma(rapportini.filter(r => testo(r.stato).toUpperCase() === 'FATTURATO' && testo(r.fatturato_il).slice(0, 7) === mese)),
         clientiDaFatturare: clientiDelMese.size,
       };
+      if (fase4) Object.assign(soldi, this.dashboardFase4({ adesso, lunedi, mese, voce, urgenti, settimana, pianificare, ruolo: c.utente ? c.utente.ruolo : '' }));
     }
 
     // ------------------------------------------------------------ fase 2: attivita' e preventivi
@@ -226,6 +231,173 @@ module.exports = {
     if (fase3.approvare) risposta.numeri.approvare = fase3.approvare;
     if (fase3.rimborsi) risposta.numeri.rimborsi = fase3.rimborsi;
     return risposta;
+  },
+
+  /**
+   * Le voci della fase 4 (§12), per chi vede fatture o banche e i soldi:
+   *  - urgenti: fatture scadute (una per una fino a 3, poi una voce sola),
+   *    fatture gia' pagate da emettere entro 12 giorni, impegni scaduti, saldo
+   *    previsto sotto soglia entro 14 giorni, da fatturare dei mesi scorsi;
+   *  - questa settimana: da fatturare, incassi attesi e pagamenti entro 7
+   *    giorni, fatture passate al programma da piu' di 3 giorni senza XML;
+   *  - da pianificare: regole fiscali da confermare, saldo di un conto non
+   *    aggiornato da 30 giorni, saldo sotto soglia piu' avanti, ricevute con la
+   *    scadenza stimata, proposte di Wisper da confermare.
+   * Torna i numeri da aggiungere a numeri.soldi.
+   */
+  dashboardFase4({ adesso, lunedi, mese, voce, urgenti, settimana, pianificare, ruolo }) {
+    const euro = n => C.euroIt(n);
+    const vedeFatture = this.livello('fatturazione') > 0;
+    const vedeBanche = this.livello('banche') > 0;
+    const out = {};
+    // ---- da fatturare (tutte le sorgenti pronte)
+    if (vedeFatture) {
+      const voci = this.sorgentiDaFatturare({}).filter(v => v.pronta);
+      const totale = centesimi(voci.reduce((t, v) => t + v.importo, 0));
+      const clienti = Array.from(new Set(voci.map(v => v.idCliente)));
+      const nomi = {};
+      this.db.righe('SELECT id, nome FROM soggetti').forEach(x => { nomi[x.id] = x.nome; });
+      out.daFatturare = totale;
+      out.clientiDaFatturare = clienti.length;
+      const vecchie = voci.filter(v => v.tipo !== 'scadenza' && v.data && v.data.slice(0, 7) < mese);
+      out.daFatturareMesiPrima = centesimi(vecchie.reduce((t, v) => t + v.importo, 0));
+      if (vecchie.length) {
+        const piuVecchio = vecchie.map(v => v.data.slice(0, 7)).sort()[0];
+        voce(urgenti, { tipo: 'fatturazione', gravita: 'soldi', titolo: 'Da fatturare dei mesi scorsi',
+          dettaglio: plurale(vecchie.length, 'cosa pronta', 'cose pronte') + ', dal ' + piuVecchio.slice(5, 7) + '/' + piuVecchio.slice(0, 4),
+          quanto: out.daFatturareMesiPrima, unita: 'euro', collegamento: { pagina: 'fatturazione', filtro: { mese: piuVecchio } } });
+      }
+      if (clienti.length) {
+        const ordinati = clienti.map(id => ({ id, totale: voci.filter(v => v.idCliente === id).reduce((t, v) => t + v.importo, 0) })).sort((a, b) => b.totale - a.totale);
+        voce(settimana, { tipo: 'fatturazione', gravita: 'soldi', titolo: 'Da fatturare',
+          dettaglio: plurale(clienti.length, 'cliente', 'clienti') + ' · ' + ordinati.slice(0, 3).map(x => nomi[x.id] || x.id).join(', ') + (clienti.length > 3 ? '…' : ''),
+          quanto: totale, unita: 'euro', collegamento: { pagina: 'fatturazione' } });
+      }
+      const fatture = this.db.righe("SELECT * FROM fatture WHERE tipo = 'fattura' AND stato IN ('bozza', 'pronta', 'emessa')");
+      const a = this.aiutiFatture(fatture);
+      out.fattureInBozza = centesimi(fatture.filter(f => f.stato !== 'emessa').reduce((t, f) => t + numero(f.totale), 0));
+      const emesse = fatture.filter(f => f.stato === 'emessa').map(f => ({ f, p: this.pagamentoDi(f, a) }));
+      out.daIncassare = centesimi(emesse.reduce((t, x) => t + x.p.residuo, 0));
+      const scadute = emesse.filter(x => x.p.scaduta).sort((x, y) => y.p.giorniScaduta - x.p.giorniScaduta);
+      out.scaduto = centesimi(scadute.reduce((t, x) => t + x.p.residuo, 0));
+      if (scadute.length > 3) {
+        voce(urgenti, { tipo: 'fattura', gravita: 'urgente', titolo: scadute.length + ' fatture scadute',
+          dettaglio: 'Restano ' + euro(out.scaduto) + ' da incassare · la più vecchia da ' + scadute[0].p.giorniScaduta + ' giorni', quanto: out.scaduto, unita: 'euro',
+          collegamento: { pagina: 'fatture', filtro: { scadute: true } } });
+      } else {
+        for (const { f, p } of scadute) {
+          voce(urgenti, { tipo: 'fattura', gravita: 'urgente', titolo: 'Fattura ' + (f.numero || f.riferimento) + ' scaduta da ' + plurale(p.giorniScaduta, 'giorno', 'giorni'),
+            dettaglio: (a.clienti[f.cliente_id] || '') + ' · restano ' + euro(p.residuo) + ' di ' + euro(f.netto), quanto: p.residuo, unita: 'euro',
+            collegamento: { pagina: 'fattura', id: f.id } });
+        }
+      }
+      // Incassate e poi stornate con una nota di credito: soldi del cliente da restituire o compensare.
+      const stornate = this.db.righe("SELECT * FROM fatture WHERE tipo = 'fattura' AND stato IN ('emessa', 'annullata')");
+      const aStornate = this.aiutiFatture(stornate);
+      for (const f of stornate) {
+        const p = this.pagamentoDi(f, aStornate);
+        if (!(p.daRestituire > 0)) continue;
+        voce(urgenti, { tipo: 'fattura', gravita: 'urgente', titolo: 'Fattura ' + (f.numero || f.riferimento) + ': ' + euro(p.daRestituire) + ' da restituire o compensare',
+          dettaglio: (aStornate.clienti[f.cliente_id] || '') + ' · incassati ' + euro(p.incassato) + ', poi la nota di credito', quanto: p.daRestituire, unita: 'euro',
+          collegamento: { pagina: 'fattura', id: f.id } });
+      }
+      // Gia' pagate (avviso di parcella) da emettere entro 12 giorni dall'incasso.
+      for (const f of fatture.filter(x => x.stato !== 'emessa')) {
+        const p = this.pagamentoDi(f, a);
+        if (!p.daEmettereEntro) continue;
+        voce(urgenti, { tipo: 'fattura', gravita: 'urgente', titolo: 'Emetti la fattura per ' + (a.clienti[f.cliente_id] || '') + ' entro ' + giornoLungo(p.daEmettereEntro),
+          dettaglio: 'Ha già pagato il ' + dataBreve(p.incassi[p.incassi.length - 1].data) + ' · ' + f.riferimento, quanto: f.netto, unita: 'euro',
+          collegamento: { pagina: 'fattura', id: f.id } });
+      }
+      // Passate al programma da piu' di 3 giorni senza l'XML di ritorno.
+      const ferme = fatture.filter(f => f.stato === 'pronta' && dataIso(f.pronta_il) && dataIso(f.pronta_il) < piuGiorni(adesso, -3) && f.esito_sdi !== 'scartata');
+      if (ferme.length) {
+        voce(settimana, { tipo: 'fattura', gravita: 'attenzione', titolo: plurale(ferme.length, 'fattura passata', 'fatture passate') + ' al programma: manca l\'XML di ritorno',
+          dettaglio: ferme.map(f => f.riferimento + ' · ' + (a.clienti[f.cliente_id] || '')).slice(0, 3).join(', '), quanto: ferme.length, unita: 'fatture',
+          collegamento: { pagina: 'fatture', filtro: { stato: 'pronta' } } });
+      }
+      // Fatture ricevute con la scadenza stimata.
+      const stimate = this.db.righe("SELECT r.*, s.nome fornitore FROM fatture_ricevute r LEFT JOIN soggetti s ON s.id = r.fornitore_id WHERE r.stato = 'attiva' AND r.scadenza_stimata = 1");
+      const aperte = stimate.filter(r => this.statoRicevuta(r, this.aiutiRicevute([r])).daPagare > 0);
+      if (aperte.length) {
+        voce(pianificare, { tipo: 'ricevuta', gravita: 'info', titolo: plurale(aperte.length, 'fattura ricevuta', 'fatture ricevute') + ' con la scadenza stimata',
+          dettaglio: aperte.slice(0, 3).map(r => (r.fornitore || '') + ' ' + r.numero).join(', ') + ' · messa a 30 giorni: controllala', quanto: aperte.length, unita: 'fatture',
+          collegamento: { pagina: 'ricevute' } });
+      }
+      // Le regole fiscali non confermate (solo titolare e amministrazione).
+      if (!this.regoleConfermate() && (ruolo === 'titolare' || ruolo === 'amministrazione')) {
+        voce(pianificare, { tipo: 'fiscale', gravita: 'info', titolo: 'Regole delle fatture da confermare col commercialista',
+          dettaglio: 'Contributo EPPI, ritenuta, bollo e tipo di documento: finché non sono confermate, ogni conto lo dice',
+          collegamento: { pagina: 'amministrazione', filtro: { sezione: 'fiscale' } } });
+      }
+    }
+    if (vedeBanche) {
+      const conti = this.db.righe('SELECT * FROM conti WHERE attivo = 1');
+      // Senza nessun conto non c'e' un saldo da prevedere: si chiede di scriverlo, niente avvisi di cassa.
+      if (!conti.length) {
+        voce(pianificare, { tipo: 'conto', gravita: 'info', titolo: 'Scrivi il conto dello studio',
+          dettaglio: 'Banche e scadenze › Conti: nome, IBAN e il saldo letto in banca', collegamento: { pagina: 'conti' } });
+        return out;
+      }
+      out.saldoConti = centesimi(conti.reduce((t, x) => t + this.saldoConto(x).saldo, 0));
+      const movimenti = this.db.righe('SELECT * FROM movimenti WHERE annullato = 0 AND data >= ? AND data <= ?', lunedi, adesso);
+      out.incassiSettimana = centesimi(movimenti.filter(m => m.verso === 'entrata').reduce((t, m) => t + m.importo, 0));
+      out.pagamentiSettimana = centesimi(movimenti.filter(m => m.verso === 'uscita').reduce((t, m) => t + m.importo, 0));
+      const s = this.scadenziario({ da: adesso, a: piuGiorni(adesso, 91) });
+      let previsto = s.saldoPartenza;
+      for (const g of s.giorni) if (g.data <= piuGiorni(adesso, 30)) previsto = g.saldo;
+      out.saldoPrevisto30 = previsto;
+      out.primoSottoSoglia = s.primoSottoSoglia;
+      if (s.primoSottoSoglia) {
+        const presto = s.primoSottoSoglia <= piuGiorni(adesso, 14);
+        voce(presto ? urgenti : pianificare, { tipo: 'cassa', gravita: presto ? 'urgente' : 'info',
+          titolo: 'Il saldo previsto scende sotto ' + C.numeroIt(s.soglia, 0, 2) + ' € ' + (s.primoSottoSoglia === adesso ? 'già oggi' : 'il ' + giornoLungo(s.primoSottoSoglia)),
+          dettaglio: 'Saldo di oggi ' + euro(s.saldoOggi) + ' · guarda lo scadenziario', quanto: null, unita: null,
+          collegamento: { pagina: 'scadenziario', filtro: { giorno: s.primoSottoSoglia } } });
+      }
+      // Impegni scaduti e non pagati (uno per uno fino a 3).
+      const impegni = this.leggiImpegni({ stato: 'aperti' });
+      const scaduti = impegni.filter(i => i.scaduto && !i.proposta);
+      if (scaduti.length > 3) {
+        voce(urgenti, { tipo: 'impegno', gravita: 'urgente', titolo: scaduti.length + ' pagamenti scaduti', dettaglio: scaduti.slice(0, 3).map(i => i.descrizione).join(', ') + '…',
+          quanto: centesimi(scaduti.reduce((t, i) => t + numero(i.daPagare), 0)), unita: 'euro', collegamento: { pagina: 'impegni' } });
+      } else {
+        for (const i of scaduti) {
+          voce(urgenti, { tipo: 'impegno', gravita: 'urgente', titolo: i.descrizione + ' scaduto da ' + plurale(i.giorniScaduto, 'giorno', 'giorni'),
+            dettaglio: [i.codice ? 'codice ' + i.codice : '', 'era per il ' + dataBreve(i.scadenza)].filter(Boolean).join(' · '), quanto: i.daPagare, unita: i.daPagare === null ? null : 'euro',
+            collegamento: { pagina: 'impegni', id: i.id } });
+        }
+      }
+      // Incassi attesi e pagamenti entro 7 giorni.
+      const entro = piuGiorni(adesso, 7);
+      const prossimi = [].concat(...s.giorni.filter(g => g.data <= entro).map(g => g.righe.map(r => Object.assign({ giorno: g.data }, r))));
+      const entrate = prossimi.filter(r => r.verso === 'entrata' && r.contaNelSaldo);
+      const uscite = prossimi.filter(r => r.verso === 'uscita');
+      const breve = r => r.titolo.split(' · ')[0] + ' ' + nomeGiorno(r.giorno);
+      if (entrate.length) {
+        voce(settimana, { tipo: 'cassa', gravita: 'soldi', titolo: 'Incassi attesi entro 7 giorni', dettaglio: entrate.slice(0, 3).map(breve).join(', '),
+          quanto: centesimi(entrate.reduce((t, r) => t + r.importo, 0)), unita: 'euro', collegamento: { pagina: 'scadenziario' } });
+      }
+      if (uscite.length) {
+        voce(settimana, { tipo: 'impegno', gravita: 'attenzione', titolo: 'Pagamenti entro 7 giorni', dettaglio: uscite.slice(0, 3).map(breve).join(', '),
+          quanto: centesimi(uscite.filter(r => r.contaNelSaldo).reduce((t, r) => t + r.importo, 0)), unita: 'euro', collegamento: { pagina: 'scadenziario' } });
+      }
+      // Proposte di Wisper da confermare.
+      const proposte = impegni.filter(i => i.proposta);
+      if (proposte.length) {
+        voce(pianificare, { tipo: 'impegno', gravita: 'info', titolo: plurale(proposte.length, 'proposta di Wisper', 'proposte di Wisper') + ' da confermare',
+          dettaglio: proposte.slice(0, 3).map(i => i.descrizione).join(', '), quanto: proposte.length, unita: 'impegni', collegamento: { pagina: 'impegni', filtro: { proposte: true } } });
+      }
+      // Il saldo di un conto non aggiornato da 30 giorni.
+      for (const c of conti) {
+        const sc = this.saldoConto(c);
+        if (sc.saldoAl && sc.saldoAl >= piuGiorni(adesso, -30)) continue;
+        voce(pianificare, { tipo: 'conto', gravita: 'info', titolo: 'Aggiorna il saldo di ' + this.nomeConto(c),
+          dettaglio: sc.saldoAl ? 'L\'ultimo saldo scritto è del ' + dataBreve(sc.saldoAl) + ': leggilo sull\'estratto conto' : 'Non hai ancora scritto il saldo letto in banca',
+          collegamento: { pagina: 'conti', id: c.id } });
+      }
+    }
+    return out;
   },
 
   /**

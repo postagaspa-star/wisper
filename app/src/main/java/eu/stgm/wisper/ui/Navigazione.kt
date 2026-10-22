@@ -68,6 +68,7 @@ enum class Sezione(val nome: String, val icona: ImageVector, val modulo: String)
     RAPPORTINI("Ore e rapportini", Icone.ore, Moduli.RAPPORTINI),
     SPESE("Spese e trasferte", Icone.scontrino, Moduli.SPESE),
     FATTURAZIONE("Fatturazione", Icone.fatturazione, Moduli.FATTURAZIONE),
+    BANCHE("Banche e scadenze", Icone.barre, Moduli.BANCHE),
     AMMINISTRAZIONE("Amministrazione", Icone.amministrazione, Moduli.AMMINISTRAZIONE),
 }
 
@@ -131,6 +132,9 @@ fun sezioneDiRotta(rotta: String?, base: Sezione): Sezione = when {
     rotta.startsWith("attivita") || rotta.startsWith("calendario") -> Sezione.ATTIVITA
     rotta.startsWith("ore-") -> Sezione.RAPPORTINI
     rotta.startsWith("spes") || rotta.startsWith("trasfert") -> Sezione.SPESE
+    // Fase 4: fatture, ricevute, importazione; banche e situazione.
+    rotta.startsWith("fattur") || rotta.startsWith("ricevut") -> Sezione.FATTURAZIONE
+    rotta.startsWith("banche") -> Sezione.BANCHE
     rotta.startsWith("amm/") -> Sezione.AMMINISTRAZIONE
     else -> base
 }

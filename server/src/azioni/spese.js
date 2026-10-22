@@ -68,6 +68,9 @@ module.exports = {
   speseBloccate(r) {
     if (r.tolta) return { bloccata: 'La spesa è stata tolta', soloCampi: null };
     if (r.rimborsata_il) return { bloccata: 'Rimborsata il ' + dataBreve(dataIso(r.rimborsata_il)) + ': non si cambia', soloCampi: null };
+    // Fase 4: in una bozza o in una fattura si cambiano solo categoria, descrizione e chi l'ha pagata (non i numeri della fattura).
+    const frase = this.fraseSorgenteFerma('spesa', r.id);
+    if (frase) return { bloccata: frase, soloCampi: CAMPI_SEMPRE };
     const fermo = this.rapportinoFermo(r.rapportino_id);
     if (fermo) {
       return {
@@ -356,6 +359,9 @@ module.exports = {
     const annulla = si(d.annulla);
     if (annulla && !r.tolta) return this.spesaPerId(r.id);
     if (!annulla && r.tolta) return this.spesaPerId(r.id);
+    // Fase 4: una spesa in una bozza o in una fattura non si toglie (la frase dice dove sta).
+    const ferma = this.fraseSorgenteFerma('spesa', r.id);
+    if (ferma) throw new Rifiuto(ferma);
     const b = this.speseBloccate(Object.assign({}, r, { tolta: null }));
     if (b.bloccata) throw new Rifiuto(b.soloCampi ? 'Il rapportino ' + r.rapportino_id + ' è già firmato: per togliere la spesa riportalo in bozza' : b.bloccata);
     this.aggiorna('spese', r.id, { tolta: annulla ? null : adesso(), modificato: adesso() });
@@ -446,12 +452,14 @@ module.exports = {
     if (!r) return;
     const fatturato = testo(r.stato).toUpperCase() === 'FATTURATO' ? testo(r.fatturato_il) : '';
     const stato = this.statoSpesaDelRapportino(r);
+    // Fase 4: una spesa che sta in una fattura sua (riservata o fatturata) tiene la sua data di fatturazione.
+    const conFattura = new Set(this.db.righe("SELECT sorgente_id FROM fattura_sorgenti WHERE tipo = 'spesa' AND attiva = 1").map(x => Number(x.sorgente_id)));
     const ora = adesso();
     let passo3 = null;
     for (const s of this.db.righe('SELECT * FROM spese WHERE rapportino_id = ? ORDER BY id', r.id)) {
       const v = Object.assign({ commessa_id: testo(r.id_commessa), cliente_id: testo(r.id_cliente) }, stato);
       if (r.utente_id !== null) v.utente_id = r.utente_id;
-      v.fatturata_il = s.destinazione === 'cliente' ? fatturato : '';
+      v.fatturata_il = conFattura.has(s.id) ? s.fatturata_il : s.destinazione === 'cliente' ? fatturato : '';
       if (s.dal_rapportino === 1) {
         if (dataIso(r.data)) v.data = dataIso(r.data);
         if (o.noteCambiate) v.descrizione = testo(r.note_spese) || 'Spese del rapportino';
@@ -818,7 +826,7 @@ module.exports = {
     const gruppo = (k, nome, extra) => gruppi[k] || (gruppi[k] = soldiPropri(Object.assign({
       chiave: k, nome, quante: 0, cliente: 0, studio: 0, personale: 0, anticipazioni: 0, daRimborsare: 0, inAttesa: 0,
       trasferte: 0, km: 0, rimborsoKm: 0, indennita: 0, totale: 0,
-    }, extra || {}), ['rimborsoKm', 'totale']));
+    }, extra || {}), ['rimborsoKm', 'totale', 'anticipazioni']));
     const chiDi = (idUtente) => gruppo(idUtente === null ? 'nessuno' : idUtente, idUtente ? nomi.utenti[idUtente] || '' : 'Senza persona');
     const diCommessa = id => {
       const m = id ? nomi.commesse[String(id).toUpperCase()] : null;
@@ -856,7 +864,7 @@ module.exports = {
       anticipazioni: somma('anticipazioni'), daRimborsare: somma('daRimborsare'), inAttesa: somma('inAttesa'),
       trasferte: righe.reduce((t, g) => t + g.trasferte, 0), km: somma('km'), rimborsoKm: somma('rimborsoKm'), indennita: somma('indennita'),
       totale: somma('totale'),
-    }, ['rimborsoKm', 'totale']);
+    }, ['rimborsoKm', 'totale', 'anticipazioni']);
     return { ok: true, da: sp.da, a: sp.a, per, righe, totale };
   },
 };

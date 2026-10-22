@@ -162,16 +162,18 @@ test('ripristino: da una copia (anche compressa), il database di prima resta da 
   semina(w);
   const copia = path.join(dati, 'copia-buona.db');
   w.db.copiaIn(copia);
+  const quanti = w.db.riga('SELECT COUNT(*) n FROM rapportini').n;
   w.come(SISTEMA, () => w.db.transazione(() => w.creaCliente({ nome: 'Arrivato Dopo La Copia Srl' })));
   w.chiudi();
   const r = spawnSync(process.execPath, [RIPRISTINA, copia, '--dati', dati], { encoding: 'utf8' });
   assert.equal(r.status, 0, r.stderr);
-  assert.match(r.stdout, /Ripristinato da .*6 rapportini/);
+  // I rapportini dei dati di esempio (13 dalla fase 4: i sei di settembre di Elettrodinamica e il collaudo di Rossi).
+  assert.match(r.stdout, new RegExp('Ripristinato da .*: ' + quanti + ' rapportini'));
   assert.match(r.stdout, /prima-del-ripristino/);
   w = new Wisper({ dati });
   try {
     assert.equal(w.leggiClienti().some(c => c.nome === 'Arrivato Dopo La Copia Srl'), false);
-    assert.equal(w.db.riga('SELECT COUNT(*) n FROM rapportini').n, 6);
+    assert.equal(w.db.riga('SELECT COUNT(*) n FROM rapportini').n, quanti);
     assert.ok(fs.readdirSync(dati).some(f => /^wisper\.db\.prima-del-ripristino-\d{8}-\d{6}$/.test(f)));
   } finally {
     w.chiudi();

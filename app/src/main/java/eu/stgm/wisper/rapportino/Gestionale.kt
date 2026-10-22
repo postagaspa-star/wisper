@@ -25,6 +25,8 @@ object Moduli {
     /** Spese e trasferte (fase 3, voce 7). */
     const val SPESE = "spese"
     const val FATTURAZIONE = "fatturazione"
+    /** Banche e scadenze (fase 4, voce 9). */
+    const val BANCHE = "banche"
     const val AMMINISTRAZIONE = "amministrazione"
 
     /** Tariffe, totali, costi orari, budget in euro, margini. */
@@ -35,7 +37,10 @@ object Moduli {
     val FASE1 = listOf(DASHBOARD, CLIENTI, COMMESSE, RAPPORTINI, FATTURAZIONE, AMMINISTRAZIONE)
 
     /** Quelli che funzionano dalla fase 3 (spese e trasferte), nell'ordine del menu. */
-    val FUNZIONANTI = listOf(DASHBOARD, CLIENTI, COMMESSE, PREVENTIVI, ATTIVITA, RAPPORTINI, SPESE, FATTURAZIONE, AMMINISTRAZIONE)
+    val FUNZIONANTI = listOf(DASHBOARD, CLIENTI, COMMESSE, PREVENTIVI, ATTIVITA, RAPPORTINI, SPESE, FATTURAZIONE, BANCHE, AMMINISTRAZIONE)
+
+    /** Fatturazione e Banche si vedono solo col modulo e col permesso dei soldi (§15.1). */
+    val CON_SOLDI = setOf(FATTURAZIONE, BANCHE)
 }
 
 /** I quattro ruoli, con la frase che li spiega (docs/gestionale/fase1-schermate.md §7). */
@@ -100,8 +105,8 @@ data class Utente(
  */
 data class Permessi(val livelli: Map<String, Int>) {
     fun livello(modulo: String): Int = livelli[modulo] ?: 0
-    fun vede(modulo: String): Boolean = livello(modulo) >= 1
-    fun modifica(modulo: String): Boolean = livello(modulo) >= 2
+    fun vede(modulo: String): Boolean = livello(modulo) >= 1 && (modulo !in Moduli.CON_SOLDI || livello(Moduli.COSTI) >= 1)
+    fun modifica(modulo: String): Boolean = livello(modulo) >= 2 && (modulo !in Moduli.CON_SOLDI || livello(Moduli.COSTI) >= 1)
 
     /** Tariffe, totali, costi e margini: senza, il server non li manda e l'app non li mostra. */
     val costi: Boolean get() = vede(Moduli.COSTI)
@@ -433,6 +438,8 @@ data class Dashboard(
     val commesse: NumeriCommesse = NumeriCommesse(),
     /** Dalla fase 3 (§14.13): ore, cose da approvare, rimborsi da fare. */
     val fase3: NumeriFase3 = NumeriFase3(),
+    /** Dalla fase 4 (§15.16): i soldi di fatture e banche; null per chi non li vede. */
+    val fase4: NumeriFase4? = null,
 ) {
     val vuota: Boolean get() = urgenti.isEmpty() && settimana.isEmpty() && pianificare.isEmpty()
 
@@ -443,6 +450,7 @@ data class Dashboard(
             pianificare = o.optJSONArray("pianificare").oggetti().map(VoceDashboard::daJson),
             commesse = NumeriCommesse.daJson(o.optJSONObject("numeri")?.optJSONObject("commesse") ?: o.optJSONObject("commesse")),
             fase3 = NumeriFase3.daJson(o.optJSONObject("numeri")),
+            fase4 = NumeriFase4.daJson(o.optJSONObject("numeri")?.optJSONObject("soldi")),
         )
     }
 }

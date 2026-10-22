@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ns3:NotificaScarto xmlns:ns3="http://ivaservizi.agenziaentrate.gov.it/docs/xsd/messaggi/v1.0" versione="1.0">
+  <IdentificativoSdI>222222222</IdentificativoSdI>
+  <NomeFile>IT00000000000_00046.xml.p7m</NomeFile>
+  <DataOraRicezione>2026-10-23T09:00:00.000+02:00</DataOraRicezione>
+  <ListaErrori>
+    <Errore>
+      <Codice>00404</Codice>
+      <Descrizione>Fattura duplicata</Descrizione>
+    </Errore>
+  </ListaErrori>
+  <MessageId>900000002</MessageId>
+</ns3:NotificaScarto>

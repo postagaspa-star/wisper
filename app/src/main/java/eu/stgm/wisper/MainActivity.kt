@@ -134,12 +134,49 @@ class MainActivity : ComponentActivity() {
 
         val archivio = (application as WisperApp).archivio
         leggiPromemoria(intent)
+        leggiFileCondivisi(intent)
         setContent { Wisper(archivio, this) }
     }
 
     override fun onNewIntent(intent: android.content.Intent) {
         super.onNewIntent(intent)
         leggiPromemoria(intent)
+        leggiFileCondivisi(intent)
+    }
+
+    /**
+     * "Condividi, Wisper" o "Apri con" di un XML, .p7m o .zip di fattura (fase4.md
+     * §13.2): i file si copiano subito (il permesso di leggerli dura poco) e si apre
+     * Fatturazione, Importa l'XML, che li fa leggere al server senza cambiare niente.
+     */
+    private fun leggiFileCondivisi(intent: android.content.Intent?) {
+        val i = intent ?: return
+        val uri: List<android.net.Uri> = when (i.action) {
+            android.content.Intent.ACTION_SEND -> listOfNotNull(
+                if (Build.VERSION.SDK_INT >= 33) i.getParcelableExtra(android.content.Intent.EXTRA_STREAM, android.net.Uri::class.java)
+                else @Suppress("DEPRECATION") i.getParcelableExtra(android.content.Intent.EXTRA_STREAM),
+            )
+            android.content.Intent.ACTION_SEND_MULTIPLE -> (
+                if (Build.VERSION.SDK_INT >= 33) i.getParcelableArrayListExtra(android.content.Intent.EXTRA_STREAM, android.net.Uri::class.java)
+                else @Suppress("DEPRECATION") i.getParcelableArrayListExtra(android.content.Intent.EXTRA_STREAM)
+                ).orEmpty()
+            android.content.Intent.ACTION_VIEW -> listOfNotNull(i.data)
+            else -> emptyList()
+        }
+        if (uri.isEmpty()) return
+        // Lo stesso intent non si rilegge (rotazione, ritorno nell'app).
+        i.action = null
+        Thread {
+            val (file, fuori) = eu.stgm.wisper.ui.FileInArrivo.leggi(this, uri)
+            runOnUiThread {
+                if (file.isEmpty()) {
+                    android.widget.Toast.makeText(this, fuori.firstOrNull() ?: "Il file non si legge", android.widget.Toast.LENGTH_LONG).show()
+                } else {
+                    eu.stgm.wisper.ui.FileInArrivo.file.value = file
+                    apriImporta.value = true
+                }
+            }
+        }.start()
     }
 
     /** Toccando la notifica di un promemoria si apre quell'attività. */
@@ -150,6 +187,9 @@ class MainActivity : ComponentActivity() {
     companion object {
         /** L'attività da aprire arrivando da un promemoria: la legge la schermata e la vuota. */
         val attivitaDaAprire = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
+
+        /** Sono arrivati file di fatture dal Condividi: si apre Importa l'XML appena si può. */
+        val apriImporta = kotlinx.coroutines.flow.MutableStateFlow(false)
     }
 
     override fun onResume() {
@@ -234,6 +274,17 @@ private fun Wisper(archivio: Archivio, attivita: ComponentActivity) {
             when (p) {
                 "dashboard" -> { modulo = null; scope.launch { cassetto.close() }; aCasa() }
                 // Fase 3: la visita passa da Spese e trasferte (Nuova spesa) e da Ore e rapportini (il timer).
+                // Fase 4: la visita passa da Fatturazione e da Banche e scadenze.
+                "fatturazione", "banche" -> {
+                    modulo = null
+                    scope.launch { cassetto.close() }
+                    val s = if (p == "fatturazione") Sezione.FATTURAZIONE else Sezione.BANCHE
+                    if (p == "fatturazione") eu.stgm.wisper.ui.RicordoFatture.segmento = eu.stgm.wisper.ui.SegmentoFatture.DA_FATTURARE
+                    else eu.stgm.wisper.ui.RicordoBanche.segmento = eu.stgm.wisper.ui.SegmentoBanche.SCADENZIARIO
+                    mettiPila(s, emptyList())
+                    sezioneNome = s.name
+                    pagina = "sezioni"
+                }
                 "spese", "ore" -> {
                     modulo = null
                     scope.launch { cassetto.close() }
@@ -314,6 +365,15 @@ private fun Wisper(archivio: Archivio, attivita: ComponentActivity) {
             sezioneNome = Sezione.ATTIVITA.name
         }
 
+        // Dal Condividi di Android (un XML di fattura da un'email o da WhatsApp): Fatturazione, Importa l'XML.
+        val importa by MainActivity.apriImporta.collectAsStateWithLifecycle()
+        LaunchedEffect(importa, pagina, visita.attiva) {
+            if (!importa || pagina != "sezioni" || visita.attiva) return@LaunchedEffect
+            MainActivity.apriImporta.value = false
+            mettiPila(Sezione.FATTURAZIONE, listOf("fatture-importa"))
+            sezioneNome = Sezione.FATTURAZIONE.name
+        }
+
         // Indietro: prima la pila della voce, poi si torna alla Dashboard; dalla Dashboard esce dall'app.
         BackHandler(enabled = pagina == "sezioni" && (pila(sezione).isNotEmpty() || sezione != Sezione.DASHBOARD)) {
             if (pila(sezione).isNotEmpty()) nav.indietro() else aCasa()
@@ -327,6 +387,7 @@ private fun Wisper(archivio: Archivio, attivita: ComponentActivity) {
                 .map { it.idCliente.ifBlank { it.cliente } }.distinct().size
         }
         val aggiornamento by dati.aggiornamento.collectAsStateWithLifecycle()
+        val dashboardLetta by dati.dashboard.collectAsStateWithLifecycle()
 
         CompositionLocalProvider(
             LocalVisita provides visita,
@@ -365,7 +426,7 @@ private fun Wisper(archivio: Archivio, attivita: ComponentActivity) {
                                             utente = sessione.utente,
                                             voci = voci,
                                             attiva = sezioneDiRotta(cima, sezione),
-                                            numeroFatturazione = if (permessi.costi) daFatturare else 0,
+                                            numeroFatturazione = if (permessi.costi) (dashboardLetta?.fase4?.clientiDaFatturare ?: daFatturare) else 0,
                                             collegato = aggiornamento.errore.isBlank() && aggiornamento.ultimo != null,
                                             statoCollegamento = when {
                                                 aggiornamento.inCorso && aggiornamento.ultimo == null -> "Mi collego…"
@@ -526,7 +587,8 @@ private fun PaginaSezione(
             Sezione.ATTIVITA -> SchermataAttivita(dati, nav)
             Sezione.RAPPORTINI -> SchermataOreERapportini(dati, nav, filtro, onFiltro)
             Sezione.SPESE -> SchermataSpese(dati, nav)
-            Sezione.FATTURAZIONE -> SchermataUfficio(dati, nav)
+            Sezione.FATTURAZIONE -> eu.stgm.wisper.ui.SchermataFatturazione(dati, nav)
+            Sezione.BANCHE -> eu.stgm.wisper.ui.SchermataBanche(dati, nav)
             Sezione.AMMINISTRAZIONE -> SchermataAmministrazione(dati, archivio, nav)
         }
         rotta.startsWith("amm/") -> PaginaAmministrazione(rotta.removePrefix("amm/"), dati, archivio, nav, tema, onTema, onVisita)
@@ -554,6 +616,14 @@ private fun PaginaSezione(
         rotta.startsWith("trasferta/") -> SchermataTrasferta(dati, nav, rotta.removePrefix("trasferta/"))
         rotta == "spese-riepilogo" -> SchermataRiepilogoSpese(dati, nav)
         rotta == "ore-statistiche" -> SchermataStatisticheOre(dati, nav)
+        // Fase 4: fatture, ricevute, importazione dell'XML, banche (docs/gestionale/fase4.md)
+        rotta.startsWith("fattura/") -> eu.stgm.wisper.ui.SchermataFattura(dati, nav, rotta.removePrefix("fattura/"))
+        rotta.startsWith("fattura-passa/") -> eu.stgm.wisper.ui.SchermataPassa(dati, nav, rotta.removePrefix("fattura-passa/"))
+        rotta == "fattura-nuova" -> eu.stgm.wisper.ui.SchermataNuovaFattura(dati, nav)
+        rotta == "fatture-importa" -> eu.stgm.wisper.ui.SchermataImportaXml(dati, nav)
+        rotta == "fatture-scadenze" -> eu.stgm.wisper.ui.SchermataScadenzeCommesse(dati, nav)
+        rotta.startsWith("ricevuta/") -> eu.stgm.wisper.ui.SchermataRicevuta(dati, nav, rotta.removePrefix("ricevuta/"))
+        rotta == "banche-situazione" -> eu.stgm.wisper.ui.SchermataSituazione(dati, nav)
         rotta == "clienti" -> SchermataClienti(dati, nav)
         rotta == "soggetti-archiviati" -> SchermataSoggettiArchiviati(dati, nav)
         rotta.startsWith("cliente/") -> SchermataCliente(dati, nav, rotta.removePrefix("cliente/"))

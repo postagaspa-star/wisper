@@ -147,6 +147,9 @@ fun SchermataDashboard(
                     Segnaposto(90.dp)
                 }
                 else -> {
+                    // Fase 4 (fase4.md §13.6): quattro riquadri dei soldi per chi vede le fatture, toccabili.
+                    val soldi = d.fase4
+                    if (soldi != null && (perm.vede(Moduli.FATTURAZIONE) || perm.vede(Moduli.BANCHE))) RiquadriSoldi(soldi, perm) { apri(it) }
                     val prima = d.urgenti.firstOrNull()
                     if (prima != null) CosaPiuUrgente(prima, Modifier.bersaglio("cosa-fare")) { apri(prima.collegamento) }
                     val urgenti = d.urgenti.drop(1)
@@ -230,7 +233,17 @@ fun apriCollegamento(col: Collegamento?, nav: Navigatore, rapportini: List<Rappo
             nav.sezione(Sezione.ATTIVITA)
         }
         "calendario" -> nav.vai("calendario/" + (p["giorno"] ?: col.id).orEmpty())
-        "fatturazione" -> nav.sezione(Sezione.FATTURAZIONE)
+        "fatturazione" -> { RicordoFatture.segmento = SegmentoFatture.DA_FATTURARE; nav.sezione(Sezione.FATTURAZIONE) }
+        // Fase 4 (§15.16): fatture, ricevute, scadenziario, movimenti, impegni, conti, situazione.
+        "fatture" -> { RicordoFatture.mostra(p["stato"].orEmpty(), p["pagamento"].orEmpty(), p["scadute"] == "true"); nav.sezione(Sezione.FATTURAZIONE) }
+        "fattura" -> if (col.id.isNotBlank()) nav.vai("fattura/${col.id}") else nav.sezione(Sezione.FATTURAZIONE)
+        "ricevute" -> { RicordoFatture.segmento = SegmentoFatture.RICEVUTE; nav.sezione(Sezione.FATTURAZIONE) }
+        "ricevuta" -> if (col.id.isNotBlank()) nav.vai("ricevuta/${col.id}") else { RicordoFatture.segmento = SegmentoFatture.RICEVUTE; nav.sezione(Sezione.FATTURAZIONE) }
+        "scadenziario" -> { RicordoBanche.segmento = SegmentoBanche.SCADENZIARIO; RicordoBanche.giorno = p["giorno"].orEmpty(); nav.sezione(Sezione.BANCHE) }
+        "movimenti" -> { RicordoBanche.segmento = SegmentoBanche.MOVIMENTI; nav.sezione(Sezione.BANCHE) }
+        "impegni" -> { RicordoBanche.segmento = SegmentoBanche.TRIBUTI; RicordoBanche.soloProposte = p["proposte"] == "true"; nav.sezione(Sezione.BANCHE) }
+        "conti" -> { RicordoBanche.segmento = SegmentoBanche.CONTI; nav.sezione(Sezione.BANCHE) }
+        "situazione" -> { nav.sezione(Sezione.BANCHE); nav.vai("banche-situazione") }
         // Fase 3: Spese e trasferte col segmento; Amministrazione › Veicoli.
         "spese" -> {
             RicordoSpese.segmento = when (p["segmento"]) {
@@ -240,7 +253,11 @@ fun apriCollegamento(col: Collegamento?, nav: Navigatore, rapportini: List<Rappo
             }
             nav.sezione(Sezione.SPESE)
         }
-        "amministrazione" -> if (p["sezione"] == "veicoli") nav.vai("amm/veicoli") else nav.sezione(Sezione.AMMINISTRAZIONE)
+        "amministrazione" -> when (p["sezione"]) {
+            "veicoli" -> nav.vai("amm/veicoli")
+            "fiscale" -> nav.vai("amm/fiscale")
+            else -> nav.sezione(Sezione.AMMINISTRAZIONE)
+        }
         "copie" -> nav.vai("amm/copie")
         "utenti" -> nav.vai("amm/utenti")
         "registro" -> nav.vai("amm/registro")
@@ -268,7 +285,15 @@ private fun CosaPiuUrgente(v: VoceDashboard, modifier: Modifier, onFai: () -> Un
 
 /** Il pulsante della cosa più urgente dice cosa fa. */
 private fun azioneDi(col: Collegamento?): String = when (col?.pagina?.lowercase()) {
-    "fatturazione" -> "Prepara il riepilogo"
+    "fatturazione" -> "Vedi cosa fatturare"
+    "fattura" -> "Apri la fattura"
+    "fatture" -> "Vedi le fatture"
+    "ricevuta", "ricevute" -> "Vedi le fatture ricevute"
+    "scadenziario" -> "Apri lo scadenziario"
+    "impegni" -> "Vedi i tributi"
+    "conti" -> "Aggiorna il saldo"
+    "movimenti" -> "Vedi i movimenti"
+    "situazione" -> "Vedi la situazione"
     "commessa" -> "Apri la commessa"
     "commesse" -> "Vedi le commesse"
     "cliente", "fornitore", "soggetto" -> "Apri la scheda"
@@ -278,7 +303,11 @@ private fun azioneDi(col: Collegamento?): String = when (col?.pagina?.lowercase(
         else -> "Vedi i rapportini"
     }
     "spese" -> if (col.parametri["segmento"] == "rimborsi") "Vedi i rimborsi" else "Vedi le spese"
-    "amministrazione" -> if (col.parametri["sezione"] == "veicoli") "Aggiorna i veicoli" else "Apri"
+    "amministrazione" -> when (col.parametri["sezione"]) {
+        "veicoli" -> "Aggiorna i veicoli"
+        "fiscale" -> "Apri le impostazioni fiscali"
+        else -> "Apri"
+    }
     "rapportino" -> "Apri il rapportino"
     "nuovorapportino", "rapportino-nuovo", "giorno" -> "Scrivi il rapportino"
     "copie" -> "Vedi le copie"
@@ -365,11 +394,37 @@ private fun iconaDi(v: VoceDashboard): ImageVector = when (v.tipo.lowercase()) {
     "timer" -> Icone.orologio
     "rimborsi" -> Icone.fatturazione
     "veicoli" -> Icone.auto
+    // Fase 4 (§15.16)
+    "fattura", "ricevuta" -> if (v.gravita == "urgente") Icone.allarme else Icone.fatturazione
+    "impegno" -> Icone.calendario
+    "cassa", "conto" -> Icone.barre
+    "fiscale" -> Icone.scudo
     else -> when (v.gravita.lowercase()) {
         "urgente" -> Icone.allarme
         "attenzione" -> Icone.avviso
         "soldi" -> Icone.fatturazione
         else -> Icone.lista
+    }
+}
+
+/**
+ * I soldi della Dashboard (fase4.md §13.6): Da fatturare · Da incassare · Scaduto (in
+ * rosso, con la parola) · Nel conto, in due colonne; ognuno apre la sua pagina.
+ */
+@Composable
+private fun RiquadriSoldi(n: eu.stgm.wisper.rapportino.NumeriFase4, perm: eu.stgm.wisper.rapportino.Permessi, onApri: (Collegamento) -> Unit) {
+    val fatt = perm.vede(Moduli.FATTURAZIONE)
+    val banche = perm.vede(Moduli.BANCHE)
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            RiquadroEuro("Da fatturare", n.daFatturare, Modifier.weight(1f), onClick = if (fatt) ({ onApri(Collegamento("fatturazione")) }) else null)
+            RiquadroEuro("Da incassare", n.daIncassare, Modifier.weight(1f), onClick = if (fatt) ({ onApri(Collegamento("fatture", parametri = mapOf("pagamento" to "aperta"))) }) else null)
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            val scaduto = (n.scaduto ?: 0.0) > 0
+            RiquadroEuro("Scaduto", n.scaduto, Modifier.weight(1f), rosso = scaduto, onClick = if (fatt) ({ onApri(Collegamento("fatture", parametri = mapOf("scadute" to "true"))) }) else null)
+            RiquadroEuro("Nel conto", n.saldoConti, Modifier.weight(1f), onClick = if (banche) ({ onApri(Collegamento("scadenziario")) }) else null)
+        }
     }
 }
 

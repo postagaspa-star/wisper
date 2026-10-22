@@ -1,6 +1,6 @@
 {
   "name": "wisper-server",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "private": true,
   "description": "Il server del gestionale Wisper: dati, conti e permessi in un posto solo.",
   "type": "commonjs",

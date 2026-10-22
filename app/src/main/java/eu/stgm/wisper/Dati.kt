@@ -471,6 +471,14 @@ interface Dati {
      * solo le sue. Torna il file nella cartella dei PDF, pronto per Condividi.
      */
     suspend fun esportaPeriodo(cosa: String, da: LocalDate?, a: LocalDate?, utente: String = ""): Result<File>
+
+    // ------------------------------------------------------------- fase 4: fatturazione, banche e scadenze (docs/gestionale/fase4.md)
+
+    /**
+     * Fatture, bozze, passaggio al programma, ritorno dell'XML, ricevute, conti,
+     * movimenti, scadenziario, tributi, situazione. Tutto in diretta (con la rete).
+     */
+    val fase4: eu.stgm.wisper.rapportino.ServizioFase4
 }
 
 /**

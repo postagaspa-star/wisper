@@ -25,11 +25,14 @@
     { bersaglio: 'nav-attivita', titolo: 'Attività e calendario', frase: 'Le cose da fare oggi, gli appuntamenti e la settimana di tutti sono qui.', serve: ['attivita', 1] },
     // Fase 3: Spese e trasferte (da leggere); il timer e i segmenti di Ore e rapportini più sotto.
     { bersaglio: 'nav-spese', titolo: 'Spese e trasferte', frase: 'Scontrini, trasferte e rimborsi da fare stanno qui.', serve: ['spese', 1] },
-    { bersaglio: 'nav-fatturazione', titolo: 'Fatturazione', frase: 'Quello che c\'è da fatturare. Fai clic su Fatturazione.', fai: true, serve: FATTURA },
-    { bersaglio: 'da-fatturare', titolo: 'Da fatturare', frase: 'Qui vedi subito quanto c\'è da fatturare questo mese.', serve: FATTURA },
-    { bersaglio: 'prepara-riepilogo', titolo: 'Il riepilogo', frase: 'Una scheda per chi paga, coi suoi rapportini. Fai clic su Prepara riepilogo.', fai: true, serve: FATTURA },
+    // Fase 4: il fine mese vive in Da fatturare; poi la bozza, che emette il programma delle fatture.
+    { bersaglio: 'nav-fatturazione', titolo: 'Fatturazione', frase: 'Quello che c\'è da fatturare, cliente per cliente. Fai clic su Fatturazione.', fai: true, serve: FATTURA },
+    { bersaglio: 'da-fatturare', titolo: 'Da fatturare', frase: 'Qui vedi quanto c\'è di pronto: rapportini, spese, ore e scadenze dei contratti.', serve: FATTURA },
+    { bersaglio: 'prepara-riepilogo', titolo: 'Il riepilogo', frase: 'I rapportini di un mese sono una voce. Fai clic su Prepara riepilogo.', fai: true, serve: FATTURA },
     { bersaglio: 'invia-email', titolo: 'Invia', frase: 'Il PDF parte per email con un clic. È un esempio: non parte niente.', fai: true, serve: FATTURA },
-    { bersaglio: 'segna-fatturati', titolo: 'Dopo la fattura', frase: 'Quando hai fatto la fattura, segnali qui.', fai: true, serve: FATTURA },
+    { bersaglio: 'scegli-tutto', titolo: 'Cosa va in fattura', frase: 'Spunta quello che va nella stessa fattura. Fai clic su Scegli tutto.', fai: true, serve: FATTURA },
+    { bersaglio: 'prepara-bozza', titolo: 'La bozza', frase: 'Wisper prepara la bozza con contributo, IVA, ritenuta e bollo. Fai clic su Prepara la bozza.', fai: true, serve: FATTURA },
+    { bersaglio: 'passa-al-programma', titolo: 'Al tuo programma', frase: 'La fattura la emette il tuo programma: qui copi i campi, poi importi l\'XML che ti dà.', serve: FATTURA },
     { bersaglio: 'nav-rapportini', titolo: 'Ore e rapportini', frase: 'Le ore della settimana, il timer e i rapportini. Fai clic su Ore e rapportini.', fai: true, serve: ['rapportini', 1] },
     { bersaglio: 'timer', titolo: 'Il timer', frase: 'Un clic per partire, uno per fermare: poi correggi le ore e le salvi.', serve: ['rapportini', 2] },
     { bersaglio: 'segmento-rapportini', titolo: 'I rapportini', frase: 'Tutti i rapportini, divisi per chi paga. Fai clic su Rapportini.', fai: true, serve: ['rapportini', 1] },

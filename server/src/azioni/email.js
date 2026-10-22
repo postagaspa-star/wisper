@@ -59,7 +59,7 @@ module.exports = {
     return this.db.transazione(() => {
       const daSegnare = ids.filter(id => {
         const r = this.trovaRiga(id, id);
-        return r && testo(r.stato).toUpperCase() !== 'FATTURATO';
+        return r && testo(r.stato).toUpperCase() !== 'FATTURATO' && !this.sorgenteAttiva('rapportino', r.id);
       });
       return daSegnare.length ? this.cambiaStato(daSegnare, 'INVIATO') : [];
     });

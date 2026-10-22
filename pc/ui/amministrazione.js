@@ -21,6 +21,8 @@
 
     const PAGINE = [
       { k: 'studio', titolo: 'Dati dello studio', icona: 'studio' },
+      // fase 4: le regole delle fatture e la conferma del commercialista (fase4.md §3.4, §13.6)
+      { k: 'fiscale', titolo: 'Impostazioni fiscali', icona: 'scudo', soldi: true },
       { k: 'utenti', titolo: 'Utenti', icona: 'clienti' },
       { k: 'permessi', titolo: 'Ruoli e permessi', icona: 'scudo' },
       { k: 'numerazioni', titolo: 'Numerazioni', icona: 'numero' },
@@ -40,8 +42,8 @@
       const dove = sotto + '/' + (id || '');
       if (M.dove !== dove) { M.utenti = null; M.permessi = null; M.copie = null; M.cestino = null; M.veicoli = null; M.sessioni = {}; M.dove = dove; }
       if (sotto && sotto !== 'app' && !puo('amministrazione')) { aggiungi(pagina, [h('div', { class: 'calmo grande' }, icona('scudo', 22, 2.2), 'Non hai il permesso per vedere questa pagina. Chiedi a ' + W.titolare() + '.')]); return; }
-      if (((sotto === 'tariffe' || sotto === 'fisco') && !soldi()) || (sotto === 'cestino' && !scrive()) || (sotto === 'veicoli' && !puo('spese'))) { aggiungi(pagina, [h('div', { class: 'calmo grande' }, icona('scudo', 22, 2.2), 'Non hai il permesso per vedere questa pagina. Chiedi a ' + W.titolare() + '.')]); return; }
-      const fn = { studio, utenti: id ? paginaUtente : elencoUtenti, permessi, numerazioni, tariffe, fisco, veicoli, registro, copie, cestino, app }[sotto];
+      if (((sotto === 'tariffe' || sotto === 'fisco' || sotto === 'fiscale') && !soldi()) || (sotto === 'cestino' && !scrive()) || (sotto === 'veicoli' && !puo('spese'))) { aggiungi(pagina, [h('div', { class: 'calmo grande' }, icona('scudo', 22, 2.2), 'Non hai il permesso per vedere questa pagina. Chiedi a ' + W.titolare() + '.')]); return; }
+      const fn = { studio, fiscale, utenti: id ? paginaUtente : elencoUtenti, permessi, numerazioni, tariffe, fisco, veicoli, registro, copie, cestino, app }[sotto];
       if (!fn) { elenco(pagina); return; }
       if (sotto !== 'app' || puo('amministrazione')) {
         aggiungi(pagina, [h('div', { class: 'indietro-riga' },
@@ -90,9 +92,10 @@
         copie: ultimaCopia(M.copie) ? descriviCopia(ultimaCopia(M.copie)) : 'Copie di ogni notte, file per Excel',
         cestino: M.cestino ? (M.cestino.file || []).length ? (M.cestino.file.length === 1 ? '1 file tolto' : M.cestino.file.length + ' file tolti') + ', recuperabili' : 'Vuoto' : 'File tolti, recuperabili',
         app: 'Tema, visita guidata, versione' + (S.versione ? ' ' + S.versione : ''),
+        fiscale: regoleConfermate() ? 'Confermate dal commercialista il ' + C.data(regoleConfermate().data) : 'Regole delle fatture da confermare col commercialista',
       };
       const lista = h('div', { class: 'scheda righe' }, PAGINE.filter(p => (!p.soldi || soldi()) && (!p.scrive || scrive()) && (!p.modulo || puo(p.modulo)) && (p.k === 'app' || puo('amministrazione'))).map(p => riga({
-        sinistra: quadrato(p.icona), titolo: p.titolo, sotto: stato[p.k], onclick: () => W.vai('#amministrazione/' + p.k),
+        sinistra: quadrato(p.icona, p.k === 'fiscale' && !regoleConfermate() ? 'ico-giallo' : null), titolo: p.titolo, sotto: stato[p.k], onclick: () => W.vai('#amministrazione/' + p.k),
         attr: { 'data-pagina': p.k },
       })));
       aggiungi(pagina, [h('div', { class: 'testata' }, h('h1', null, 'Amministrazione')), h('div', { class: 'stretta-720' }, lista)]);
@@ -133,6 +136,13 @@
               h('div', { class: 'riga-campi' }, input('INDIRIZZO', 'Indirizzo'), input('PARTITA_IVA', 'Partita IVA')),
               h('div', { class: 'riga-campi' }, input('EMAIL', 'Email per le risposte'), input('TELEFONO', 'Telefono'), input('PEC', 'PEC')),
               sola ? null : h('div', null, h('button', { type: 'button', class: 'btn giallo', onclick: () => salvaImpostazioni(campi, ['RAGIONE_SOCIALE', 'TECNICO', 'INDIRIZZO', 'PARTITA_IVA', 'EMAIL', 'TELEFONO', 'PEC']) }, 'Salva')))),
+          // Fase 4 (§4.1): i dati che servono alla fattura, separati (l'indirizzo qui sopra è via e numero).
+          h('div', { class: 'scheda' }, h('h2', null, 'Per le fatture'),
+            h('div', { class: 'fila' },
+              h('div', { class: 'riga-campi' }, input('CODICE_FISCALE', 'Codice fiscale'), input('STUDIO_CAP', 'CAP'), input('STUDIO_COMUNE', 'Comune'), input('STUDIO_PROVINCIA', 'Provincia')),
+              h('div', { class: 'riga-campi' }, input('ALBO', 'Albo'), input('ALBO_PROVINCIA', 'Provincia dell\'albo'), input('ALBO_NUMERO', 'Numero di iscrizione'), input('ALBO_DATA', 'Iscritto dal')),
+              sola ? null : h('div', null, h('button', { type: 'button', class: 'btn', onclick: () => salvaImpostazioni(campi, ['CODICE_FISCALE', 'STUDIO_CAP', 'STUDIO_COMUNE', 'STUDIO_PROVINCIA', 'ALBO', 'ALBO_PROVINCIA', 'ALBO_NUMERO', 'ALBO_DATA'],
+                'Salvato: vale per le fatture che passi al programma da adesso') }, 'Salva')))),
           h('div', { class: 'scheda' }, h('h2', null, 'Polizza e titoli'),
             h('div', { class: 'fila' },
               h('div', { class: 'riga-campi' }, input('POLIZZA_COMPAGNIA', 'Compagnia della polizza professionale'), input('POLIZZA_NUMERO', 'Numero della polizza'), input('POLIZZA_MASSIMALE', 'Massimale')),
@@ -203,11 +213,10 @@
       campi.PREVENTIVO_CONDIZIONI.value = imp.PREVENTIVO_CONDIZIONI || '';
       aggiungi(pagina, [h('div', { class: 'testata' }, h('h1', null, 'Fisco e preventivi')),
         h('div', { class: 'stretta-820 sezione' },
-          h('div', { class: 'scheda' }, h('h2', null, 'Imposte e contributi'),
-            h('div', { class: 'fila' },
-              h('div', { class: 'riga-campi' }, input('IVA', 'IVA', '%'), input('EPPI_INTEGRATIVO', 'Contributo integrativo EPPI', '%'), input('RITENUTA', 'Ritenuta d\'acconto', '%')),
-              sola ? null : h('div', null, h('button', { type: 'button', class: 'btn', onclick: () => salvaImpostazioni(campi, ['IVA', 'EPPI_INTEGRATIVO', 'RITENUTA'],
-                'Salvato. Vale per i preventivi nuovi: quelli già scritti tengono IVA e contributo con cui sono nati') }, 'Salva')))),
+          // Fase 4: IVA, contributo e ritenuta sono regole fiscali: stanno in Impostazioni fiscali (cambiarle toglie la conferma del commercialista).
+          soldi() ? h('div', { class: 'scheda righe' }, riga({ sinistra: quadrato('scudo'), titolo: 'IVA ' + C.numero(imp.IVA !== undefined && imp.IVA !== '' ? imp.IVA : 22) + '% · contributo EPPI ' +
+            C.numero(imp.EPPI_INTEGRATIVO !== undefined && imp.EPPI_INTEGRATIVO !== '' ? imp.EPPI_INTEGRATIVO : 5) + '% · ritenuta ' + C.numero(imp.RITENUTA !== undefined && imp.RITENUTA !== '' ? imp.RITENUTA : 20) + '%',
+          sotto: 'Si cambiano in Impostazioni fiscali', onclick: () => W.vai('#amministrazione/fiscale') })) : null,
           h('div', { class: 'scheda' }, h('h2', null, 'Preventivi'),
             h('div', { class: 'fila' },
               h('div', { class: 'riga-campi' }, input('PREVENTIVO_VALIDITA_GIORNI', 'Validità di un preventivo', 'giorni'), h('span')),
@@ -536,7 +545,122 @@
               h('div', { class: 'coppia' }, h('span', { class: 'k' }, 'Formato'), h('span', { class: 'v' }, R.formatoAParole(n.formato))),
               h('div', { class: 'coppia' }, h('span', { class: 'k' }, 'Numero'), h('span', { class: 'v' }, n.annuale ? 'riparte a gennaio' : 'continua da un anno all\'altro'))),
             scrive() ? h('div', null, h('button', { type: 'button', class: 'btn', onclick: () => modificaNumerazione(n) }, 'Modifica')) : null);
-        })) : h('p', { class: 'vuoto' }, 'Il server non ha ancora mandato le numerazioni.')]);
+        })) : h('p', { class: 'vuoto' }, 'Il server non ha ancora mandato le numerazioni.'),
+      // Fase 4 (§4.1): le fatture non hanno una numerazione in Wisper.
+      soldi() && puo('fatturazione') ? h('div', { class: 'calmo stretta-900' }, icona('fatturazione', 20, 2.2), 'Le fatture le numera il tuo programma: Wisper usa solo il riferimento W-15 per riconoscerle.') : null]);
+    }
+
+    // ===================================================================== impostazioni fiscali (fase 4)
+
+    /** La conferma del commercialista ({data, commercialista, da}) o null. */
+    function regoleConfermate() {
+      const r = S.ana.impostazioni.REGOLE_FISCALI_CONFERMATE;
+      return r && typeof r === 'object' && r.data ? r : null;
+    }
+
+    /**
+     * Impostazioni fiscali (fase4.md §13.6): la scheda "Regole confermate dal commercialista"
+     * (Non ancora / Confermate il … da …) col giallo Segna confermate (solo il titolare); le schede
+     * Aliquote, Bollo, Documento, Pagamento, ognuna col suo Salva col bordo. Cambiare una regola
+     * toglie la conferma (lo fa il server, qui si dice).
+     */
+    function fiscale(pagina) {
+      const imp = S.ana.impostazioni;
+      const sola = !scrive();
+      const titolare = !!(S.io && S.io.utente && S.io.utente.ruolo === 'titolare') && scrive();
+      const conf = regoleConfermate();
+      const v = (k, d) => (imp[k] === undefined || imp[k] === null || imp[k] === '' ? d : imp[k]);
+      const numero = (k, d) => h('input', { type: 'text', inputmode: 'decimal', value: R.numeroCampo(Number(v(k, d))), disabled: sola });
+      const testo = (k, d) => h('input', { type: 'text', value: String(v(k, d)), disabled: sola });
+      const scelte = { BOLLO_RIVALSA: v('BOLLO_RIVALSA', true) !== false && v('BOLLO_RIVALSA', true) !== 'NO', PAGAMENTO_FINE_MESE: v('PAGAMENTO_FINE_MESE', false) === true || v('PAGAMENTO_FINE_MESE', false) === 'SI',
+        TIPO_DOCUMENTO: v('TIPO_DOCUMENTO', 'TD01'), REGIME_FISCALE: v('REGIME_FISCALE', 'RF01'), MODALITA_PAGAMENTO: v('MODALITA_PAGAMENTO', 'MP05') };
+      const c = {
+        IVA: numero('IVA', 22), EPPI_INTEGRATIVO: numero('EPPI_INTEGRATIVO', 5), RITENUTA: numero('RITENUTA', 20),
+        RITENUTA_TIPO: testo('RITENUTA_TIPO', 'RT01'), RITENUTA_CAUSALE: testo('RITENUTA_CAUSALE', 'A'), EPPI_TIPO_CASSA: testo('EPPI_TIPO_CASSA', 'TC17'),
+        BOLLO_SOGLIA: numero('BOLLO_SOGLIA', 77.47), BOLLO_IMPORTO: numero('BOLLO_IMPORTO', 2), GIORNI_PAGAMENTO: numero('GIORNI_PAGAMENTO', 30), SOGLIA_CASSA: numero('SOGLIA_CASSA', 3000),
+      };
+      const salva = async chiavi => {
+        const valori = {};
+        chiavi.forEach(k => {
+          if (c[k]) valori[k] = ['RITENUTA_TIPO', 'RITENUTA_CAUSALE', 'EPPI_TIPO_CASSA'].indexOf(k) >= 0 ? c[k].value.trim() : C.num(c[k].value);
+          else valori[k] = scelte[k];
+        });
+        const prima = regoleConfermate();
+        const ris = await lavora('Salvo', () => Rete.post('/server/salvaImpostazioni', { valori }));
+        if (!ris) return;
+        S.ana.impostazioni = Object.assign({}, S.ana.impostazioni, ris.impostazioni || valori);
+        if (!ris.impostazioni) await W.ricaricaAnagrafiche();
+        avviso(prima && !regoleConfermate() ? 'Fatto. La conferma del commercialista va rifatta' : 'Salvato');
+        W.disegnaPagina();
+      };
+      const scheda = (titolo, corpo, chiavi) => h('div', { class: 'scheda' }, h('h2', null, titolo), h('div', { class: 'fila' }, corpo,
+        sola ? null : h('div', null, h('button', { type: 'button', class: 'btn', onclick: () => salva(chiavi) }, 'Salva'))));
+      const disegnaScelte = (k, voci) => {
+        const zona = h('div');
+        const rifai = () => aggiungi(svuota(zona), [segmenti(voci, scelte[k], x => { if (sola) return; scelte[k] = x; rifai(); }, 'piccoli')]);
+        rifai();
+        return zona;
+      };
+      const siNoZona = k => {
+        const zona = h('div');
+        const rifai = () => aggiungi(svuota(zona), [segmenti([['si', 'Sì'], ['no', 'No']], scelte[k] ? 'si' : 'no', x => { if (sola) return; scelte[k] = x === 'si'; rifai(); }, 'piccoli')]);
+        rifai();
+        return zona;
+      };
+      aggiungi(pagina, [h('div', { class: 'testata alta' }, h('h1', null, 'Impostazioni fiscali'),
+        !conf && titolare ? h('button', { type: 'button', class: 'btn giallo', onclick: segnaConfermate }, 'Segna confermate') : null),
+      h('div', { class: 'stretta-900 sezione' },
+        h('div', { class: 'scheda conferma-regole' + (conf ? ' confermate' : '') }, h('span', { class: 'etichetta' }, 'Regole confermate dal commercialista'),
+          conf ? h('div', { class: 'pillole-testa' }, pillola('Confermate', 'verde'), h('b', null, 'il ' + C.data(conf.data) + ' da ' + conf.commercialista))
+            : h('div', { class: 'pillole-testa' }, pillola('Non ancora', 'giallo'), h('b', null, 'Contributo EPPI, ritenuta, bollo e tipo di documento vanno confermati')),
+          conf && titolare ? h('button', { type: 'button', class: 'btn collegamento', style: { alignSelf: 'flex-start' }, onclick: togliConferma }, 'Togli la conferma') : null),
+        h('div', { class: 'due-colonne' },
+          h('div', { class: 'sezione' },
+            scheda('Aliquote', [h('div', { class: 'riga-campi' }, campo('IVA', conSuffisso(c.IVA, '%')), campo('Contributo integrativo EPPI', conSuffisso(c.EPPI_INTEGRATIVO, '%')), campo('Ritenuta', conSuffisso(c.RITENUTA, '%'))),
+              h('div', { class: 'riga-campi' }, campo('Codice della ritenuta', c.RITENUTA_TIPO), campo('Causale', c.RITENUTA_CAUSALE), campo('Cassa nella fattura', c.EPPI_TIPO_CASSA))],
+            ['IVA', 'EPPI_INTEGRATIVO', 'RITENUTA', 'RITENUTA_TIPO', 'RITENUTA_CAUSALE', 'EPPI_TIPO_CASSA']),
+            scheda('Saldo e scadenziario', [campo('Soglia del saldo: sotto, il giorno è rosso', conSuffisso(c.SOGLIA_CASSA, '€'))], ['SOGLIA_CASSA'])),
+          h('div', { class: 'sezione' },
+            scheda('Bollo', [h('div', { class: 'riga-campi' }, campo('Scatta sopra (senza IVA)', conSuffisso(c.BOLLO_SOGLIA, '€')), campo('Importo', conSuffisso(c.BOLLO_IMPORTO, '€'))),
+              h('div', { class: 'campo' }, h('label', null, 'Lo riaddebito al cliente'), siNoZona('BOLLO_RIVALSA'))], ['BOLLO_SOGLIA', 'BOLLO_IMPORTO', 'BOLLO_RIVALSA']),
+            scheda('Documento', [h('div', { class: 'campo' }, h('label', null, 'Tipo'), disegnaScelte('TIPO_DOCUMENTO', [['TD01', 'Fattura (TD01)'], ['TD06', 'Parcella (TD06)']])),
+              h('div', { class: 'campo' }, h('label', null, 'Regime'), disegnaScelte('REGIME_FISCALE', [['RF01', 'Ordinario (RF01)'], ['RF19', 'Forfettario (RF19)']]))], ['TIPO_DOCUMENTO', 'REGIME_FISCALE']),
+            scheda('Pagamento', [h('div', { class: 'riga-campi' }, campo('Giorni', conSuffisso(c.GIORNI_PAGAMENTO, 'giorni')), h('div', { class: 'campo' }, h('label', null, 'Fine mese'), siNoZona('PAGAMENTO_FINE_MESE'))),
+              h('div', { class: 'campo' }, h('label', null, 'Modo'), disegnaScelte('MODALITA_PAGAMENTO', [['MP05', 'Bonifico'], ['MP12', 'RIBA'], ['MP02', 'Assegno'], ['MP01', 'Contanti']]))], ['GIORNI_PAGAMENTO', 'PAGAMENTO_FINE_MESE', 'MODALITA_PAGAMENTO']))))]);
+    }
+
+    function segnaConfermate() {
+      const data = h('input', { type: 'date', value: C.oggiIso(), max: C.oggiIso() });
+      const nome = h('input', { type: 'text', autocomplete: 'off' });
+      const zonaNome = h('div', null, campo('Commercialista', nome));
+      let chiudi;
+      const vai = async () => {
+        if (!nome.value.trim()) { aggiungi(svuota(zonaNome), [campo('Commercialista', nome, 'Commercialista: scrivi chi ha controllato le regole')]); nome.focus(); return; }
+        const ris = await lavora('Segno confermate', () => Rete.post('/server/confermaRegoleFiscali', { data: data.value || C.oggiIso(), commercialista: nome.value.trim() }));
+        if (!ris) return;
+        if (ris.impostazioni) S.ana.impostazioni = Object.assign({}, S.ana.impostazioni, ris.impostazioni);
+        S.ana.impostazioni.REGOLE_FISCALI_CONFERMATE = ris.regoleConfermate;
+        chiudi();
+        W.caricaDashboard();
+        avviso('Regole confermate: le pillole Da confermare spariscono');
+        W.disegnaPagina();
+      };
+      const imp = S.ana.impostazioni;
+      chiudi = finestra({ titolo: 'Regole confermate', corpo: [h('p', { class: 'sotto-titolo', style: { margin: 0 } }, 'Contributo EPPI ' + C.numero(imp.EPPI_INTEGRATIVO !== undefined ? imp.EPPI_INTEGRATIVO : 5) + '%, ritenuta ' +
+        C.numero(imp.RITENUTA !== undefined ? imp.RITENUTA : 20) + '% sul compenso, bollo oltre ' + C.euro(imp.BOLLO_SOGLIA !== undefined ? imp.BOLLO_SOGLIA : 77.47) + ' senza IVA, ' +
+        ((imp.TIPO_DOCUMENTO || 'TD01') === 'TD06' ? 'parcella TD06' : 'fattura TD01') + '.'), zonaNome, campo('Il giorno', data)],
+      pulsanti: ['spazio', h('button', { type: 'button', class: 'btn testo grande', onclick: () => chiudi() }, 'Annulla'), h('button', { type: 'button', class: 'btn giallo grande', onclick: vai }, 'Segna confermate')] });
+    }
+
+    async function togliConferma() {
+      if (!(await conferma('Togliere la conferma?', 'Su ogni conto torna la pillola Da confermare, finché non le segni confermate di nuovo.', 'Togli la conferma'))) return;
+      const ris = await lavora('Tolgo la conferma', () => Rete.post('/server/confermaRegoleFiscali', { data: null }));
+      if (!ris) return;
+      if (ris.impostazioni) S.ana.impostazioni = Object.assign({}, S.ana.impostazioni, ris.impostazioni);
+      S.ana.impostazioni.REGOLE_FISCALI_CONFERMATE = null;
+      W.caricaDashboard();
+      avviso('Conferma tolta');
+      W.disegnaPagina();
     }
 
     /** Il formato coi pezzi da toccare: anno a 4 o 2 cifre, testo fisso, numero con N cifre. */

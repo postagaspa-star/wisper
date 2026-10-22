@@ -50,12 +50,12 @@
   /** I permessi iniziali dei quattro ruoli (architettura §3), per i moduli che ci sono. */
   function permessiDi(ruolo) {
     const p = {};
-    const tutti = ['dashboard', 'clienti', 'commesse', 'preventivi', 'attivita', 'rapportini', 'spese', 'fatturazione', 'documenti', 'amministrazione', 'costi', 'riservati'];
+    const tutti = ['dashboard', 'clienti', 'commesse', 'preventivi', 'attivita', 'rapportini', 'spese', 'fatturazione', 'banche', 'documenti', 'amministrazione', 'costi', 'riservati'];
     tutti.forEach(m => { p[m] = 0; });
     if (ruolo === 'titolare') tutti.forEach(m => { p[m] = 2; });
-    if (ruolo === 'amministrazione') Object.assign(p, { dashboard: 2, clienti: 2, commesse: 2, preventivi: 2, attivita: 2, rapportini: 2, spese: 2, fatturazione: 2, documenti: 2, amministrazione: 1, costi: 2 });
+    if (ruolo === 'amministrazione') Object.assign(p, { dashboard: 2, clienti: 2, commesse: 2, preventivi: 2, attivita: 2, rapportini: 2, spese: 2, fatturazione: 2, banche: 2, documenti: 2, amministrazione: 1, costi: 2 });
     if (ruolo === 'collaboratore') Object.assign(p, { dashboard: 1, clienti: 1, commesse: 1, attivita: 2, rapportini: 2, spese: 2, documenti: 1 });
-    if (ruolo === 'lettura') Object.assign(p, { dashboard: 1, clienti: 1, commesse: 1, preventivi: 1, attivita: 1, rapportini: 1, spese: 1, fatturazione: 1, documenti: 1, costi: 1 });
+    if (ruolo === 'lettura') Object.assign(p, { dashboard: 1, clienti: 1, commesse: 1, preventivi: 1, attivita: 1, rapportini: 1, spese: 1, fatturazione: 1, banche: 1, documenti: 1, costi: 1 });
     return p;
   }
 
@@ -503,6 +503,7 @@
     const conta = R.contaCommesse(commesse, oggi);
     const numeri = { commesse: { aperte: conta.aperte, sospese: conta.sospese, chiuse: conta.chiuse, inRitardo: conta.inRitardo }, giorniSenzaRapportino: senzaRapportino };
     dashboardFase3(dati, { urgenti, settimana, pianificare, mio, soldi }, numeri);
+    if (!mio) dashboardFase4(dati, numeri);
     return { ok: true, per: mio ? 'collaboratore' : 'titolare', oggi, urgenti, settimana, pianificare, numeri };
   }
 
@@ -1712,7 +1713,7 @@
         return { ok: true, da, a: al, per, righe: lista, totale };
       }
       default:
-        return { ok: true };
+        return FASE4.has(azione) ? fase4Con(dati, azione, b) : { ok: true };
     }
   }
 
@@ -1856,6 +1857,393 @@
       righe = a.soggetti.map(s => [s.id, s.nome, s.cliente ? 'sì' : 'no', s.fornitore ? 'sì' : 'no', s.partitaIva, s.codiceFiscale, s.codiceSdi, s.pec, s.email, s.telefono, s.indirizzo, s.cap, s.citta, s.provincia]);
     }
     return { ok: true, nome: R.nomeEsportazione(b.cosa, dati.oggi), csv: R.csv(intest, righe) };
+  }
+
+
+  // ======================================================================= fase 4: fatture, banche e scadenze
+
+  /*
+   * I dati di esempio della fase 4 per la visita guidata (e per finto-ponte --esempio): le
+   * fatture dei dati di prova del server (W-11 ... W-15, con le date spostate a oggi), un conto,
+   * due fatture ricevute, tre impegni. Da fatturare nasce dai rapportini firmati e inviati di
+   * questi dati; i conti li fa contiFattura di regole-fatture.js (gli stessi casi del server).
+   * Nella visita non si scrive niente di vero: quello che qui non serve risponde con una frase.
+   */
+  /** Le azioni della fase 4: vogliono il loro modulo e anche il permesso dei soldi (§15.1). */
+  const AZIONI_FATTURE = ['daFatturare', 'fatture', 'fattura', 'preparaFattura', 'nuovaFattura', 'salvaFattura', 'pacchetto', 'passaAlProgramma', 'tornaInBozza', 'scartaFattura', 'segnaEmessa',
+    'inviaAvviso', 'leggiXml', 'confermaXml', 'preparaNotaCredito', 'segnaFatturataFuori', 'ricevute', 'ricevuta', 'salvaRicevuta', 'annullaRicevuta', 'scadenzePagamento', 'fatturazioneCommessa', 'riepilogoFatturato'];
+  const AZIONI_BANCHE = ['conti', 'salvaConto', 'aggiornaSaldo', 'movimenti', 'salvaMovimento', 'segnaIncasso', 'segnaPagamento', 'verificaMovimenti', 'annullaMovimento', 'scadenziario', 'situazione',
+    'impegni', 'salvaImpegno', 'confermaImpegno', 'togliImpegno'];
+  const FASE4 = new Set(AZIONI_FATTURE.concat(AZIONI_BANCHE, ['confermaRegoleFiscali']));
+  const SCRIVONO4 = new Set(['preparaFattura', 'nuovaFattura', 'salvaFattura', 'passaAlProgramma', 'tornaInBozza', 'scartaFattura', 'segnaEmessa', 'inviaAvviso', 'leggiXml', 'confermaXml', 'preparaNotaCredito',
+    'segnaFatturataFuori', 'salvaRicevuta', 'annullaRicevuta', 'salvaConto', 'aggiornaSaldo', 'salvaMovimento', 'segnaIncasso', 'segnaPagamento', 'verificaMovimenti', 'annullaMovimento', 'salvaImpegno', 'confermaImpegno', 'togliImpegno']);
+  function fase4Con(dati, azione, b) {
+    if (azione === 'confermaRegoleFiscali') return dati.io.ruolo === 'titolare' ? fase4(dati, azione, b) : NONPERMESSO('segnare le regole confermate');
+    const modulo = AZIONI_BANCHE.indexOf(azione) >= 0 ? 'banche' : 'fatturazione';
+    if (!R.puo(dati.permessiIo, modulo, SCRIVONO4.has(azione) ? 2 : 1)) return NONPERMESSO(SCRIVONO4.has(azione) ? 'fare questa modifica' : 'vedere questa pagina');
+    if (!R.puo(dati.permessiIo, 'costi')) return { ok: false, errore: modulo === 'banche' ? 'Per vedere banche e scadenze serve anche il permesso dei soldi: chiedi al titolare' : 'Per vedere le fatture serve anche il permesso dei soldi: chiedi al titolare', permesso: false };
+    return fase4(dati, azione, b);
+  }
+  const NON_NELLA_VISITA = { ok: false, errore: 'Nei dati di esempio questo non si fa: provalo coi dati veri' };
+  const PARAMETRI_BASE = { regime: 'ordinario', ivaPercentuale: 22, eppiPercentuale: 5, ritenutaPercentuale: 20, bolloSoglia: 77.47, bolloImporto: 2, bolloRivalsa: true };
+
+  function rf() { return radice.WisperRegoleFatture || (typeof require === 'function' ? require('./regole-fatture.js') : null); }
+  function doc() { return radice.WisperDocumenti || (typeof require === 'function' ? require('./documenti.js') : null); }
+
+  function creaFase4(dati) {
+    const oggi = dati.oggi;
+    const g = n => RA.piuGiorni(oggi, n);
+    const F = { fatture: [], ricevute: [], impegni: [], movimenti: [], prossima: 16, prossimoMov: 10 };
+    const riga = (id, gruppo, tipo, descrizione, importo, idCommessa) => ({ id, ordine: 0, origine: 'bozza', gruppo, tipo, descrizione, quantita: 1, unita: '', prezzo: importo, importo,
+      aliquotaIva: tipo === 'compenso' ? 22 : 0, natura: tipo === 'compenso' ? '' : 'N1', ritenuta: false, tributoCliente: false, idCommessa: idCommessa || '', importoSorgenti: gruppo ? importo : null });
+    const fattura = (x) => Object.assign({ tipo: 'fattura', tipoDocumento: 'TD01', idFatturaCollegata: null, numeroDa: '', noteInterne: '', regime: 'ordinario', ivaPercentuale: 22,
+      eppiPercentuale: 5, ritenutaPercentuale: 20, ritenuta: true, bolloRivalsa: true, idConto: 1, conto: 'Conto studio …3456', esitoSdi: '', prontaIl: '', emessaIl: '', avvisoInviatoIl: '',
+      incassi: [], sorgenti: [], file: null, idCommessa: '' }, x);
+    F.fatture.push(fattura({ id: 11, idCliente: 'C001', stato: 'emessa', numero: '38/2026', numeroDa: 'xml', data: g(-52), causale: 'Prestazioni di agosto',
+      righe: [riga(31, '', 'compenso', 'Prestazioni professionali di agosto', 810)], scadenzaGiorni: 30, incassi: [{ idMovimento: 1, data: g(-23), importo: 875.61, conto: 'Conto studio …3456', verificato: true }] }));
+    F.fatture.push(fattura({ id: 12, idCliente: 'C002', stato: 'emessa', numero: '39/2026', numeroDa: 'xml', data: g(-42), causale: 'Progetto del quadro, commessa 26ST002',
+      righe: [riga(32, '', 'compenso', 'Progetto del quadro elettrico', 750, '26ST002')], scadenzaGiorni: 30, incassi: [{ idMovimento: 2, data: g(-10), importo: 500, conto: 'Conto studio …3456', verificato: false }] }));
+    F.fatture.push(fattura({ id: 13, idCliente: 'C002', stato: 'emessa', numero: '45/2026', numeroDa: 'xml', data: g(-3), causale: 'Acconto 30% alla firma',
+      righe: [riga(33, '', 'compenso', '30% alla firma: Quadro elettrico capannone', 1140, '26ST002')], scadenzaGiorni: 30 }));
+    F.fatture.push(fattura({ id: 14, idCliente: 'C003', stato: 'pronta', numero: '', data: g(-7), prontaIl: g(-7) + 'T10:00:00', causale: 'Sopralluogo e rilievo', ritenuta: false,
+      righe: [riga(34, '', 'compenso', 'Sopralluogo e rilievo', 250)], scadenzaGiorni: 30, incassi: [{ idMovimento: 3, data: g(-2), importo: 320.25, conto: 'Conto studio …3456', verificato: true }] }));
+    F.ricevute.push({ id: 1, idFornitore: 'F001', fornitore: 'Comel Forniture Elettriche', tipoDocumento: 'TD01', numero: '1287', data: g(-6), descrizione: 'Materiale elettrico', categoria: 'materiale',
+      idCommessa: '', imponibile: 398.36, iva: 87.64, contributo: 0, bollo: 0, totale: 486, ritenuta: 0, netto: 486, pagato: 0, daPagare: 486, stato: 'attiva', statoVisto: 'Da pagare', scaduta: false,
+      scadenze: [{ id: 1, data: g(25), importo: 486, coperta: 0 }], scadenzaStimata: false, pagamenti: [], origine: 'xml', file: null, note: '' });
+    F.ricevute.push({ id: 2, idFornitore: 'F002', fornitore: 'Verifiche Nord Snc', tipoDocumento: 'TD01', numero: '77', data: g(-24), descrizione: 'Verifica impianto di terra', categoria: 'consulenze',
+      idCommessa: '', imponibile: 600, iva: 132, contributo: 0, bollo: 0, totale: 732, ritenuta: 0, netto: 732, pagato: 0, daPagare: 732, stato: 'attiva', statoVisto: 'Da pagare', scaduta: false,
+      scadenze: [{ id: 2, data: g(6), importo: 732, coperta: 0 }], scadenzaStimata: false, pagamenti: [], origine: 'mano', file: null, note: '' });
+    F.impegni.push({ id: 1, tipo: 'rata', verso: 'uscita', descrizione: 'Affitto ufficio', codice: '', scadenza: g(4), importo: 850, importoDaScrivere: false, ripete: 'ogni mese', idRicorrenza: 1,
+      ricorrenza: { regola: 'mesi', ogni: 1 }, confermato: true, proposta: false, pagato: 0, daPagare: 850, stato: 'aperto', statoVisto: 'Da pagare', scaduto: false, note: '' });
+    F.impegni.push({ id: 2, tipo: 'f24', verso: 'uscita', descrizione: 'IVA del 3° trimestre', codice: '6033', scadenza: g(25), importo: 2380, importoDaScrivere: false, ripete: '', idRicorrenza: null,
+      ricorrenza: null, confermato: true, proposta: false, pagato: 0, daPagare: 2380, stato: 'aperto', statoVisto: 'Da pagare', scaduto: false, note: '' });
+    F.impegni.push({ id: 3, tipo: 'f24', verso: 'uscita', descrizione: 'Ritenute sui compensi pagati a ottobre', codice: '1040', scadenza: g(25), importo: 100, importoDaScrivere: false, ripete: '',
+      idRicorrenza: null, ricorrenza: null, origine: 'ritenute', confermato: false, proposta: true, pagato: 0, daPagare: 100, stato: 'aperto', statoVisto: 'Proposta', scaduto: false, note: '' });
+    F.movimenti.push({ id: 1, idConto: 1, conto: 'Conto studio …3456', data: g(-23), verso: 'entrata', importo: 875.61, descrizione: 'Incasso Elettrodinamica, fattura 38/2026', idSoggetto: 'C001',
+      soggetto: 'Elettrodinamica', categoria: 'incasso', verificato: true, livello: 'verificato', abbinamenti: [{ tipo: 'fattura', id: 11, etichetta: '38/2026', importo: 875.61 }], annullato: false });
+    F.movimenti.push({ id: 2, idConto: 1, conto: 'Conto studio …3456', data: g(-10), verso: 'entrata', importo: 500, descrizione: 'Incasso Rossi Impianti Srl, fattura 39/2026 (in parte)', idSoggetto: 'C002',
+      soggetto: 'Rossi Impianti Srl', categoria: 'incasso', verificato: false, livello: 'registrato', abbinamenti: [{ tipo: 'fattura', id: 12, etichetta: '39/2026', importo: 500 }], annullato: false });
+    F.movimenti.push({ id: 3, idConto: 1, conto: 'Conto studio …3456', data: g(-2), verso: 'entrata', importo: 320.25, descrizione: 'Incasso Mario Bianchi, W-14', idSoggetto: 'C003',
+      soggetto: 'Mario Bianchi', categoria: 'incasso', verificato: true, livello: 'verificato', abbinamenti: [{ tipo: 'fattura', id: 14, etichetta: 'W-14', importo: 320.25 }], annullato: false });
+    F.movimenti.push({ id: 4, idConto: 1, conto: 'Conto studio …3456', data: g(-6), verso: 'uscita', importo: 1250, descrizione: 'F24 del 16', idSoggetto: '', soggetto: '',
+      categoria: 'tributo', verificato: true, livello: 'verificato', abbinamenti: [], annullato: false });
+    F.fatture.forEach(f => ricalcolaFattura(dati, f));
+    return F;
+  }
+
+  /** I conti, gli incassi e la parola dello stato di una fattura di esempio (come il server, §15.4). */
+  function ricalcolaFattura(dati, f) {
+    const R4 = rf();
+    const c = dati.ana.soggetti.find(s => s.id === f.idCliente) || {};
+    f.cliente = c.nome || f.idCliente;
+    f.riferimento = 'W-' + f.id;
+    f.righe = (f.righe || []).filter(r => r.tipo !== 'bollo');
+    f.righe.forEach((r, i) => { r.ordine = i + 1; r.importo = R4.importoRiga(r.importoFisso !== undefined && r.importoFisso !== null ? { importo: r.importoFisso } : r); r.ritenuta = r.tipo === 'compenso' && f.ritenuta; });
+    f.conti = R4.contiFattura(Object.assign({}, PARAMETRI_BASE, { ritenuta: f.ritenuta, righe: f.righe }));
+    if (f.conti.bolloAddebitato > 0) f.righe.push({ id: 900 + f.id, ordine: f.righe.length + 1, origine: 'bozza', gruppo: '', tipo: 'bollo', descrizione: 'Imposta di bollo', quantita: 1, unita: '', prezzo: 2, importo: 2, aliquotaIva: 0, natura: 'N1', importoSorgenti: null });
+    const scad = f.scadenzaAMano && f.scadenzaScritta ? f.scadenzaScritta : RA.piuGiorni(f.data, f.scadenzaGiorni || 30);
+    f.incassato = Math.round((f.incassi || []).reduce((a, x) => a + x.importo, 0) * 100) / 100;
+    f.residuo = Math.max(0, Math.round((f.conti.netto - f.incassato) * 100) / 100);
+    // Come il server (correzioni del 22/10): quello incassato in più del netto, da restituire o compensare.
+    f.daRestituire = Math.max(0, Math.round((f.incassato - f.conti.netto) * 100) / 100);
+    f.scadenze = [{ id: f.id, data: scad, importo: f.conti.netto, modalita: 'MP05', coperta: Math.min(f.incassato, f.conti.netto) }];
+    f.pagamento = f.residuo <= 0.004 ? 'pagata' : f.incassato > 0 ? 'in_parte' : 'da_incassare';
+    f.scaduta = f.stato === 'emessa' && f.residuo > 0.004 && scad < dati.oggi;
+    f.giorniScaduta = f.scaduta ? Math.round((new Date(dati.oggi + 'T12:00:00') - new Date(scad + 'T12:00:00')) / 86400000) : 0;
+    f.etichetta = f.stato === 'bozza' ? 'Bozza W-' + f.id : f.stato === 'pronta' ? 'Pronta W-' + f.id : f.stato === 'scartata' ? 'Scartata W-' + f.id : f.numero;
+    f.statoVisto = f.stato === 'bozza' ? 'Bozza' : f.stato === 'scartata' ? 'Scartata' : f.stato === 'annullata' ? 'Annullata'
+      : f.stato === 'pronta' ? (f.pagamento === 'pagata' ? 'Pronta · già pagata' : 'Pronta') : f.scaduta ? 'Scaduta' : f.pagamento === 'pagata' ? 'Pagata' : f.pagamento === 'in_parte' ? 'Pagata in parte' : 'Emessa';
+    f.avvisi = f.stato === 'pronta' && f.pagamento === 'pagata' ? [{ tipo: 'emetti', testo: 'Va emessa entro ' + RA.piuGiorni(f.incassi[0].data, 12).split('-').reverse().join('/') + ': ha già pagato il ' + C.data(f.incassi[0].data).slice(0, 5) }] : [];
+    f.modificabile = f.stato === 'bozza';
+    f.regoleConfermate = !!dati.ana.impostazioni.REGOLE_FISCALI_CONFERMATE;
+    f.mancano = [];
+    f.scadenzaAMano = !!f.scadenzaAMano;
+    return f;
+  }
+
+  /** Le voci da fatturare dei dati di esempio: i rapportini firmati e inviati non ancora in una bozza (§15.3, in piccolo). */
+  function daFatturareEsempio(dati, F) {
+    const riservati = new Set();
+    F.fatture.filter(f => f.stato !== 'scartata').forEach(f => (f.sorgenti || []).filter(s => s.attiva).forEach(s => riservati.add(s.id)));
+    const gruppi = new Map();
+    dati.rapportini.filter(r => (r.stato === 'FIRMATO' || r.stato === 'INVIATO') && !riservati.has(r.id) && (!r.statoApprovazione || r.statoApprovazione === 'approvato')).forEach(r => {
+      const c = dati.ana.soggetti.find(s => s.id === r.idCliente) || { nome: r.cliente };
+      if (!gruppi.has(r.idCliente)) gruppi.set(r.idCliente, { idCliente: r.idCliente, cliente: c.nome, sostituto: !!c.partitaIva, mancano: [], totale: 0, voci: [] });
+      const g0 = gruppi.get(r.idCliente);
+      g0.voci.push({ tipo: 'rapportino', id: r.id, idCommessa: r.idCommessa || '', data: r.data, titolo: r.descrizione || 'Rapportino', dettaglio: [r.idCommessa, C.numero(r.oreTotali) + ' ore', C.numero(r.km) + ' km'].filter(Boolean).join(' · '),
+        pronta: true, importo: C.num(r.totale), spese: [], totaleConSpese: C.num(r.totale), anticipazione: false, gruppo: 'rapportini:' + r.idCliente + ':' + r.data.slice(0, 7) });
+      g0.totale = Math.round((g0.totale + C.num(r.totale)) * 100) / 100;
+    });
+    const lista = Array.from(gruppi.values()).sort((a, b) => b.totale - a.totale);
+    lista.forEach(x => x.voci.sort((a, b) => a.data.localeCompare(b.data)));
+    const raggruppa = {};
+    lista.forEach(x => { const c = dati.ana.soggetti.find(s => s.id === x.idCliente) || {}; raggruppa[x.idCliente] = c.tariffaFissa ? 'mese' : 'rapportino'; });
+    return {
+      ok: true, oggi: dati.oggi, totale: Math.round(lista.reduce((a, x) => a + x.totale, 0) * 100) / 100, clienti: lista.length, gruppi: lista, piuAvanti: [],
+      inBozza: F.fatture.filter(f => f.stato === 'bozza' || f.stato === 'pronta').map(f => ({ idFattura: f.id, riferimento: f.riferimento, idCliente: f.idCliente, cliente: f.cliente, stato: f.stato, voci: (f.sorgenti || []).length, totale: f.conti.totale })),
+      riepiloghi: [], raggruppa,
+      daFirmare: dati.rapportini.filter(r => r.stato === 'BOZZA').map(r => ({ id: r.id, idCliente: r.idCliente, cliente: r.cliente, idCommessa: r.idCommessa, data: r.data, descrizione: r.descrizione, ore: r.oreTotali })),
+    };
+  }
+
+  function senzaDettagli(f) {
+    const x = copia(f);
+    ['righe', 'sorgenti', 'incassi', 'note', 'file', 'avvisi'].forEach(k => delete x[k]);
+    return x;
+  }
+
+  function modelloEsempio(dati, f) {
+    const imp = dati.ana.impostazioni;
+    const c = dati.ana.soggetti.find(s => s.id === f.idCliente) || {};
+    const righe = f.righe.map((r, i) => ({ numero: i + 1, descrizione: r.descrizione, quantita: r.quantita, unitaMisura: r.unita || '', prezzoUnitario: r.prezzo, prezzoTotale: r.importo,
+      aliquotaIva: r.aliquotaIva, natura: r.natura, ritenuta: r.tipo === 'compenso' && f.ritenuta }));
+    return {
+      riferimento: f.riferimento, tipoDocumento: f.tipoDocumento, divisa: 'EUR', dataProposta: f.data, data: f.stato === 'emessa' ? f.data : '', numero: f.stato === 'emessa' ? f.numero : '',
+      prestatore: { denominazione: imp.RAGIONE_SOCIALE, partitaIva: imp.PARTITA_IVA, codiceFiscale: imp.PARTITA_IVA, regimeFiscale: 'RF01', sede: { indirizzo: 'Via Roma 1', cap: '36063', comune: 'Marostica', provincia: 'VI', nazione: 'IT' }, pec: imp.PEC, email: imp.EMAIL },
+      committente: { denominazione: c.partitaIva ? c.nome : '', nome: c.partitaIva ? '' : String(c.nome || '').split(' ').slice(0, -1).join(' '), cognome: c.partitaIva ? '' : String(c.nome || '').split(' ').slice(-1)[0],
+        partitaIva: c.partitaIva || '', codiceFiscale: c.codiceFiscale || '', sede: { indirizzo: c.indirizzo || '', cap: c.cap || '', comune: c.citta || '', provincia: c.provincia || '', nazione: 'IT' }, codiceDestinatario: c.codiceSdi || '0000000', pec: c.pec || '' },
+      righe,
+      cassa: f.conti.contributo ? { tipo: 'TC17', aliquota: 5, imponibile: f.conti.compenso, importo: f.conti.contributo, aliquotaIva: 22, natura: '', ritenuta: false } : null,
+      ritenuta: f.conti.ritenuta ? { tipo: 'RT01', aliquota: 20, importo: f.conti.ritenuta, causale: 'A' } : null,
+      bollo: f.conti.bollo ? { virtuale: true, importo: f.conti.bollo } : null,
+      riepilogo: [{ aliquotaIva: 22, natura: '', imponibile: f.conti.baseIva, imposta: f.conti.iva, esigibilita: 'I', riferimentoNormativo: '' }]
+        .concat(f.conti.anticipazioni || f.conti.bolloAddebitato ? [{ aliquotaIva: 0, natura: 'N1', imponibile: Math.round((f.conti.anticipazioni + f.conti.bolloAddebitato) * 100) / 100, imposta: 0, esigibilita: '', riferimentoNormativo: 'Escluse ex art. 15 DPR 633/72' }] : []),
+      totaleDocumento: f.conti.totale, nettoAPagare: f.conti.netto,
+      pagamento: { condizioni: 'TP02', dettagli: [{ modalita: 'MP05', scadenza: f.scadenze[0].data, importo: f.conti.netto, iban: 'IT60X0542811101000000123456', istituto: 'Banca di esempio' }] },
+      causale: [f.causale + '. Rif. Wisper ' + f.riferimento], fattureCollegate: [], regoleConfermate: !!imp.REGOLE_FISCALI_CONFERMATE,
+    };
+  }
+
+  function scadenziarioEsempio(dati, F, giorniAvanti) {
+    const oggi = dati.oggi;
+    const a = RA.piuGiorni(oggi, giorniAvanti || 90);
+    const saldoOggi = 8743.55;
+    const soglia = C.num(dati.ana.impostazioni.SOGLIA_CASSA || 3000);
+    const righe = [];
+    F.fatture.filter(f => f.tipo === 'fattura' && (f.stato === 'emessa' || f.stato === 'pronta') && f.residuo > 0.004).forEach(f => righe.push({ tipo: 'fattura', id: f.id, data: f.scadenze[0].data, verso: 'entrata',
+      titolo: (f.numero || f.riferimento) + ' · ' + f.cliente, dettaglio: f.stato === 'pronta' ? 'da emettere: è nel programma' : f.pagamento === 'in_parte' ? 'pagata in parte' : 'fattura emessa', importo: f.residuo,
+      stato: f.stato === 'pronta' ? 'da_emettere' : f.pagamento === 'in_parte' ? 'in_parte' : 'previsto', proposta: false }));
+    F.ricevute.filter(x => x.stato === 'attiva' && x.daPagare > 0.004).forEach(x => righe.push({ tipo: 'ricevuta', id: x.id, data: x.scadenze[0].data, verso: 'uscita', titolo: x.fornitore + ' · fattura ' + x.numero,
+      dettaglio: x.categoria, importo: x.daPagare, stato: 'previsto', proposta: false }));
+    F.impegni.filter(i => i.stato === 'aperto').forEach(i => righe.push({ tipo: 'impegno', id: i.id, data: i.scadenza, verso: 'uscita', titolo: i.descrizione, dettaglio: i.codice ? 'codice ' + i.codice : i.ripete,
+      importo: i.daPagare, stato: i.proposta ? 'proposto' : 'previsto', proposta: i.proposta }));
+    const scaduti = righe.filter(r => r.data < oggi).map(r => Object.assign(r, { stato: 'scaduto', contaNelSaldo: r.verso === 'uscita', dettaglio: 'scaduto da ' + Math.round((new Date(oggi + 'T12:00:00') - new Date(r.data + 'T12:00:00')) / 86400000) + ' giorni · ' + r.dettaglio }));
+    let saldo = Math.round((saldoOggi - scaduti.filter(r => r.verso === 'uscita').reduce((x, r) => x + r.importo, 0)) * 100) / 100;
+    const saldoPartenza = saldo;
+    const perGiorno = new Map();
+    righe.filter(r => r.data >= oggi && r.data <= a).sort((x, y) => x.data.localeCompare(y.data)).forEach(r => { if (!perGiorno.has(r.data)) perGiorno.set(r.data, []); perGiorno.get(r.data).push(Object.assign(r, { contaNelSaldo: true })); });
+    let primo = saldoPartenza < soglia ? oggi : '';
+    const NOMI_G = ['Domenica', 'Lunedì', 'Martedì', 'Mercoledì', 'Giovedì', 'Venerdì', 'Sabato'];
+    const MESI_L = ['gennaio', 'febbraio', 'marzo', 'aprile', 'maggio', 'giugno', 'luglio', 'agosto', 'settembre', 'ottobre', 'novembre', 'dicembre'];
+    const giorni = Array.from(perGiorno.entries()).map(([data, rr]) => {
+      rr.forEach(r => { saldo = Math.round((saldo + (r.verso === 'entrata' ? r.importo : -r.importo)) * 100) / 100; });
+      const d = new Date(data + 'T12:00:00');
+      if (saldo < soglia && !primo) primo = data;
+      return { data, titolo: NOMI_G[d.getDay()] + ' ' + d.getDate() + ' ' + MESI_L[d.getMonth()], saldo, sottoSoglia: saldo < soglia, righe: rr };
+    });
+    return { ok: true, oggi, da: oggi, a, saldoOggi, soglia, saldoPartenza, scaduti, giorni, senzaData: { entrate: 0, voci: 0 }, primoSottoSoglia: primo, nota: 'Gli incassi scaduti non entrano nel saldo previsto' };
+  }
+
+  function fase4(dati, azione, b) {
+    const F = dati.f4 || (dati.f4 = creaFase4(dati));
+    const trovaF = id => F.fatture.find(f => String(f.id) === String(id) || f.riferimento === String(id) || f.numero === String(id));
+    const rifai = () => F.fatture.forEach(f => ricalcolaFattura(dati, f));
+    switch (azione) {
+      case 'daFatturare': return daFatturareEsempio(dati, F);
+      case 'fatture': {
+        let l = F.fatture.slice();
+        if (b.stato === 'scartata') l = l.filter(f => f.stato === 'scartata'); else l = l.filter(f => f.stato !== 'scartata');
+        if (b.idCliente) l = l.filter(f => f.idCliente === b.idCliente);
+        if (b.pagamento === 'aperta') l = l.filter(f => f.stato === 'emessa' && f.residuo > 0.004);
+        l.sort((x, y) => (Number(y.stato === 'bozza' || y.stato === 'pronta') - Number(x.stato === 'bozza' || x.stato === 'pronta')) || y.data.localeCompare(x.data));
+        return { ok: true, oggi: dati.oggi, fatture: l.map(senzaDettagli) };
+      }
+      case 'fattura': {
+        const f = trovaF(b.id);
+        return f ? { ok: true, fattura: copia(Object.assign({}, f, { puoScrivere: R.puo(dati.permessiIo, 'fatturazione', 2) })) } : { ok: false, errore: 'Fattura ' + b.id + ' non trovata' };
+      }
+      case 'preparaFattura': {
+        const voci = b.voci || [];
+        if (!voci.length) return { ok: false, errore: 'Scegli almeno una cosa da fatturare' };
+        const raps = voci.map(v => dati.rapportini.find(r => r.id === v.id)).filter(Boolean);
+        if (raps.some(r => r.idCliente !== b.idCliente)) return { ok: false, errore: 'Una fattura è per un cliente solo' };
+        const id = F.prossima++;
+        const c = dati.ana.soggetti.find(s => s.id === b.idCliente) || {};
+        const righe = [];
+        const sorgenti = [];
+        let n = 0;
+        if (b.raggruppa === 'mese') {
+          const mesi = {};
+          raps.forEach(r => { (mesi[r.data.slice(0, 7)] = mesi[r.data.slice(0, 7)] || []).push(r); });
+          Object.keys(mesi).sort().forEach(m => {
+            const gr = 'rapportini:' + b.idCliente + ':' + m;
+            const somma = Math.round(mesi[m].reduce((x, r) => x + C.num(r.totale), 0) * 100) / 100;
+            righe.push(Object.assign(rigaEsempio(id * 10 + (++n), gr, 'compenso', 'Prestazioni professionali di ' + C.nomeMese(m).toLowerCase() + ' (' + mesi[m].length + (mesi[m].length === 1 ? ' rapportino)' : ' rapportini)'), somma)));
+            mesi[m].forEach(r => sorgenti.push({ tipo: 'rapportino', id: r.id, gruppo: gr, descrizione: r.id + ' · ' + C.data(r.data).slice(0, 5), importo: C.num(r.totale), attiva: true }));
+          });
+        } else {
+          raps.forEach(r => {
+            const gr = 'rapportino:' + r.id;
+            righe.push(rigaEsempio(id * 10 + (++n), gr, 'compenso', 'Rapportino ' + r.id + ' del ' + C.data(r.data) + ': ' + (r.descrizione || ''), C.num(r.totale)));
+            sorgenti.push({ tipo: 'rapportino', id: r.id, gruppo: gr, descrizione: r.id + ' · ' + C.data(r.data).slice(0, 5), importo: C.num(r.totale), attiva: true });
+          });
+        }
+        const f = ricalcolaFattura(dati, { id, tipo: 'fattura', tipoDocumento: 'TD01', idCliente: b.idCliente, stato: 'bozza', numero: '', data: dati.oggi, causale: b.raggruppa === 'mese' ? 'Prestazioni professionali' : 'Rapportini',
+          righe, sorgenti, incassi: [], ritenuta: !!c.partitaIva, regime: 'ordinario', ivaPercentuale: 22, eppiPercentuale: 5, ritenutaPercentuale: 20, bolloRivalsa: true, idConto: 1, conto: 'Conto studio …3456',
+          scadenzaGiorni: 30, idCommessa: '', idFatturaCollegata: null, noteInterne: '', prontaIl: '' });
+        F.fatture.unshift(f);
+        return { ok: true, fattura: copia(f) };
+      }
+      case 'salvaFattura': {
+        const x = b.fattura || {};
+        const f = trovaF(x.id);
+        if (!f) return { ok: false, errore: 'Fattura non trovata' };
+        if (f.stato !== 'bozza') return { ok: false, errore: 'La fattura ' + f.riferimento + ' è già stata passata al programma: per cambiarla falla tornare in bozza' };
+        ['data', 'causale', 'noteInterne', 'ritenuta', 'tipoDocumento'].forEach(k => { if (x[k] !== undefined) f[k] = x[k]; });
+        const liberate = [];
+        if (Array.isArray(x.righe)) {
+          const restano = new Set(x.righe.filter(r => r.gruppo).map(r => r.gruppo));
+          (f.sorgenti || []).forEach(s => { if (s.attiva && !restano.has(s.gruppo)) { s.attiva = false; liberate.push({ tipo: s.tipo, id: s.id, descrizione: s.descrizione }); } });
+          f.righe = x.righe.map((r, i) => Object.assign(rigaEsempio(r.id || (f.id * 100 + i + 50), r.gruppo || '', r.tipo, r.descrizione, C.num(r.prezzo)), { quantita: r.quantita, unita: r.unita || '', prezzo: C.num(r.prezzo) }));
+        }
+        if (x.scadenza) { f.scadenzaAMano = true; f.scadenzaScritta = x.scadenza; } else if (x.scadenza === null) f.scadenzaAMano = false;
+        ricalcolaFattura(dati, f);
+        return { ok: true, fattura: copia(f), liberate };
+      }
+      case 'pacchetto':
+      case 'passaAlProgramma': {
+        const f = trovaF(b.id);
+        if (!f) return { ok: false, errore: 'Fattura non trovata' };
+        if (azione === 'passaAlProgramma') {
+          if (f.stato === 'bozza' && !dati.ana.impostazioni.REGOLE_FISCALI_CONFERMATE && !b.conferma) return { ok: false, errore: 'Le regole delle fatture non sono ancora confermate dal commercialista: passala lo stesso?', serveConferma: true };
+          if (f.stato === 'bozza') { f.stato = 'pronta'; f.prontaIl = new Date().toISOString().slice(0, 19); ricalcolaFattura(dati, f); }
+        }
+        const modello = modelloEsempio(dati, f);
+        const D = doc();
+        const sezioni = D.sezioniProspetto(modello);
+        const avviso = modello.regoleConfermate ? '' : 'Conti da verificare: regole non confermate dal commercialista';
+        const testo = [avviso, 'Rif. ' + f.riferimento].concat(...sezioni.map(s => ['', s.titolo.toUpperCase()].concat(s.campi.map(c => c.etichetta + ': ' + c.valore)))).filter((x, i) => i > 0 || x).join('\n');
+        const pacchetto = { ok: true, uscite: ['prospetto', 'xml'], modello, mancano: [], prospetto: { titolo: 'Prospetto per il programma delle fatture', avviso, sezioni, testo },
+          xml: f.stato === 'emessa' ? undefined : { nome: 'Bozza ' + f.riferimento + ' ' + f.cliente + ' - non inviare.xml', mime: 'application/xml', base64: '' } };
+        return azione === 'pacchetto' ? pacchetto : { ok: true, fattura: copia(f), pacchetto };
+      }
+      case 'tornaInBozza': { const f = trovaF(b.id); if (f && f.stato === 'pronta') { f.stato = 'bozza'; ricalcolaFattura(dati, f); } return { ok: true, fattura: copia(f) }; }
+      case 'scartaFattura': {
+        const f = trovaF(b.id);
+        if (f && f.stato === 'pronta' && !b.conferma) return { ok: false, errore: 'La ' + f.riferimento + ' è già nel programma: scartala solo se lì non l\'hai emessa', serveConferma: true };
+        if (f) { f.stato = 'scartata'; (f.sorgenti || []).forEach(s => { s.attiva = false; }); ricalcolaFattura(dati, f); }
+        return { ok: true, fattura: copia(f) };
+      }
+      case 'riepilogoFatturato': {
+        const anno = String(b.anno || dati.oggi.slice(0, 4));
+        const emesse = F.fatture.filter(f => (f.stato === 'emessa' || f.stato === 'annullata') && f.data.slice(0, 4) === anno);
+        const per = b.per || 'mese';
+        const chiaveDi = f => per === 'mese' ? f.data.slice(0, 7) : per === 'cliente' ? f.idCliente : (f.idCommessa || '');
+        const nomeDi = (k, f) => per === 'mese' ? C.nomeMese(k).toLowerCase() : per === 'cliente' ? f.cliente : k;
+        const mappa = new Map();
+        if (per === 'mese') for (let m = 1; m <= Number(dati.oggi.slice(5, 7)); m++) { const k = anno + '-' + String(m).padStart(2, '0'); mappa.set(k, { chiave: k, nome: C.nomeMese(k).toLowerCase(), fatture: 0, compenso: 0, contributo: 0, iva: 0, anticipazioni: 0, totale: 0, ritenute: 0, incassato: 0 }); }
+        emesse.forEach(f => {
+          const k = chiaveDi(f);
+          if (!mappa.has(k)) mappa.set(k, { chiave: k, nome: nomeDi(k, f), fatture: 0, compenso: 0, contributo: 0, iva: 0, anticipazioni: 0, totale: 0, ritenute: 0, incassato: 0 });
+          const x = mappa.get(k);
+          x.fatture++;
+          ['compenso', 'contributo', 'iva', 'anticipazioni', 'totale'].forEach(c => { x[c] = Math.round((x[c] + f.conti[c]) * 100) / 100; });
+          x.ritenute = Math.round((x.ritenute + f.conti.ritenuta) * 100) / 100;
+        });
+        F.movimenti.filter(m => !m.annullato && m.data.slice(0, 4) === anno).forEach(m => (m.abbinamenti || []).filter(a => a.tipo === 'fattura').forEach(a => {
+          const f = trovaF(a.id);
+          if (!f || f.stato !== 'emessa') return;
+          const k = per === 'mese' ? m.data.slice(0, 7) : chiaveDi(f);
+          if (mappa.has(k)) mappa.get(k).incassato = Math.round((mappa.get(k).incassato + a.importo) * 100) / 100;
+        }));
+        const righe = Array.from(mappa.values());
+        if (per !== 'mese') righe.sort((x, y) => y.compenso - x.compenso);
+        const totali = righe.reduce((t, r) => { Object.keys(t).forEach(k => { t[k] = Math.round((t[k] + r[k]) * 100) / 100; }); return t; }, { fatture: 0, compenso: 0, contributo: 0, iva: 0, anticipazioni: 0, totale: 0, ritenute: 0, incassato: 0 });
+        return { ok: true, anno: Number(anno), per, righe, totali, fatturato: totali.compenso, incassato: totali.incassato };
+      }
+      case 'ricevute': return { ok: true, ricevute: copia(F.ricevute.filter(x => b.stato === 'da_pagare' ? x.daPagare > 0.004 : true).filter(x => !b.idFornitore || x.idFornitore === b.idFornitore)) };
+      case 'ricevuta': { const x = F.ricevute.find(r => String(r.id) === String(b.id)); return x ? { ok: true, ricevuta: copia(x) } : { ok: false, errore: 'Ricevuta non trovata' }; }
+      case 'scadenzePagamento': return { ok: true, scadenze: [], commesse: [] };
+      case 'fatturazioneCommessa': {
+        const righe = F.fatture.filter(f => f.stato === 'emessa').reduce((l, f) => l.concat(f.righe.filter(r => r.idCommessa === b.id && r.tipo === 'compenso')), []);
+        const bozze = F.fatture.filter(f => f.stato === 'bozza' || f.stato === 'pronta').reduce((l, f) => l.concat(f.righe.filter(r => r.idCommessa === b.id && r.tipo === 'compenso')), []);
+        const somma = l => Math.round(l.reduce((x, r) => x + r.importo, 0) * 100) / 100;
+        const m = dati.ana.commesse.find(x => x.id === b.id) || {};
+        return { ok: true, idCommessa: b.id, modoFatturazione: m.modoFatturazione || 'ore', contratto: C.num(m.importoContratto), fatturato: somma(righe), incassato: 0, daFatturare: 0, inBozza: somma(bozze), previsto: 0, scadenze: [], fatture: [] };
+      }
+      case 'conti': return { ok: true, conti: [{ id: 1, nome: 'Conto studio', banca: 'Banca di esempio', ultimeCifre: '3456', predefinito: true, soglia: null, attivo: true, note: '', saldo: 8743.55, saldoAl: RA.piuGiorni(dati.oggi, -21),
+        saldoScritto: 9850, movimentiDopo: F.movimenti.length, verificatiDopo: F.movimenti.filter(m => m.verificato).length, collegamento: 'non_collegato', iban: R.puo(dati.permessiIo, 'banche', 2) ? 'IT60X0542811101000000123456' : undefined }], collegamento: 'non_collegato' };
+      case 'movimenti': {
+        const t = C.normalizza(b.testo || '');
+        const l = F.movimenti.filter(m => (!b.verso || m.verso === b.verso) && (b.verificato === undefined || b.verificato === '' || String(m.verificato ? 1 : 0) === String(b.verificato))
+          && (!t || C.normalizza(m.descrizione + ' ' + m.soggetto + ' ' + m.importo).indexOf(t) >= 0)).sort((x, y) => y.data.localeCompare(x.data));
+        const somma = v => Math.round(l.filter(m => m.verso === v && !m.annullato).reduce((x, m) => x + m.importo, 0) * 100) / 100;
+        return { ok: true, pagina: 1, pagine: 1, quante: l.length, entrate: somma('entrata'), uscite: somma('uscita'), daVerificare: l.filter(m => !m.verificato).length, importaEstrattoConto: 'non_collegato', movimenti: copia(l) };
+      }
+      case 'scadenziario': return scadenziarioEsempio(dati, F, b.a ? Math.round((new Date(b.a + 'T12:00:00') - new Date(dati.oggi + 'T12:00:00')) / 86400000) : 90);
+      case 'situazione': {
+        const s = scadenziarioEsempio(dati, F, 91);
+        const saldoA = n => { let v = s.saldoPartenza; s.giorni.forEach(gg => { if (gg.data <= RA.piuGiorni(dati.oggi, n)) v = gg.saldo; }); return v; };
+        const daInc = F.fatture.filter(f => f.stato === 'emessa').reduce((x, f) => x + f.residuo, 0);
+        const settimane = [];
+        const lun = RO.settimanaDi(dati.oggi)[0];
+        for (let i = 0; i < 13; i++) {
+          const da = RA.piuGiorni(lun, i * 7);
+          const a = RA.piuGiorni(da, 6);
+          const dentro = s.giorni.filter(gg => gg.data >= da && gg.data <= a).reduce((l, gg) => l.concat(gg.righe), []);
+          const saldo = saldoA(Math.round((new Date(a + 'T12:00:00') - new Date(dati.oggi + 'T12:00:00')) / 86400000));
+          settimane.push({ da, a, entrate: dentro.filter(r => r.verso === 'entrata').reduce((x, r) => x + r.importo, 0), uscite: dentro.filter(r => r.verso === 'uscita').reduce((x, r) => x + r.importo, 0), saldo, sottoSoglia: saldo < s.soglia });
+        }
+        const rie = fase4(dati, 'riepilogoFatturato', { anno: dati.oggi.slice(0, 4), per: 'mese' });
+        return { ok: true, oggi: dati.oggi, saldi: [{ idConto: 1, nome: 'Conto studio …3456', saldo: s.saldoOggi }], saldoOggi: s.saldoOggi, soglia: s.soglia, daIncassare: Math.round(daInc * 100) / 100,
+          scadutoDaIncassare: Math.round(F.fatture.filter(f => f.scaduta).reduce((x, f) => x + f.residuo, 0) * 100) / 100,
+          daPagare30: Math.round(s.giorni.filter(gg => gg.data <= RA.piuGiorni(dati.oggi, 30)).reduce((l, gg) => l.concat(gg.righe), []).filter(r => r.verso === 'uscita').reduce((x, r) => x + r.importo, 0) * 100) / 100,
+          scadutoDaPagare: 0, previsto: { 30: saldoA(30), 60: saldoA(60), 90: saldoA(90) }, primoSottoSoglia: s.primoSottoSoglia, settimane, fatturatoAnno: rie.fatturato, incassatoAnno: rie.incassato, collegamento: 'non_collegato' };
+      }
+      case 'impegni': return { ok: true, impegni: copia(F.impegni.filter(i => b.stato === 'tutti' || i.stato === 'aperto')) };
+      case 'segnaIncasso': {
+        const f = trovaF(b.idFattura);
+        if (!f) return { ok: false, errore: 'Fattura non trovata' };
+        const importo = b.importo || f.residuo;
+        if (importo > f.residuo + 0.004) return { ok: false, errore: 'La fattura ' + (f.numero || f.riferimento) + ' ha ancora da incassare ' + C.euro(f.residuo).replace(' €', '') + ': non puoi abbinarne ' + C.euro(importo).replace(' €', '') };
+        const m = { id: F.prossimoMov++, idConto: 1, conto: 'Conto studio …3456', data: b.data || dati.oggi, verso: 'entrata', importo, descrizione: 'Incasso ' + f.cliente + ', fattura ' + (f.numero || f.riferimento), idSoggetto: f.idCliente,
+          soggetto: f.cliente, categoria: 'incasso', verificato: !!b.verificato, livello: b.verificato ? 'verificato' : 'registrato', abbinamenti: [{ tipo: 'fattura', id: f.id, etichetta: f.numero || f.riferimento, importo }], annullato: false };
+        F.movimenti.unshift(m);
+        f.incassi.push({ idMovimento: m.id, data: m.data, importo, conto: m.conto, verificato: m.verificato });
+        ricalcolaFattura(dati, f);
+        return { ok: true, movimento: copia(m), fattura: copia(f) };
+      }
+      case 'annullaMovimento': {
+        const m = F.movimenti.find(x => String(x.id) === String(b.id));
+        if (m) { m.annullato = true; F.fatture.forEach(f => { f.incassi = (f.incassi || []).filter(i => i.idMovimento !== m.id); }); rifai(); }
+        return { ok: true, movimento: copia(m) };
+      }
+      case 'confermaRegoleFiscali': {
+        dati.ana.impostazioni.REGOLE_FISCALI_CONFERMATE = b.data ? { data: b.data, commercialista: b.commercialista, da: dati.io.id } : null;
+        rifai();
+        return { ok: true, regoleConfermate: dati.ana.impostazioni.REGOLE_FISCALI_CONFERMATE, impostazioni: copia(dati.ana.impostazioni) };
+      }
+      default:
+        return NON_NELLA_VISITA;
+    }
+  }
+
+  function rigaEsempio(id, gruppo, tipo, descrizione, importo) {
+    return { id, ordine: 0, origine: 'bozza', gruppo, tipo, descrizione, quantita: 1, unita: '', prezzo: importo, importo, aliquotaIva: tipo === 'compenso' ? 22 : 0,
+      natura: tipo === 'compenso' ? '' : 'N1', ritenuta: false, tributoCliente: false, idCommessa: '', importoSorgenti: gruppo ? importo : null };
+  }
+
+  /** I numeri dei soldi della fase 4 sulla Dashboard di esempio (§15.16, in piccolo). */
+  function dashboardFase4(dati, numeri) {
+    if (!R.puo(dati.permessiIo, 'costi') || !(R.puo(dati.permessiIo, 'fatturazione') || R.puo(dati.permessiIo, 'banche'))) return;
+    const F = dati.f4 || (dati.f4 = creaFase4(dati));
+    const df = daFatturareEsempio(dati, F);
+    const emesse = F.fatture.filter(f => f.tipo === 'fattura' && f.stato === 'emessa');
+    numeri.soldi = Object.assign(numeri.soldi || {}, {
+      daFatturare: df.totale, clientiDaFatturare: df.clienti, daIncassare: Math.round(emesse.reduce((x, f) => x + f.residuo, 0) * 100) / 100,
+      scaduto: Math.round(emesse.filter(f => f.scaduta).reduce((x, f) => x + f.residuo, 0) * 100) / 100, saldoConti: 8743.55,
+      fattureInBozza: Math.round(F.fatture.filter(f => f.stato === 'bozza' || f.stato === 'pronta').reduce((x, f) => x + f.conti.totale, 0) * 100) / 100,
+    });
   }
 
   const Esempio = { crea, gestisci, dashboard, permessiDi, togliCosti };

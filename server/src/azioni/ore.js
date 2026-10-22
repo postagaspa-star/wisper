@@ -173,6 +173,10 @@ module.exports = {
   /** Perche' una riga non si cambia (o ''): approvata, per chi non approva. */
   oreBloccate(r) {
     if (r.tolta) return 'Le ore sono state tolte';
+    // Fase 4: in una bozza o in una fattura le ore non cambiano.
+    const frase = this.fraseSorgenteFerma('ore', r.id);
+    if (frase) return frase;
+    if (r.fatturata_il) return 'Fatturate fuori da Wisper il ' + dataBreve(dataIso(r.fatturata_il)) + ': non si cambiano';
     if (r.stato === 'approvata' && this.soloSuoi()) return 'Sono già approvate: per cambiarle chiedi a chi approva';
     return '';
   },
@@ -419,6 +423,10 @@ module.exports = {
       return { ok: true, riga: this.orePerId(r.id) };
     }
     if (r.stato === 'approvata' && this.soloSuoi()) throw new Rifiuto('Sono già approvate: per toglierle chiedi a chi approva');
+    if (!r.tolta) {
+      const ferma = this.oreBloccate(r);
+      if (ferma) throw new Rifiuto(ferma);
+    }
     if (!r.tolta) this.aggiorna('ore', r.id, { tolta: adesso(), modificato: adesso() });
     return { ok: true, riga: this.orePerId(r.id) };
   },
@@ -534,6 +542,12 @@ module.exports = {
   /** Cosa la tiene ferma (gia' rimborsata, fatturata, mandata al cliente) o ''. */
   decisioneBloccata(v) {
     const r = v.r;
+    // Fase 4: una cosa gia' in una bozza o in una fattura non si rimette in discussione.
+    const sorgente = { ore: 'ore', rapportino: 'rapportino', spesa: 'spesa' }[v.tipo];
+    if (sorgente) {
+      const a = this.sorgenteAttiva(sorgente, r.id);
+      if (a) return this.fraseGiaRiservata(sorgente, r.id, a).replace(/^./, c => c.toUpperCase());
+    }
     if (v.tipo === 'rapportino') {
       const st = testo(r.stato).toUpperCase();
       if (st === 'INVIATO' || st === 'FATTURATO') return 'Il rapportino ' + r.id + ' è già stato mandato al cliente';

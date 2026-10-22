@@ -102,7 +102,155 @@ function semina(w) {
   });
   seminaFase2(w, utenti, come);
   seminaFase3(w, utenti, come);
+  seminaFase4(w, utenti, come);
   return utenti;
+}
+
+/**
+ * Fatture, banche e scadenze come nel prototipo della fase 4
+ * (docs/prototipo/Gestionale-fase4.html, oggi = 22/10/2026). Le fatture hanno
+ * date fisse (sono storia fiscale: 38/2026, 39/2026, 45/2026), come i
+ * rapportini della fase 1; gli impegni che si ripetono vanno sempre avanti.
+ *  - i dati dello studio e dei clienti per le fatture (partite IVA finte col
+ *    controllo giusto), Mario Bianchi privato, due fornitori in piu';
+ *  - il PR/2026/012 rev. 1 accettato con la DiRi: la commessa 26ST003 a corpo,
+ *    3.800 euro di contratto, acconto 30/40/30 (1.140, 1.520, 1.140);
+ *  - 26ST002 "misto" (il contratto PR/2026/010 e le ore in piu');
+ *  - i sei rapportini di settembre di Elettrodinamica, firmati e mandati
+ *    (riepilogo inviato il 30/09), da fatturare in una riga al mese;
+ *  - il collaudo di Rossi (rapportino con pedaggio e una spesa anticipata);
+ *  - 38/2026 (agosto, pagata), 39/2026 (30% di 26ST002, pagata in parte e
+ *    scaduta), 45/2026 (30% di 26ST003, consegnata), W-14 di Mario Bianchi
+ *    pronta e gia' pagata (da emettere entro 12 giorni), la bozza W-15 di Rossi
+ *    (40% di 26ST003 con la pratica anticipata e il bollo): passate al
+ *    programma e tornate con l'XML vero, dal ritorno di sempre (leggiXml e
+ *    confermaXml);
+ *  - il Conto studio (saldo scritto il 01/10), i movimenti di ottobre, quattro
+ *    fatture ricevute (una con la ritenuta: la proposta F24 1040), affitto e
+ *    luce ricorrenti, IVA e IRPEF di novembre: il saldo previsto va sotto i
+ *    3.000 euro il 30/11.
+ * Le regole fiscali NON sono confermate (come nel prototipo).
+ */
+function seminaFase4(w, utenti, come) {
+  const { scriviFatturaPA } = require('./fatturapa');
+  const fattura = id => w.db.riga('SELECT * FROM fatture WHERE id = ?', id);
+  /** Passa la bozza al programma e la fa tornare con l'XML emesso (numero e data veri), dal ritorno di sempre. */
+  const emetti = (id, numeroFiscale, data, nomeFile) => {
+    const passata = w.passaAlProgramma({ id, conferma: true });
+    if (!passata.ok) throw new Error('dati di esempio: ' + passata.errore);
+    const m = Object.assign(w.modelloFattura(fattura(id), { ibanIntero: true }), { data });
+    const xml = scriviFatturaPA(m, { numero: numeroFiscale, progressivo: nomeFile.replace(/^.*_|\..*$/g, '') });
+    const l = w.leggiXml({ file: [{ nome: nomeFile, base64: Buffer.from(xml, 'utf8').toString('base64') }] });
+    w.confermaXml({ idLettura: l.idLettura, scelte: [{ chiave: l.documenti[0].chiave, azione: 'abbina', idFattura: id }] });
+  };
+  const retrodata = (tabella, id, campi) => {
+    const k = Object.keys(campi);
+    w.db.esegui('UPDATE ' + tabella + ' SET ' + k.map(c => c + ' = ?').join(', ') + ' WHERE id = ?', ...k.map(c => campi[c]), id);
+  };
+  const quando = (giorno, ora) => istante(new Date(giorno + 'T' + ora));
+
+  come('titolare', () => {
+    // ------------------------------------------------ dati dello studio e dei clienti per le fatture
+    w.salvaImpostazioni({ CODICE_FISCALE: '00000000000', STUDIO_CAP: '36016', STUDIO_COMUNE: 'Thiene', STUDIO_PROVINCIA: 'VI',
+      ALBO: 'Periti industriali', ALBO_PROVINCIA: 'VI', ALBO_NUMERO: '000' });
+    w.salvaSoggetto({ id: 'C001', partitaIva: '02468135799', codiceSdi: 'AB12CD3', indirizzo: 'Via dell\'Industria 12', cap: '36016', citta: 'Thiene', provincia: 'VI' });
+    w.salvaSoggetto({ id: 'C002', partitaIva: '04455667784', pec: 'rossiimpianti@pec.esempio.it', indirizzo: 'Via Nuova 3', cap: '36061', citta: 'Bassano del Grappa', provincia: 'VI' });
+    w.salvaSoggetto({ nome: 'Mario Bianchi', codiceFiscale: 'BNCMRA70C12L840K', email: 'mario.bianchi@example.com', indirizzo: 'Via Montegrappa 8', cap: '36063',
+      citta: 'Marostica', provincia: 'VI' });
+    w.salvaSoggetto({ nome: 'Ing. Paolo Verdi', cliente: false, fornitore: true, partitaIva: '01122334459', email: 'studio@verdi.example',
+      indirizzo: 'Via dei Calcoli 4', cap: '36100', citta: 'Vicenza', provincia: 'VI' });
+    w.salvaSoggetto({ nome: 'Luce e Gas Esempio Spa', cliente: false, fornitore: true, partitaIva: '07788990013', cap: '20100', citta: 'Milano', provincia: 'MI' });
+    w.salvaConto({ conto: { nome: 'Conto studio', banca: 'Banca di esempio', iban: 'IT60X0542811101000000123456', predefinito: true } });
+    w.aggiornaSaldo({ idConto: 1, data: '2026-10-01', saldo: 9850 });
+
+    // ------------------------------------------------ il contratto PR/2026/012 rev. 1 diventa la commessa 26ST003 (a corpo)
+    const rev1 = w.leggiPreventivi({}).find(p => /\/012$/.test(p.numero) && p.revisione === 1);
+    const voci = w.preventivoCompleto(w.rigaPreventivo(rev1.id)).sezioni[1].voci;
+    const voce = testo => voci.find(v => v.descrizione.indexOf(testo) === 0).id;
+    w.accettaPreventivo({ id: rev1.id, modo: 'documento', nome: 'Paolo Rossi',
+      scelte: { [voce('Dichiarazione')]: true, [voce('Collaudo con strumenti')]: true, [voce('Collaudo con laboratorio')]: false } });
+    const c3 = w.creaCommessaDaPreventivo({ id: rev1.id }).commessa;
+    w.aggiornaCommessa('26ST002', { modoFatturazione: 'misto' });
+    const scadenze3 = w.db.righe('SELECT * FROM scadenze_pagamento WHERE commessa_id = ? ORDER BY ordine', c3.id);
+    const scadenze2 = w.db.righe("SELECT * FROM scadenze_pagamento WHERE commessa_id = '26ST002' ORDER BY ordine");
+    const pratica = w.salvaSpesa({ data: '2026-10-14', importo: 120, categoria: 'altro', descrizione: 'Pratica di connessione al distributore', idCommessa: c3.id,
+      anticipazione: true, pagataDaMe: true });
+
+    // ------------------------------------------------ i rapportini di settembre di Elettrodinamica (firmati, riepilogo inviato il 30/09)
+    const settembre = [['2026-09-03', 6, 1, 8.4, 'Rilievo quadri del magazzino'], ['2026-09-08', 7, 1, 0, 'Cablaggio quadro di linea 1'],
+      ['2026-09-11', 5, 1, 8.4, 'Cablaggio quadro di linea 2'], ['2026-09-16', 8, 0, 0, 'Messa in servizio nastri'],
+      ['2026-09-21', 6, 0, 0, 'Prove dei sensori'], ['2026-09-24', 6, 0, 0, 'Collaudo con il cliente']];
+    settembre.forEach(([data, ore, viaggio, spese, descrizione], i) => {
+      const r = w.salvaRapportino({ idLocale: 'seme-f4-elettro-' + (i + 1), tecnico: 'Manuel Gasparotto', data, idCliente: 'C001', descrizione, oreLavoro: ore,
+        oreViaggio: viaggio, km: 52, spese, noteSpese: spese ? 'Pedaggio' : '' });
+      w.caricaFile({ tipo: 'firma', id: r.id, base64: SCONTRINO, mime: 'image/png', idFile: 'firma-f4-' + (i + 1), firmatario: 'Giulia Bianchi' });
+      w.cambiaStato([r.id], 'INVIATO');
+      w.db.esegui('UPDATE rapportini SET firmato_il = ?, inviato_il = ? WHERE id = ?', quando(data, '17:00:00'), quando('2026-09-30', '18:05:00'), r.id);
+    });
+
+    // ------------------------------------------------ il collaudo di Rossi: pedaggio e una spesa anticipata, firmato
+    const collaudo = w.salvaRapportino({ idLocale: 'seme-f4-rossi-1', tecnico: 'Manuel Gasparotto', data: '2026-10-21', idCliente: 'C002', idCommessa: '26ST002',
+      descrizione: 'Collaudo quadro', oreLavoro: 6.5, oreViaggio: 1, km: 48, tariffa: 42, spese: 8.4, noteSpese: 'Pedaggio' });
+    w.salvaSpesa({ data: '2026-10-21', importo: 12, categoria: 'altro', descrizione: 'Corriere per i documenti', idRapportino: collaudo.id, anticipazione: true });
+    w.caricaFile({ tipo: 'firma', id: collaudo.id, base64: SCONTRINO, mime: 'image/png', idFile: 'firma-f4-rossi', firmatario: 'Paolo Rossi' });
+
+    // ------------------------------------------------ le fatture: W-11 ... W-15 come nel prototipo
+    w.db.esegui("INSERT INTO sqlite_sequence (name, seq) SELECT 'fatture', 10 WHERE NOT EXISTS (SELECT 1 FROM sqlite_sequence WHERE name = 'fatture')");
+    // 38/2026: agosto di Elettrodinamica (4 rapportini fatturati prima di Wisper), pagata il 29/09.
+    const f38 = w.nuovaFattura({ idCliente: 'C001' }).fattura.id;
+    w.salvaFattura({ fattura: { id: f38, data: '2026-08-31', causale: 'Prestazioni di agosto 2026', righe: [
+      { tipo: 'compenso', descrizione: 'Prestazioni professionali di agosto 2026 (4 rapportini)', quantita: 26, unita: 'ore', prezzo: 30 },
+      { tipo: 'compenso', descrizione: 'Rimborso chilometrico di agosto 2026', quantita: 208, unita: 'km', prezzo: 0.76 },
+      { tipo: 'compenso', descrizione: 'Spese di viaggio e materiale di agosto 2026', quantita: 1, prezzo: 21.92 }] } });
+    emetti(f38, '38/2026', '2026-08-31', 'IT00000000000_00038.xml');
+    // 39/2026: il 30% alla firma di 26ST002 (contratto PR/2026/010), scaduto il 10/10 e pagato in parte il 12/10.
+    const f39 = w.preparaFattura({ idCliente: 'C002', voci: [{ tipo: 'scadenza', id: scadenze2[0].id }], data: '2026-09-10' }).fattura.id;
+    emetti(f39, '39/2026', '2026-09-10', 'IT00000000000_00039.xml');
+    // 45/2026: il 30% alla firma di 26ST003, consegnata il 19/10.
+    const f45 = w.preparaFattura({ idCliente: 'C002', voci: [{ tipo: 'scadenza', id: scadenze3[0].id }], data: '2026-10-19' }).fattura.id;
+    emetti(f45, '45/2026', '2026-10-19', 'IT00000000000_00045.xml');
+    // W-14: Mario Bianchi, passata al programma il 15/10 e gia' pagata il 20/10 (avviso di parcella): va emessa entro il 1/11.
+    const f14 = w.nuovaFattura({ idCliente: 'C003' }).fattura.id;
+    w.salvaFattura({ fattura: { id: f14, data: '2026-10-15', causale: 'Sopralluogo e rilievo, impianto fotovoltaico', righe: [
+      { tipo: 'compenso', descrizione: 'Sopralluogo e rilievo: Impianto fotovoltaico', quantita: 1, prezzo: 250 }] } });
+    const p14 = w.passaAlProgramma({ id: f14, conferma: true });
+    if (!p14.ok) throw new Error('dati di esempio: ' + p14.errore);
+    // W-15: la bozza di Rossi, il 40% a fine progetto di 26ST003 con la pratica anticipata (e il bollo).
+    w.preparaFattura({ idCliente: 'C002', voci: [{ tipo: 'scadenza', id: scadenze3[1].id }, { tipo: 'spesa', id: pratica.id }], data: '2026-10-22' });
+    // Le date di quando sono successe le cose.
+    retrodata('fatture', f38, { pronta_il: quando('2026-08-31', '09:00:00'), emessa_il: quando('2026-08-31', '11:00:00'), esito_sdi: 'consegnata', esito_il: '2026-08-31' });
+    retrodata('fatture', f39, { pronta_il: quando('2026-09-10', '09:00:00'), emessa_il: quando('2026-09-10', '11:00:00'), esito_sdi: 'consegnata', esito_il: '2026-09-10' });
+    retrodata('fatture', f45, { pronta_il: quando('2026-10-16', '15:00:00'), emessa_il: quando('2026-10-20', '09:30:00'), esito_sdi: 'consegnata', esito_il: '2026-10-19' });
+    retrodata('fatture', f14, { pronta_il: quando('2026-10-15', '10:00:00') });
+
+    // ------------------------------------------------ fatture ricevute
+    const ricevuta = r => w.salvaRicevuta({ ricevuta: r }).ricevuta;
+    ricevuta({ idFornitore: 'F001', numero: 'A/233', data: '2026-10-16', imponibile: 398.36, iva: 87.64, totale: 486, categoria: 'materiale', idCommessa: '26ST002',
+      descrizione: 'Interruttori e morsettiere per il quadro', scadenze: [{ data: '2026-11-16', importo: 486 }] });
+    ricevuta({ idFornitore: 'F002', numero: '77', data: '2026-09-28', imponibile: 600, iva: 132, totale: 732, categoria: 'servizi',
+      descrizione: 'Noleggio piattaforma aerea', scadenze: [{ data: '2026-10-28', importo: 732 }] });
+    const verdi = ricevuta({ idFornitore: 'F003', numero: '12', data: '2026-10-05', imponibile: 520, iva: 114.4, totale: 634.4, ritenuta: 100, categoria: 'consulenze',
+      idCommessa: c3.id, descrizione: 'Verifica dei calcoli del quadro', scadenze: [{ data: '2026-10-12', importo: 534.4 }] });
+    const luce = ricevuta({ idFornitore: 'F004', numero: '2026/88412', data: '2026-09-25', imponibile: 116.64, iva: 25.66, totale: 142.3, categoria: 'utenze',
+      descrizione: 'Luce e gas dell\'ufficio, settembre', scadenze: [{ data: '2026-10-05', importo: 142.3 }] });
+
+    // ------------------------------------------------ impegni: affitto e luce ogni mese, IVA e IRPEF di novembre, F24 di ottobre
+    const affitto = w.salvaImpegno({ impegno: { tipo: 'rata', descrizione: 'Affitto ufficio', scadenza: '2026-09-26', importo: 850, ricorrenza: { regola: 'mesi', ogni: 1 } } }).impegno;
+    w.salvaImpegno({ impegno: { tipo: 'altro', descrizione: 'Luce e gas dell\'ufficio', scadenza: '2026-11-05', importo: 142.3, idSoggetto: 'F004', ricorrenza: { regola: 'mesi', ogni: 1 } } });
+    w.salvaImpegno({ impegno: { tipo: 'f24', descrizione: 'IVA del 3° trimestre', codice: '6033', scadenza: '2026-11-16', importo: 2380 } });
+    w.salvaImpegno({ impegno: { tipo: 'f24', descrizione: 'Secondo acconto IRPEF', codice: '4034', scadenza: '2026-11-30', importo: 3400 } });
+    w.salvaImpegno({ impegno: { tipo: 'f24', descrizione: 'Ritenute e contributi del mese', scadenza: '2026-12-16', ricorrenza: { regola: 'mesi', ogni: 1 } } });
+    const f24 = w.salvaImpegno({ impegno: { tipo: 'f24', descrizione: 'F24 del 16 ottobre', scadenza: '2026-10-16', importo: 1250 } }).impegno;
+
+    // ------------------------------------------------ i movimenti (registrati; quasi tutti visti sull'estratto conto)
+    w.segnaPagamento({ idImpegno: affitto.id, data: '2026-09-26', verificato: true });
+    w.segnaIncasso({ idFattura: f38, data: '2026-09-29', verificato: true });
+    w.segnaPagamento({ idRicevuta: luce.id, data: '2026-10-05', verificato: true });
+    w.segnaPagamento({ idRicevuta: verdi.id, data: '2026-10-12', verificato: true });
+    w.segnaIncasso({ idFattura: f39, importo: 500, data: '2026-10-12' });
+    w.segnaPagamento({ idImpegno: f24.id, data: '2026-10-16', verificato: true });
+    w.segnaIncasso({ idFattura: f14, data: '2026-10-20', verificato: true });
+  });
 }
 
 /** Una foto di scontrino finta (un PNG di 1x1). */

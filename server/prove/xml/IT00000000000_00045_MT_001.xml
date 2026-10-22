@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ns3:MetadatiInvioFile xmlns:ns3="http://ivaservizi.agenziaentrate.gov.it/docs/xsd/messaggi/v1.0" versione="1.0">
+  <IdentificativoSdI>111111111</IdentificativoSdI>
+  <NomeFile>IT00000000000_00045.xml</NomeFile>
+  <CodiceDestinatario>0000000</CodiceDestinatario>
+  <Formato>FPR12</Formato>
+  <TentativiInvio>1</TentativiInvio>
+  <MessageId>900000003</MessageId>
+</ns3:MetadatiInvioFile>

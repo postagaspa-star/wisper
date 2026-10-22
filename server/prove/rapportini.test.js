@@ -32,7 +32,8 @@ const nuovo = dati => manuel('salvaRapportino', { rapportino: Object.assign({ id
 test('i dati di esempio: stessi clienti, commesse e conti di semina() sullo script', async () => {
   const mio = await manuel('anagrafiche');
   const suo = delloScript({});
-  const campiCliente = ['id', 'nome', 'alias', 'gruppo', 'email', 'telefono', 'indirizzo', 'partitaIva', 'tariffaFissa', 'costoFisso', 'ultimaTariffa', 'pagaViaggio', 'kmRimborsati', 'maggExtra', 'note', 'accorpatoIn'];
+  // Indirizzo e partita IVA no: dalla fase 4 i dati di esempio del server hanno quelli di fatturazione di Elettrodinamica e Rossi.
+  const campiCliente = ['id', 'nome', 'alias', 'gruppo', 'email', 'telefono', 'tariffaFissa', 'costoFisso', 'ultimaTariffa', 'pagaViaggio', 'kmRimborsati', 'maggExtra', 'note', 'accorpatoIn'];
   const solo = (o, campi) => Object.fromEntries(campi.map(k => [k, o[k]]));
   for (const c of suo.clienti) assert.deepEqual(solo(mio.clienti.find(x => x.id === c.id), campiCliente), solo(c, campiCliente), c.nome);
   const campiCommessa = ['id', 'idCliente', 'descrizione', 'stato', 'indirizzo', 'budgetOre', 'budgetEuro', 'prezzoOrario', 'costoOrario', 'euroKm', 'inizio', 'finePrevista', 'codicePrecedente', 'note'];
@@ -47,7 +48,7 @@ test('i dati di esempio: stessi clienti, commesse e conti di semina() sullo scri
     'totale', 'costoOrario', 'firma', 'stato'];
   assert.equal(suoi.length, 4);
   for (const r of suoi) assert.deepEqual(solo(miei.find(x => x.id === r.id), campi), solo(r, campi), r.id);
-  assert.equal(miei.length, 6, 'piu\' i due di Marco');
+  assert.equal(miei.length, 13, 'piu\' i due di Marco e i sette della fase 4');
 });
 
 // ------------------------------------------------------------------ salvataggi

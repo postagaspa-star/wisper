@@ -46,7 +46,8 @@ function stessiCampi(ora, prima, chi) {
 }
 
 test('migrazione 003: versione 3, la copia wisper.db.prima-3, i rapportini non si toccano', () => {
-  assert.equal(w.db.versione(), 3);
+  // Dalla fase 4 il database va avanti fino alla migrazione 004: la 003 c'e' (la sua copia prima-3 anche).
+  assert.equal(w.db.versione(), 4);
   assert.ok(fs.existsSync(path.join(cartella, 'wisper.db.prima-3')), 'la copia prima della migrazione');
   const dopo = w.db.righe('SELECT * FROM rapportini ORDER BY id');
   assert.equal(dopo.length, righePrima.length);
@@ -56,6 +57,9 @@ test('migrazione 003: versione 3, la copia wisper.db.prima-3, i rapportini non s
   filePrima.forEach((f, i) => {
     const senzaSpesa = Object.assign({}, file[i]);
     delete senzaSpesa.spesa_id;
+    // Le colonne della migrazione 004 (fase 4): la foto non e' di una fattura.
+    delete senzaSpesa.fattura_id;
+    delete senzaSpesa.ricevuta_id;
     assert.deepEqual(senzaSpesa, Object.assign({}, f), f.id);
   });
 });
@@ -123,7 +127,7 @@ test('riaperto il server: la migrazione non si rifa\' e i numeri restano quelli 
   const quante = w.db.riga('SELECT COUNT(*) n FROM spese').n;
   w.chiudi();
   w = new Wisper({ dati: cartella });
-  assert.equal(w.db.versione(), 3);
+  assert.equal(w.db.versione(), 4);
   assert.equal(w.db.riga('SELECT COUNT(*) n FROM spese').n, quante);
   assert.equal(w.db.riga('SELECT COUNT(*) n FROM veicoli').n, 1);
   const ora = numeri(w);

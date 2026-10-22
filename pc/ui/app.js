@@ -307,6 +307,10 @@
     // Fase 3: entrando in una pagina ore e spese si rileggono (un telefono può averle cambiate).
     Ore.daRileggere();
     Spese.daRileggere();
+    // Fase 4: fatture e banche si rileggono entrando (il telefono o un'altra persona possono averle cambiate).
+    Fatture.daRileggere();
+    Banche.daRileggere();
+    if (percorso().indexOf('fatturazione/fatture') !== 0) Fatture.M.aperta = null;
     mostra();
     const nome = percorso().split('/')[0];
     if (nome === 'rapportini') Visita.azione('nav-rapportini');
@@ -319,6 +323,7 @@
   /** Cambio di pagina: si chiude il pannello e si ridisegna da capo. */
   function mostra() {
     chiudiPannello(true);
+    document.querySelectorAll('.pannello').forEach(p => p.remove());
     disegnaPagina(true);
     $('#principale').scrollTop = 0;
   }
@@ -366,7 +371,9 @@
       S.scelti.clear();
       S.apriDopo = x.apri || x.id || null;
     }
-    if (d.hash === '#fatturazione' && f && f.mese) S.mese = f.mese;
+    // Fase 4: Fatturazione (fatture da aprire, filtri) e Banche e scadenze (giorno, proposte, conto).
+    if (d.hash.indexOf('#fatturazione') === 0) S.filtroFatture = f ? Object.assign({}, f) : null;
+    if (d.hash.indexOf('#banche') === 0) S.filtroBanche = f ? Object.assign({}, f) : null;
     if (d.hash === '#clienti' && f) S.filtriSoggetti = Object.assign({ tipo: 'clienti', testo: '', archiviati: false }, f);
     // Fase 2: il segmento dei preventivi, il segmento o il giorno delle attività.
     if (d.hash === '#preventivi' && f) {
@@ -411,7 +418,8 @@
     else if (nome === 'commesse') a1 ? Commesse.pagina(pagina, decodeURIComponent(a1)) : Commesse.vista(pagina);
     else if (nome === 'rapportini') { const f = S.filtroOre; S.filtroOre = null; Ore.vista(pagina, a1 ? decodeURIComponent(a1) : '', f); }
     else if (nome === 'spese') { const f = S.filtroSpese; S.filtroSpese = null; Spese.vista(pagina, a1 ? decodeURIComponent(a1) : '', f); }
-    else if (nome === 'fatturazione') vistaFatturazione(pagina);
+    else if (nome === 'fatturazione') { const f = S.filtroFatture; S.filtroFatture = null; Fatture.vista(pagina, a1 || '', a2 || '', f); }
+    else if (nome === 'banche') { const f = S.filtroBanche; S.filtroBanche = null; Banche.vista(pagina, a1 || '', f); }
     else if (nome === 'amministrazione') Amministrazione.vista(pagina, a1 || '', a2 ? decodeURIComponent(a2) : '');
     else if (nome === 'preventivi') Preventivi.vista(pagina, a1 ? decodeURIComponent(a1) : '', a2 || '');
     else if (nome === 'attivita') { const f = S.filtroAttivita; S.filtroAttivita = null; Attivita.vista(pagina, a1 ? decodeURIComponent(a1) : '', f); }
@@ -448,6 +456,9 @@
 
   /** Quanti clienti hanno qualcosa da fatturare nel mese: il numerino giallo su Fatturazione. */
   function clientiDaFatturare() {
+    // Fase 4: il server conta i clienti con qualcosa di pronto (scadenze, rapportini, spese, ore: §15.16).
+    const n = S.dash && S.dash.numeri && S.dash.numeri.soldi && S.dash.numeri.soldi.clientiDaFatturare;
+    if (typeof n === 'number') return n;
     const mese = meseDiOggi();
     return perChiPaga(attivi().filter(r => (r.stato === 'FIRMATO' || r.stato === 'INVIATO') && String(r.data).slice(0, 7) === mese && !RO.bloccoInvio(r))).length;
   }
@@ -716,7 +727,9 @@
       prestazioni: 'lista', preventivo: 'preventivo', preventivi: 'preventivo', attivita: 'lista', appuntamento: 'calendario', sopralluogo: 'luogo',
       calendario: 'calendario', listino: 'libro',
       // fase 3
-      approvare: 'spunta', respinta: 'allarme', timer: 'orologio', rimborsi: 'scontrino', veicoli: 'auto' }[v.tipo] ||
+      approvare: 'spunta', respinta: 'allarme', timer: 'orologio', rimborsi: 'scontrino', veicoli: 'auto',
+      // fase 4
+      fattura: v.gravita === 'urgente' ? 'allarme' : 'fatturazione', ricevuta: 'scontrino', impegno: 'calendario', cassa: 'banca', conto: 'banca', fiscale: 'scudo' }[v.tipo] ||
       ({ urgente: 'allarme', attenzione: 'calendario', soldi: 'fatturazione' }[v.gravita] || 'lista');
   }
 
@@ -737,6 +750,20 @@
       h('div', { class: 'titoli' }, h('span', { class: 'sotto-titolo' }, R.dataTitolo(new Date())),
         h('h1', null, R.saluto() + (nome ? ', ' + nome : ''))),
       puo('rapportini', 2) ? h('button', { type: 'button', class: 'btn giallo', onclick: () => moduloRapportino(null) }, icona('piu', 18, 2.6), 'Nuovo rapportino') : null)]);
+
+    // Fase 4 (§13.6): quattro riquadri dei soldi per chi vede fatture o banche: Da fatturare · Da incassare · Scaduto · Nel conto.
+    const sd = S.dash && S.dash.numeri && S.dash.numeri.soldi;
+    if (sd && soldi() && (R.vociMenu(perm()).some(v => v.modulo === 'fatturazione' || v.modulo === 'banche')) && sd.daIncassare !== undefined) {
+      const vedeF = puo('fatturazione');
+      const vedeB = puo('banche');
+      const box = (quanto, che, collegamento, rosso) => h('button', { type: 'button', class: 'num-box' + (rosso ? ' rosso' : ''), disabled: !collegamento, onclick: () => collegamento && vaiA(collegamento) },
+        h('b', null, C.euro(quanto)), h('span', null, che));
+      aggiungi(pagina, [h('div', { class: 'quattro-num' },
+        box(sd.daFatturare, 'da fatturare', vedeF ? { pagina: 'fatturazione' } : null),
+        box(sd.daIncassare, 'da incassare', vedeF ? { pagina: 'fatture', filtro: { pagamento: 'aperta' } } : null),
+        box(sd.scaduto, 'scaduto', vedeF ? { pagina: 'fatture', filtro: { scadute: true } } : null, C.num(sd.scaduto) > 0),
+        box(sd.saldoConti, 'nel conto', vedeB ? { pagina: 'conti' } : null))]);
+    }
 
     // I numeri delle commesse: ognuno apre Commesse sul filtro giusto.
     if (puo('commesse')) {
@@ -788,121 +815,14 @@
 
   // ======================================================================= FATTURAZIONE
 
-  function vistaFatturazione(pagina) {
-    const mese = S.mese;
-    const scrive = puo('fatturazione', 2);
-    const delMese = attivi().filter(r => String(r.data).slice(0, 7) === mese);
-    const t = C.totali(delMese);
-    // Fase 3: i firmati che aspettano l'approvazione non si fatturano ancora (stanno a parte).
-    const daFatturare = delMese.filter(r => (r.stato === 'FIRMATO' || r.stato === 'INVIATO') && !RO.bloccoInvio(r));
-    const inAttesa = delMese.filter(r => (r.stato === 'FIRMATO' || r.stato === 'INVIATO') && RO.bloccoInvio(r));
-    const bozze = delMese.filter(r => r.stato === 'BOZZA');
-    const fatturati = delMese.filter(r => r.stato === 'FATTURATO');
-    const spostaMese = d => {
-      const [a, m] = mese.split('-').map(Number);
-      const x = new Date(a, m - 1 + d, 1);
-      S.mese = x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0');
-      disegnaPagina();
-    };
-
-    aggiungi(pagina, [h('div', { class: 'testata' },
-      h('div', { class: 'titoli' }, h('span', { class: 'dove' }, 'Fatturazione'), h('h1', null, 'Da fatturare'),
-        h('span', { class: 'sotto-titolo' }, C.nomeMese(mese) + ' · ' + nRapportini(t.n) + ' · ' + C.numero(t.ore) + ' ore · ' + C.numero(t.km) + ' km')),
-      tondo('indietro', 'Mese prima', () => spostaMese(-1)),
-      tondo('avanti', 'Mese dopo', () => spostaMese(1)),
-      puo('rapportini', 2) ? h('button', { type: 'button', class: 'btn', onclick: () => moduloRapportino(null) }, 'Nuovo rapportino') : null)]);
-
-    const clientiDi = lista => Array.from(new Set(lista.map(r => r.cliente))).join(', ');
-    aggiungi(pagina, [h('div', { class: 'tre-colonne' },
-      riquadro('Da fatturare', C.euro(somma(daFatturare)), daFatturare.length ? nRapportini(daFatturare.length) + (daFatturare.length === 1 ? ' firmato o inviato' : ' firmati o inviati') : 'niente in attesa', { 'data-visita': 'da-fatturare' }),
-      riquadro('Da far firmare', C.euro(somma(bozze)), bozze.length ? nRapportini(bozze.length) + ' di ' + clientiDi(bozze) : 'nessuno'),
-      riquadro('Fatturato', C.euro(somma(fatturati)), mese === meseDiOggi() ? 'questo mese' : 'a ' + meseMinuscolo(mese)))]);
-
-    // Da fatturare: una scheda per chi paga.
-    const sez = h('div', { class: 'sezione' }, h('h2', null, 'Da fatturare'));
-    const gruppi = perChiPaga(daFatturare);
-    if (!gruppi.length) {
-      aggiungi(sez, [h('div', { class: 'calmo' }, icona('spunta', 20, 2.8), 'Niente da fatturare a ' + meseMinuscolo(mese))]);
-    }
-    gruppi.forEach((g, i) => aggiungi(sez, [schedaChiPaga(g, i === 0, scrive)]));
-    if (inAttesa.length) {
-      const puoApprovare = !!(S.io && S.io.interfaccia && S.io.interfaccia.puoApprovare);
-      aggiungi(sez, [h('div', { class: 'secondario' }, (inAttesa.length === 1 ? '1 rapportino firmato aspetta' : inAttesa.length + ' rapportini firmati aspettano') + ' l\'approvazione: si fatturano dopo. ',
-        puoApprovare ? h('button', { type: 'button', class: 'btn collegamento', onclick: () => vaiA({ pagina: 'rapportini', filtro: { segmento: 'daApprovare' } }) }, 'Vai a Da approvare') : null)]);
-    }
-    const prima = attivi().filter(r => (r.stato === 'FIRMATO' || r.stato === 'INVIATO') && String(r.data).slice(0, 7) < mese && !RO.bloccoInvio(r));
-    if (prima.length) {
-      const ultimoMese = prima.map(r => String(r.data).slice(0, 7)).sort().reverse()[0];
-      aggiungi(sez, [h('div', { class: 'secondario' }, 'Restano da fatturare anche ' + nRapportini(prima.length) + ' dei mesi prima. ',
-        h('button', { type: 'button', class: 'btn collegamento', onclick: () => { S.mese = ultimoMese; disegnaPagina(); } }, 'Vai a ' + meseMinuscolo(ultimoMese)))]);
-    }
-    aggiungi(pagina, [sez]);
-
-    // Da far firmare e commesse da guardare.
-    const firmare = h('div', { class: 'sezione' }, h('h2', null, 'Da far firmare'));
-    if (bozze.length) {
-      aggiungi(firmare, [h('div', { class: 'scheda stretta righe' }, C.ordina(bozze, 'data', -1).slice(0, 6).map(r =>
-        h('div', { class: 'riga-el', role: 'button', tabindex: '0', onclick: () => apriPannello(r.id || r.idLocale), onkeydown: e => { if (e.key === 'Enter') apriPannello(r.id || r.idLocale); } },
-          h('span', { class: 'giorno' }, h('b', null, String(Number(String(r.data).slice(8, 10)))), h('span', null, giornoSett(r.data))),
-          h('span', { class: 'testi' }, h('span', { class: 'titolo' }, r.cliente), h('span', { class: 'sotto' }, [r.descrizione || r.commessa, C.ore(r.oreTotali)].filter(Boolean).join(' · '))),
-          soldi() ? h('span', { class: 'valore' }, C.euro(r.totale)) : null)))]);
-      if (bozze.length > 6) aggiungi(firmare, [h('button', { type: 'button', class: 'btn collegamento', onclick: () => vaiARapportini({ mese, quali: 'firmare' }) }, 'Vedi tutti i ' + bozze.length)]);
-    } else {
-      aggiungi(firmare, [h('div', { class: 'calmo' }, icona('spunta', 20, 2.8), 'Tutti firmati')]);
-    }
-
-    const guardare = h('div', { class: 'sezione' }, h('h2', null, 'Commesse da guardare'));
-    const daGuardare = S.ana.commesse.filter(m => m.stato === 'APERTA' && !m.archiviata && !m.modello).map(m => ({ m, k: C.cruscotto(m, S.rapportini, S.ana.impostazioni, null, cliente(m.idCliente)) }))
-      .filter(x => x.k.livelloOre === 'attenzione' || x.k.livelloOre === 'sforato' || (x.k.giorniMancanti !== null && x.k.giorniMancanti < 0));
-    if (daGuardare.length) {
-      aggiungi(guardare, [h('div', { class: 'scheda stretta' }, daGuardare.map(({ m, k }) => {
-        const scaduta = k.giorniMancanti !== null && k.giorniMancanti < 0;
-        const etichetta = k.livelloOre === 'sforato' ? ['Oltre il budget', 'pericolo'] : k.livelloOre === 'attenzione' ? ['Vicina al budget', 'avviso'] : ['Scaduta', 'pericolo'];
-        return h('div', { class: 'guarda', role: 'button', tabindex: '0', onclick: () => { location.hash = '#commesse/' + encodeURIComponent(m.id); } },
-          h('div', { class: 'alto' }, h('span', { class: 'codice' }, m.id), h('b', null, m.descrizione), h('span', { class: 'stato ' + etichetta[1] }, etichetta[0])),
-          k.budgetOre ? h('div', { class: 'barra' }, h('i', { class: k.livelloOre, style: { width: Math.min(100, Math.round(k.percOre * 100)) + '%' } })) : null,
-          h('div', { class: 'basso' },
-            h('span', null, k.budgetOre ? C.numero(k.ore) + ' di ' + C.numero(k.budgetOre) + ' ore' : (scaduta ? 'Fine prevista il ' + C.data(m.finePrevista) : C.numero(k.ore) + ' ore')),
-            k.costo.lavoroNoto && soldi() ? h('span', null, 'Margine ' + C.euro(k.margine) + (k.percMargine !== null ? ' · ' + Math.round(k.percMargine * 100) + '%' : '')) : null));
-      }))]);
-    } else {
-      aggiungi(guardare, [h('div', { class: 'calmo' }, icona('spunta', 20, 2.8), 'Nessuna commessa vicina al budget')]);
-    }
-    aggiungi(pagina, [h('div', { class: 'due-colonne' }, firmare, guardare)]);
-  }
+  // La pagina di Fatturazione sta in fatture.js (fase 4): il fine mese di prima vive dentro Da fatturare
+  // (i rapportini di un mese sono una voce, col suo Prepara riepilogo). Qui resta il riquadro dei numeri.
 
   function riquadro(che, quanto, nota, attr, negativo) {
     return h('div', Object.assign({ class: 'riquadro' + (negativo ? ' negativo' : '') }, attr || {}),
       h('span', { class: 'che' }, che), h('span', { class: 'quanto' }, quanto), nota ? h('span', { class: 'nota' }, nota) : null);
   }
 
-  function schedaChiPaga(g, prima, scrive) {
-    const t = C.totali(g.lista);
-    const tuttiInviati = g.lista.every(r => r.stato === 'INVIATO');
-    const quando = g.lista.map(r => r.inviatoIl).filter(Boolean).sort().reverse()[0];
-    const azioni = h('div', { class: 'azioni' },
-      h('button', { type: 'button', class: 'btn grande', onclick: () => vaiARapportini({ mese: S.mese, quali: 'fatturare', chi: g.chiave }) }, 'Vedi rapportini'),
-      !scrive ? null : tuttiInviati
-        ? h('button', { type: 'button', class: 'btn grande giallo', 'data-visita': prima ? 'segna-fatturati' : null, onclick: async () => {
-          const fatto = await cambiaStato(g.lista, 'FATTURATO');
-          if (fatto) Visita.azione('segna-fatturati');
-        } }, 'Segna fatturati')
-        : h('button', { type: 'button', class: 'btn grande giallo', 'data-visita': prima ? 'prepara-riepilogo' : null, onclick: () => {
-          preparaInvio(g.lista);
-          Visita.azione('prepara-riepilogo');
-        } }, 'Prepara riepilogo'));
-    let esito = null;
-    if (tuttiInviati) {
-      esito = h('span', { class: 'esito' }, icona('spunta', 16, 2.8), 'Riepilogo inviato' + (g.email ? ' a ' + g.email : '') + (quando ? ' il ' + dataBreve(quando) : ''));
-    }
-    return h('div', { class: 'chi-paga' },
-      iniziali(g.nome),
-      h('div', { class: 'chi' }, h('b', null, g.nome),
-        h('span', { class: 'secondario' }, nRapportini(t.n) + ' · ' + C.ore(t.ore) + ' · ' + C.numero(t.km) + ' km'),
-        esito),
-      h('span', { class: 'quanto' }, C.euro(t.totale)),
-      azioni);
-  }
 
   /** Il codice che avrà una commessa nuova: quello che dice il server (Numerazioni), o 26ST + il numero dopo l'ultimo. */
   function prossimoCodiceCommessa(anno) {
@@ -1033,7 +953,7 @@
         h('button', { type: 'button', class: 'btn piccolo', onclick: () => preparaInvio(sel) }, 'Riepilogo'),
         // I fatturati restano fatturati: "inviato" viene prima.
         h('button', { type: 'button', class: 'btn piccolo', onclick: () => cambiaStato(sel.filter(r => r.stato !== 'FATTURATO'), 'INVIATO') }, 'Segna inviati'),
-        h('button', { type: 'button', class: 'btn piccolo', onclick: () => cambiaStato(sel, 'FATTURATO') }, 'Segna fatturati'),
+        h('button', { type: 'button', class: 'btn piccolo', onclick: () => segnaFatturatiAMano(sel) }, 'Segna fatturati a mano'),
         h('button', { type: 'button', class: 'btn piccolo', onclick: () => { S.scelti.clear(); elencoRapportini(area); } }, 'Deseleziona'))]);
     }
   }
@@ -1115,6 +1035,8 @@
     const corpo = h('div', { class: 'corpo' },
       h('div', { class: 'alto' }, h('span', { class: 'numero' }, r.id || 'Rapportino'), stato(r.stato, true), tondo('chiudi', 'Chiudi', () => chiudiPannello(), 'piccolo')),
       passi(r.stato),
+      // Fase 4 (§15.2): la pillola della fattura in cui sta, col collegamento (solo per chi vede le fatture).
+      r.fattura ? h('button', { type: 'button', class: 'pill ' + (r.fattura.stato === 'emessa' ? 'p-blu' : 'p-grigio') + ' pill-fattura', title: 'Apri', onclick: () => apriSuaFattura(r) }, icona('fatturazione', 14, 2.2), r.fattura.etichetta) : null,
       approvazione ? h('div', { class: approvazione.colore === 'rosso' ? 'banda' : 'banda calma' }, icona(approvazione.colore === 'rosso' ? 'avviso' : 'orologio', 20),
         h('span', { class: 'spazio' }, approvazione.colore === 'rosso' ? approvazione.testo : 'Da approvare: si manda al cliente e si fattura dopo l\'approvazione')) : null,
       h('div', null, h('div', { style: { fontSize: '18px', fontWeight: '800' } }, r.cliente),
@@ -1143,8 +1065,9 @@
       scrive && r.stato === 'BOZZA' ? { testo: 'Carica il foglio firmato', fn: () => caricaFirmato(r) } : null,
       scrive ? { testo: 'Aggiungi uno scontrino', fn: () => aggiungiFoto(r) } : null,
       fattura && (r.stato === 'BOZZA' || r.stato === 'FIRMATO') ? { testo: 'Segna inviato senza email', fn: () => cambiaStato([r], 'INVIATO') } : null,
-      fattura && (r.stato === 'BOZZA' || r.stato === 'FIRMATO') ? { testo: 'Segna fatturato', fn: () => cambiaStato([r], 'FATTURATO') } : null,
-      fattura && r.stato === 'FATTURATO' ? { testo: 'Non ancora fatturato', fn: () => cambiaStato([r], 'INVIATO') } : null,
+      // Fase 4: diventa fatturato da solo quando torna l'XML; a mano solo quello fatturato fuori da Wisper, con conferma.
+      fattura && !r.fattura && (r.stato === 'FIRMATO' || r.stato === 'INVIATO') ? { testo: 'Segna fatturato a mano', fn: () => segnaFatturatiAMano([r]) } : null,
+      fattura && r.stato === 'FATTURATO' && !r.fattura ? { testo: 'Non ancora fatturato', fn: () => cambiaStato([r], 'INVIATO') } : null,
       bloccato && (r.stato === 'FIRMATO' ? scrive : fattura) ? { testo: 'Riporta in bozza', fn: () => riportaInBozza(r) } : null,
       scrive && r.stato === 'BOZZA' ? '-' : null,
       scrive && r.stato === 'BOZZA' ? { testo: 'Elimina', fn: () => annulla(r), pericolo: true } : null,
@@ -1156,7 +1079,9 @@
     const principale = {
       BOZZA: scrive ? h('button', { type: 'button', class: 'btn grande giallo', 'data-visita': 'azione-gialla', onclick: () => moduloRapportino(r) }, 'Modifica') : null,
       FIRMATO: fattura ? h('button', { type: 'button', class: 'btn grande giallo', 'data-visita': 'azione-gialla', onclick: () => preparaInvio([r], true) }, 'Invia al cliente') : null,
-      INVIATO: fattura ? h('button', { type: 'button', class: 'btn grande giallo', 'data-visita': 'azione-gialla', onclick: () => cambiaStato([r], 'FATTURATO') }, 'Segna fatturato') : null,
+      // Fase 4: un rapportino inviato si fattura preparando la bozza (o si apre la bozza in cui è già).
+      INVIATO: r.fattura && puo('fatturazione') ? h('button', { type: 'button', class: 'btn grande giallo', 'data-visita': 'azione-gialla', onclick: () => apriSuaFattura(r) }, 'Apri ' + (r.fattura.riferimento || 'la fattura'))
+        : fattura ? h('button', { type: 'button', class: 'btn grande giallo', 'data-visita': 'azione-gialla', onclick: () => { S.filtroFatture = { preseleziona: 'rapportino:' + r.id }; vai('#fatturazione'); } }, 'Prepara la bozza') : null,
     }[r.stato];
     const piede = h('div', { class: 'piede' }, principale ? [pdf(false), altro, principale] : [altro, pdf(true)]);
 
@@ -1194,6 +1119,29 @@
       ridisegna();
     }
     return !!fatto;
+  }
+
+  /**
+   * "Segna fatturati a mano" (fase4.md §13.1): solo per i rapportini fatturati fuori da Wisper.
+   * Quelli in una bozza o fattura di Wisper il server li rifiuta con la sua frase; qui si chiede conferma.
+   */
+  async function segnaFatturatiAMano(lista0) {
+    const lista = lista0.filter(r => r.stato !== 'FATTURATO');
+    if (!lista.length) { avviso('Sono già fatturati', true); return false; }
+    const inFattura = lista.filter(r => r.fattura);
+    if (inFattura.length) { avviso('Il rapportino ' + inFattura[0].id + ' è già in ' + inFattura[0].fattura.etichetta + ': diventa fatturato da solo quando torna l\'XML', true); return false; }
+    const ok = await conferma('Fatturati fuori da Wisper?', (lista.length === 1 ? 'Il rapportino diventa fatturato' : 'I ' + lista.length + ' rapportini diventano fatturati') +
+      ' senza una fattura in Wisper. Fallo solo per quelli fatturati fuori da Wisper; gli altri si fatturano da Fatturazione › Da fatturare.', 'Sì, segna fatturati');
+    if (!ok) return false;
+    return cambiaStato(lista, 'FATTURATO');
+  }
+
+  /** La bozza o la fattura in cui sta un rapportino. */
+  function apriSuaFattura(r) {
+    if (!r.fattura) return;
+    chiudiPannello(true);
+    if (r.fattura.stato === 'bozza') vai('#fatturazione/bozza/' + r.fattura.id);
+    else { Fatture.M.aperta = r.fattura.id; vai('#fatturazione/fatture'); }
   }
 
   async function riportaInBozza(r) {
@@ -1737,6 +1685,11 @@
   const Attivita = window.WisperAttivita(W);
   const Ore = window.WisperOre(W);
   const Spese = window.WisperSpese(W);
+  // Fase 4: Fatturazione e Banche e scadenze (si chiamano a vicenda: segnare un incasso da una fattura).
+  const Fatture = window.WisperFatture(W);
+  const Banche = window.WisperBanche(W);
+  W.Fatture = Fatture;
+  W.Banche = Banche;
 
   /**
    * L'esportazione per Excel (§12.13, §13.9, §14.14): il server prepara il CSV coi
@@ -1824,6 +1777,7 @@
     if (chiudiMenu()) return;
     const veli = document.querySelectorAll('.velo');
     if (veli.length) { const v = veli[veli.length - 1]; if (v.chiudi) v.chiudi(); else v.remove(); } else if (S.aperto) chiudiPannello();
+    else if (document.querySelector('.pannello-fattura')) { const x = document.querySelector('.pannello-fattura [aria-label="Chiudi"]'); if (x) x.click(); }
   });
 
   // ======================================================================= visita guidata
@@ -1842,6 +1796,10 @@
     // fase 3: ore, timer, approvazioni, spese
     Object.assign(Ore.M, { ore: null, chiave: '', approvare: null, stat: null, timer: null, attivita: null, aggiunte: {}, persona: null, segmento: 'ore' });
     Object.assign(Spese.M, { spese: null, trasferte: null, rimborsi: null, veicoli: null, riep: null, persona: '', segmento: 'spese' });
+    // fase 4: fatture, banche e scadenze
+    Fatture.daRileggere();
+    Object.assign(Fatture.M, { scelte: new Map(), cliente: null, aperta: null, conti: null, preselezione: null });
+    Banche.daRileggere();
   }
 
   function iniziaVisita() {

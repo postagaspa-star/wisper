@@ -226,9 +226,18 @@ module.exports = {
         try {
           const n = this.allungaRicorrenze();
           if (n) console.log('[ricorrenze] ' + n + ' occorrenze nuove');
+          // Fase 4: gli impegni ricorrenti (affitto, F24) per i prossimi 12 mesi.
+          const i = this.allungaImpegni();
+          if (i) console.log('[impegni] ' + i + ' scadenze nuove');
         } catch (err) {
           console.error('[ricorrenze] non riuscito: ' + messaggio(err));
         }
+      }
+      // Fase 4: le letture degli XML in attesa di conferma durano un'ora.
+      try {
+        this.pulisciLetture();
+      } catch (err) {
+        console.error('[letture] non riuscito: ' + messaggio(err));
       }
       if (adesso >= soglia && this.ultimaNotturna !== oggi() && !this.copiaInCorso) {
         this.ultimaNotturna = oggi();

@@ -15,6 +15,14 @@ const { togliCosti } = require('./permessi');
 
 const scrive = (modulo, cosa, fn) => ({ modulo, livello: 2, cosa, scrive: true, fn });
 const legge = (modulo, cosa, fn) => ({ modulo, livello: 1, cosa, fn });
+// Fase 4: tutte le azioni di Fatturazione e di Banche vogliono anche il permesso dei soldi ("costi").
+const conCosti = v => Object.assign(v, { costi: true });
+
+/** La frase quando manca il permesso dei soldi (fase4.md §11). */
+const SENZA_COSTI = {
+  fatturazione: 'Per vedere le fatture serve anche il permesso dei soldi: chiedi al titolare',
+  banche: 'Per vedere banche e scadenze serve anche il permesso dei soldi: chiedi al titolare',
+};
 const nonServePiu = { fn: () => { throw new Rifiuto('Non serve più'); } };
 const siVuole = v => v === true || v === '1' || v === 'true';
 
@@ -157,6 +165,50 @@ const AZIONI = {
   riepilogoSpese: legge('spese', 'vedere i riepiloghi delle spese', (w, d) => w.riepilogoSpese(d)),
   veicoli: legge('spese', 'vedere i veicoli', (w, d) => w.leggiVeicoli(d)),
   salvaVeicolo: scrive('amministrazione', 'cambiare i veicoli', (w, d) => ({ ok: true, veicolo: w.salvaVeicolo(d.veicolo || {}) })),
+
+  // --- fatturazione (fase 4): Da fatturare, bozze, passaggio al programma, ritorno dell'XML, note, ricevute
+  daFatturare: conCosti(legge('fatturazione', 'vedere le fatture', (w, d) => w.daFatturare(d))),
+  preparaFattura: conCosti(scrive('fatturazione', 'preparare le fatture', (w, d) => w.preparaFattura(d))),
+  nuovaFattura: conCosti(scrive('fatturazione', 'preparare le fatture', (w, d) => w.nuovaFattura(d))),
+  fatture: conCosti(legge('fatturazione', 'vedere le fatture', (w, d) => ({ ok: true, oggi: oggi(), fatture: w.leggiFatture(d) }))),
+  fattura: conCosti(legge('fatturazione', 'vedere le fatture', (w, d) => ({ ok: true, fattura: w.fatturaCompleta(w.rigaFattura(d.numero && !d.id ? { numero: d.numero, anno: d.anno } : d.id)) }))),
+  salvaFattura: conCosti(scrive('fatturazione', 'preparare le fatture', (w, d) => w.salvaFattura(d))),
+  scartaFattura: conCosti(scrive('fatturazione', 'scartare le bozze', (w, d) => w.scartaFattura(d))),
+  passaAlProgramma: conCosti(scrive('fatturazione', 'passare le fatture al programma', (w, d) => w.passaAlProgramma(d))),
+  pacchetto: conCosti(legge('fatturazione', 'vedere le fatture', (w, d) => w.pacchetto(d))),
+  tornaInBozza: conCosti(scrive('fatturazione', 'preparare le fatture', (w, d) => w.tornaInBozza(d))),
+  segnaEmessa: conCosti(scrive('fatturazione', 'segnare emesse le fatture', (w, d) => w.segnaEmessa(d))),
+  inviaAvviso: conCosti({ modulo: 'fatturazione', livello: 2, cosa: 'mandare gli avvisi di parcella', asincrona: true, soloPost: true, fn: (w, d) => w.inviaAvviso(d) }),
+  leggiXml: conCosti({ modulo: 'fatturazione', livello: 2, cosa: 'importare gli XML delle fatture', scrive: true, soloPost: true, fn: (w, d) => w.leggiXml(d) }),
+  confermaXml: conCosti(scrive('fatturazione', 'importare gli XML delle fatture', (w, d) => w.confermaXml(d))),
+  preparaNotaCredito: conCosti(scrive('fatturazione', 'preparare le note di credito', (w, d) => w.preparaNotaCredito(d))),
+  segnaFatturataFuori: conCosti(scrive('fatturazione', 'segnare le cose fatturate fuori da Wisper', (w, d) => w.segnaFatturataFuori(d))),
+  ricevute: conCosti(legge('fatturazione', 'vedere le fatture ricevute', (w, d) => ({ ok: true, ricevute: w.leggiRicevute(d) }))),
+  ricevuta: conCosti(legge('fatturazione', 'vedere le fatture ricevute', (w, d) => ({ ok: true, ricevuta: w.ricevutaCompleta(w.rigaRicevuta(d.id)) }))),
+  salvaRicevuta: conCosti(scrive('fatturazione', 'scrivere le fatture ricevute', (w, d) => w.salvaRicevuta(d))),
+  annullaRicevuta: conCosti(scrive('fatturazione', 'annullare le fatture ricevute', (w, d) => w.annullaRicevuta(d))),
+  scadenzePagamento: conCosti(legge('fatturazione', 'vedere le fatture', (w, d) => w.scadenzePagamento(d))),
+  fatturazioneCommessa: conCosti(legge('fatturazione', 'vedere le fatture', (w, d) => w.fatturazioneCommessa(d))),
+  riepilogoFatturato: conCosti(legge('fatturazione', 'vedere le fatture', (w, d) => w.riepilogoFatturato(d))),
+  // Confermare le regole fiscali: solo il titolare (lo controlla l'azione).
+  confermaRegoleFiscali: scrive('amministrazione', 'confermare le regole fiscali', (w, d) => w.confermaRegoleFiscali(d)),
+
+  // --- banche e scadenze (fase 4)
+  conti: conCosti(legge('banche', 'vedere banche e scadenze', (w, d) => ({ ok: true, conti: w.leggiConti(d), collegamento: 'non_collegato' }))),
+  salvaConto: conCosti(scrive('banche', 'cambiare i conti', (w, d) => w.salvaConto(d))),
+  aggiornaSaldo: conCosti(scrive('banche', 'aggiornare il saldo', (w, d) => w.aggiornaSaldo(d))),
+  movimenti: conCosti(legge('banche', 'vedere banche e scadenze', (w, d) => w.leggiMovimenti(d))),
+  salvaMovimento: conCosti(scrive('banche', 'scrivere i movimenti', (w, d) => w.salvaMovimento(d))),
+  segnaIncasso: conCosti(scrive('banche', 'segnare gli incassi', (w, d) => w.segnaIncasso(d))),
+  segnaPagamento: conCosti(scrive('banche', 'segnare i pagamenti', (w, d) => w.segnaPagamento(d))),
+  verificaMovimenti: conCosti(scrive('banche', 'scrivere i movimenti', (w, d) => w.verificaMovimenti(d))),
+  annullaMovimento: conCosti(scrive('banche', 'annullare i movimenti', (w, d) => w.annullaMovimento(d))),
+  scadenziario: conCosti(legge('banche', 'vedere banche e scadenze', (w, d) => w.scadenziario(d))),
+  impegni: conCosti(legge('banche', 'vedere banche e scadenze', (w, d) => ({ ok: true, impegni: w.leggiImpegni(d) }))),
+  salvaImpegno: conCosti(scrive('banche', 'scrivere tributi e scadenze', (w, d) => w.salvaImpegno(d))),
+  confermaImpegno: conCosti(scrive('banche', 'scrivere tributi e scadenze', (w, d) => w.confermaImpegno(d))),
+  togliImpegno: conCosti(scrive('banche', 'togliere tributi e scadenze', (w, d) => w.togliImpegno(d))),
+  situazione: conCosti(legge('banche', 'vedere banche e scadenze', (w, d) => w.situazione(d))),
 };
 
 /**
@@ -237,6 +289,7 @@ async function esegui(w, d, opzioni) {
     try {
       const serve = voce.modulo ? [voce.modulo, voce.livello, voce.cosa] : voce.controllo ? voce.controllo(d) : null;
       if (serve && permessi && (permessi[serve[0]] || 0) < serve[1]) throw senzaPermesso(serve[2]);
+      if (voce.costi && permessi && !permessi.costi) throw new Rifiuto(SENZA_COSTI[voce.modulo] || SENZA_COSTI.fatturazione, { permesso: false });
       if (voce.asincrona) risposta = await voce.fn(w, d);
       else if (voce.scrive) risposta = w.db.transazione(() => voce.fn(w, d));
       else risposta = voce.fn(w, d);

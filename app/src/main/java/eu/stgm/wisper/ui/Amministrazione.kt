@@ -111,6 +111,12 @@ fun SchermataAmministrazione(dati: Dati, archivio: Archivio, nav: Navigatore) {
     val numRapportini = ana.numerazione("rapportino")?.prossimoNumero(anno)
     val voci = listOf(
         VoceAmm("Dati dello studio", "Intestazione dei PDF, la tua firma", Icone.scudo, "studio"),
+        // Fase 4: le regole delle fatture e la conferma del commercialista.
+        VoceAmm(
+            "Impostazioni fiscali",
+            if (eu.stgm.wisper.rapportino.RegoleFiscali.da(ana.impostazioni).confermate) "Regole confermate dal commercialista" else "Regole da confermare col commercialista",
+            Icone.fatturazione, "fiscale",
+        ).takeIf { LocalPermessi.current.vede(Moduli.FATTURAZIONE) },
         VoceAmm(
             "Utenti",
             if (ana.utenti.isEmpty()) "Chi entra in Wisper e con quale ruolo"
@@ -118,7 +124,7 @@ fun SchermataAmministrazione(dati: Dati, archivio: Archivio, nav: Navigatore) {
             Icone.clienti, "utenti",
         ),
         VoceAmm("Ruoli e permessi", "Titolare, Amministrazione, Collaboratore, Lettura", Icone.lucchetto, "permessi"),
-        VoceAmm("Numerazioni", "Commesse $numCommesse" + (numRapportini?.let { " · Rapportini $it" } ?: ""), Icone.numero, "numerazioni"),
+        VoceAmm("Numerazioni", "Commesse $numCommesse" + (numRapportini?.let { " · Rapportini $it" } ?: "") + " · le fatture le numera il programma", Icone.numero, "numerazioni"),
         VoceAmm(
             "Tariffe e rimborsi",
             listOfNotNull(Numeri.leggi(ana.impostazione("EURO_KM"))?.let { "Rimborso km ${Numeri.scrivi(it)} €" }, ana.costoOrario?.let { "costo orario ${Numeri.scrivi(it)} €" })
@@ -173,6 +179,7 @@ fun PaginaAmministrazione(
     val indietro = { nav.indietro() }
     when {
         quale == "studio" -> PaginaStudio(dati, puo, indietro)
+        quale == "fiscale" -> PaginaImpostazioniFiscali(dati, puo, indietro)
         quale == "tariffe" -> PaginaTariffe(dati, puo, indietro)
         quale == "app" -> PaginaApp(archivio, tema, onTema, onVisita, indietro)
         quale == "utenti" -> PaginaUtenti(dati, nav, puo)

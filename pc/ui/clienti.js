@@ -127,6 +127,13 @@
         coppie.push(['Viaggio', c.pagaViaggio === true ? 'pagato' : 'non pagato']);
         coppie.push(['Km', c.kmRimborsati === false ? 'non rimborsati' : 'rimborsati']);
         if (c.costoFisso !== null && c.costoFisso !== undefined && c.costoFisso !== '') coppie.push(['Costo orario fisso', C.numero(c.costoFisso) + ' €/h']);
+        if (puo('fatturazione')) {
+          const auto = c.sostitutoImposta === null || c.sostitutoImposta === undefined;
+          coppie.push(['Sostituto d\'imposta', auto ? (c.partitaIva ? 'sì (automatico: ha la partita IVA)' : 'no (automatico: è un privato)') : c.sostitutoImposta ? 'sì' : 'no']);
+          const giorni = c.pagamentoGiorni === null || c.pagamentoGiorni === undefined ? (S.ana.impostazioni.GIORNI_PAGAMENTO || 30) : c.pagamentoGiorni;
+          const fine = c.pagamentoFineMese === null || c.pagamentoFineMese === undefined ? !!S.ana.impostazioni.PAGAMENTO_FINE_MESE : c.pagamentoFineMese;
+          coppie.push(['Pagamento', giorni + ' giorni' + (fine ? ', fine mese' : '')]);
+        }
       }
       aggiungi(area, [h('div', { class: 'scheda' }, h('div', { class: 'coppie' },
         coppie.map(x => h('div', { class: 'coppia' }, h('span', { class: 'k' }, x[0]), h('span', { class: 'v' }, x[1] || '—'))))),
@@ -206,6 +213,9 @@
         cliente: !!c.cliente, fornitore: !!c.fornitore,
         // Di solito il viaggio non si paga e i km sì: è così finché non si sceglie altro.
         pagaViaggio: c.pagaViaggio === true ? 'SI' : 'NO', kmRimborsati: c.kmRimborsati === false ? 'NO' : 'SI',
+        // Fase 4 (§15.2): sostituto d'imposta automatico (sì con la partita IVA) o scritto a mano; fine mese come le impostazioni o scritto.
+        sostituto: c.sostitutoImposta === true ? 'si' : c.sostitutoImposta === false ? 'no' : 'auto',
+        fineMese: c.pagamentoFineMese === true ? 'si' : c.pagamentoFineMese === false ? 'no' : 'auto',
       };
       const testo = (k, attr) => h('input', Object.assign({ type: 'text', value: c[k] === null || c[k] === undefined ? '' : String(c[k]) }, attr || {}));
       const numero = k => h('input', { type: 'text', inputmode: 'decimal', value: c[k] !== null && c[k] !== undefined && c[k] !== '' ? R.numeroCampo(c[k]) : '' });
@@ -216,6 +226,8 @@
         email: testo('email', { type: 'email', spellcheck: 'false' }), telefono: testo('telefono', { type: 'tel' }),
         indirizzo: testo('indirizzo'), cap: testo('cap', { inputmode: 'numeric' }), citta: testo('citta'), provincia: testo('provincia', { maxlength: '2' }),
         tariffaFissa: numero('tariffaFissa'), ultimaTariffa: numero('ultimaTariffa'), costoFisso: numero('costoFisso'),
+        pagamentoGiorni: h('input', { type: 'text', inputmode: 'numeric', value: c.pagamentoGiorni === null || c.pagamentoGiorni === undefined ? '' : String(c.pagamentoGiorni),
+          placeholder: String((S.ana.impostazioni && S.ana.impostazioni.GIORNI_PAGAMENTO) || 30) }),
         note: h('textarea', { rows: 3 }),
       };
       v.note.value = c.note || '';
@@ -277,6 +289,10 @@
             h('div', { class: 'riga-campi' }, campo('Tariffa fissa (€/h, vuota = libera)', conSuffisso(v.tariffaFissa, '€/h')), campo('Ultima tariffa libera', conSuffisso(v.ultimaTariffa, '€/h'))),
             h('div', { class: 'riga-campi' }, campo('Costo orario fisso', conSuffisso(v.costoFisso, '€/h')), h('span')),
             h('div', { class: 'riga-campi' }, campo('Viaggio pagato', siNo('pagaViaggio')), campo('Km rimborsati', siNo('kmRimborsati')))) : null,
+          tipoCliente && soldi() && W.puo('fatturazione') ? h('div', { class: 'gruppo-campi' }, h('h3', null, 'Fatture'),
+            campo('Sostituto d\'imposta',segmenti([['auto', 'Automatico'], ['si', 'Sì'], ['no', 'No']], scelte.sostituto, x => { scelte.sostituto = x; disegna(); }, 'piccoli')),
+            h('div', { class: 'riga-campi' }, campo('Pagamento a', conSuffisso(v.pagamentoGiorni, 'giorni')),
+              campo('Fine mese', segmenti([['auto', 'Come le impostazioni'], ['si', 'Sì'], ['no', 'No']], scelte.fineMese, x => { scelte.fineMese = x; disegna(); }, 'piccoli')))) : null,
           h('div', { class: 'gruppo-campi' }, h('h3', null, 'Note'), campo(null, v.note)),
           errori.doppione ? h('div', { class: 'doppione', role: 'alert' }, h('span', null, 'C\'è già ', h('b', null, errori.doppione.nome)),
             h('button', { type: 'button', class: 'btn', onclick: () => { chiudi(); W.vai('#clienti/' + encodeURIComponent(errori.doppione.id)); } }, 'Apri')) : null]);
@@ -314,6 +330,13 @@
             tariffaFissa: C.numONull(v.tariffaFissa.value), ultimaTariffa: C.numONull(v.ultimaTariffa.value), costoFisso: C.numONull(v.costoFisso.value),
             pagaViaggio: scelte.pagaViaggio === 'SI', kmRimborsati: scelte.kmRimborsati === 'SI',
           });
+          if (W.puo('fatturazione')) {
+            Object.assign(campi, {
+              sostitutoImposta: scelte.sostituto === 'auto' ? null : scelte.sostituto === 'si',
+              pagamentoGiorni: v.pagamentoGiorni.value.trim() === '' ? null : Number(v.pagamentoGiorni.value.trim()),
+              pagamentoFineMese: scelte.fineMese === 'auto' ? null : scelte.fineMese === 'si',
+            });
+          }
         }
         if (esistente) campi.id = c.id;
         const ris = await lavora(esistente ? 'Salvo' : 'Creo', () => Rete.post('/server/salvaSoggetto', { soggetto: campi }));

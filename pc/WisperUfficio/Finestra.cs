@@ -311,6 +311,27 @@ public sealed class Finestra : Form, Ponte.IFinestra
         return (Path.GetFileName(finestra.FileName), File.ReadAllBytes(finestra.FileName));
     }
 
+    /// <summary>
+    /// Fase 4: i file delle fatture elettroniche da importare (.xml, .p7m, .zip), anche più insieme.
+    /// Come la finestra Salva, si apre sul filo della finestra.
+    /// </summary>
+    public IReadOnlyList<(string Nome, byte[] Dati)>? ScegliPiuFile(string filtro)
+    {
+        List<(string Nome, byte[] Dati)>? scelti = null;
+        Invoke(() =>
+        {
+            using var finestra = new OpenFileDialog
+            {
+                Title = "Scegli i file delle fatture",
+                Filter = "Fatture elettroniche (*.xml;*.p7m;*.zip)|*.xml;*.p7m;*.zip|Tutti i file|*.*",
+                Multiselect = true,
+            };
+            if (finestra.ShowDialog(this) != DialogResult.OK) return;
+            scelti = finestra.FileNames.Select(f => (Path.GetFileName(f), File.ReadAllBytes(f))).ToList();
+        });
+        return scelti;
+    }
+
     /// <summary>Dove salvare un file (un'esportazione per Excel, un documento): la finestra Salva di Windows.</summary>
     public string? SalvaFile(string nomeProposto)
     {
@@ -323,7 +344,8 @@ public sealed class Finestra : Form, Ponte.IFinestra
             {
                 Title = "Salva",
                 FileName = nomeProposto,
-                Filter = estensione == "csv" ? "File per Excel (*.csv)|*.csv|Tutti i file|*.*" : "Tutti i file|*.*",
+                Filter = estensione == "csv" ? "File per Excel (*.csv)|*.csv|Tutti i file|*.*"
+                    : estensione == "xml" ? "File XML (*.xml)|*.xml|Tutti i file|*.*" : "Tutti i file|*.*",
                 DefaultExt = estensione,
                 AddExtension = true,
                 OverwritePrompt = true,

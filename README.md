@@ -55,6 +55,19 @@ send. The migration turned the expenses already written in reports into expense 
 without touching the reports: a test reads a database from before with the phase 2 code
 and checks every report field, the CSV export and the Dashboard money to the cent.
 
+Phase 4 adds invoicing, banks and due dates. Wisper prepares the invoice (fee, the
+engineers' pension contribution inside the VAT base, VAT, withholding tax only for clients
+who must apply it, re-charged expenses outside VAT, the 2 euro stamp) and the program my
+father already uses issues it: Wisper hands over a field-by-field summary and an XML to
+complete, numbered BOZZA and named so nobody sends it; it never invents an invoice number,
+and sending to the tax exchange is marked "not connected". The issued XML (plain, signed
+.p7m or zipped) comes back into Wisper and is matched to its draft only after an explicit
+confirmation. A unique index in the database guarantees that a report, an instalment or an
+expense can never be invoiced twice. Until the accountant confirms the tax rules, every
+invoicing page says so. Banking is a hand-kept schedule: expected, recorded and verified
+amounts stay separate, and the projected balance turns red on the days it drops below a
+threshold.
+
 ## What changed
 
 The first Wisper, built for NGN Hacks 2026, was voice only: a wake word, a

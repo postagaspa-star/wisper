@@ -102,3 +102,69 @@ test('numerazioni: il piu\' alto gia\' usato + 1, per anno per i rapportini, di 
     w.chiudi();
   }
 });
+
+// ------------------------------------------------------------------ fase 4: i conti della fattura (casi-fattura.json)
+//
+// I casi condivisi con telefono (FattureTest.kt) e computer (pc/prove/fatture.test.js): ogni numero al centesimo.
+// I raggruppamenti (le righe che nascono dai rapportini) li prova solo il server.
+
+const CASI_FATTURA = require('./casi-fattura.json');
+
+test('casi-fattura.json: i 16 casi del contratto e i casi limite del server', () => {
+  assert.ok(CASI_FATTURA.casi.length >= 30, 'i 16 del contratto piu\' i casi limite');
+  assert.deepEqual(CASI_FATTURA.casi.slice(0, 16).map(c => Number(c.nome.split('.')[0])), Array.from({ length: 16 }, (_, i) => i + 1));
+  assert.equal(CASI_FATTURA.raggruppamenti.length, 4);
+});
+
+for (const c of CASI_FATTURA.casi) {
+  test('fattura: ' + c.nome, () => {
+    const r = C.contiFattura(Object.assign({}, CASI_FATTURA.base, c.fattura));
+    for (const k of Object.keys(c.atteso)) assert.deepEqual(r[k], c.atteso[k], c.nome + ' · ' + k);
+    // Il netto e' sempre il totale meno la ritenuta, e il totale la somma dei pezzi arrotondati.
+    assert.equal(Math.round(r.netto * 100), Math.round(r.totale * 100) - Math.round(r.ritenuta * 100));
+  });
+}
+
+for (const g of CASI_FATTURA.raggruppamenti) {
+  test('righe dai rapportini: ' + g.nome, () => {
+    const gruppi = C.righeRapportini({ raggruppa: g.raggruppa, cliente: g.cliente, rapportini: g.rapportini, spese: g.spese });
+    const righe = [].concat(...gruppi.map(x => x.righe)).map(r => ({ tipo: r.tipo, descrizione: r.descrizione, quantita: r.quantita, unita: r.unita, prezzo: r.prezzo, importo: r.importo }));
+    assert.deepEqual(righe, g.atteso.righe);
+    assert.equal(gruppi.reduce((t, x) => t + x.sorgenti.length, 0), g.atteso.sorgenti, 'le sorgenti');
+    if (g.atteso.gruppo) assert.equal(gruppi[0].gruppo, g.atteso.gruppo);
+    // L'importo delle righe e' la somma delle sorgenti (gia' arrotondate e firmate).
+    const somma = gruppi.reduce((t, x) => t + x.sorgenti.reduce((u, s) => u + s.importo, 0), 0);
+    assert.equal(Math.round(righe.reduce((t, r) => t + r.importo, 0) * 100), Math.round(somma * 100));
+  });
+}
+
+test('righe: scadenza, spesa, anticipazione e ore coi testi dell\'accordo', () => {
+  assert.deepEqual(C.rigaScadenza({ descrizione: '40% a fine progetto', importo: 1520 }, { id: '26ST003', descrizione: 'Adeguamento impianto elettrico capannone' }, 'PR/2026/012 rev. 1'),
+    { tipo: 'compenso', descrizione: '40% a fine progetto: Adeguamento impianto elettrico capannone (commessa 26ST003, contratto PR/2026/012 rev. 1)', quantita: 1,
+      unita: '', prezzo: 1520, importo: 1520, idCommessa: '26ST003', periodoDa: '', periodoA: '' });
+  assert.match(C.rigaScadenza({ descrizione: 'Saldo', importo: 10 }, { id: '26ST009', descrizione: 'Quadro' }, '').descrizione, /\(commessa 26ST009\)$/);
+  assert.equal(C.rigaSpesa({ descrizione: 'Pratica di connessione', data: '2026-10-14', importo: 120, anticipazione: true }).descrizione,
+    'Spesa anticipata per conto del cliente: Pratica di connessione del 14/10/2026');
+  assert.equal(C.rigaSpesa({ descrizione: 'Pedaggio', data: '2026-10-14', importo: 8.4 }).descrizione, 'Pedaggio del 14/10/2026');
+  const ore = C.rigaOre(4, { id: '26ST045', descrizione: 'Quadro capannone' }, 42, '2026-10');
+  assert.deepEqual([ore.descrizione, ore.quantita, ore.unita, ore.prezzo, ore.importo], ['Ore di lavoro su 26ST045 Quadro capannone di ottobre 2026', 4, 'ore', 42, 168]);
+  assert.deepEqual([C.rigaOre(2, { id: 'X', descrizione: 'Y' }, null, '2026-10').prezzo, C.rigaOre(2, { id: 'X', descrizione: 'Y' }, null, '2026-10').importo], [null, 0], 'senza prezzo');
+});
+
+test('IBAN (modulo 97), scadenza della fattura, giorni lavorativi per gli F24', () => {
+  assert.equal(C.ibanValido('IT60 X054 2811 1010 0000 0123 456'), true);
+  assert.equal(C.ibanValido('IT60X0542811101000000123457'), false, 'una cifra sbagliata');
+  assert.equal(C.ibanValido('IT60X054281110100000012345'), false, 'italiano di 26 caratteri');
+  assert.equal(C.ibanValido('DE89370400440532013000'), true, 'tedesco');
+  assert.equal(C.scadenzaFattura('2026-10-22', 30, false), '2026-11-21');
+  assert.equal(C.scadenzaFattura('2026-10-22', 30, true), '2026-11-30', 'fine mese');
+  assert.equal(C.scadenzaFattura('2026-01-31', 30, true), '2026-03-31');
+  assert.equal(C.pasqua(2026), '2026-04-05');
+  assert.equal(C.pasqua(2027), '2027-03-28');
+  assert.equal(C.primoLavorativo('2026-11-16'), '2026-11-16', 'lunedi\'');
+  assert.equal(C.primoLavorativo('2026-05-16'), '2026-05-18', 'sabato: il lunedi\' dopo');
+  assert.equal(C.primoLavorativo('2026-05-31'), '2026-06-01', 'il bollo del primo trimestre (31/5 domenica)');
+  assert.equal(C.primoLavorativo('2026-04-06'), '2026-04-07', 'lunedi\' dell\'Angelo');
+  assert.equal(C.primoLavorativo('2027-02-28'), '2027-03-01', 'il bollo del quarto trimestre');
+  assert.equal(C.primoLavorativo('2026-08-16'), '2026-08-17');
+});

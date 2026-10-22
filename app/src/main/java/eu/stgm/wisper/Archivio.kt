@@ -66,6 +66,8 @@ import eu.stgm.wisper.rapportino.InvioFase3
 import eu.stgm.wisper.rapportino.RiepilogoSpese
 import eu.stgm.wisper.rapportino.RigaOre
 import eu.stgm.wisper.rapportino.Rimborsi
+import eu.stgm.wisper.rapportino.EsecutoreFase4
+import eu.stgm.wisper.rapportino.ServizioFase4
 import eu.stgm.wisper.rapportino.Spesa
 import eu.stgm.wisper.rapportino.StatisticheOre
 import eu.stgm.wisper.rapportino.StatoVoce
@@ -615,7 +617,7 @@ class Archivio(private val ctx: Context) : Dati {
     override suspend fun salvaCliente(cliente: Cliente, nuovo: Boolean): Result<Salvataggio<Cliente>> = inDiretta {
         if (cliente.nome.isBlank()) throw PonteServer.Rifiutato("Scrivi il nome o la ragione sociale")
         if (!nuovo && cliente.id.isBlank()) throw PonteServer.Rifiutato("Manca il codice del cliente")
-        val salvato = ponte.salvaSoggetto(cliente, nuovo, costi)
+        val salvato = ponte.salvaSoggetto(cliente, nuovo, costi, fatturazione)
         mettiInAnagrafica { a -> conSoggetto(a, salvato.dato) }
         rileggiAnagrafiche()
         salvato
@@ -623,6 +625,9 @@ class Archivio(private val ctx: Context) : Dati {
 
     /** Chi è entrato vede i soldi: solo allora tariffe e importi si mandano. */
     private val costi: Boolean get() = _sessione.value.permessi.costi
+
+    /** Fase 4: sostituto d'imposta, pagamento e "come si fattura" si mandano solo a chi vede le fatture. */
+    private val fatturazione: Boolean get() = _sessione.value.permessi.vede(eu.stgm.wisper.rapportino.Moduli.FATTURAZIONE)
 
     /** Un soggetto al suo posto: clienti, fornitori, archiviati. */
     private fun conSoggetto(a: Anagrafiche, s: Cliente): Anagrafiche {
@@ -644,10 +649,10 @@ class Archivio(private val ctx: Context) : Dati {
             // il computer l'ha dato a un'altra, lo script prende il primo libero invece di dire di no.
             val proposto = ana.prossimoCodiceCommessa(LocalDate.now().year)
             val codice = commessa.id.trim().uppercase().takeUnless { it == proposto }.orEmpty()
-            ponte.creaCommessa(commessa.copy(id = codice), cliente, costi)
+            ponte.creaCommessa(commessa.copy(id = codice), cliente, costi, fatturazione)
         } else {
             if (commessa.id.isBlank()) throw PonteServer.Rifiutato("Manca il codice della commessa")
-            Salvataggio(ponte.aggiornaCommessa(commessa, cliente, costi))
+            Salvataggio(ponte.aggiornaCommessa(commessa, cliente, costi, fatturazione))
         }
         mettiInAnagrafica { a ->
             a.copy(commesse = sostituisci(a.commesse, salvata.dato) { it.id.equals(salvata.dato.id, ignoreCase = true) })
@@ -1499,6 +1504,20 @@ class Archivio(private val ctx: Context) : Dati {
     }
 
     override suspend fun rimborsi(): Result<Rimborsi> = inDiretta { ponte.rimborsi() }
+
+    // ------------------------------------------------------------- fase 4: fatturazione, banche e scadenze
+
+    /** Tutto in diretta (serve la rete): niente coda per emissioni, abbinamenti e incassi (vedi Fase4). */
+    override val fase4: ServizioFase4 by lazy {
+        ServizioFase4(
+            ponte, ctx.cacheDir,
+            object : EsecutoreFase4 {
+                override suspend fun <T> esegui(lavoro: suspend () -> T): Result<T> = inDiretta { lavoro() }
+            },
+            dopoScrittura = { aggiornaDashboard() },
+            impostazioniCambiate = { rileggiAnagrafiche() },
+        )
+    }
 
     override suspend fun segnaRimborsato(voci: List<VoceRimborso>, annulla: Boolean): Result<Pair<Int, Double>> = inDiretta {
         ponte.segnaRimborsato(voci, annulla).also { meseSpese?.let { m -> provaONull { leggiSpese(m) } } }

@@ -479,7 +479,7 @@ module.exports = {
   allungaRicorrenze() {
     return this.db.transazione(() => {
       let n = 0;
-      for (const r of this.db.righe("SELECT id FROM ricorrenze WHERE fine = '' OR fine >= ?", oggi())) n += this.generaOccorrenze(r.id);
+      for (const r of this.db.righe("SELECT id FROM ricorrenze WHERE (fine = '' OR fine >= ?) AND per = 'attivita'", oggi())) n += this.generaOccorrenze(r.id);
       return n;
     });
   },

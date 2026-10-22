@@ -63,6 +63,8 @@ module.exports = {
     if (!r.idLocale && !r.id) throw new Rifiuto('Manca l\'identificativo del rapportino');
     const esistente = this.trovaRiga(r.id, r.idLocale);
     if (esistente) this.controllaSuo(esistente, 'modificare i rapportini degli altri');
+    // Fase 4: un rapportino in una bozza o in una fattura non si tocca (prima la frase che dice dove sta).
+    if (esistente) this.controllaSorgenteLibera('rapportino', esistente.id);
 
     if (esistente && STATI_BLOCCATI.indexOf(testo(esistente.stato).toUpperCase()) >= 0) {
       throw new Rifiuto('Il rapportino ' + esistente.id + ' e\' gia\' firmato: riportalo in bozza per modificarlo');
@@ -254,14 +256,25 @@ module.exports = {
       const a = this.aiutiSpese(righeSpese);
       for (const s of righeSpese) (spese[s.rapportino_id] = spese[s.rapportino_id] || []).push(this.spesaDaRiga(s, a));
     }
-    return { foto, descrizioni, spese };
+    // Fase 4: la fattura in cui sta il rapportino ("In bozza W-15", "Fattura 45/2026"), solo per chi vede le fatture.
+    let fatture = null;
+    if (this.livello('fatturazione') > 0 && this.vedeCosti()) {
+      fatture = {};
+      const righeF = id
+        ? this.db.righe("SELECT s.sorgente_id, f.id, f.stato, f.riferimento, f.numero, f.tipo FROM fattura_sorgenti s JOIN fatture f ON f.id = s.fattura_id WHERE s.attiva = 1 AND s.tipo = 'rapportino' AND s.sorgente_id = ?", id)
+        : this.db.righe("SELECT s.sorgente_id, f.id, f.stato, f.riferimento, f.numero, f.tipo FROM fattura_sorgenti s JOIN fatture f ON f.id = s.fattura_id WHERE s.attiva = 1 AND s.tipo = 'rapportino'");
+      for (const f of righeF) {
+        fatture[f.sorgente_id] = { id: f.id, riferimento: f.riferimento, stato: f.stato, etichetta: f.stato === 'bozza' || f.stato === 'pronta' ? 'In bozza ' + f.riferimento : 'Fattura ' + (f.numero || f.riferimento) };
+      }
+    }
+    return { foto, descrizioni, spese, fatture };
   },
 
   /** La riga come la mandava rapportinoDaRiga() dello script, piu' chi l'ha scritto. */
   rapportinoDaRiga(r, aiuti) {
     aiuti = aiuti || this.aiutiRapportini(r.id);
     const descrizione = testo(r.id_commessa) ? aiuti.descrizioni[testo(r.id_commessa).toUpperCase()] || '' : '';
-    return {
+    const o = {
       id: testo(r.id),
       idLocale: testo(r.id_locale),
       data: dataIso(r.data),
@@ -311,6 +324,9 @@ module.exports = {
       motivoRifiuto: testo(r.motivo),
       righeSpese: (aiuti.spese || {})[r.id] || [],
     };
+    // Fase 4: {id, riferimento, stato, etichetta} o null; la chiave c'e' solo per chi vede le fatture.
+    if (aiuti.fatture) o.fattura = aiuti.fatture[r.id] || null;
+    return o;
   },
 
   /**
@@ -357,6 +373,9 @@ module.exports = {
       if (!riga) throw new Rifiuto('Rapportino ' + id + ' non trovato');
       this.controllaSuo(riga, 'cambiare lo stato dei rapportini degli altri');
       if ((nuovo === 'INVIATO' || nuovo === 'FATTURATO') && testo(riga.stato).toUpperCase() !== nuovo) this.controllaApprovato(riga);
+      // Fase 4: il rapportino in una bozza diventa fatturato da solo, quando torna l'XML; in una fattura non torna indietro.
+      const inFattura = this.sorgenteAttiva('rapportino', riga.id);
+      const nota = this.notaCambioStato(riga, nuovo, inFattura);
       const valori = { stato: nuovo, modificato: ora };
       if (nuovo === 'BOZZA') {
         valori.firma = '';
@@ -372,10 +391,31 @@ module.exports = {
       if (nuovo === 'FATTURATO') valori.fatturato_il = ora;
       const attuale = testo(riga.stato).toUpperCase() || 'BOZZA';
       if (nuovo === 'ANNULLATO' && attuale !== 'ANNULLATO') valori.stato_prima = attuale;
-      this.aggiorna('rapportini', riga.id, valori);
+      this.aggiorna('rapportini', riga.id, valori, 'id', nota);
       this.allineaSpeseRapportino(riga.id);
       return this.rapportinoPerId(riga.id);
     });
+  },
+
+  /**
+   * Fase 4 (§7.3): cosa si puo' fare allo stato di un rapportino che sta in una
+   * fattura. In una bozza: niente (nemmeno FATTURATO a mano: lo diventa da solo
+   * quando torna l'XML). In una fattura emessa: non torna indietro (serve una
+   * nota di credito). Uno non legato a niente si segna fatturato a mano (quelli
+   * fatturati fuori da Wisper), con la nota nel registro. Torna la nota o ''.
+   */
+  notaCambioStato(riga, nuovo, inFattura) {
+    const attuale = testo(riga.stato).toUpperCase() || 'BOZZA';
+    if (attuale === nuovo) return '';
+    if (inFattura) {
+      if (nuovo === 'FATTURATO' && ['bozza', 'pronta'].indexOf(inFattura.stato) >= 0) {
+        throw new Rifiuto('Diventa fatturato da solo quando torna l\'XML della fattura ' + inFattura.riferimento);
+      }
+      this.controllaSorgenteLibera('rapportino', riga.id);
+    }
+    if (nuovo === 'FATTURATO') return 'segnato fatturato a mano, senza fattura in Wisper';
+    if (attuale === 'FATTURATO') return 'non ancora fatturato: tolto il segno a mano';
+    return '';
   },
 
   /** Un rapportino annullato torna com'era prima (stato, firma, date: l'annullamento non le aveva toccate). */

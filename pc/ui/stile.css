@@ -1155,3 +1155,241 @@ input.importo-grande { height: 60px; font-size: 28px; font-weight: 800; letter-s
 .voci-rimborso .rc { display: flex; justify-content: space-between; gap: 12px; font-size: 14px; font-weight: 600; color: var(--testo2); }
 .voci-rimborso .rc span:last-child { font-weight: 800; color: var(--testo); font-variant-numeric: tabular-nums; white-space: nowrap; }
 @media (max-width: 900px) { .modulo-spesa { grid-template-columns: minmax(0, 1fr); } .foto-spesa { position: static; } }
+
+/* ============================================================ fase 4: fatturazione, banche e scadenze */
+/* Misure e colori dal prototipo docs/prototipo/Gestionale-fase4.html (vista Computer). */
+
+.p-ambra { background: var(--ambra-f); color: var(--ambra-t); }
+.pill.piccola { height: 22px; font-size: 12px; padding: 0 8px; }
+.pill svg { stroke: currentColor; margin-right: 4px; flex: none; }
+.non-collegato { background: transparent; border: 1.5px dashed var(--bordo-campo); color: var(--tenue); gap: 2px; }
+.rosso-testo { color: var(--rosso-testo); }
+.piccolo-15 { font-size: 15px !important; }
+.fascia-regole {
+  display: flex; align-items: center; gap: 12px; background: var(--giallo-tenue); color: var(--giallo-testo); border-radius: 18px;
+  padding: 12px 14px 12px 18px; font-weight: 800; font-size: 15px;
+}
+.fascia-regole svg { stroke: currentColor; flex: none; }
+.fascia-regole .btn { border-color: var(--giallo-testo); color: var(--giallo-testo); background: transparent; }
+.banda.giallina { background: var(--giallo-tenue); color: var(--giallo-testo); }
+.banda.giallina svg { stroke: currentColor; }
+.banda svg { flex: none; }
+button.banda { border: none; width: 100%; text-align: left; font: inherit; font-weight: 700; cursor: pointer; }
+.segmenti-fatt { align-self: flex-start; }
+.quattro-riquadri { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+.quattro-riquadri .riquadro .quanto { font-size: 28px; }
+button.riquadro { text-align: left; font: inherit; color: inherit; cursor: pointer; transition: border-color .15s; }
+button.riquadro:hover { border-color: var(--bordo-campo); }
+.riquadro.attivo { border-color: var(--giallo); box-shadow: inset 0 0 0 1px var(--giallo); }
+.num-box:disabled { cursor: default; }
+@media (max-width: 1100px) { .quattro-riquadri { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* i conti della fattura */
+.conti-fattura { display: flex; flex-direction: column; gap: 8px; font-size: 15px; }
+.conti-fattura .etichetta { margin-bottom: 4px; }
+.conti-fattura .rc { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.conti-fattura .rc span:first-child { color: var(--testo2); display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; }
+.conti-fattura .rc span:last-child { font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.conti-fattura .rc-totale { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; border-top: 1px solid var(--riga); padding-top: 10px; margin-top: 2px; }
+.conti-fattura .rc-totale span { font-weight: 800; }
+.conti-fattura .rc-totale b { font-size: 24px; font-weight: 800; letter-spacing: -0.4px; font-variant-numeric: tabular-nums; }
+.conti-fattura .rc-netto { display: flex; justify-content: space-between; align-items: center; gap: 12px; background: var(--fondo); border-radius: 14px; padding: 12px 14px; margin-top: 4px; }
+.conti-fattura .rc-netto span { font-weight: 800; }
+.conti-fattura .rc-netto b { font-size: 28px; font-weight: 800; letter-spacing: -0.5px; font-variant-numeric: tabular-nums; }
+.conti-fattura.anteprima .rc-totale b, .conti-fattura.anteprima .rc-netto b { color: var(--testo2); }
+.da-confermare { font-weight: 800; }
+
+/* da fatturare */
+.scheda-cliente-df { display: flex; flex-direction: column; gap: 10px; padding-bottom: 14px; }
+.scheda-cliente-df.scelta { border-color: var(--giallo); }
+.testa-cliente-df { display: flex; align-items: center; gap: 14px; }
+.testa-cliente-df .chi { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.testa-cliente-df .chi b { font-size: 18px; font-weight: 800; }
+.quanto-grande { font-size: 26px; font-weight: 800; letter-spacing: -0.5px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.manca-df { font-size: 14px; font-weight: 700; color: var(--giallo-testo); }
+.comandi-df { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; min-height: 40px; }
+.tab-df { border-radius: 14px; }
+.tab-df .r { min-height: 60px; }
+.tab-df .r.scelta { background: var(--giallo-scelto); }
+input.casella-df { width: 22px; height: 22px; accent-color: var(--testo); margin: 0; cursor: pointer; }
+.importo-df { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+.riga-mese { border-bottom: none !important; }
+.apri-mese { display: inline-flex; align-items: center; gap: 6px; background: none; border: none; padding: 0; font: inherit; font-weight: 800; color: var(--testo); cursor: pointer; text-align: left; }
+.apri-mese svg { stroke: currentColor; flex: none; }
+.riga-riepilogo-mese { min-height: 0 !important; padding-bottom: 12px !important; }
+.fila-riepilogo { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.fila-riepilogo .esito { margin-top: 0; }
+.riga-rapportino-df { background: var(--superficie-tenue) !important; min-height: 52px !important; }
+.riga-rapportino-df.scelta { background: var(--giallo-scelto) !important; }
+.apri-rap { background: none; border: none; padding: 0; text-align: left; font: inherit; color: inherit; cursor: pointer; }
+.apri-rap:hover > :first-child { text-decoration: underline; text-underline-offset: 3px; }
+.piu-avanti { padding: 0 18px; }
+.piu-avanti summary { list-style: none; display: flex; justify-content: space-between; align-items: center; min-height: 56px; font-weight: 800; cursor: pointer; }
+.piu-avanti summary::-webkit-details-marker { display: none; }
+.piu-avanti summary svg { stroke: var(--tenue); transition: transform .2s; }
+.piu-avanti[open] summary svg { transform: rotate(180deg); }
+.righe-piu { display: flex; flex-direction: column; padding-bottom: 8px; }
+.voce-piu { display: flex; align-items: center; gap: 12px; min-height: 60px; border-top: 1px solid var(--riga); cursor: pointer; }
+.voce-piu .corpo { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.voce-piu .t1 { font-weight: 800; } .voce-piu .t2 { font-size: 14px; font-weight: 600; color: var(--tenue); }
+.voce-piu .quanto { font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* la bozza */
+.tab-bozza .r { align-items: start; padding-top: 12px; padding-bottom: 12px; }
+.tab-bozza .r.testa { align-items: center; }
+.tab-bozza .r > .n { padding-top: 10px; }
+.riga-bozza.trascinata { opacity: .45; }
+.riga-bozza.sopra { box-shadow: inset 0 3px 0 var(--giallo); }
+.maniglia { color: var(--molto-tenue); cursor: grab; padding-top: 10px; display: flex; }
+.maniglia svg { stroke: currentColor; }
+.cella-desc { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+textarea.desc-riga { width: 100%; border: 1.5px solid transparent; border-radius: 10px; background: transparent; padding: 6px 8px; font: inherit; font-weight: 700; line-height: 1.4; resize: vertical; color: var(--testo); min-height: 48px; }
+textarea.desc-riga:hover:not(:disabled) { border-color: var(--bordo-campo); }
+textarea.desc-riga:focus { border-color: var(--testo2); background: var(--scheda); outline: none; }
+input.num-riga, input.unita-riga { width: 100%; height: 40px; border-radius: 10px; border: 1.5px solid var(--bordo-campo); background: var(--scheda); padding: 0 8px; font: inherit; font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; color: var(--testo); }
+input.unita-riga { text-align: left; }
+input.num-riga:disabled, input.unita-riga:disabled, textarea.desc-riga:disabled { background: transparent; border-color: transparent; color: var(--testo); }
+.sotto-riga-bozza { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding-left: 8px; }
+.segno-gruppo { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 700; color: var(--tenue); }
+.segno-gruppo svg { stroke: currentColor; }
+.era { font-size: 12px; font-weight: 800; color: var(--giallo-testo); }
+button.cambia-tipo { border: none; cursor: pointer; }
+.togli-riga { margin-top: 4px; }
+.riga-bollo { background: var(--superficie-tenue) !important; }
+.fila-azioni { display: flex; gap: 10px; flex-wrap: wrap; }
+.dati-bozza { display: flex; flex-direction: column; gap: 14px; }
+.riga-ritenuta { display: flex; align-items: center; gap: 12px; }
+.riga-ritenuta .corpo { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.mancano-bozza { display: flex; flex-direction: column; gap: 4px; background: var(--giallo-tenue); color: var(--giallo-testo); border-radius: 14px; padding: 12px 14px; font-weight: 700; font-size: 14px; }
+.mancano-bozza b { font-weight: 800; }
+.mancano-bozza.calma { background: var(--superficie); color: var(--testo2); }
+
+/* passa al programma */
+.finestra-passaggio .corpo-f { max-height: calc(100vh - 160px); }
+.griglia-passaggio { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(280px, 1fr); gap: 22px; align-items: start; }
+.prospetto-campi { display: flex; flex-direction: column; gap: 14px; }
+.sez-prospetto { display: flex; flex-direction: column; }
+.sez-prospetto .etichetta { padding-bottom: 6px; border-bottom: 1px solid var(--riga); }
+.campo-prospetto { display: grid; grid-template-columns: 170px minmax(0, 1fr) auto; gap: 12px; align-items: center; min-height: 50px; border-bottom: 1px solid var(--riga); padding: 4px 0; }
+.campo-prospetto .k { font-size: 14px; font-weight: 600; color: var(--testo2); }
+.campo-prospetto .v { font-size: 15px; font-weight: 700; overflow-wrap: anywhere; }
+.btn.copia { height: 40px; gap: 6px; }
+.btn.copia svg { stroke: currentColor; }
+.btn.copiato { border-color: var(--firmato); color: var(--firmato); }
+.prospetto-azioni { display: flex; flex-direction: column; gap: 10px; position: sticky; top: 0; }
+.btn.largo { width: 100%; justify-content: center; }
+.totali-prospetto { padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; }
+.totali-prospetto .rc { display: flex; justify-content: space-between; gap: 12px; font-size: 15px; }
+.totali-prospetto .rc b { font-variant-numeric: tabular-nums; }
+.riga-sdi { display: flex; align-items: center; gap: 12px; border-top: 1px solid var(--riga); padding-top: 12px; }
+.riga-sdi .corpo { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+
+/* il pannello della fattura */
+.pannello-fattura .titolo-pannello { font-size: 26px; font-weight: 800; letter-spacing: -0.5px; }
+.pannello-fattura .alto .dove { flex: 1; }
+.pannello-fattura .piede .btn.giallo { flex: 1; justify-content: center; }
+.pill-fattura { border: none; cursor: pointer; align-self: flex-start; }
+
+/* importa XML */
+.zona-xml {
+  border: 2px dashed var(--bordo-campo); border-radius: 20px; background: var(--giallo-scelto); display: flex; flex-direction: column; align-items: center;
+  justify-content: center; gap: 8px; text-align: center; padding: 22px; cursor: pointer; color: var(--testo2); min-height: 150px;
+}
+.zona-xml b { font-size: 17px; font-weight: 800; color: var(--testo); }
+.zona-xml svg { stroke: currentColor; }
+.zona-xml:hover, .zona-xml.accoglie { border-color: var(--giallo-premuto); }
+.zona-xml.accoglie { background: var(--giallo-tenue); }
+.zona-xml .btn { pointer-events: none; }
+.tab-xml .r { align-items: start; padding-top: 14px; padding-bottom: 14px; }
+.tab-xml .r.testa { align-items: center; }
+.riga-xml.scelta { background: var(--giallo-scelto); }
+.cosa-xml { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.cosa-xml b { font-weight: 800; }
+.cosa-xml .nome-file { font-size: 12px; color: var(--tenue); overflow-wrap: anywhere; }
+.proposta-xml { display: flex; flex-direction: column; gap: 8px; min-width: 0; font-size: 14px; }
+.proposta-xml > b { font-size: 15px; }
+.proposta-xml .etichetta { margin-top: 4px; }
+.differenze { display: grid; grid-template-columns: auto auto 1fr; gap: 2px 16px; font-variant-numeric: tabular-nums; font-weight: 700; }
+.avviso-xml { font-size: 13px; font-weight: 700; color: var(--giallo-testo); }
+.btn.scelta-xml { gap: 6px; width: 100%; justify-content: space-between; }
+.btn.scelta-xml svg { stroke: currentColor; }
+.btn.scelta-xml.da-scegliere { border-style: dashed; border-color: var(--giallo-testo); color: var(--giallo-testo); }
+.collegabile span { display: flex; flex-direction: column; }
+
+/* scadenze di pagamento e riepilogo */
+.tab .r.testa-commessa { grid-template-columns: auto minmax(0, 1fr) auto; background: var(--superficie-tenue); cursor: pointer; font: inherit; color: inherit; }
+.grafico-mesi .legenda { margin-top: 0; }
+.grafico-mesi .legenda i.col-fatturato, .barre-mesi i.col-fatturato { background: var(--testo); }
+.grafico-mesi .legenda i.col-incassato, .barre-mesi i.col-incassato { background: var(--firmato); }
+.barre-mesi { display: flex; align-items: flex-end; gap: 6px; height: 190px; margin-top: 14px; }
+.mese-barre { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; background: none; border: none; padding: 0; cursor: pointer; font: inherit; color: inherit; }
+.coppia-barre { display: flex; align-items: flex-end; gap: 3px; height: 156px; }
+.coppia-barre i { width: 14px; border-radius: 4px 4px 2px 2px; min-height: 2px; }
+.nome-mese { font-size: 12px; font-weight: 700; color: var(--tenue); }
+.mese-barre:hover .nome-mese { color: var(--testo); text-decoration: underline; }
+
+/* banche e scadenze */
+.nota-saldo { margin: -4px 4px 0; font-size: 14px; font-weight: 600; color: var(--testo2); }
+.tab-scadenziario .r { min-height: 56px; }
+.tab-scadenziario .entrata, .tab .entrata { color: var(--firmato); }
+.tab-scadenziario .r.intesta-scaduti { background: var(--rosso-fondo); color: var(--rosso-testo); font-weight: 800; min-height: 44px; cursor: default; }
+.tab-scadenziario .r.intesta-giorno { background: var(--superficie-tenue); min-height: 46px; cursor: default; }
+.tab-scadenziario .r.intesta-giorno .saldo-giorno { display: flex; align-items: center; gap: 10px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.tab-scadenziario .r.sotto-soglia, .tab-scadenziario .r.intesta-giorno.sotto-soglia { background: var(--rosso-fondo); }
+.tab-scadenziario .r.intesta-giorno.sotto-soglia { color: var(--rosso-testo); }
+.tab-scadenziario .r.evidenziato { box-shadow: inset 4px 0 0 var(--giallo); }
+.riga-non-collegata { display: flex; align-items: center; gap: 14px; padding: 14px 18px; }
+.riga-non-collegata .corpo { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.tab .r.annullato { color: var(--tenue); }
+.tab .r.annullato .forte { text-decoration: line-through; }
+.tab .r.spento { color: var(--tenue); }
+.stato-impegno { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.scheda-conto { display: flex; flex-direction: column; gap: 10px; text-align: left; font: inherit; color: inherit; cursor: pointer; width: 100%; }
+.scheda-conto:hover { border-color: var(--bordo-campo); }
+.scheda-conto.spento { opacity: .65; }
+.testa-conto { display: flex; align-items: center; gap: 12px; }
+.testa-conto .corpo { display: flex; flex-direction: column; gap: 2px; }
+.testa-conto b { font-size: 18px; font-weight: 800; }
+.saldo-conto { font-size: 32px; font-weight: 800; letter-spacing: -0.6px; font-variant-numeric: tabular-nums; }
+.spunta-campo.riquadrata { border: 1.5px solid var(--bordo-campo); border-radius: 14px; padding: 12px 14px; min-height: 52px; }
+.banda-cliccabile .forte { text-decoration: underline; text-underline-offset: 3px; }
+.grafico-settimane { display: flex; flex-direction: column; gap: 14px; }
+.testa-grafico { display: flex; justify-content: space-between; align-items: center; gap: 14px; flex-wrap: wrap; }
+.testa-grafico .legenda { margin-top: 0; }
+.legenda i.col-sopra { background: var(--testo); }
+.legenda i.col-sotto { background: var(--rosso); }
+.legenda i.col-soglia { background: none; border-top: 2px dashed var(--rosso); border-radius: 0; height: 0; width: 16px; vertical-align: 3px; }
+.area-barre { position: relative; display: flex; align-items: flex-end; gap: 10px; }
+.linea-soglia { position: absolute; left: 0; right: 0; border-top: 2px dashed var(--rosso); opacity: .8; pointer-events: none; }
+.colonna-sett { position: relative; flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; gap: 4px; min-width: 0; padding-bottom: 22px; }
+.colonna-sett i { width: 70%; max-width: 46px; border-radius: 6px 6px 3px 3px; display: block; }
+.colonna-sett i.sopra { background: var(--testo); }
+.colonna-sett i.sotto { background: var(--rosso); }
+.colonna-sett .cifra { font-size: 11px; font-weight: 800; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.colonna-sett .data-sett { font-size: 12px; font-weight: 600; color: var(--tenue); position: absolute; bottom: 0; }
+.numeri-riga { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding-left: 8px; }
+.numeri-riga input.num-riga.q, .numeri-riga .num-fisso.q { width: 84px; flex: none; }
+.numeri-riga input.num-riga.p, .numeri-riga .num-fisso.p { width: 112px; flex: none; }
+.numeri-riga input.unita-riga, .numeri-riga .num-fisso.unita { width: 64px; flex: none; }
+.numeri-riga .num-fisso { width: 84px; text-align: right; font-variant-numeric: tabular-nums; }
+.numeri-riga .num-fisso.unita { text-align: left; }
+.numeri-riga .importo-riga { width: 112px; flex: none; text-align: right; font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.testa-righe { padding-left: 0; }
+.testa-righe .num-fisso, .testa-righe .importo-riga { font-weight: 700; }
+.desc-fissa { font-weight: 700; padding: 6px 8px; }
+.tab-bozza .r.riga-bozza { align-items: start; }
+.gruppo-numeri { display: flex; align-items: center; gap: 8px; margin-left: auto; flex: none; }
+.testa-fatt-commessa { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 12px; }
+.testa-fatt-commessa b { font-size: 17px; font-weight: 800; }
+.barra-fatt i.fatt, .legenda i.fatt { background: var(--testo); }
+.barra-fatt i.bozza-f, .legenda i.bozza-f { background: var(--giallo); }
+.barra-fatt i.pronto-f, .legenda i.pronto-f { background: var(--firmato); }
+.barra-fatt i.previsto-f, .legenda i.previsto-f { background: var(--bordo-campo); }
+.barra-fatt { display: flex; }
+.fatturazione-commessa .scheda { display: flex; flex-direction: column; }
+.testa-righe { flex-wrap: nowrap; }
+.testa-righe > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+input.num-riga.importo-storno { width: 130px; flex: none; }
+.scartato-xml { font-size: 14px; font-weight: 600; color: var(--testo2); }
+.scartato-xml b { font-weight: 800; }
+.banda.da-restituire { font-size: 16px; font-weight: 800; }

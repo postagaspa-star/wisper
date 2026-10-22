@@ -49,6 +49,31 @@ script is in [`docs/gestionale/postino.md`](../docs/gestionale/postino.md).
   (proved against the 0.5.0 server in `prove/migrazione-spese.test.js`); old app versions keep working through the
   bridge. A person always sees the money they spent and are owed, even without the `costi` permission. Shared
   calculation cases for the apps: `prove/casi-ore-spese.json`.
+- **Phase 4: invoicing, banks and due dates** (`docs/gestionale/fase4.md`, responses in `architettura.md` §15,
+  migration `004-fatture-banche`). Wisper *prepares* invoices and Manuel's invoicing program *issues* them: a draft never
+  gets an invented fiscal number. "To invoice" collects everything ready per client (payment milestones of fixed-price
+  jobs, signed reports with their expenses, client expenses with pass-through costs kept apart, billable hours); a draft
+  gets the rows and groups of the agreement and the invoice maths frozen at creation (`contiFattura` in
+  `src/conti.js`: EPPI contribution, VAT, withholding only for withholding agents, pass-through costs, stamp duty above
+  77.47 euro; shared cases in `prove/casi-fattura.json` for the apps). **Something is invoiced once only, and the
+  database guarantees it**: every source enters an invoice through `fattura_sorgenti`, with a unique index on the active
+  rows (tested by hand-written inserts, two simultaneous requests and two servers on the same file). Handing over to the
+  program: a field-by-field sheet and a FatturaPA FPR12 1.2.3 XML "to complete" (number `BOZZA`, file name saying not to
+  send it), from one invoice model, with more outputs to come when the program is known (`src/passaggio/`). The issued
+  XML comes back (`.xml`, `.p7m` signed envelopes also in base64 or split, `.zip` with several files; hand-written
+  reader in `src/fatturapa.js`: no DOCTYPE or entities, file count and size limits, no zip in zip, signatures not
+  verified): it is matched to its draft (certain via "Rif. Wisper W-15", probable by total, different with the missing
+  rows, none), the XML wins, only groups missing entirely go back to "to invoice", duplicates are refused, invoices made
+  outside Wisper can be linked to the work they covered; on issue reports become FATTURATO, milestones and expenses and
+  hours invoiced, all in the audit log, undone by credit notes (TD04) or an SDI rejection. Received invoices from
+  suppliers (withholding included), payment milestones per job, the yearly summary, fiscal rules that must be confirmed
+  by the accountant (shown on every invoice until then; changing a rule removes the confirmation). Banks: accounts (full
+  IBAN only to who can write), balance from the last written statement plus movements, hand-written movements with
+  search, part payments matched to invoices, received invoices and obligations (never above the residual), recurring
+  taxes and F24 (12 months ahead; this/following/all), Wisper's own proposals (withholding F24 1040, quarterly e-invoice
+  stamp duty), a cautious cash forecast (overdue payments count today, overdue receipts do not) with the days below the
+  threshold, and the financial situation. Planned, recorded and verified at the bank are always kept apart; SDI, bank
+  connection and statement import say "not connected".
 
 No npm dependencies: only Node 24 built-in modules.
 
@@ -66,7 +91,11 @@ contacts, sites, work phases and four test users, all with password `prova`: `ma
 sent quote expiring in 6 days, an expired one, a draft without price, an accepted one, overdue and recurring tasks, an
 appointment and a site visit), and for phase 3 the recent hours of three people, Marco's running timer, things to approve
 with anomalies, a rejected item, expenses with and without receipts for client, office and "mine", a pass-through cost,
-trips and reimbursements to make. E-mails and backups go to `<data>/posta-finta/`. Phone emulator:
+trips and reimbursements to make, and for phase 4 the prototype's invoices (38/2026 paid, 39/2026 partly paid and overdue,
+45/2026 delivered, draft W-15 and W-14 ready and already paid, all handed over and returned through the real XML import),
+Elettrodinamica's September reports to invoice in one row per month, job 26ST003 from the accepted quote PR/2026/012
+rev. 1 (3,800 euro, 30/40/30), the studio account with October's movements, received invoices (one with withholding),
+recurring rent and utilities and a forecast that falls below 3,000 euro. E-mails and backups go to `<data>/posta-finta/`. Phone emulator:
 `http://10.0.2.2:8400`; computer: `http://localhost:8400`.
 
 On the NAS (`/volume1/docker/Wisper-NAS`): copy `.env.esempio` to `.env` with the real values, then
@@ -97,4 +126,11 @@ quote cases, revisions and lock, acceptance with choices, the job created once, 
 skip), overlaps and every role on the new actions; for phase 3 the hours and reimbursement cases, the timer across a
 restart, approvals with reason and undo, the report that cannot be sent before approval, frozen rates, reimbursements,
 statistics, the job cost (checked against the phase 1 dashboard in `pc/ui/conti.js`), and a 0.5.0 database migrated with
-every report identical to the cent. Nothing in the tests touches Google or the internet.
+every report identical to the cent; for phase 4 the 30 invoice cases and the 4 report groupings, invoicing once only (also
+two requests at once and two servers on one file), every state change and refusal, the locks on what is already in an
+invoice, the handover sheet and XML read back equal to the model, the FatturaPA reader on the example files in
+`prove/xml/` (invented data, rebuilt by `node server/prove/xml/genera.js`: UTF-8 and ISO-8859-1, prefixes, DER and
+base64 p7m, zip, batch, credit note, delivery and rejection receipts, a received invoice with withholding) and the
+malicious ones, matching certain/probable/different/none, credit notes, the SDI rejection, banks, the cash forecast,
+recurring obligations and proposals, every role on every new action, and migration 004 on a phase 3 database. Nothing
+in the tests touches Google or the internet.

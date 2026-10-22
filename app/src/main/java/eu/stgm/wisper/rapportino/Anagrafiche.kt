@@ -43,6 +43,21 @@ data class Cliente(
     val provincia: String = "",
     val nazione: String = "IT",
     val archiviato: Boolean = false,
+    /**
+     * Fase 4 (architettura.md §15.2): null = automatico (sì con la partita IVA, no senza);
+     * true/false scritto a mano (un condominio sì, un forfettario no).
+     */
+    val sostitutoImposta: Boolean? = null,
+    /** Giorni di pagamento del cliente; null = quelli delle impostazioni. */
+    val pagamentoGiorni: Int? = null,
+    /** Poi a fine mese; null = come le impostazioni. */
+    val pagamentoFineMese: Boolean? = null,
+    /**
+     * Vero quando i tre campi qui sopra si sono letti davvero dal server (o li ha scritti il
+     * modulo). Una copia vecchia non li ha: allora non si mandano, così un "null" non
+     * cancella un "sì" scritto dal computer.
+     */
+    val fatturazioneLetta: Boolean = false,
 ) {
     /** "C001 · Thiene": la citta', o l'indirizzo se la citta' non c'e' ancora (i clienti del foglio). */
     val luogo: String get() = citta.ifBlank { indirizzo }
@@ -67,6 +82,13 @@ data class Cliente(
         .put("cliente", cliente).put("fornitore", fornitore).put("pec", pec)
         .put("codiceFiscale", codiceFiscale).put("codiceSdi", codiceSdi).put("cap", cap)
         .put("citta", citta).put("provincia", provincia).put("nazione", nazione).put("archiviato", archiviato)
+        .apply {
+            if (fatturazioneLetta) {
+                put("sostitutoImposta", sostitutoImposta ?: JSONObject.NULL)
+                put("pagamentoGiorni", pagamentoGiorni ?: JSONObject.NULL)
+                put("pagamentoFineMese", pagamentoFineMese ?: JSONObject.NULL)
+            }
+        }
 
     companion object {
         fun daJson(c: JSONObject, comeFornitore: Boolean = false) = Cliente(
@@ -98,6 +120,10 @@ data class Cliente(
             provincia = c.testo("provincia"),
             nazione = c.testo("nazione").ifBlank { "IT" },
             archiviato = c.vero("archiviato"),
+            sostitutoImposta = c.booleanoONull("sostitutoImposta"),
+            pagamentoGiorni = c.numero("pagamentoGiorni")?.toInt(),
+            pagamentoFineMese = c.booleanoONull("pagamentoFineMese"),
+            fatturazioneLetta = c.has("sostitutoImposta") || c.has("pagamentoGiorni") || c.has("pagamentoFineMese"),
         )
     }
 }
@@ -137,6 +163,11 @@ data class Commessa(
     val archiviata: Boolean = false,
     /** Una commessa modello: non compare negli elenchi normali, si usa per farne di nuove. */
     val modello: Boolean = false,
+    /**
+     * Fase 4 (§15.2): "ore" | "corpo" | "misto". Null = non letto (una copia vecchia): allora
+     * non si manda, così salvare la commessa non la riporta "a ore" per sbaglio.
+     */
+    val modoFatturazione: String? = null,
 ) {
     /**
      * Solo le aperte si propongono nei rapportini nuovi. Le sospese e le chiuse
@@ -167,6 +198,7 @@ data class Commessa(
         .put("sedeId", idSede).put("responsabileId", idResponsabile).put("persone", JSONArray(persone))
         .put("importoContratto", importoContratto ?: JSONObject.NULL)
         .put("archiviata", archiviata).put("modello", modello)
+        .apply { if (modoFatturazione != null) put("modoFatturazione", modoFatturazione) }
 
     companion object {
         /** Gli stati che lo script accetta, in ordine. */
@@ -202,6 +234,7 @@ data class Commessa(
             importoContratto = m.numero("importoContratto"),
             archiviata = m.vero("archiviata"),
             modello = m.vero("modello"),
+            modoFatturazione = m.testo("modoFatturazione").lowercase().takeIf { it in setOf("ore", "corpo", "misto") },
         )
     }
 }

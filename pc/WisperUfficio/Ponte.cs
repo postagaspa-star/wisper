@@ -30,6 +30,9 @@ public sealed class Ponte
     {
         Task<bool> StampaAsync(string html, string percorso);
         (string Nome, byte[] Dati)? ScegliFile(string filtro);
+
+        /// <summary>Fase 4: più file insieme (le fatture elettroniche da importare).</summary>
+        IReadOnlyList<(string Nome, byte[] Dati)>? ScegliPiuFile(string filtro);
         string? SalvaFile(string nomeProposto);
         void Riavvia();
 
@@ -216,6 +219,17 @@ public sealed class Ponte
 
             case "scegli-file":
             {
+                // Fase 4: Importa XML sceglie più file insieme (fino a 300 e 30 MB, come accetta il server).
+                if (o?["piu"] is JsonNode piu && piu.GetValueKind() == System.Text.Json.JsonValueKind.True)
+                {
+                    var tanti = Finestra?.ScegliPiuFile(Testo(o?["filtro"]));
+                    if (tanti == null || tanti.Count == 0) return Json(200, new JsonObject { ["ok"] = false, ["annullato"] = true });
+                    if (tanti.Count > 300) return Json(200, Errore("Troppi file: al massimo 300 per volta"));
+                    if (tanti.Sum(f => (long)f.Dati.Length) > 30L * 1024 * 1024) return Json(200, Errore("File troppo grandi: al massimo 30 MB per volta"));
+                    var elenco = new JsonArray();
+                    foreach (var (n, d) in tanti) elenco.Add(new JsonObject { ["nome"] = n, ["base64"] = Convert.ToBase64String(d) });
+                    return Json(200, new JsonObject { ["ok"] = true, ["file"] = elenco });
+                }
                 var scelto = Finestra?.ScegliFile(Testo(o?["filtro"]));
                 if (scelto == null) return Json(200, new JsonObject { ["ok"] = false, ["annullato"] = true });
                 var (nomeFile, dati) = scelto.Value;

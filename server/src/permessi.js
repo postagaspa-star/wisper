@@ -60,6 +60,13 @@ const CAMPI_COSTI = new Set([
   'sconto_percentuale', 'sconto_euro',
   // Fase 3: il costo delle ore (ore x costo orario congelato) e il costo della commessa.
   'costo', 'costoCommessa', 'costoOreRegistrate',
+  // Fase 4: fatture, incassi, saldi (servono dove una risposta arriva a chi non ha "costi": commessa, Dashboard, registro).
+  // "scaduto" no: e' gia' un si'/no dei preventivi (fase 2), e il "scaduto" in euro della fase 4 sta solo dentro
+  // numeri.soldi e nelle risposte di fatturazione e banche, che senza "costi" non arrivano proprio.
+  'compenso', 'anticipazioni', 'bollo', 'bolloAddebitato', 'ritenuta', 'netto', 'incassato', 'residuo', 'parteSenzaIva',
+  'totaleBozza', 'nettoBozza', 'saldo', 'saldoPrevisto', 'entrate', 'uscite', 'daIncassare', 'daPagare', 'fatturato',
+  'fattureInBozza', 'incassiSettimana', 'pagamentiSettimana', 'saldoConti',
+  'base_iva', 'bollo_addebitato', 'totale_bozza', 'netto_bozza',
 ]);
 
 /**

@@ -236,6 +236,21 @@ class DatiEsempio(oggi: LocalDate = LocalDate.now(), private val cartella: File?
         MutableStateFlow(Archivio.Aggiornamento(ultimo = LocalDateTime.now())).asStateFlow()
     override val esempio: Boolean = true
 
+    /** Fase 4: fatture, banche e scadenze di esempio, in memoria (EsempioFase4). */
+    override val fase4: eu.stgm.wisper.rapportino.ServizioFase4 = eu.stgm.wisper.rapportino.ServizioFase4(
+        EsempioFase4(oggi), cartella,
+        object : eu.stgm.wisper.rapportino.EsecutoreFase4 {
+            override suspend fun <T> esegui(lavoro: suspend () -> T): Result<T> = try {
+                Result.success(lavoro())
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Result.failure(Exception(e.message ?: "È un esempio", e))
+            }
+        },
+        dopoScrittura = { aggiornaDashboard() },
+    )
+
     private val permessiPerRuolo = Ruoli.ELENCO.associateWith { Permessi.iniziali(it) }.toMutableMap()
 
     override val sessione: StateFlow<Sessione> =
@@ -1213,6 +1228,8 @@ internal fun nomeModulo(modulo: String): String = when (modulo) {
     Moduli.ATTIVITA -> "Attività e calendario"
     Moduli.RAPPORTINI -> "Ore e rapportini"
     Moduli.FATTURAZIONE -> "Fatturazione"
+    Moduli.BANCHE -> "Banche e scadenze"
+    Moduli.SPESE -> "Spese e trasferte"
     Moduli.AMMINISTRAZIONE -> "Amministrazione"
     Moduli.COSTI -> "Soldi"
     else -> modulo

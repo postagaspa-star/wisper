@@ -44,7 +44,7 @@ class PonteServer(
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
         .build(),
-) {
+) : TrasportoFase4 {
 
     val configurato: Boolean get() = base().isNotBlank() && token().isNotBlank()
 
@@ -269,22 +269,22 @@ class PonteServer(
      *        prezzo e costo restano sulla sua scheda e non si copiano sulla commessa.
      * @param costi senza il permesso dei soldi quei campi non si mandano: restano come sono.
      */
-    suspend fun creaCommessa(m: Commessa, cliente: Cliente? = null, costi: Boolean = true): Salvataggio<Commessa> = withContext(Dispatchers.IO) {
-        val corpo = campiCommessa(m, cliente, nuova = true, costi = costi).put("azione", "creaCommessa").put("id", m.id.trim().uppercase())
+    suspend fun creaCommessa(m: Commessa, cliente: Cliente? = null, costi: Boolean = true, fatturazione: Boolean = false): Salvataggio<Commessa> = withContext(Dispatchers.IO) {
+        val corpo = campiCommessa(m, cliente, nuova = true, costi = costi, fatturazione = fatturazione).put("azione", "creaCommessa").put("id", m.id.trim().uppercase())
         val o = scrivi(corpo).optJSONObject("commessa") ?: throw Rifiutato("Il server non ha restituito la commessa")
         Salvataggio(Commessa.daJson(o), o.optBoolean("giaEsisteva", false))
     }
 
     /** Riscrive la commessa [Commessa.id], stato compreso (APERTA, SOSPESA, CHIUSA). */
-    suspend fun aggiornaCommessa(m: Commessa, cliente: Cliente? = null, costi: Boolean = true): Commessa = withContext(Dispatchers.IO) {
+    suspend fun aggiornaCommessa(m: Commessa, cliente: Cliente? = null, costi: Boolean = true, fatturazione: Boolean = false): Commessa = withContext(Dispatchers.IO) {
         val r = scrivi(
             JSONObject().put("azione", "aggiornaCommessa").put("id", m.id.trim())
-                .put("campi", campiCommessa(m, cliente, nuova = false, costi = costi))
+                .put("campi", campiCommessa(m, cliente, nuova = false, costi = costi, fatturazione = fatturazione))
         )
         Commessa.daJson(r.optJSONObject("commessa") ?: throw Rifiutato("Il server non ha restituito la commessa"))
     }
 
-    private fun campiCommessa(m: Commessa, cliente: Cliente?, nuova: Boolean, costi: Boolean): JSONObject {
+    private fun campiCommessa(m: Commessa, cliente: Cliente?, nuova: Boolean, costi: Boolean, fatturazione: Boolean = false): JSONObject {
         val o = JSONObject()
             .put("idCliente", m.idCliente)
             .put("descrizione", m.descrizione.trim())
@@ -302,6 +302,8 @@ class PonteServer(
             o.put("importoContratto", m.importoContratto ?: JSONObject.NULL)
             if (cliente?.tariffaFissa == null) o.put("prezzoOrario", m.prezzoOrario ?: JSONObject.NULL)
             if (cliente?.costoFisso == null) o.put("costoOrario", m.costoOrario ?: JSONObject.NULL)
+            // Fase 4, come pc/ui/commesse.js: "come si fattura" solo con la fatturazione, e solo se si sa.
+            if (fatturazione && m.modoFatturazione != null) o.put("modoFatturazione", m.modoFatturazione)
         }
         // Una commessa nuova nasce sempre APERTA: lo decide il server.
         if (!nuova) o.put("stato", m.stato.trim().uppercase().ifBlank { "APERTA" })
@@ -341,7 +343,7 @@ class PonteServer(
      * scaduto, 403 niente permesso, 404 il file non c'e' (o non e' ancora stato
      * copiato da Drive).
      */
-    suspend fun file(id: String): Pair<ByteArray, String> = withContext(Dispatchers.IO) {
+    override suspend fun file(id: String): Pair<ByteArray, String> = withContext(Dispatchers.IO) {
         controllaConfigurazione()
         val u = (base() + "/file/" + java.net.URLEncoder.encode(id, "UTF-8")).toHttpUrlOrNull()
             ?: throw Rifiutato("Indirizzo del server non valido")
@@ -401,7 +403,7 @@ class PonteServer(
      * Crea (senza id) o cambia un cliente o un fornitore con tutti i campi nuovi.
      * Le regole della tariffa si mandano solo con il permesso dei soldi.
      */
-    suspend fun salvaSoggetto(s: Cliente, nuovo: Boolean, costi: Boolean): Salvataggio<Cliente> = withContext(Dispatchers.IO) {
+    suspend fun salvaSoggetto(s: Cliente, nuovo: Boolean, costi: Boolean, fatturazione: Boolean = false): Salvataggio<Cliente> = withContext(Dispatchers.IO) {
         val o = JSONObject()
             .put("nome", s.nome.trim()).put("cliente", s.cliente).put("fornitore", s.fornitore)
             .put("alias", JSONArray(s.alias.map { it.trim() }.filter { it.isNotBlank() }))
@@ -415,6 +417,13 @@ class PonteServer(
             o.put("tariffaFissa", s.tariffaFissa ?: JSONObject.NULL).put("costoFisso", s.costoFisso ?: JSONObject.NULL)
                 .put("ultimaTariffa", s.ultimaTariffa ?: JSONObject.NULL).put("pagaViaggio", s.pagaViaggio ?: JSONObject.NULL)
                 .put("kmRimborsati", s.kmRimborsati ?: JSONObject.NULL).put("maggExtra", s.maggExtra ?: JSONObject.NULL)
+            // Fase 4, come pc/ui/clienti.js: solo per un cliente, solo con la fatturazione, e solo se letti
+            // (null = automatico / quello delle impostazioni). Senza, il server li lascia com'erano.
+            if (fatturazione && s.cliente && s.fatturazioneLetta) {
+                o.put("sostitutoImposta", s.sostitutoImposta ?: JSONObject.NULL)
+                    .put("pagamentoGiorni", s.pagamentoGiorni ?: JSONObject.NULL)
+                    .put("pagamentoFineMese", s.pagamentoFineMese ?: JSONObject.NULL)
+            }
         }
         val r = scrivi(JSONObject().put("azione", "salvaSoggetto").put("soggetto", o))
         val x = r.optJSONObject("soggetto") ?: throw Rifiutato("Il server non ha restituito l'anagrafica")
@@ -944,6 +953,16 @@ class PonteServer(
     suspend fun riepilogoSpese(da: LocalDate, a: LocalDate, per: String): RiepilogoSpese = withContext(Dispatchers.IO) {
         RiepilogoSpese.daJson(leggi("riepilogoSpese", "da" to da.toString(), "a" to a.toString(), "per" to per))
     }
+
+    // ------------------------------------------------------------- fase 4 (architettura.md §15): le azioni le scrive Fase4
+
+    /** Una lettura della fase 4: GET /exec?azione=... Le risposte grandi (fatture, scadenziario) aspettano di più. */
+    override suspend fun leggiAzione(azione: String, parametri: List<Pair<String, String>>): JSONObject = withContext(Dispatchers.IO) {
+        leggi(azione, *parametri.toTypedArray(), c = clientLetturaLunga)
+    }
+
+    /** Una scrittura della fase 4: POST, mai ripetuta da sola. */
+    override suspend fun scriviAzione(corpo: JSONObject): JSONObject = withContext(Dispatchers.IO) { scrivi(corpo) }
 
     // ------------------------------------------------------------- interno
 

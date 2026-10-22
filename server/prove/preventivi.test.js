@@ -72,7 +72,11 @@ test('conti del preventivo: tutti i casi di casi-preventivo.json, al centesimo',
 });
 
 test('conti del preventivo: il server usa gli stessi conti (il PR/012 del prototipo)', async () => {
-  const p = (await manuel('preventivo', { id: await dodici() })).preventivo;
+  // Dalla fase 4 il PR/012 rev. 1 dei dati di esempio e' accettato con la DiRi (e' il contratto di 26ST003): si
+  // prova una sua copia con le scelte di quando era stato mandato (DiRi non scelta), i numeri del caso condiviso.
+  const copia = (await manuel('duplicaPreventivo', { id: await dodici() })).preventivo;
+  s.wisper.db.esegui("UPDATE preventivo_voci SET scelta = 0 WHERE preventivo_id = ? AND descrizione = 'Dichiarazione di rispondenza'", copia.id);
+  const p = (await manuel('preventivo', { id: copia.id })).preventivo;
   const caso = CASI.find(c => c.nome.startsWith('PR/2026/012')).atteso;
   for (const k of ['sommaVoci', 'imponibile', 'contributo', 'baseIva', 'iva', 'totale', 'oreVoci']) assert.equal(p.conti[k], caso[k], k);
   assert.deepEqual(p.sezioni.map(x => x.subtotale), caso.sezioni);
@@ -502,10 +506,15 @@ test('registro: ogni modifica dei preventivi ha chi, prima e dopo; le voci tolte
 test('dashboard: preventivi in scadenza, senza risposta, bozze; i numeri dei preventivi', async () => {
   const d = await manuel('dashboard');
   const voci = [].concat(d.urgenti, d.settimana, d.pianificare);
-  const scade = d.settimana.find(v => /\/012 rev\. 1 scade fra 6 giorni$/.test(v.titolo));
-  assert.ok(scade, 'il PR/012 scade fra 6 giorni');
+  // Dalla fase 4 il PR/012 e' accettato: un preventivo mandato che scade fra 6 giorni lo fa la prova.
+  const inScadenza = await nuovoCompleto();
+  await manuel('salvaPreventivo', { preventivo: { id: inScadenza.id, scadenza: s.wisper.db.riga("SELECT date('now', 'localtime', '+6 days') d").d } });
+  await manuel('segnaInviato', { id: inScadenza.id });
+  const conScadenza = await manuel('dashboard');
+  const scade = conScadenza.settimana.find(v => v.collegamento.id === inScadenza.id && / scade fra 6 giorni$/.test(v.titolo));
+  assert.ok(scade, 'il preventivo scade fra 6 giorni');
   assert.equal(scade.collegamento.pagina, 'preventivo');
-  assert.equal(scade.quanto, 4291.35);
+  assert.equal(scade.quanto, (await manuel('preventivo', { id: inScadenza.id })).preventivo.totale);
   assert.equal(scade.unita, 'euro');
   const muto = d.urgenti.find(v => /\/007: nessuna risposta da \d+ giorni$/.test(v.titolo));
   assert.ok(muto, 'il PR/007 senza risposta');
@@ -513,7 +522,7 @@ test('dashboard: preventivi in scadenza, senza risposta, bozze; i numeri dei pre
   assert.ok(voci.some(v => v.collegamento.pagina === 'preventivi' && v.collegamento.filtro.stato === 'BOZZA'));
   assert.ok(d.numeri.preventivi.bozze >= 1);
   assert.ok(d.numeri.preventivi.scaduti >= 1);
-  assert.ok(d.numeri.preventivi.inScadenza >= 1);
+  assert.ok(conScadenza.numeri.preventivi.inScadenza >= 1);
   assert.equal(typeof d.numeri.soldi.preventiviInAttesa, 'number');
   // Un accettato senza commessa si fa vedere.
   const p = await nuovoCompleto();
@@ -530,9 +539,10 @@ test('esporta preventivi: CSV con lo stato a parole e le colonne dei soldi', asy
   const righe = csv.slice(1).trim().split('\r\n');
   const testa = righe[0].split(';');
   assert.deepEqual(testa.slice(0, 5), ['Numero', 'Revisione', 'Data', 'Scadenza', 'Stato']);
+  // Dalla fase 4 il PR/012 rev. 1 e' accettato con la DiRi: 3.800 + 190 di contributo + IVA = 4.867,80.
   const dodici = righe.find(x => /^PR\/\d{4}\/012;1;/.test(x)).split(';');
-  assert.equal(dodici[testa.indexOf('Totale')], '4291,35');
-  assert.equal(dodici[testa.indexOf('Contributo integrativo')], '167,5');
-  assert.equal(dodici[testa.indexOf('Stato')], 'Inviato');
+  assert.equal(dodici[testa.indexOf('Totale')], '4867,8');
+  assert.equal(dodici[testa.indexOf('Contributo integrativo')], '190');
+  assert.equal(dodici[testa.indexOf('Stato')], 'Accettato');
   assert.ok(righe.some(x => x.includes(';Scaduto;')));
 });

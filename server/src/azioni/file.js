@@ -29,6 +29,9 @@ function fileDaRiga(f) {
     idPreventivo: f.preventivo_id === null || f.preventivo_id === undefined ? null : f.preventivo_id,
     // Fase 3
     idSpesa: f.spesa_id === null || f.spesa_id === undefined ? null : f.spesa_id,
+    // Fase 4
+    idFattura: f.fattura_id === null || f.fattura_id === undefined ? null : f.fattura_id,
+    idRicevuta: f.ricevuta_id === null || f.ricevuta_id === undefined ? null : f.ricevuta_id,
   };
 }
 
@@ -42,7 +45,7 @@ module.exports = {
    * file a meta' non c'e' mai) e la riga nella tabella. Il contenuto non va mai
    * nel registro: solo nome, tipo e grandezza.
    */
-  salvaFile({ dati, nome, mime, tipo, rapportinoId, commessaId, idClient, attivitaId, preventivoId, spesaId }) {
+  salvaFile({ dati, nome, mime, tipo, rapportinoId, commessaId, idClient, attivitaId, preventivoId, spesaId, fatturaId, ricevutaId }) {
     const id = idCasuale();
     const finale = this.percorsoFile(id);
     const temporaneo = finale + '.scrivendo';
@@ -53,6 +56,7 @@ module.exports = {
       percorso: id, tipo, rapportino_id: rapportinoId || null, commessa_id: commessaId || null,
       id_client: idClient || null, creato: adesso(),
       attivita_id: attivitaId || null, preventivo_id: preventivoId || null, spesa_id: spesaId || null,
+      fattura_id: fatturaId || null, ricevuta_id: ricevutaId || null,
     });
     return this.db.riga('SELECT * FROM file WHERE id = ?', id);
   },
@@ -127,6 +131,8 @@ module.exports = {
 
     if (tipo === 'spesa') {
       let f = this.fileGiaArrivato('spesa', d.idFile, riga.id, '');
+      // Fase 4: in una bozza o in una fattura il rapportino non cambia, nemmeno le foto (una ripetizione della coda si', sopra).
+      if (!f) this.controllaSorgenteLibera('rapportino', riga.id);
       if (!f) {
         // Fase 3: la foto va anche alla riga di spese del passo 3, se c'e'.
         const passo3 = this.db.riga("SELECT id FROM spese WHERE rapportino_id = ? AND dal_rapportino = 1 AND destinazione = 'cliente' AND tolta IS NULL ORDER BY id LIMIT 1", riga.id);
@@ -162,6 +168,7 @@ module.exports = {
     if (!riga) throw new Rifiuto('Rapportino ' + id + ' non trovato');
     this.controllaSuo(riga, 'togliere file dai rapportini degli altri');
     const f = this.db.riga("SELECT * FROM file WHERE id = ? AND rapportino_id = ? AND tipo = 'spesa'", testo(fileId), riga.id);
+    if (f && !f.cestinato) this.controllaSorgenteLibera('rapportino', riga.id);
     if (f && !f.cestinato) this.aggiorna('file', f.id, { cestinato: adesso() });
     this.aggiorna('rapportini', riga.id, { modificato: adesso() });
     return this.rapportinoPerId(riga.id);
@@ -193,6 +200,7 @@ module.exports = {
       return !!a && this.vedeAttivita(a);
     }
     if (f.tipo === 'preventivo') return this.livello('preventivi') >= 1;
+    if (f.tipo === 'fattura' || f.tipo === 'ricevuta') return this.livello('fatturazione') >= 1 && this.vedeCosti();
     if (f.tipo === 'spesa' && f.spesa_id !== null && f.spesa_id !== undefined) return false;
     return this.livello('rapportini') >= 1 || this.livello('documenti') >= 1;
   },

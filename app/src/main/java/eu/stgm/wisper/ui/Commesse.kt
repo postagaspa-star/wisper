@@ -381,7 +381,11 @@ fun SchermataCommessa(dati: Dati, nav: Navigatore, id: String) {
                 SchedaDiCommessa.PRESTAZIONI -> PrestazioniCommessa(dati, m, prestazioni, costi, puo)
                 SchedaDiCommessa.RAPPORTINI -> RapportiniCommessa(k, viste, nav, costi)
                 SchedaDiCommessa.COSTI -> CostiCommessa(m, k, cliente, ana, nav)
-                SchedaDiCommessa.FATTURARE -> DaFatturareCommessa(dati, k, viste, nav)
+                SchedaDiCommessa.FATTURARE -> {
+                    // Fase 4 (§15.12): contratto, fatturato, incassato, le scadenze di pagamento col loro stato.
+                    if (perm.vede(Moduli.FATTURAZIONE)) FatturazioneDellaCommessa(dati, m.id, nav)
+                    DaFatturareCommessa(dati, k, viste, nav)
+                }
                 SchedaDiCommessa.DOCUMENTI -> DocumentiCommessa(dati, m)
             }
         }
@@ -1255,6 +1259,9 @@ fun SchermataModificaCommessa(dati: Dati, nav: Navigatore, id: String?, idClient
     // Gli id delle persone separati da virgola: una lista non si salva se si gira il telefono.
     var persone by rememberSaveable { mutableStateOf(esistente?.persone.orEmpty().joinToString(",")) }
     var contratto by rememberSaveable { mutableStateOf(Numeri.scrivi(esistente?.importoContratto)) }
+    // Fase 4: null = non toccato e non letto (non si manda); "ore" | "corpo" | "misto".
+    var modo by rememberSaveable { mutableStateOf(esistente?.modoFatturazione) }
+    val vedeFatture = LocalPermessi.current.vede(Moduli.FATTURAZIONE)
     var sceltaSede by remember { mutableStateOf(false) }
     var sceltaResp by remember { mutableStateOf(false) }
     var sceltaPersone by remember { mutableStateOf(false) }
@@ -1332,7 +1339,7 @@ fun SchermataModificaCommessa(dati: Dati, nav: Navigatore, id: String?, idClient
                 prezzoOrario = esistente?.prezzoOrario, budgetEuro = esistente?.budgetEuro,
                 costoOrario = esistente?.costoOrario, euroKm = esistente?.euroKm,
             )
-        }
+        }.copy(modoFatturazione = if (costi && vedeFatture) modo else esistente?.modoFatturazione)
         salvo = true
         scope.launch {
             dati.salvaCommessa(m, nuova)
@@ -1404,6 +1411,10 @@ fun SchermataModificaCommessa(dati: Dati, nav: Navigatore, id: String?, idClient
                 }
                 CampoTesto(budget, { budget = it; ricalcola("euro") }, "Budget", segnaposto = "—", tastiera = KeyboardType.Decimal, suffisso = "€", errore = erroriNumeri[2])
                 CampoTesto(contratto, { contratto = it }, "Importo del contratto", segnaposto = "—", tastiera = KeyboardType.Decimal, suffisso = "€", errore = erroriNumeri[5])
+                if (vedeFatture) {
+                    Text("Come si fattura", style = Testi.secondarioGrande.copy(fontWeight = FontWeight.Bold), color = W.colori.testo)
+                    Segmenti(listOf("ore" to "A ore", "corpo" to "A corpo", "misto" to "Misto"), modo ?: "ore", { modo = it })
+                }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     // Vuoti = quelli delle impostazioni, che si vedono in grigio.
                     CampoTesto(

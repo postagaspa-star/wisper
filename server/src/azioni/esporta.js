@@ -126,8 +126,50 @@ COLONNE.rimborsi = [
   ['Codice commessa', v => v.idCommessa], ['Km', v => v.km], ['Importo', v => v.importo],
 ];
 
+const STATO_FATTURA = { bozza: 'Bozza', pronta: 'Pronta', emessa: 'Emessa', scartata: 'Scartata', annullata: 'Annullata' };
+const TIPO_DOC = { TD01: 'Fattura', TD06: 'Parcella', TD04: 'Nota di credito' };
+const COLONNE_FASE4 = {
+  fatture: [
+    ['Riferimento', f => f.riferimento], ['Numero', f => f.numero], ['Data', f => data(f.data)], ['Tipo', f => TIPO_DOC[f.tipoDocumento] || f.tipoDocumento],
+    ['Stato', f => f.statoVisto], ['Cliente', f => f.cliente], ['Partita IVA', f => f.partitaIva], ['Commessa', f => f.idCommessa],
+    ['Compenso', f => f.conti.compenso], ['Contributo', f => f.conti.contributo], ['IVA', f => f.conti.iva], ['Spese anticipate', f => f.conti.anticipazioni],
+    ['Bollo', f => f.conti.bolloAddebitato], ['Totale', f => f.conti.totale], ['Ritenuta', f => f.conti.ritenuta], ['Netto', f => f.conti.netto],
+    ['Incassato', f => f.incassato], ['Residuo', f => f.residuo], ['Scadenza', f => data((f.scadenze[0] || {}).data)],
+  ],
+  ricevute: [
+    ['Fornitore', r => r.fornitore], ['Numero', r => r.numero], ['Data', r => data(r.data)], ['Tipo', r => TIPO_DOC[r.tipoDocumento] || r.tipoDocumento],
+    ['Categoria', r => r.categoria], ['Commessa', r => r.idCommessa], ['Imponibile', r => r.imponibile], ['IVA', r => r.iva], ['Contributo', r => r.contributo],
+    ['Totale', r => r.totale], ['Ritenuta', r => r.ritenuta], ['Netto', r => r.netto], ['Pagato', r => r.pagato], ['Da pagare', r => r.daPagare],
+    ['Scadenza', r => data((r.scadenze[0] || {}).data)], ['Stato', r => r.statoVisto], ['Note', r => r.note],
+  ],
+  daFatturare: [
+    ['Codice cliente', v => v.idCliente], ['Cliente', v => v.cliente], ['Cosa', v => ({ scadenza: 'Scadenza di pagamento', rapportino: 'Rapportino', spesa: 'Spesa', ore: 'Ore' })[v.tipo]],
+    ['Codice', v => v.id], ['Commessa', v => v.idCommessa], ['Data', v => data(v.data)], ['Titolo', v => v.titolo], ['Dettaglio', v => v.dettaglio],
+    ['Pronta', v => v.pronta], ['Importo', v => v.importo], ['Spesa anticipata', v => v.anticipazione],
+  ],
+  riepilogo: [
+    ['Chiave', g => g.chiave], ['Nome', g => g.nome], ['Fatture', g => g.fatture], ['Compenso', g => g.compenso], ['Contributo', g => g.contributo],
+    ['IVA', g => g.iva], ['Spese anticipate', g => g.anticipazioni], ['Totale', g => g.totale], ['Ritenute', g => g.ritenute], ['Incassato', g => g.incassato],
+  ],
+  movimenti: [
+    ['Data', m => data(m.data)], ['Conto', m => m.conto], ['Entrata o uscita', m => (m.verso === 'entrata' ? 'Entrata' : 'Uscita')], ['Importo', m => m.importo],
+    ['Descrizione', m => m.descrizione], ['Chi', m => m.soggetto], ['Categoria', m => m.categoria], ['Verificato in banca', m => m.verificato],
+    ['Abbinato a', m => m.abbinamenti.map(a => a.etichetta + ' ' + String(a.importo).replace('.', ',')).join(', ')], ['Annullato', m => m.annullato], ['Motivo', m => m.motivo],
+  ],
+  scadenziario: [
+    ['Giorno', r => data(r.data)], ['Cosa', r => r.titolo], ['Dettaglio', r => r.dettaglio], ['Entrata', r => (r.verso === 'entrata' ? r.importo : null)],
+    ['Uscita', r => (r.verso === 'uscita' ? r.importo : null)], ['Saldo previsto', r => r.saldo], ['Stato', r => r.stato], ['Sotto soglia', r => r.sottoSoglia],
+  ],
+  impegni: [
+    ['Scadenza', i => data(i.scadenza)], ['Descrizione', i => i.descrizione], ['Tipo', i => i.tipo], ['Codice', i => i.codice], ['Importo', i => i.importo],
+    ['Pagato', i => i.pagato], ['Ripete', i => i.ripete], ['Stato', i => i.statoVisto], ['Conto', i => i.conto], ['Note', i => i.note],
+  ],
+};
+
 /** Di quale modulo serve almeno la lettura, per ogni cosa da esportare. */
 const MODULO = {
+  fatture: 'fatturazione', ricevute: 'fatturazione', daFatturare: 'fatturazione', riepilogo: 'fatturazione',
+  movimenti: 'banche', scadenziario: 'banche', impegni: 'banche',
   rapportini: 'rapportini', clienti: 'clienti', fornitori: 'clienti', commesse: 'commesse', registro: 'amministrazione',
   preventivi: 'preventivi', attivita: 'attivita',
   ore: 'rapportini', spese: 'spese', trasferte: 'spese', rimborsi: 'spese',
@@ -136,8 +178,10 @@ const MODULO = {
 module.exports = {
   esporta(d) {
     const cosa = testo(d.cosa);
-    if (!MODULO[cosa]) throw new Rifiuto('Cosa esportare? rapportini, clienti, fornitori, commesse, registro, preventivi, attivita, ore, spese, trasferte o rimborsi');
+    if (!MODULO[cosa]) throw new Rifiuto('Cosa esportare? rapportini, clienti, fornitori, commesse, registro, preventivi, attivita, ore, spese, trasferte, rimborsi, fatture, ricevute, daFatturare, riepilogo, movimenti, scadenziario o impegni');
     if (this.livello(MODULO[cosa]) < 1) throw senzaPermesso('esportare ' + cosa);
+    // Fase 4: fatture e banche si esportano solo col permesso dei soldi.
+    if (COLONNE_FASE4[cosa] && !this.vedeCosti()) throw new Rifiuto('Per vedere le fatture serve anche il permesso dei soldi: chiedi al titolare', { permesso: false });
     const costi = this.vedeCosti();
     const scegli = lista => lista.filter(c => costi || !c[2]);
     let colonne;
@@ -177,6 +221,9 @@ module.exports = {
     } else if (cosa === 'trasferte') {
       colonne = COLONNE.trasferte;
       righe = this.leggiTrasferte(d).trasferte.slice().reverse();
+    } else if (COLONNE_FASE4[cosa]) {
+      colonne = COLONNE_FASE4[cosa];
+      righe = this.righeDaEsportareFase4(cosa, d);
     } else if (cosa === 'rimborsi') {
       colonne = COLONNE.rimborsi;
       righe = [];
@@ -195,6 +242,37 @@ module.exports = {
     const periodo = [testo(d.da), testo(d.a)].filter(Boolean).join('-') || oggi();
     const nome = 'wisper-' + cosa + '-' + periodo + '.csv';
     return { ok: true, nome, mime: 'text/csv;charset=utf-8', righe: righe.length, base64: csv(colonne, righe).toString('base64') };
+  },
+
+  /** Le righe delle esportazioni della fase 4, coi filtri dei loro elenchi. */
+  righeDaEsportareFase4(cosa, d) {
+    if (cosa === 'fatture') {
+      const piva = {};
+      this.db.righe('SELECT id, partita_iva, codice_fiscale FROM soggetti').forEach(s => { piva[s.id] = s.partita_iva || s.codice_fiscale; });
+      return this.leggiFatture(d).map(f => Object.assign({ partitaIva: piva[f.idCliente] || '' }, f)).reverse();
+    }
+    if (cosa === 'ricevute') return this.leggiRicevute(d).reverse();
+    if (cosa === 'daFatturare') {
+      const nomi = {};
+      this.db.righe('SELECT id, nome FROM soggetti').forEach(s => { nomi[s.id] = s.nome; });
+      return this.sorgentiDaFatturare(d).map(v => Object.assign({}, v, { cliente: nomi[v.idCliente] || '' }));
+    }
+    if (cosa === 'riepilogo') return this.riepilogoFatturato(d).righe;
+    if (cosa === 'movimenti') {
+      const tutte = [];
+      for (let pagina = 1; ; pagina++) {
+        const p = this.leggiMovimenti(Object.assign({}, d, { pagina }));
+        tutte.push(...p.movimenti);
+        if (pagina >= p.pagine) break;
+      }
+      return tutte.reverse();
+    }
+    if (cosa === 'scadenziario') {
+      const s = this.scadenziario(d);
+      return s.scaduti.map(r => Object.assign({ saldo: null, sottoSoglia: false }, r))
+        .concat([].concat(...s.giorni.map(g => g.righe.map(r => Object.assign({ data: g.data, saldo: g.saldo, sottoSoglia: g.sottoSoglia }, r)))));
+    }
+    return this.leggiImpegni(Object.assign({ stato: 'tutti' }, d));
   },
 };
 

@@ -37,7 +37,9 @@
     { modulo: 'rapportini', nome: 'Ore e rapportini', spiega: 'Ore, timer, rapportini e approvazioni', icona: 'rapportini' },
     // Fase 3 (docs/gestionale/fase3.md §5): voce 7, tra Ore e rapportini e Fatturazione.
     { modulo: 'spese', nome: 'Spese e trasferte', spiega: 'Spese, trasferte, rimborsi', icona: 'scontrino' },
-    { modulo: 'fatturazione', nome: 'Fatturazione', spiega: 'Da fatturare, riepiloghi', icona: 'fatturazione' },
+    { modulo: 'fatturazione', nome: 'Fatturazione', spiega: 'Da fatturare, fatture, ricevute, riepilogo', icona: 'fatturazione' },
+    // Fase 4 (docs/gestionale/fase4.md §12): voce 9, subito dopo Fatturazione.
+    { modulo: 'banche', nome: 'Banche e scadenze', spiega: 'Scadenziario, movimenti, tributi, conti', icona: 'banca' },
     { modulo: 'amministrazione', nome: 'Amministrazione', spiega: 'Studio, utenti, permessi, copie', icona: 'amministrazione' },
   ];
 
@@ -69,8 +71,12 @@
   }
 
   /** Le voci della barra laterale per questi permessi. */
+  /** Fatturazione e Banche si vedono solo col modulo e anche il permesso dei soldi (fase4.md §12). */
+  const CON_SOLDI = ['fatturazione', 'banche'];
+  const vede = (permessi, modulo) => puo(permessi, modulo, 1) && (CON_SOLDI.indexOf(modulo) < 0 || puo(permessi, 'costi', 1));
+
   function vociMenu(permessi) {
-    return VOCI_MENU.filter(v => puo(permessi, v.modulo, 1));
+    return VOCI_MENU.filter(v => vede(permessi, v.modulo));
   }
 
   /**
@@ -87,7 +93,7 @@
 
   function paginaPermessa(permessi, percorso) {
     const m = moduloDi(percorso);
-    return m === null || puo(permessi, m, 1);
+    return m === null || vede(permessi, m);
   }
 
   /** La prima pagina che questi permessi lasciano vedere (di solito la Dashboard). */
@@ -500,6 +506,16 @@
       case 'attivita': return { hash: '#attivita' + (c.id ? '/' + id : ''), filtro: c.filtro || null };
       case 'calendario': return { hash: '#attivita/calendario', filtro: c.filtro || null };
       case 'pianificazione': return { hash: '#attivita/pianificazione', filtro: c.filtro || null };
+      // Fase 4: fatture, ricevute, banche e scadenze (architettura.md §15.16).
+      case 'fatture': return { hash: '#fatturazione/fatture', filtro: c.filtro || null };
+      case 'fattura': return { hash: '#fatturazione/fatture', filtro: Object.assign({ apri: c.id }, c.filtro || {}) };
+      case 'ricevute': return { hash: '#fatturazione/ricevute', filtro: c.filtro || null };
+      case 'ricevuta': return { hash: '#fatturazione/ricevute', filtro: Object.assign({ apri: c.id }, c.filtro || {}) };
+      case 'scadenziario': return { hash: '#banche', filtro: c.filtro || null };
+      case 'movimenti': return { hash: '#banche/movimenti', filtro: c.filtro || null };
+      case 'impegni': return { hash: '#banche/tributi', filtro: Object.assign(c.id ? { id: c.id } : {}, c.filtro || {}) };
+      case 'conti': return { hash: '#banche/conti', filtro: c.id ? { id: c.id } : (c.filtro || null) };
+      case 'situazione': return { hash: '#banche/situazione', filtro: null };
       default: return { hash: '#dashboard', filtro: null };
     }
   }
@@ -514,11 +530,13 @@
     if (p === 'spese' && seg === 'rimborsi') return 'Apri i rimborsi';
     if (p === 'amministrazione' && collegamento.filtro && collegamento.filtro.sezione === 'veicoli') return 'Apri i veicoli';
     return {
-      fatturazione: 'Prepara il riepilogo', commessa: 'Apri la commessa', commesse: 'Apri le commesse',
+      fatturazione: 'Apri Da fatturare', commessa: 'Apri la commessa', commesse: 'Apri le commesse',
       cliente: 'Apri la scheda', soggetto: 'Apri la scheda', clienti: 'Apri i clienti',
       rapportini: 'Apri i rapportini', rapportino: 'Apri il rapportino', amministrazione: 'Apri',
       preventivi: 'Apri i preventivi', preventivo: 'Apri il preventivo', attivita: 'Apri le attività', calendario: 'Apri il calendario',
       spese: 'Apri le spese',
+      fattura: 'Apri la fattura', fatture: 'Apri le fatture', ricevute: 'Apri le ricevute', ricevuta: 'Apri la ricevuta', scadenziario: 'Apri lo scadenziario',
+      movimenti: 'Apri i movimenti', impegni: 'Apri i tributi', conti: 'Apri i conti', situazione: 'Apri la situazione',
     }[p] || 'Apri';
   }
 
@@ -734,7 +752,8 @@
   /** Il nome del file da salvare: "Wisper registro 2026-10-23.csv". */
   function nomeEsportazione(cosa, oggi) {
     const nomi = { rapportini: 'rapportini', clienti: 'clienti e fornitori', fornitori: 'fornitori', commesse: 'commesse', registro: 'registro',
-      preventivi: 'preventivi', attivita: 'attività', ore: 'ore', spese: 'spese', trasferte: 'trasferte', rimborsi: 'rimborsi' };
+      preventivi: 'preventivi', attivita: 'attività', ore: 'ore', spese: 'spese', trasferte: 'trasferte', rimborsi: 'rimborsi',
+      fatture: 'fatture', ricevute: 'fatture ricevute', daFatturare: 'da fatturare', riepilogo: 'riepilogo del fatturato', movimenti: 'movimenti', scadenziario: 'scadenziario', impegni: 'tributi e rate' };
     return 'Wisper ' + (nomi[cosa] || cosa) + ' ' + (oggi || oggiIso()) + '.csv';
   }
 

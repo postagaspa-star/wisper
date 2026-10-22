@@ -522,6 +522,7 @@ module.exports = {
         descrizione = tipo === 'percentuale' && valore !== null ? String(valore).replace('.', ',') + '% ' + q : maiuscola(q);
       }
       const v = { descrizione, tipo, valore, quando, data, ordine: i + 1 };
+      if (vecchia && (tipo !== vecchia.tipo || numero(valore) !== numero(vecchia.valore))) this.controllaSorgenteLibera('scadenza', vecchia.id);
       if (vecchia) {
         this.aggiorna('scadenze_pagamento', vecchia.id, v);
         tenute.add(vecchia.id);
@@ -531,6 +532,7 @@ module.exports = {
     });
     for (const s of vecchie.values()) {
       if (tenute.has(s.id)) continue;
+      this.controllaSorgenteLibera('scadenza', s.id);
       this.db.esegui('DELETE FROM scadenze_pagamento WHERE id = ?', s.id);
       this.annota('scadenze_pagamento', s.id, Object.assign({}, s), null, 'tolta');
     }
@@ -541,7 +543,10 @@ module.exports = {
     const r = this.db.riga('SELECT * FROM preventivi WHERE id = ?', id);
     for (const s of this.contenutoPreventivo(r).scadenze) {
       const riga = this.db.riga('SELECT importo FROM scadenze_pagamento WHERE id = ?', s.id);
-      if (riga.importo !== s.importo) this.aggiorna('scadenze_pagamento', s.id, { importo: s.importo });
+      if (riga.importo !== s.importo) {
+        this.controllaSorgenteLibera('scadenza', s.id);
+        this.aggiorna('scadenze_pagamento', s.id, { importo: s.importo });
+      }
     }
   },
 
@@ -808,6 +813,7 @@ module.exports = {
       prezzo_orario: prezziOrari.size === 1 ? Array.from(prezziOrari)[0] : null,
       inizio: oggi(), fine_prevista: '', note: 'Dal preventivo ' + etichetta(r), sede_id: r.sede_id,
       responsabile_id: c.utente ? c.utente.id : null, importo_contratto: conti.imponibile, creato: ora, modificato: ora,
+      modo_fatturazione: 'corpo',
     });
     this.segnaNumero('commessa', this.numeroDi('commessa', codice) || 0);
     // Gli sconti sul totale si dividono tra le prestazioni in proporzione: la somma resta l'importo del contratto.

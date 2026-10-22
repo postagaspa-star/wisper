@@ -17,10 +17,14 @@ const ruolo = r => E.permessiDi(r);
 
 test('permessi: le voci del menu nell\'ordine delle specifiche, solo quelle del ruolo', () => {
   assert.deepEqual(R.vociMenu(ruolo('titolare')).map(v => v.nome),
-    ['Dashboard', 'Clienti e fornitori', 'Progetti e commesse', 'Preventivi e contratti', 'Attività e calendario', 'Ore e rapportini', 'Spese e trasferte', 'Fatturazione', 'Amministrazione']);
+    ['Dashboard', 'Clienti e fornitori', 'Progetti e commesse', 'Preventivi e contratti', 'Attività e calendario', 'Ore e rapportini', 'Spese e trasferte', 'Fatturazione', 'Banche e scadenze', 'Amministrazione']);
   // Fase 2: il collaboratore vede Attività e calendario, non i preventivi. Fase 3: Spese e trasferte, voce 7.
   assert.deepEqual(R.vociMenu(ruolo('collaboratore')).map(v => v.modulo), ['dashboard', 'clienti', 'commesse', 'attivita', 'rapportini', 'spese']);
-  assert.deepEqual(R.vociMenu(ruolo('lettura')).map(v => v.modulo), ['dashboard', 'clienti', 'commesse', 'preventivi', 'attivita', 'rapportini', 'spese', 'fatturazione']);
+  assert.deepEqual(R.vociMenu(ruolo('lettura')).map(v => v.modulo), ['dashboard', 'clienti', 'commesse', 'preventivi', 'attivita', 'rapportini', 'spese', 'fatturazione', 'banche']);
+  // Fase 4: Fatturazione e Banche vogliono anche il permesso dei soldi.
+  assert.deepEqual(R.vociMenu({ dashboard: 1, fatturazione: 2, banche: 2, costi: 0 }).map(v => v.modulo), ['dashboard']);
+  assert.ok(!R.paginaPermessa({ fatturazione: 2, costi: 0 }, '#fatturazione/fatture'));
+  assert.ok(R.paginaPermessa({ banche: 1, costi: 1 }, '#banche/movimenti'));
   assert.ok(R.vociMenu(ruolo('amministrazione')).some(v => v.modulo === 'amministrazione'), 'amministrazione in lettura la vede');
   assert.deepEqual(R.vociMenu(null), []);
 });
@@ -42,7 +46,7 @@ test('permessi: livelli, pagine permesse, l\'app è di tutti', () => {
   assert.equal(R.moduloDi(''), 'dashboard');
   assert.equal(R.primaPagina(c), 'dashboard');
   assert.equal(R.primaPagina({}), 'amministrazione/app');
-  assert.deepEqual(Object.keys(R.permessiTutti()).sort(), ['amministrazione', 'attivita', 'commesse', 'costi', 'clienti', 'dashboard', 'fatturazione', 'preventivi', 'rapportini', 'riservati', 'spese'].sort());
+  assert.deepEqual(Object.keys(R.permessiTutti()).sort(), ['amministrazione', 'attivita', 'commesse', 'costi', 'clienti', 'dashboard', 'fatturazione', 'banche', 'preventivi', 'rapportini', 'riservati', 'spese'].sort());
 });
 
 test('permessi: il titolare da chiamare e l\'ultimo titolare che non si toglie', () => {
@@ -62,7 +66,7 @@ test('permessi: cosa vedrà chi cambia ruolo, a parole', () => {
   const f = R.descriviRuolo(ruolo('collaboratore'));
   assert.match(f, /Potrà cambiare: Attività e calendario, Ore e rapportini, Spese e trasferte\./);
   assert.match(f, /Solo da leggere: Dashboard, Clienti e fornitori, Progetti e commesse\./);
-  assert.match(f, /Non vedrà: Preventivi e contratti, Fatturazione, Amministrazione\./);
+  assert.match(f, /Non vedrà: Preventivi e contratti, Fatturazione, Banche e scadenze, Amministrazione\./);
   assert.match(f, /Senza importi\.$/);
   assert.match(R.descriviRuolo(ruolo('titolare')), /Vede gli importi\.$/);
 });
@@ -254,7 +258,14 @@ test('dashboard: ogni riga porta al suo elenco filtrato', () => {
   assert.deepEqual(R.destinazione({ pagina: 'rapportino', id: 'RAP/2026/0012' }), { hash: '#rapportini', filtro: { apri: 'RAP/2026/0012' } });
   assert.deepEqual(R.destinazione({ pagina: 'fatturazione', filtro: { mese: '2026-09' } }), { hash: '#fatturazione', filtro: { mese: '2026-09' } });
   assert.deepEqual(R.destinazione({ pagina: 'chissà' }), { hash: '#dashboard', filtro: null });
-  assert.equal(R.testoAzione({ pagina: 'fatturazione' }), 'Prepara il riepilogo');
+  assert.equal(R.testoAzione({ pagina: 'fatturazione' }), 'Apri Da fatturare');
+  // Fase 4: le pagine nuove della Dashboard.
+  assert.deepEqual(R.destinazione({ pagina: 'fattura', id: 12 }), { hash: '#fatturazione/fatture', filtro: { apri: 12 } });
+  assert.deepEqual(R.destinazione({ pagina: 'fatture', filtro: { stato: 'pronta' } }), { hash: '#fatturazione/fatture', filtro: { stato: 'pronta' } });
+  assert.deepEqual(R.destinazione({ pagina: 'scadenziario', filtro: { giorno: '2026-11-30' } }), { hash: '#banche', filtro: { giorno: '2026-11-30' } });
+  assert.deepEqual(R.destinazione({ pagina: 'impegni', filtro: { proposte: true } }), { hash: '#banche/tributi', filtro: { proposte: true } });
+  assert.deepEqual(R.destinazione({ pagina: 'conti', id: 1 }), { hash: '#banche/conti', filtro: { id: 1 } });
+  assert.deepEqual(R.destinazione({ pagina: 'amministrazione', filtro: { sezione: 'fiscale' } }), { hash: '#amministrazione/fiscale', filtro: null });
   assert.equal(R.testoAzione({ pagina: 'commessa' }), 'Apri la commessa');
   assert.equal(R.classeGravita('urgente'), 'ico-rosso');
   assert.equal(R.classeGravita('soldi'), 'ico-blu');
