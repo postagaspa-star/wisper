@@ -184,8 +184,8 @@
     function moduloSpesa(esistente, base) {
       const b = base || {};
       const s = esistente ? JSON.parse(JSON.stringify(esistente)) : {
-        id: null, data: b.data || oggi(), importo: '', categoria: b.categoria || 'altro', descrizione: '', idCommessa: b.idCommessa || '', idCliente: '',
-        idTrasferta: b.idTrasferta || null, idRapportino: '', destinazione: null, anticipazione: false, pagataDaMe: true, foto: [], idUtente: b.idUtente || null,
+        id: null, data: b.data || oggi(), importo: '', categoria: b.categoria || 'altro', descrizione: '', idCommessa: b.idCommessa || '', idCliente: b.idCliente || '',
+        idTrasferta: b.idTrasferta || null, idRapportino: '', destinazione: b.destinazione || null, anticipazione: false, pagataDaMe: true, foto: [], idUtente: b.idUtente || null,
       };
       const soloCampi = esistente && Array.isArray(esistente.soloCampi) ? esistente.soloCampi : null;
       const sola = esistente ? (!scrive() || esistente.puoScrivere === false || (!!esistente.bloccata && !soloCampi)) : !scrive();
@@ -297,6 +297,8 @@
           if (esistente) x.id = esistente.id;
           else {
             if (s.idTrasferta) x.idTrasferta = s.idTrasferta;
+            // Fase 5: il materiale e le spese di un ticket (+ Materiale o spesa nel ticket).
+            if (b.idTicket) x.idTicket = b.idTicket;
             if (!soloSuoi() && m.idUtente && String(m.idUtente) !== String(io()) && !s.idTrasferta) x.idUtente = m.idUtente;
           }
         }

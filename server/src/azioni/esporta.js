@@ -143,7 +143,7 @@ const COLONNE_FASE4 = {
     ['Scadenza', r => data((r.scadenze[0] || {}).data)], ['Stato', r => r.statoVisto], ['Note', r => r.note],
   ],
   daFatturare: [
-    ['Codice cliente', v => v.idCliente], ['Cliente', v => v.cliente], ['Cosa', v => ({ scadenza: 'Scadenza di pagamento', rapportino: 'Rapportino', spesa: 'Spesa', ore: 'Ore' })[v.tipo]],
+    ['Codice cliente', v => v.idCliente], ['Cliente', v => v.cliente], ['Cosa', v => ({ scadenza: 'Scadenza di pagamento', rapportino: 'Rapportino', spesa: 'Spesa', ore: 'Ore', ticket: 'Ticket' })[v.tipo]],
     ['Codice', v => v.id], ['Commessa', v => v.idCommessa], ['Data', v => data(v.data)], ['Titolo', v => v.titolo], ['Dettaglio', v => v.dettaglio],
     ['Pronta', v => v.pronta], ['Importo', v => v.importo], ['Spesa anticipata', v => v.anticipazione],
   ],
@@ -166,6 +166,39 @@ const COLONNE_FASE4 = {
   ],
 };
 
+// Fase 5: documenti, scadenze, ticket, contratti (fase5.md §10). [intestazione, valore(riga), soloConCosti]
+const ORIGINE = { file: 'File', collegamento: 'Collegamento', inviato: 'Mandato' };
+const MODI_TICKET = { ticket: 'Una riga per l\'intervento', separati: 'Con gli altri rapportini', contratto: 'Nel contratto', no: 'Non si fattura' };
+const RATE = { annuale: 'Annuale', semestrale: 'Semestrale', trimestrale: 'Trimestrale', mensile: 'Mensile', nessuna: 'Nessuna' };
+const COLONNE_FASE5 = {
+  documenti: [
+    ['Titolo', d => d.titolo], ['Categoria', d => d.categoria], ['Cliente', d => d.cliente], ['Commessa', d => d.idCommessa], ['Impianto', d => d.impianto],
+    ['Ticket', d => d.ticket], ['Origine', d => ORIGINE[d.origine] || d.origine], ['Tipo di collegamento', d => d.collegamentoNome],
+    ['Indirizzo', d => (d.origine === 'collegamento' ? d.url : '')], ['Revisione valida', d => (d.statoVisto === 'Valida' ? d.revisione : null)],
+    ['Stato', d => d.statoVisto], ['Riferimento', d => d.riferimento], ['Data del documento', d => data(d.dataDocumento)],
+    ['Scadenza', d => (d.scadenza ? data(d.scadenza.data) : '')], ['Caricato da', d => d.caricatoDa], ['Modificato', d => dataOra(d.modificato)],
+  ],
+  scadenze: [
+    ['Data', s => data(s.data)], ['Titolo', s => s.titolo], ['Tipo', s => s.tipoNome], ['Cliente', s => s.cliente], ['Impianto', s => s.impianto],
+    ['Ogni (mesi)', s => s.ogniMesi], ['Stato', s => s.statoVisto], ['Fatta il', s => data(s.fattaIl)], ['Documento', s => s.documento], ['Ticket', s => s.ticket],
+  ],
+  ticket: [
+    ['Numero', t => t.numero], ['Aperto il', t => dataOra(t.apertoIl)], ['Cliente', t => t.cliente], ['Impianto', t => t.impianto], ['Titolo', t => t.titolo],
+    ['Tipo', t => t.tipoNome], ['Da dove', t => t.origineNome], ['Priorità', t => t.prioritaNome], ['Stato', t => t.statoVisto], ['Responsabile', t => t.responsabile],
+    ['Contratto', t => t.contratto], ['Commessa', t => t.idCommessa], ['Preso il', t => dataOra(t.presoIl)], ['Primo intervento il', t => dataOra(t.interventoIl)],
+    ['Risolto il', t => dataOra(t.risoltoIl)], ['Chiuso il', t => dataOra(t.chiusoIl)], ['Ore', t => t.somma.ore], ['Km', t => t.somma.km],
+    ['Spese', t => Math.round((t.somma.materiale + t.somma.spese) * 100) / 100], ['Come si fattura', t => MODI_TICKET[t.fatturazione] || ''],
+    ['Importo', t => t.somma.importo, true], ['Fatturato il', t => data(t.fatturatoIl)],
+  ],
+  contratti: [
+    ['Numero', c => c.numero], ['Cliente', c => c.cliente], ['Titolo', c => c.titolo], ['Dal', c => data(c.dal)], ['Al', c => data(c.al)],
+    ['Rinnovo', c => (c.rinnovo === 'tacito' ? 'Tacito' : 'No')], ['Disdetta entro', c => data(c.disdettaEntro)], ['Stato', c => c.statoVisto],
+    ['Canone', c => c.canone, true], ['Come si fattura il canone', c => RATE[c.fatturazioneCanone] || c.fatturazioneCanone],
+    ['Copre', c => (c.copre === 'visite_guasti' ? 'Visite e guasti' : 'Solo visite')], ['Impianti', c => c.impianti.map(i => i.nome).join(', ')],
+    ['Ticket nell\'anno', c => c.ticket.anno], ['Commessa', c => c.idCommessa],
+  ],
+};
+
 /** Di quale modulo serve almeno la lettura, per ogni cosa da esportare. */
 const MODULO = {
   fatture: 'fatturazione', ricevute: 'fatturazione', daFatturare: 'fatturazione', riepilogo: 'fatturazione',
@@ -173,13 +206,16 @@ const MODULO = {
   rapportini: 'rapportini', clienti: 'clienti', fornitori: 'clienti', commesse: 'commesse', registro: 'amministrazione',
   preventivi: 'preventivi', attivita: 'attivita',
   ore: 'rapportini', spese: 'spese', trasferte: 'spese', rimborsi: 'spese',
+  // Fase 5 (le scadenze: documenti o ticket, lo controlla esporta)
+  documenti: 'documenti', scadenze: 'documenti', ticket: 'ticket', contratti: 'ticket',
 };
 
 module.exports = {
   esporta(d) {
     const cosa = testo(d.cosa);
-    if (!MODULO[cosa]) throw new Rifiuto('Cosa esportare? rapportini, clienti, fornitori, commesse, registro, preventivi, attivita, ore, spese, trasferte, rimborsi, fatture, ricevute, daFatturare, riepilogo, movimenti, scadenziario o impegni');
-    if (this.livello(MODULO[cosa]) < 1) throw senzaPermesso('esportare ' + cosa);
+    if (!MODULO[cosa]) throw new Rifiuto('Cosa esportare? rapportini, clienti, fornitori, commesse, registro, preventivi, attivita, ore, spese, trasferte, rimborsi, fatture, ricevute, daFatturare, riepilogo, movimenti, scadenziario, impegni, documenti, scadenze, ticket o contratti');
+    const puo = cosa === 'scadenze' ? this.livello('documenti') >= 1 || this.livello('ticket') >= 1 : this.livello(MODULO[cosa]) >= 1;
+    if (!puo) throw senzaPermesso('esportare ' + cosa);
     // Fase 4: fatture e banche si esportano solo col permesso dei soldi.
     if (COLONNE_FASE4[cosa] && !this.vedeCosti()) throw new Rifiuto('Per vedere le fatture serve anche il permesso dei soldi: chiedi al titolare', { permesso: false });
     const costi = this.vedeCosti();
@@ -221,6 +257,9 @@ module.exports = {
     } else if (cosa === 'trasferte') {
       colonne = COLONNE.trasferte;
       righe = this.leggiTrasferte(d).trasferte.slice().reverse();
+    } else if (COLONNE_FASE5[cosa]) {
+      colonne = scegli(COLONNE_FASE5[cosa]);
+      righe = this.righeDaEsportareFase5(cosa, d);
     } else if (COLONNE_FASE4[cosa]) {
       colonne = COLONNE_FASE4[cosa];
       righe = this.righeDaEsportareFase4(cosa, d);
@@ -242,6 +281,32 @@ module.exports = {
     const periodo = [testo(d.da), testo(d.a)].filter(Boolean).join('-') || oggi();
     const nome = 'wisper-' + cosa + '-' + periodo + '.csv';
     return { ok: true, nome, mime: 'text/csv;charset=utf-8', righe: righe.length, base64: csv(colonne, righe).toString('base64') };
+  },
+
+  /** Le righe delle esportazioni della fase 5, coi filtri dei loro elenchi (tutte le pagine). */
+  righeDaEsportareFase5(cosa, d) {
+    if (cosa === 'documenti') {
+      const nomi = {};
+      this.db.righe('SELECT id, nome FROM utenti').forEach(u => { nomi[u.id] = u.nome; });
+      const da = {};
+      this.db.righe('SELECT id, creato_da FROM documenti').forEach(x => { da[x.id] = x.creato_da; });
+      const tutte = [];
+      for (let pagina = 1; ; pagina++) {
+        const p = this.leggiDocumenti(Object.assign({}, d, { archivio: true, pagina }));
+        tutte.push(...p.documenti);
+        if (pagina >= p.pagine) break;
+      }
+      return tutte.map(x => Object.assign({ caricatoDa: da[x.id] ? nomi[da[x.id]] || '' : '' }, x));
+    }
+    if (cosa === 'scadenze') {
+      const r = this.leggiScadenze(Object.assign({ stato: 'tutte' }, d));
+      return r.scadenze || [].concat(r.scadute, r.entro, r.piuAvanti);
+    }
+    if (cosa === 'ticket') {
+      const lista = this.leggiTicket(Object.assign({ segmento: 'tutti' }, d)).ticket;
+      return lista.map(t => this.ticketCompleto(this.db.riga('SELECT * FROM ticket WHERE id = ?', t.id)));
+    }
+    return this.leggiContratti(d).contratti;
   },
 
   /** Le righe delle esportazioni della fase 4, coi filtri dei loro elenchi. */

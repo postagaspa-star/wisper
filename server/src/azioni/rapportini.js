@@ -110,6 +110,22 @@ module.exports = {
     }
     const data = r.data ? dataDaIso(r.data) : oggi();
 
+    // Fase 5: il ticket di cui e' il rapportino (idTicket o idLocaleTicket): stesso cliente, non chiuso, visibile.
+    // Senza, resta quello che aveva (si toglie solo con legaRapportino).
+    let ticketRiga = this.ticketPerRapportino(r, cliente ? cliente.id : '');
+    if (!ticketRiga && esistente && esistente.ticket_id) {
+      ticketRiga = this.db.riga('SELECT * FROM ticket WHERE id = ?', esistente.ticket_id);
+      if (ticketRiga && cliente && ticketRiga.cliente_id !== cliente.id) this.controllaTicketPerRapportino(ticketRiga, cliente.id);
+    }
+    if (ticketRiga && esistente && esistente.ticket_id && esistente.ticket_id !== ticketRiga.id) {
+      const vecchio = this.db.riga('SELECT numero FROM ticket WHERE id = ?', esistente.ticket_id);
+      throw new Rifiuto('Il rapportino ' + esistente.id + ' è già del ticket ' + (vecchio ? vecchio.numero : esistente.ticket_id) + ': toglilo prima da lì');
+    }
+    if (ticketRiga && !cliente) {
+      const nome = (this.db.riga('SELECT nome FROM soggetti WHERE id = ?', ticketRiga.cliente_id) || {}).nome || ticketRiga.cliente_id;
+      throw new Rifiuto('Il ticket è di ' + nome + ', il rapportino di ' + testo(r.cliente));
+    }
+
     if (!cliente) cliente = this.creaCliente({ nome: r.cliente });
 
     // Una commessa nata sul telefono arriva con la descrizione e il codice che il
@@ -147,7 +163,8 @@ module.exports = {
       id_commessa: commessa ? commessa.id : '',
       // Nella colonna COMMESSA il codice: e' quello che si cerca.
       commessa: commessa ? commessa.id : '',
-      ticket: testo(r.ticket),
+      // Fase 5: col ticket e il campo vuoto, il server ci scrive il numero ("TK/2026/0014 · rif. 4471").
+      ticket: testo(r.ticket) || (ticketRiga ? (esistente && testo(esistente.ticket) ? testo(esistente.ticket) : this.testoTicketRapportino(ticketRiga)) : ''),
       luogo: testo(r.luogo),
       descrizione: testo(r.descrizione),
       ore_lavoro: numero(r.oreLavoro),
@@ -167,6 +184,7 @@ module.exports = {
       totale: conto.totale,
       costo_orario: regole.costoOrario === null || regole.costoOrario === undefined ? null : numero(regole.costoOrario),
       note_interne: testo(r.noteInterne),
+      ticket_id: ticketRiga ? ticketRiga.id : null,
       modificato: ora,
     };
 
@@ -187,6 +205,8 @@ module.exports = {
     }
     // Le spese del passo 3 diventano (o restano) righe di spese al cliente che sommano alla colonna.
     this.sincronizzaSpeseRapportino(id, { noteCambiate });
+    // Fase 5: un rapportino nuovo (o appena legato) porta il ticket in carico e ne rifa' i tempi.
+    if (ticketRiga) this.dopoRapportinoDelTicket(ticketRiga.id, this.db.riga('SELECT * FROM rapportini WHERE id = ?', id), !esistente || esistente.ticket_id !== ticketRiga.id);
 
     // La tariffa libera si ricorda: al prossimo rapportino per questo cliente
     // il telefono la propone gia' scritta.
@@ -267,7 +287,10 @@ module.exports = {
         fatture[f.sorgente_id] = { id: f.id, riferimento: f.riferimento, stato: f.stato, etichetta: f.stato === 'bozza' || f.stato === 'pronta' ? 'In bozza ' + f.riferimento : 'Fattura ' + (f.numero || f.riferimento) };
       }
     }
-    return { foto, descrizioni, spese, fatture };
+    // Fase 5: il ticket di ogni rapportino (numero, stato, come si fattura).
+    const ticket = {};
+    for (const t of this.db.righe('SELECT t.id, t.numero, t.stato, t.fatturazione, c.numero contratto FROM ticket t LEFT JOIN contratti c ON c.id = t.contratto_id')) ticket[t.id] = t;
+    return { foto, descrizioni, spese, fatture, ticket };
   },
 
   /** La riga come la mandava rapportinoDaRiga() dello script, piu' chi l'ha scritto. */
@@ -324,6 +347,12 @@ module.exports = {
       motivoRifiuto: testo(r.motivo),
       righeSpese: (aiuti.spese || {})[r.id] || [],
     };
+    // Fase 5: il ticket (idTicket interno, numeroTicket) e, chiuso nel contratto o senza fattura, perche' non si fattura.
+    const tk = r.ticket_id !== null && r.ticket_id !== undefined ? ((aiuti.ticket || {})[r.ticket_id] || null) : null;
+    o.idTicket = tk ? tk.id : null;
+    o.numeroTicket = tk ? tk.numero : '';
+    o.ticketAperto = !!tk && ['aperto', 'in_carico', 'in_attesa', 'risolto'].indexOf(tk.stato) >= 0;
+    o.nonSiFattura = tk && tk.stato === 'chiuso' ? (tk.fatturazione === 'contratto' ? 'Nel contratto' + (tk.contratto ? ' ' + tk.contratto : '') : tk.fatturazione === 'no' ? 'Non si fattura' : '') : '';
     // Fase 4: {id, riferimento, stato, etichetta} o null; la chiave c'e' solo per chi vede le fatture.
     if (aiuti.fatture) o.fattura = aiuti.fatture[r.id] || null;
     return o;
@@ -348,6 +377,7 @@ module.exports = {
     if (testo(a)) { condizioni.push("(data IS NULL OR data = '' OR data <= ?)"); parametri.push(testo(a)); }
     if (testo(f.idCliente)) { condizioni.push('id_cliente = ?'); parametri.push(testo(f.idCliente)); }
     if (testo(f.idCommessa)) { condizioni.push('id_commessa = ?'); parametri.push(testo(f.idCommessa)); }
+    if (testo(f.idTicket)) { condizioni.push('ticket_id = ?'); parametri.push(this.idTicketDa(f.idTicket)); }
     if (testo(f.statoApprovazione)) { condizioni.push('stato_approvazione = ?'); parametri.push(testo(f.statoApprovazione) === 'nessuno' ? '' : testo(f.statoApprovazione)); }
     const sql = 'SELECT * FROM rapportini' + (condizioni.length ? ' WHERE ' + condizioni.join(' AND ') : '');
     const aiuti = this.aiutiRapportini();
@@ -393,6 +423,7 @@ module.exports = {
       if (nuovo === 'ANNULLATO' && attuale !== 'ANNULLATO') valori.stato_prima = attuale;
       this.aggiorna('rapportini', riga.id, valori, 'id', nota);
       this.allineaSpeseRapportino(riga.id);
+      if (riga.ticket_id && (nuovo === 'ANNULLATO' || attuale === 'ANNULLATO')) this.ricalcolaIntervento(riga.ticket_id);
       return this.rapportinoPerId(riga.id);
     });
   },

@@ -30,8 +30,9 @@ test('anagrafiche: le parti di oggi e quelle nuove', async () => {
   assert.equal(a.fornitori[0].cliente, false);
   assert.deepEqual(Object.keys(a.utenti[0]).sort(), ['attivo', 'id', 'nome', 'ruolo'], 'degli utenti solo nome e ruolo');
   // Fase 4: il PR/2026/012 rev. 1 accettato e' diventato la commessa 26ST003 (il contratto del prototipo).
-  assert.equal(a.numerazioni.find(n => n.tipo === 'commessa').prossimo, '26ST004');
-  assert.equal(a.sedi.filter(x => x.tipo === 'impianto').length, 1);
+  // Fase 5: i tre contratti di assistenza hanno le loro commesse (26ST004-26ST006) e ci sono gli impianti 4-9 del prototipo.
+  assert.equal(a.numerazioni.find(n => n.tipo === 'commessa').prossimo, '26ST007');
+  assert.equal(a.sedi.filter(x => x.tipo === 'impianto').length, 7);
   assert.equal(a.commesse.find(m => m.id === '26ST001').responsabileId, 1);
   assert.deepEqual(a.commesse.find(m => m.id === '26ST001').persone, [3]);
 });
@@ -233,7 +234,7 @@ test('esporta: CSV per Excel con punto e virgola, BOM, virgola nei decimali', as
   assert.ok(m.includes('26ST001;C001;Elettrodinamica;Nuovo magazzino automatico Batokyo'));
   const reg = await manuel('esporta', { cosa: 'registro' });
   assert.ok(reg.righe > 10);
-  assert.equal((await manuel('esporta', { cosa: 'boh' })).errore, 'Cosa esportare? rapportini, clienti, fornitori, commesse, registro, preventivi, attivita, ore, spese, trasferte, rimborsi, fatture, ricevute, daFatturare, riepilogo, movimenti, scadenziario o impegni');
+  assert.equal((await manuel('esporta', { cosa: 'boh' })).errore, 'Cosa esportare? rapportini, clienti, fornitori, commesse, registro, preventivi, attivita, ore, spese, trasferte, rimborsi, fatture, ricevute, daFatturare, riepilogo, movimenti, scadenziario, impegni, documenti, scadenze, ticket o contratti');
 });
 
 // ------------------------------------------------------------------ dashboard
@@ -247,7 +248,9 @@ test('dashboard: tre sezioni di voci con gravita e collegamento; per il titolare
   const pagine = ['dashboard', 'clienti', 'cliente', 'commesse', 'commessa', 'rapportini', 'fatturazione', 'amministrazione',
     'preventivi', 'preventivo', 'attivita', 'calendario', 'spese',
     // Fase 4 (fase4.md §12)
-    'fatture', 'fattura', 'ricevute', 'ricevuta', 'scadenziario', 'movimenti', 'impegni', 'conti', 'situazione'];
+    'fatture', 'fattura', 'ricevute', 'ricevuta', 'scadenziario', 'movimenti', 'impegni', 'conti', 'situazione',
+    // Fase 5 (fase5.md §11.1)
+    'tickets', 'ticket', 'contratti', 'contratto', 'documenti', 'documento', 'scadenza', 'impianto'];
   for (const v of voci) {
     assert.ok(['urgente', 'attenzione', 'info', 'soldi'].includes(v.gravita), JSON.stringify(v));
     assert.ok(pagine.includes(v.collegamento.pagina), JSON.stringify(v));

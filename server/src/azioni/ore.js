@@ -124,6 +124,9 @@ module.exports = {
       a.commesse[String(m.id).toUpperCase()] = { id: m.id, descrizione: m.descrizione, idCliente: m.cliente_id };
     });
     this.db.righe('SELECT id, nome FROM soggetti').forEach(s => { a.clienti[s.id] = s.nome; });
+    // Fase 5: i numeri dei ticket.
+    a.ticket = {};
+    this.db.righe('SELECT id, numero FROM ticket').forEach(t => { a.ticket[t.id] = t.numero; });
     return a;
   },
 
@@ -204,6 +207,8 @@ module.exports = {
       approvataDaNome: r.approvata_da ? a.utenti[r.approvata_da] || '' : '', approvataIl: dataOraIso(r.approvata_il),
       motivoRifiuto: r.motivo, dalTimer: r.dal_timer === 1, tolta: dataOraIso(r.tolta),
       puoScrivere: this.livello('rapportini') >= 2 && this.vedeDi(r.utente_id) && !bloccata,
+      // Fase 5
+      idTicket: r.ticket_id === null || r.ticket_id === undefined ? null : r.ticket_id, ticket: r.ticket_id ? (a.ticket || {})[r.ticket_id] || '' : '',
       bloccata,
       creato: dataOraIso(r.creato), modificato: dataOraIso(r.modificato),
     };
@@ -258,6 +263,7 @@ module.exports = {
       cond.push('stato = ?');
       par.push(stato);
     }
+    if (testo(d.ticket || d.idTicket)) { cond.push('ticket_id = ?'); par.push(this.idTicketDa(d.ticket || d.idTicket)); }
     const righe = this.db.righe('SELECT * FROM ore WHERE ' + cond.join(' AND ') + ' ORDER BY data, inizio, id', ...par);
     const aiuti = this.aiutiOre(righe);
     const ore = righe.map(r => this.oreDaRiga(r, aiuti));
@@ -336,7 +342,19 @@ module.exports = {
 
     const bozza = si(x.bozza);
     const data = x.data !== undefined && testo(x.data) ? dataDaIso(x.data) : prima ? prima.data : oggi();
-    let commessa = this.commessaPerCodice(x.idCommessa !== undefined ? x.idCommessa : prima ? prima.commessa_id : '');
+    // Fase 5: il ticket delle ore (assistenza al telefono, preparazione); senza commessa propone quella del ticket.
+    const idTicket = x.idTicket !== undefined ? (testo(x.idTicket) ? this.idTicketDa(x.idTicket) : null) : prima ? prima.ticket_id : null;
+    const tk = idTicket !== null ? this.rigaTicket(idTicket) : null;
+    if (tk && (!prima || prima.ticket_id !== tk.id)) {
+      if (['chiuso', 'annullato'].indexOf(tk.stato) >= 0) throw new Rifiuto('Il ticket ' + tk.numero + ' è ' + (tk.stato === 'chiuso' ? 'chiuso: riaprilo per aggiungere ore' : 'annullato'));
+      this.controllaTicketLibero(tk, false);
+    }
+    if (prima && prima.ticket_id && (!tk || tk.id !== prima.ticket_id)) {
+      const vecchio = this.db.riga('SELECT * FROM ticket WHERE id = ?', prima.ticket_id);
+      if (vecchio) this.controllaTicketLibero(vecchio, false);
+    }
+    const codiceCommessa = x.idCommessa !== undefined ? x.idCommessa : prima ? prima.commessa_id : (tk ? tk.commessa_id : '');
+    let commessa = this.commessaPerCodice(codiceCommessa);
     const pa = this.prestazioneEAttivita(x, prima, commessa);
     commessa = pa.commessa;
 
@@ -380,7 +398,7 @@ module.exports = {
 
     const v = {
       utente_id: utente, data, inizio, fine, pausa_minuti: pausa, ore, commessa_id: idCommessa, prestazione_id: pa.idPrest,
-      attivita_id: pa.idAtt, descrizione, fatturabile: fatturabile ? 1 : 0, tipo, costo_orario: costoOrario,
+      attivita_id: pa.idAtt, descrizione, fatturabile: fatturabile ? 1 : 0, tipo, costo_orario: costoOrario, ticket_id: tk ? tk.id : null,
     };
     const cambiato = !prima || Object.keys(v).some(k => diverso(prima[k], v[k]));
     Object.assign(v, this.statoDopoSalvataggio(prima, utente, bozza, cambiato));
@@ -392,6 +410,7 @@ module.exports = {
     } else {
       id = this.inserisci('ore', Object.assign(v, { id_locale: testo(x.idLocale) || null, creato: ora, modificato: ora }));
     }
+    for (const t of new Set([prima && prima.ticket_id, tk && tk.id].filter(Boolean))) this.ricalcolaIntervento(t);
     return { ok: true, riga: this.orePerId(id) };
   },
 
@@ -420,6 +439,7 @@ module.exports = {
     if (!this.vedeDi(r.utente_id)) throw senzaPermesso('togliere le ore degli altri');
     if (si(d.annulla)) {
       if (r.tolta) this.aggiorna('ore', r.id, { tolta: null, modificato: adesso() });
+      if (r.ticket_id) this.ricalcolaIntervento(r.ticket_id);
       return { ok: true, riga: this.orePerId(r.id) };
     }
     if (r.stato === 'approvata' && this.soloSuoi()) throw new Rifiuto('Sono già approvate: per toglierle chiedi a chi approva');
@@ -427,7 +447,12 @@ module.exports = {
       const ferma = this.oreBloccate(r);
       if (ferma) throw new Rifiuto(ferma);
     }
+    if (!r.tolta && r.ticket_id) {
+      const t = this.db.riga('SELECT * FROM ticket WHERE id = ?', r.ticket_id);
+      if (t) this.controllaTicketLibero(t, false);
+    }
     if (!r.tolta) this.aggiorna('ore', r.id, { tolta: adesso(), modificato: adesso() });
+    if (r.ticket_id) this.ricalcolaIntervento(r.ticket_id);
     return { ok: true, riga: this.orePerId(r.id) };
   },
 

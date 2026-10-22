@@ -117,6 +117,8 @@ async function copiaNelDatabase(o) {
             id: c.id, nome: f.nome || c.nome || '', mime: f.mime || c.mime || '', byte: f.dati.length, sha256: sha256(f.dati), percorso: c.id,
             tipo: 'documento', commessa_id: c.idCommessa, drive_url: c.url || null, creato: c.data ? istante(new Date(c.data)) : adesso(),
           });
+          // Fase 5: il documento della commessa entra nell'archivio (Da classificare), con lo stesso id del file di Drive.
+          w.documentoDaFileVecchio(w.db.riga('SELECT * FROM file WHERE id = ?', c.id), c.idCommessa);
         } else {
           w.db.esegui('UPDATE file SET nome = CASE WHEN nome = \'\' THEN ? ELSE nome END, mime = CASE WHEN mime = \'\' THEN ? ELSE mime END, ' +
             'byte = ?, sha256 = ?, percorso = ? WHERE id = ?', f.nome, f.mime, f.dati.length, sha256(f.dati), c.id, c.id);

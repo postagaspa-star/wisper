@@ -79,8 +79,15 @@
       const referenti = S.ana.referenti.filter(r => r.idSoggetto === c.id).sort((a, b) => (a.ordine || 0) - (b.ordine || 0));
       const sedi = S.ana.sedi.filter(s => s.idSoggetto === c.id && !s.archiviata);
       const commesse = S.ana.commesse.filter(m => m.idCliente === c.id && !m.modello);
+      // Fase 5 (§12.5): Documenti · N e Ticket · N (i numeri arrivano dal server mentre la scheda è aperta).
+      S.conteFase5 = S.conteFase5 || {};
+      const conta = S.conteFase5[c.id] || {};
       const tabs = [['dati', 'Dati'], ['referenti', 'Referenti · ' + referenti.length], ['sedi', 'Sedi e impianti · ' + sedi.length]]
-        .concat(c.cliente ? [['commesse', 'Commesse · ' + commesse.filter(m => !m.archiviata).length]] : []);
+        .concat(c.cliente ? [['commesse', 'Commesse · ' + commesse.filter(m => !m.archiviata).length]] : [])
+        .concat(c.cliente && puo('documenti') && W.Archivio ? [['documenti', 'Documenti' + (typeof conta.documenti === 'number' ? ' · ' + conta.documenti : ''), { 'data-conta': 'documenti' }]] : [])
+        .concat(c.cliente && puo('ticket') && W.Ticket ? [['ticket', 'Ticket' + (typeof conta.ticket === 'number' ? ' · ' + conta.ticket : ''), { 'data-conta': 'ticket' }]] : []);
+      if (c.cliente && W.Archivio && puo('documenti') && conta.documenti === undefined) W.Archivio.quantiDocumenti(c.id).then(n => { if (typeof n !== 'number') return; (S.conteFase5[c.id] = S.conteFase5[c.id] || {}).documenti = n; const b = document.querySelector('[data-conta="documenti"]'); if (b) b.textContent = 'Documenti · ' + n; });
+      if (c.cliente && W.Ticket && puo('ticket') && conta.ticket === undefined) W.Ticket.quantiTicket(c.id).then(n => { if (typeof n !== 'number') return; (S.conteFase5[c.id] = S.conteFase5[c.id] || {}).ticket = n; const b = document.querySelector('[data-conta="ticket"]'); if (b) b.textContent = 'Ticket · ' + n; });
       const scelta = S.schedaSoggetto[c.id] && tabs.some(t => t[0] === S.schedaSoggetto[c.id]) ? S.schedaSoggetto[c.id] : 'dati';
       const scrive = puo('clienti', 2);
       const area = h('div', { class: 'sezione stretta-820' });
@@ -112,6 +119,8 @@
       if (scelta === 'referenti') schedaReferenti(area, c, referenti, scrive);
       else if (scelta === 'sedi') schedaSedi(area, c, sedi, scrive);
       else if (scelta === 'commesse') schedaCommesse(area, c, commesse);
+      else if (scelta === 'documenti' && W.Archivio) W.Archivio.schedaDocumenti(area, { idCliente: c.id });
+      else if (scelta === 'ticket' && W.Ticket) W.Ticket.schedaTicketCliente(area, c.id);
       else schedaDati(area, c);
     }
 
@@ -160,10 +169,14 @@
     }
 
     function schedaSedi(area, c, sedi, scrive) {
+      // Fase 5: la riga dell'impianto dice la categoria e apre lo storico (ticket, rapportini, documenti, verifiche).
+      const storico = puo('ticket');
       aggiungi(area, [h('div', { class: 'scheda righe' }, sedi.length ? sedi.map(s => riga({
-        sinistra: quadrato('luogo'), titolo: s.nome, sotto: R.indirizzoCompleto(s),
-        destra: s.tipo === 'impianto' ? pillola('Impianto', 'blu') : pillola('Sede', 'grigio'),
-        onclick: scrive ? () => moduloSede(c, s) : null, freccia: false,
+        sinistra: quadrato(s.tipo === 'impianto' ? 'fulmine' : 'luogo', s.tipo === 'impianto' ? 'ico-blu' : null), titolo: s.nome,
+        sotto: [s.categoriaNome, R.indirizzoCompleto(s)].filter(Boolean).join(' · '),
+        destra: h('span', { class: 'pillole-testa' }, s.tipo === 'impianto' ? pillola('Impianto', 'blu') : pillola('Sede', 'grigio'),
+          storico && scrive ? h('button', { type: 'button', class: 'btn collegamento piccolo', onclick: e => { e.stopPropagation(); moduloSede(c, s); } }, 'Cambia') : null),
+        onclick: storico ? () => W.vai('#ticket/impianto/' + s.id) : scrive ? () => moduloSede(c, s) : null, freccia: storico,
       })) : h('p', { class: 'vuoto sinistra' }, 'Nessuna sede o impianto.'))]);
       if (scrive) aggiungi(area, [h('div', null, h('button', { type: 'button', class: 'btn grande', onclick: () => moduloSede(c, null) }, icona('piu', 18, 2.6), 'Aggiungi una sede o un impianto'))]);
     }
@@ -409,21 +422,38 @@
       });
     }
 
-    function moduloSede(c, s) {
+    function moduloSede(c, s, dopo) {
       const x = s || { tipo: 'sede' };
       let tipo = x.tipo === 'impianto' ? 'impianto' : 'sede';
       const v = {
         nome: h('input', { type: 'text', value: x.nome || '' }), indirizzo: h('input', { type: 'text', value: x.indirizzo || '' }),
         cap: h('input', { type: 'text', inputmode: 'numeric', value: x.cap || '' }), citta: h('input', { type: 'text', value: x.citta || '' }),
         provincia: h('input', { type: 'text', maxlength: '2', value: x.provincia || '' }), note: h('textarea', { rows: 2 }),
+        // fase 5: i dati dell'impianto (architettura §16.2), tutti facoltativi
+        matricola: h('input', { type: 'text', value: x.matricola || '' }), potenza: h('input', { type: 'text', value: x.potenza || '', placeholder: '630 kVA' }),
+        tensione: h('input', { type: 'text', value: x.tensione || '', placeholder: '15 kV / 400 V' }), messaInServizio: h('input', { type: 'date', value: x.messaInServizio || '' }),
+        datiTecnici: h('textarea', { rows: 2 }),
       };
       v.note.value = x.note || '';
+      v.datiTecnici.value = x.datiTecnici || '';
+      const imp = { categoria: x.categoria || '', ambiente: x.ambiente || '', referenteId: x.referenteId || '', sedePadreId: x.sedePadreId || '' };
+      const T5 = window.WisperRegoleTicket;
       let errori = {};
       const zona = h('div', { class: 'fila' });
       const disegna = () => aggiungi(svuota(zona), [
         campo('Tipo', segmenti([['sede', 'Sede'], ['impianto', 'Impianto']], tipo, t => { tipo = t; disegna(); }, 'piccoli')),
         campo('Nome', v.nome, errori.nome), campo('Indirizzo', v.indirizzo),
         h('div', { class: 'riga-campi tre' }, campo('CAP', v.cap, errori.cap), campo('Città', v.citta), campo('Provincia', v.provincia, errori.provincia)),
+        tipo === 'impianto' && T5 ? h('div', { class: 'fila' },
+          h('div', { class: 'riga-campi' },
+            campo('Categoria', B.selezione([['', 'Da scegliere']].concat(T5.CATEGORIE_IMPIANTO), imp.categoria, y => { imp.categoria = y; })),
+            campo('Ambiente', B.selezione([['', 'Da scegliere']].concat(T5.AMBIENTI), imp.ambiente, y => { imp.ambiente = y; }))),
+          h('div', { class: 'riga-campi tre' }, campo('Potenza', v.potenza), campo('Tensione', v.tensione), campo('Matricola', v.matricola)),
+          h('div', { class: 'riga-campi' }, campo('Messa in servizio', v.messaInServizio),
+            campo('Referente sul posto', B.selezione([['', 'Nessuno']].concat(S.ana.referenti.filter(r => r.idSoggetto === c.id).map(r => [r.id, r.nome])), imp.referenteId, y => { imp.referenteId = y; }))),
+          S.ana.sedi.some(z => z.idSoggetto === c.id && z.tipo !== 'impianto' && (!s || z.id !== s.id))
+            ? campo('Sta nella sede', B.selezione([['', 'Nessuna in particolare']].concat(S.ana.sedi.filter(z => z.idSoggetto === c.id && z.tipo !== 'impianto' && (!s || z.id !== s.id)).map(z => [z.id, z.nome])), imp.sedePadreId, y => { imp.sedePadreId = y; })) : null,
+          campo('Dati tecnici', v.datiTecnici)) : null,
         campo('Note', v.note)]);
       disegna();
       let chiudi;
@@ -436,13 +466,16 @@
         if (ep) errori.provincia = ep;
         if (Object.keys(errori).length) { disegna(); return; }
         const campi = { idSoggetto: c.id, tipo, nome: v.nome.value.trim(), indirizzo: v.indirizzo.value.trim(), cap: v.cap.value.trim(), citta: v.citta.value.trim(), provincia: v.provincia.value.trim().toUpperCase(), note: v.note.value.trim() };
+        if (tipo === 'impianto' && T5) Object.assign(campi, { categoria: imp.categoria, ambiente: imp.ambiente, referenteId: imp.referenteId ? Number(imp.referenteId) || imp.referenteId : null,
+          sedePadreId: imp.sedePadreId ? Number(imp.sedePadreId) || imp.sedePadreId : null, matricola: v.matricola.value.trim(), potenza: v.potenza.value.trim(), tensione: v.tensione.value.trim(),
+          messaInServizio: v.messaInServizio.value || '', datiTecnici: v.datiTecnici.value.trim() });
         if (s) campi.id = s.id;
         const ris = await lavora('Salvo', () => Rete.post('/server/salvaSede', { sede: campi }));
         if (!ris) return;
         await W.ricaricaAnagrafiche().catch(() => null);
         chiudi();
         avviso(s ? 'Salvato' : (tipo === 'impianto' ? 'Impianto aggiunto' : 'Sede aggiunta'));
-        W.ridisegna();
+        if (dopo) dopo(); else W.ridisegna();
       };
       chiudi = finestra({
         titolo: s ? s.nome : 'Nuova sede o impianto', corpo: zona,
@@ -461,6 +494,6 @@
       });
     }
 
-    return { vista, scheda, modulo };
+    return { vista, scheda, modulo, moduloSede };
   };
 })(window);

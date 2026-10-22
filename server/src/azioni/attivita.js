@@ -22,7 +22,8 @@ const {
   Rifiuto, senzaPermesso, testo, numero, adesso, oggi, piuGiorni, dataIso, dataDaIso, dataOraIso, istante, due,
 } = require('../utili');
 
-const TIPI = ['attivita', 'appuntamento', 'sopralluogo'];
+// Fase 5: "intervento" e' l'uscita per un ticket (ticket_id), nel calendario di tutti come gli altri.
+const TIPI = ['attivita', 'appuntamento', 'sopralluogo', 'intervento'];
 const PRIORITA = ['alta', 'normale', 'bassa'];
 const STATI = ['da_fare', 'in_corso', 'fatta', 'annullata'];
 const REGOLE = ['giorni', 'settimane', 'mesi', 'anni'];
@@ -163,6 +164,8 @@ module.exports = {
     this.db.righe('SELECT id, nome FROM soggetti').forEach(s => { a.clienti[s.id] = s.nome; });
     this.db.righe('SELECT id, descrizione FROM commesse').forEach(m => { a.commesse[String(m.id).toUpperCase()] = m.descrizione; });
     this.db.righe('SELECT * FROM ricorrenze').forEach(r => { a.ricorrenze[r.id] = r; });
+    a.ticket = {};
+    this.db.righe('SELECT id, numero FROM ticket').forEach(t => { a.ticket[t.id] = t.numero; });
     if (!lista) return a;
     for (const c of this.db.righe('SELECT * FROM attivita_checklist WHERE attivita_id' + lista + ' ORDER BY ordine, id')) {
       (a.checklist[c.attivita_id] = a.checklist[c.attivita_id] || []).push({ id: c.id, testo: c.testo, fatta: c.fatta === 1, ordine: c.ordine });
@@ -197,6 +200,8 @@ module.exports = {
       fattaIl: dataOraIso(r.fatta_il), giorno, gruppo,
       checklist: aiuti.checklist[r.id] || [], allegati: aiuti.allegati[r.id] || [],
       puoScrivere: this.livello('attivita') >= 2 && this.suaAttivita(r),
+      // Fase 5
+      idTicket: r.ticket_id === null || r.ticket_id === undefined ? null : r.ticket_id, ticket: r.ticket_id ? aiuti.ticket[r.ticket_id] || '' : '',
       creato: dataOraIso(r.creato), modificato: dataOraIso(r.modificato),
     };
   },
@@ -233,6 +238,7 @@ module.exports = {
     if (si(d.nonAssegnate)) cond.push('a.assegnata_a IS NULL');
     if (testo(d.commessa || d.idCommessa)) { cond.push('a.commessa_id = ? COLLATE NOCASE'); par.push(testo(d.commessa || d.idCommessa)); }
     if (testo(d.cliente || d.idCliente)) { cond.push('a.cliente_id = ?'); par.push(testo(d.cliente || d.idCliente)); }
+    if (testo(d.ticket || d.idTicket)) { cond.push('a.ticket_id = ?'); par.push(this.idTicketDa(d.ticket || d.idTicket)); }
     if (this.soloSuoi()) {
       cond.push('(a.assegnata_a = ? OR a.assegnata_a IS NULL OR a.creata_da = ? ' +
         'OR a.commessa_id IN (SELECT commessa_id FROM commessa_persone WHERE utente_id = ?) ' +
@@ -266,7 +272,7 @@ module.exports = {
       stato: x.stato !== undefined ? testo(x.stato).toLowerCase() || 'da_fare' : prima ? p.stato : 'da_fare',
     };
     if (!v.titolo) throw new Rifiuto('Titolo: scrivi cosa c\'è da fare');
-    if (TIPI.indexOf(v.tipo) < 0) throw new Rifiuto('Tipo: attivita, appuntamento o sopralluogo');
+    if (TIPI.indexOf(v.tipo) < 0) throw new Rifiuto('Tipo: attivita, appuntamento, sopralluogo o intervento');
     if (PRIORITA.indexOf(v.priorita) < 0) throw new Rifiuto('Priorità: alta, normale o bassa');
     if (STATI.indexOf(v.stato) < 0) throw new Rifiuto('Stato: da_fare, in_corso, fatta o annullata');
     v.fatta_il = v.stato === 'fatta' ? (prima && p.stato === 'fatta' ? p.fatta_il : adesso()) : '';
@@ -284,6 +290,14 @@ module.exports = {
     v.cliente_id = x.idCliente !== undefined ? testo(x.idCliente) : prima ? p.cliente_id : '';
     if (v.cliente_id && !this.db.riga('SELECT id FROM soggetti WHERE id = ?', v.cliente_id)) throw new Rifiuto('Cliente ' + v.cliente_id + ' non trovato');
     if (!v.cliente_id && v.commessa_id) v.cliente_id = this.db.riga('SELECT cliente_id FROM commesse WHERE id = ?', v.commessa_id).cliente_id;
+    // Fase 5: il ticket dell'intervento (stesso cliente).
+    v.ticket_id = x.idTicket !== undefined ? (vuoto(x.idTicket) ? null : this.idTicketDa(x.idTicket)) : prima ? p.ticket_id : null;
+    if (v.ticket_id !== null) {
+      const t = this.rigaTicket(v.ticket_id);
+      if (v.cliente_id && t.cliente_id !== v.cliente_id) throw new Rifiuto('Il ticket ' + t.numero + ' è di un altro cliente');
+      if (!v.cliente_id) v.cliente_id = t.cliente_id;
+      v.ticket_id = t.id;
+    }
     v.prestazione_id = x.idPrestazione !== undefined ? (vuoto(x.idPrestazione) ? null : Number(x.idPrestazione)) : prima ? p.prestazione_id : null;
     if (v.prestazione_id !== null && !this.db.riga('SELECT id FROM prestazioni WHERE id = ?', v.prestazione_id)) {
       throw new Rifiuto('Prestazione ' + v.prestazione_id + ' non trovata');
@@ -397,6 +411,8 @@ module.exports = {
     }
     const risposta = { ok: true, attivita: this.attivitaPerId(id) };
     if (occorrenze !== undefined) risposta.occorrenze = occorrenze;
+    // Fase 5: un intervento fatto (o tolto) cambia il momento del primo intervento del ticket.
+    for (const tk of new Set([prima && prima.ticket_id, v.ticket_id].filter(x => x !== null && x !== undefined))) this.ricalcolaIntervento(tk);
     return risposta;
   },
 
@@ -592,6 +608,7 @@ module.exports = {
     const fatta = d.fatta === undefined ? true : si(d.fatta);
     const ora = adesso();
     this.aggiorna('attivita', r.id, { stato: fatta ? 'fatta' : 'da_fare', fatta_il: fatta ? (r.stato === 'fatta' ? r.fatta_il : ora) : '', modificato: ora });
+    if (r.ticket_id) this.ricalcolaIntervento(r.ticket_id);
     return { ok: true, attivita: this.attivitaPerId(r.id) };
   },
 
@@ -609,6 +626,7 @@ module.exports = {
     if (!r.ricorrenza_id || per === 'questa') {
       const tolte = r.stato === 'annullata' ? 0 : 1;
       if (tolte) this.aggiorna('attivita', r.id, { stato: 'annullata', modificato: ora });
+      if (r.ticket_id) this.ricalcolaIntervento(r.ticket_id);
       return { ok: true, attivita: this.attivitaPerId(r.id), tolte };
     }
     const ric = this.db.riga('SELECT * FROM ricorrenze WHERE id = ?', r.ricorrenza_id);

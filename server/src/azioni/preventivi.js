@@ -694,6 +694,8 @@ module.exports = {
     }
     if (aMe) return { ok: true, preventivo: this.preventivoCompleto(r.id) };
     return this.db.transazione(() => {
+      // Fase 5: la copia del PDF mandato (COPIA_INVIATI), nella categoria Mandati ai clienti.
+      this.copiaInviati({ allegati: posta.allegati, a: destinatario, idCliente: r.cliente_id, idCommessa: r.commessa_id });
       const adessoR = this.db.riga('SELECT * FROM preventivi WHERE id = ?', r.id);
       if (adessoR.stato === 'BOZZA') {
         const ora = adesso();

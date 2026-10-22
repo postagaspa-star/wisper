@@ -366,6 +366,8 @@ fun SchermataCommessa(dati: Dati, nav: Navigatore, id: String) {
                     ParolaStatoCommessa(m.stato)
                     if (m.archiviata) ParolaGrigia("Archiviata")
                     if (m.modello) ParolaGrigia("Modello")
+                    // Fase 5 (§12.5): la commessa di un contratto di assistenza, col contratto linkato.
+                    if (m.idContratto.isNotBlank()) Box(Modifier.clickable { nav.vai("contratto-ca/${m.idContratto}") }) { Parola5("Assistenza", colore = eu.stgm.wisper.rapportino.ColoreFase5.BLU) }
                 }
                 Text(m.descrizione, style = Testi.titoloPagina.copy(fontSize = 26.sp, lineHeight = 30.sp), color = c.testo)
                 val sotto = listOfNotNull(
@@ -386,7 +388,8 @@ fun SchermataCommessa(dati: Dati, nav: Navigatore, id: String) {
                     if (perm.vede(Moduli.FATTURAZIONE)) FatturazioneDellaCommessa(dati, m.id, nav)
                     DaFatturareCommessa(dati, k, viste, nav)
                 }
-                SchedaDiCommessa.DOCUMENTI -> DocumentiCommessa(dati, m)
+                // Fase 5 (§12.5): l'archivio filtrato (cartella in cima, documenti, "Da Wisper"); senza il modulo Documenti come prima.
+                SchedaDiCommessa.DOCUMENTI -> if (LocalPermessi.current.vede(Moduli.DOCUMENTI)) ArchivioFiltrato(dati, nav, eu.stgm.wisper.rapportino.FiltroArchivio(idCommessa = m.id)) else DocumentiCommessa(dati, m)
             }
         }
         // Solo le aperte si propongono nei rapportini nuovi: dalle altre non se ne scrive uno.

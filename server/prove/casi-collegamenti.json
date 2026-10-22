@@ -1,0 +1,32 @@
+{
+  "nota": "Il tipo di un collegamento dall'indirizzo (fase5.md §5.1): tipoCollegamento(url) in server/src/documenti.js. Telefono e computer lo rifanno per la pillola mentre si incolla. tipo: onedrive | sharepoint | gdrive | percorso | web; cartella: proposta (si cambia). Gli spazi in fondo si tolgono, l'indirizzo si salva com'e'. rifiutati: la frase e' sempre la stessa.",
+  "frase": "Collegamento: incolla un indirizzo che comincia con https:// o un percorso come \\\\server\\cartella",
+  "casi": [
+    {"nome": "OneDrive personale (cartella condivisa)", "url": "https://esempio-my.sharepoint.com/:f:/g/personal/studio/Commesse/26ST003", "tipo": "onedrive", "cartella": true, "pillola": "OneDrive"},
+    {"nome": "OneDrive personale (file)", "url": "https://esempio-my.sharepoint.com/:b:/g/personal/studio/EaBcD123?e=xyz", "tipo": "onedrive", "cartella": false, "pillola": "OneDrive"},
+    {"nome": "OneDrive, link corto", "url": "https://1drv.ms/f/s!AbCdEfEsempio", "tipo": "onedrive", "cartella": true, "pillola": "OneDrive"},
+    {"nome": "OneDrive consumer", "url": "https://onedrive.live.com/?id=ESEMPIO%21123&cid=ABC", "tipo": "onedrive", "cartella": false, "pillola": "OneDrive"},
+    {"nome": "SharePoint con /:f:/", "url": "https://studioesempio.sharepoint.com/:f:/s/Commesse/EkAbC", "tipo": "sharepoint", "cartella": true, "pillola": "SharePoint"},
+    {"nome": "SharePoint, cartella della raccolta", "url": "https://studioesempio.sharepoint.com/sites/Commesse/Shared%20Documents/Forms/AllItems.aspx", "tipo": "sharepoint", "cartella": true, "pillola": "SharePoint"},
+    {"nome": "SharePoint, un file", "url": "https://studioesempio.sharepoint.com/:w:/s/Commesse/Relazione.docx", "tipo": "sharepoint", "cartella": false, "pillola": "SharePoint"},
+    {"nome": "Google Drive, un file", "url": "https://drive.google.com/file/d/1AbCdEsempio/view?usp=sharing", "tipo": "gdrive", "cartella": false, "pillola": "Google Drive"},
+    {"nome": "Google Drive, una cartella", "url": "https://drive.google.com/drive/folders/1AbCdEsempioCartella", "tipo": "gdrive", "cartella": true, "pillola": "Google Drive"},
+    {"nome": "Google Drive, una cartella con l'utente", "url": "https://drive.google.com/drive/u/0/folders/1AbCdEsempioCartella", "tipo": "gdrive", "cartella": true, "pillola": "Google Drive"},
+    {"nome": "Google Documenti", "url": "https://docs.google.com/document/d/1AbCdEsempio/edit", "tipo": "gdrive", "cartella": false, "pillola": "Google Drive"},
+    {"nome": "Percorso UNC del server dello studio", "url": "\\\\SERVER-STUDIO\\Archivio\\2019\\Schemi", "tipo": "percorso", "cartella": true, "pillola": "Cartella del computer"},
+    {"nome": "Percorso UNC di un file", "url": "\\\\SERVER-STUDIO\\Archivio\\2019\\schema.pdf", "tipo": "percorso", "cartella": false, "pillola": "Cartella del computer"},
+    {"nome": "Lettera di unità, una cartella", "url": "X:\\Commesse\\26ST003\\", "tipo": "percorso", "cartella": true, "pillola": "Cartella del computer"},
+    {"nome": "Lettera di unità, un file", "url": "X:\\Commesse\\26ST003\\schema unifilare.pdf", "tipo": "percorso", "cartella": false, "pillola": "Cartella del computer"},
+    {"nome": "file:/// dal computer", "url": "file:///C:/Dati/Commesse/26ST003/schema.pdf", "tipo": "percorso", "cartella": false, "pillola": "Cartella del computer"},
+    {"nome": "Un sito", "url": "https://www.esempio-inverter.example/manuali/6k.pdf", "tipo": "web", "cartella": false, "pillola": "Sito"},
+    {"nome": "Spazi in fondo", "url": "https://drive.google.com/drive/folders/1AbC   ", "salvato": "https://drive.google.com/drive/folders/1AbC", "tipo": "gdrive", "cartella": true, "pillola": "Google Drive"}
+  ],
+  "rifiutati": [
+    {"nome": "http:// senza la s", "url": "http://www.esempio.example/a.pdf"},
+    {"nome": "javascript:", "url": "javascript:alert(1)"},
+    {"nome": "data:", "url": "data:text/html,<b>x</b>"},
+    {"nome": "testo che non e' un indirizzo", "url": "la cartella sul server"},
+    {"nome": "vuoto", "url": ""},
+    {"nome": "ftp", "url": "ftp://server/archivio"}
+  ]
+}

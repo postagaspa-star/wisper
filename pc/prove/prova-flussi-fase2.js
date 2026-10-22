@@ -173,7 +173,9 @@ async function main() {
     await valuta(`(() => { const i = document.querySelector('.riepilogo-f input[type=email]'); if (!i.value) { i.value = 'rossi@esempio.com'; i.dispatchEvent(new Event('input', { bubbles: true })); } return true; })()`);
     await foto('invio');
     await clicca('Invia per email', '.riepilogo-f', 6000);
-    const inviato = (await server('preventivo?id=' + id)).preventivo;
+    // Il PDF lo fa Edge e a volte ci mette più dei 6 secondi: si aspetta che il server lo segni inviato, fino a 30.
+    let inviato = (await server('preventivo?id=' + id)).preventivo;
+    for (let i = 0; i < 24 && inviato.stato !== 'INVIATO'; i++) { await aspetta(1000); inviato = (await server('preventivo?id=' + id)).preventivo; }
     assert.equal(inviato.stato, 'INVIATO', 'il server lo segna inviato: ' + (await testoAvvisi()));
     passo('invio: PDF fatto da Edge, email al postino finto, preventivo INVIATO');
 
@@ -231,7 +233,10 @@ async function main() {
     await valuta("document.querySelector('.testata .tondo[aria-label=\"Altre azioni\"]').click(); true");
     await aspetta(300);
     await clicca('PDF dell\'incarico', '.menu', 5000);
-    const nuovi = fs.readdirSync(STAMPE).filter(x => /^(Preventivo|Incarico) /.test(x) && x.indexOf(GIRO) < 0);
+    // Anche qui Edge può metterci più dei 5 secondi: si aspetta l'incarico, fino a 30.
+    const stampati = () => fs.readdirSync(STAMPE).filter(x => /^(Preventivo|Incarico) /.test(x) && x.indexOf(GIRO) < 0);
+    for (let i = 0; i < 25 && !stampati().some(x => /^Incarico /.test(x)); i++) await aspetta(1000);
+    const nuovi = stampati();
     assert.ok(fs.readdirSync(STAMPE).length >= pdfPrima, 'i PDF ci sono');
     assert.ok(nuovi.some(x => /^Preventivo /.test(x)) && nuovi.some(x => /^Incarico /.test(x)), 'preventivo e incarico in pc/prove/stampe: ' + nuovi.join(', '));
     passo('PDF del preventivo e dell\'incarico stampati');

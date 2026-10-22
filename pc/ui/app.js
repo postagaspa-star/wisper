@@ -172,9 +172,12 @@
     if (!puo('dashboard')) return;
     try {
       // Fase 3: il proprio timer acceso si vede sulla Dashboard.
-      const [dash] = await Promise.all([Rete.get('/server/dashboard'), Ore.leggiTimer()]);
+      const [dash] = await Promise.all([Rete.get('/server/dashboard'), Ore.leggiTimer(),
+        // Fase 5: per il collaboratore il numerino di Ticket conta anche i suoi (conteggi.miei).
+        S.io && S.io.utente && S.io.utente.ruolo === 'collaboratore' && puo('ticket') ? Rete.get('/server/tickets?segmento=aperti').then(r => { Ticket.M.miei = (r.conteggi && r.conteggi.miei) || 0; }).catch(() => null) : null]);
       S.dash = dash;
       S.dashErrore = '';
+      if (S.caricato) disegnaLato();
     } catch (e) {
       if (e.accesso === false) return;
       S.dashErrore = e.message || String(e);
@@ -311,6 +314,13 @@
     Fatture.daRileggere();
     Banche.daRileggere();
     if (percorso().indexOf('fatturazione/fatture') !== 0) Fatture.M.aperta = null;
+    // Fase 5: Documenti e Ticket si rileggono entrando da un'altra voce; i loro pannelli si chiudono cambiando pagina.
+    const modulo5 = percorso().split('/')[0];
+    if (modulo5 !== S.moduloPrima) { if (modulo5 === 'documenti') Archivio.daRileggere(); if (modulo5 === 'ticket') Ticket.daRileggere(); }
+    S.moduloPrima = modulo5;
+    Archivio.M.aperto = null;
+    Ticket.M.aperto = null;
+    Ticket.M.contrattoAperto = null;
     mostra();
     const nome = percorso().split('/')[0];
     if (nome === 'rapportini') Visita.azione('nav-rapportini');
@@ -375,6 +385,10 @@
     if (d.hash.indexOf('#fatturazione') === 0) S.filtroFatture = f ? Object.assign({}, f) : null;
     if (d.hash.indexOf('#banche') === 0) S.filtroBanche = f ? Object.assign({}, f) : null;
     if (d.hash === '#clienti' && f) S.filtriSoggetti = Object.assign({ tipo: 'clienti', testo: '', archiviati: false }, f);
+    // Fase 5: una scadenza senza il permesso dei documenti (una visita di un contratto) si apre sulla pagina dove si è.
+    if (c.pagina === 'scadenza' && !puo('documenti')) { Archivio.apriScadenza(c.id); return; }
+    if (d.hash.indexOf('#documenti') === 0) S.filtroDocumenti = f ? Object.assign({}, f) : null;
+    if (d.hash.indexOf('#ticket') === 0) S.filtroTicket = f ? Object.assign({}, f) : null;
     // Fase 2: il segmento dei preventivi, il segmento o il giorno delle attività.
     if (d.hash === '#preventivi' && f) {
       const seg = f.segmento || { BOZZA: 'bozze', INVIATO: 'inviati', SCADUTO: 'scaduti', ACCETTATO: 'accettati' }[String(f.stato || '').toUpperCase()];
@@ -423,6 +437,9 @@
     else if (nome === 'amministrazione') Amministrazione.vista(pagina, a1 || '', a2 ? decodeURIComponent(a2) : '');
     else if (nome === 'preventivi') Preventivi.vista(pagina, a1 ? decodeURIComponent(a1) : '', a2 || '');
     else if (nome === 'attivita') { const f = S.filtroAttivita; S.filtroAttivita = null; Attivita.vista(pagina, a1 ? decodeURIComponent(a1) : '', f); }
+    // Fase 5: Documenti e Ticket e assistenza.
+    else if (nome === 'documenti') { const f = S.filtroDocumenti; S.filtroDocumenti = null; Archivio.vista(pagina, a1 || '', a2 ? decodeURIComponent(a2) : '', f); }
+    else if (nome === 'ticket') { const f = S.filtroTicket; S.filtroTicket = null; Ticket.vista(pagina, a1 || '', a2 ? decodeURIComponent(a2) : '', f); }
     else vistaDashboard(pagina);
   }
 
@@ -472,7 +489,7 @@
     if (S.entrato === false && !S.esempio) return;
     const attiva = R.moduloDi(percorso());
     R.vociMenu(perm()).forEach(v => {
-      const n = v.modulo === 'fatturazione' && S.caricato ? clientiDaFatturare() : 0;
+      const n = v.modulo === 'fatturazione' && S.caricato ? clientiDaFatturare() : (v.modulo === 'documenti' || v.modulo === 'ticket') && S.caricato ? numerinoFase5(v.modulo) : 0;
       const sua = attiva === v.modulo;
       aggiungi(voci, [h('a', {
         href: '#' + v.modulo, class: 'voce' + (sua ? ' attiva' : ''), 'aria-current': sua ? 'page' : null,
@@ -483,6 +500,18 @@
     aggiornaStatoServer();
     $('#richiudi .lab').textContent = S.latoChiuso ? 'Apri il menu' : 'Richiudi il menu';
     $('#richiudi').setAttribute('data-nome', S.latoChiuso ? 'Apri il menu' : 'Richiudi il menu');
+  }
+
+  /**
+   * Il numerino giallo di Documenti (le revisioni da approvare, solo per chi approva) e di Ticket e
+   * assistenza (quelli che nessuno ha preso; per il collaboratore anche i suoi da fare): architettura §16.18.
+   */
+  function numerinoFase5(modulo) {
+    const n = (S.dash && S.dash.numeri) || {};
+    if (modulo === 'documenti') return (S.io && S.io.interfaccia && S.io.interfaccia.puoApprovareDocumenti && n.documenti && n.documenti.daApprovare) || 0;
+    const t = n.ticket || {};
+    const miei = S.io && S.io.utente && S.io.utente.ruolo === 'collaboratore' ? (Ticket.M.miei || 0) : 0;
+    return (t.nonAssegnati || 0) + miei;
   }
 
   function disegnaChi() {
@@ -729,7 +758,9 @@
       // fase 3
       approvare: 'spunta', respinta: 'allarme', timer: 'orologio', rimborsi: 'scontrino', veicoli: 'auto',
       // fase 4
-      fattura: v.gravita === 'urgente' ? 'allarme' : 'fatturazione', ricevuta: 'scontrino', impegno: 'calendario', cassa: 'banca', conto: 'banca', fiscale: 'scudo' }[v.tipo] ||
+      fattura: v.gravita === 'urgente' ? 'allarme' : 'fatturazione', ricevuta: 'scontrino', impegno: 'calendario', cassa: 'banca', conto: 'banca', fiscale: 'scudo',
+      // fase 5
+      ticket: 'chiaveInglese', intervento: 'calendario', scadenza: 'bandiera', documento: 'file', contratto: 'contratto', spazio: 'disco', copia: 'disco' }[v.tipo] ||
       ({ urgente: 'allarme', attenzione: 'calendario', soldi: 'fatturazione' }[v.gravita] || 'lista');
   }
 
@@ -750,6 +781,18 @@
       h('div', { class: 'titoli' }, h('span', { class: 'sotto-titolo' }, R.dataTitolo(new Date())),
         h('h1', null, R.saluto() + (nome ? ', ' + nome : ''))),
       puo('rapportini', 2) ? h('button', { type: 'button', class: 'btn giallo', onclick: () => moduloRapportino(null) }, icona('piu', 18, 2.6), 'Nuovo rapportino') : null)]);
+
+    // Fase 5 (§12.5): per chi vede i ticket, Ticket aperti · Urgenti · Interventi oggi · Scadenze vicine (toccabili).
+    const nt = S.dash && S.dash.numeri && S.dash.numeri.ticket;
+    if (nt && puo('ticket')) {
+      const ns = (S.dash.numeri.scadenze) || {};
+      const box5 = (quanti, che, fn, rosso) => h('button', { type: 'button', class: 'num-box' + (rosso && quanti > 0 ? ' rosso' : ''), onclick: fn }, h('b', null, String(quanti || 0)), h('span', null, che));
+      aggiungi(pagina, [h('div', { class: 'quattro-num', 'data-visita': 'riquadri-ticket' },
+        box5(nt.aperti, 'ticket aperti', () => vaiA({ pagina: 'tickets', filtro: { segmento: 'aperti' } })),
+        box5(nt.urgenti, 'urgenti', () => vaiA({ pagina: 'tickets', filtro: { segmento: 'aperti', priorita: 'urgente' } }), true),
+        box5(nt.interventiOggi, nt.interventiOggi === 1 ? 'intervento oggi' : 'interventi oggi', () => vaiA({ pagina: 'calendario', filtro: { giorno: C.oggiIso() } })),
+        box5(ns.vicine !== undefined ? ns.vicine : (ns.scadute || 0) + (ns.entro || 0), 'scadenze vicine', () => (puo('documenti') ? vaiA({ pagina: 'documenti', filtro: { segmento: 'scadenze' } }) : vai('#ticket/programmati')), (ns.scadute || 0) > 0))]);
+    }
 
     // Fase 4 (§13.6): quattro riquadri dei soldi per chi vede fatture o banche: Da fatturare · Da incassare · Scaduto · Nel conto.
     const sd = S.dash && S.dash.numeri && S.dash.numeri.soldi;
@@ -889,6 +932,8 @@
     const stato0 = f.stato || (f.quali === 'fatturare' ? 'dafatturare' : f.quali === 'firmare' ? 'BOZZA' : '');
     let lista = C.filtra(S.rapportini, { testo: f.testo, mese: f.mese, cliente: f.cliente, commessa: f.commessa, stato: stato0 });
     if (f.chi) lista = lista.filter(r => chiPaga(r).chiave === f.chi);
+    // Fase 5 (§16.14): i rapportini di un ticket non chiuso aspettano la chiusura; quelli "nel contratto" o "non si fattura" non sono da fatturare.
+    if (stato0 === 'dafatturare') lista = lista.filter(r => !r.nonSiFattura && !(r.idTicket && r.ticketAperto));
     return C.ordina(lista, 'data', -1);
   }
 
@@ -1037,6 +1082,10 @@
       passi(r.stato),
       // Fase 4 (§15.2): la pillola della fattura in cui sta, col collegamento (solo per chi vede le fatture).
       r.fattura ? h('button', { type: 'button', class: 'pill ' + (r.fattura.stato === 'emessa' ? 'p-blu' : 'p-grigio') + ' pill-fattura', title: 'Apri', onclick: () => apriSuaFattura(r) }, icona('fatturazione', 14, 2.2), r.fattura.etichetta) : null,
+      // Fase 5: il ticket di cui è il rapportino (apre il ticket) e "Nel contratto" / "Non si fattura".
+      r.idTicket || r.nonSiFattura ? h('div', { class: 'pillole-testa' },
+        r.idTicket && puo('ticket') ? h('button', { type: 'button', class: 'pill p-grigio pill-fattura', title: 'Apri il ticket', onclick: () => { chiudiPannello(true); vai('#ticket/tk/' + r.idTicket); } }, icona('chiaveInglese', 14, 2.2), 'Ticket ' + (r.numeroTicket || '')) : null,
+        r.nonSiFattura ? h('span', { class: 'pill p-grigio' }, r.nonSiFattura) : null) : null,
       approvazione ? h('div', { class: approvazione.colore === 'rosso' ? 'banda' : 'banda calma' }, icona(approvazione.colore === 'rosso' ? 'avviso' : 'orologio', 20),
         h('span', { class: 'spazio' }, approvazione.colore === 'rosso' ? approvazione.testo : 'Da approvare: si manda al cliente e si fattura dopo l\'approvazione')) : null,
       h('div', null, h('div', { style: { fontSize: '18px', fontWeight: '800' } }, r.cliente),
@@ -1069,6 +1118,9 @@
       fattura && !r.fattura && (r.stato === 'FIRMATO' || r.stato === 'INVIATO') ? { testo: 'Segna fatturato a mano', fn: () => segnaFatturatiAMano([r]) } : null,
       fattura && r.stato === 'FATTURATO' && !r.fattura ? { testo: 'Non ancora fatturato', fn: () => cambiaStato([r], 'INVIATO') } : null,
       bloccato && (r.stato === 'FIRMATO' ? scrive : fattura) ? { testo: 'Riporta in bozza', fn: () => riportaInBozza(r) } : null,
+      // Fase 5 (§3.3): legare un rapportino scritto dalla strada solita a un ticket, o toglierlo.
+      scrive && puo('ticket') && r.id && r.stato !== 'FATTURATO' && !r.idTicket && !r.fattura ? { testo: 'Lega a un ticket', fn: () => legaATicket(r) } : null,
+      scrive && r.idTicket && r.stato !== 'FATTURATO' && !r.fattura ? { testo: 'Togli dal ticket', fn: () => togliDalTicket(r) } : null,
       scrive && r.stato === 'BOZZA' ? '-' : null,
       scrive && r.stato === 'BOZZA' ? { testo: 'Elimina', fn: () => annulla(r), pericolo: true } : null,
     ].filter(Boolean);
@@ -1142,6 +1194,38 @@
     chiudiPannello(true);
     if (r.fattura.stato === 'bozza') vai('#fatturazione/bozza/' + r.fattura.id);
     else { Fatture.M.aperta = r.fattura.id; vai('#fatturazione/fatture'); }
+  }
+
+  /** Lega a un ticket: i ticket aperti di quel cliente (fase5.md §3.3). */
+  async function legaATicket(r) {
+    const lista = await lavora('Cerco i ticket', () => Rete.get('/server/tickets?segmento=aperti&idCliente=' + encodeURIComponent(r.idCliente)));
+    if (!lista) return;
+    const vivi = lista.ticket || [];
+    let chiudi;
+    const lega = async t => {
+      chiudi();
+      const x = await lavora('Lego al ticket', () => Rete.post('/server/legaRapportino', { idRapportino: r.id, idTicket: t.id }));
+      if (!x) return;
+      accogli([x.rapportino]);
+      Ticket.daRileggere();
+      avviso(r.id + ' legato a ' + t.numero);
+      ridisegna();
+    };
+    chiudi = finestra({ titolo: 'Lega a un ticket', fuoco: false,
+      corpo: vivi.length ? h('div', { class: 'scheda righe' }, vivi.map(t => riga({ sinistra: quadrato('chiaveInglese'), titolo: t.numero + ' · ' + t.titolo,
+        sotto: [t.impianto, t.statoVisto, t.responsabile].filter(Boolean).join(' · '), onclick: () => lega(t) }))) : h('p', { class: 'vuoto sinistra' }, 'Nessun ticket aperto di ' + r.cliente + '.'),
+      pulsanti: ['spazio', h('button', { type: 'button', class: 'btn grande', onclick: () => chiudi() }, 'Chiudi')] });
+  }
+
+  async function togliDalTicket(r) {
+    const ok = await conferma('Togliere dal ticket?', 'Il rapportino ' + r.id + ' non sarà più del ticket ' + (r.numeroTicket || '') + '.', 'Togli dal ticket');
+    if (!ok) return;
+    const x = await lavora('Tolgo dal ticket', () => Rete.post('/server/legaRapportino', { idRapportino: r.id, idTicket: null }));
+    if (!x) return;
+    accogli([x.rapportino]);
+    Ticket.daRileggere();
+    avviso('Tolto dal ticket');
+    ridisegna();
   }
 
   async function riportaInBozza(r) {
@@ -1366,14 +1450,16 @@
       idLocale: 'U-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
       data: p.data || C.oggiIso(), tecnico: (S.io && S.io.utente && S.io.utente.nome) || S.ana.impostazioni.TECNICO || '', idCliente: p.idCliente || '', cliente: '',
       idCommessa: p.idCommessa || '', commessa: '', oreLavoro: 0, oreExtra: 0, oreViaggio: 0, km: '', spese: '',
-      tariffa: null, descrizione: '', luogo: '', ticket: '', noteSpese: '', noteInterne: '',
+      tariffa: null, descrizione: '', luogo: p.luogo || '', ticket: '', noteSpese: '', noteInterne: '',
+      // Fase 5 (§3.3): dal ticket il rapportino nasce già con cliente, commessa e luogo; il numero lo scrive il server.
+      idTicket: p.idTicket || null, numeroTicket: p.numeroTicket || '',
     };
     if (r.idCliente && !r.cliente) r.cliente = (cliente(r.idCliente) || {}).nome || '';
     if (r.idCommessa && !r.commessa) r.commessa = (commessa(r.idCommessa) || {}).descrizione || '';
 
     const m = {
       idCliente: r.idCliente, cliente: r.cliente, idCommessa: r.idCommessa, commessa: r.commessa, codiceProposto: '',
-      sceltaFatta: !!r.cliente, commessaFatta: !!esistente || !!r.idCommessa,
+      sceltaFatta: !!r.cliente, commessaFatta: !!esistente || !!r.idCommessa || !!r.idTicket,
       oreLavoro: C.num(r.oreLavoro), oreExtra: C.num(r.oreExtra), oreViaggio: C.num(r.oreViaggio),
       extraAperto: C.num(r.oreExtra) > 0, tariffaToccata: !!esistente, nuovoCliente: false,
     };
@@ -1570,6 +1656,7 @@
         noteSpese: v.noteSpese.value.trim(),
         tariffa: C.numONull(v.tariffa.value),
         noteInterne: v.noteInterne.value.trim(),
+        ...(r.idTicket && !esistente ? { idTicket: r.idTicket } : {}),
       };
     }
 
@@ -1620,14 +1707,17 @@
       accogli([ris.rapportino]);
       if (nuovaAnagrafica) await ricaricaAnagrafiche().catch(() => null);
       chiudi();
-      avviso('Salvato: ' + ris.rapportino.id + ' · ' + C.euro(ris.rapportino.totale));
+      avviso('Salvato: ' + ris.rapportino.id + (soldi() ? ' · ' + C.euro(ris.rapportino.totale) : ''));
+      // Fase 5: un rapportino del ticket chiede "Il lavoro è finito?" (il ticket si rilegge col rapportino nuovo).
+      if (ris.rapportino.idTicket && !esistente) { Ticket.daRileggere(); Ticket.lavoroFinito(ris.rapportino); if (W.percorso().indexOf('ticket') === 0) { ridisegna(); if (Ticket.M.tk) Ticket.apriPannello(ris.rapportino.idTicket); return; } }
       S.aperto = ris.rapportino.id || ris.rapportino.idLocale;
       ridisegna();
     }
 
     disegnaPerChi(); disegnaOre(); disegnaKm(); disegnaTariffa(); disegnaAltro(); disegnaDescrizione(); aggiornaConto();
     const corpo = h('div', { class: 'modulo' },
-      h('div', { class: 'col' }, campo('Data', v.data), h('h3', null, 'Per chi'), zonaPerChi, h('h3', null, 'Ore e strada'),
+      h('div', { class: 'col' }, r.numeroTicket || r.idTicket ? h('div', { class: 'pillole-testa' }, h('span', { class: 'pill p-grigio' }, icona('chiaveInglese', 14, 2.2), 'Ticket ' + (r.numeroTicket || esistente && esistente.numeroTicket || ''))) : null,
+        campo('Data', v.data), h('h3', null, 'Per chi'), zonaPerChi, h('h3', null, 'Ore e strada'),
         zonaOre, zonaKm, zonaTariffa),
       h('div', { class: 'col' }, h('h3', null, 'Il lavoro'), campoDescrizione, zonaAltro, soldi() ? h('h3', null, 'Il conto') : null, soldi() ? zonaConto : null));
     const chiudi = finestra({
@@ -1677,6 +1767,8 @@
     senzaPermesso, nomeFile, prossimoCodiceCommessa, attivitaLette, scriviConConferma,
     // fase 3
     vistaRapportini, esporta, rileggiRapportini,
+    // fase 5
+    percorso,
   };
   const Clienti = window.WisperClienti(W);
   const Commesse = window.WisperCommesse(W);
@@ -1690,6 +1782,15 @@
   const Banche = window.WisperBanche(W);
   W.Fatture = Fatture;
   W.Banche = Banche;
+  // Fase 5: Documenti e Ticket e assistenza usano calendario, ore, spese e la scheda dell'impianto.
+  W.Attivita = Attivita;
+  W.Ore = Ore;
+  W.Spese = Spese;
+  W.Clienti = Clienti;
+  const Archivio = window.WisperArchivio(W);
+  const Ticket = window.WisperTicket(W);
+  W.Archivio = Archivio;
+  W.Ticket = Ticket;
 
   /**
    * L'esportazione per Excel (§12.13, §13.9, §14.14): il server prepara il CSV coi
@@ -1777,6 +1878,9 @@
     if (chiudiMenu()) return;
     const veli = document.querySelectorAll('.velo');
     if (veli.length) { const v = veli[veli.length - 1]; if (v.chiudi) v.chiudi(); else v.remove(); } else if (S.aperto) chiudiPannello();
+    else if (document.querySelector('.pannello-doc')) Archivio.chiudiPannello();
+    else if (document.querySelector('.pannello-ticket')) Ticket.chiudiPannello();
+    else if (document.querySelector('.pannello-contratto')) Ticket.chiudiContrattoPannello();
     else if (document.querySelector('.pannello-fattura')) { const x = document.querySelector('.pannello-fattura [aria-label="Chiudi"]'); if (x) x.click(); }
   });
 
@@ -1800,6 +1904,11 @@
     Fatture.daRileggere();
     Object.assign(Fatture.M, { scelte: new Map(), cliente: null, aperta: null, conti: null, preselezione: null });
     Banche.daRileggere();
+    // fase 5
+    Archivio.daRileggere();
+    Ticket.daRileggere();
+    Object.assign(Archivio.M, { aperto: null, doc: null });
+    Object.assign(Ticket.M, { aperto: null, tk: null, contrattoAperto: null, contratto: null, miei: null });
   }
 
   function iniziaVisita() {

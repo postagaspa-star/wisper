@@ -85,6 +85,13 @@ fun SchermataCalendario(dati: Dati, nav: Navigatore, giorno: String) {
 
     val delGiorno = Agenda.delGiorno(tutte, scelto)
     val puo = perm.modifica(Moduli.ATTIVITA)
+    // Fase 5 (fase5.md §3.6): le scadenze si vedono nel loro giorno, lette da `scadenze {da, a}`: non sono attività.
+    val vedeScadenze = perm.vede(Moduli.DOCUMENTI) || perm.vede(Moduli.TICKET)
+    val scadenze = if (vedeScadenze) rememberLettura(meseVisto, 0) { dati.fase5.scadenzePeriodo(meseVisto.atDay(1).minusDays(7), meseVisto.atEndOfMonth().plusDays(7)) } else null
+    val scadenzeAperte = (scadenze as? Lettura.Pronta)?.dato?.periodo.orEmpty().filter { it.stato == "aperta" }
+    val scadenzeDelGiorno = scadenzeAperte.filter { it.data.take(10) == scelto.toString() }
+    // Anche le scadenze fanno il loro pallino nel giorno.
+    val scadenzePerGiorno: Map<String, Int> = scadenzeAperte.groupingBy { it.data.take(10) }.eachCount()
 
     Box(Modifier.fillMaxSize().background(c.fondo)) {
         Column(
@@ -115,12 +122,12 @@ fun SchermataCalendario(dati: Dati, nav: Navigatore, giorno: String) {
 
             AnimatedContent(targetState = mese, transitionSpec = { fadeIn(tween(220)) togetherWith fadeOut(tween(160)) }, label = "settimana o mese") { vediMese ->
                 if (vediMese) {
-                    GrigliaMese(meseVisto, scelto, oggi, tutte) { g -> sceltoTesto = g.toString(); mese = false }
+                    GrigliaMese(meseVisto, scelto, oggi, tutte, scadenzePerGiorno) { g -> sceltoTesto = g.toString(); mese = false }
                 } else {
                     Scheda(orizzontale = 8.dp, verticale = 12.dp) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             (0L until 7L).map { lunedi.plusDays(it) }.forEach { g ->
-                                GiornoStriscia(g, g == scelto, g == oggi, Agenda.pallini(tutte, g), Modifier.weight(1f)) { sceltoTesto = g.toString() }
+                                GiornoStriscia(g, g == scelto, g == oggi, (Agenda.pallini(tutte, g) + (scadenzePerGiorno[g.toString()] ?: 0)).coerceAtMost(3), Modifier.weight(1f)) { sceltoTesto = g.toString() }
                             }
                         }
                     }
@@ -137,7 +144,13 @@ fun SchermataCalendario(dati: Dati, nav: Navigatore, giorno: String) {
                 },
             )
             SchedaElenco {
-                if (delGiorno.isEmpty()) RigaCalma("Niente in calendario. Giornata libera.")
+                if (delGiorno.isEmpty() && scadenzeDelGiorno.isEmpty()) RigaCalma("Niente in calendario. Giornata libera.")
+                scadenzeDelGiorno.forEachIndexed { i, s ->
+                    if (i > 0) LineaElenco()
+                    RigaVoce("Scadenza: " + s.titolo, sotto = listOf(s.cliente.ifBlank { "Studio" }, s.impianto).filter { it.isNotBlank() }.joinToString(" · "),
+                        icona = Icone.bandiera, onClick = { nav.vai("scadenza/${s.id}") })
+                }
+                if (scadenzeDelGiorno.isNotEmpty() && delGiorno.isNotEmpty()) LineaElenco()
                 val pezzi = Agenda.giornata(delGiorno)
                 pezzi.forEachIndexed { i, p ->
                     if (i > 0) LineaElenco()
@@ -192,7 +205,7 @@ private fun GiornoStriscia(g: LocalDate, scelto: Boolean, oggi: Boolean, pallini
 
 /** Il mese: i giorni in griglia coi pallini; toccandone uno si torna alla settimana su quel giorno. */
 @Composable
-private fun GrigliaMese(m: YearMonth, scelto: LocalDate, oggi: LocalDate, tutte: List<Attivita>, onGiorno: (LocalDate) -> Unit) {
+private fun GrigliaMese(m: YearMonth, scelto: LocalDate, oggi: LocalDate, tutte: List<Attivita>, scadenze: Map<String, Int>, onGiorno: (LocalDate) -> Unit) {
     val c = W.colori
     val primo = m.atDay(1)
     val inizio = primo.with(DayOfWeek.MONDAY)
@@ -211,7 +224,7 @@ private fun GrigliaMese(m: YearMonth, scelto: LocalDate, oggi: LocalDate, tutte:
                 (0L until 7L).forEach { d ->
                     val g = inizio.plusDays(s * 7L + d)
                     val dentro = YearMonth.from(g) == m
-                    val n = if (dentro) Agenda.pallini(tutte, g) else 0
+                    val n = if (dentro) (Agenda.pallini(tutte, g) + (scadenze[g.toString()] ?: 0)).coerceAtMost(3) else 0
                     Column(
                         Modifier.weight(1f).heightIn(min = 52.dp).clip(RoundedCornerShape(12.dp)).let { if (dentro) it.clickable { onGiorno(g) } else it }
                             .semantics { if (dentro) contentDescription = giornoEsteso(g) + if (n > 0) ", $n impegni" else "" },
@@ -239,8 +252,10 @@ private fun GrigliaMese(m: YearMonth, scelto: LocalDate, oggi: LocalDate, tutte:
 @Composable
 private fun RigaImpegno(a: Attivita, ana: Anagrafiche, scriveRapportini: Boolean, nav: Navigatore) {
     val c = W.colori
+    // Fase 5: un intervento di un ticket ha la pillola Ticket e il tocco apre il ticket (§7.3).
+    val delTicket = a.tipo == TipoAttivita.INTERVENTO && a.idTicket.isNotBlank()
     Row(
-        Modifier.fillMaxWidth().heightIn(min = 64.dp).clickable { nav.vai("attivita/${a.id}") }.padding(vertical = 10.dp),
+        Modifier.fillMaxWidth().heightIn(min = 64.dp).clickable { nav.vai(if (delTicket) "ticket/${a.idTicket}" else "attivita/${a.id}") }.padding(vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -264,7 +279,8 @@ private fun RigaImpegno(a: Attivita, ana: Anagrafiche, scriveRapportini: Boolean
             ).joinToString(" · ")
             if (sotto.isNotBlank()) Text(sotto, style = Testi.secondario, color = c.tenue, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        if (scriveRapportini && a.tipo != TipoAttivita.ATTIVITA && a.idCliente.isNotBlank()) {
+        if (delTicket) Parola5("Ticket", colore = eu.stgm.wisper.rapportino.ColoreFase5.BLU)
+        else if (scriveRapportini && a.tipo != TipoAttivita.ATTIVITA && a.idCliente.isNotBlank()) {
             PulsanteRiga("Rapportino", { nav.nuovoRapportino(a.giorno ?: LocalDate.now(), a.idCliente, a.idCommessa.ifBlank { null }) })
         }
     }

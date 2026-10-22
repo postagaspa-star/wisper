@@ -56,8 +56,36 @@
     }
   }
 
+  /**
+   * Fase 5: un file trascinato sulla pagina (o un PDF appena fatto) va al programma così com'è, in byte:
+   * POST /locale/carica-corpo?nome=&mime=&per=&idFile=. Il programma lo gira al server (/carica) con la chiave.
+   */
+  async function postFile(percorso, file) {
+    if (!/^\/locale\/carica-corpo\?/.test(percorso)) throw new Error('Chiamata fuori dall\'accordo: ' + percorso);
+    let r;
+    try {
+      r = await fetch(percorso, { method: 'POST', cache: 'no-store', headers: { Accept: 'application/json', 'Content-Type': 'application/octet-stream' }, body: file });
+    } catch (e) {
+      const err = new Error('Il programma non risponde');
+      err.rete = true;
+      throw err;
+    }
+    let dati = null;
+    try { dati = await r.json(); } catch (e) { dati = null; }
+    if (!dati || dati.ok === false) {
+      const err = new Error((dati && dati.errore) || ('Errore ' + r.status));
+      if (dati && dati.accesso === false) err.accesso = false;
+      if (dati && dati.permesso === false) err.permesso = false;
+      if (dati) err.dati = dati;
+      err.rete = !!(dati && dati.rete);
+      throw err;
+    }
+    return dati;
+  }
+
   radice.WisperApi = {
     get: percorso => chiama('GET', percorso),
     post: (percorso, corpo) => chiama('POST', percorso, corpo || {}),
+    postFile,
   };
 })(window);

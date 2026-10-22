@@ -40,6 +40,9 @@
     { modulo: 'fatturazione', nome: 'Fatturazione', spiega: 'Da fatturare, fatture, ricevute, riepilogo', icona: 'fatturazione' },
     // Fase 4 (docs/gestionale/fase4.md §12): voce 9, subito dopo Fatturazione.
     { modulo: 'banche', nome: 'Banche e scadenze', spiega: 'Scadenziario, movimenti, tributi, conti', icona: 'banca' },
+    // Fase 5 (docs/gestionale/fase5.md §12): voci 11 e 12, dopo Banche e scadenze.
+    { modulo: 'documenti', nome: 'Documenti', spiega: 'Archivio, revisioni, scadenze, modelli', icona: 'file' },
+    { modulo: 'ticket', nome: 'Ticket e assistenza', spiega: "Richieste d'intervento, contratti, statistiche", icona: 'chiaveInglese' },
     { modulo: 'amministrazione', nome: 'Amministrazione', spiega: 'Studio, utenti, permessi, copie', icona: 'amministrazione' },
   ];
 
@@ -516,6 +519,20 @@
       case 'impegni': return { hash: '#banche/tributi', filtro: Object.assign(c.id ? { id: c.id } : {}, c.filtro || {}) };
       case 'conti': return { hash: '#banche/conti', filtro: c.id ? { id: c.id } : (c.filtro || null) };
       case 'situazione': return { hash: '#banche/situazione', filtro: null };
+      // Fase 5: ticket, contratti di assistenza, documenti, scadenze, impianti (architettura.md §16.18).
+      case 'tickets': {
+        const seg = c.filtro && c.filtro.segmento;
+        return { hash: '#ticket' + (seg && seg !== 'aperti' ? '/' + seg : ''), filtro: c.filtro || null };
+      }
+      case 'ticket': return { hash: '#ticket/tk/' + id, filtro: null };
+      case 'contratto': return { hash: '#ticket/contratto/' + id, filtro: null };
+      case 'impianto': return { hash: '#ticket/impianto/' + id, filtro: null };
+      case 'documenti': {
+        const seg = c.filtro && c.filtro.segmento;
+        return { hash: '#documenti' + (seg && seg !== 'archivio' ? '/' + seg : ''), filtro: c.filtro || null };
+      }
+      case 'documento': return { hash: '#documenti/doc/' + id, filtro: null };
+      case 'scadenza': return { hash: '#documenti/scadenza/' + id, filtro: null };
       default: return { hash: '#dashboard', filtro: null };
     }
   }
@@ -537,6 +554,9 @@
       spese: 'Apri le spese',
       fattura: 'Apri la fattura', fatture: 'Apri le fatture', ricevute: 'Apri le ricevute', ricevuta: 'Apri la ricevuta', scadenziario: 'Apri lo scadenziario',
       movimenti: 'Apri i movimenti', impegni: 'Apri i tributi', conti: 'Apri i conti', situazione: 'Apri la situazione',
+      // fase 5
+      ticket: 'Apri il ticket', tickets: 'Apri i ticket', contratto: 'Apri il contratto', documento: 'Apri il documento', documenti: 'Apri i documenti',
+      scadenza: 'Apri la scadenza', impianto: "Apri l'impianto",
     }[p] || 'Apri';
   }
 

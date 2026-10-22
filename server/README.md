@@ -74,15 +74,51 @@ script is in [`docs/gestionale/postino.md`](../docs/gestionale/postino.md).
   stamp duty), a cautious cash forecast (overdue payments count today, overdue receipts do not) with the days below the
   threshold, and the financial situation. Planned, recorded and verified at the bank are always kept apart; SDI, bank
   connection and statement import say "not connected".
+- **Phase 5: documents, tickets and service contracts** (`docs/gestionale/fase5.md`, responses in `architettura.md`
+  §16, migration `005-documenti-ticket`, server 0.8.0). *Documents*: an archive with categories, per client, job, plant
+  and ticket; each document is either a file uploaded to the NAS (with revisions: the old one stays readable as
+  "superseded", a new one waits for approval without replacing the valid one; approve, reject with a reason, undo) or a
+  **link** to a file or folder already on OneDrive, SharePoint, Google Drive, a website or a `\\server\...` path, recognised
+  from the address and never copied (`tipoCollegamento` in `src/documenti.js`, cases in `prove/casi-collegamenti.json`);
+  who can see what (`tutti`, `costi`, `riservati`: hidden documents are not listed and `/file/<id>` answers 403); search
+  in titles, notes, references, client, job, plant and ticket (accents and case ignored, all words; not inside files);
+  document deadlines; templates (Wisper's PDFs stay laid out in `pc/ui/documenti.js`, their texts and the letters are
+  editable, placeholders checked); "send by email" and a copy of every PDF Wisper sends (`COPIA_INVIATI`). Browsing
+  OneDrive/Drive and the expiring client link are **not connected** (the link is built and tested, served only by a
+  second port, `--porta-condivisione`, and only once `CONDIVISIONE_INDIRIZZO` is set). Files arrive as raw bytes with
+  **`POST /carica`** (up to `FILE_MAX_MB`, 50 MB, written to disk while they arrive and removed if too big, SHA-256
+  duplicate check, file type checked on the first bytes: no programs, scripts or web pages); base64 uploads keep working
+  for old apps. Disk space: below `SPAZIO_MINIMO_MB` no new documents, but report photos and signatures still pass down
+  to 200 MB free; the dashboard warns below `SPAZIO_AVVISO_MB`; the owner can empty the bin of files older than 90 days.
+  The off-site copy now sends one file at a time for at most 20 minutes a night; files over `COPIA_FUORI_MAX_MB` stay on
+  the NAS only and the dashboard says so. *Tickets*: service requests tied to client and plant, priority from two
+  questions (`prioritaDa` in `src/conti.js`, cases in `prove/casi-ticket.json`), response times from `TICKET_TEMPI` or
+  the contract, owner, states (open, taken, waiting, solved, closed, cancelled) with taking/intervention/solution/closing
+  times measured; **a ticket reuses what exists**: the visit is a calendar activity of type `intervento` (phase 2,
+  overlaps included), hours and expenses are phase 3 rows with `ticket_id`, the closing report is the usual report (the
+  server writes the ticket number in its Ticket field only when empty), photos are ticket files; opened offline with
+  `idLocale` like hours and expenses. **Closing chooses how it is invoiced** (owner and office only): one row for the
+  intervention (a new `ticket` source of "to invoice" under the same unique index, carrying its reports, expenses and
+  hours in one group), with the other reports, inside the contract, or not invoiced with a reason; while a ticket is
+  open its reports do not appear in "to invoice". *Service contracts* with their own fixed-price job (the fee becomes
+  the job's payment milestones, which phase 4 already invoices), periodic visits that create scheduled tickets 30 days
+  ahead (checked at start-up and every night, never twice), tacit renewal at night, cancellation, renewal with a new fee
+  applied to new instalments only, and whether the contract pays for itself. Plant history, ticket statistics, dashboard
+  items, permissions, audit log and CSV exports for all of it. Every report, PDF and total from before is identical after
+  the migration (proved against the 0.7.0 server in `prove/migrazione-005.test.js`).
 
 No npm dependencies: only Node 24 built-in modules.
 
 ## Run it
 
 ```sh
-node server/src/avvio.js --dati ./dati [--porta 8400]       # real data folder
-node server/src/avvio.js --dati ./dati-prova --prova         # sample data, in memory
+node server/src/avvio.js --dati ./dati [--porta 8400] [--porta-condivisione 8401]   # real data folder
+node server/src/avvio.js --dati ./dati-prova --prova                                 # sample data, in memory
 ```
+
+`--porta-condivisione` starts the second listener that answers only `GET /condiviso/<token>` (the client links of
+phase 5); without it, or while `CONDIVISIONE_INDIRIZZO` is empty, no link opens anywhere. `WISPER_SPAZIO_FINTO_MB`
+fakes the free disk space (tests only).
 
 `--prova` starts with the same sample data as the fake Google (`apps-script/prove/finto-google.js`) plus suppliers,
 contacts, sites, work phases and four test users, all with password `prova`: `manuel@esempio.it` (titolare),
@@ -95,7 +131,13 @@ trips and reimbursements to make, and for phase 4 the prototype's invoices (38/2
 45/2026 delivered, draft W-15 and W-14 ready and already paid, all handed over and returned through the real XML import),
 Elettrodinamica's September reports to invoice in one row per month, job 26ST003 from the accepted quote PR/2026/012
 rev. 1 (3,800 euro, 30/40/30), the studio account with October's movements, received invoices (one with withholding),
-recurring rent and utilities and a forecast that falls below 3,000 euro. E-mails and backups go to `<data>/posta-finta/`. Phone emulator:
+recurring rent and utilities and a forecast that falls below 3,000 euro, and for phase 5 the prototype's plants 4-9
+(Cabina MT Acme, Batokyo's warehouse and earthing system, Mario Bianchi's 6 kW PV), the service contracts CA/2026/001,
+CA/2026/002 (tacit renewal, cancellation due by 1 November) and CA/2025/004 with their jobs, tickets TK/2026/0009-0016
+(0014 urgent and opened this morning, 0013 with today's 14:30 visit, 0012 solved with Mario Bianchi's signed report and
+ready to close, 0011 waiting, 0010 and 0009 closed, 0015 and 0016 created by the contract visits), documents with
+revisions (rev. 3 of the MV single-line diagram waiting for approval), links (OneDrive, Google Drive, a website, a
+studio path), three to classify, the DPR 462 deadlines of Batokyo and an overdue protection check. E-mails and backups go to `<data>/posta-finta/`. Phone emulator:
 `http://10.0.2.2:8400`; computer: `http://localhost:8400`.
 
 On the NAS (`/volume1/docker/Wisper-NAS`): copy `.env.esempio` to `.env` with the real values, then
@@ -132,5 +174,15 @@ invoice, the handover sheet and XML read back equal to the model, the FatturaPA 
 `prove/xml/` (invented data, rebuilt by `node server/prove/xml/genera.js`: UTF-8 and ISO-8859-1, prefixes, DER and
 base64 p7m, zip, batch, credit note, delivery and rejection receipts, a received invoice with withholding) and the
 malicious ones, matching certain/probable/different/none, credit notes, the SDI rejection, banks, the cash forecast,
-recurring obligations and proposals, every role on every new action, and migration 004 on a phase 3 database. Nothing
-in the tests touches Google or the internet.
+recurring obligations and proposals, every role on every new action, and migration 004 on a phase 3 database; for
+phase 5 the link and priority cases, `/carica` with 49 MB (passes) and 51 MB (refused half-way, also without
+Content-Length, nothing left on disk), repeated `idFile`, SHA-256 duplicates and fake types, revisions with approval,
+rejection and undo, hidden `costi` documents (403 on `/file`), search, the expiring link on the second port (revoked and
+expired: 404), a fake almost-full disk, the one-file-at-a-time off-site copy (too big, failing, retried), every ticket
+state change and refusal, the calendar overlap, the report with the ticket (also offline), invoicing a ticket once only
+(index, issue, credit note, "with the other reports", "in the contract", "not invoiced"), the fifth grouping "E" of
+`casi-fattura.json`, contracts (activation, instalments in "to invoice", the visit ticket created once, tacit renewal,
+cancellation, renewal, closing), deadlines (done with the next one, 31 January + 1 month = 28 February, DPR 462 from the
+plant's environment), every role on every new action, the dashboard, and migration 005 on the real phase 4 sample
+database written by the 0.7.0 server (`prove/migrazione-005/genera-prima.js`). Nothing in the tests touches Google or
+the internet.

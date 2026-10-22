@@ -251,6 +251,26 @@ class DatiEsempio(oggi: LocalDate = LocalDate.now(), private val cartella: File?
         dopoScrittura = { aggiornaDashboard() },
     )
 
+    /** Fase 5: ticket, documenti e scadenze di esempio, in memoria (EsempioFase5). Niente va in coda. */
+    override val fase5: eu.stgm.wisper.rapportino.ServizioFase5 = eu.stgm.wisper.rapportino.ServizioFase5(
+        EsempioFase5(oggi), cartella, null, eu.stgm.wisper.rapportino.Scaffale(null),
+        object : eu.stgm.wisper.rapportino.EsecutoreFase4 {
+            override suspend fun <T> esegui(lavoro: suspend () -> T): Result<T> = try {
+                Result.success(lavoro())
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Result.failure(Exception(e.message ?: "È un esempio", e))
+            }
+        },
+        object : eu.stgm.wisper.rapportino.CodaFase5 {
+            override fun ticket(chiave: String, corpo: org.json.JSONObject) = Unit
+            override fun azioneTicket(chiave: String, corpo: org.json.JSONObject) = Unit
+            override fun fotoTicket(chiave: String, file: File) = Unit
+            override fun faiScadenza(id: String, corpo: org.json.JSONObject) = Unit
+        },
+    )
+
     private val permessiPerRuolo = Ruoli.ELENCO.associateWith { Permessi.iniziali(it) }.toMutableMap()
 
     override val sessione: StateFlow<Sessione> =

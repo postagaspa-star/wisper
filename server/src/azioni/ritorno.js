@@ -343,6 +343,10 @@ module.exports = {
         const mese = v.tipo === 'rapportino' ? v.data.slice(0, 7) : (voci.find(x => x.tipo === 'rapportino' && x.id === v.idRapportino) || v).data.slice(0, 7);
         g = 'rapportini:' + idCliente + ':' + mese;
         titolo = C.nomeMese(mese).replace(/^./, c => c.toUpperCase());
+      } else if (v.tipo === 'ticket' || (v.tipo === 'spesa' && v.idTicket)) {
+        // Fase 5: un ticket con le sue spese anticipate e' un gruppo solo.
+        g = v.gruppo;
+        titolo = 'Intervento ' + (v.tipo === 'ticket' ? v.id + ' · ' + v.titolo : v.idTicket);
       } else if (v.tipo === 'scadenza') { g = 'scadenza:' + v.id; titolo = v.titolo + ' · ' + v.idCommessa; }
       else if (v.tipo === 'spesa') { g = 'spesa:' + v.id; titolo = v.titolo; }
       else { g = v.gruppo; titolo = 'Ore di ' + C.nomeMese(v.data.slice(0, 7)) + ' · ' + v.idCommessa; }
@@ -673,9 +677,13 @@ module.exports = {
           const a = this.sorgenteAttiva(testo(x && x.tipo), testo(x && x.id));
           throw new Rifiuto(a ? this.fraseGiaRiservata(testo(x.tipo), testo(x.id), a) : nome + ': ' + this.nomeSorgente(testo(x.tipo), testo(x.id)).replace(/^./, c => c.toLowerCase()) + ' non è da fatturare per ' + cliente.nome);
         }
-        const g = v.tipo === 'scadenza' ? 'scadenza:' + v.id : v.tipo === 'spesa' && !v.idRapportino ? 'spesa:' + v.id : v.gruppo;
+        const g = v.tipo === 'scadenza' ? 'scadenza:' + v.id : v.tipo === 'spesa' && !v.idRapportino && !v.idTicket ? 'spesa:' + v.id : v.gruppo;
         if (!perGruppo.has(g)) perGruppo.set(g, []);
-        perGruppo.get(g).push({ tipo: v.tipo, id: String(v.id), importo: v.importo });
+        if (!perGruppo.get(g).some(x => x.tipo === v.tipo && x.id === String(v.id))) perGruppo.get(g).push({ tipo: v.tipo, id: String(v.id), importo: v.importo });
+        // Fase 5: un ticket porta con se' le sorgenti che ha dentro (rapportini, spese, ore), nello stesso gruppo.
+        if (v.tipo === 'ticket') {
+          for (const s of v.voceTicket.gruppi[0].sorgenti) if (s.tipo !== 'ticket' && !perGruppo.get(g).some(x => x.tipo === s.tipo && x.id === String(s.id))) perGruppo.get(g).push({ tipo: s.tipo, id: String(s.id), importo: s.importo });
+        }
       }
       for (const [g, sorgenti] of perGruppo) this.legaSorgenti(id, g, sorgenti);
       // Con un gruppo solo, le righe dell'XML sono sue: cosi' una nota di credito che le storna lo libera.

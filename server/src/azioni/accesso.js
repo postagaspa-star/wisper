@@ -190,6 +190,11 @@ module.exports = {
         puoSegnareRimborsi: this.puoSegnareRimborsi() && this.livello('spese') >= 2,
         approvazione: this.regolaApprovazione(),
         oreGiornaliere: Number(imp.ORE_GIORNALIERE) || 8,
+        // Fase 5: il giallo "Approva" dei documenti, "Chiudi il ticket", i link per i clienti, la grandezza massima di un file.
+        puoApprovareDocumenti: this.puoApprovareDocumenti() && this.livello('documenti') >= 2,
+        puoChiudereTicket: this.puoChiudereTicket(),
+        condivisioneCollegata: !!testo(imp.CONDIVISIONE_INDIRIZZO),
+        fileMaxMb: Number(imp.FILE_MAX_MB) || 50,
       },
     };
   },

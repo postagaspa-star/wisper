@@ -208,6 +208,9 @@ fun SchermataCliente(dati: Dati, nav: Navigatore, id: String) {
         add("referenti" to "Referenti · ${referenti.size}")
         add("sedi" to "Sedi e impianti · ${sedi.size}")
         if (cl.cliente) add("commesse" to "Commesse · ${commesse.size}")
+        // Fase 5 (§12.5): i documenti del cliente (la sua cartella in cima) e i suoi ticket.
+        if (cl.cliente && perm.vede(Moduli.DOCUMENTI)) add("documenti" to "Documenti")
+        if (cl.cliente && perm.vede(Moduli.TICKET)) add("ticket" to "Ticket")
     }
     val scheda = RicordoClienti.schede[id]?.takeIf { s -> schede.any { it.first == s } } ?: "dati"
 
@@ -324,17 +327,33 @@ fun SchermataCliente(dati: Dati, nav: Navigatore, id: String) {
                     if (sedi.isEmpty()) TestoRiga("Nessuna sede o impianto.")
                     sedi.forEachIndexed { i, s ->
                         if (i > 0) LineaElenco()
+                        // Fase 5: la riga dell'impianto mostra la categoria e apre lo storico.
                         RigaVoce(
                             s.nome,
-                            sotto = s.indirizzoCompleto.ifBlank { null },
-                            icona = Icone.luogo,
+                            sotto = listOf(s.categoriaNome, s.indirizzoCompleto).filter { it.isNotBlank() }.joinToString(" · ").ifBlank { null },
+                            icona = if (s.impianto) Icone.fulmine else Icone.luogo,
                             fine = { if (s.impianto) PillolaTipo("Impianto", c.inviatoTesto, c.inviatoFondo) else PillolaTipo("Sede", c.testo2, c.superficie2) },
-                            freccia = false,
-                            onClick = if (puo) ({ sede = s }) else null,
+                            freccia = s.impianto && perm.vede(Moduli.TICKET),
+                            onClick = if (s.impianto && perm.vede(Moduli.TICKET)) ({ nav.vai("impianto/${s.id}") }) else if (puo) ({ sede = s }) else null,
                         )
                     }
                 }
                 if (puo) PulsanteBordo("Aggiungi una sede o un impianto", { sede = Sede("", id, "sede", "") }, icona = Icone.piu, altezza = 48.dp)
+            }
+            "documenti" -> ArchivioFiltrato(dati, nav, eu.stgm.wisper.rapportino.FiltroArchivio(idCliente = id))
+            "ticket" -> {
+                val lettura = rememberLettura("ticket-cliente-$id", Giri5.ticket) { dati.fase5.tickets("tutti", listOf("idCliente" to id)) }
+                when (lettura) {
+                    is Lettura.InCorso -> Segnaposto(90.dp)
+                    is Lettura.Errore -> SchedaErrore(lettura.messaggio) {}
+                    is Lettura.Pronta -> SchedaElenco {
+                        if (lettura.dato.ticket.isEmpty()) RigaCalma("Nessun ticket.")
+                        lettura.dato.ticket.forEachIndexed { i, t -> if (i > 0) LineaElenco(); RigaTicket(t) { nav.vai("ticket/${t.chiave}") } }
+                    }
+                }
+                if (perm.modifica(Moduli.TICKET)) PulsanteBordo("Nuovo ticket", {
+                    nav.vai("ticket-nuovo/" + (sedi.singleOrNull { it.impianto }?.id ?: ""))
+                }, icona = Icone.piu, altezza = 48.dp)
             }
             "commesse" -> {
                 Scheda(orizzontale = 18.dp, verticale = 0.dp, raggio = 22.dp, spazio = 0.dp) {

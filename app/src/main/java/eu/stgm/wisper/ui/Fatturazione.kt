@@ -377,7 +377,7 @@ private fun RigaVoceDaFatturare(
         Column(Modifier.weight(1f).padding(start = 4.dp, top = 6.dp, bottom = 6.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             val titolo = when (v.tipo) {
                 "scadenza" -> v.titolo + if (v.idCommessa.isNotBlank()) " · ${v.idCommessa}" else ""
-                "rapportino" -> v.id + " · " + v.titolo
+                "rapportino", "ticket" -> v.id + " · " + v.titolo
                 else -> v.titolo
             }
             Text(titolo, style = Testi.forte.copy(fontWeight = FontWeight.Bold), color = c.testo, maxLines = 2, overflow = TextOverflow.Ellipsis)

@@ -33,6 +33,9 @@ public sealed class Ponte
 
         /// <summary>Fase 4: più file insieme (le fatture elettroniche da importare).</summary>
         IReadOnlyList<(string Nome, byte[] Dati)>? ScegliPiuFile(string filtro);
+
+        /// <summary>Fase 5: un file da caricare in byte (/carica): solo il percorso, il programma lo legge mentre lo manda.</summary>
+        string? ScegliPercorso(string filtro);
         string? SalvaFile(string nomeProposto);
         void Riavvia();
 
@@ -219,6 +222,27 @@ public sealed class Ponte
 
             case "scegli-file":
             {
+                // Fase 5: "percorso: true" = il file resta sul disco; la pagina riceve un riferimento (rif) da passare a /locale/carica.
+                if (o?["percorso"] is JsonNode conPercorso && conPercorso.GetValueKind() == System.Text.Json.JsonValueKind.True)
+                {
+                    var percorsoScelto = Finestra?.ScegliPercorso(Testo(o?["filtro"]));
+                    if (percorsoScelto == null) return Json(200, new JsonObject { ["ok"] = false, ["annullato"] = true });
+                    var info = new FileInfo(percorsoScelto);
+                    var rif = Guid.NewGuid().ToString("N");
+                    lock (sceltiDaCaricare)
+                    {
+                        if (sceltiDaCaricare.Count > 50) sceltiDaCaricare.Clear();
+                        sceltiDaCaricare[rif] = percorsoScelto;
+                    }
+                    return Json(200, new JsonObject
+                    {
+                        ["ok"] = true,
+                        ["rif"] = rif,
+                        ["nome"] = info.Name,
+                        ["mime"] = TipoContenuto(info.Name).Split(';')[0],
+                        ["byte"] = info.Length,
+                    });
+                }
                 // Fase 4: Importa XML sceglie più file insieme (fino a 300 e 30 MB, come accetta il server).
                 if (o?["piu"] is JsonNode piu && piu.GetValueKind() == System.Text.Json.JsonValueKind.True)
                 {
@@ -249,6 +273,21 @@ public sealed class Ponte
             case "apri-documento":
                 return await ApriDocumentoAsync(o).ConfigureAwait(false);
 
+            case "carica":
+            {
+                // Fase 5: il file scelto prima (rif) va al server in byte, letto dal disco mentre parte.
+                var rif = Testo(o?["rif"]);
+                string? file;
+                lock (sceltiDaCaricare) sceltiDaCaricare.TryGetValue(rif, out file);
+                if (file == null || !File.Exists(file)) return Json(200, Errore("Il file scelto non c'è più: sceglilo di nuovo"));
+                var per = Testo(o?["per"]);
+                await using var flusso = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, useAsync: true);
+                return await server.CaricaAsync(flusso, flusso.Length, Path.GetFileName(file), TipoContenuto(file).Split(';')[0], Testo(o?["idFile"]), per.Length > 0 ? per : "documento").ConfigureAwait(false);
+            }
+
+            case "apri-collegamento":
+                return await ApriCollegamentoAsync(Testo(o?["url"])).ConfigureAwait(false);
+
             case "notifica":
             {
                 // Solo testo corto: titolo e una riga, come un promemoria. Niente link, niente azioni.
@@ -262,6 +301,54 @@ public sealed class Ponte
             default:
                 return Json(404, Errore("sconosciuto"));
         }
+    }
+
+    /// <summary>Fase 5: i file scelti per /carica (riferimento -> percorso): la pagina non manda mai un percorso.</summary>
+    private readonly Dictionary<string, string> sceltiDaCaricare = new();
+
+    /// <summary>
+    /// Fase 5: un file trascinato sulla pagina (o un PDF appena fatto) arriva qui in byte, così com'è:
+    /// POST /locale/carica-corpo?nome=&amp;mime=&amp;per=&amp;idFile=, e va al server con la chiave.
+    /// </summary>
+    public async Task<(int Stato, string Json)> CaricaCorpoAsync(Uri uri, Stream? corpo)
+    {
+        if (corpo == null) return Json(200, Errore("File vuoto"));
+        var q = HttpUtility.ParseQueryString(uri.Query);
+        var nome = NomeFilePulito(q["nome"] ?? "");
+        if (nome.Length == 0) nome = "documento";
+        var per = q["per"] ?? "documento";
+        long? lunghezza = null;
+        try { if (corpo.CanSeek) lunghezza = corpo.Length; } catch (NotSupportedException) { lunghezza = null; }
+        return await server.CaricaAsync(corpo, lunghezza, nome, q["mime"] ?? "application/octet-stream", q["idFile"] ?? "", per).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Fase 5: un collegamento dell'archivio. Un indirizzo https:// si apre col browser (o con l'app di OneDrive);
+    /// un percorso del computer dello studio (\\server\..., X:\..., file:///...) in Esplora file: una cartella si
+    /// apre, un file si mostra selezionato nella sua cartella. Niente viene eseguito.
+    /// </summary>
+    private static async Task<(int, string)> ApriCollegamentoAsync(string url)
+    {
+        if (url.Length == 0) return Json(200, Errore("Manca il collegamento"));
+        if (Uri.TryCreate(url, UriKind.Absolute, out var u) && u.Scheme == Uri.UriSchemeHttps)
+        {
+            Process.Start(new ProcessStartInfo(u.AbsoluteUri) { UseShellExecute = true })?.Dispose();
+            return Json(200, new JsonObject { ["ok"] = true });
+        }
+        string? percorso = null;
+        if (url.StartsWith(@"\\", StringComparison.Ordinal) || (url.Length > 2 && char.IsLetter(url[0]) && url[1] == ':' && url[2] == '\\')) percorso = url;
+        else if (url.StartsWith("file:///", StringComparison.OrdinalIgnoreCase) && Uri.TryCreate(url, UriKind.Absolute, out var f) && f.IsFile) percorso = f.LocalPath;
+        if (percorso == null || percorso.IndexOfAny(new[] { '"', '\0', '\n', '\r' }) >= 0)
+            return Json(200, Errore("Collegamento: incolla un indirizzo che comincia con https:// o un percorso come \\\\server\\cartella"));
+        // Un server dello studio spento farebbe aspettare a lungo: si guarda per al massimo 8 secondi.
+        var guarda = Task.Run(() => Directory.Exists(percorso) ? "cartella" : File.Exists(percorso) ? "file" : "");
+        var chi = await Task.WhenAny(guarda, Task.Delay(TimeSpan.FromSeconds(8))).ConfigureAwait(false);
+        var cosa = chi == guarda ? guarda.Result : "";
+        if (cosa.Length == 0) return Json(200, Errore("Da questo computer il percorso non si trova: controlla che la cartella dello studio sia collegata"));
+        var explorer = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "explorer.exe");
+        var argomenti = cosa == "cartella" ? "\"" + percorso.TrimEnd('\\') + "\"" : "/select,\"" + percorso + "\"";
+        Process.Start(new ProcessStartInfo(explorer, argomenti) { UseShellExecute = false })?.Dispose();
+        return Json(200, new JsonObject { ["ok"] = true });
     }
 
     /// <summary>
@@ -348,8 +435,11 @@ public sealed class Ponte
         if (nome.Length == 0) nome = id;
         var (stato, _, dati) = await server.FileAsync(id).ConfigureAwait(false);
         if (stato == 401) return Json(200, new JsonObject { ["ok"] = false, ["errore"] = "Accesso scaduto: entra di nuovo", ["accesso"] = false });
+        if (stato == 403) return Json(200, new JsonObject { ["ok"] = false, ["errore"] = "Non hai il permesso per vedere questo documento: chiedi al titolare", ["permesso"] = false });
         if (stato != 200) return Json(200, Errore(stato == 502 ? "Il server non risponde: controlla la rete e riprova" : "Il documento non c'è più"));
-        if (!Apribili.Contains(Path.GetExtension(nome)))
+        // Fase 5: "Scarica" (salva: true) chiede sempre dove salvarlo, col nome che dice la revisione.
+        var salva = o?["salva"] is JsonNode s && s.GetValueKind() == System.Text.Json.JsonValueKind.True;
+        if (salva || !Apribili.Contains(Path.GetExtension(nome)))
         {
             var dove = Finestra?.SalvaFile(nome);
             if (dove == null) return Json(200, new JsonObject { ["ok"] = false, ["annullato"] = true });

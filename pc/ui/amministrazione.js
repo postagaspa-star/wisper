@@ -34,6 +34,9 @@
       { k: 'registro', titolo: 'Registro attività', icona: 'lista' },
       { k: 'copie', titolo: 'Copie ed esportazioni', icona: 'scarica' },
       { k: 'cestino', titolo: 'Cestino', icona: 'cestino', scrive: true },
+      // fase 5: le categorie dei documenti e lo spazio sul NAS (fase5.md §12.4)
+      { k: 'categorie', titolo: 'Categorie dei documenti', icona: 'file', modulo: 'documenti' },
+      { k: 'spazio', titolo: 'Spazio sul NAS', icona: 'disco' },
       { k: 'app', titolo: 'L\'app', icona: 'app' },
     ];
 
@@ -42,8 +45,9 @@
       const dove = sotto + '/' + (id || '');
       if (M.dove !== dove) { M.utenti = null; M.permessi = null; M.copie = null; M.cestino = null; M.veicoli = null; M.sessioni = {}; M.dove = dove; }
       if (sotto && sotto !== 'app' && !puo('amministrazione')) { aggiungi(pagina, [h('div', { class: 'calmo grande' }, icona('scudo', 22, 2.2), 'Non hai il permesso per vedere questa pagina. Chiedi a ' + W.titolare() + '.')]); return; }
-      if (((sotto === 'tariffe' || sotto === 'fisco' || sotto === 'fiscale') && !soldi()) || (sotto === 'cestino' && !scrive()) || (sotto === 'veicoli' && !puo('spese'))) { aggiungi(pagina, [h('div', { class: 'calmo grande' }, icona('scudo', 22, 2.2), 'Non hai il permesso per vedere questa pagina. Chiedi a ' + W.titolare() + '.')]); return; }
-      const fn = { studio, fiscale, utenti: id ? paginaUtente : elencoUtenti, permessi, numerazioni, tariffe, fisco, veicoli, registro, copie, cestino, app }[sotto];
+      if (((sotto === 'tariffe' || sotto === 'fisco' || sotto === 'fiscale') && !soldi()) || (sotto === 'cestino' && !scrive()) || (sotto === 'veicoli' && !puo('spese')) || (sotto === 'categorie' && !puo('documenti'))) { aggiungi(pagina, [h('div', { class: 'calmo grande' }, icona('scudo', 22, 2.2), 'Non hai il permesso per vedere questa pagina. Chiedi a ' + W.titolare() + '.')]); return; }
+      const fn = { studio, fiscale, utenti: id ? paginaUtente : elencoUtenti, permessi, numerazioni, tariffe, fisco, veicoli, registro, copie, cestino, app,
+        categorie: p => W.Archivio.paginaCategorie(p), spazio: p => W.Archivio.paginaSpazio(p) }[sotto];
       if (!fn) { elenco(pagina); return; }
       if (sotto !== 'app' || puo('amministrazione')) {
         aggiungi(pagina, [h('div', { class: 'indietro-riga' },
@@ -91,6 +95,8 @@
         registro: 'Chi ha cambiato cosa',
         copie: ultimaCopia(M.copie) ? descriviCopia(ultimaCopia(M.copie)) : 'Copie di ogni notte, file per Excel',
         cestino: M.cestino ? (M.cestino.file || []).length ? (M.cestino.file.length === 1 ? '1 file tolto' : M.cestino.file.length + ' file tolti') + ', recuperabili' : 'Vuoto' : 'File tolti, recuperabili',
+        categorie: 'Approvazione, chi vede, scadenza proposta',
+        spazio: 'Dove va lo spazio, copia fuori casa, cestino vecchio',
         app: 'Tema, visita guidata, versione' + (S.versione ? ' ' + S.versione : ''),
         fiscale: regoleConfermate() ? 'Confermate dal commercialista il ' + C.data(regoleConfermate().data) : 'Regole delle fatture da confermare col commercialista',
       };

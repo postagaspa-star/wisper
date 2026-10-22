@@ -55,6 +55,9 @@ const NUMERAZIONI_INIZIALI = [
   { tipo: 'rapportino', formato: 'RAP/{AAAA}/{NNNN}', annuale: 1 },
   // Fase 2 (la mette anche la migrazione 002): riparte ogni anno, le revisioni tengono il numero.
   { tipo: 'preventivo', formato: 'PR/{AAAA}/{NNN}', annuale: 1 },
+  // Fase 5 (le mette anche la migrazione 005): ripartono ogni anno.
+  { tipo: 'ticket', formato: 'TK/{AAAA}/{NNNN}', annuale: 1 },
+  { tipo: 'contratto', formato: 'CA/{AAAA}/{NNN}', annuale: 1 },
 ];
 
 /**
@@ -368,6 +371,6 @@ module.exports = {
 
 // Le azioni, divise per argomento: ognuna aggiunge i suoi metodi al server.
 for (const parte of ['anagrafiche', 'rapportini', 'file', 'accesso', 'amministrazione', 'dashboard', 'esporta', 'copie', 'email', 'vies',
-  'preventivi', 'attivita', 'ore', 'spese', 'fatture', 'ritorno', 'banche']) {
+  'preventivi', 'attivita', 'ore', 'spese', 'fatture', 'ritorno', 'banche', 'documenti', 'scadenze', 'ticket', 'contratti']) {
   Object.assign(Wisper.prototype, require('./azioni/' + parte));
 }

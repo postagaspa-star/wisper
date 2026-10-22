@@ -42,6 +42,10 @@ const TIPI = {
 
 // Un PNG 2x2 grigio: lo "scontrino" e la "firma" di prova.
 const IMMAGINE = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGNkYGD4z8DAwMDEwMDAAAAZ8wMDp0gFgQAAAABJRU5ErkJggg==', 'base64');
+// Fase 5: il documento di prova che "Scegli un file" restituisce (un PDF piccolo ma vero nei primi byte),
+// o il file di WISPER_FILE. I file scelti si tengono qui (rif -> file): la pagina non vede mai il percorso.
+const PDF_PROVA = () => Buffer.from('%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj 2 0 obj<</Type/Pages/Kids[]/Count 0>>endobj\ntrailer<</Root 1 0 R>>\n%% prova ' + Date.now() + '\n%%EOF\n');
+const scelti = new Map();
 
 // Chi è entrato. Come nel programma, la chiave resta qui: la pagina non la vede mai.
 const sessione = { token: '', email: '', studio: '', esempio: null };
@@ -78,6 +82,23 @@ async function alServer(metodo, azione, parametri, corpo) {
     // Accesso scaduto o revocato: la chiave non serve più.
     if (dati.accesso === false) sessione.token = '';
     return dati;
+  } catch (e) {
+    return { ok: false, errore: 'Il server non risponde', rete: true };
+  }
+}
+
+/** Fase 5: un file in byte al server (POST /carica), con la chiave come il programma. */
+async function alServerCarica(dati, q) {
+  if (!sessione.token) return { ok: false, errore: 'Accesso scaduto: entra di nuovo', accesso: false };
+  const u = new URL(SERVER + '/carica');
+  for (const [k, v] of Object.entries(q)) if (v) u.searchParams.set(k, v);
+  try {
+    const r = await fetch(u, { method: 'POST', headers: { Authorization: 'Bearer ' + sessione.token, 'Content-Type': 'application/octet-stream', 'X-Wisper-Disp': DISPOSITIVO.disp, 'X-Wisper-App': DISPOSITIVO.app }, body: dati });
+    const testo = await r.text();
+    if (!testo.trim().startsWith('{')) return { ok: false, errore: 'Il server ha risposto ' + r.status, rete: true };
+    const x = JSON.parse(testo);
+    if (x.accesso === false) sessione.token = '';
+    return x;
   } catch (e) {
     return { ok: false, errore: 'Il server non risponde', rete: true };
   }
@@ -144,7 +165,14 @@ async function locale(nome, o) {
     case 'riavvia': console.log('[riavvia]'); return { ok: true };
     case 'cartella-pdf': return { ok: true };
     case 'apri': return { ok: true };
-    case 'apri-documento': console.log('[apri documento]', o.nome); return { ok: true };
+    case 'apri-documento': console.log(o.salva ? '[salva documento]' : '[apri documento]', o.nome); return { ok: true, percorso: path.join(STAMPE, String(o.nome || 'documento')) };
+    // Fase 5: un collegamento si apre fuori (nel programma vero: il browser o Esplora file). Qui si scrive e basta.
+    case 'apri-collegamento': console.log('[apri collegamento]', o.url); return { ok: true };
+    case 'carica': {
+      const f = scelti.get(String(o.rif || ''));
+      if (!f) return { ok: false, errore: 'Il file scelto non c\'è più: sceglilo di nuovo' };
+      return alServerCarica(f.dati, { nome: f.nome, mime: f.mime, idFile: o.idFile || '', per: o.per || 'documento' });
+    }
     // Il promemoria: nel programma vero è una notifica di Windows.
     case 'notifica': console.log('[notifica]', o.titolo, '·', o.testo); return { ok: true };
     case 'scegli-file': {
@@ -154,6 +182,15 @@ async function locale(nome, o) {
         const percorsi = String(process.env.WISPER_XML || path.join(__dirname, '..', '..', 'server', 'prove', 'xml', 'fatture-ottobre.zip')).split(',').map(x => x.trim()).filter(Boolean);
         const file = percorsi.filter(p => fs.existsSync(p)).map(p => ({ nome: path.basename(p), base64: fs.readFileSync(p).toString('base64') }));
         return file.length ? { ok: true, file } : { ok: false, annullato: true };
+      }
+      // Fase 5: "percorso: true" = il programma tiene il file e restituisce solo il suo riferimento (rif).
+      if (o.percorso) {
+        const rif = 'rif' + Math.random().toString(36).slice(2);
+        const f = o.filtro === 'immagini' ? { nome: 'Foto del guasto.png', mime: 'image/png', dati: IMMAGINE }
+          : process.env.WISPER_FILE ? { nome: path.basename(process.env.WISPER_FILE), mime: 'application/octet-stream', dati: fs.readFileSync(process.env.WISPER_FILE) }
+            : { nome: 'Verbale di prova.pdf', mime: 'application/pdf', dati: PDF_PROVA() };
+        scelti.set(rif, f);
+        return { ok: true, rif, nome: f.nome, mime: f.mime, byte: f.dati.length };
       }
       return { ok: true, nome: 'scontrino.png', mime: 'image/png', base64: IMMAGINE.toString('base64') };
     }
@@ -176,8 +213,10 @@ async function locale(nome, o) {
 
 http.createServer(async (rq, rs) => {
   const u = new URL(rq.url, 'http://localhost');
-  let corpo = '';
-  for await (const p of rq) corpo += p;
+  const pezzi = [];
+  for await (const p of rq) pezzi.push(p);
+  const grezzo = Buffer.concat(pezzi);
+  const corpo = grezzo.toString('utf8');
   const json = (o, s) => { rs.writeHead(s || 200, { 'Content-Type': 'application/json; charset=utf-8' }); rs.end(typeof o === 'string' ? o : JSON.stringify(o)); };
   try {
     if (u.pathname.startsWith('/server/')) {
@@ -200,6 +239,11 @@ http.createServer(async (rq, rs) => {
       const html = daStampare.get(path.basename(u.pathname, '.html'));
       rs.writeHead(html ? 200 : 404, { 'Content-Type': 'text/html; charset=utf-8' });
       return rs.end(html || '');
+    }
+    // Fase 5: un file trascinato sulla pagina arriva in byte e va al server così com'è.
+    if (u.pathname === '/locale/carica-corpo') {
+      if (ESEMPIO) return json({ ok: false, errore: 'Nei dati di esempio i file non si caricano' });
+      return json(await alServerCarica(grezzo, { nome: u.searchParams.get('nome'), mime: u.searchParams.get('mime'), idFile: u.searchParams.get('idFile'), per: u.searchParams.get('per') || 'documento' }));
     }
     if (u.pathname.startsWith('/locale/')) {
       const ris = await locale(u.pathname.slice(8), corpo ? JSON.parse(corpo) : {});

@@ -109,6 +109,8 @@
           h('div', { class: 'titoli' },
             h('div', { class: 'pillole-testa' }, h('span', { class: 'codice' }, m.id), stato(m.stato, true),
               m.archiviata ? pillola('Archiviata', 'grigio') : null, m.modello ? pillola('Modello', 'grigio') : null,
+              // Fase 5: la commessa di un contratto di assistenza, col contratto linkato.
+              m.idContratto ? (puo('ticket') ? h('button', { type: 'button', class: 'pill p-blu pill-fattura', title: 'Apri il contratto', onclick: () => W.vai('#ticket/contratto/' + m.idContratto) }, 'Assistenza') : pillola('Assistenza', 'blu')) : null,
               soldi() && puo('fatturazione') && m.modoFatturazione ? pillola({ ore: 'A ore', corpo: 'A corpo', misto: 'Misto' }[m.modoFatturazione] || m.modoFatturazione, 'grigio') : null),
             h('h1', { class: 'titolo-scheda' }, m.descrizione),
             h('span', { class: 'sotto-titolo' }, [c ? c.nome : m.idCliente, sede ? sede.nome : m.indirizzo].filter(Boolean).join(' · '))),
@@ -130,7 +132,8 @@
         aggiungi(area, [W.tabellaRapportini(C.ordina(k.rapportini, 'data', -1))]);
       } else if (scheda === 'costi' && soldi()) costiCommessa(area, m, k, costoDi(m));
       else if (scheda === 'dafatturare' && soldi()) { if (puo('fatturazione') && W.Fatture) W.Fatture.incorporaDaFatturare(area, m.id); else daFatturare(area, k); }
-      else if (scheda === 'documenti' && puoDocumenti(1)) documentiCommessa(area, m);
+      // Fase 5: la scheda Documenti è l'archivio filtrato (cartella in cima, documenti, "Da Wisper"); con un server vecchio quella di prima.
+      else if (scheda === 'documenti' && puoDocumenti(1)) { if (W.Archivio && W.perm().documenti !== undefined) W.Archivio.schedaDocumenti(area, { idCommessa: m.id }); else documentiCommessa(area, m); }
       else panoramica(area, m, k, soldi() ? RO.costiConFase3(k, costoDi(m)) : null);
     }
 

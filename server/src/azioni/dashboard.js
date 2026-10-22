@@ -125,7 +125,9 @@ module.exports = {
     // Fase 3: uno che aspetta l'approvazione non si manda ancora (sta tra le cose da approvare).
     const firmati = rapportini.filter(r => testo(r.stato).toUpperCase() === 'FIRMATO' &&
       r.stato_approvazione !== 'da_approvare' && r.stato_approvazione !== 'respinto');
-    const daFatturare = rapportini.filter(r => ['FIRMATO', 'INVIATO'].indexOf(testo(r.stato).toUpperCase()) >= 0);
+    // Fase 5: i rapportini di un ticket aperto (aspettano la chiusura) o chiuso nel contratto o senza fattura non contano qui.
+    const trattenuti = new Set(this.db.righe("SELECT id FROM ticket WHERE stato IN ('aperto', 'in_carico', 'in_attesa', 'risolto') OR (stato = 'chiuso' AND fatturazione IN ('contratto', 'no'))").map(t => t.id));
+    const daFatturare = rapportini.filter(r => ['FIRMATO', 'INVIATO'].indexOf(testo(r.stato).toUpperCase()) >= 0 && !(r.ticket_id && trattenuti.has(r.ticket_id)));
     if (vecchie.length) {
       voce(urgenti, { tipo: 'rapportini', gravita: 'urgente', titolo: plurale(vecchie.length, 'rapportino da far firmare', 'rapportini da far firmare') + ' da più di una settimana',
         dettaglio: 'Il più vecchio è del ' + dataBreve(vecchie.map(r => r.data).sort()[0]), quanto: vecchie.length, unita: 'rapportini',
@@ -230,7 +232,226 @@ module.exports = {
     if (fase3.ore) risposta.numeri.ore = fase3.ore;
     if (fase3.approvare) risposta.numeri.approvare = fase3.approvare;
     if (fase3.rimborsi) risposta.numeri.rimborsi = fase3.rimborsi;
+    // Fase 5: ticket, documenti, scadenze, contratti, spazio sul NAS (le voci entrano nelle tre sezioni prima di ordinarle).
+    const fase5 = this.dashboardFase5({ mie, costi, io, adesso, voce, urgenti, settimana, pianificare });
+    risposta.urgenti = ordina(urgenti);
+    // Un ticket, una voce sola: se e' gia' tra le urgenti (in ritardo, non preso), non si ripete in settimana o da
+    // pianificare (per esempio "Intervento di oggi" dello stesso ticket). Il resto delle voci resta com'e'.
+    const ticketUrgenti = new Set(risposta.urgenti.filter(v => v.collegamento && v.collegamento.pagina === 'ticket').map(v => String(v.collegamento.id)));
+    const nonRipetuto = v => !(v.collegamento && v.collegamento.pagina === 'ticket' && ticketUrgenti.has(String(v.collegamento.id)));
+    risposta.settimana = ordina(settimana.filter(nonRipetuto));
+    risposta.pianificare = ordina(pianificare.filter(nonRipetuto));
+    for (const k of ['ticket', 'documenti', 'scadenze', 'contratti', 'spazio']) if (fase5[k]) risposta.numeri[k] = fase5[k];
     return risposta;
+  },
+
+  /**
+   * Le voci della fase 5 (fase5.md §11.1), con le frasi dell'accordo:
+   *  - urgenti: ticket urgenti non presi o in ritardo (uno per uno fino a 3),
+   *    scadenze scadute, le proprie revisioni respinte, disco quasi pieno;
+   *  - questa settimana: interventi di oggi, documenti da approvare, ticket
+   *    risolti da chiudere, scadenze nel preavviso entro 30 giorni, contratti
+   *    in scadenza;
+   *  - da pianificare: ticket da prendere, programmati da pianificare entro 30
+   *    giorni, scadenze fra 31 e 120 giorni, documenti da classificare, file
+   *    troppo grandi per la copia fuori casa, spazio sotto l'avviso.
+   * Il collaboratore: i suoi ticket e quelli da prendere, i suoi interventi, le
+   * sue revisioni; niente contratti, niente spazio, niente soldi.
+   */
+  dashboardFase5({ mie, costi, io, adesso, voce, urgenti, settimana, pianificare }) {
+    const out = {};
+    const nomiCli = {};
+    this.db.righe('SELECT id, nome FROM soggetti').forEach(s => { nomiCli[s.id] = s.nome; });
+    const nomiSedi = {};
+    this.db.righe('SELECT id, nome, citta FROM sedi').forEach(s => { nomiSedi[s.id] = s; });
+    const utenti = {};
+    this.db.righe('SELECT id, nome FROM utenti').forEach(u => { utenti[u.id] = u.nome; });
+    const ora = ist => { const o = dataOraIso(ist).slice(11, 16); return Number(o.slice(0, 2)) + ':' + o.slice(3); };
+    const quandoGiorno = ist => {
+      const g = dataIso(ist);
+      if (g === adesso) return 'le ' + ora(ist);
+      if (g === piuGiorni(adesso, 1)) return 'domani alle ' + ora(ist);
+      if (g === piuGiorni(adesso, -1)) return 'ieri alle ' + ora(ist);
+      return nomeGiorno(g) + ' alle ' + ora(ist);
+    };
+    const t30 = piuGiorni(adesso, 30);
+
+    // ------------------------------------------------------------ ticket
+    if (this.livello('ticket') >= 1) {
+      const vis = mie ? this.aiutiVisibilita() : null;
+      let tutti = this.db.righe('SELECT * FROM ticket').filter(t => this.vedeTicket(t, vis));
+      if (mie) tutti = tutti.filter(t => t.responsabile_id === io || t.responsabile_id === null);
+      const vivi = tutti.filter(t => ['aperto', 'in_carico', 'in_attesa', 'risolto'].indexOf(t.stato) >= 0 && !(t.tipo === 'programmato' && t.previsto_il > t30));
+      const conInterventi = new Set(this.db.righe("SELECT DISTINCT ticket_id FROM attivita WHERE ticket_id IS NOT NULL AND stato <> 'annullata'").map(r => r.ticket_id));
+      const oggiInterventi = this.db.righe("SELECT * FROM attivita WHERE ticket_id IS NOT NULL AND stato <> 'annullata' AND inizio <> '' ORDER BY inizio")
+        .filter(a => dataIso(a.inizio) === adesso && (!mie || a.assegnata_a === io));
+      const daChiudere = tutti.filter(t => t.stato === 'risolto');
+      const programmati = tutti.filter(t => t.tipo === 'programmato' && (t.stato === 'aperto' || t.stato === 'in_carico') && !conInterventi.has(t.id) && (!t.previsto_il || t.previsto_il <= t30));
+      out.ticket = {
+        aperti: vivi.length, urgenti: vivi.filter(t => t.priorita === 'urgente' && t.stato !== 'risolto').length,
+        nonAssegnati: vivi.filter(t => t.responsabile_id === null && t.stato === 'aperto').length,
+        inRitardo: vivi.filter(t => !!this.ritardoTicket(t)).length, interventiOggi: oggiInterventi.length,
+        risoltiDaChiudere: daChiudere.length, programmatiDaPianificare: programmati.length,
+      };
+      const dove = t => [nomiCli[t.cliente_id], t.sede_id && nomiSedi[t.sede_id] ? nomiSedi[t.sede_id].nome : ''].filter(Boolean).join(' · ');
+      // Urgenti non presi o in ritardo: uno per uno fino a 3, poi una voce sola.
+      const caldi = vivi.filter(t => t.stato !== 'risolto' && ((t.priorita === 'urgente' && !t.preso_il) || this.ritardoTicket(t)) && (!mie || t.responsabile_id === io || t.responsabile_id === null));
+      if (caldi.length && caldi.length <= 3) {
+        for (const t of caldi) {
+          const urgente = t.priorita === 'urgente';
+          const coda = !t.preso_il ? 'aperto ' + (dataIso(t.aperto_il) === adesso ? 'alle ' + ora(t.aperto_il) : quandoGiorno(t.aperto_il)) + ' · nessuno l\'ha preso'
+            : t.entro_intervento ? 'intervento previsto entro ' + quandoGiorno(t.entro_intervento) : this.ritardoTicket(t);
+          voce(urgenti, { tipo: 'ticket', gravita: 'urgente', titolo: t.numero + (urgente ? ' urgente: ' : ' in ritardo: ') + t.titolo,
+            dettaglio: [dove(t), coda].filter(Boolean).join(' · '), collegamento: { pagina: 'ticket', id: t.id } });
+        }
+      } else if (caldi.length) {
+        voce(urgenti, { tipo: 'ticket', gravita: 'urgente', titolo: caldi.length + ' ticket urgenti o in ritardo', dettaglio: caldi.slice(0, 3).map(t => t.numero).join(', '),
+          quanto: caldi.length, unita: 'ticket', collegamento: { pagina: 'tickets', filtro: { segmento: 'aperti', priorita: 'urgente' } } });
+      }
+      // Gli interventi di oggi, uno per uno.
+      const numeri = {};
+      tutti.forEach(t => { numeri[t.id] = t; });
+      for (const a of oggiInterventi) {
+        const t = numeri[a.ticket_id] || this.db.riga('SELECT * FROM ticket WHERE id = ?', a.ticket_id);
+        if (!t) continue;
+        const s = t.sede_id ? nomiSedi[t.sede_id] : null;
+        voce(settimana, { tipo: 'intervento', gravita: 'attenzione', titolo: 'Intervento di oggi alle ' + ora(a.inizio) + ': ' + t.numero + ' ' + t.titolo,
+          dettaglio: [a.assegnata_a ? utenti[a.assegnata_a] : '', nomiCli[t.cliente_id], s ? s.citta || s.nome : ''].filter(Boolean).join(' · '),
+          collegamento: { pagina: 'ticket', id: t.id } });
+      }
+      // I risolti da chiudere: chi chiude (titolare e amministrazione).
+      if (!mie && this.puoChiudereTicket()) {
+        const lista = daChiudere.slice(0, 3);
+        for (const t of daChiudere.length <= 3 ? lista : []) {
+          const r = this.db.riga("SELECT firmato_il FROM rapportini WHERE ticket_id = ? AND firmato_il <> '' AND UPPER(stato) <> 'ANNULLATO' ORDER BY firmato_il DESC LIMIT 1", t.id);
+          voce(settimana, { tipo: 'ticket', gravita: 'attenzione', titolo: t.numero + ' risolto: da chiudere',
+            dettaglio: [nomiCli[t.cliente_id], r ? 'rapportino firmato il ' + dataBreve(dataIso(r.firmato_il)) : 'risolto il ' + dataBreve(dataIso(t.risolto_il))].filter(Boolean).join(' · '),
+            collegamento: { pagina: 'ticket', id: t.id } });
+        }
+        if (daChiudere.length > 3) {
+          voce(settimana, { tipo: 'ticket', gravita: 'attenzione', titolo: daChiudere.length + ' ticket risolti da chiudere', dettaglio: lista.map(t => t.numero).join(', '),
+            quanto: daChiudere.length, unita: 'ticket', collegamento: { pagina: 'tickets', filtro: { segmento: 'aperti' } } });
+        }
+      }
+      // Da prendere (non urgenti: gli urgenti stanno sopra).
+      const daPrendere = vivi.filter(t => t.responsabile_id === null && t.stato === 'aperto' && t.priorita !== 'urgente' && t.tipo !== 'programmato');
+      if (daPrendere.length) {
+        voce(pianificare, { tipo: 'ticket', gravita: 'info', titolo: daPrendere.length === 1 ? '1 ticket da prendere' : daPrendere.length + ' ticket da prendere',
+          dettaglio: daPrendere.slice(0, 3).map(t => t.numero + ' ' + t.titolo).join(', '), quanto: daPrendere.length, unita: 'ticket',
+          collegamento: { pagina: 'tickets', filtro: { segmento: 'aperti', nonAssegnati: true } } });
+      }
+      for (const t of programmati.filter(x => !mie || x.responsabile_id === io)) {
+        voce(pianificare, { tipo: 'ticket', gravita: 'info', titolo: t.titolo + (t.previsto_il ? ' del ' + dataBreve(t.previsto_il) : '') + ' da pianificare',
+          dettaglio: [t.numero, nomiCli[t.cliente_id]].filter(Boolean).join(' · '), collegamento: { pagina: 'ticket', id: t.id } });
+      }
+    }
+
+    // ------------------------------------------------------------ documenti
+    if (this.livello('documenti') >= 1) {
+      const elenco = this.leggiDocumenti({ archivio: true });
+      out.documenti = elenco.conteggi;
+      const approva = this.puoApprovareDocumenti() && this.livello('documenti') >= 2;
+      const versioni = this.db.righe("SELECT v.*, d.titolo, d.vede, d.archiviato FROM documento_versioni v JOIN documenti d ON d.id = v.documento_id WHERE v.tolta IS NULL AND d.archiviato IS NULL ORDER BY v.id")
+        .filter(v => this.vedeLivello(v.vede));
+      if (approva) {
+        const attesa = versioni.filter(v => v.stato === 'da_approvare');
+        if (attesa.length) {
+          voce(settimana, { tipo: 'documento', gravita: 'attenzione', titolo: attesa.length === 1 ? '1 documento da approvare' : attesa.length + ' documenti da approvare',
+            dettaglio: attesa[0].titolo + ' rev. ' + attesa[0].numero + (attesa[0].caricata_da ? ' · ' + (utenti[attesa[0].caricata_da] || '') : ''), quanto: attesa.length, unita: 'documenti',
+            collegamento: { pagina: 'documenti', filtro: { segmento: 'approvare' } } });
+        }
+      }
+      // Le proprie revisioni respinte (urgenti) e, per chi non approva, quelle che aspettano.
+      for (const v of versioni.filter(x => x.caricata_da === io && x.stato === 'respinta')) {
+        voce(urgenti, { tipo: 'documento', gravita: 'attenzione', titolo: v.titolo + ' rev. ' + v.numero + ' respinta',
+          dettaglio: 'Motivo: ' + v.motivo_rifiuto + (v.decisa_da ? ' · ' + (utenti[v.decisa_da] || '') : ''), collegamento: { pagina: 'documento', id: v.documento_id } });
+      }
+      if (!approva) {
+        for (const v of versioni.filter(x => x.caricata_da === io && x.stato === 'da_approvare')) {
+          voce(settimana, { tipo: 'documento', gravita: 'info', titolo: v.titolo + ' rev. ' + v.numero + ': aspetta l\'approvazione', dettaglio: '',
+            collegamento: { pagina: 'documento', id: v.documento_id } });
+        }
+      }
+      if (!mie && this.livello('documenti') >= 2 && elenco.conteggi.daClassificare) {
+        const n = elenco.conteggi.daClassificare;
+        voce(pianificare, { tipo: 'documento', gravita: 'info', titolo: n === 1 ? '1 documento da classificare' : n + ' documenti da classificare', dettaglio: 'Arrivati senza categoria',
+          quanto: n, unita: 'documenti', collegamento: { pagina: 'documenti', filtro: { segmento: 'archivio', daClassificare: true } } });
+      }
+    }
+
+    // ------------------------------------------------------------ scadenze (niente per il collaboratore: sono dell'ufficio)
+    if (this.livello('documenti') >= 1 || this.livello('ticket') >= 1) {
+      const aperte = this.db.righe("SELECT * FROM scadenze WHERE stato = 'aperta' ORDER BY data, id").filter(s => this.vedeScadenza(s));
+      const scadute = aperte.filter(s => s.data < adesso);
+      const entro = aperte.filter(s => s.data >= adesso && this.gruppoScadenza(s) === 'entro');
+      out.scadenze = { scadute: scadute.length, entro: entro.length, vicine: scadute.length + entro.length };
+      if (!mie) {
+        const base = s => s.titolo.replace(/ scade$/, '');
+        const dove = s => [nomiCli[s.cliente_id], s.sede_id && nomiSedi[s.sede_id] ? nomiSedi[s.sede_id].nome : ''].filter(Boolean).join(' · ');
+        const proprie = l => l.filter(s => s.tipo !== 'contratto' && !(s.azione === 'ticket' && s.ticket_id));
+        const sc = proprie(scadute);
+        for (const s of sc.length <= 3 ? sc : []) {
+          const g = Math.round((Date.parse(adesso + 'T12:00:00') - Date.parse(s.data + 'T12:00:00')) / 86400000);
+          voce(urgenti, { tipo: 'scadenza', gravita: 'urgente', titolo: base(s) + ' scaduta da ' + plurale(g, 'giorno', 'giorni'), dettaglio: dove(s),
+            quanto: g, unita: 'giorni', collegamento: { pagina: 'scadenza', id: s.id } });
+        }
+        if (sc.length > 3) {
+          voce(urgenti, { tipo: 'scadenza', gravita: 'urgente', titolo: sc.length + ' scadenze scadute', dettaglio: sc.slice(0, 3).map(base).join(', '), quanto: sc.length, unita: 'scadenze',
+            collegamento: { pagina: 'documenti', filtro: { segmento: 'scadenze' } } });
+        }
+        for (const s of proprie(entro).filter(x => x.data <= t30)) {
+          const g = Math.round((Date.parse(s.data + 'T12:00:00') - Date.parse(adesso + 'T12:00:00')) / 86400000);
+          const quando = g === 0 ? ' oggi' : g === 1 ? ' domani' : ' fra ' + g + ' giorni';
+          voce(settimana, { tipo: 'scadenza', gravita: 'attenzione', titolo: base(s) + ' scade' + quando, dettaglio: dove(s), quanto: g, unita: 'giorni',
+            collegamento: { pagina: 'scadenza', id: s.id } });
+        }
+        const lontane = proprie(aperte).filter(s => s.data > piuGiorni(adesso, 30) && s.data <= piuGiorni(adesso, 120));
+        for (const s of lontane.slice(0, 5)) {
+          voce(pianificare, { tipo: 'scadenza', gravita: 'info', titolo: base(s) + ': ' + dataBreve(s.data) + '/' + s.data.slice(0, 4), dettaglio: dove(s),
+            collegamento: { pagina: 'scadenza', id: s.id } });
+        }
+      }
+    }
+
+    // ------------------------------------------------------------ contratti (con i soldi, non il collaboratore)
+    if (!mie && costi && this.livello('ticket') >= 1) {
+      const contratti = this.db.righe("SELECT * FROM contratti WHERE stato IN ('attivo', 'disdetto')");
+      const inScadenza = contratti.filter(c => this.statoVistoContratto(c).statoVisto === 'In scadenza');
+      out.contratti = { attivi: contratti.filter(c => c.stato === 'attivo').length, inScadenza: inScadenza.length };
+      for (const c of inScadenza) {
+        if (c.rinnovo === 'tacito') {
+          const entro = this.disdettaEntro(c);
+          voce(settimana, { tipo: 'contratto', gravita: 'attenzione', titolo: c.numero + ': la disdetta va mandata entro ' + giornoLungo(entro),
+            dettaglio: (nomiCli[c.cliente_id] || '') + ' · si rinnova da solo il ' + dataBreve(piuGiorni(c.al, 1)) + '/' + piuGiorni(c.al, 1).slice(0, 4),
+            collegamento: { pagina: 'contratto', id: c.id } });
+        } else {
+          voce(settimana, { tipo: 'contratto', gravita: 'attenzione', titolo: c.numero + ' scade il ' + dataBreve(c.al) + '/' + c.al.slice(0, 4) + ': rinnovalo o lascialo scadere',
+            dettaglio: (nomiCli[c.cliente_id] || '') + ' · ' + c.titolo, collegamento: { pagina: 'contratto', id: c.id } });
+        }
+      }
+    }
+
+    // ------------------------------------------------------------ spazio sul NAS e copia fuori casa (titolare e amministrazione)
+    if (!mie && this.livello('amministrazione') >= 1) {
+      const imp = this.leggiImpostazioni();
+      const { liberoMb } = this.spazioDisco();
+      const avvisoMb = numero(imp.SPAZIO_AVVISO_MB) || 10240;
+      const minimoMb = numero(imp.SPAZIO_MINIMO_MB) || 2048;
+      out.spazio = { liberoMb, avviso: liberoMb < avvisoMb };
+      const grandezza = require('../documenti').grandezza;
+      const collegamento = { pagina: 'amministrazione', filtro: { sezione: 'spazio' } };
+      if (liberoMb < minimoMb) {
+        voce(urgenti, { tipo: 'spazio', gravita: 'urgente', titolo: 'Il disco del NAS è quasi pieno: restano ' + grandezza(liberoMb), dettaglio: 'I documenti nuovi non si caricano finché non si libera spazio', collegamento });
+      } else if (liberoMb < avvisoMb) {
+        voce(pianificare, { tipo: 'spazio', gravita: 'info', titolo: 'Il disco del NAS si sta riempiendo: restano ' + grandezza(liberoMb), dettaglio: 'Amministrazione › Spazio sul NAS', collegamento });
+      }
+      const troppo = this.db.righe("SELECT id FROM file WHERE fuori_no = 'troppo grande' AND svuotato IS NULL AND cestinato IS NULL").length;
+      if (troppo) {
+        voce(pianificare, { tipo: 'copia', gravita: 'info', titolo: troppo === 1 ? '1 file è solo sul NAS: troppo grande per la copia fuori casa' : troppo + ' file sono solo sul NAS: troppo grandi per la copia fuori casa',
+          dettaglio: 'Oltre ' + (numero(imp.COPIA_FUORI_MAX_MB) || 25) + ' MB', quanto: troppo, unita: null, collegamento });
+      }
+    }
+    return out;
   },
 
   /**
@@ -551,7 +772,8 @@ module.exports = {
       const diOggi = aperte.filter(a => g(a) === adesso).sort(perOra);
       const prossime = aperte.filter(a => g(a) > adesso && g(a) <= tra7).sort(perOra);
       const nonAssegnate = aperte.filter(a => a.assegnata_a === null);
-      const appuntamenti = diOggi.filter(a => a.tipo !== 'attivita' && a.inizio && !a.tutto_il_giorno);
+      // Fase 5: gli interventi dei ticket hanno la loro voce ("Intervento di oggi alle ...").
+      const appuntamenti = diOggi.filter(a => a.tipo !== 'attivita' && a.tipo !== 'intervento' && a.inizio && !a.tutto_il_giorno);
       const breve = a => ({
         id: a.id, tipo: a.tipo, titolo: a.titolo, giorno: g(a), inizio: dataOraIso(a.inizio), fine: dataOraIso(a.fine),
         tuttoIlGiorno: a.tutto_il_giorno === 1, assegnataA: a.assegnata_a, assegnata: a.assegnata_a ? nomi[a.assegnata_a] || '' : '',
@@ -575,7 +797,7 @@ module.exports = {
           dettaglio: [a.assegnata_a ? nomi[a.assegnata_a] : '', a.luogo].filter(Boolean).join(' · '),
           collegamento: { pagina: 'calendario', filtro: { giorno: adesso } } });
       }
-      const altreOggi = diOggi.filter(a => appuntamenti.indexOf(a) < 0);
+      const altreOggi = diOggi.filter(a => appuntamenti.indexOf(a) < 0 && a.tipo !== 'intervento');
       if (altreOggi.length) {
         voce(settimana, { tipo: 'attivita', gravita: 'info', titolo: plurale(altreOggi.length, 'attività da fare oggi', 'attività da fare oggi'),
           dettaglio: altreOggi.slice(0, 3).map(a => a.titolo).join(', '), quanto: altreOggi.length, unita: 'attivita',

@@ -110,6 +110,20 @@
     entrata: '<path d="M17 7 7 17M15 17H7V9"/>',
     uscita: '<path d="M7 17 17 7M9 7h8v8"/>',
     file: '<path d="M7 3h7l4 4v14H7zM14 3v4h4"/>',
+    // fase 5: documenti, ticket e assistenza (dal prototipo Gestionale-fase5.html)
+    chiaveInglese: '<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.8-3.8a6 6 0 0 1-7.9 7.9l-6.9 6.9a2.1 2.1 0 0 1-3-3l6.9-6.9a6 6 0 0 1 7.9-7.9z"/>',
+    bandiera: '<path d="M5 21V4M5 4h11l-2 4 2 4H5"/>',
+    link: '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>',
+    cartella: '<path d="M3 7.5A1.5 1.5 0 0 1 4.5 6H9l2 2h8.5A1.5 1.5 0 0 1 21 9.5v9a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18.5z"/>',
+    disco: '<path d="M4 6h16v5H4zM4 13h16v5H4zM7 8.5h.01M7 15.5h.01"/>',
+    fulmine: '<path d="M13 2 4 14h7l-1 8 9-12h-7z"/>',
+    storia: '<path d="M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5M12 7v5l3 2"/>',
+    grafico: '<path d="M4 19V5M4 19h16M8 15v-4M12 15V8M16 15v-6"/>',
+    condividi: '<path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7M16 6l-4-4-4 4M12 2v13"/>',
+    pausa: '<path d="M9 5v14M15 5v14"/>',
+    lucchetto: '<path d="M6 11h12v10H6zM8 11V7a4 4 0 0 1 8 0v4"/>',
+    persona: '<path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21a8 8 0 0 1 16 0"/>',
+    carica: '<path d="M12 21V9M7 14l5-5 5 5M5 3h14"/>',
   };
 
   function icona(nome, dim, spessore) {

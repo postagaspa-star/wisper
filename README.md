@@ -68,6 +68,16 @@ invoicing page says so. Banking is a hand-kept schedule: expected, recorded and 
 amounts stay separate, and the projected balance turns red on the days it drops below a
 threshold.
 
+Phase 5 adds documents, tickets and maintenance. A document is either a file on the NAS or
+a link to where it already lives (OneDrive, SharePoint, Google Drive, a studio folder):
+nothing is copied. Documents have revisions, approvals, categories and due dates (for
+example the periodic earthing checks). A ticket is a service request on a client's
+installation; it reuses what exists instead of duplicating it: the visit is a calendar
+task, hours and expenses are the phase 3 ones, and it is closed with the usual signed work
+report, offline too. Closing it means choosing how it is invoiced, and it enters the
+invoicing list under the same unique index, so neither the ticket nor its reports can be
+invoiced twice. Maintenance contracts carry their fee and generate the scheduled visits.
+
 ## What changed
 
 The first Wisper, built for NGN Hacks 2026, was voice only: a wake word, a

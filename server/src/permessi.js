@@ -67,6 +67,8 @@ const CAMPI_COSTI = new Set([
   'totaleBozza', 'nettoBozza', 'saldo', 'saldoPrevisto', 'entrate', 'uscite', 'daIncassare', 'daPagare', 'fatturato',
   'fattureInBozza', 'incassiSettimana', 'pagamentiSettimana', 'saldoConti',
   'base_iva', 'bollo_addebitato', 'totale_bozza', 'netto_bozza',
+  // Fase 5: il canone e la tariffa dei contratti, il prezzo a corpo e l'importo dei ticket, il loro costo, se un contratto rende.
+  'canone', 'tariffaExtra', 'prezzoCorpo', 'importoTicket', 'costoTicket', 'rende', 'prezzo_corpo', 'tariffa_extra',
 ]);
 
 /**

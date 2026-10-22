@@ -49,7 +49,20 @@
     }
     const serveAperte = () => (M.aperte ? Promise.resolve() : leggiAperte());
     /** Dopo un cambio che tocca più righe (una ricorrenza, gli allegati): si rilegge tutto alla prossima pagina. */
-    function daRileggere() { M.aperte = null; M.periodo = null; }
+    function daRileggere() { M.aperte = null; M.periodo = null; M.scadenze = null; }
+    /** Fase 5: le scadenze (verifiche, documenti, visite) si vedono nel loro giorno, lette da scadenze {da, a}: non sono attività. */
+    async function serveScadenze(da, a) {
+      if (!(puo('documenti') || puo('ticket'))) { M.scadenze = []; return; }
+      if (M.scadenze && M.scDa <= da && M.scA >= a) return;
+      try { const r = await Rete.get('/server/scadenze?da=' + da + '&a=' + a); M.scadenze = (r.scadenze || []).filter(x => x.stato === 'aperta'); M.scDa = da; M.scA = a; } catch (e) { M.scadenze = []; }
+    }
+    const scadenzeDel = g => (M.scadenze || []).filter(x => x.data === g);
+    /** Un intervento (fase 5) si apre nel suo ticket; il resto col modulo dell'attività. */
+    function apriAttivita(a) { if (a.tipo === 'intervento' && a.idTicket) W.vai('#ticket/tk/' + a.idTicket); else modulo(a); }
+    function chipScadenza(x) {
+      return h('button', { type: 'button', class: 'cal-chip c-scadenza', title: 'Scadenza: ' + x.titolo, onclick: e => { e.stopPropagation(); if (W.Archivio) W.Archivio.apriScadenza(x.id, x); } },
+        icona('bandiera', 12, 2.6), 'Scadenza: ' + x.titolo + (x.cliente ? ' · ' + x.cliente : ''));
+    }
     /** Le aperte e quelle del periodo insieme, una volta sola ciascuna (per le sovrapposizioni e la pianificazione). */
     function tutte() {
       const visti = new Map();
@@ -80,7 +93,7 @@
       if (a1 === 'calendario') {
         const g = M.giorno || oggi();
         const [da, a] = periodoCalendario(g);
-        return conDati(pagina, () => servePeriodo(da, a), () => calendario(pagina));
+        return conDati(pagina, () => Promise.all([servePeriodo(da, a), serveScadenze(da, a)]), () => calendario(pagina));
       }
       if (a1 === 'pianificazione') {
         const giorni = RA.settimanaDi(M.settimanaPian || oggi());
@@ -136,6 +149,7 @@
     }
 
     const NOMI_TIPO = Object.fromEntries(RA.TIPI);
+    NOMI_TIPO.intervento = 'Intervento';
 
     function rigaAttivita(a, prima) {
       const fatta = a.stato === 'fatta';
@@ -145,9 +159,10 @@
       const cerchio = h('button', { type: 'button', class: 'spunta-attivita' + (fatta ? ' fatta' : ''), 'aria-label': fatta ? 'Segna da fare: ' + a.titolo : 'Segna fatta: ' + a.titolo,
         'aria-pressed': fatta ? 'true' : 'false', disabled: !puoCambiare(a), 'data-visita': prima ? 'spunta-attivita' : null,
         onclick: e => { e.stopPropagation(); spunta(a, !fatta); } }, fatta ? icona('spunta', 16, 3) : null);
-      return h('div', { class: 'riga riga-attivita' + (fatta ? ' fatta' : ''), role: 'button', tabindex: '0', onclick: () => modulo(a), onkeydown: e => { if (e.key === 'Enter' && e.target === e.currentTarget) modulo(a); } },
+      return h('div', { class: 'riga riga-attivita' + (fatta ? ' fatta' : ''), role: 'button', tabindex: '0', onclick: () => apriAttivita(a), onkeydown: e => { if (e.key === 'Enter' && e.target === e.currentTarget) apriAttivita(a); } },
         cerchio,
         h('span', { class: 'corpo' }, h('span', { class: 't1' }, a.titolo), h('span', { class: 't2' }, sotto)),
+        a.tipo === 'intervento' ? pillola('Ticket', 'blu') : null,
         a.priorita === 'alta' && !fatta ? pillola('Alta', 'rosso') : null,
         a.assegnataA ? h('span', { class: 'cerchio-io piccolo', title: nomeUtente(a.assegnataA) }, RA.iniziali(nomeUtente(a.assegnataA))) : pillola('libera', 'grigio'));
     }
@@ -224,7 +239,10 @@
       let errori = {};
 
       const disegnaTipo = () => aggiungi(svuota(zone.tipo), [h('div', { class: 'campo' }, h('label', null, 'Tipo'),
-        segmenti(RA.TIPI, a.tipo, x => { if (sola) return; a.tipo = x; disegnaTipo(); disegnaQuando(); }))]);
+        // Fase 5: un intervento è di un ticket (nasce da Pianifica l'intervento): qui si sposta, il tipo non si cambia.
+        a.tipo === 'intervento' ? h('div', { class: 'pillole' }, pillola('Intervento del ticket ' + (a.ticket || ''), 'blu'),
+          a.idTicket ? h('button', { type: 'button', class: 'btn collegamento', onclick: () => { document.querySelectorAll('.velo').forEach(x => x.remove()); W.vai('#ticket/tk/' + a.idTicket); } }, 'Apri il ticket') : null)
+          : segmenti(RA.TIPI, a.tipo, x => { if (sola) return; a.tipo = x; disegnaTipo(); disegnaQuando(); }))]);
       const disegnaQuando = () => {
         const orario = a.tipo !== 'attivita';
         aggiungi(svuota(zone.quando), orario ? [
@@ -473,7 +491,7 @@
         giorni.map(gi => h('button', { type: 'button', class: 'cal-giorno' + (gi === oggi() ? ' oggi' : ''), onclick: () => { M.giorno = gi; M.vistaCal = 'giorno'; W.disegnaPagina(); } }, RA.nomeGiorno(gi, true))));
       const blocchi = giorni.map(gi => RA.blocchiDelGiorno(lista, gi));
       const tuttoIlGiorno = h('div', { class: 'cal-tutto', style: { gridTemplateColumns: col } }, h('span', { class: 'piccolo' }, 'giorno'),
-        blocchi.map((b, i) => h('div', { class: 'cal-cella-tutto', 'data-giorno': giorni[i] }, b.tuttoIlGiorno.map(a => chip(a)))));
+        blocchi.map((b, i) => h('div', { class: 'cal-cella-tutto', 'data-giorno': giorni[i] }, scadenzeDel(giorni[i]).map(chipScadenza), b.tuttoIlGiorno.map(a => chip(a)))));
       const corpo = h('div', { class: 'cal-corpo', style: { gridTemplateColumns: col } });
       aggiungi(corpo, [h('div', { class: 'cal-ore' }, ore.map(o => h('div', { class: 'cal-ora', style: { height: ORE.alta + 'px' } }, o + ':00')))]);
       giorni.forEach((gi, i) => {
@@ -485,8 +503,8 @@
           const alto = Math.max(22, (Math.min(ORE.a, b.a2) - Math.max(ORE.da, b.da)) * ORE.alta - 3);
           const largo = 100 / b.colonne;
           aggiungi(colonna, [h('button', { type: 'button', class: 'cal-blocco ' + colorePersona(b.a.assegnataA) + (b.a.stato === 'fatta' ? ' fatta' : ''),
-            style: { top: top + 'px', height: alto + 'px', left: 'calc(' + (largo * b.colonna) + '% + 3px)', width: 'calc(' + largo + '% - 6px)' }, onclick: () => modulo(b.a) },
-          h('b', null, b.a.titolo), h('span', null, RA.ora(b.a.inizio) + (b.a.fine ? '-' + RA.ora(b.a.fine) : '') + (b.a.assegnataA ? ' · ' + RA.iniziali(nomeUtente(b.a.assegnataA)) : '')),
+            style: { top: top + 'px', height: alto + 'px', left: 'calc(' + (largo * b.colonna) + '% + 3px)', width: 'calc(' + largo + '% - 6px)' }, onclick: () => apriAttivita(b.a) },
+          h('b', null, b.a.tipo === 'intervento' ? h('span', { class: 'segno-ticket' }, 'Ticket') : null, b.a.titolo), h('span', null, RA.ora(b.a.inizio) + (b.a.fine ? '-' + RA.ora(b.a.fine) : '') + (b.a.assegnataA ? ' · ' + RA.iniziali(nomeUtente(b.a.assegnataA)) : '')),
           giorni.length === 1 && b.a.luogo ? h('span', null, b.a.luogo) : null)]);
         });
         if (gi === oggi()) {
@@ -500,7 +518,7 @@
     }
 
     function chip(a) {
-      return h('button', { type: 'button', class: 'cal-chip ' + colorePersona(a.assegnataA) + (a.stato === 'fatta' ? ' fatta' : ''), title: a.titolo, onclick: e => { e.stopPropagation(); modulo(a); } },
+      return h('button', { type: 'button', class: 'cal-chip ' + colorePersona(a.assegnataA) + (a.stato === 'fatta' ? ' fatta' : ''), title: a.titolo, onclick: e => { e.stopPropagation(); apriAttivita(a); } },
         a.priorita === 'alta' ? h('i', { class: 'pallino-alta' }) : null, a.titolo);
     }
 
@@ -514,6 +532,7 @@
           return h('div', { class: 'mese-cella' + (gi.slice(0, 7) !== g.slice(0, 7) ? ' fuori' : '') + (gi === oggi() ? ' oggi' : ''), role: 'button', tabindex: '0',
             onclick: () => { M.giorno = gi; M.vistaCal = 'giorno'; W.disegnaPagina(); }, onkeydown: e => { if (e.key === 'Enter') { M.giorno = gi; M.vistaCal = 'giorno'; W.disegnaPagina(); } } },
           h('span', { class: 'num-giorno' }, String(Number(gi.slice(8)))),
+          scadenzeDel(gi).slice(0, 2).map(x => h('span', { class: 'cal-chip c-scadenza' }, icona('bandiera', 12, 2.6), x.titolo)),
           del.slice(0, 3).map(a => h('span', { class: 'cal-chip ' + colorePersona(a.assegnataA) + (a.stato === 'fatta' ? ' fatta' : '') }, (RA.conOrario(a) && a.inizio && !a.tuttoIlGiorno ? RA.ora(a.inizio) + ' ' : '') + a.titolo)),
           del.length > 3 ? h('span', { class: 'piccolo' }, 'e altre ' + (del.length - 3)) : null);
         }))))]);

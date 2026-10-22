@@ -183,6 +183,13 @@ public sealed class Finestra : Form, Ponte.IFinestra
                     : Risposta(404, "text/plain", Encoding.UTF8.GetBytes("non trovato"));
                 return;
             }
+            // Fase 5: un file trascinato sulla pagina arriva in byte: va al server così com'è, senza diventare testo.
+            if (metodo == "POST" && uri.AbsolutePath == "/locale/carica-corpo")
+            {
+                var (s5, json5) = await ponte.CaricaCorpoAsync(uri, e.Request.Content);
+                e.Response = Risposta(s5, "application/json; charset=utf-8", Encoding.UTF8.GetBytes(json5));
+                return;
+            }
             string? corpo = null;
             if (e.Request.Content != null)
             {
@@ -309,6 +316,28 @@ public sealed class Finestra : Form, Ponte.IFinestra
         };
         if (finestra.ShowDialog(this) != DialogResult.OK) return null;
         return (Path.GetFileName(finestra.FileName), File.ReadAllBytes(finestra.FileName));
+    }
+
+    /// <summary>
+    /// Fase 5: un documento da caricare nell'archivio (o la foto di un ticket): solo il percorso, il ponte lo
+    /// legge mentre lo manda al server. Si apre sul filo della finestra, come la finestra Salva.
+    /// </summary>
+    public string? ScegliPercorso(string filtro)
+    {
+        string? scelto = null;
+        Invoke(() =>
+        {
+            using var finestra = new OpenFileDialog
+            {
+                Title = filtro == "immagini" ? "Scegli una foto" : "Scegli il documento",
+                Filter = filtro == "immagini"
+                    ? "Foto (*.png;*.jpg;*.jpeg;*.heic;*.webp)|*.png;*.jpg;*.jpeg;*.heic;*.webp|Tutti i file|*.*"
+                    : "Documenti|*.pdf;*.png;*.jpg;*.jpeg;*.doc;*.docx;*.xls;*.xlsx;*.dwg;*.dxf;*.zip;*.txt;*.csv;*.p7m|Tutti i file|*.*",
+                Multiselect = false,
+            };
+            scelto = finestra.ShowDialog(this) == DialogResult.OK ? finestra.FileName : null;
+        });
+        return scelto;
     }
 
     /// <summary>

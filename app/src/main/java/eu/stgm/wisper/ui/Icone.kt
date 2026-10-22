@@ -149,4 +149,15 @@ object Icone {
     val ferma = tratto("ferma", 2.2f, "M7 7h10v10H7z")
     /** Le statistiche delle ore: barre orizzontali, come la pagina. */
     val barre = tratto("barre", 2.2f, "M4 4v16h16", "M8 8h9M8 12h6M8 16h11")
+
+    // ---- fase 5 (docs/prototipo/Gestionale-fase5.html): documenti, ticket e assistenza
+    val chiave = tratto("chiave", 2.2f, "M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.8-3.8a6 6 0 0 1-7.9 7.9l-6.9 6.9a2.1 2.1 0 0 1-3-3l6.9-6.9a6 6 0 0 1 7.9-7.9z")
+    val documento = tratto("documento", 2.2f, "M7 3h7l4 4v14H7z", "M14 3v4h4M10 12h5M10 16h5")
+    val link = tratto("link", 2.2f, "M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1", "M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1")
+    val foto = tratto("foto", 2.2f, "M4 8h3l2-3h6l2 3h3v11H4z", "M12 17a3.5 3.5 0 1 0 0-7a3.5 3.5 0 1 0 0 7z")
+    val fulmine = tratto("fulmine", 2.2f, "M13 2L4 14h7l-1 8 9-12h-7z")
+    val monitor = tratto("monitor", 2.2f, "M3 4h18v12H3z", "M8 20h8M12 16v4")
+    val triangolo = tratto("triangolo", 2.2f, "M12 4L21 19H3z")
+    val disco = tratto("disco", 2.2f, "M4 6h16v5H4z", "M4 13h16v5H4z", "M7 8.5h.01M7 15.5h.01")
+    val importa = tratto("importa", 2.2f, "M12 21V9M7 14l5-5 5 5M5 3h14")
 }

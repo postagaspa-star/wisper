@@ -44,7 +44,7 @@ class PonteServer(
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
         .build(),
-) : TrasportoFase4 {
+) : TrasportoFase5 {
 
     val configurato: Boolean get() = base().isNotBlank() && token().isNotBlank()
 
@@ -463,6 +463,14 @@ class PonteServer(
         val o = JSONObject().put("idSoggetto", x.idSoggetto).put("tipo", x.tipo).put("nome", x.nome.trim())
             .put("indirizzo", x.indirizzo.trim()).put("cap", x.cap.trim()).put("citta", x.citta.trim())
             .put("provincia", x.provincia.trim()).put("note", x.note.trim()).put("archiviata", x.archiviata)
+        // Fase 5 (§16.2): i dati dell'impianto.
+        if (x.impianto) {
+            o.put("categoria", x.categoria).put("matricola", x.matricola.trim()).put("potenza", x.potenza.trim())
+                .put("tensione", x.tensione.trim()).put("messaInServizio", x.messaInServizio.trim()).put("ambiente", x.ambiente)
+                .put("datiTecnici", x.datiTecnici.trim())
+                .put("referenteId", x.referenteId.takeIf { it.isNotBlank() }?.let(::idJson) ?: JSONObject.NULL)
+                .put("sedePadreId", x.sedePadreId.takeIf { it.isNotBlank() }?.let(::idJson) ?: JSONObject.NULL)
+        }
         if (x.id.isNotBlank()) o.put("id", idJson(x.id))
         val r = scrivi(JSONObject().put("azione", "salvaSede").put("sede", o))
         Sede.daJson(r.optJSONObject("sede") ?: throw Rifiutato("Il server non ha restituito la sede"))
@@ -963,6 +971,28 @@ class PonteServer(
 
     /** Una scrittura della fase 4: POST, mai ripetuta da sola. */
     override suspend fun scriviAzione(corpo: JSONObject): JSONObject = withContext(Dispatchers.IO) { scrivi(corpo) }
+
+    /**
+     * Fase 5 (§16.3): un file in byte con `POST /carica`, senza base64. [idFile] è lo
+     * stesso a ogni tentativo: il server riconosce il file già arrivato. [per] è
+     * "documento" o "ticket". La risposta è come /exec (`ok`, `errore`, `gia`).
+     */
+    override suspend fun carica(nome: String, mime: String, idFile: String, per: String, dati: ByteArray): JSONObject = withContext(Dispatchers.IO) {
+        controllaConfigurazione()
+        if (dati.isEmpty()) throw Rifiutato("File vuoto")
+        val u = (base() + "/carica").toHttpUrlOrNull()?.newBuilder()
+            ?.addQueryParameter("nome", nome)?.addQueryParameter("mime", mime)
+            ?.addQueryParameter("idFile", idFile)?.addQueryParameter("per", per)
+            ?.build() ?: throw Rifiutato("Indirizzo del server non valido: controllalo nella schermata di accesso")
+        val r = Request.Builder().url(u)
+            .post(dati.toRequestBody("application/octet-stream".toMediaType()))
+            .header("Authorization", "Bearer " + token())
+            .apply {
+                chiSono()["disp"]?.let { header("X-Wisper-Disp", it) }
+            }
+            .build()
+        chiama(r, clientScrittura.newBuilder().writeTimeout(5, TimeUnit.MINUTES).readTimeout(3, TimeUnit.MINUTES).build())
+    }
 
     // ------------------------------------------------------------- interno
 

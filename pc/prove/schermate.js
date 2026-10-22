@@ -26,6 +26,10 @@ const ALTO = Number(opz('--alto', 800));
 const EDGE = 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';
 const BASE = 'http://localhost:' + PORTA;
 
+// Fase 5: chiude finestre e pannelli dopo la schermata; clicca il giallo della pagina col testo dato.
+const CHIUDI = "document.querySelectorAll('.velo, .pannello, .pannello-doc, .pannello-ticket, .pannello-contratto').forEach(v => v.remove())";
+const GIALLO = testo => "[...document.querySelectorAll('.btn.giallo')].find(b => b.textContent.indexOf(" + JSON.stringify(testo) + ") >= 0).click()";
+
 // Le pagine: nome del file, indirizzo, e cosa fare prima della schermata (JavaScript nella pagina).
 const PAGINE = [
   { nome: 'accesso', esci: true },
@@ -125,6 +129,39 @@ const PAGINE = [
   { nome: 'cliente-modulo-fatture', hash: '#clienti/C002', fai: "[...document.querySelectorAll('.btn.giallo')].find(b => b.textContent === 'Modifica').click(); await new Promise(r => setTimeout(r, 400)); const c = document.querySelector('.finestra .corpo-f'); c.scrollTop = c.scrollHeight", dopo: "document.querySelectorAll('.velo').forEach(v => v.remove())" },
   { nome: 'commessa-fatturazione', hash: '#commesse/' + new Date().getFullYear() % 100 + 'ST003', fai: "[...document.querySelectorAll('.segmenti button')].find(b => b.textContent === 'Panoramica').click()" },
   { nome: 'commessa-dafatturare', hash: '#commesse/' + new Date().getFullYear() % 100 + 'ST002', fai: "[...document.querySelectorAll('.segmenti button')].find(b => b.textContent === 'Da fatturare').click()" },
+  // fase 5: documenti, ticket e assistenza (col server di prova: i dati di esempio della fase 5 sono lì)
+  { nome: 'documenti', hash: '#documenti' },
+  { nome: 'documento', hash: '#documenti/doc/1', fai: "await new Promise(r => setTimeout(r, 900))", dopo: CHIUDI },
+  { nome: 'documento-collegamento', hash: '#documenti/doc/4', fai: "await new Promise(r => setTimeout(r, 900))", dopo: CHIUDI },
+  { nome: 'documento-percorso', hash: '#documenti/doc/9', fai: "await new Promise(r => setTimeout(r, 900))", dopo: CHIUDI },
+  { nome: 'aggiungi-documento', hash: '#documenti', fai: GIALLO('Aggiungi un documento'), dopo: CHIUDI },
+  { nome: 'aggiungi-collegamento', hash: '#documenti', fai: GIALLO('Aggiungi un documento') + "; await new Promise(r => setTimeout(r, 400)); [...document.querySelectorAll('.finestra .scelta-ruolo')][1].click(); await new Promise(r => setTimeout(r, 200)); const i = document.querySelector('.finestra .campo-con-pulsante input'); i.value = 'https://esempio-my.sharepoint.com/:f:/g/personal/studio/Commesse/26ST041'; i.dispatchEvent(new Event('input', { bubbles: true }))", dopo: CHIUDI },
+  { nome: 'da-approvare-doc', hash: '#documenti/approvare' },
+  { nome: 'scadenze-doc', hash: '#documenti/scadenze' },
+  { nome: 'scadenza', hash: '#documenti/scadenza/5', fai: "await new Promise(r => setTimeout(r, 600))", dopo: CHIUDI },
+  { nome: 'nuova-scadenza', hash: '#documenti/scadenze', fai: GIALLO('Nuova scadenza'), dopo: CHIUDI },
+  { nome: 'modelli', hash: '#documenti/modelli' },
+  { nome: 'testi-modello', hash: '#documenti/modelli/lettera', fai: "await new Promise(r => setTimeout(r, 600))", dopo: CHIUDI },
+  { nome: 'nuova-lettera', hash: '#documenti/modelli', fai: GIALLO('Nuova lettera') + "; await new Promise(r => setTimeout(r, 400)); [...document.querySelectorAll('.finestra .scelta-card')].find(b => /Batokyo/.test(b.textContent)).click(); await new Promise(r => setTimeout(r, 900)); const p = [...document.querySelectorAll('.finestra .pillola')].find(b => /terra/.test(b.textContent) && /stabilimento/i.test(b.textContent)); if (p) p.click(); await new Promise(r => setTimeout(r, 900))", dopo: CHIUDI },
+  { nome: 'ticket', hash: '#ticket' },
+  { nome: 'ticket-urgente', hash: '#ticket/tk/14', fai: "await new Promise(r => setTimeout(r, 900))", dopo: CHIUDI },
+  { nome: 'ticket-risolto', hash: '#ticket/tk/12', fai: "await new Promise(r => setTimeout(r, 900))", dopo: CHIUDI },
+  { nome: 'ticket-risolto-giu', hash: '#ticket/tk/12', fai: "await new Promise(r => setTimeout(r, 900)); const c = document.querySelector('.pannello-ticket .corpo'); c.scrollTop = 700", dopo: CHIUDI },
+  { nome: 'nuovo-ticket', hash: '#ticket', fai: GIALLO('Nuovo ticket') + "; await new Promise(r => setTimeout(r, 400)); [...document.querySelectorAll('.finestra .scelta-card')].find(b => /Rossi/.test(b.textContent)).click(); await new Promise(r => setTimeout(r, 900)); [...document.querySelectorAll('.finestra .pillola')].find(b => b.textContent === 'Cabina MT Acme').click(); const t = [...document.querySelectorAll('.finestra .campo')].find(c => c.querySelector('label') && c.querySelector('label').textContent === 'Cosa succede').querySelector('input'); t.value = 'Scatta il generale MT'; [...document.querySelectorAll('.finestra .pillola')].find(b => b.textContent === 'Fermo').click(); [...document.querySelectorAll('.finestra .pillola')].find(b => b.textContent === 'Subito').click()", dopo: CHIUDI },
+  { nome: 'pianifica', hash: '#ticket/tk/15', fai: "await new Promise(r => setTimeout(r, 900)); [...document.querySelectorAll('.pannello-ticket .btn.giallo')].pop().click(); await new Promise(r => setTimeout(r, 1200))", dopo: CHIUDI },
+  { nome: 'chiudi-ticket', hash: '#ticket/tk/12', fai: "await new Promise(r => setTimeout(r, 900)); [...document.querySelectorAll('.pannello-ticket .btn.giallo')].pop().click(); await new Promise(r => setTimeout(r, 600))", dopo: CHIUDI },
+  { nome: 'programmati', hash: '#ticket/programmati' },
+  { nome: 'chiusi', hash: '#ticket/chiusi' },
+  { nome: 'contratti-assistenza', hash: '#ticket/contratti' },
+  { nome: 'contratto', hash: '#ticket/contratto/2', fai: "await new Promise(r => setTimeout(r, 900))", dopo: CHIUDI },
+  { nome: 'nuovo-contratto', hash: '#ticket/contratti', fai: GIALLO('Nuovo contratto'), dopo: CHIUDI },
+  { nome: 'statistiche-ticket', hash: '#ticket/statistiche' },
+  { nome: 'impianto', hash: '#ticket/impianto/4' },
+  { nome: 'categorie', hash: '#amministrazione/categorie' },
+  { nome: 'spazio', hash: '#amministrazione/spazio' },
+  { nome: 'cliente-documenti', hash: '#clienti/C002', fai: "await new Promise(r => setTimeout(r, 500)); [...document.querySelectorAll('.segmenti button')].find(b => /^Documenti/.test(b.textContent)).click(); await new Promise(r => setTimeout(r, 800))" },
+  { nome: 'cliente-sedi-impianti', hash: '#clienti/C002', fai: "[...document.querySelectorAll('.segmenti button')].find(b => /^Sedi/.test(b.textContent)).click()" },
+  { nome: 'commessa-documenti', hash: '#commesse/' + new Date().getFullYear() % 100 + 'ST005', fai: "[...document.querySelectorAll('.segmenti button')].find(b => b.textContent === 'Documenti').click(); await new Promise(r => setTimeout(r, 800))" },
 ];
 
 const aspetta = ms => new Promise(r => setTimeout(r, ms));

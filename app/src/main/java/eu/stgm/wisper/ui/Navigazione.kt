@@ -69,6 +69,8 @@ enum class Sezione(val nome: String, val icona: ImageVector, val modulo: String)
     SPESE("Spese e trasferte", Icone.scontrino, Moduli.SPESE),
     FATTURAZIONE("Fatturazione", Icone.fatturazione, Moduli.FATTURAZIONE),
     BANCHE("Banche e scadenze", Icone.barre, Moduli.BANCHE),
+    DOCUMENTI("Documenti", Icone.documento, Moduli.DOCUMENTI),
+    TICKET("Ticket e assistenza", Icone.chiave, Moduli.TICKET),
     AMMINISTRAZIONE("Amministrazione", Icone.amministrazione, Moduli.AMMINISTRAZIONE),
 }
 
@@ -95,6 +97,7 @@ class Navigatore(
     private val onApriRapportino: (String) -> Unit,
     private val onNuovoRapportino: (LocalDate, String?, String?) -> Unit,
     private val onFirmaPreventivo: (String) -> Unit = {},
+    private val onRapportinoDaTicket: (eu.stgm.wisper.rapportino.Rapportino) -> Unit = {},
 ) {
     fun vai(rotta: String) = onVai(rotta)
     fun indietro() = onIndietro()
@@ -111,6 +114,9 @@ class Navigatore(
 
     /** La firma del cliente per accettare un preventivo, a tutto schermo come quella del rapportino. */
     fun firmaPreventivo(id: String) = onFirmaPreventivo(id)
+
+    /** Fase 5: il rapportino di sempre già compilato dal ticket, aperto al passo 2 (fase5.md §3.3). */
+    fun rapportinoDaTicket(r: eu.stgm.wisper.rapportino.Rapportino) = onRapportinoDaTicket(r)
 }
 
 /** Le rotte "compito" (moduli, invio): a tutto schermo, niente menu, si esce con la ×. */
@@ -120,7 +126,11 @@ fun rottaCompito(rotta: String?): Boolean =
         rotta.startsWith("preventivo-modifica/") || rotta.startsWith("preventivo-nuovo") ||
         rotta.startsWith("attivita-modifica/") || rotta.startsWith("attivita-nuova") ||
         rotta.startsWith("ore-registra") || rotta.startsWith("spesa-nuova") || rotta.startsWith("spesa/") ||
-        rotta.startsWith("trasferta-nuova") || rotta.startsWith("trasferta/") || rotta.startsWith("amm/veicolo"))
+        rotta.startsWith("trasferta-nuova") || rotta.startsWith("trasferta/") || rotta.startsWith("amm/veicolo") ||
+        // Fase 5: i moduli di ticket, contratti, documenti, scadenze e lettere.
+        rotta.startsWith("ticket-nuovo") || rotta.startsWith("ticket-modifica/") || rotta.startsWith("contratto-ca-nuovo") ||
+        rotta.startsWith("contratto-ca-modifica/") || rotta.startsWith("documento-nuovo") || rotta.startsWith("scadenza-nuova") ||
+        rotta.startsWith("lettera-nuova"))
 
 /** La sezione di una pagina interna: dice il nome piccolo accanto a "indietro" e il permesso che serve. */
 fun sezioneDiRotta(rotta: String?, base: Sezione): Sezione = when {
@@ -135,6 +145,10 @@ fun sezioneDiRotta(rotta: String?, base: Sezione): Sezione = when {
     // Fase 4: fatture, ricevute, importazione; banche e situazione.
     rotta.startsWith("fattur") || rotta.startsWith("ricevut") -> Sezione.FATTURAZIONE
     rotta.startsWith("banche") -> Sezione.BANCHE
+    // Fase 5: ticket, impianti e contratti di assistenza; documenti, scadenze, lettere e testi dei modelli.
+    rotta.startsWith("ticket") || rotta.startsWith("impianto/") || rotta.startsWith("contratto-ca") -> Sezione.TICKET
+    rotta.startsWith("document") || rotta.startsWith("scadenz") || rotta.startsWith("lettera") || rotta.startsWith("modello-testi") -> Sezione.DOCUMENTI
+    rotta == "amm/categorie" || rotta == "amm/spazio" -> Sezione.AMMINISTRAZIONE
     rotta.startsWith("amm/") -> Sezione.AMMINISTRAZIONE
     else -> base
 }
@@ -272,7 +286,8 @@ fun CassettoMenu(
     utente: Utente,
     voci: List<Sezione>,
     attiva: Sezione,
-    numeroFatturazione: Int,
+    /** I numerini gialli: Fatturazione (clienti da fatturare), Ticket e assistenza (da prendere), Documenti (da approvare). */
+    numeri: Map<Sezione, Int>,
     collegato: Boolean,
     statoCollegamento: String,
     onVoce: (Sezione) -> Unit,
@@ -296,7 +311,7 @@ fun CassettoMenu(
             Box(Modifier.fillMaxWidth().height(1.dp).background(c.riga))
             Spacer(Modifier.height(0.dp))
             voci.forEach { s ->
-                VoceCassetto(s, s == attiva, if (s == Sezione.FATTURAZIONE) numeroFatturazione else 0) { onVoce(s) }
+                VoceCassetto(s, s == attiva, numeri[s] ?: 0) { onVoce(s) }
             }
         }
         Column(Modifier.fillMaxWidth()) {
@@ -345,7 +360,13 @@ private fun VoceCassetto(s: Sezione, attiva: Boolean, numero: Int, onClick: () -
         if (numero > 0) {
             Box(
                 Modifier.widthIn(min = 24.dp).height(24.dp).clip(RoundedCornerShape(12.dp)).background(c.giallo).padding(horizontal = 7.dp)
-                    .semantics { contentDescription = "$numero da fatturare" },
+                    .semantics {
+                        contentDescription = when (s) {
+                            Sezione.TICKET -> "$numero da prendere"
+                            Sezione.DOCUMENTI -> "$numero da approvare"
+                            else -> "$numero da fatturare"
+                        }
+                    },
                 contentAlignment = Alignment.Center,
             ) { Text("$numero", style = Testi.piccolo.copy(fontWeight = FontWeight.ExtraBold), color = c.suGiallo) }
         }

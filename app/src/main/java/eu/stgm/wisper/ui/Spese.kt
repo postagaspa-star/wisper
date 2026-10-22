@@ -383,13 +383,15 @@ fun SchermataSpesa(dati: Dati, nav: Navigatore, arg: String) {
     val trasferta = trasferte?.trasferte?.firstOrNull { it.id == idTrasferta }
     val recenti = remember(ana, viste, spese) { FilaOreSpese.commesseRecenti(ana, viste.map { it.rapportino }, spese = spese?.spese.orEmpty()) }
 
+    // Fase 5 (§7.5): "+ Materiale o spesa" dal ticket: materiale, al cliente, la commessa e il ticket.
+    val delTicket = remember(arg) { if (nuova && idTrasferta.isBlank()) RicordoTicket.perOreSpese.also { RicordoTicket.perOreSpese = null } else null }
     var passo by rememberSaveable { mutableStateOf(if (nuova) 1 else 2) }
     var foto by rememberSaveable { mutableStateOf<String?>(null) }
     var importo by rememberSaveable { mutableStateOf(esistente?.importo?.takeIf { it > 0 }?.let(::soldiNelCampo).orEmpty()) }
-    var categoria by rememberSaveable { mutableStateOf(esistente?.categoria ?: "altro") }
+    var categoria by rememberSaveable { mutableStateOf(esistente?.categoria ?: if (delTicket != null) "materiale" else "altro") }
     var data by rememberSaveable { mutableStateOf(esistente?.data ?: trasferta?.dal ?: LocalDate.now()) }
-    var idCommessa by rememberSaveable { mutableStateOf(esistente?.idCommessa ?: trasferta?.idCommessa ?: recenti.firstOrNull()?.id ?: "") }
-    var destinazione by rememberSaveable { mutableStateOf<String?>(esistente?.destinazione) }
+    var idCommessa by rememberSaveable { mutableStateOf(esistente?.idCommessa ?: delTicket?.idCommessa ?: trasferta?.idCommessa ?: recenti.firstOrNull()?.id ?: "") }
+    var destinazione by rememberSaveable { mutableStateOf<String?>(esistente?.destinazione ?: if (delTicket != null) Destinazione.CLIENTE else null) }
     var anticipazione by rememberSaveable { mutableStateOf(esistente?.anticipazione ?: false) }
     var pagataDaMe by rememberSaveable { mutableStateOf(esistente?.pagataDaMe ?: true) }
     var descrizione by rememberSaveable { mutableStateOf(esistente?.descrizione.orEmpty()) }
@@ -458,7 +460,7 @@ fun SchermataSpesa(dati: Dati, nav: Navigatore, arg: String) {
         if (cambia("destinazione") && dest == Destinazione.CLIENTE && idCommessa.isBlank() && (esistente?.idCliente.isNullOrBlank())) {
             errore = "Al cliente: scegli la commessa o il cliente"; return
         }
-        val s = (esistente ?: Spesa(idLocale = "", idTrasferta = idTrasferta)).copy(
+        val s = (esistente ?: Spesa(idLocale = "", idTrasferta = idTrasferta, idTicket = delTicket?.chiave.orEmpty(), idCliente = if (idCommessa.isBlank()) delTicket?.idCliente.orEmpty() else "")).copy(
             data = data, importo = euro?.let(ContiOreSpese::centesimi) ?: esistente?.importo ?: 0.0, categoria = categoria,
             descrizione = descrizione.trim(), idCommessa = idCommessa, destinazione = dest,
             anticipazione = dest == Destinazione.CLIENTE && anticipazione, pagataDaMe = pagataDaMe,

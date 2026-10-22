@@ -137,6 +137,9 @@ fun SchermataAmministrazione(dati: Dati, archivio: Archivio, nav: Navigatore) {
                 ?: "Il veicolo, il suo €/km, le tabelle ACI",
             Icone.auto, "veicoli",
         ).takeIf { vedeSpese },
+        // Fase 5 (fase5.md §12.4): le categorie dei documenti e lo spazio sul NAS, anche sul telefono.
+        VoceAmm("Categorie dei documenti", "Approvazione, chi le vede, scadenza proposta", Icone.documento, "categorie").takeIf { LocalPermessi.current.vede(Moduli.DOCUMENTI) },
+        VoceAmm("Spazio sul NAS", "Dove va lo spazio, copia fuori casa, cestino", Icone.disco, "spazio"),
         VoceAmm("Registro attività", "Chi ha cambiato cosa", Icone.lista, "registro"),
         VoceAmm(
             "Copie ed esportazioni",
@@ -189,6 +192,8 @@ fun PaginaAmministrazione(
         quale == "registro" -> PaginaRegistro(dati, indietro)
         quale == "copie" -> PaginaCopie(dati, puo, indietro)
         quale == "cestino" -> PaginaCestino(dati, puo, indietro)
+        quale == "categorie" -> PaginaCategorie(dati, puo, indietro)
+        quale == "spazio" -> PaginaSpazio(dati, puo, indietro)
         quale == "veicoli" -> PaginaVeicoli(dati, nav, puo)
         quale == "veicolo-nuovo" -> PaginaVeicolo(dati, nav, "", puo)
         quale.startsWith("veicolo/") -> PaginaVeicolo(dati, nav, quale.removePrefix("veicolo/"), puo)

@@ -1393,3 +1393,140 @@ input.num-riga.importo-storno { width: 130px; flex: none; }
 .scartato-xml { font-size: 14px; font-weight: 600; color: var(--testo2); }
 .scartato-xml b { font-weight: 800; }
 .banda.da-restituire { font-size: 16px; font-weight: 800; }
+
+/* ============================================================ fase 5: documenti, ticket e assistenza */
+/* Dal prototipo docs/prototipo/Gestionale-fase5.html (vista Computer). Colori sempre con la parola. */
+.p-ambra { background: var(--ambra-f); color: var(--ambra-t); }
+.p-chiaro { background: transparent; color: var(--testo2); box-shadow: inset 0 0 0 1.5px var(--bordo-campo); }
+.p-tratteggiata { background: transparent; color: var(--tenue); border: 1.5px dashed var(--bordo-campo); gap: 5px; }
+.p-tratteggiata svg { flex: none; }
+.ico-verde { background: var(--firmato-fondo); color: var(--firmato); }
+.ico-riga.piccola { width: 34px; height: 34px; border-radius: 10px; }
+.pillola.piccola { height: 32px; padding: 0 10px; font-size: 13px; }
+.num-box.acceso { border-color: var(--testo); box-shadow: inset 0 0 0 1px var(--testo); }
+
+/* archivio: categorie a sinistra (220), ricerca, filtri e tabella a destra */
+.griglia-archivio { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 18px; align-items: start; }
+.categorie-doc { display: flex; flex-direction: column; gap: 2px; position: sticky; top: 0; }
+.voce-cat { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 46px; padding: 0 12px; border: none; border-radius: 14px;
+  background: transparent; color: var(--testo2); font-size: 14px; font-weight: 700; text-align: left; }
+.voce-cat:hover { background: var(--superficie); }
+.voce-cat.scelta { background: var(--giallo-tenue); color: var(--testo); font-weight: 800; }
+.voce-cat b { font-size: 13px; color: var(--tenue); font-variant-numeric: tabular-nums; }
+.colonna-archivio { min-width: 0; }
+.filtri-doc { align-items: center; }
+.tab-archivio .r { min-height: 62px; }
+.titolo-doc { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.titolo-doc .doppia { flex: 1; }
+.tab .legato { font-size: 13px; line-height: 1.3; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.zona-vuota { display: flex; flex-direction: column; gap: 6px; align-items: center; border: 1.5px dashed var(--bordo-campo); border-radius: 18px; }
+.sezione.accoglie { outline: 2px dashed var(--giallo-premuto); outline-offset: 4px; border-radius: 18px; background: var(--giallo-scelto); }
+.stato-doppio { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; }
+
+/* pannelli (documento, ticket, contratto): come quello del rapportino, con le sezioni */
+.etichetta-pannello { font-size: 13px; font-weight: 700; color: var(--tenue); }
+.titolo-pannello { font-size: 25px; letter-spacing: -0.4px; line-height: 1.2; }
+.sezione-pannello { display: flex; flex-direction: column; gap: 8px; }
+.sezione-pannello > .pillola { align-self: flex-start; }
+.pannello .scheda.righe { padding: 0 16px; }
+.anteprima-doc { border: 1px solid var(--bordo-scheda); border-radius: 18px; overflow: hidden; background: var(--superficie-tenue); display: flex; align-items: center; justify-content: center; min-height: 160px; }
+.anteprima-doc img { max-width: 100%; max-height: 260px; display: block; object-fit: contain; }
+.anteprima-doc.pdf { height: 260px; }
+.anteprima-doc.pdf iframe { border: none; width: 100%; height: 100%; background: #fff; }
+.anteprima-doc.vuota { flex-direction: column; gap: 6px; padding: 22px; color: var(--testo2); text-align: center; }
+.collegamento-doc { display: flex; flex-direction: column; gap: 8px; padding: 14px 16px; }
+.riga-indirizzo { display: flex; align-items: center; gap: 10px; }
+.riga-indirizzo .indirizzo { flex: 1; min-width: 0; font-size: 14px; font-weight: 700; overflow-wrap: anywhere; }
+.cronologia { display: flex; flex-direction: column; gap: 8px; padding: 2px 4px; }
+.voce-cron { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 10px; font-size: 14px; font-weight: 600; color: var(--testo2); }
+.voce-cron .quando { color: var(--tenue); font-variant-numeric: tabular-nums; }
+.banda-tempi { background: var(--superficie); color: var(--testo); border-radius: 16px; padding: 12px 16px; font-size: 15px; font-weight: 700; display: flex; flex-direction: column; gap: 3px; }
+.banda-tempi.rossa { background: var(--rosso-fondo); color: var(--rosso-testo); }
+.testo-cliente { font-size: 16px; font-weight: 600; line-height: 1.5; white-space: pre-wrap; }
+.somma-tk { display: flex; flex-direction: column; gap: 2px; padding: 4px 4px 0; font-size: 15px; font-weight: 700; }
+.foto-tk { display: flex; flex-wrap: wrap; gap: 8px; }
+.foto-btn, .foto-aggiungi { position: relative; width: 84px; height: 84px; border-radius: 14px; padding: 0; overflow: hidden; }
+.foto-btn { border: 1px solid var(--bordo-scheda); background: var(--superficie); }
+.foto-btn img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.segno-archivio { position: absolute; right: 4px; bottom: 4px; width: 22px; height: 22px; border-radius: 7px; background: var(--scheda); color: var(--testo2); display: flex; align-items: center; justify-content: center; }
+.foto-aggiungi { border: 1.5px dashed var(--bordo-campo); background: transparent; color: var(--tenue); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; font-size: 12px; font-weight: 700; }
+.foto-aggiungi:hover { border-color: var(--testo2); color: var(--testo); }
+.calmo.piccolo-calmo { flex: 1; justify-content: center; font-size: 15px; }
+.num-tk { font-variant-numeric: tabular-nums; font-size: 14px; }
+
+/* finestre a due colonne (Aggiungi un documento, Nuovo ticket, Nuovo contratto, Pianifica, Chiudi) */
+.due-colonne-f { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 22px; align-items: start; }
+.due-colonne-f.pf { grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); }
+.colonna-f { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.due-scelte { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.scelta-ruolo.grande-doc { flex-direction: column; min-height: 118px; }
+.zona-file { border: 1.5px dashed var(--bordo-campo); border-radius: 18px; min-height: 104px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
+  color: var(--testo2); font-size: 15px; font-weight: 700; background: var(--superficie-tenue); }
+.zona-file.accoglie { border-color: var(--giallo-premuto); background: var(--giallo-tenue); }
+.tipo-coll { align-items: center; min-height: 0; }
+.legami-f .riga { min-height: 58px; }
+.riga-contratto, .riga-priorita { display: flex; align-items: center; gap: 10px; background: var(--superficie); border-radius: 14px; padding: 8px 8px 8px 14px; font-size: 14px; font-weight: 700; min-height: 52px; }
+.riga-tempi-nuovo { padding: 14px 16px; font-size: 15px; font-weight: 700; }
+.pillole.grandi .pillola { height: 48px; padding: 0 18px; font-size: 15px; }
+.scelta-fatt { align-items: center; }
+.scelta-fatt .testi { flex: 1; }
+.proposta-fatt { color: var(--giallo-testo) !important; font-weight: 800 !important; font-size: 13px !important; }
+.in-fattura { display: flex; flex-direction: column; gap: 10px; }
+.tot-fatt { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; border-top: 1px solid var(--riga); padding-top: 12px; }
+.riga-fattura { display: flex; flex-direction: column; gap: 4px; font-size: 14px; font-weight: 600; color: var(--testo2); line-height: 1.4; border-top: 1px solid var(--riga); padding-top: 10px; }
+.impianto-contratto { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.impianto-contratto select.scelta { width: auto; min-width: 150px; height: 44px; }
+.impianto-contratto input.campo-solo { width: 170px; height: 44px; }
+
+/* pianificare: la giornata a colonne per persona, i giorni come schede */
+.agenda-pf { display: grid; border: 1px solid var(--bordo-scheda); border-radius: 16px; overflow: hidden; background: var(--scheda); }
+.agenda-pf > span { border-top: 1px solid var(--riga); min-height: 34px; padding: 4px 6px; font-size: 12px; }
+.agenda-pf .chi-pf { border-top: none; font-weight: 800; color: var(--testo2); padding-top: 8px; }
+.agenda-pf .ora-pf { color: var(--tenue); font-weight: 700; }
+.cella-pf { display: flex; flex-direction: column; gap: 2px; }
+.blocco-pf { display: block; border-radius: 7px; padding: 2px 6px; background: var(--blu-f); color: var(--blu-t); font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.blocco-pf.intervento { background: var(--superficie); color: var(--testo2); }
+.blocco-pf.nuovo { background: var(--giallo-tenue); color: var(--giallo-testo); outline: 1.5px dashed var(--giallo-testo); }
+.giorni-pf { display: flex; gap: 8px; flex-wrap: wrap; }
+.giorno-pf { width: 62px; height: 58px; border-radius: 14px; border: 1.5px solid var(--bordo-campo); background: var(--scheda); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; }
+.giorno-pf span { font-size: 12px; font-weight: 700; color: var(--tenue); }
+.giorno-pf b { font-size: 18px; font-weight: 800; }
+.giorno-pf.scelto { background: var(--testo); border-color: var(--testo); color: var(--scheda); }
+.giorno-pf.scelto span { color: var(--scheda); }
+.stepper.grande-pf .valore { font-size: 24px; min-width: 76px; text-align: center; }
+
+/* scadenze: il giorno grande a sinistra */
+.giorno-scad { width: 48px; height: 48px; border-radius: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1.05; }
+.giorno-scad b { font-size: 18px; font-weight: 800; }
+.giorno-scad span { font-size: 11px; font-weight: 700; }
+.gs-rosso { background: var(--rosso-fondo); color: var(--rosso-testo); }
+.gs-ambra { background: var(--ambra-f); color: var(--ambra-t); }
+.gs-verde { background: var(--firmato-fondo); color: var(--firmato); }
+.gs-grigio { background: var(--superficie); color: var(--testo2); }
+.tab-scadenze .r { min-height: 66px; }
+.cal-chip.c-scadenza { display: flex; align-items: center; gap: 4px; background: var(--ambra-f); color: var(--ambra-t); }
+.cal-chip.c-scadenza svg { flex: none; }
+.segno-ticket { display: inline-block; font-size: 10px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; background: var(--scheda); color: var(--testo2); border-radius: 5px; padding: 0 4px; margin-right: 5px; }
+
+/* modelli e testi */
+.anteprima-testo { position: sticky; top: 0; min-height: 360px; }
+.testo-a4 { white-space: pre-wrap; font-size: 11px; line-height: 1.55; color: #3F3F46; margin-top: 10px; }
+.testo-a4 mark { background: #FFE8A3; color: #5C3D00; border-radius: 3px; padding: 0 2px; }
+.pillole.segnaposti-modello { align-items: center; margin-top: 6px; }
+
+/* spazio sul NAS */
+.barre-spazio { display: flex; flex-direction: column; gap: 12px; margin-top: 14px; }
+.barra-spazio { display: grid; grid-template-columns: 200px minmax(0, 1fr) 130px; gap: 14px; align-items: center; font-size: 14px; font-weight: 700; }
+.barra-spazio .barra { height: 12px; }
+.barra-spazio .barra > i { background: var(--testo); }
+.barra-spazio .quanto { text-align: right; color: var(--testo2); font-variant-numeric: tabular-nums; }
+
+/* storico dell'impianto: due colonne, la riga del tempo per anno */
+.griglia-impianto { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 18px; align-items: start; }
+.anno-storico { font-size: 12px; font-weight: 800; letter-spacing: .06em; color: var(--tenue); padding: 14px 0 4px; }
+.storico-tempo .anno-storico + .riga { border-top: none; }
+.coppia.link { border: none; background: none; text-align: left; padding: 0; font: inherit; color: inherit; cursor: pointer; }
+.coppia.link .v { text-decoration: underline; text-underline-offset: 3px; }
+@media (max-width: 1100px) { .griglia-archivio, .griglia-impianto, .due-colonne-f { grid-template-columns: minmax(0, 1fr); } .categorie-doc { position: static; flex-direction: row; flex-wrap: wrap; } }
+.sotto-pill { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin-top: 3px; }
+.tab-archivio .t2.taglia { display: block; }

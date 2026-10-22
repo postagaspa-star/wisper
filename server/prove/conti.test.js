@@ -113,7 +113,8 @@ const CASI_FATTURA = require('./casi-fattura.json');
 test('casi-fattura.json: i 16 casi del contratto e i casi limite del server', () => {
   assert.ok(CASI_FATTURA.casi.length >= 30, 'i 16 del contratto piu\' i casi limite');
   assert.deepEqual(CASI_FATTURA.casi.slice(0, 16).map(c => Number(c.nome.split('.')[0])), Array.from({ length: 16 }, (_, i) => i + 1));
-  assert.equal(CASI_FATTURA.raggruppamenti.length, 4);
+  // I 4 della fase 4 (A-D) e il ticket della fase 5 (E, fase5.md §7.6).
+  assert.equal(CASI_FATTURA.raggruppamenti.length, 5);
 });
 
 for (const c of CASI_FATTURA.casi) {
@@ -127,7 +128,9 @@ for (const c of CASI_FATTURA.casi) {
 
 for (const g of CASI_FATTURA.raggruppamenti) {
   test('righe dai rapportini: ' + g.nome, () => {
-    const gruppi = C.righeRapportini({ raggruppa: g.raggruppa, cliente: g.cliente, rapportini: g.rapportini, spese: g.spese });
+    // Fase 5: un ticket chiuso "una riga per l'intervento" fa la sua riga con righeTicket (stessi rapportini e spese).
+    const gruppi = g.ticket ? C.righeTicket({ ticket: g.ticket, cliente: g.cliente, rapportini: g.rapportini, spese: g.spese, ore: g.ore || [] })
+      : C.righeRapportini({ raggruppa: g.raggruppa, cliente: g.cliente, rapportini: g.rapportini, spese: g.spese });
     const righe = [].concat(...gruppi.map(x => x.righe)).map(r => ({ tipo: r.tipo, descrizione: r.descrizione, quantita: r.quantita, unita: r.unita, prezzo: r.prezzo, importo: r.importo }));
     assert.deepEqual(righe, g.atteso.righe);
     assert.equal(gruppi.reduce((t, x) => t + x.sorgenti.length, 0), g.atteso.sorgenti, 'le sorgenti');

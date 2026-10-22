@@ -48,7 +48,8 @@ test('i dati di esempio: stessi clienti, commesse e conti di semina() sullo scri
     'totale', 'costoOrario', 'firma', 'stato'];
   assert.equal(suoi.length, 4);
   for (const r of suoi) assert.deepEqual(solo(miei.find(x => x.id === r.id), campi), solo(r, campi), r.id);
-  assert.equal(miei.length, 13, 'piu\' i due di Marco e i sette della fase 4');
+  // Fase 5: in piu' i due rapportini dei ticket (TK/2026/0010 e TK/2026/0012).
+  assert.equal(miei.length, 15, 'piu\' i due di Marco, i sette della fase 4 e i due dei ticket della fase 5');
 });
 
 // ------------------------------------------------------------------ salvataggi

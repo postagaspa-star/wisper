@@ -151,6 +151,18 @@ class MainActivity : ComponentActivity() {
      */
     private fun leggiFileCondivisi(intent: android.content.Intent?) {
         val i = intent ?: return
+        // Fase 5 (fase5.md §3.1): un collegamento di OneDrive o Drive condiviso come testo va in Documenti, Aggiungi.
+        if (i.action == android.content.Intent.ACTION_SEND && i.type?.startsWith("text/") == true) {
+            val link = eu.stgm.wisper.rapportino.Collegamenti.daTestoCondiviso(i.getStringExtra(android.content.Intent.EXTRA_TEXT))
+            i.action = null
+            if (link == null) {
+                android.widget.Toast.makeText(this, "Qui non c'è un collegamento da mettere nei documenti", android.widget.Toast.LENGTH_LONG).show()
+            } else {
+                eu.stgm.wisper.ui.RicordoDocumenti.preparato = eu.stgm.wisper.ui.DocumentoPreparato(url = link)
+                apriDocumentoNuovo.value = true
+            }
+            return
+        }
         val uri: List<android.net.Uri> = when (i.action) {
             android.content.Intent.ACTION_SEND -> listOfNotNull(
                 if (Build.VERSION.SDK_INT >= 33) i.getParcelableExtra(android.content.Intent.EXTRA_STREAM, android.net.Uri::class.java)
@@ -166,6 +178,23 @@ class MainActivity : ComponentActivity() {
         if (uri.isEmpty()) return
         // Lo stesso intent non si rilegge (rotazione, ritorno nell'app).
         i.action = null
+        // Fase 5: un PDF o una foto (non una fattura) va in Documenti, Aggiungi un documento.
+        val nomeDi = { u: android.net.Uri -> runCatching { contentResolver.query(u, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c -> if (c.moveToFirst()) c.getString(0) else null } }.getOrNull() ?: u.lastPathSegment.orEmpty() }
+        if (uri.size == 1 && !eu.stgm.wisper.ui.FileInArrivo.accettato(nomeDi(uri[0]))) {
+            val u = uri[0]
+            Thread {
+                val dati = runCatching { contentResolver.openInputStream(u)?.use { it.readBytes() } }.getOrNull()
+                runOnUiThread {
+                    if (dati == null || dati.size > 50L * 1024 * 1024) {
+                        android.widget.Toast.makeText(this, if (dati == null) "Il file non si legge" else "Il file è più grande di 50 MB: non si carica", android.widget.Toast.LENGTH_LONG).show()
+                    } else {
+                        eu.stgm.wisper.ui.RicordoDocumenti.preparato = eu.stgm.wisper.ui.DocumentoPreparato(file = eu.stgm.wisper.ui.FileArrivato(nomeDi(u), dati))
+                        apriDocumentoNuovo.value = true
+                    }
+                }
+            }.start()
+            return
+        }
         Thread {
             val (file, fuori) = eu.stgm.wisper.ui.FileInArrivo.leggi(this, uri)
             runOnUiThread {
@@ -190,6 +219,9 @@ class MainActivity : ComponentActivity() {
 
         /** Sono arrivati file di fatture dal Condividi: si apre Importa l'XML appena si può. */
         val apriImporta = kotlinx.coroutines.flow.MutableStateFlow(false)
+
+        /** Fase 5: un collegamento o un file dal Condividi: si apre Documenti, Aggiungi un documento. */
+        val apriDocumentoNuovo = kotlinx.coroutines.flow.MutableStateFlow(false)
     }
 
     override fun onResume() {
@@ -263,6 +295,8 @@ private fun Wisper(archivio: Archivio, attivita: ComponentActivity) {
         val cassetto = rememberDrawerState(DrawerValue.Closed)
         // Il foglio "Tu": null chiuso, "" dal cerchio, "esci" da Esci in fondo al menu.
         var foglioTu by remember { mutableStateOf<String?>(null) }
+        // Fase 5: dopo la firma di un rapportino col ticket, "Il lavoro è finito?".
+        var lavoroFinito by remember { mutableStateOf<Rapportino?>(null) }
 
         fun aCasa() {
             sezioneNome = Sezione.DASHBOARD.name
@@ -293,6 +327,16 @@ private fun Wisper(archivio: Archivio, attivita: ComponentActivity) {
                     else eu.stgm.wisper.ui.RicordoOre.segmento = eu.stgm.wisper.ui.SegmentoOre.ORE
                     mettiPila(s, emptyList())
                     sezioneNome = s.name
+                    pagina = "sezioni"
+                }
+                // Fase 5: la visita passa dai ticket (l'urgente in cima) e dal ticket aperto (il giallo).
+                "ticket", "ticket-pagina" -> {
+                    modulo = null
+                    scope.launch { cassetto.close() }
+                    eu.stgm.wisper.ui.RicordoTicket.segmento = eu.stgm.wisper.ui.SegmentoTicket.APERTI
+                    eu.stgm.wisper.ui.RicordoTicket.filtro = eu.stgm.wisper.ui.FiltroTicket.TUTTI
+                    mettiPila(Sezione.TICKET, if (p == "ticket") emptyList() else listOf("ticket/14"))
+                    sezioneNome = Sezione.TICKET.name
                     pagina = "sezioni"
                 }
                 else -> pagina = p
@@ -353,6 +397,10 @@ private fun Wisper(archivio: Archivio, attivita: ComponentActivity) {
             onApriRapportino = ::apri,
             onNuovoRapportino = { g, cli, com -> nuovo(g, cli, com) },
             onFirmaPreventivo = { id -> pagina = "firma-preventivo:$id" },
+            onRapportinoDaTicket = { r ->
+                modulo = ModuloStato(r, nuovo = true, passoIniziale = 2)
+                pagina = "rapportino"
+            },
         )
 
         // Da un promemoria: la voce Attività, sull'attività.
@@ -372,6 +420,15 @@ private fun Wisper(archivio: Archivio, attivita: ComponentActivity) {
             MainActivity.apriImporta.value = false
             mettiPila(Sezione.FATTURAZIONE, listOf("fatture-importa"))
             sezioneNome = Sezione.FATTURAZIONE.name
+        }
+
+        // Dal Condividi di Android (un link di OneDrive o Drive, un PDF): Documenti, Aggiungi un documento.
+        val docNuovo by MainActivity.apriDocumentoNuovo.collectAsStateWithLifecycle()
+        LaunchedEffect(docNuovo, pagina, visita.attiva) {
+            if (!docNuovo || pagina != "sezioni" || visita.attiva) return@LaunchedEffect
+            MainActivity.apriDocumentoNuovo.value = false
+            mettiPila(Sezione.DOCUMENTI, listOf("documento-nuovo"))
+            sezioneNome = Sezione.DOCUMENTI.name
         }
 
         // Indietro: prima la pila della voce, poi si torna alla Dashboard; dalla Dashboard esce dall'app.
@@ -426,7 +483,12 @@ private fun Wisper(archivio: Archivio, attivita: ComponentActivity) {
                                             utente = sessione.utente,
                                             voci = voci,
                                             attiva = sezioneDiRotta(cima, sezione),
-                                            numeroFatturazione = if (permessi.costi) (dashboardLetta?.fase4?.clientiDaFatturare ?: daFatturare) else 0,
+                                            numeri = mapOf(
+                                                Sezione.FATTURAZIONE to if (permessi.costi) (dashboardLetta?.fase4?.clientiDaFatturare ?: daFatturare) else 0,
+                                                // Fase 5 (§16.18): i ticket che nessuno ha preso; i documenti da approvare, solo per chi approva.
+                                                Sezione.TICKET to (dashboardLetta?.fase5?.ticketNonAssegnati ?: 0),
+                                                Sezione.DOCUMENTI to if (sessione.puoApprovareDocumenti) (dashboardLetta?.fase5?.documentiDaApprovare ?: 0) else 0,
+                                            ),
                                             collegato = aggiornamento.errore.isBlank() && aggiornamento.ultimo != null,
                                             statoCollegamento = when {
                                                 aggiornamento.inCorso && aggiornamento.ultimo == null -> "Mi collego…"
@@ -492,6 +554,7 @@ private fun Wisper(archivio: Archivio, attivita: ComponentActivity) {
                                 onChiudi = { modulo = null; pagina = "sezioni" },
                                 // "Invia al cliente": si chiude il rapportino e si prepara l'invio nella voce aperta.
                                 onInvia = { idLocale -> modulo = null; pagina = "sezioni"; nav.vai("invio/rapportino/$idLocale") },
+                                onSalvatoSenzaFirma = { r -> if (r.conTicket && !dati.esempio) lavoroFinito = r },
                             )
                         }
 
@@ -529,6 +592,8 @@ private fun Wisper(archivio: Archivio, attivita: ComponentActivity) {
                                     scope.launch { dati.firma(idLocale, disegno, nome) }
                                     modulo = null
                                     pagina = "sezioni"
+                                    // Fase 5 (§3.3): col ticket, "Il lavoro è finito?".
+                                    if (r != null && r.conTicket && !dati.esempio) lavoroFinito = r.copy(firmatario = nome)
                                 },
                                 onAnnulla = {
                                     // Si torna al rapportino, già salvato.
@@ -539,6 +604,7 @@ private fun Wisper(archivio: Archivio, attivita: ComponentActivity) {
                         }
                     }
                 }
+                lavoroFinito?.let { r -> eu.stgm.wisper.ui.FoglioLavoroFinito(dati, r) { lavoroFinito = null } }
                 foglioTu?.let { modoTu ->
                     FoglioTu(
                         dati = dati,
@@ -589,8 +655,27 @@ private fun PaginaSezione(
             Sezione.SPESE -> SchermataSpese(dati, nav)
             Sezione.FATTURAZIONE -> eu.stgm.wisper.ui.SchermataFatturazione(dati, nav)
             Sezione.BANCHE -> eu.stgm.wisper.ui.SchermataBanche(dati, nav)
+            Sezione.DOCUMENTI -> eu.stgm.wisper.ui.SchermataDocumenti(dati, nav)
+            Sezione.TICKET -> eu.stgm.wisper.ui.SchermataTicket(dati, nav)
             Sezione.AMMINISTRAZIONE -> SchermataAmministrazione(dati, archivio, nav)
         }
+        // Fase 5: ticket e assistenza (docs/gestionale/fase5.md §12.1)
+        rotta == "ticket" -> eu.stgm.wisper.ui.SchermataTicket(dati, nav)
+        rotta.startsWith("ticket-nuovo") -> eu.stgm.wisper.ui.SchermataNuovoTicket(dati, nav, rotta.removePrefix("ticket-nuovo").removePrefix("/"))
+        rotta.startsWith("ticket-modifica/") -> eu.stgm.wisper.ui.SchermataNuovoTicket(dati, nav, "modifica:" + rotta.removePrefix("ticket-modifica/"))
+        rotta.startsWith("ticket/") -> eu.stgm.wisper.ui.SchermataDettaglioTicket(dati, nav, rotta.removePrefix("ticket/"))
+        rotta.startsWith("impianto/") -> eu.stgm.wisper.ui.SchermataImpianto(dati, nav, rotta.removePrefix("impianto/"))
+        rotta == "contratto-ca-nuovo" -> eu.stgm.wisper.ui.SchermataModificaContratto(dati, nav, null)
+        rotta.startsWith("contratto-ca-modifica/") -> eu.stgm.wisper.ui.SchermataModificaContratto(dati, nav, rotta.removePrefix("contratto-ca-modifica/"))
+        rotta.startsWith("contratto-ca/") -> eu.stgm.wisper.ui.SchermataContratto(dati, nav, rotta.removePrefix("contratto-ca/"))
+        // Fase 5: documenti (§12.3)
+        rotta == "documenti" -> eu.stgm.wisper.ui.SchermataDocumenti(dati, nav)
+        rotta.startsWith("documento-nuovo") -> eu.stgm.wisper.ui.SchermataAggiungiDocumento(dati, nav)
+        rotta.startsWith("documento/") -> eu.stgm.wisper.ui.SchermataDocumento(dati, nav, rotta.removePrefix("documento/"))
+        rotta == "scadenza-nuova" -> eu.stgm.wisper.ui.SchermataNuovaScadenza(dati, nav)
+        rotta.startsWith("scadenza/") -> eu.stgm.wisper.ui.SchermataScadenza(dati, nav, rotta.removePrefix("scadenza/"))
+        rotta.startsWith("lettera-nuova") -> eu.stgm.wisper.ui.SchermataLettera(dati, nav, rotta.removePrefix("lettera-nuova").removePrefix("/"))
+        rotta.startsWith("modello-testi/") -> eu.stgm.wisper.ui.SchermataTestiModello(dati, nav, rotta.removePrefix("modello-testi/"))
         rotta.startsWith("amm/") -> PaginaAmministrazione(rotta.removePrefix("amm/"), dati, archivio, nav, tema, onTema, onVisita)
         rotta == "impostazioni" -> PaginaAmministrazione("app", dati, archivio, nav, tema, onTema, onVisita)
         rotta.startsWith("invio/preventivo/") -> SchermataInvioPreventivo(dati, nav, rotta.removePrefix("invio/preventivo/"))

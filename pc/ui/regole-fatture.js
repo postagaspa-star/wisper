@@ -213,8 +213,17 @@
     voci.forEach(v => { if (v.tipo === 'spesa' && v.idRapportino) (spesePer[v.idRapportino] = spesePer[v.idRapportino] || []).push(v); });
     const out = [];
     const mesi = {};
+    // Fase 5: le spese anticipate di un ticket chiuso "una riga" seguono la voce del ticket (scegliere uno porta l'altro).
+    const delTicket = id => voci.filter(v => v.tipo === 'spesa' && v.idTicket && String(v.idTicket) === String(id));
     voci.forEach(v => {
       if (v.tipo === 'spesa' && v.idRapportino && voci.some(x => x.tipo === 'rapportino' && x.id === v.idRapportino)) return;
+      if (v.tipo === 'spesa' && v.idTicket && voci.some(x => x.tipo === 'ticket' && String(x.id) === String(v.idTicket))) return;
+      if (v.tipo === 'ticket') {
+        const spese = delTicket(v.id);
+        out.push({ chiave: 'ticket:' + v.id, tipo: 'ticket', voce: v, titolo: v.titolo, spese, voci: [{ tipo: 'ticket', id: v.id }].concat(spese.map(s => ({ tipo: 'spesa', id: s.id }))),
+          importo: centesimi(numero(v.importo) + spese.reduce((a, s) => a + numero(s.importo), 0)), pronta: v.pronta !== false, anticipazione: false });
+        return;
+      }
       if (v.tipo === 'rapportino') {
         const mese = String(v.data).slice(0, 7);
         let m = mesi[mese];

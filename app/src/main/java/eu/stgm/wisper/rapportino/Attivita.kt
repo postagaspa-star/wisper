@@ -23,18 +23,22 @@ object TipoAttivita {
     const val ATTIVITA = "attivita"
     const val APPUNTAMENTO = "appuntamento"
     const val SOPRALLUOGO = "sopralluogo"
+    /** Fase 5: l'intervento di un ticket (lo crea pianificaTicket, non si sceglie nel modulo). */
+    const val INTERVENTO = "intervento"
 
     val ELENCO = listOf(ATTIVITA, APPUNTAMENTO, SOPRALLUOGO)
 
     fun nome(tipo: String): String = when (tipo) {
         APPUNTAMENTO -> "Appuntamento"
         SOPRALLUOGO -> "Sopralluogo"
+        INTERVENTO -> "Intervento"
         else -> "Attività"
     }
 
     fun da(testo: String?): String = when (testo?.trim()?.lowercase()) {
         APPUNTAMENTO -> APPUNTAMENTO
         SOPRALLUOGO -> SOPRALLUOGO
+        INTERVENTO -> INTERVENTO
         else -> ATTIVITA
     }
 }
@@ -156,6 +160,9 @@ data class Attivita(
     val nomeCommessa: String = "",
     /** Se chi e' entrato puo' cambiarla (un collaboratore solo le sue). */
     val puoScrivere: Boolean = true,
+    /** Fase 5: il ticket dell'intervento (id interno) e il suo numero. */
+    val idTicket: String = "",
+    val ticket: String = "",
 ) {
     val fatta: Boolean get() = stato == StatoAttivita.FATTA
     val annullata: Boolean get() = stato == StatoAttivita.ANNULLATA
@@ -190,11 +197,13 @@ data class Attivita(
         .put("idRicorrenza", idRicorrenza).put("occorrenza", occorrenza?.toString() ?: "")
         .put("checklist", JSONArray().apply { checklist.forEachIndexed { i, v -> put(v.copy(ordine = i + 1).aJson()) } })
         .put("assegnata", nomeAssegnata).put("cliente", nomeCliente).put("commessa", nomeCommessa).put("puoScrivere", puoScrivere)
+        .put("idTicket", if (idTicket.isBlank()) JSONObject.NULL else PonteServer.idJson(idTicket)).put("ticket", ticket)
 
     /** Quello che salvaAttivita accetta (§13.7): niente nomi, niente occorrenza. [conRicorrenza] solo se la regola e' cambiata. */
     fun perSalvare(conRicorrenza: Boolean): JSONObject {
         val o = aJson()
-        listOf("assegnata", "cliente", "commessa", "puoScrivere", "idRicorrenza", "occorrenza").forEach { o.remove(it) }
+        listOf("assegnata", "cliente", "commessa", "puoScrivere", "idRicorrenza", "occorrenza", "ticket").forEach { o.remove(it) }
+        if (idTicket.isBlank()) o.remove("idTicket")
         if (id.isBlank()) o.remove("id")
         if (!conRicorrenza) o.remove("ricorrenza")
         o.put("checklist", JSONArray().apply {
@@ -250,6 +259,8 @@ data class Attivita(
                 nomeCliente = a.testo("cliente").takeUnless { it == a.primoTesto("idCliente") }.orEmpty(),
                 nomeCommessa = a.testo("commessa").takeUnless { it == a.primoTesto("idCommessa") }.orEmpty(),
                 puoScrivere = if (a.has("puoScrivere")) a.vero("puoScrivere") else true,
+                idTicket = a.testo("idTicket"),
+                ticket = a.testo("ticket"),
             )
         }
     }

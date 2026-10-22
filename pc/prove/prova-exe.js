@@ -124,7 +124,10 @@ async function main() {
       '#rapportini/ore', '#rapportini/elenco', '#rapportini/approvare', '#rapportini/statistiche', '#spese', '#spese/riepiloghi', '#amministrazione/veicoli',
       // fase 4: fatturazione, banche e scadenze
       '#fatturazione/fatture', '#fatturazione/bozza/15', '#fatturazione/ricevute', '#fatturazione/scadenze', '#fatturazione/riepilogo',
-      '#banche', '#banche/movimenti', '#banche/tributi', '#banche/conti', '#banche/situazione', '#amministrazione/fiscale', '#commesse/26ST003']) {
+      '#banche', '#banche/movimenti', '#banche/tributi', '#banche/conti', '#banche/situazione', '#amministrazione/fiscale', '#commesse/26ST003',
+      // fase 5: documenti, ticket e assistenza
+      '#documenti', '#documenti/doc/1', '#documenti/approvare', '#documenti/scadenze', '#documenti/modelli', '#ticket', '#ticket/tk/12', '#ticket/programmati', '#ticket/chiusi',
+      '#ticket/contratti', '#ticket/contratto/2', '#ticket/statistiche', '#ticket/impianto/4', '#amministrazione/categorie', '#amministrazione/spazio']) {
       await valuta("location.hash = '" + hash + "'; true");
       await aspetta(900);
       const testo = await valuta("document.querySelector('#principale').innerText.slice(0, 80).replace(/\\s+/g, ' ')");
@@ -139,6 +142,23 @@ async function main() {
     const file = await valuta("fetch('/file/abcdefghijklmnop').then(r => r.status)");
     assert.ok([404, 403].indexOf(file) >= 0, 'un file che non c\'è: ' + file);
     console.log('ok  /file/<id> risponde ' + file + ' per un file che non c\'è');
+
+    // Fase 5: un file in byte passa dal ponte vero a /carica (col Bearer), un file scelto che non c'è più si rifiuta,
+    // un collegamento che non va o un percorso che non si trova non aprono niente (niente browser né Esplora file).
+    const caricato = await valuta("fetch('/locale/carica-corpo?nome=' + encodeURIComponent('Prova exe.pdf') + '&mime=application/pdf&per=documento&idFile=exe' + Date.now(), { method: 'POST', body: new Blob(['%PDF-1.4\\n% prova di Wisper Ufficio ' + Date.now() + '\\n%%EOF\\n']) }).then(r => r.json())");
+    assert.equal(caricato.ok, true, '/locale/carica-corpo: ' + JSON.stringify(caricato));
+    assert.equal(caricato.file.mime, 'application/pdf');
+    assert.ok(caricato.file.byte > 20 && caricato.file.sha256, 'byte e impronta dal server');
+    const finto = await valuta("fetch('/locale/carica', { method: 'POST', body: JSON.stringify({ rif: 'nessuno', per: 'documento' }) }).then(r => r.json())");
+    assert.equal(finto.ok, false);
+    assert.match(finto.errore, /sceglilo di nuovo/);
+    const cattivo = await valuta("fetch('/locale/apri-collegamento', { method: 'POST', body: JSON.stringify({ url: 'javascript:alert(1)' }) }).then(r => r.json())");
+    assert.equal(cattivo.ok, false);
+    assert.match(cattivo.errore, /^Collegamento: incolla un indirizzo/);
+    const lontano = await valuta("fetch('/locale/apri-collegamento', { method: 'POST', body: JSON.stringify({ url: 'X:\\\\Cartella che non esiste da nessuna parte\\\\' }) }).then(r => r.json())");
+    assert.equal(lontano.ok, false);
+    assert.match(lontano.errore, /percorso non si trova/);
+    console.log('ok  /carica in byte dal ponte vero (' + caricato.file.byte + ' byte), rif sconosciuto rifiutato, collegamenti che non vanno non aprono niente');
 
     // 8. Esci: la chiave sparisce dal disco e si torna alla pagina di accesso.
     // Fase 2: il promemoria come notifica di Windows (l'icona accanto all'orologio). Qui si guarda solo la risposta.

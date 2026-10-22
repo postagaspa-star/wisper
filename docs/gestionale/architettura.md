@@ -2416,3 +2416,1171 @@ nel registro (`utente: "sistema"`, `azione: "migrazione"`, nota `"migrazione 004
   da fatturapa.gov.it: da fare una volta, con il permesso di Andrea, per esempio con `lxml`, che sul PC c'e'); l'ordine
   degli elementi e' controllato contenitore per contenitore contro lo schema nelle prove di `fatturapa.test.js`. Le
   regole fiscali restano da confermare col commercialista (fase4.md §15), e il programma di Manuel da sapere (§8.4).
+
+## 16. Fase 5: le risposte, campo per campo
+
+Documenti, ticket e assistenza (accordo in [`fase5.md`](fase5.md), ricerca in [`ricerca-fase5.md`](ricerca-fase5.md),
+migrazione `005-documenti-ticket`, server 0.8.0). Valgono le regole comuni della §12.1 (`ok`, `permesso:false`, date
+`"2026-10-22"`, istanti `"2026-10-22T12:55:16"` in ora italiana senza fuso, le azioni che scrivono vogliono una POST) e
+quelle della §15.1 sui soldi. Gli esempi sono le risposte vere del server di prova (`node server/src/avvio.js --prova
+--porta-condivisione <porta> ...`, 22/10/2026 alle 12:55), accorciate dove un elenco si ripete. Nei dati di esempio i
+ticket aperti e le scadenze sono contati da adesso (la Dashboard ha sempre l'urgente di stamattina); i ticket chiusi
+hanno le date del prototipo.
+
+### 16.1 Regole comuni della fase 5
+
+- **Moduli.** Archivio, revisioni, collegamenti, categorie, modelli e copie dei PDF mandati sono del modulo `documenti`
+  (voce 11): leggere 1, scrivere 2. Ticket, interventi, storico dell'impianto, statistiche e contratti sono del modulo
+  `ticket` (voce 12): leggere 1, scrivere 2. Le **scadenze** si leggono con `documenti` 1 **o** `ticket` 1 (arrivano
+  quelle che uno vede); per scriverle decide la scadenza: quelle dei contratti (tipo `manutenzione` o `contratto`, o con
+  `idContratto`) vogliono `ticket` 2, le altre `documenti` 2. `storicoImpianto` vuole `clienti` 1 **o** `ticket` 1.
+  Senza nessuno dei due: `"Non hai il permesso per vedere le scadenze: chiedi al titolare"` (o `"... vedere gli
+  impianti ..."`), `permesso:false`. `spazio` vuole `amministrazione` 1; `salvaCategoria`, `salvaTestoModello` e
+  `svuotaCestino` vogliono `amministrazione` 2.
+- **Ruoli**: nessun valore nuovo (architettura §3): titolare e amministrazione `documenti` 2 e `ticket` 2;
+  collaboratore `documenti` 1 e `ticket` 2; lettura 1 e 1. Le regole fini (chi chiude, chi approva, cosa vede il
+  collaboratore) sono in §16.19.
+- **Campi dei soldi nuovi** (spariscono, chiavi comprese, per chi non ha `costi`): `canone`, `tariffaExtra`,
+  `prezzoCorpo`, `importoTicket`, `costoTicket`, `rende` e le colonne `prezzo_corpo`, `tariffa_extra`; `importo`,
+  `costo`, `fatturato` e `totale` c'erano già. Quindi senza `costi`: `somma` del ticket senza `costo` e `importo`, le
+  rate del contratto senza `importo`, le statistiche senza `costo` e `fatturato`. Unica eccezione: `totale` delle
+  statistiche dei ticket è un riassunto di conte e resta (dentro, `costo` e `fatturato` no).
+- **Gli id.** `idTicket` è sempre l'**id interno** (intero) e `ticket` il **numero** (`"TK/2026/0014"`). Le azioni con
+  `id`/`idTicket` di un ticket accettano anche il numero o l'`idLocale` di un ticket nato senza rete. `idContratto` è
+  l'id interno (`contratto {id}` accetta anche `"CA/2026/002"`). Documenti, revisioni, scadenze, categorie e
+  condivisioni hanno id interi; i file hanno id di testo come prima.
+- **Le parole fisse** arrivano pronte dal server (`statoVisto`, `statoDettaglio`, `tipoNome`, `prioritaNome`,
+  `origineNome`, `fatturazioneNome`, `ritardo`, `collegamentoNome`, `cronologia`, le voci della Dashboard): le app le
+  mostrano come sono.
+- **Non collegato**: sfogliare OneDrive e Google Drive da dentro Wisper (fase 8), WhatsApp e il portale come origine dei
+  ticket (fase 7), il link che scade finché `CONDIVISIONE_INDIRIZZO` è vuoto (`nonCollegato: true`, §16.7). Nessuna
+  azione finge di farli.
+- **Senza rete**: `salvaTicket` e `salvaDocumento` accettano `idLocale` (ripetuti tornano lo stesso, con
+  `giaArrivato: true`), `/carica` e `caricaFile` l'`idFile`, `salvaRapportino` l'`idLocaleTicket` di un ticket nato
+  senza rete. Le azioni di stato ripetute uguali (prendi, sospendi con lo stesso motivo, riprendi, risolvi, annulla,
+  respingi con lo stesso motivo, chiudi con lo stesso modo) tornano `ok` senza rifare niente.
+- `io` e `/salute` dicono `versioneServer`/`versione` `"0.8.0"`; lo schema del database è 5.
+
+### 16.2 Cosa cambia nelle azioni di prima
+
+- **`io.interfaccia`** ha in più (vero, Manuel): `"puoApprovareDocumenti": true, "puoChiudereTicket": true,
+  "condivisioneCollegata": false, "fileMaxMb": 50`. Per il collaboratore (Marco) i primi due sono `false`.
+  `condivisioneCollegata` è `true` solo con `CONDIVISIONE_INDIRIZZO` scritto.
+- **`anagrafiche.impostazioni`** ha in più (si cambiano con `salvaImpostazioni`): `FILE_MAX_MB` (50),
+  `SPAZIO_AVVISO_MB` (10240), `SPAZIO_MINIMO_MB` (2048), `COPIA_FUORI_MAX_MB` (25), `EMAIL_ALLEGATI_MAX_MB` (15),
+  `COPIA_INVIATI` (true), `CONDIVISIONE_INDIRIZZO` (""), `CONDIVISIONE_GIORNI` (14), `PREAVVISO_GIORNI` (60),
+  `ANTICIPO_TICKET_GIORNI` (30), `TICKET_TEMPI`
+  (`{"urgente":{"presa":1,"intervento":4},"alta":{"presa":2,"intervento":24},"normale":{"presa":8,"intervento":72},"bassa":{"presa":24,"intervento":240}}`,
+  ore di calendario dall'apertura).
+- **`anagrafiche.numerazioni`** ha in più (vero): `{"tipo": "contratto", "formato": "CA/{AAAA}/{NNN}", "annuale": true,
+  "ultimo": 4, "prossimo": "CA/2026/003"}` e `{"tipo": "ticket", "formato": "TK/{AAAA}/{NNNN}", "annuale": true,
+  "ultimo": 16, "prossimo": "TK/2026/0017"}`. Ripartono ogni anno: il numero è il più alto già usato in quell'anno + 1, i
+  buchi non si riusano (`ultimo` è l'ultimo segnato, di qualunque anno). Il contratto prende l'anno di `dal` (uno che
+  parte nel 2027 è `CA/2027/001`), il ticket quello di `apertoIl`. Si cambiano in Amministrazione › Numerazioni come le
+  altre (`prossimo`).
+- **Una sede o impianto** (`anagrafiche.sedi`, `salvaSede`) ha in più (vero, sede 4): `"categoria": "cabina_mt",
+  "categoriaNome": "Cabina MT", "sedePadreId": null, "matricola": "TR-2014-0571", "potenza": "630 kVA", "tensione": "15 kV
+  / 400 V", "messaInServizio": "2014-05-20", "ambiente": "ordinario", "referenteId": 4, "datiTecnici": "Trasformatore in
+  resina, due scomparti MT"`. `categoria`: `cabina_mt`, `quadro`, `terra`, `scariche`, `fotovoltaico`, `automazione`,
+  `illuminazione`, `altro` o `""` (errore `"Categoria: cabina_mt, quadro, terra, ..."`); `ambiente`: `ordinario`,
+  `cantiere`, `medico`, `incendio`, `esplosione` o `""` (propone la periodicità DPR 462, §16.10; errore `"Ambiente:
+  ordinario, cantiere, ..."`); `sedePadreId` e `referenteId` dello stesso cliente (`"Sede: scegli una sede dello stesso
+  cliente"`, `"Referente: scegli un referente dello stesso cliente"`). Gli altri sono testo libero (la data `aaaa-mm-gg`).
+- **Una commessa** ha in più `"idContratto": 2` (o `null`): il contratto di assistenza di cui è la commessa.
+- **Un rapportino** ha in più `"idTicket": 17, "numeroTicket": "TK/2026/0017", "ticketAperto": true, "nonSiFattura":
+  ""` (vero). **`ticket` resta il campo di testo di sempre** (quello stampato nel PDF): col ticket e il campo vuoto il
+  server ci scrive `"{numero}"` o `"{numero} · rif. {rifCliente}"` (vero: `"ticket": "TK/2026/0017 · rif. Buono 88"`); se
+  il tecnico ci ha scritto qualcosa, resta il suo. `nonSiFattura` è `"Nel contratto CA/2026/002"` o `"Non si fattura"`
+  per un ticket chiuso così, se no `""`. `salvaRapportino {rapportino: {..., idTicket | idLocaleTicket}}` lo lega (stesso
+  cliente, ticket non chiuso, che chi scrive vede). Errori: `"Ticket TK/2026/0099 non trovato"`, `"Il ticket
+  TK/2026/0012 è chiuso: riaprilo per aggiungere un rapportino"`, `"Il ticket è di Rossi Impianti Srl, il rapportino di
+  Batokyo Srl"`, `"Il rapportino RAP/2026/0016 è già del ticket TK/2026/0012: toglilo prima da lì"`, e i blocchi della
+  fase 4 se il ticket è in una fattura. Filtro nuovo `idTicket` in `rapportini`. Un rapportino nuovo su un ticket
+  `aperto` lo porta `in_carico` (responsabile chi l'ha scritto, se non c'era) e rifà `interventoIl`; la firma scrive
+  nella cronologia del ticket `"Rapportino RAP/2026/0014 firmato da Mario Bianchi"`.
+- **Un'attività** può essere `tipo: "intervento"` (errore nuovo: `"Tipo: attivita, appuntamento, sopralluogo o
+  intervento"`) e ha in più `"idTicket": 17, "ticket": "TK/2026/0017"` (o `null` e `""`); filtro `ticket` (id o numero)
+  in `attivita`; `salvaAttivita` accetta `idTicket`. Il calendario la mostra con la pillola Ticket e il tocco apre il
+  ticket. Gli interventi **non** contano negli appuntamenti della Dashboard della fase 2 (hanno la voce loro, §16.18).
+  Segnarla fatta o annullarla rifà `interventoIl` del ticket.
+- **Ore e spese** hanno in più `idTicket` e `ticket` (numero); filtro `idTicket` (o `ticket`) in `ore` e `spese`;
+  `salvaOre {riga: {..., idTicket}}` (senza commessa propone quella del ticket) e `salvaSpesa {spesa: {..., idTicket}}`.
+  Le spese di un rapportino hanno il ticket del rapportino (non si sceglie). Errori: `"Il ticket TK/2026/0010 è chiuso:
+  riaprilo per aggiungere ore"` (e `"... spese"`), e i blocchi della fase 4 se il ticket è in una fattura.
+- **`documenti {idCommessa}`** (la chiamata delle versioni vecchie, con solo `idCommessa`) torna come prima (vero):
+  `{"ok": true, "cartella": "", "documenti": [{"id": "R_ZROaLCyCRb2D7WC13w2QpcLMm8", "nome": "Foto quadro prima dei
+  lavori.png", "url": "/file/R_ZROaLCyCRb2D7WC13w2QpcLMm8", "mime": "image/png", "data": "2026-10-22T12:54:47"}, ...]}`,
+  letta dall'archivio (i documenti `file` di quella commessa, revisione valida). Con `archivio: true` o con **qualunque**
+  filtro della fase 5 (`testo`, `idCategoria`, `idCliente`, `idSede`, `idTicket`, `idContratto`, `origine`, `stato`,
+  `scadenza`, `daClassificare`, `archiviati`, `pagina`) è l'elenco nuovo di §16.4. Le app nuove mandano sempre
+  `archivio: true`.
+- **`caricaFile {tipo: "documento", idCommessa, ...}`** (versioni vecchie) mette il documento nell'archivio, categoria
+  "Da classificare", rev. 0 approvata. **Ogni `caricaFile`** controlla ora il tipo sui primi byte (§16.3) e lo spazio sul
+  disco (§16.9). Tipo nuovo `ticket` (§16.13).
+- **`daFatturare`, `preparaFattura`, `confermaXml` (collegabili), `segnaFatturataFuori`**: tipo `ticket` (§16.14).
+- **`inviaEmail`, `inviaPreventivo`, `inviaAvviso`**: tengono la copia del PDF (§16.7).
+- **`copie`**: l'esito `fuori` è `"ok · 12 file · 3 restano per domani"` (§16.9).
+- **`cestino`** non mostra più i file tolti per sempre; `ripristinaFile` di uno di loro: `"Il file X è stato tolto per
+  sempre col cestino svuotato"`.
+- **`/file/<id>`**: un documento che uno non vede → 403 (come un file non suo); una revisione superata si scarica col
+  nome `"Schema unifilare cabina rev1 (rev. 1, superata).pdf"`; sempre con `X-Content-Type-Options: nosniff`.
+
+### 16.3 `/carica`: un file in byte
+
+`POST /carica?nome=<nome>&mime=<mime>&idFile=<idFile>&per=<documento|ticket>` con `Authorization: Bearer <token>` (lo
+stesso di `/exec`, con le stesse intestazioni facoltative `X-Wisper-Disp`, `X-Wisper-Disp-Nome`, `X-Wisper-App` per il
+registro degli accessi) e il file nel corpo così com'è (`application/octet-stream`: niente base64, niente multipart).
+Risposte come `/exec`: HTTP 200 con `ok` true/false (405 solo se non è una POST). Vero:
+```json
+{"ok": true, "file": {"id": "qfPF3gZg4GsuwKkLsHfOlgCkaq7l", "nome": "Schema unifilare cabina rev4.pdf", "mime": "application/pdf",
+ "byte": 24, "sha256": "e0f50421a8fb64cb3e34e87b0d780685790026df206a3780859875d5693850bd"}}
+```
+- **Come lavora**: scrive su disco mentre arriva (`<dati>/file/<id>.scrivendo`, poi rinomina), conta i byte e fa lo
+  SHA-256 per strada, quindi la memoria non dipende dalla grandezza del file. Oltre `FILE_MAX_MB` smette di scrivere,
+  legge e butta il resto della richiesta (chi manda riceve la risposta, non una connessione caduta) e non lascia niente
+  sul disco: `{"ok": false, "errore": "Il file è più grande di 50 MB: non si carica"}`; con un `Content-Length` già più
+  grande risponde subito. Interrotto: `"Il file non è arrivato tutto: riprova"`; vuoto: `"File vuoto"`.
+- **Permesso**: `per=documento` (di base) vuole `documenti` 2, `per=ticket` vuole `ticket` 2. Vero, utente lettura:
+  `{"ok": false, "errore": "Non hai il permesso per caricare documenti: chiedi al titolare", "permesso": false}` (per i
+  ticket `"... caricare le foto dei ticket ..."`). Token scaduto: `{"ok": false, "errore": "Accesso scaduto: entra di
+  nuovo", "accesso": false}`. Un altro `per`: `"Per: documento o ticket"`.
+- **Il tipo** si controlla sui primi 512 byte (`riconosciTipo` e `tipoDaSalvare` in `src/documenti.js`). Programmi,
+  script e pagine web (anche SVG) non passano mai, qualunque cosa dica `mime` (vero: `"Questo file non si carica: è un
+  programma per Windows: i programmi non si caricano"`; poi `"... è uno script: gli script non si caricano"`, `"... è
+  una pagina web: per una pagina web si incolla il collegamento"`). Un file che si dice PDF o foto deve esserlo: `"Il
+  file dice di essere un PDF ma dentro non lo è: controlla di aver scelto il file giusto"`, `"Il file dice di essere una
+  foto ma dentro non lo è: controlla di aver scelto il file giusto"` (vero). Gli altri tipi (DWG, ZIP, documenti Office,
+  testo, XML, video) passano; `mime` salvato è quello riconosciuto quando i byte lo dicono, mai un tipo che il browser
+  eseguirebbe.
+- **Lo spazio** si controlla prima di cominciare (§16.9: sotto `SPAZIO_MINIMO_MB` no, con `"spazio": true`).
+- **`gia`**: c'è quando lo stesso SHA-256 è già una revisione (non tolta) di un documento non archiviato che chi chiede
+  vede: `"gia": {"idDocumento": 4, "titolo": "Schema unifilare cabina MT", "revisione": 2}`. Il file è arrivato lo stesso:
+  l'app chiede "Questo file c'è già: «Schema unifilare cabina MT» rev. 2. Lo carico lo stesso?" e, se no, non lo lega.
+- **Lo stesso `idFile`** ripetuto dalla stessa persona (la coda del telefono) torna lo stesso file senza riscriverlo
+  (vero: la seconda risposta ha lo stesso `id`); il corpo si legge e si butta.
+- **Il file nasce `caricato`** e non si vede da nessuna parte finché non lo lega `salvaDocumento {origine: "file",
+  idFile}` (rev. 0), `caricaVersione {id, idFile}` o `caricaFile {tipo: "ticket", idTicket, idFileCaricato}`. Lo lega
+  solo chi l'ha caricato (`"File X non trovato: caricalo di nuovo"`). Mai legato: nel cestino dopo 24 ore (controllo ogni
+  minuto, registro `"caricato e mai legato: nel cestino dopo 24 ore"`).
+- **Il base64 resta**: `caricaFile` con `base64` funziona come prima per le versioni vecchie e per foto e firme dei
+  rapportini e delle spese (che restano così anche nelle app nuove).
+
+### 16.4 L'archivio: l'elenco e un documento
+
+`documenti {archivio: true, testo?, idCategoria?, idCliente?, idCommessa?, idSede?, idTicket?, idContratto?, origine?:
+"file"|"collegamento"|"inviato", stato?: "validi"|"da_approvare"|"respinti"|"tutti", scadenza?: "entro"|"scadute",
+daClassificare?, archiviati?, pagina?}` (documenti 1), 50 per pagina, i più recenti prima (con `testo`: prima i titoli
+che cominciano con la prima parola). Vero:
+```json
+{"ok": true, "pagina": 1, "pagine": 1, "quanti": 13,
+ "conteggi": {"daApprovare": 1, "inScadenza": 1, "scaduti": 0, "daClassificare": 3},
+ "documenti": [
+  {"id": 1, "idLocale": "", "titolo": "Schema unifilare cabina MT", "idCategoria": 1, "categoria": "Progetti e schemi", "daClassificare": false,
+   "origine": "file", "collegamentoTipo": "", "collegamentoNome": "", "cartella": false, "principale": false, "url": "/file/rg9wqtHsiu1PnN2_9VSLJShE3gEb",
+   "idCliente": "C002", "cliente": "Rossi Impianti Srl", "idCommessa": "26ST005", "commessa": "Assistenza Manutenzione cabina MT Acme",
+   "idSede": 4, "impianto": "Cabina MT Acme", "idTicket": null, "ticket": "", "idContratto": null, "contratto": "", "riferimento": "",
+   "dataDocumento": "2026-06-18", "revisione": 2, "statoVisto": "Valida", "daApprovare": 3, "nomeFile": "Schema unifilare cabina rev2.pdf",
+   "mime": "application/pdf", "byte": 99, "scadenza": null, "vede": "tutti", "archiviato": false, "puoScrivere": true,
+   "creato": "2026-10-22T12:54:46", "modificato": "2026-10-22T12:54:47"},
+  {"id": 9, "titolo": "Schemi elettrici archivio 2019", "idCategoria": 13, "categoria": "Documenti dello studio", "origine": "collegamento",
+   "collegamentoTipo": "percorso", "collegamentoNome": "Cartella del computer", "cartella": true, "principale": false,
+   "url": "\\\\SERVER-STUDIO\\Archivio\\2019\\Schemi", "revisione": null, "statoVisto": "Collegamento", "nomeFile": "", "mime": "", "byte": null, "...": "..."},
+  {"id": 7, "titolo": "Certificato di taratura del misuratore di terra", "categoria": "Certificati", "riferimento": "LAT 0000/25",
+   "scadenza": {"id": 6, "data": "2026-11-15", "statoVisto": "Scade fra 24 giorni", "giorni": 24, "ogniMesi": 12}, "...": "..."}],
+ "daWisper": []}
+```
+- `statoVisto`: `Valida` (c'è una revisione approvata), `Da approvare` (nessuna approvata, una in attesa), `Respinta`
+  (nessuna approvata, l'ultima respinta), `Collegamento`, `Archiviato`. `revisione` = il numero della revisione che si
+  apre (la valida; senza valida l'ultima da approvare); `daApprovare` = il numero della revisione in attesa (o `null`),
+  anche quando c'è una valida: la riga "rev. 3 da approvare". `url`, `nomeFile`, `mime`, `byte` sono della revisione che
+  si apre; per un collegamento `url` è l'indirizzo com'è stato incollato.
+- `daClassificare`: la categoria è quella di sistema "Da classificare". `cartella` e `principale` hanno senso solo per i
+  collegamenti (la cartella principale di una commessa o di un cliente, una sola).
+- `scadenza` (o `null`): la scadenza del documento, breve (`statoVisto` come §16.10).
+- `conteggi` sono contati su tutti i documenti che uno vede (non solo la pagina, e anche col filtro `stato`):
+  `daApprovare` conta, per chi approva, tutti i documenti con una revisione in attesa, per gli altri solo quelli con una
+  **loro** revisione in attesa; `inScadenza` = scadenza aperta nel preavviso; `scaduti`; `daClassificare`.
+- `stato`: `validi` (con una valida, o collegamenti), `da_approvare` (come il conteggio), `respinti` (con una revisione
+  **mia** respinta). Errori: `"Stato: validi, da_approvare, respinti o tutti"`, `"Scadenza: entro o scadute"`,
+  `"Origine: file, collegamento o inviato"`.
+- **La ricerca** (`testo`): tutte le parole, senza badare a maiuscole, accenti e spazi doppi (`pulisciRicerca`), dentro
+  titolo, descrizione, parole chiave, riferimento, nome del file, cliente, codice e descrizione della commessa, impianto,
+  numero del ticket e del contratto. Non dentro i file.
+- `daWisper` (solo con `idCliente`, `idCommessa` o `idSede`): quello che Wisper fa già, come righe che aprono la loro
+  pagina, dalle più recenti: `{"tipo": "preventivo"|"rapportino"|"fattura"|"contratto", "id": ..., "titolo":
+  "Rapportino RAP/2026/0014", "dettaglio": "21/10/2026 · Cambiati i fusibili ... · firmato", "data": "2026-10-21",
+  "pagina": "rapportino"}`. Preventivi non sostituiti (con preventivi 1), rapportini firmati o oltre (rapportini 1; il
+  collaboratore i suoi), fatture emesse o annullate (fatturazione 1 e `costi`), contratti (ticket 1). Non sono copie.
+- **Chi non vede** un documento (`vede: "costi"` senza `costi`, `"riservati"` senza `riservati`) non lo trova da
+  nessuna parte: né qui, né nei conteggi, né in `documento` (`"Documento 6 non trovato"`), né in `/file/<id>` (403), né
+  in `gia`. Vero: Marco vede 13 documenti su 14 (manca "Contratto CA/2026/002 firmato", `vede: "costi"`).
+
+`documento {id}` (documenti 1) → la voce più (vero, lo schema della cabina):
+```json
+{"ok": true, "documento": {"id": 1, "titolo": "Schema unifilare cabina MT", "...": "come nell'elenco",
+ "descrizione": "", "parole": "unifilare MT cabina protezioni",
+ "versioni": [
+  {"id": 4, "numero": 3, "statoVisto": "Da approvare", "nomeFile": "Schema unifilare cabina rev3.pdf", "nomeDaScaricare": "Schema unifilare cabina rev3.pdf",
+   "mime": "application/pdf", "byte": 99, "url": "/file/Paou4Ezp8FUVNjv9NIuWzQNeo4O9", "nota": "Aggiunto il trasformatore di riserva",
+   "caricataDa": "Marco Collaboratore", "caricataIl": "2026-10-22T12:54:47", "decisaDa": "", "decisaIl": "", "motivoRifiuto": "", "puoTogliere": false},
+  {"id": 3, "numero": 2, "statoVisto": "Valida", "nomeFile": "Schema unifilare cabina rev2.pdf", "nota": "Nuove protezioni SPG",
+   "caricataDa": "Manuel Gasparotto", "decisaDa": "Manuel Gasparotto", "decisaIl": "2026-10-22T12:54:47", "...": "..."},
+  {"id": 2, "numero": 1, "statoVisto": "Superata", "nomeFile": "Schema unifilare cabina rev1.pdf",
+   "nomeDaScaricare": "Schema unifilare cabina rev1 (rev. 1, superata).pdf", "nota": "Prima emissione dopo il rilievo", "...": "..."},
+  {"id": 1, "numero": 0, "statoVisto": "Superata", "...": "..."}],
+ "condivisioni": [],
+ "cronologia": [{"quando": "2026-10-22T12:54:46", "chi": "Manuel Gasparotto", "testo": "Aggiunto da Manuel Gasparotto"},
+  {"quando": "2026-10-22T12:54:46", "chi": "Manuel Gasparotto", "testo": "rev. 0 caricata da Manuel Gasparotto"},
+  "...", {"quando": "2026-10-22T12:54:47", "chi": "Marco Collaboratore", "testo": "rev. 3 caricata da Marco Collaboratore"}],
+ "puoApprovare": true, "mieRespinte": []}}
+```
+- `versioni`: dalla più nuova, senza le tolte. `statoVisto`: `Valida`, `Superata` (approvata più vecchia della valida),
+  `Da approvare`, `Respinta`. `puoTogliere`: solo chi l'ha caricata, solo da approvare o respinta, con documenti 2.
+- `condivisioni` (solo con documenti 2): `{id, perChi, scade, revocata, scaduta, aperture, ultimaApertura, creata}`; il
+  link intero non c'è mai (§16.7).
+- `cronologia` (dal registro, frasi pronte, dalla più vecchia): `"Aggiunto da ..."`, `"Entrato nell'archivio dai
+  documenti della commessa"` (migrazione), `"rev. 3 caricata da ..."`, `"rev. 2 approvata da ..."`, `"rev. 3 respinta da
+  ...: {motivo}"`, `"rev. 3 di nuovo da approvare (...)"`, `"rev. 3 tolta da ..."`/`"rimessa"`, `"Cambiato da ..."`,
+  `"Collegamento cambiato da ..."`, `"Archiviato da ..."`/`"Tolto dall'archivio da ..."`, `"Mandato a {email} da ..."`,
+  `"Link per {per chi} fino al {gg/mm/aaaa}"`, `"Link revocato da ..."`.
+- `puoApprovare`: chi approva, con una revisione in attesa, documento non archiviato. `mieRespinte`: `[{numero, motivo}]`
+  delle mie revisioni respinte (il motivo arriva a chi l'ha caricata).
+- Un collegamento ha in più `righe`: `["Le revisioni le tiene OneDrive"]` (OneDrive, SharePoint, Google Drive) o
+  `["Si apre dal computer dello studio"]` (percorso); per un sito `[]`.
+
+### 16.5 Scrivere un documento, i collegamenti, archiviare
+
+`salvaDocumento {documento: {id?, idLocale?, titolo, idCategoria, descrizione?, parole?, riferimento?, dataDocumento?,
+idCliente?, idCommessa?, idSede?, idTicket?, idContratto?, vede?, origine?, url?, cartella?, principale?, idFile?, nota?,
+scadenza?: {data, ogniMesi?, preavvisoGiorni?, tipo?} | null}}` (documenti 2) → `{"ok": true, "documento": {...come
+documento...}, "chiudeScadenza": null | {"id": 5, "titolo": "Verifica impianto di terra (DPR 462)", "data": "2027-01-12"}}`.
+- **Nuovo `file`**: `idFile` è il file di `/carica` (diventa la rev. 0, approvata o da approvare come §16.6) oppure la
+  **foto di un ticket** ("Metti nell'archivio": resta anche foto del ticket, e nel ticket la foto ha `idDocumento`;
+  errori `"La foto è del ticket TK/2026/0012"`, `"Questa foto è già nell'archivio: «...»"`). Senza `idFile`: `"Carica il
+  file o incolla il collegamento"`.
+- **Nuovo `collegamento`**: con `url` (anche senza `origine`). Il server riconosce il tipo (`tipoCollegamento`, §16.21),
+  propone `cartella` (si cambia mandandola) e salva l'indirizzo com'è (tolti gli spazi in fondo). Il file non si copia e
+  non si legge. Vero:
+  ```json
+  {"ok": true, "documento": {"id": 14, "titolo": "Cartella del cliente Batokyo", "origine": "collegamento", "collegamentoTipo": "onedrive",
+   "collegamentoNome": "OneDrive", "cartella": true, "principale": true, "url": "https://esempio-my.sharepoint.com/:f:/g/personal/studio/Clienti/Batokyo",
+   "revisione": null, "statoVisto": "Collegamento", "versioni": [], "condivisioni": [], "righe": ["Le revisioni le tiene OneDrive"],
+   "cronologia": [{"quando": "2026-10-22T12:55:16", "chi": "Manuel Gasparotto", "testo": "Aggiunto da Manuel Gasparotto"}], "...": "..."},
+   "chiudeScadenza": null}
+  ```
+  Un indirizzo che non va (vero, con `ftp://`): la frase `Collegamento: incolla un indirizzo che comincia con https:// o
+  un percorso come \\server\cartella`. Cambiare l'indirizzo è un `salvaDocumento` con `url` (registro `"collegamento
+  cambiato"`).
+- **`principale`**: la cartella principale di una commessa (o, senza commessa, di un cliente), una sola anche nel
+  database (indici `documenti_cartella_commessa`, `documenti_cartella_cliente`). Errori: `"Solo una cartella può essere
+  la cartella principale"`, `"La commessa 26ST003 ha già la sua cartella: «Cartella della commessa 26ST003»"`, `"Batokyo
+  Srl ha già la sua cartella: «...»"`, `"La cartella principale è di una commessa o di un cliente: scegli a cosa è
+  legata"`.
+- **I legami**: con la commessa e senza cliente il cliente è quello della commessa; con l'impianto, il ticket o il
+  contratto, il loro. Errori: `"L'impianto 4 è di Rossi Impianti Srl, non di Batokyo Srl"`, `"La commessa 26ST003 è di
+  ..., non di ..."`, `"Il ticket TK/2026/0012 è di ..., non di ..."`, `"Il contratto CA/2026/002 è di ..., non di ..."`,
+  `"Impianto 99 non trovato"`, `"Commessa X non trovata"`, `"Cliente X non trovato"`, `"Contratto 9 non trovato"`.
+- **`vede`**: di base quello della categoria; chi non è titolare non lo mette più basso della categoria (il server lo
+  rialza); nessuno mette un documento che non vedrebbe (`"Non hai il permesso per mettere documenti che tu non vedresti:
+  chiedi al titolare"`). Errore `"Chi lo vede: tutti, costi o riservati"`.
+- **Altri errori**: `"Titolo: scrivi di cosa si tratta"`, `"Categoria: scegli la categoria"`, `"Categoria: «...» non si
+  usa più"` (categoria disattivata, per i documenti nuovi), `"Origine: file o collegamento"`, `"Il documento è
+  archiviato: ripristinalo prima di cambiarlo"`, `"Non hai il permesso per cambiare i documenti degli altri: chiedi al
+  titolare"` (collaboratore con documenti 2: solo quelli creati da lui), lo spazio (§16.9).
+- **`scadenza`**: `{data, ogniMesi?, preavvisoGiorni?, tipo?}` crea o cambia la scadenza del documento (titolo
+  `"{titolo} scade"`, tipo `polizza` nella categoria Polizze e assicurazioni, se no `documento`); `null` la toglie
+  (annullata, motivo `"tolta dal documento"`).
+- **`chiudeScadenza`**: per un documento **nuovo** `file` con l'impianto, nella categoria "Verbali di verifica" (o con
+  un riferimento), la prima scadenza aperta di una verifica (terra, scariche, protezioni) dello stesso impianto: l'app
+  chiede "È la verifica che chiude la scadenza del 12/01/2027?" e, se sì, chiama `faiScadenza {id, data, idDocumento}`.
+- **Ripetuto con lo stesso `idLocale`**: lo stesso documento, `"giaArrivato": true`.
+
+`archiviaDocumento {id, archiviato?: true|false, togliScadenza?}` (documenti 2) → il documento: esce dagli elenchi (si
+ritrova con `archiviati: true`); `archiviato: false` lo rimette. Con una scadenza aperta, la prima risposta chiede (vero):
+`{"ok": false, "errore": "Ha una scadenza aperta il 15/11/2026: la tolgo?", "serveConferma": true, "scadenza": {"id": 6,
+"data": "2026-11-15", "statoVisto": "Scade fra 24 giorni", "giorni": 24, "ogniMesi": 12}}`; si richiama con
+`togliScadenza: true` (la scadenza si annulla, motivo `"documento archiviato"`) o `false` (resta). Rimettere una cartella
+principale controlla che la commessa non ne abbia già un'altra.
+
+### 16.6 Revisioni e approvazione
+
+- `caricaVersione {id, idFile, nota}` (documenti 2) → `{"ok": true, "documento": {...}}`. `nota` obbligatoria dalla
+  rev. 1 (`"Scrivi cosa cambia in questa revisione"`). Solo documenti `file` (`"Un collegamento non ha revisioni: le
+  tiene OneDrive"`, `"Le copie mandate ai clienti non hanno revisioni"`). Ripetuta col file già legato a quel documento:
+  `ok` con `"giaArrivato": true`.
+- **Stato della revisione nuova**: `approvata` se la categoria non chiede approvazione o se la carica chi approva;
+  altrimenti `da_approvare`. Con `APPROVAZIONE = "tutti"` (fase 3) va in approvazione anche quella del titolare, che
+  può approvarla.
+- **Valida** = l'approvata non tolta col numero più alto (`versione_valida_id`, rifatta a ogni cambio). Una da approvare
+  non sostituisce la valida.
+- `approvaVersione {id}`, `respingiVersione {id, motivo}`, `annullaDecisione {id}` (POST; `id` = id della revisione):
+  solo chi approva (titolare e amministrazione con documenti 2; gli altri `"Non hai il permesso per approvare i
+  documenti: chiedi al titolare"`, `permesso:false`) → il documento. Errori: `"La rev. 2 è già approvata"`, `"Scrivi il
+  motivo: arriva a chi l'ha caricata"`, `"La rev. 3 è stata tolta"`, `"Revisione 99 non trovata"`, `"Il documento è
+  archiviato: ripristinalo prima di cambiarlo"`. `annullaDecisione` rimette *Da approvare* (anche un'approvata: la valida
+  torna la precedente).
+- `togliVersione {id, annulla?}` → il documento: solo chi l'ha caricata (`"Non hai il permesso per togliere le
+  revisioni caricate da altri: chiedi al titolare"`), solo da approvare o respinta (`"Una revisione approvata non si
+  toglie: carica una revisione nuova"`); il file va nel cestino; `annulla: true` la rimette.
+- Il motivo del rifiuto arriva nella Dashboard di chi l'ha caricata (§16.18) e in `mieRespinte`.
+
+### 16.7 Mandare e condividere
+
+- `inviaDocumento {id, idVersione?, a, cc?, oggetto?, messaggio?}` (documenti 2, asincrona come `inviaEmail`) →
+  `{"ok": true}`. Allegato il file della revisione che si apre (o di `idVersione`), fino a `EMAIL_ALLEGATI_MAX_MB` (`"Il
+  file è di 23 MB: per email ne passano al massimo 15"`). Per un collegamento OneDrive, SharePoint, Drive o sito
+  l'indirizzo va in fondo al messaggio (la riga "Il cliente lo apre solo se in OneDrive è condiviso anche fuori dallo
+  studio" la mostra l'app); per un percorso: `"Un percorso del computer non si può mandare"`. Oggetto e messaggio di
+  base: i testi `EMAIL_DOCUMENTO_OGGETTO`/`EMAIL_DOCUMENTO_MESSAGGIO` (§16.8) riempiti. Errori: `"Manca l'indirizzo del
+  cliente"`, `"Le email non sono collegate: manca il postino (WISPER_POSTINO_URL nel .env del server)"`, `"Il file non è
+  sul NAS: non si può mandare"`, `"Revisione 9 non trovata"`, `"L'email non è partita: ..."` (con `"rete": true` se è
+  la rete). Registro `"mandato per email a {email}"`, cronologia del documento.
+- **La copia di quello che parte** (`COPIA_INVIATI`, di base sì): gli allegati di `inviaEmail` (rapportini e
+  riepiloghi), `inviaPreventivo` e `inviaAvviso` diventano documenti `origine: "inviato"` nella categoria di sistema
+  **Mandati ai clienti** (`vede: "costi"`), legati a cliente, commessa (e ticket), titolo = nome del file senza
+  estensione, rev. 0 approvata con nota `"mandato a {email} il {gg/mm/aaaa}"`, registro `"copia del PDF mandato a
+  {email}"`. Non ferma mai l'email: col disco quasi pieno la copia non si tiene (registro `"copia del PDF mandato a ...
+  non tenuta: disco quasi pieno"`).
+- `condividiDocumento {id, perChi, giorni?}` (documenti 2). Oggi (vero): `{"ok": false, "errore": "I link per i clienti
+  non sono collegati: manda il documento per email", "nonCollegato": true}`, finché `CONDIVISIONE_INDIRIZZO` è vuoto.
+  Scritto l'indirizzo (decisione di Andrea, fase5.md §14, domanda 3): `{"ok": true, "link":
+  "https://<CONDIVISIONE_INDIRIZZO>/condiviso/<token>", "condivisione": {"id": 3, "perChi": "Rossi Impianti Srl, ufficio
+  tecnico", "scade": "2026-11-05", "aperture": 0}}`. Il link intero torna **solo** in questa risposta (nel database c'è
+  solo lo SHA-256 del token, 32 byte casuali). Vale `giorni` (da 1 a 90, di base `CONDIVISIONE_GIORNI`: `"Giorni: da 1 a
+  90"`) e dà **la revisione valida al momento del link** (una revisione approvata dopo non cambia il link). Errori:
+  `"Per chi: scrivi a chi lo mandi"`, `"Il documento non ha ancora una revisione valida"`, `"Un collegamento si condivide
+  da OneDrive: il link per i clienti è per i file sul NAS"`. `revocaCondivisione {id}` (documenti 2, `id` della
+  condivisione) → il documento.
+- **La seconda porta** (`--porta-condivisione <porta>`, sul NAS 8401) risponde **solo** a `GET /condiviso/<token>`
+  (pagina minima: nome dello studio, titolo, revisione, **Scarica**) e `GET /condiviso/<token>/scarica` (il file come
+  allegato; conta le aperture). Tutto il resto, e un link revocato, scaduto, di un documento archiviato o con
+  l'indirizzo non scritto: HTTP 404 con la pagina "Questo link non vale più". `/exec`, `/file`, `/carica` su quella porta
+  non ci sono.
+
+### 16.8 Categorie, modelli e testi
+
+- `categorieDocumenti {}` (documenti 1) → vero: `{"ok": true, "categorie": [{"id": 1, "nome": "Progetti e schemi",
+  "approvazione": true, "vede": "tutti", "scadenzaMesi": null, "ordine": 1, "attiva": true, "sistema": false,
+  "documenti": 3}, ...]}`. Le 16 iniziali: con approvazione Progetti e schemi, Dichiarazioni di conformità,
+  Dichiarazioni di rispondenza, Relazioni e collaudi; poi Verbali di verifica, Certificati (scadenza proposta 12 mesi),
+  Contratti (`costi`), Polizze e assicurazioni (`costi`, 12 mesi), Corrispondenza, Foto, Manuali e schede tecniche,
+  Modelli dello studio, Documenti dello studio; di sistema Mandati ai clienti (`costi`), Da classificare, Documenti
+  personali (`riservati`). Chi non vede un livello non vede quelle categorie. `documenti` = quanti, non archiviati.
+- `salvaCategoria {categoria: {id?, nome, approvazione, vede, scadenzaMesi, attiva, ordine?}}` (amministrazione 2) →
+  `{"ok": true, "categoria": {...}, "categorie": [...]}`. Errori: `"Nome: scrivi il nome della categoria"`, `"Nome: c'è
+  già una categoria «Foto»"`, `"Chi la vede: tutti, costi o riservati"`, `"Scadenza proposta: da 1 a 120 mesi"`, `"«Da
+  classificare» serve a Wisper: si rinomina, non si toglie"`, `"Categoria 99 non trovata"`. Una categoria disattivata
+  resta sui documenti che ce l'hanno.
+- `modelli {}` (documenti 1), vero:
+  ```json
+  {"ok": true,
+   "wisper": [{"chiave": "rapportino", "nome": "Rapportino", "impaginazione": "fissa", "testi": [
+     {"chiave": "EMAIL_RAPPORTINO_OGGETTO", "nome": "Oggetto dell'email del rapportino", "testo": "Rapportino {rapportino} del {data}",
+      "segnaposti": ["rapportino", "data"], "modificato": "2026-10-22T12:54:46", "modificatoDa": ""}, "..."]}, "..."],
+   "studio": [{"id": 10, "titolo": "Modulo della dichiarazione di conformità", "categoria": "Modelli dello studio", "...": "voce di documenti"}],
+   "segnaposti": ["cliente", "indirizzo_cliente", "referente", "impianto", "indirizzo_impianto", "commessa", "ticket", "contratto", "canone",
+    "dal", "al", "scadenza", "ultima_verifica", "oggi", "studio", "tecnico", "rapportino", "data", "periodo", "preventivo", "oggetto", "documento"],
+   "lettere": [{"chiave": "LETTERA_VERIFICA_TERRA", "nome": "Lettera \"Verifica impianto di terra\""}, {"chiave": "LETTERA_LIBERA", "nome": "Lettera libera"}]}
+  ```
+  I modelli di Wisper (`rapportino`, `riepilogo`, `preventivo`, `prospetto`, `avviso`, `lettera`, `contratto`) hanno
+  l'impaginazione fissa nel codice (`pc/ui/documenti.js`); si cambiano solo i loro testi: `EMAIL_RAPPORTINO_OGGETTO`,
+  `EMAIL_RAPPORTINO_MESSAGGIO`, `EMAIL_RIEPILOGO_OGGETTO`, `EMAIL_RIEPILOGO_MESSAGGIO`, `PREVENTIVO_INTRODUZIONE`,
+  `PREVENTIVO_CONDIZIONI` (resta l'impostazione di prima), `EMAIL_PREVENTIVO_OGGETTO`, `EMAIL_PREVENTIVO_MESSAGGIO`,
+  `LETTERA_VERIFICA_TERRA`, `LETTERA_LIBERA`, `EMAIL_DOCUMENTO_OGGETTO`, `EMAIL_DOCUMENTO_MESSAGGIO`,
+  `CONTRATTO_CONDIZIONI`. I segnaposti dopo `tecnico` servono ai testi delle email che le app scrivevano già. Un messaggio
+  vuoto = quello che le app scrivono da sole.
+- `salvaTestoModello {chiave, testo}` (amministrazione 2) → come `modelli`. Errori: `"Testo sconosciuto: X"`,
+  `"Segnaposto sconosciuto: {cliente_nome}. Si possono usare {cliente}, {indirizzo_cliente}, ..., {tecnico} (e nelle
+  email {rapportino}, {data}, {periodo}, {preventivo}, {oggetto}, {documento})"`.
+- `componiModello {chiave, idCliente?, idSede?, idCommessa?, idTicket?, idContratto?, idScadenza?}` (documenti 1): il
+  testo riempito. Vero (senza `idScadenza`):
+  ```json
+  {"ok": true, "chiave": "LETTERA_VERIFICA_TERRA", "titolo": "Verifica periodica dell'impianto di terra",
+   "testo": "Gentile Batokyo Srl,\nl'impianto di terra di Impianto di terra stabilimento è stato verificato il {ultima_verifica}: la prossima verifica periodica va fatta entro il {scadenza}, come chiede il DPR 462/2001.\n...",
+   "mancano": ["{ultima_verifica}", "{scadenza}"],
+   "valori": {"oggi": "22/10/2026", "studio": "Studio Tecnico GM", "tecnico": "Manuel Gasparotto", "impianto": "Impianto di terra stabilimento",
+    "indirizzo_impianto": "Zona industriale, 36015 Schio (VI)", "referente": "Ufficio tecnico Batokyo", "cliente": "Batokyo Srl",
+    "indirizzo_cliente": "Zona industriale 4, 36015 Schio (VI)"}}
+  ```
+  I segnaposti senza valore restano scritti e sono in `mancano` (l'app li mostra da completare). Gli id si completano a
+  vicenda (dalla scadenza l'impianto, il cliente e il contratto; dal ticket la commessa e il contratto...). `{canone}`
+  solo con `costi`. `{ultima_verifica}` = il giorno del documento della scadenza o di quella fatta prima. Il PDF lo fanno
+  le app col modello `lettera` (o `contratto`, titolo `"Contratto di assistenza CA/2026/002"`).
+
+### 16.9 Spazio sul NAS, cestino e copia fuori casa
+
+- **Prima di ogni file**: lo spazio libero del disco dei dati (`fs.statfsSync`). Sotto `SPAZIO_MINIMO_MB` (2048) non
+  passano `/carica`, `salvaDocumento` con un file, `caricaVersione` e `caricaFile {tipo: "documento"}`: `{"ok": false,
+  "errore": "Il disco del NAS è quasi pieno (restano 1,6 GB): il file non è stato caricato. Avvisa il titolare", "spazio":
+  true}`. Foto e firme dei rapportini, scontrini delle spese, foto dei ticket e allegati delle attività passano fino a
+  **200 MB** liberi (fisso); sotto, nessun file. La copia dei PDF mandati non si tiene sotto `SPAZIO_MINIMO_MB` (l'email
+  parte lo stesso).
+- `spazio {}` (amministrazione 1), vero:
+  ```json
+  {"ok": true, "disco": {"totaleMb": 475002, "liberoMb": 34745, "avvisoMb": 10240, "minimoMb": 2048}, "file": {"mb": 0, "quanti": 36},
+   "perTipo": [{"tipo": "documenti", "nome": "Documenti", "mb": 0, "quanti": 12}, {"tipo": "rapportini", "nome": "Foto e firme dei rapportini", "mb": 0, "quanti": 17},
+    {"tipo": "ticket", "nome": "Foto dei ticket", "mb": 0, "quanti": 4}, {"tipo": "inviati", "nome": "Mandati ai clienti", "...": "..."},
+    {"tipo": "cestino", "nome": "Cestino", "...": "..."}, {"tipo": "altri", "nome": "Altri file", "...": "..."}],
+   "perAnno": [{"anno": 2026, "mb": 0}],
+   "piuGrandi": [{"id": "jB34CHfakn0gFRYB34-_cHKkDXXd", "nome": "IT00000000000_00038.xml", "mb": 0, "documento": null, "fuori": "da copiare"}, "..."],
+   "fuori": {"ultima": "", "daCopiare": 36, "troppoGrandi": []},
+   "cestinoVecchio": {"mb": 0, "quanti": 0, "prima": "2026-07-24"}}
+  ```
+  (i file d'esempio sono piccoli: `mb` è arrotondato a un decimale). `altri` c'è solo se ci sono file d'altro tipo (XML
+  delle fatture, allegati delle attività). `fuori` dei più grandi: `"copiato"`, `"da copiare"`, `"troppo grande"`,
+  `"manca sul disco"`, `"su Drive"` (arrivati dal Drive col passaggio). `cestinoVecchio`: i file nel cestino da prima del
+  giorno `prima` (90 giorni fa), quelli che `svuotaCestino` toglierebbe.
+- `svuotaCestino {conferma}` (amministrazione 2 e **solo il titolare**; gli altri `"Non hai il permesso per svuotare il
+  cestino (lo fa solo il titolare): chiedi al titolare"`): toglie dal disco del NAS i file nel cestino da più di 90
+  giorni (la copia fuori casa, se c'è, resta). Prima risposta: `{"ok": false, "serveConferma": true, "quanti": 22, "mb":
+  31.5, "errore": "Tolgo per sempre 22 file (31,5 MB) messi nel cestino prima del 24/07: non si potranno più
+  recuperare"}`; con `conferma: true` → `{"ok": true, "tolti": 22, "mb": 31.5}`; niente da togliere: `{"ok": true,
+  "tolti": 0, "mb": 0}` (vero). La riga del file resta, con `svuotato` (registro `"cestino svuotato: 22 file"`).
+- **Copia fuori casa** (nella copia notturna, §7): manda al postino i file con `fuori_il` e `fuori_no` vuoti, **uno per
+  richiesta**, dai più vecchi, per al massimo 20 minuti; ognuno riuscito prende `fuori_il`; uno oltre
+  `COPIA_FUORI_MAX_MB` prende `fuori_no = 'troppo grande'` e non si riprova (la Dashboard lo dice, §16.18); uno che manca
+  sul disco `'manca sul disco'`; uno che fallisce non ferma gli altri e si riprova la notte dopo. L'esito `fuori` di
+  `copie`: `"ok · 12 file · 3 restano per domani"` (`"ok"` se non c'era niente; `"errore: ..."` se non è partita la copia
+  del database). I file `caricato` mai legati e i collegamenti non si copiano. La regola "due notti di fila con errore =
+  email" resta.
+
+### 16.10 Scadenze
+
+`scadenze {da?, a?, stato?: "aperte"|"fatte"|"annullate"|"tutte", tipo?, idCliente?, idSede?, idContratto?,
+idDocumento?}` (documenti 1 o ticket 1: arrivano quelle che uno vede). Senza date e con le aperte (di base), divise
+(vero):
+```json
+{"ok": true, "oggi": "2026-10-22",
+ "scadute": [{"id": 7, "titolo": "Verifica protezioni SPG e SPI", "tipo": "verifica_protezioni", "tipoNome": "Verifica protezioni SPG e SPI",
+   "idCliente": "C002", "cliente": "Rossi Impianti Srl", "idSede": 4, "impianto": "Cabina MT Acme", "idContratto": null, "contratto": "",
+   "data": "2026-09-30", "preavvisoGiorni": 90, "ogniMesi": 60, "dallaFatta": true, "azione": "promemoria", "anticipoGiorni": null,
+   "stato": "aperta", "statoVisto": "Scaduta", "statoDettaglio": "da 22 giorni", "giorni": 22, "fattaIl": "", "motivo": "",
+   "idDocumento": null, "documento": "", "idDocumentoFatto": null, "idTicket": null, "ticket": "", "idProssima": null,
+   "assegnataA": null, "assegnata": "", "note": "", "puoScrivere": true, "creato": "2026-10-22T12:54:47", "modificato": "2026-10-22T12:54:47"}],
+ "entro": [{"id": 4, "titolo": "Manutenzione impianto fotovoltaico 6 kW", "tipo": "manutenzione", "idSede": 8, "idContratto": 3, "contratto": "CA/2025/004",
+   "data": "2026-10-28", "preavvisoGiorni": 30, "ogniMesi": 12, "dallaFatta": false, "azione": "ticket", "anticipoGiorni": 30,
+   "statoVisto": "Scade fra 6 giorni", "giorni": 6, "idTicket": 16, "ticket": "TK/2026/0016", "...": "..."}, "..."],
+ "piuAvanti": [{"id": 1, "titolo": "Manutenzione magazzino automatico", "data": "2026-12-01", "statoVisto": "Prossima", "statoDettaglio": "01/12/2026",
+   "giorni": 40, "...": "..."}, "..."],
+ "conteggi": {"scadute": 1, "entro": 5, "piuAvanti": 2}}
+```
+Con `da`/`a` (il calendario) o con un altro `stato`: `{"ok": true, "oggi": "2026-10-22", "da": "2026-11-01", "a":
+"2026-11-30", "scadenze": [...]}`, per data. **Il calendario della fase 2 mostra le scadenze leggendo `scadenze {da,
+a}`**: non sono copiate in `attivita`.
+- `tipo` e `tipoNome`: `verifica_terra` "Verifica impianto di terra", `verifica_scariche` "Verifica protezione dalle
+  scariche", `verifica_protezioni` "Verifica protezioni SPG e SPI", `manutenzione` "Manutenzione", `documento`
+  "Documento", `polizza` "Polizza", `contratto` "Contratto", `altro` "Altro".
+- `statoVisto`: `Scaduta` (`statoDettaglio` "da 22 giorni", `giorni` = da quanti), `Scade oggi`, `Scade domani`,
+  `Scade fra N giorni` (nel preavviso; `giorni` = fra quanti), `Prossima` (`statoDettaglio` la data, `giorni` fra
+  quanti), `Fatta` ("il 22/10", `giorni` null), `Annullata` (il motivo). Gruppi: `scadute` (prima di oggi), `entro` (nel
+  preavviso), `piuAvanti`.
+- Chi vede: quelle dei contratti (tipo `manutenzione`, `contratto` o con `idContratto`) chi ha `ticket` ≥ 1, le altre
+  chi ha `documenti` ≥ 1; quella di un documento che uno non vede, no. `puoScrivere`: il modulo giusto a 2 e la scadenza
+  aperta.
+
+`salvaScadenza {scadenza: {id?, titolo?, tipo, idCliente?, idSede?, idDocumento?, idContratto?, data, preavvisoGiorni?,
+ogniMesi?, dallaFatta?, azione?: "promemoria"|"ticket", anticipoGiorni?, assegnataA?, note?}}` → `{"ok": true,
+"scadenza": {...}}`. Vero, una verifica di terra sull'impianto 9 mandando solo `tipo` e `data`: `"titolo": "Verifica
+impianto di terra (DPR 462)", "idCliente": "C001", "ogniMesi": 60, "dallaFatta": true, "preavvisoGiorni": 90, "azione":
+"promemoria", "statoVisto": "Prossima", "statoDettaglio": "15/02/2027", "giorni": 116`.
+- **Le proposte** (quello che non si manda; fase5.md §6.3, da confermare con Manuel): `verifica_terra` e
+  `verifica_scariche` ogni 60 mesi (24 se l'ambiente dell'impianto è `cantiere`, `medico`, `incendio` o `esplosione`),
+  dalla fatta, preavviso 90, titolo "... (DPR 462)"; `verifica_protezioni` ogni 60 mesi, dalla fatta, preavviso 90;
+  `manutenzione` la periodicità dell'impianto nel contratto, dalla data prevista, azione `ticket`, anticipo e preavviso
+  `ANTICIPO_TICKET_GIORNI` (30), titolo "Manutenzione {impianto}"; `contratto` preavviso 30, titolo "Disdetta del
+  contratto CA/..."; le altre preavviso `PREAVVISO_GIORNI` (60), senza ripetizione. `ogniMesi: 0` o vuoto = non si ripete.
+- Il cliente viene dall'impianto o dal contratto se non c'è. Errori: `"Data: scrivi quando scade"`, `"Titolo: scrivi
+  cosa scade"`, `"Ogni: da 1 a 120 mesi"`, `"Preavviso: da 0 a 365 giorni"`, `"Azione: promemoria o ticket"`, `"Tipo:
+  verifica_terra, verifica_scariche, verifica_protezioni, manutenzione, documento, polizza, contratto o altro"`,
+  `"Cliente: una scadenza che fa nascere un ticket vuole il cliente"`, `"Impianto 9 non trovato tra quelli di ..."`,
+  `"La scadenza è già fatta: non si cambia"`, `"Persona 9 non trovata"`, il permesso (`"Non hai il permesso per
+  scrivere le scadenze dei contratti: chiedi al titolare"`).
+- `faiScadenza {id, data?, idDocumento?}` → `{"ok": true, "scadenza": {...}, "prossima": {...} | null}`: fatta il `data`
+  (di base oggi), col documento che la chiude; se si ripete nasce la prossima, uguale, con data = (dalla fatta ? il
+  giorno fatto : la data prevista) + `ogniMesi` (31 gennaio + 1 mese = 28 febbraio, `piuMesi`). Vero: la verifica SPG e
+  SPI fatta oggi → `"scadenza": {"stato": "fatta", "statoVisto": "Fatta", "statoDettaglio": "il 22/10", "fattaIl":
+  "2026-10-22", "idProssima": 10, ...}, "prossima": {"id": 10, "data": "2031-10-22", "statoVisto": "Prossima", ...}`. Chi
+  la citava (l'impianto del contratto, il documento) ora cita la prossima. Le visite di un contratto oltre la sua fine non
+  nascono (tranne col rinnovo tacito). Ripetuta: `ok` senza rifare. `"La scadenza è stata tolta: non si segna fatta"`.
+- `togliScadenza {id, motivo, ancheProssime?}` → come `faiScadenza`: annullata col motivo (`"Scrivi il motivo"`); una
+  ripetuta **continua** (nasce la prossima) a meno di `ancheProssime: true`. `"La scadenza è già fatta: non si toglie"`.
+- **Una scadenza con `azione: "ticket"`** fa nascere un ticket programmato **una volta sola** (`idTicket`) quando `data
+  − anticipoGiorni` ≤ oggi: controllato all'avvio, ogni notte e dopo ogni `salvaScadenza`, `faiScadenza`,
+  `attivaContratto` e `rinnovaContratto`. Il ticket: `tipo: "programmato"`, `origine: "scadenza"`, priorità normale,
+  `previstoIl` = data della scadenza, cliente, impianto, contratto e commessa del contratto, descrizione `"Visita del
+  contratto CA/2026/002."`, responsabile = `assegnataA` (se no nessuno); registro `"nato dalla scadenza del 20/11/2026"`.
+  Chiudere o risolvere quel ticket segna fatta la scadenza (col giorno della risoluzione) e fa nascere la prossima.
+
+### 16.11 Ticket: l'elenco e un ticket
+
+`tickets {segmento?: "aperti"|"programmati"|"chiusi"|"tutti", mie?, nonAssegnati?, priorita?, tipo?, idCliente?, idSede?,
+idContratto?, testo?, da?, a?}` (ticket 1), vero:
+```json
+{"ok": true, "adesso": "2026-10-22T12:55:16", "segmento": "aperti",
+ "conteggi": {"aperti": 6, "urgenti": 1, "nonAssegnati": 2, "inRitardo": 1, "risoltiDaChiudere": 1, "programmatiDaPianificare": 2},
+ "ticket": [{"id": 14, "numero": "TK/2026/0014", "idLocale": "", "titolo": "Scatta il generale MT", "tipo": "guasto", "tipoNome": "Guasto",
+   "idCliente": "C002", "cliente": "Rossi Impianti Srl", "idSede": 4, "impianto": "Cabina MT Acme",
+   "idCommessa": "26ST005", "commessa": "Assistenza Manutenzione cabina MT Acme", "idContratto": 2, "contratto": "CA/2026/002",
+   "priorita": "urgente", "prioritaNome": "Urgente", "stato": "aperto", "statoVisto": "Aperto", "statoDettaglio": "",
+   "inRitardo": true, "ritardo": "Da prendere da 26 minuti", "responsabileId": null, "responsabile": "",
+   "apertoIl": "2026-10-22T11:29:46", "previstoIl": "", "entroPresa": "2026-10-22T12:29:46", "entroIntervento": "2026-10-22T15:29:46",
+   "prossimoIntervento": null, "rapportini": 0, "origine": "telefono", "origineNome": "Telefono", "fatturazione": "", "fatturazioneNome": "",
+   "chiusoIl": "", "puoScrivere": true, "puoPrendere": true, "fattura": null}, "..."]}
+```
+- **Segmenti**: `aperti` (di base) = aperto, in carico, in attesa, risolto, tranne i programmati con `previstoIl` oltre
+  30 giorni; `programmati` = tipo programmato non chiusi né annullati, per `previstoIl`; `chiusi` = chiusi e annullati
+  con la chiusura (o l'annullamento) fra `da` e `a` (di base gli ultimi 90 giorni), dal più recente; `tutti` (con `da` e
+  `a` sull'apertura). Ordine degli aperti: i risolti in fondo; prima gli urgenti non presi, poi quelli in ritardo, poi
+  per `entroIntervento`, poi per apertura. Errore `"Segmento: aperti, programmati, chiusi o tutti"`.
+- `conteggi` su tutti quelli che uno vede (non sul segmento); per il collaboratore anche `miei` (vero, Marco:
+  `{"aperti": 3, "urgenti": 1, "nonAssegnati": 2, "inRitardo": 1, "risoltiDaChiudere": 0, "programmatiDaPianificare": 1,
+  "miei": 1}`).
+- `tipo` e `tipoNome`: `guasto` Guasto, `verifica` Verifica, `piccolo` Piccolo intervento, `assistenza` Assistenza,
+  `programmato` Programmato. `origine` e `origineNome`: `telefono`, `email`, `sopralluogo`, `ufficio`, `scadenza` "Da una
+  scadenza" (`whatsapp` e `portale` ci sono nel database ma non si accettano, §16.12). `priorita`: `urgente`, `alta`,
+  `normale`, `bassa`. `stato` e `statoVisto`: `aperto` Aperto, `in_carico` In carico, `in_attesa` In attesa, `risolto`
+  Risolto, `chiuso` Chiuso, `annullato` Annullato.
+- `statoDettaglio`: in carico con un intervento in arrivo `"giovedì 22 alle 8:30"`; in attesa il motivo; chiuso il modo
+  (`"una riga per l'intervento"`, `"con gli altri rapportini"`, `"nel contratto"`, `"non si fattura"`); se no `""`.
+- `inRitardo` e `ritardo` (finché non è risolto): oltre `entroIntervento` senza intervento `"Intervento in ritardo da 3
+  ore"`, oltre `entroPresa` senza presa `"Da prendere da 26 minuti"` (minuti, ore fino a 47, poi giorni).
+- `entroPresa` e `entroIntervento`: `apertoIl` + le ore di `TICKET_TEMPI` per la priorità (o dei `tempi` del contratto),
+  ore di calendario; programmati: `entroPresa` `""`, `entroIntervento` la fine di `previstoIl` (`"2026-10-28T23:59:59"`).
+  Cambiare priorità o contratto li rifà.
+- `prossimoIntervento`: il primo intervento da fare da oggi in poi, `{id, inizio, fine, assegnataA, assegnata, luogo}`, o
+  `null`. `rapportini`: quanti, non annullati. `fatturazioneNome` breve: "Una riga", "Con i rapportini", "Nel contratto",
+  "Non si fattura".
+- `puoScrivere`: ticket 2, ticket vivo, suo o senza responsabile. `puoPrendere`: ticket 2, aperto e senza
+  responsabile. `fattura` (solo per chi vede le fatture con `costi`): `{"id": 16, "riferimento": "W-16", "stato":
+  "bozza", "etichetta": "In bozza W-16"}` (emessa: `"Fattura 47/2026"`) o `null`.
+- `testo` cerca (come i documenti) in numero, titolo, descrizione, cliente, impianto, richiedente, riferimento del
+  cliente, commessa.
+
+`ticket {id}` (ticket 1; `id` interno, numero o idLocale) → la voce più (vero, TK/2026/0012 prima della chiusura):
+```json
+{"ok": true, "ticket": {"id": 12, "numero": "TK/2026/0012", "titolo": "Inverter in errore di isolamento", "tipo": "guasto", "priorita": "normale",
+ "stato": "risolto", "idContratto": 3, "contratto": "CA/2025/004", "idCommessa": "26ST006", "apertoIl": "2026-10-20T09:15:00",
+ "entroPresa": "2026-10-20T17:15:00", "entroIntervento": "2026-10-23T09:15:00", "...": "come nell'elenco",
+ "descrizione": "L'inverter si spegne la mattina con l'errore di isolamento e riparte a mezzogiorno.", "richiedente": "Mario Bianchi · 333 0000123",
+ "idReferente": null, "rifCliente": "", "impatto": "ridotto", "urgenza": "presto", "prioritaAMano": false,
+ "presoIl": "2026-10-20T09:16:00", "interventoIl": "2026-10-21T09:00:00", "risoltoIl": "2026-10-21T11:41:00", "annullatoIl": "",
+ "motivo": "", "esito": "cambiati i fusibili della stringa 2, isolamento a posto", "prezzoCorpo": null, "motivoNo": "", "fatturatoIl": "",
+ "idScadenza": null, "referente": null, "indirizzoImpianto": "Via Montegrappa 8, 36063 Marostica (VI)",
+ "interventi": [],
+ "rapportini": [{"id": "RAP/2026/0014", "data": "2026-10-21", "tecnico": "Manuel Gasparotto", "idUtente": 1, "ore": 2.5, "km": 24, "stato": "FIRMATO",
+   "statoApprovazione": "", "firmatario": "Mario Bianchi", "descrizione": "Cambiati i fusibili della stringa 2, isolamento a posto", "apribile": true}],
+ "ore": [],
+ "spese": [{"id": 18, "data": "2026-10-21", "importo": 18.5, "categoria": "materiale", "descrizione": "Fusibili e portafusibili", "idRapportino": "RAP/2026/0014",
+   "destinazione": "cliente", "stato": "approvata", "idTicket": 12, "ticket": "TK/2026/0012", "...": "come in spese (fase 3)"}],
+ "foto": [{"id": "8XY1YpfVt1KpU5HXIZJ-x2CN9MrV", "url": "/file/8XY1YpfVt1KpU5HXIZJ-x2CN9MrV", "nome": "Inverter.png", "mime": "image/png", "idDocumento": null}, "..."],
+ "documenti": [],
+ "somma": {"ore": 2.5, "km": 24, "materiale": 18.5, "spese": 0, "costo": 66.74, "importo": 126.74},
+ "proposta": {"fatturazione": "ticket", "perche": "Il contratto CA/2025/004 copre solo le visite"},
+ "daFirmare": "",
+ "storico": [{"tipo": "ticket", "data": "2026-10-22", "titolo": "TK/2026/0016 · Manutenzione impianto fotovoltaico 6 kW", "dettaglio": "Normale · Aperto · da una scadenza",
+   "id": "TK/2026/0016", "idTicket": 16}, {"tipo": "foto", "data": "2026-10-22", "titolo": "2 foto", "dettaglio": "del ticket TK/2026/0012", "id": "TK/2026/0012", "idTicket": 12}, "..."],
+ "cronologia": [{"quando": "2026-10-20T09:15:00", "chi": "Manuel Gasparotto", "testo": "Aperto da Manuel Gasparotto (telefono)"},
+   {"quando": "2026-10-20T09:16:00", "chi": "Manuel Gasparotto", "testo": "Preso da Manuel Gasparotto"}, "..."],
+ "riservata": null, "puoChiudere": true, "giallo": "chiudi"}}
+```
+- `interventi`: le sue attività non annullate, come in `attivita` (tipo `intervento`). `rapportini` brevi (`apribile`:
+  il collaboratore apre solo i suoi). `ore` e `spese` come nella fase 3 (il collaboratore vede le sue; le spese dei
+  rapportini sempre). `foto`: `{id, url, nome, mime, idDocumento}` (`idDocumento` se è anche nell'archivio).
+  `documenti`: voci come `documenti` (con documenti 1, se no `[]`). `referente`: `{nome, telefono}` o `null`.
+- `somma`: ore (rapportini + ore registrate che contano), km, materiale (spese di categoria materiale, non "Mia", non
+  respinte), spese (le altre); con `costi` anche `costo` (fase 3: ore × costo orario congelato + km + spese,
+  `costoTicket`) e `importo` (quello che **resta** da fatturare con "una riga per l'intervento", §16.14: 0 per un ticket
+  già fatturato).
+- `proposta` (§16.14): `{fatturazione, perche}`. `daFirmare`: perché la voce non è ancora pronta (`"RAP/2026/0016 da far
+  firmare"`), o `""`.
+- `storico`: le ultime 5 voci dell'impianto (§16.17). `cronologia`: da `ticket_eventi` (§16.22), dalla più vecchia.
+- `riservata`: `"W-16"` (in una bozza o pronta) o `"47/2026"` (emessa) o `null`. `puoChiudere`: chi chiude, con il
+  ticket aperto, in carico o risolto.
+- **`giallo`** (il pulsante giallo, uguale su telefono e computer): `"prendi"` (aperto senza responsabile),
+  `"pianifica"` (suo, senza interventi futuri né rapportini), `"rapportino"` (suo, con un intervento di oggi o passato o
+  un rapportino non firmato), `"risolvi"` (suo, con un rapportino firmato), `"chiudi"` (risolto, per chi chiude),
+  `"riprendi"` (in attesa, suo), `""` (niente da fare, ticket 1, o non suo).
+
+### 16.12 Aprire e cambiare un ticket
+
+`salvaTicket {ticket: {id?, idLocale?, numero?, idCliente, idSede?, idCommessa?, idContratto?, titolo, descrizione?,
+tipo?, origine?, richiedente?, idReferente?, rifCliente?, impatto?, urgenza?, priorita?, responsabileId?, apertoIl?,
+previstoIl?}}` (ticket 2) → `{"ok": true, "ticket": {...come ticket...}}`. Vero (nuovo, Manuel, senza responsabile,
+impianto 5, `ridotto` + `presto`): `"numero": "TK/2026/0017", "stato": "aperto", "priorita": "normale", "entroPresa":
+"2026-10-22T20:55:16", "entroIntervento": "2026-10-25T11:55:16", "proposta": {"fatturazione": "ticket", "perche":
+"Nessun contratto per questo impianto"}, "giallo": "prendi"`, cronologia `"Aperto da Manuel Gasparotto (telefono)"`.
+- **Nuovo**: numero = quello mandato se libero e dell'anno giusto (nato senza rete), se no il prossimo dell'anno di
+  `apertoIl`; `apertoIl` di base adesso; `tipo` di base `guasto`, `origine` `telefono`; **il contratto** proposto
+  dall'impianto (il contratto attivo, o disdetto non ancora finito, che lo copre quel giorno), **la commessa** di base
+  quella del contratto; con `responsabileId` nasce `in_carico` (`presoIl` adesso). Ripetuto con lo stesso `idLocale`: lo
+  stesso ticket, `"giaArrivato": true`.
+- **Priorità**: dalle due domande (`impatto`: `fermo`|`ridotto`|`nessuno`; `urgenza`: `subito`|`presto`|`quando_si_puo`)
+  con `prioritaDa` (§16.21); `priorita` mandata e diversa dalla matrice = scritta a mano (`prioritaAMano: true`, le
+  risposte restano); `priorita: ""` torna automatica. Cambiarla scrive `"Priorità: Alta"` nella cronologia.
+- **Cambiare**: solo un ticket vivo (`"Il ticket TK/2026/0010 è chiuso: riaprilo per cambiarlo"`); il cliente non cambia
+  se il ticket ha già rapportini, ore o spese; contratto e commessa non cambiano se il ticket (o una sua cosa) è in una
+  fattura.
+- Errori: `"Cliente: scegli il cliente"`, `"Titolo: scrivi in poche parole cosa succede"`, `"Tipo: guasto, verifica,
+  piccolo, assistenza o programmato"`, `"Da dove arriva: telefono, email, sopralluogo o ufficio"` (per `whatsapp` e
+  `portale`, vero: `"Da dove arriva: telefono, email, sopralluogo o ufficio (WhatsApp e il portale non sono ancora
+  collegati)"`; `scadenza` la usa solo il server), `"L'impianto è fermo? fermo, ridotto o nessuno"`, `"Per quando?
+  subito, presto o quando_si_puo"`, `"Priorità: urgente, alta, normale o bassa"`, `"Impianto 9 non trovato tra quelli di
+  Rossi Impianti Srl"`, `"Il contratto CA/2026/001 è di Batokyo Srl"`, `"La commessa 26ST001 è di un altro cliente"`,
+  `"Chi ha chiamato: il referente 7 non è di Rossi Impianti Srl"`, `"Persona 9 non trovata"`, `"Aperto il: scrivi
+  giorno e ora"`, `"Il ticket ha già rapportini, ore o spese di ...: il cliente non si cambia"`.
+
+**I passaggi** (tutti ticket 2, `{id, ...}` → `{"ok": true, "ticket": {...}}`; ripetuti uguali: `ok` senza rifare):
+
+| Azione | Da | A | Note ed errori |
+|---|---|---|---|
+| `prendiTicket {id}` | aperto | in carico | responsabile chi chiama, `presoIl` la prima volta. `"Il ticket TK/2026/0014 l'ha già preso Marco Collaboratore"` |
+| `assegnaTicket {id, responsabileId}` | aperto, in carico, in attesa | in carico (`null`: aperto; in attesa resta in attesa) | il collaboratore solo a sé, o a nessuno i suoi. `"Persona 9 non trovata"` |
+| `sospendiTicket {id, motivo}` | aperto, in carico | in attesa | `"Scrivi il motivo"`, `"Si mette in attesa un ticket aperto o in carico"` |
+| `riprendiTicket {id}` | in attesa | in carico (aperto senza responsabile) | `"Il ticket TK/... non è in attesa"` |
+| `altroIntervento {id}` | aperto, in carico, in attesa | (resta; aperto con responsabile: in carico) | cronologia "Serve un altro intervento" |
+| `risolviTicket {id, esito?}` | aperto, in carico, in attesa | risolto | `esito` di base la descrizione dell'ultimo rapportino; senza responsabile lo diventa chi risolve; chiude la scadenza da cui è nato |
+| `riapriTicket {id, motivo}` | risolto (suo); chiuso (solo chi chiude, non riservato né fatturato) | in carico (aperto senza responsabile) | da chiuso `fatturazione` torna `""`. `"Si riapre un ticket risolto o chiuso"`, `"Il ticket lo chiude l'ufficio: chiedi a loro di riaprirlo"` (`permesso:false`) |
+| `annullaTicket {id, motivo}` | aperto, in carico, in attesa | annullato | non con rapportini non annullati: `"Il ticket ha il rapportino RAP/2026/0016: toglilo prima dal ticket"`; gli interventi da fare si annullano |
+| `chiudiTicket` | aperto, in carico, risolto | chiuso | §16.14 |
+
+Il collaboratore cambia solo i suoi ticket (assegnati a lui, o creati da lui e senza responsabile): `"Non hai il
+permesso per cambiare i ticket degli altri: chiedi al titolare"` (e `"... annullare i ticket degli altri ..."`,
+`"... assegnare i ticket agli altri ..."`).
+
+### 16.13 L'intervento, il rapportino, ore, spese e foto
+
+- **`pianificaTicket {id, inizio, fine?, assegnataA?, luogo?, note?, conferma?, promemoriaMinuti?}`** (ticket 2 **e**
+  attivita 2: `"Non hai il permesso per pianificare gli interventi (serve il calendario): chiedi al titolare"`) crea con
+  `salvaAttivita` (fase 2 §13.7) un'attività `tipo: "intervento"` con `idTicket`, titolo `"{numero} · {titolo}"`,
+  cliente e commessa del ticket, `luogo` = indirizzo dell'impianto (o quello mandato), persona = `assegnataA`, se no il
+  responsabile, se no chi chiama, `descrizione` = descrizione del ticket (più `note`), `fine` di base un'ora dopo. Il
+  ticket va `in_carico` (chi va diventa responsabile se non c'era); cronologia `"Intervento pianificato per giovedì 22
+  alle 7:00"`. → `{"ok": true, "ticket": {...}, "attivita": {...come attivita...}}`. Ogni chiamata è **un intervento in
+  più** (un'altra uscita); spostarlo o toglierlo si fa come per ogni attività (`salvaAttivita`, anche dal calendario).
+  Le sovrapposizioni sono quelle della fase 2 (vero):
+  ```json
+  {"ok": false, "errore": "Si sovrappone a: Sopralluogo quadri del magazzino Batokyo (14:30-16:00), TK/2026/0013 · Navetta 2 si ferma in errore (14:30-16:00)",
+   "sovrapposte": [{"id": 3, "titolo": "Sopralluogo quadri del magazzino Batokyo", "inizio": "2026-10-22T14:30:00", "fine": "2026-10-22T16:00:00", "assegnataA": 3, "assegnata": "Marco Collaboratore"},
+    {"id": 25, "titolo": "TK/2026/0013 · Navetta 2 si ferma in errore", "inizio": "2026-10-22T14:30:00", "fine": "2026-10-22T16:00:00", "assegnataA": 3, "assegnata": "Marco Collaboratore"}],
+   "serveConferma": true}
+  ```
+  e si richiama con `conferma: true`. Il collaboratore pianifica solo per sé (`"... pianificare per gli altri ..."`) e
+  solo i suoi ticket o quelli da prendere. Errori: `"Inizio: scrivi quando si va"`, `"Il ticket TK/... è chiuso: riaprilo
+  per pianificare"`.
+- **Il rapportino del ticket** è quello di sempre (§16.2). `legaRapportino {idRapportino, idTicket | null}` (rapportini
+  2) lega o slega dopo → `{"ok": true, "rapportino": {...}}`. Legando, il server scrive il numero nel campo Ticket solo
+  se è vuoto e il rapportino non è firmato; slegando lo toglie solo se il rapportino non è firmato e il campo è proprio
+  quello scritto dal server. Errori: `"Rapportino X non trovato"`, `"Il rapportino RAP/... è annullato"`, `"... è già
+  fatturato"`, `"... è già del ticket TK/...: toglilo prima da lì"`, `"Il ticket TK/... è chiuso: riaprilo per togliere il
+  rapportino"`, i blocchi della fase 4.
+- **Ore** senza rapportino (assistenza al telefono, preparazione) e **spese** (`materiale` con *Al cliente*):
+  `salvaOre`/`salvaSpesa` con `idTicket` (§16.2).
+- **Foto**: `caricaFile {tipo: "ticket", idTicket, base64, mime, nome, idFile}` oppure `{tipo: "ticket", idTicket,
+  idFileCaricato}` col file di `/carica` (`per=ticket`) → `{"ok": true, "file": {"id": "...", "url": "/file/...", "nome":
+  "..."}}`. Lo stesso `idFile` sullo stesso ticket: lo stesso file. Non su un ticket annullato. `togliFotoTicket {id,
+  annulla?}` (ticket 2; il collaboratore sui suoi) → il ticket: la foto va nel cestino, `annulla: true` la rimette.
+  "Metti nell'archivio": `salvaDocumento {origine: "file", idFile: <id della foto>, idTicket, idSede, idCategoria: <Foto>}`
+  (documenti 2).
+- **`interventoIl`** = il primo fra: l'inizio di un intervento segnato fatto, la nascita del primo rapportino non
+  annullato, la prima riga di ore non tolta, la risoluzione. Si rifà a ogni cambio di queste cose.
+
+### 16.14 Chiudere e fatturare
+
+`chiudiTicket {id, fatturazione: "ticket"|"separati"|"contratto"|"no", prezzoCorpo?, motivo?, conferma?}` (ticket 2,
+**titolare e amministrazione**, `costi` ≥ 1). Il collaboratore (vero): `{"ok": false, "errore": "Il ticket lo chiude
+l'ufficio: tu segnalo risolto", "permesso": false}`; senza `costi`: `"Per chiudere i ticket serve anche il permesso dei
+soldi: chiedi al titolare"`. Da risolto, o direttamente da aperto o in carico (assistenza al telefono: mette anche
+`risoltoIl`); in attesa: `"Il ticket è in attesa: riprendilo prima di chiuderlo"`. → il ticket più `daFatturare` (vero,
+TK/2026/0012):
+```json
+{"ok": true, "ticket": {"id": 12, "stato": "chiuso", "statoVisto": "Chiuso", "statoDettaglio": "una riga per l'intervento", "fatturazione": "ticket", "...": "..."},
+ "daFatturare": {"tipo": "ticket", "id": "TK/2026/0012", "importo": 126.74, "pronta": true, "perche": "", "gruppo": "ticket:TK/2026/0012"}}
+```
+`daFatturare` serve all'avviso "Chiuso: va in Da fatturare (126,74 €)" ed è `null` per gli altri modi. Con un rapportino
+ancora in bozza si chiude lo stesso (vero, TK/2026/0017): `"daFatturare": {"tipo": "ticket", "id": "TK/2026/0017",
+"importo": 92.6, "pronta": false, "perche": "RAP/2026/0016 da far firmare", "gruppo": "ticket:TK/2026/0017"}`.
+- **`ticket`** (una riga per l'intervento): serve qualcosa (un rapportino non annullato, ore fatturabili, spese al
+  cliente o `prezzoCorpo`), se no `"Non c'è niente da fatturare: scrivi un prezzo a corpo o scegli Non si fattura"`.
+  `prezzoCorpo` > 0 (`"Prezzo a corpo: scrivi quanto"`) = modo corpo.
+- **`separati`** (con gli altri rapportini): rapportini, ore e spese del ticket diventano sorgenti normali della fase 4.
+  Se la commessa è a corpo e ci sono rapportini o ore, prima: `{"ok": false, "serveConferma": true, "errore": "La
+  commessa 26ST005 è a corpo: con «Con gli altri rapportini» i rapportini e le ore del ticket non vanno in fattura. Chiudo
+  lo stesso?"}`.
+- **`contratto`** (nel canone): serve il contratto (`"Il ticket non è legato a un contratto"`). Rapportini e ore non si
+  fatturano mai; le spese al cliente sì, come voci `spesa` normali, se il contratto non comprende i materiali
+  (`materialiInclusi: false`); le anticipazioni sempre.
+- **`no`** (non si fattura): `motivo` obbligatorio (`"Scrivi perché non si fattura"`); con spese al cliente, prima
+  (vero): `{"ok": false, "serveConferma": true, "errore": "Ci sono 6,80 € di spese segnate al cliente: con «Non si
+  fattura» restano fuori dalla fattura. Chiudo lo stesso?"}`. Niente del ticket va in Da fatturare.
+- `"Come si fattura: ticket, separati, contratto o no"`. Richiuso con lo stesso modo: `ok`; con un altro: `"Il ticket
+  TK/... è già chiuso: riaprilo per cambiare come si fattura"`. Registro `"chiuso: una riga per l'intervento"`;
+  cronologia `"Chiuso: una riga per l'intervento"`, `"Chiuso: nel contratto CA/2026/002"`, `"Chiuso: non si fattura
+  (Garanzia)"`.
+- **`proposta`** (la scelta già fatta nella finestra di chiusura): visita di un contratto valido → `contratto` ("Nel
+  contratto CA/2026/002: è una visita del contratto"); contratto valido che copre visite e guasti → `contratto` ("Nel
+  contratto CA/2026/002: copre visite e guasti"); cliente a tariffa fissa → `separati` ("Elettrodinamica ha la tariffa
+  fissa: il mese resta una riga"); contratto valido che copre solo le visite → `ticket` ("Il contratto CA/2025/004 copre
+  solo le visite"); contratto non valido quel giorno → `ticket` ("Il contratto CA/... non copre questo intervento"); senza
+  contratto → `ticket` ("Nessun contratto per questo impianto"). Valido = attivo, o disdetto non ancora finito, e il
+  giorno di apertura dentro il periodo.
+
+**Finché un ticket non è chiuso** (aperto, in carico, in attesa, risolto) i suoi rapportini, ore e spese **non compaiono
+in Da fatturare** (e non contano in `numeri.rapportini.daFatturare` della Dashboard); un ticket annullato non trattiene
+niente. Così una cosa del ticket non si fattura per sbaglio prima che si scelga come.
+
+**La voce in `daFatturare`** (tipo `ticket`, vero, Mario Bianchi):
+```json
+{"tipo": "ticket", "id": "TK/2026/0012", "idCommessa": "26ST006", "data": "2026-10-21", "titolo": "Inverter in errore di isolamento",
+ "dettaglio": "Impianto fotovoltaico 6 kW · 1 rapportino · 2 ore · 24 km · materiale 18,50 €", "pronta": true, "importo": 126.74, "aCorpo": false,
+ "dentro": [{"tipo": "rapportino", "id": "RAP/2026/0014"}, {"tipo": "spesa", "id": 18}], "spese": [], "senzaPrezzo": false,
+ "anticipazione": false, "gruppo": "ticket:TK/2026/0012"}
+```
+- C'è quando il ticket è chiuso con `fatturazione: "ticket"`, `fatturatoIl` vuoto e non riservato. `id` = il **numero**
+  del ticket (come i rapportini); `data` = giorno della risoluzione; il gruppo della vista e delle righe è lo stesso,
+  `ticket:{numero}`.
+- **Pronta** se i suoi rapportini non annullati sono firmati o inviati (e approvati, se serviva) e le sue ore e spese
+  approvate; se no sta in `piuAvanti` con `perche` (`"RAP/2026/0016 da far firmare"`, `"RAP/... da approvare"`, `"RAP/...
+  respinto"`, `"La spesa «...» del 21/10 da approvare"`, `"Le ore del 21/10 da approvare"`, vero:
+  `{"tipo": "ticket", "id": "TK/2026/0017", "pronta": false, "importo": 92.6, "perche": "RAP/2026/0016 da far firmare",
+  "idCliente": "C002", "cliente": "Rossi Impianti Srl", ...}`). Si sceglie solo quando è pronta (`"Il ticket TK/2026/0017
+  non è ancora pronto: RAP/2026/0016 da far firmare"`).
+- **Importo** (modo lavoro): per ogni rapportino non annullato `compenso ore + rimborso km` (più le spese vecchie senza
+  righe), più le spese al cliente **non anticipate** del ticket e dei suoi rapportini, più le ore registrate fatturabili ×
+  prezzo (la tariffa fuori contratto del contratto se c'è, se no `prezzoOrarioDi(cliente, commessa)`; senza prezzo
+  quelle ore non contano e la voce ha `senzaPrezzo: true`). Modo corpo: `prezzoCorpo` (`aCorpo: true`). `dettaglio`:
+  impianto · rapportini · ore pagate · km rimborsati · materiale (le spese non anticipate) · "a corpo". `dentro`: le cose
+  che la riga contiene.
+- **Le spese anticipate** (`spese`: i loro id) seguono la voce come voci `spesa` con `idTicket` (il **numero**),
+  `anticipazione: true` e lo stesso `gruppo`; scegliere il ticket le porta, sceglierne una porta il ticket.
+- **Le righe** (`righeTicket`, §16.21): `"Intervento TK/2026/0012 del 21/10/2026: Inverter in errore di isolamento -
+  Impianto fotovoltaico 6 kW (2 ore, 24 km, materiale e spese 18,50 €, commessa 26ST006)"`, quantità 1, prezzo =
+  importo; a corpo `"... (a corpo, commessa 26ST006)"`; senza impianto niente `" - ..."`; le parti a zero non si scrivono.
+  Le anticipazioni: `"Spesa anticipata per conto del cliente: {descrizione} del {gg/mm/aaaa}"`, N1 come la fase 4.
+  Causale proposta: `"Intervento TK/2026/0012, commessa 26ST006"`.
+- **Senza doppioni, nel database**: il gruppo `ticket:{numero}` ha in `fattura_sorgenti` **una sorgente `ticket`**
+  (`sorgente_id` = il numero; importo 0 nel modo lavoro, `prezzoCorpo` nel modo corpo) **e una per ogni cosa che ha
+  dentro**: ogni rapportino (`compenso ore + rimborso km`, 0 a corpo), ogni spesa (importo, 0 a corpo tranne le
+  anticipazioni), ogni riga di ore (ore × prezzo, 0 a corpo). Tutte sotto lo stesso indice unico della fase 4
+  (`fattura_sorgenti_una ON fattura_sorgenti(tipo, sorgente_id) WHERE attiva = 1`): un rapportino del ticket non entra in
+  un'altra fattura, nemmeno scritto a mano, finché questa è viva.
+- **Effetti dell'emissione** (fase 4 §7.2): quelli di rapportini, spese e ore come sempre (FATTURATO, `fatturataIl`); il
+  ticket prende `fatturatoIl` = data della fattura (cronologia `"Fatturato (...)"`); una nota di credito che lo storna lo
+  toglie (`"Non più fatturato (...)"`).
+- **Blocchi** (fase 4 §7.3): un ticket riservato o fatturato non si riapre, non cambia modo, contratto o commessa, non
+  riceve né perde rapportini, ore o spese: `"Il ticket TK/2026/0012 è nella bozza W-16 per Mario Bianchi: toglilo prima
+  dalla bozza"`, `"... è nella fattura W-16 (già passata al programma) per Mario Bianchi: toglilo prima dalla bozza"`,
+  `"... è nella fattura 47/2026: per cambiarlo serve una nota di credito"`, `"Il ticket TK/2026/0010 è già fatturato
+  fuori da Wisper"`; per una sua cosa la frase della fase 4 (`"RAP/2026/0014 è già nella bozza W-16 per ..."`).
+- **`segnaFatturataFuori {voci: [{tipo: "ticket", id: "TK/2026/0010"}], nota?, annulla?}`**: un ticket chiuso "una riga"
+  porta con sé rapportini, spese e ore che ha dentro (tutti fatturati fuori); `annulla` li toglie insieme. Errori: `"Il
+  ticket TK/... non è chiuso con «Una riga per l'intervento»"`, `"... non è ancora pronto: ..."`, `"... non è segnato
+  come fatturato fuori da Wisper"`.
+- **XML di ritorno** (`leggiXml`/`confermaXml`): fra i `collegabili` c'è il gruppo del ticket (come i gruppi dei
+  rapportini); collegarlo porta anche le sorgenti che ha dentro, senza doppioni.
+
+### 16.15 Contratti di assistenza: elenco e scrittura
+
+`contratti {stato?: "bozza"|"attivo"|"disdetto"|"chiuso", idCliente?, testo?}` (ticket 1) → `{"ok": true, "oggi":
+"2026-10-22", "contratti": [...]}`, dal più recente; `contratto {id}` (ticket 1; id o numero) → `{"ok": true,
+"contratto": {...}}` con in più `rate`, `costoTicket`, `rende`. Vero, CA/2026/002:
+```json
+{"ok": true, "contratto": {"id": 2, "numero": "CA/2026/002", "titolo": "Manutenzione cabina MT Acme", "idCliente": "C002", "cliente": "Rossi Impianti Srl",
+ "idCommessa": "26ST005", "commessa": "Assistenza Manutenzione cabina MT Acme", "idPreventivo": null, "dal": "2026-01-01", "al": "2026-12-31",
+ "rinnovo": "tacito", "disdettaGiorni": 60, "disdettaEntro": "2026-11-01", "stato": "attivo", "statoVisto": "In scadenza",
+ "statoDettaglio": "disdetta entro domenica 1 novembre", "canone": 1200, "fatturazioneCanone": "semestrale", "copre": "visite_guasti",
+ "materialiInclusi": false, "tariffaExtra": 45, "tempi": {"urgente": {"presa": 1, "intervento": 4}},
+ "impianti": [{"idSede": 4, "nome": "Cabina MT Acme", "ogniMesi": 6, "primaVisita": "2026-11-20", "prossimaVisita": "2026-11-20", "idScadenza": 2}],
+ "ticket": {"aperti": 2, "anno": 2}, "documento": {"id": 6, "titolo": "Contratto CA/2026/002 firmato"}, "disdettoIl": "", "motivo": "", "note": "",
+ "puoScrivere": true, "creato": "2026-10-22T12:54:46", "modificato": "2026-10-22T12:54:47",
+ "rate": [{"id": 14, "descrizione": "Canone 1° semestre 2026", "data": "2026-01-01", "importo": 600, "stato": "fatturata", "statoVisto": "Fatturata fuori da Wisper"},
+  {"id": 15, "descrizione": "Canone 2° semestre 2026", "data": "2026-07-01", "importo": 600, "stato": "fatturata", "statoVisto": "Fatturata fuori da Wisper"}],
+ "costoTicket": 0, "rende": {"canone": 1200, "costo": 0, "fatturatoExtra": 0, "margine": 1200, "ticket": 2}}}
+```
+- `statoVisto`: `Bozza`, `Attivo`, `In scadenza` (senza rinnovo a 60 giorni dalla fine: `"scade il 28/02/2027"`;
+  tacito a 30 giorni dall'ultimo giorno per la disdetta: `"disdetta entro domenica 1 novembre"`), `Scaduto` (senza
+  rinnovo, oltre la fine: `"finito il 31/10/2026"`), `Disdetto` (`"finisce il 31/12/2026"`), `Chiuso`. `disdettaEntro`
+  = `al` − `disdettaGiorni` (solo col rinnovo tacito, se no `""`).
+- `impianti`: `ogniMesi` delle visite, `primaVisita`, e la visita aperta (`prossimaVisita`, `idScadenza`). `ticket`:
+  `aperti` (vivi) e `anno` (aperti quest'anno, non annullati). `documento`: il contratto firmato nell'archivio (se uno lo
+  vede). `tempi`: solo le voci che cambiano `TICKET_TEMPI` (o `null`).
+- `rate` (le scadenze di pagamento della commessa del contratto): `stato` `prevista` ("Prevista"), `in_bozza` ("In bozza
+  W-16"), `fatturata` ("Fatturata 47/2026" o "Fatturata fuori da Wisper").
+- `rende` (solo nel contratto, con `costi`): `canone` del periodo, `costo` dei suoi ticket aperti nel periodo (fase 3),
+  `fatturatoExtra` (compenso delle fatture emesse coi gruppi dei suoi ticket), `margine` = canone + fatturato extra −
+  costo, `ticket` = quanti nel periodo. `costoTicket` = lo stesso `costo`.
+- Senza `costi` (vero, Marco): niente `canone`, `tariffaExtra`, `costoTicket`, `rende`, né `importo` delle rate;
+  `puoScrivere: false`. Lettura (con `costi` 1) vede tutto, `puoScrivere: false`.
+
+`salvaContratto {contratto: {id?, idCliente, titolo, dal, al?, rinnovo?, disdettaGiorni?, canone?, fatturazioneCanone?,
+copre?, materialiInclusi?, tariffaExtra?, tempi?, idCommessa?, idPreventivo?, idDocumento?, note?, impianti?: [{idSede,
+ogniMesi?, primaVisita?}]}}` (ticket 2 **e** `costi` 2; gli altri, vero: `"Non hai il permesso per scrivere i contratti
+di assistenza: chiedi al titolare"`) → `{"ok": true, "contratto": {...}}`. Nuovo = **bozza** col numero dell'anno di
+`dal`. Vero: `{"id": 4, "numero": "CA/2027/001", "titolo": "Assistenza quadro di linea 3", "idCliente": "C001",
+"idCommessa": "", "dal": "2027-01-01", "al": "2027-12-31", "rinnovo": "tacito", "disdettaGiorni": 60, "disdettaEntro":
+"2027-11-01", "stato": "bozza", "statoVisto": "Bozza", "canone": 480, "fatturazioneCanone": "semestrale", "copre":
+"visite", "materialiInclusi": false, "tariffaExtra": 40, "impianti": [{"idSede": 9, "nome": "Quadro di linea 3",
+"ogniMesi": 6, "primaVisita": "2027-03-01", "prossimaVisita": "", "idScadenza": null}], "rate": [], ...}`.
+- Di base: `al` = `dal` + 12 mesi − 1 giorno, `rinnovo` `tacito`, `disdettaGiorni` 60, `fatturazioneCanone` `annuale`,
+  `copre` `visite`. Valori: `rinnovo` `tacito`|`no`; `fatturazioneCanone` `annuale`|`semestrale`|`trimestrale`|
+  `mensile`|`nessuna`; `copre` `visite`|`visite_guasti`; `tempi` per esempio `{"urgente": {"presa": 1, "intervento":
+  4}}` (solo le voci che cambiano). `impianti` è l'elenco intero (ognuno del cliente; quelli che mancano si tolgono).
+- **In bozza** si cambia tutto. **Attivo**: titolo, note, tempi, copre, materiali, tariffa fuori contratto, rinnovo,
+  preavviso, documento e impianti (le visite si rifanno dalla prossima: un impianto nuovo prende la sua visita, uno
+  tolto perde le sue, `ogniMesi` vuoto toglie le visite); canone, periodo e rate solo con `rinnovaContratto` (`"Il
+  contratto CA/2026/002 è attivo: canone e periodo si cambiano con Rinnova"`).
+- Errori: `"Cliente: scegli il cliente"`, `"Titolo: scrivi di che contratto si tratta"`, `"Dal: scrivi da quando
+  vale"`, `"Al: deve venire dopo Dal"`, `"Rinnovo: tacito o no"`, `"Preavviso di disdetta: da 0 a 365 giorni"`,
+  `"Canone: non può essere negativo"`, `"Come si fattura il canone: annuale, semestrale, trimestrale, mensile o
+  nessuna"`, `"Copre: visite o visite_guasti"`, `"Tariffa fuori contratto: non può essere negativa"`, `"Impianto 9 non è
+  di Rossi Impianti Srl"`, `"Ogni: da 1 a 60 mesi"`, `"Tempi: urgente, alta, normale o bassa"`, `"Tempi: le ore devono
+  essere più di zero"`, `"Tempi: non si capiscono"`, `"La commessa 26ST001 è di un altro cliente"`, `"Preventivo 99 non
+  trovato"`, `"Il contratto CA/2025/004 è chiuso"`, `"Il numero CA/2026/002 è già usato"`.
+
+### 16.16 Contratti: attivare, canone, visite, rinnovo, disdetta
+
+- `attivaContratto {id}` (ticket 2 e `costi` 2) → il contratto. Da bozza ad attivo (`"Il contratto CA/... non è in
+  bozza"`; già attivo: `ok`):
+  1. **la commessa**: se il contratto non ne ha una, nasce `"Assistenza {titolo}"` (un titolo che comincia già con
+     "Assistenza" non si raddoppia), del cliente, `modoFatturazione: "corpo"`, inizio `dal`, fine prevista `al`,
+     `importoContratto` e `budgetEuro` = canone, l'impianto = il primo del contratto, responsabile chi attiva, nota `"Dal
+     contratto CA/2026/002"`, `idContratto`; con `idCommessa` scelta si lega quella;
+  2. **le rate del canone** del periodo (`rateCanone`, §16.21) come scadenze di pagamento della commessa (`tipo:
+     "importo"`, `quando: "data"`, `contratto_id`): la fase 4 le porta in Da fatturare come tutte le scadenze di pagamento
+     (pronte 15 giorni prima della data; il `dettaglio` della voce ha il numero del contratto), con la riga `"Canone 1°
+     semestre 2027: Manutenzione cabina MT Acme (contratto CA/2026/002, commessa 26ST005)"`;
+  3. **le visite**: per ogni impianto con `ogniMesi`, una scadenza `tipo: "manutenzione"`, `azione: "ticket"`, titolo
+     `"Manutenzione {impianto}"` (con la prima lettera minuscola: "Manutenzione cabina MT Acme"), alla `primaVisita` (se
+     no `dal` + `ogniMesi`), contata dalla data prevista, anticipo e preavviso `ANTICIPO_TICKET_GIORNI`;
+  4. col rinnovo tacito la scadenza **"Disdetta del contratto CA/..."** (`tipo: "contratto"`, data `disdettaEntro`,
+     preavviso 30): è la voce della Dashboard;
+  5. i ticket delle visite già entro l'anticipo (§16.10).
+- `rinnovaContratto {id, al?, canone?, fatturazioneCanone?}` → il contratto. Solo attivo (`"Il contratto è in bozza:
+  attivalo"`, `"Il contratto CA/... è disdetto"`). Il periodo nuovo parte il giorno dopo `al` (`al` nuovo di base + 12
+  mesi − 1 giorno; `"Al: deve venire dopo 01/01/2027"`); il canone nuovo vale **solo per le rate nuove** (le vecchie
+  restano come sono, anche in fattura); la commessa allunga la fine prevista; le visite ripartono dall'ultima prevista;
+  nuova scadenza di disdetta. Registro `"rinnovato"`.
+- **Rinnovo tacito, ogni notte** (e all'avvio): un contratto attivo, tacito, con `al` passato si allunga di 12 mesi come
+  sopra (registro `"rinnovato da solo"`, nel log `[contratti] N rinnovati da soli`).
+- `disdiciContratto {id, data?, motivo}` → il contratto: `disdetto` il `data` (di base oggi), finisce ad `al`, nessun
+  rinnovo; la scadenza della disdetta si segna fatta (`"disdetta mandata"`); visite e rate del periodo restano. `"Scrivi
+  il motivo"`, `"Si disdice un contratto attivo"`.
+- `chiudiContratto {id, conferma?}` → il contratto: finito adesso. Prima, se ci sono rate o scadenze da togliere:
+  `{"ok": false, "serveConferma": true, "errore": "Chiudo il contratto CA/2026/002 adesso: tolgo 1 rata non ancora
+  fatturata e 2 scadenze (visite e disdetta). Va bene?"}`; con `conferma: true` le rate future non ancora in una fattura
+  si tolgono (registro `"tolta: il contratto CA/2026/002 è chiuso"`) e le scadenze aperte si annullano (`"contratto
+  chiuso"`).
+- **I ticket del contratto**: aprendo un ticket su un impianto coperto il contratto si propone (§16.12); i suoi tempi
+  valgono per `entroPresa`/`entroIntervento`; la proposta di chiusura dipende da `copre` (§16.14); le ore fuori contratto
+  costano `tariffaExtra`; ore, km e spese dei ticket finiscono nel costo della commessa del contratto (fase 3) e in
+  `rende`.
+
+### 16.17 Storico dell'impianto e statistiche
+
+`storicoImpianto {idSede, pagina?}` (clienti 1 o ticket 1), 30 voci per pagina, dalla più recente. Vero, Cabina MT Acme:
+```json
+{"ok": true,
+ "impianto": {"id": 4, "tipo": "impianto", "nome": "Cabina MT Acme", "categoria": "cabina_mt", "categoriaNome": "Cabina MT", "idCliente": "C002",
+  "cliente": "Rossi Impianti Srl", "indirizzo": "Via dell'Artigianato 9, 36010 Zanè (VI)", "sedePadreId": null, "matricola": "TR-2014-0571",
+  "potenza": "630 kVA", "tensione": "15 kV / 400 V", "messaInServizio": "2014-05-20", "ambiente": "ordinario",
+  "ambienteNome": "Ordinario: verifica ogni 5 anni", "verificaOgniMesi": 60, "idReferente": 4, "referente": "Sig. Ferretti · 0445 000201",
+  "datiTecnici": "Trasformatore in resina, due scomparti MT"},
+ "aperti": [{"tipo": "ticket", "id": "TK/2026/0014", "idTicket": 14, "titolo": "Scatta il generale MT", "stato": "aperto", "statoVisto": "Aperto", "priorita": "urgente"},
+  {"tipo": "ticket", "id": "TK/2026/0015", "idTicket": 15, "titolo": "Manutenzione cabina MT Acme", "stato": "in_carico", "statoVisto": "In carico", "priorita": "normale"}],
+ "scadenze": [{"id": 7, "titolo": "Verifica protezioni SPG e SPI", "data": "2026-09-30", "statoVisto": "Scaduta", "giorni": 22},
+  {"id": 2, "titolo": "Manutenzione cabina MT Acme", "data": "2026-11-20", "statoVisto": "Scade fra 29 giorni", "giorni": 29}],
+ "contratti": [{"id": 2, "numero": "CA/2026/002", "titolo": "Manutenzione cabina MT Acme", "statoVisto": "In scadenza"}],
+ "pagina": 1, "pagine": 1, "quante": 6,
+ "voci": [{"tipo": "ticket", "data": "2026-10-22", "titolo": "TK/2026/0014 · Scatta il generale MT", "dettaglio": "Urgente · Aperto · telefono", "id": "TK/2026/0014", "idTicket": 14},
+  {"tipo": "foto", "data": "2026-10-22", "titolo": "1 foto", "dettaglio": "del ticket TK/2026/0014", "id": "TK/2026/0014", "idTicket": 14},
+  {"tipo": "ticket", "data": "2026-10-21", "titolo": "TK/2026/0015 · Manutenzione cabina MT Acme", "dettaglio": "Normale · In carico · da una scadenza", "id": "TK/2026/0015", "idTicket": 15}, "..."]}
+```
+- **Voci**: `ticket` (aperti e chiusi, non annullati: priorità · stato, col modo se chiuso · origine), `rapportino` (dei
+  ticket dell'impianto o delle commesse con quell'impianto: titolo `"RAP/2026/0014 · {descrizione}"`, dettaglio
+  `"Manuel Gasparotto · 2,5 ore · firmato da Mario Bianchi"`, con `idTicket` e `ticket` se è di un ticket, `apribile`),
+  `documento` (con quell'impianto, non archiviati, che uno vede: `"Progetti e schemi · Valida"`), `scadenza` (fatte:
+  `"... fatta"`, `"dal ticket TK/..."` o `"scadenza del 30/09/2026"`), `foto` (dei ticket, raggruppate per ticket: `"2
+  foto"`), `contratto` (nascita `"Contratto CA/... · {titolo}"`, `"dal 01/01/2026 al 31/12/2026"`; disdetta `"Contratto
+  CA/... disdetto"`). `id` è quello che apre la pagina (il numero per ticket e foto, con `idTicket`).
+- Il collaboratore vede le voci delle cose che vede: i rapportini degli altri come `{"tipo": "rapportino", "titolo":
+  "Rapportino di Manuel Gasparotto", "dettaglio": "", "id": null, "apribile": false}`, niente ticket che non vede,
+  niente documenti `costi`.
+- `ambienteNome` e `verificaOgniMesi`: la periodicità proposta delle verifiche DPR 462 (5 anni, 2 per gli ambienti a
+  maggior rischio), `""` e `null` senza ambiente. `referente` col telefono; qui `idReferente` come nel ticket (in
+  `anagrafiche.sedi` la chiave è `referenteId`, come dice fase5.md §10.5).
+- Errori: `"Impianto: scegli l'impianto"`, `"Impianto 99 non trovato"`.
+
+`statisticheTicket {da?, a?, per?: "tipo"|"cliente"|"impianto"|"persona"|"mese"}` (ticket 1; di base `tipo` e i 12 mesi
+fino alla fine del mese in corso), vero:
+```json
+{"ok": true, "da": "2025-11-01", "a": "2026-10-31", "per": "tipo",
+ "totale": {"aperti": 8, "chiusi": 2, "inCorso": 6, "presaMediaOre": 34.1, "interventoMedioOre": 18.8, "chiusuraMediaGiorni": 1, "entroITempi": 67,
+   "ore": 4.5, "km": 72, "nelContratto": 0, "costo": 125.72, "fatturato": 0},
+ "righe": [{"chiave": "guasto", "nome": "Guasti", "aperti": 4, "chiusi": 1, "inCorso": 3, "presaMediaOre": 0.1, "interventoMedioOre": 28.1,
+   "chiusuraMediaGiorni": 2, "entroITempi": 50, "ore": 4.5, "km": 72, "nelContratto": 0, "costo": 125.72, "fatturato": 0},
+  {"chiave": "programmato", "nome": "Programmati", "aperti": 2, "chiusi": 0, "inCorso": 2, "presaMediaOre": 34.4, "interventoMedioOre": null,
+   "chiusuraMediaGiorni": null, "entroITempi": null, "ore": 0, "km": 0, "nelContratto": 0, "costo": 0, "fatturato": 0}, "..."]}
+```
+- Contano i ticket **aperti nel periodo**, non annullati (`aperti` = quanti, `chiusi`, `inCorso` = ancora vivi). Medie a
+  una cifra, solo sui ticket che hanno la misura (`null` se nessuno): `presaMediaOre` (apertura → presa),
+  `interventoMedioOre` (apertura → primo intervento), `chiusuraMediaGiorni` (apertura → chiusura); `entroITempi` = % con
+  `interventoIl ≤ entroIntervento` (sui ticket con un intervento). `ore` e `km` (rapportini e ore registrate),
+  `nelContratto` = chiusi "nel contratto". Ore di calendario.
+- `costo` e `fatturato` (compenso delle fatture emesse coi gruppi `ticket:{numero}`) solo con `costi` (Marco senza).
+  `righe`: per `mese` in ordine di mese (`nome` "ottobre 2026"), gli altri dal più numeroso; `chiave` vuota = "Nessun
+  impianto" o "Nessuno". `nome` per tipo: Guasti, Verifiche, Piccoli interventi, Assistenza, Programmati.
+- Il collaboratore vede solo i ticket di cui è responsabile. Errore `"Per: tipo, cliente, impianto, persona o mese"`.
+
+### 16.18 Dashboard: cosa si aggiunge
+
+- `numeri` in più (veri, Manuel): `"ticket": {"aperti": 6, "urgenti": 1, "nonAssegnati": 2, "inRitardo": 1,
+  "interventiOggi": 1, "risoltiDaChiudere": 1, "programmatiDaPianificare": 2}` (con ticket ≥ 1; per il collaboratore i
+  suoi e quelli da prendere, Marco: `{"aperti": 3, "urgenti": 1, "nonAssegnati": 2, "inRitardo": 1, "interventiOggi": 1,
+  "risoltiDaChiudere": 0, "programmatiDaPianificare": 1}`), `"documenti": {"daApprovare": 1, "inScadenza": 1,
+  "scaduti": 0, "daClassificare": 3}` (con documenti ≥ 1: i conteggi di §16.4), `"scadenze": {"scadute": 1, "entro": 5,
+  "vicine": 6}` (con documenti o ticket ≥ 1), `"contratti": {"attivi": 3, "inScadenza": 2}` (ticket ≥ 1 e `costi`, non il
+  collaboratore), `"spazio": {"liberoMb": 34745, "avviso": false}` (amministrazione ≥ 1, non il collaboratore).
+- Le voci nuove (vere, Manuel):
+```json
+{"urgenti": [
+  {"tipo": "ticket", "gravita": "urgente", "titolo": "TK/2026/0014 urgente: Scatta il generale MT",
+   "dettaglio": "Rossi Impianti Srl · Cabina MT Acme · aperto alle 11:29 · nessuno l'ha preso", "quanto": null, "unita": null, "collegamento": {"pagina": "ticket", "id": 14}},
+  {"tipo": "scadenza", "gravita": "urgente", "titolo": "Verifica protezioni SPG e SPI scaduta da 22 giorni", "dettaglio": "Rossi Impianti Srl · Cabina MT Acme",
+   "quanto": 22, "unita": "giorni", "collegamento": {"pagina": "scadenza", "id": 7}}],
+ "settimana": [
+  {"tipo": "intervento", "gravita": "attenzione", "titolo": "Intervento di oggi alle 14:30: TK/2026/0013 Navetta 2 si ferma in errore",
+   "dettaglio": "Marco Collaboratore · Batokyo Srl · Schio", "quanto": null, "unita": null, "collegamento": {"pagina": "ticket", "id": 13}},
+  {"tipo": "ticket", "gravita": "attenzione", "titolo": "TK/2026/0012 risolto: da chiudere", "dettaglio": "Mario Bianchi · rapportino firmato il 21/10",
+   "quanto": null, "unita": null, "collegamento": {"pagina": "ticket", "id": 12}},
+  {"tipo": "documento", "gravita": "attenzione", "titolo": "1 documento da approvare", "dettaglio": "Schema unifilare cabina MT rev. 3 · Marco Collaboratore",
+   "quanto": 1, "unita": "documenti", "collegamento": {"pagina": "documenti", "filtro": {"segmento": "approvare"}}},
+  {"tipo": "scadenza", "gravita": "attenzione", "titolo": "Certificato di taratura del misuratore di terra scade fra 24 giorni", "dettaglio": "",
+   "quanto": 24, "unita": "giorni", "collegamento": {"pagina": "scadenza", "id": 6}},
+  {"tipo": "contratto", "gravita": "attenzione", "titolo": "CA/2026/002: la disdetta va mandata entro domenica 1 novembre",
+   "dettaglio": "Rossi Impianti Srl · si rinnova da solo il 01/01/2027", "quanto": null, "unita": null, "collegamento": {"pagina": "contratto", "id": 2}},
+  {"tipo": "contratto", "gravita": "attenzione", "titolo": "CA/2025/004 scade il 31/10/2026: rinnovalo o lascialo scadere",
+   "dettaglio": "Mario Bianchi · Controllo annuale fotovoltaico", "quanto": null, "unita": null, "collegamento": {"pagina": "contratto", "id": 3}}],
+ "pianificare": [
+  {"tipo": "ticket", "gravita": "info", "titolo": "Manutenzione cabina MT Acme del 20/11 da pianificare", "dettaglio": "TK/2026/0015 · Rossi Impianti Srl",
+   "quanto": null, "unita": null, "collegamento": {"pagina": "ticket", "id": 15}},
+  {"tipo": "documento", "gravita": "info", "titolo": "3 documenti da classificare", "dettaglio": "Arrivati senza categoria", "quanto": 3, "unita": "documenti",
+   "collegamento": {"pagina": "documenti", "filtro": {"segmento": "archivio", "daClassificare": true}}},
+  {"tipo": "scadenza", "gravita": "info", "titolo": "Verifica impianto di terra (DPR 462): 12/01/2027", "dettaglio": "Batokyo Srl · Impianto di terra stabilimento",
+   "quanto": null, "unita": null, "collegamento": {"pagina": "scadenza", "id": 5}}]}
+```
+- **urgenti**: ticket urgenti non presi o in ritardo, uno per uno fino a 3 (titolo `"... urgente: ..."` o `"... in
+  ritardo: ..."`; dettaglio `"... · aperto alle 11:29 · nessuno l'ha preso"` o `"... · intervento previsto entro le
+  15:29"`), oltre 3 una voce sola `"5 ticket urgenti o in ritardo"` (unità `ticket`, `collegamento {pagina: "tickets",
+  filtro: {segmento: "aperti", priorita: "urgente"}}`); scadenze scadute, una per una fino a 3, poi `"5 scadenze
+  scadute"` (unità `scadenze`, `collegamento {pagina: "documenti", filtro: {segmento: "scadenze"}}`), senza le disdette
+  (hanno la voce del contratto) e quelle già diventate ticket (hanno la voce del ticket), come in tutte le voci delle
+  scadenze; le proprie revisioni respinte (`"Schema unifilare cabina MT rev. 3 respinta"`, `"Motivo:
+  ... · Manuel Gasparotto"`, `collegamento {pagina: "documento", id}`); disco sotto `SPAZIO_MINIMO_MB` (`tipo: "spazio"`,
+  `"Il disco del NAS è quasi pieno: restano 1,6 GB"`, `"I documenti nuovi non si caricano finché non si libera spazio"`,
+  `collegamento {pagina: "amministrazione", filtro: {sezione: "spazio"}}`).
+- **questa settimana**: interventi di oggi, uno per uno; ticket risolti da chiudere (solo chi chiude; oltre 3 `"5
+  ticket risolti da chiudere"`, `collegamento {pagina: "tickets", filtro: {segmento: "aperti"}}`); documenti da approvare
+  (chi approva); per chi non approva le sue revisioni in attesa (`"Schema unifilare cabina MT rev. 3: aspetta
+  l'approvazione"`, `gravita: "info"`, `collegamento {pagina: "documento", id}`); scadenze nel preavviso che cadono entro
+  30 giorni (`"... scade fra 24 giorni"`, `"... scade oggi"`, `"... scade domani"`); contratti in scadenza (tacito: `"...:
+  la disdetta va mandata entro domenica 1 novembre"`; senza rinnovo: `"... scade il 31/10/2026: rinnovalo o lascialo
+  scadere"`).
+- **da pianificare**: ticket da prendere non urgenti e non programmati (`"2 ticket da prendere"`, dettaglio i primi tre,
+  `collegamento {pagina: "tickets", filtro: {segmento: "aperti", nonAssegnati: true}}`); programmati senza intervento con
+  `previstoIl` entro 30 giorni, uno per uno; scadenze fra 31 e 120 giorni (le prime 5, `"...: 12/01/2027"`); documenti da
+  classificare (con documenti 2); file troppo grandi per la copia fuori casa (`tipo: "copia"`, `"2 file sono solo sul NAS:
+  troppo grandi per la copia fuori casa"`, `"Oltre 25 MB"`); disco sotto `SPAZIO_AVVISO_MB` (`"Il disco del NAS si sta
+  riempiendo: restano 8,4 GB"`, `"Amministrazione › Spazio sul NAS"`).
+- **Il collaboratore** (vero, Marco): l'urgente da prendere, il suo intervento di oggi, `"Schema unifilare cabina MT rev.
+  3: aspetta l'approvazione"`; i suoi ticket e quelli da prendere; niente scadenze tra le voci (i numeri sì), niente
+  contratti, niente spazio, niente soldi.
+- `collegamento.pagina` nuove: `tickets` (filtro `segmento`, `priorita`, `nonAssegnati`), `ticket` (`id`), `contratto`
+  (`id`), `documenti` (filtro `segmento`: `archivio` | `approvare` | `scadenze`, e `daClassificare`), `documento` (`id`),
+  `scadenza` (`id`), `amministrazione` con `filtro.sezione: "spazio"`. `tipo` nuovi: `ticket`, `intervento`, `scadenza`,
+  `documento`, `contratto`, `spazio`, `copia`. Unità nuove: `ticket`, `documenti`, `scadenze`.
+- **Numerino giallo** del menu: Ticket e assistenza = `numeri.ticket.nonAssegnati` (per il collaboratore anche
+  `conteggi.miei` di `tickets`); Documenti = `numeri.documenti.daApprovare`, solo per chi approva
+  (`io.interfaccia.puoApprovareDocumenti`).
+- Di prima cambia: gli appuntamenti di oggi della fase 2 non contano gli interventi; `numeri.rapportini.daFatturare`
+  non conta i rapportini trattenuti da un ticket (§16.14).
+
+### 16.19 Permessi
+
+Coi valori iniziali dei ruoli (provati in `prove/permessi-fase5.test.js`, ogni ruolo su ogni azione nuova):
+- **Titolare**: tutto. Solo lui svuota il cestino.
+- **Amministrazione** (documenti 2, ticket 2, `costi` 2, amministrazione 1): tutto tranne categorie e testi dei modelli
+  (amministrazione 2) e il cestino; vede lo spazio, approva le revisioni, chiude i ticket, scrive i contratti.
+- **Collaboratore** (documenti 1, ticket 2, attivita 2, rapportini 2, `costi` 0):
+  - documenti in lettura (tranne `costi` e `riservati`: `/file/<id>` di un documento `costi` → 403), non carica, non
+    approva, `/carica?per=documento` no; con documenti 2 (se Andrea glielo dà) carica e cambia solo i documenti creati da
+    lui, e le sue revisioni nelle categorie con approvazione vanno *Da approvare*;
+  - ticket: vede i suoi, quelli non assegnati, quelli delle commesse dove è responsabile o tra le persone, e quelli con
+    un suo intervento o un suo rapportino (gli altri: `"Ticket 9 non trovato"`); crea (per sé o per nessuno), prende,
+    pianifica per sé, sospende, riprende, fotografa (`/carica?per=ticket` sì), scrive il rapportino, risolve, riapre i
+    suoi risolti, annulla i suoi; **non chiude** (`"Il ticket lo chiude l'ufficio: tu segnalo risolto"`), non assegna ad
+    altri, non riapre i chiusi;
+  - contratti in lettura senza soldi, non li scrive; statistiche dei suoi ticket senza costo e fatturato;
+  - scadenze: le legge; scrive quelle dei contratti (ticket 2, come dice fase5.md §10.2: spostare o segnare fatta una
+    visita) ma non quelle dei documenti; niente spazio, niente cestino.
+- **Lettura** (tutti 1, `costi` 1, amministrazione 0): vede ed esporta tutto (anche canone e `rende`), nessuna scrittura
+  (`puoScrivere` sempre `false`, `giallo` sempre `""`), `/carica` no, niente spazio.
+- Fuori dai ruoli: `/condiviso/<token>` revocato o scaduto → 404 "Questo link non vale più"; il token non compare mai nel
+  registro.
+
+### 16.20 Esportazioni
+
+`esporta {cosa: "documenti"|"scadenze"|"ticket"|"contratti", ...i filtri dell'elenco}` → il CSV della §12.13 (vero:
+`"nome": "wisper-ticket-2026-10-22.csv", "righe": 9`). Serve la lettura del modulo (scadenze: documenti o ticket).
+Colonne:
+- **documenti** (tutte le pagine, come `archivio: true`): Titolo, Categoria, Cliente, Commessa, Impianto, Ticket, Origine
+  (File, Collegamento, Mandato), Tipo di collegamento, Indirizzo (solo collegamenti), Revisione valida, Stato,
+  Riferimento, Data del documento, Scadenza, Caricato da, Modificato;
+- **scadenze** (di base tutte, ogni stato): Data, Titolo, Tipo, Cliente, Impianto, Ogni (mesi), Stato, Fatta il,
+  Documento, Ticket;
+- **ticket** (di base segmento `tutti`): Numero, Aperto il, Cliente, Impianto, Titolo, Tipo, Da dove, Priorità, Stato,
+  Responsabile, Contratto, Commessa, Preso il, Primo intervento il, Risolto il, Chiuso il, Ore, Km, Spese, Come si
+  fattura, Importo (solo con `costi`), Fatturato il. Vera: `TK/2026/0010;12/10/2026 08:05;Rossi Impianti Srl;Quadro
+  generale capannone;Presa del quadro bruciata;Guasto;Telefono;Alta;Chiuso;Manuel Gasparotto;;;12/10/2026 08:05;13/10/2026
+  16:30;13/10/2026 17:05;14/10/2026 09:00;2;48;0;Una riga per l'intervento;0;22/10/2026` (Importo = quello che resta da
+  fatturare: 0 per un ticket già fatturato, §16.23);
+- **contratti**: Numero, Cliente, Titolo, Dal, Al, Rinnovo (Tacito, No), Disdetta entro, Stato, Canone (solo con
+  `costi`), Come si fattura il canone (Annuale, Semestrale, Trimestrale, Mensile, Nessuna), Copre (Solo visite, Visite e
+  guasti), Impianti, Ticket nell'anno, Commessa.
+
+L'errore di `cosa` ora finisce con `"..., documenti, scadenze, ticket o contratti"`.
+
+### 16.21 Conti e casi condivisi
+
+In `server/src/conti.js` e `server/src/documenti.js`, coi casi in `server/prove/` (telefono e computer li leggono dal loro
+posto e devono ritrovare ogni risultato, `deepEqual` sui campi di `atteso`):
+- `prioritaDa(impatto, urgenza)` (`MATRICE_PRIORITA`), casi in **`casi-ticket.json`**: `priorita` (le 9 caselle più
+  "senza risposte" = normale), `cambia` (la priorità scritta a mano: `prioritaAMano: true`, le risposte restano),
+  `tempi` (`entroPresa`/`entroIntervento` da `apertoIl` e priorità con la tabella dello studio, in ore di calendario, e il
+  programmato).
+- `tipoCollegamento(url)` → `{url, tipo, cartella, pillola}`, casi in **`casi-collegamenti.json`**: 18 indirizzi
+  riconosciuti (OneDrive personale `*-my.sharepoint.com`, `1drv.ms`, `onedrive.live.com`; SharePoint
+  `*.sharepoint.com`; Google Drive `drive.google.com`/`docs.google.com`; percorsi `\\server\...`, `X:\...`,
+  `file:///...`; siti `https://`) e 6 rifiutati (`http://`, vuoto, testo, `ftp://`...) con la `frase`. `cartella` è una
+  proposta (OneDrive e SharePoint `/:f:/`, Drive `/folders/`, un percorso senza estensione).
+- `righeTicket({ticket, cliente, rapportini, spese, ore})` → `[{gruppo, righe, sorgenti}]`: il raggruppamento **E** di
+  **`casi-fattura.json`** (TK/2026/0012, Mario Bianchi: una riga da 126,74, 3 sorgenti), provato riga per riga con A-D.
+- Solo del server (prove in `ticket.test.js`, `ticket-fatture.test.js`, `contratti.test.js`): `rateCanone(dal, al,
+  canone, fatturazione)` → `[{data, importo, descrizione}]` ("Canone 2026", "Canone 2025-2026" per un periodo a
+  cavallo, "Canone 1° semestre 2027", "Canone 2° trimestre 2027", "Canone di marzo 2027"; l'ultima rata prende il
+  resto); `rigaCanone(scadenza, contratto, commessa)`; `piuMesi(iso, n)` (31 gennaio + 1 mese = 28 febbraio);
+  `costoTicket({rapportini, ore, spese, costoOrarioOggi, euroKmOggi})` → `{lavoro, auto, ore, spese, totale}`.
+- In `src/documenti.js` anche `pulisciRicerca`, `riconosciTipo`, `tipoDaSalvare`, `SEGNAPOSTI`, `riempi`.
+
+### 16.22 Note per chi legge il database
+
+Migrazione `005-documenti-ticket.sql` + `005-documenti-ticket.js` (schema 5, copia `wisper.db.prima-5` prima, una
+transazione). Nessun dato di prima cambia: `prove/migrazione-005.test.js` prende il database d'esempio della fase 4
+scritto dal server 0.7.0 (`prove/migrazione-005/fase4.sql`, rifatto da `genera-prima.js`), lo migra e ritrova identici
+rapportini, PDF (impronte in `pdf.js`), conti, fatture, Da fatturare e file.
+- **Tabelle nuove**: `documento_categorie`, `documenti`, `documento_versioni`, `documento_condivisioni` (`token_hash` =
+  SHA-256 del token, unico), `scadenze` (con `motivo` in più dell'accordo, per l'annullamento), `contratti`,
+  `contratto_impianti` (chiave `contratto_id, sede_id`), `ticket`, `ticket_eventi` (la cronologia del ticket: due
+  trigger impediscono di cambiarla o cancellarla; non va nel registro), `modelli_testi`.
+- **Colonne nuove**: `sedi.categoria`, `sede_padre_id`, `matricola`, `potenza`, `tensione`, `messa_in_servizio`,
+  `ambiente`, `referente_id`, `dati_tecnici`; `ticket_id` su `rapportini`, `ore` e `spese` (con gli indici);
+  `contratto_id` su `scadenze_pagamento` e `commesse`.
+- **Tabelle rifatte** (per cambiare un CHECK, coi contatori AUTOINCREMENT rimessi come prima): `attivita` (tipo
+  `intervento`, colonna `ticket_id`; la checklist resta), `file` (tipi `ticket`, `caricato`, `inviato`; colonne
+  `documento_id`, `versione_id`, `ticket_id`, `fuori_il`, `fuori_no`, `caricato_da`, `svuotato`), `fattura_sorgenti`
+  (tipo `ticket`, **stesso indice unico** `fattura_sorgenti_una`).
+- **Indici che proteggono i dati**: `documenti_cartella_commessa` e `documenti_cartella_cliente` (una cartella
+  principale); `ticket.numero`, `contratti.numero`, `ticket.id_locale`, `documenti.id_locale` unici.
+- **Cosa fa la `.js`**: le 16 categorie e i 12 testi dei modelli; ogni file `documento` non nel cestino diventa un
+  documento in "Da classificare", rev. 0 approvata, **con lo stesso id del file** (gli indirizzi `/file/<id>` di prima
+  aprono ancora), registro `"migrazione 005: il documento della commessa entra nell'archivio"`; la `cartella` di ogni
+  commessa diventa un collegamento principale `"Cartella della commessa {id}"` (un id di Drive da solo diventa
+  `https://drive.google.com/drive/folders/<id>`; un valore che non è un indirizzo resta solo nella commessa, con la nota
+  nel registro); i file creati prima dell'ultima copia fuori casa riuscita prendono `fuori_il` (la copia nuova non
+  rimanda tutto).
+- **Il registro**: le tabelle nuove coi loro nomi (tranne `ticket_eventi`); note `"caricato con /carica"`, `"caricato e
+  mai legato: nel cestino dopo 24 ore"`, `"caricata la rev. 3"`, `"rev. 2 approvata"`, `"rev. 3 respinta: {motivo}"`,
+  `"rev. 3 di nuovo da approvare"`, `"collegamento cambiato"`, `"mandato per email a {email}"`, `"copia del PDF mandato a
+  {email}"`, `"link per {per chi} fino al {data}"`, `"link revocato"`, `"scadenza fatta: nasce la prossima del {data}"`,
+  `"nato dalla scadenza del {data}"`, `"legato al ticket TK/..."`, `"tolto dal ticket TK/..."`, `"chiuso: {modo}"`,
+  `"il ticket TK/... è annullato"` (sugli interventi annullati), `"contratto attivato"`, `"rinnovato"`, `"rinnovato da
+  solo"`, `"disdetto: {motivo}"`, `"disdetta mandata"`, `"contratto chiuso"`, `"tolta: il contratto ... è chiuso"`,
+  `"cestino svuotato: {n} file"`, `"troppo grande per la copia fuori casa: resta solo sul NAS"`. Mai nel registro: il
+  token dei link, il contenuto dei file. Il registro della copia fuori casa riuscita non ha una riga per file (l'esito sta
+  in `copie`).
+- **La cronologia del ticket** (`ticket_eventi.testo`): "Aperto da {chi} (telefono)", "Nato dalla scadenza del {data}
+  (contratto CA/...)", "Preso da {chi}", "Assegnato a {chi}", "Nessuno lo segue più", "Priorità: Alta", "In attesa:
+  {motivo}", "Ripreso", "Intervento pianificato per {giorno} alle {ora}", "Rapportino RAP/... scritto da {tecnico}",
+  "Rapportino RAP/... firmato da {firmatario}", "Rapportino RAP/... legato al ticket", "Rapportino RAP/... tolto dal
+  ticket", "Serve un altro intervento", "Risolto: {esito}", "Chiuso: {modo}", "Riaperto: {motivo}", "Annullato:
+  {motivo}", "Fatturato (...)", "Non più fatturato (...)".
+- **Pianificazione del server**: all'avvio e ogni notte rinnovi taciti e ticket delle scadenze (log `[contratti]`,
+  `[ticket]`); ogni minuto i file di `/carica` mai legati da più di 24 ore vanno nel cestino.
+
+**Correzioni del 22/10/2026, dopo le prove di computer e telefono.** L'elenco `ticket` porta anche `fatturatoIl`
+(come la pagina del ticket), così Chiusi sa dire "fatturato fuori da Wisper". Nella Dashboard un ticket compare una
+volta sola: se è già tra le urgenti (in ritardo, non preso), le sue voci in settimana e da pianificare (per esempio
+"Intervento di oggi") non si ripetono. Le ore del server (`2026-10-22T13:54:00`) sono **ora italiana** (Europe/Rome) e non portano il fuso:
+le app le leggono sempre come ora italiana, anche su un telefono con un altro fuso.
+
+### 16.23 Decisioni prese dove l'accordo non diceva (o non reggeva)
+
+- **`documenti` ha due risposte.** L'azione c'era già (Code.gs, fase 1: `{idCommessa}` → cartella e file della
+  commessa). Per non rompere le versioni vecchie, con solo `idCommessa` risponde come prima (letta dall'archivio); con
+  `archivio: true` o un filtro della fase 5 è l'elenco nuovo. Le app nuove mandano sempre `archivio: true`.
+- **Il campo `ticket` del rapportino resta il testo di sempre** (fase5.md §10.5 diceva "`ticket` (numero)"): è stampato
+  nel PDF firmato, e nei rapportini di prima c'è scritto di tutto. Trasformarlo in un numero avrebbe cambiato quello che
+  il cliente ha firmato. Il numero sta in `numeroTicket`, l'id in `idTicket`; il server scrive nel campo solo se è vuoto
+  e lo toglie (slegando) solo se è proprio il suo testo e il rapportino non è firmato.
+- **`idTicket` è sempre l'id interno** (anche nelle voci dello storico, dove l'accordo mostrava il numero) e `ticket` il
+  numero; ovunque si accetta anche il numero. Nella voce di Da fatturare `id` è il numero (come i rapportini), ed è il
+  `sorgente_id` di `fattura_sorgenti`.
+- **Finché il ticket non è chiuso le sue cose non vanno in Da fatturare**, qualunque modo si sceglierà poi: altrimenti un
+  rapportino del ticket si potrebbe fatturare da solo prima della chiusura, e poi di nuovo con la riga del ticket (l'indice
+  lo fermerebbe, ma con un errore difficile da capire). Il gruppo "una riga" mette sotto l'indice unico anche tutto quello
+  che ha dentro. Un ticket annullato non trattiene niente.
+- **"Con gli altri rapportini" su una commessa a corpo chiede conferma**: i rapportini di una commessa a corpo non vanno
+  in fattura (fase 4), e senza avviso sparirebbero dal conto senza che nessuno l'abbia deciso.
+- **`somma.importo` del ticket è quello che resta da fatturare** (0 per un ticket già fatturato o fatturato fuori),
+  anche nella colonna Importo dell'esportazione: è la stessa voce di Da fatturare, così i due numeri non si contraddicono.
+  Il fatturato vero sta in `statisticheTicket` (`fatturato`) e nel contratto (`rende`).
+- **Lo spazio**: 200 MB fissi per tutto il lavoro sul campo (foto e firme dei rapportini, scontrini, foto dei ticket,
+  allegati delle attività; l'accordo nominava solo i primi due), perché un tecnico dal cliente non deve restare bloccato
+  per un archivio che si riempie. La copia dei PDF mandati non ferma mai l'email.
+- **`/carica` più severo dell'accordo**: programmi, script e pagine web (anche SVG o HTML dichiarati come altro) non
+  passano mai, e un tipo che il browser eseguirebbe non si salva (diventa `application/octet-stream`); `/file` manda
+  `nosniff`. Un file con lo stesso SHA-256 passa lo stesso (`gia`): decide la persona. I file di `/carica` li lega solo
+  chi li ha caricati.
+- **Il link che scade dà la revisione valida quando è stato creato** e non segue le revisioni nuove (come dice
+  l'accordo): chi l'ha ricevuto scarica quello che gli è stato mandato. Il token sta nel database solo come SHA-256.
+- **Scadenze dei contratti e collaboratore**: l'accordo (§10.2) dice ticket 2, e il collaboratore ha ticket 2: può
+  spostare o segnare fatta una visita (pianificazione), ma non tocca contratto, canone o rate (ticket 2 **e** `costi`
+  2). Nella sua Dashboard le scadenze non hanno voci (sono dell'ufficio).
+- **Le visite si contano dalla data prevista, le verifiche DPR 462 dalla fatta**: una visita fatta in ritardo non sposta
+  il calendario del contratto; una verifica sì, perché la periodicità di legge parte dall'ultima verifica.
+- **`togliScadenza` vuole il motivo**, e una ripetuta continua (nasce la prossima) se non si dice "anche le prossime":
+  togliere per errore una verifica non deve far sparire tutte quelle dopo.
+- **Chiudere un contratto toglie le rate future non ancora in fattura** (le cancella, col registro) e annulla le scadenze
+  aperte, con conferma; le rate già in una bozza o fatturate restano. Le rate di un periodo nascono solo all'attivazione e
+  al rinnovo, col canone di quel momento (cambiare il canone non riscrive niente).
+- **La commessa del contratto**: "Assistenza {titolo}" senza raddoppiare "Assistenza", `budgetEuro` = canone, fine
+  prevista = `al` (allungata a ogni rinnovo).
+- **Tempi in ore di calendario** (come propone l'accordo; da confermare con Manuel): notti e domeniche contano.
+- **Le origini `whatsapp` e `portale`** sono già nel CHECK del database (fase 7) ma non si accettano; `scadenza` la usa
+  solo il server.
+- **Statistiche**: `totale` resta anche senza `costi` (è un riassunto di conte), senza `costo` e `fatturato` dentro.
+- **Categorie di sistema** (Mandati ai clienti, Da classificare, Documenti personali): si rinominano ma non si
+  disattivano; Wisper le trova per nome e `sistema`.
+- **`svuotaCestino` tiene la riga del file** (con `svuotato`): il registro e i documenti che lo citavano dicono che
+  c'era; ripristinarlo è rifiutato.
+- **La migrazione** tiene lo stesso id dei file dei documenti (gli indirizzi `/file/<id>` di prima aprono ancora) e
+  segna `fuori_il` ai file già copiati, perché la copia nuova "uno alla volta" non rimandasse tutto la prima notte.
+- **Dati di esempio**: Batokyo Srl (C004) e gli impianti 4-9; i contratti CA/2026/001, CA/2026/002 e CA/2025/004 attivi,
+  con le commesse 26ST004-26ST006 (il prossimo codice è 26ST007) e le rate segnate fatturate fuori da Wisper come nel
+  prototipo; i ticket partono da TK/2026/0009 come il prototipo (0015 e 0016 nascono dalle visite); i rapportini sono 15
+  (RAP/2026/0014 di TK/2026/0012, RAP/2026/0015 di TK/2026/0010, fatturato fuori); la rev. 3 dello schema è caricata da
+  Marco come nel prototipo (i dati di esempio gli danno documenti 2 per quel momento: col ruolo di base non potrebbe). Le
+  prove vecchie che contavano rapportini, impianti o il prossimo codice commessa sono state portate ai numeri nuovi.
+- **Non provato**: le app (telefono e computer) contro queste risposte; la seconda porta raggiunta da internet (Tailscale
+  Funnel, decisione di Andrea); la copia fuori casa col postino vero (provata col postino finto); `fs.statfsSync` sul disco
+  del NAS (provato su Windows: sul NAS va guardato il numero in Amministrazione › Spazio sul NAS); un caricamento vero da
+  50 MB su una rete lenta (provati 49 e 51 MB in locale, anche senza `Content-Length`). Periodicità DPR 462, tempi
+  d'intervento, categorie e approvazioni restano da confermare con Manuel (fase5.md §14).

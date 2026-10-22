@@ -268,7 +268,10 @@ module.exports = {
     return this.db.righe('SELECT * FROM numerazioni ORDER BY tipo').map(n => {
       const prossimo = n.tipo === 'commessa' ? this.prossimoCodiceCommessa(anno)
         : n.tipo === 'rapportino' ? this.prossimoNumeroRapportino(anno)
-          : n.tipo === 'preventivo' ? this.prossimoNumeroPreventivo(anno) : null;
+          : n.tipo === 'preventivo' ? this.prossimoNumeroPreventivo(anno)
+            // Fase 5
+            : n.tipo === 'ticket' ? this.prossimoNumeroTicket(anno)
+              : n.tipo === 'contratto' ? this.prossimoNumeroContratto(anno) : null;
       return {
         tipo: n.tipo, formato: n.formato, annuale: n.annuale === 1, ultimo: n.ultimo,
         prossimo: prossimo ? prossimo.codice : '',

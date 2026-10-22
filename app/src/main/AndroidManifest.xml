@@ -55,6 +55,16 @@
                 <data android:mimeType="application/x-zip-compressed" />
                 <data android:mimeType="application/octet-stream" />
             </intent-filter>
+            <!-- Fase 5 (fase5.md §3.1): il collegamento di OneDrive, SharePoint o Drive ("Copia
+                 collegamento", Condividi) e i PDF e le foto vanno in Documenti, Aggiungi un documento.
+                 Il file resta su OneDrive o Drive: Wisper tiene solo l'indirizzo. -->
+            <intent-filter android:label="Metti nei documenti di Wisper">
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+                <data android:mimeType="application/pdf" />
+                <data android:mimeType="image/*" />
+            </intent-filter>
             <intent-filter android:label="Importa in Wisper">
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />

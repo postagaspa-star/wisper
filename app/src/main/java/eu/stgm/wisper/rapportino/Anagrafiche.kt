@@ -168,6 +168,8 @@ data class Commessa(
      * non si manda, così salvare la commessa non la riporta "a ore" per sbaglio.
      */
     val modoFatturazione: String? = null,
+    /** Fase 5 (§16.2): il contratto di assistenza di cui è la commessa (pillola Assistenza). */
+    val idContratto: String = "",
 ) {
     /**
      * Solo le aperte si propongono nei rapportini nuovi. Le sospese e le chiuse
@@ -199,6 +201,7 @@ data class Commessa(
         .put("importoContratto", importoContratto ?: JSONObject.NULL)
         .put("archiviata", archiviata).put("modello", modello)
         .apply { if (modoFatturazione != null) put("modoFatturazione", modoFatturazione) }
+        .put("idContratto", idContratto)
 
     companion object {
         /** Gli stati che lo script accetta, in ordine. */
@@ -235,6 +238,7 @@ data class Commessa(
             archiviata = m.vero("archiviata"),
             modello = m.vero("modello"),
             modoFatturazione = m.testo("modoFatturazione").lowercase().takeIf { it in setOf("ore", "corpo", "misto") },
+            idContratto = m.testo("idContratto"),
         )
     }
 }

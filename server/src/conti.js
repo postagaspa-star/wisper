@@ -754,8 +754,175 @@ function ibanValido(v) {
   return resto === 1;
 }
 
+// ------------------------------------------------------------------ fase 5: ticket, contratti, scadenze
+
+/**
+ * La priorita' di un ticket dalle due domande (fase5.md §7.2): "L'impianto e'
+ * fermo?" (impatto: fermo | ridotto | nessuno) e "Per quando?" (urgenza:
+ * subito | presto | quando_si_puo). Senza risposte: normale. Casi in
+ * server/prove/casi-ticket.json (telefono e computer la rifanno uguale).
+ */
+const MATRICE_PRIORITA = {
+  fermo: { subito: 'urgente', presto: 'alta', quando_si_puo: 'normale' },
+  ridotto: { subito: 'alta', presto: 'normale', quando_si_puo: 'bassa' },
+  nessuno: { subito: 'normale', presto: 'bassa', quando_si_puo: 'bassa' },
+};
+function prioritaDa(impatto, urgenza) {
+  const riga = MATRICE_PRIORITA[testo(impatto)];
+  return (riga && riga[testo(urgenza)]) || 'normale';
+}
+
+/**
+ * "2026-01-31" + n mesi: lo stesso giorno, o l'ultimo del mese se quel giorno
+ * non c'e' (31 gennaio + 1 mese = 28 febbraio). Per le scadenze ripetute e le
+ * rate del canone.
+ */
+function piuMesi(iso, n) {
+  const [a, m, g] = String(iso).split('-').map(Number);
+  const totale = (m - 1) + Number(n);
+  const anno = a + Math.floor(totale / 12);
+  const mese = ((totale % 12) + 12) % 12;
+  const ultimo = new Date(anno, mese + 1, 0, 12).getDate();
+  return anno + '-' + due(mese + 1) + '-' + due(Math.min(g, ultimo));
+}
+
+/**
+ * La riga di fattura di un ticket chiuso "una riga per l'intervento" (fase5.md
+ * §7.6), col suo gruppo e le sue sorgenti (stesso indice unico della fase 4).
+ *
+ * @param x.ticket    {numero, titolo, impianto, risolto, idCommessa?, prezzoCorpo?}
+ * @param x.cliente   {pagaViaggio}
+ * @param x.rapportini [{id, oreLavoro, oreExtra, oreViaggio, pagaViaggio?, compensoOre, km, rimborsoKm, speseSenzaRighe?}] (non annullati)
+ * @param x.spese     [{id, idRapportino?, data, descrizione, importo, anticipazione, tributoCliente?}] (al cliente, del ticket e dei suoi rapportini)
+ * @param x.ore       [{id, ore, prezzo}] (fatturabili; prezzo null = senza prezzo: la riga non le conta)
+ * @return [{gruppo, righe: [{tipo, descrizione, quantita, unita, prezzo, importo, idCommessa, periodoDa, periodoA}], sorgenti: [{tipo, id, importo}]}]
+ *
+ * Modo lavoro: una riga, importo = compenso ore + rimborso km dei rapportini,
+ * piu' le spese al cliente non anticipate, piu' le ore registrate x prezzo.
+ * Modo corpo (prezzoCorpo scritto): una riga col prezzo, le sorgenti a zero.
+ * Le spese anticipate sono sempre righe a parte (N1), nello stesso gruppo.
+ */
+function righeTicket(x) {
+  const t = x.ticket || {};
+  const cliente = x.cliente || {};
+  const rapportini = x.rapportini || [];
+  const spese = (x.spese || []).slice().sort((a, b) => numero(a.id) - numero(b.id));
+  const ore = x.ore || [];
+  const corpo = scritto(t.prezzoCorpo);
+  const commessa = testo(t.idCommessa);
+  const nonAnticipate = spese.filter(s => !s.anticipazione);
+  const gruppo = 'ticket:' + testo(t.numero);
+  const sorgenti = [{ tipo: 'ticket', id: testo(t.numero), importo: corpo ? centesimi(numero(t.prezzoCorpo)) : 0 }];
+  for (const r of rapportini) sorgenti.push({ tipo: 'rapportino', id: r.id, importo: corpo ? 0 : importoRapportino(r) });
+  for (const s of spese) sorgenti.push({ tipo: 'spesa', id: String(s.id), importo: corpo && !s.anticipazione ? 0 : centesimi(numero(s.importo)) });
+  for (const o of ore) sorgenti.push({ tipo: 'ore', id: String(o.id), importo: corpo || !scritto(o.prezzo) ? 0 : centesimi(numero(o.ore) * numero(o.prezzo)) });
+
+  const testa = 'Intervento ' + testo(t.numero) + ' del ' + dataIt(t.risolto) + ': ' + testo(t.titolo) + (testo(t.impianto) ? ' - ' + testo(t.impianto) : '');
+  let riga;
+  if (corpo) {
+    const prezzo = centesimi(numero(t.prezzoCorpo));
+    riga = { tipo: 'compenso', descrizione: testa + ' (a corpo' + (commessa ? ', commessa ' + commessa : '') + ')', quantita: 1, unita: '', prezzo, importo: prezzo };
+  } else {
+    const oreRapportini = rapportini.reduce((tot, r) => tot + orePagate(r, cliente.pagaViaggio), 0);
+    const oreRegistrate = ore.filter(o => scritto(o.prezzo)).reduce((tot, o) => tot + numero(o.ore), 0);
+    const orePag = due2(oreRapportini + oreRegistrate);
+    const km = due2(rapportini.filter(r => numero(r.rimborsoKm) > 0).reduce((tot, r) => tot + numero(r.km), 0));
+    const spesePiu = centesimi(nonAnticipate.reduce((tot, s) => tot + numero(s.importo), 0) + rapportini.reduce((tot, r) => tot + numero(r.speseSenzaRighe), 0));
+    // L'importo e' la somma delle sorgenti della riga (gia' arrotondate), senza le anticipazioni che hanno righe loro.
+    const anticipate = new Set(spese.filter(z => z.anticipazione).map(z => String(z.id)));
+    const importo = centesimi(sorgenti.filter(s => !(s.tipo === 'spesa' && anticipate.has(s.id))).reduce((tot, s) => tot + s.importo, 0));
+    const parti = [];
+    if (orePag > 0) parti.push(numeroIt(orePag) + (orePag === 1 ? ' ora' : ' ore'));
+    if (km > 0) parti.push(numeroIt(km) + ' km');
+    if (spesePiu > 0) parti.push('materiale e spese ' + euroIt(spesePiu) + ' €');
+    if (commessa) parti.push('commessa ' + commessa);
+    riga = { tipo: 'compenso', descrizione: testa + (parti.length ? ' (' + parti.join(', ') + ')' : ''), quantita: 1, unita: '', prezzo: importo, importo };
+  }
+  const righe = [Object.assign(riga, { idCommessa: commessa, periodoDa: testo(t.risolto), periodoA: testo(t.risolto) })];
+  for (const s of spese.filter(z => z.anticipazione)) {
+    righe.push({
+      tipo: 'anticipazione', descrizione: 'Spesa anticipata per conto del cliente: ' + (testo(s.descrizione) || 'spesa') + ' del ' + dataIt(s.data),
+      quantita: 1, unita: '', prezzo: centesimi(numero(s.importo)), importo: centesimi(numero(s.importo)), tributoCliente: !!s.tributoCliente,
+      idCommessa: commessa, periodoDa: '', periodoA: '',
+    });
+  }
+  return [{ gruppo, righe, sorgenti }];
+}
+
+/**
+ * La riga di una rata del canone (fase5.md §8.3): "Canone 1° semestre 2027:
+ * Manutenzione cabina MT Acme (contratto CA/2026/002, commessa 26ST005)".
+ */
+function rigaCanone(s, contratto, commessa) {
+  const importo = centesimi(numero(s.importo));
+  return {
+    tipo: 'compenso', descrizione: testo(s.descrizione) + ': ' + testo(contratto.titolo) + ' (contratto ' + testo(contratto.numero) +
+      (commessa && testo(commessa.id) ? ', commessa ' + testo(commessa.id) : '') + ')',
+    quantita: 1, unita: '', prezzo: importo, importo, idCommessa: testo(commessa && commessa.id), periodoDa: '', periodoA: '',
+  };
+}
+
+/**
+ * Le rate del canone di un periodo (fase5.md §8.3): rate anticipate, il primo
+ * giorno di ogni parte del periodo, l'importo diviso al centesimo (l'ultima
+ * prende il resto). Torna [{data, importo, descrizione}].
+ */
+function rateCanone(dal, al, canone, fatturazione) {
+  const n = { annuale: 1, semestrale: 2, trimestrale: 4, mensile: 12 }[fatturazione];
+  if (!n || !scritto(canone)) return [];
+  const mesi = 12 / n;
+  const base = Math.floor(numero(canone) * 100 / n) / 100;
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    const data = piuMesi(dal, i * mesi);
+    if (al && data > al) break;
+    const anno = data.slice(0, 4);
+    let descrizione;
+    if (n === 1) descrizione = 'Canone ' + (al && al.slice(0, 4) !== dal.slice(0, 4) ? dal.slice(0, 4) + '-' + al.slice(0, 4) : anno);
+    else if (n === 2) descrizione = 'Canone ' + (i + 1) + '° semestre ' + anno;
+    else if (n === 4) descrizione = 'Canone ' + (i + 1) + '° trimestre ' + anno;
+    else descrizione = 'Canone di ' + MESI[Number(data.slice(5, 7)) - 1] + ' ' + anno;
+    out.push({ data, importo: base, descrizione });
+  }
+  if (out.length) out[out.length - 1].importo = centesimi(numero(canone) - base * (out.length - 1));
+  return out;
+}
+
+/**
+ * Il costo di un ticket (fase 3: ore x costo orario + km + spese), per le
+ * statistiche e per dire se un contratto rende. rapportini e ore come nelle
+ * risposte (costoOrario congelato nella riga), spese le righe del ticket e dei
+ * suoi rapportini (le "Mia" no).
+ */
+function costoTicket({ rapportini, ore, spese, costoOrarioOggi, euroKmOggi }) {
+  let lavoro = 0;
+  let auto = 0;
+  for (const r of rapportini || []) {
+    const co = scritto(r.costoOrario) ? numero(r.costoOrario) : (costoOrarioOggi === undefined ? null : costoOrarioOggi);
+    if (co !== null) lavoro += (numero(r.oreLavoro) + numero(r.oreExtra)) * co;
+    auto += numero(r.km) * (numero(r.euroKm) || numero(euroKmOggi));
+  }
+  let oreCosto = 0;
+  for (const o of ore || []) {
+    if (!contaNeiConti(o)) continue;
+    const co = scritto(o.costoOrario) ? numero(o.costoOrario) : (costoOrarioOggi === undefined ? null : costoOrarioOggi);
+    if (co !== null) oreCosto += numero(o.ore) * co;
+  }
+  let speseTot = 0;
+  for (const s of spese || []) {
+    if (s.tolta || s.destinazione === 'personale' || s.stato === 'respinta' || s.stato === 'bozza') continue;
+    speseTot += numero(s.importo);
+  }
+  return {
+    lavoro: centesimi(lavoro), auto: centesimi(auto), ore: centesimi(oreCosto), spese: centesimi(speseTot),
+    totale: centesimi(lavoro + auto + oreCosto + speseTot),
+  };
+}
+
 module.exports = {
   ELETTRODINAMICA, STATI, STATI_BLOCCATI, regoleDi, calcola, prossimoCodice, RE_CODICE_COMMESSA,
+  // fase 5
+  MATRICE_PRIORITA, prioritaDa, piuMesi, righeTicket, rigaCanone, rateCanone, costoTicket,
   tariffaProposta, prezzoOrarioDi, costoOrarioDi, budgetDi, partitaIvaItalianaValida,
   importoVoce, vociCheContano, gruppoAlternativa, contiPreventivo,
   minutiDa, oraDaMinuti, oreDaOrari, rimborsoTrasferta, oreDelRapportino, contaNeiConti, rimborsiDovuti, costoCommessa,

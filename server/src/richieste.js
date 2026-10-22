@@ -41,10 +41,12 @@ const AZIONI = {
   anagrafiche: { fn: (w, d) => w.rispostaAnagrafiche(d) },
   rapportini: legge('rapportini', 'vedere i rapportini', (w, d) => ({
     ok: true,
-    rapportini: w.leggiRapportini(d.da, d.a, siVuole(d.tutti), { idCliente: d.idCliente, idCommessa: d.idCommessa, statoApprovazione: d.statoApprovazione }),
+    rapportini: w.leggiRapportini(d.da, d.a, siVuole(d.tutti), { idCliente: d.idCliente, idCommessa: d.idCommessa, statoApprovazione: d.statoApprovazione, idTicket: d.idTicket }),
   })),
   file: { fn: (w, d) => ({ ok: true, file: w.leggiFile(d.id) }) },
-  documenti: legge('documenti', 'vedere i documenti', (w, d) => w.documentiCommessa(d.idCommessa)),
+  // Il nome di Code.gs: con solo idCommessa risponde come prima (cartella e file della commessa, per le versioni vecchie);
+  // con archivio: true (o un filtro della fase 5) e' l'elenco dell'archivio (fase5.md §10.1).
+  documenti: legge('documenti', 'vedere i documenti', (w, d) => (w.elencoNuovo(d) ? w.leggiDocumenti(d) : w.documentiCommessa(d.idCommessa))),
   salvaRapportino: scrive('rapportini', 'scrivere i rapportini', (w, d) => ({ ok: true, rapportino: w.salvaRapportino(d.rapportino || {}) })),
   caricaFile: {
     scrive: true,
@@ -52,6 +54,7 @@ const AZIONI = {
     controllo: d => (d.tipo === 'documento' ? ['documenti', 2, 'caricare documenti']
       : d.tipo === 'firmaTecnico' ? ['amministrazione', 2, 'cambiare la firma del tecnico']
         : d.tipo === 'attivita' ? ['attivita', 2, 'caricare allegati sulle attività']
+          : d.tipo === 'ticket' ? ['ticket', 2, 'caricare le foto dei ticket']
           : d.tipo === 'spesa' && testo(d.idSpesa) ? ['spese', 2, 'caricare le foto delle spese']
             : ['rapportini', 2, 'caricare foto e firme dei rapportini']),
     fn: (w, d) => ({ ok: true, file: w.caricaFile(d) }),
@@ -209,6 +212,61 @@ const AZIONI = {
   confermaImpegno: conCosti(scrive('banche', 'scrivere tributi e scadenze', (w, d) => w.confermaImpegno(d))),
   togliImpegno: conCosti(scrive('banche', 'togliere tributi e scadenze', (w, d) => w.togliImpegno(d))),
   situazione: conCosti(legge('banche', 'vedere banche e scadenze', (w, d) => w.situazione(d))),
+
+  // --- documenti (fase 5): archivio, revisioni, collegamenti, modelli, spazio
+  documento: legge('documenti', 'vedere i documenti', (w, d) => ({ ok: true, documento: w.documentoCompleto(w.rigaDocumento(d.id)) })),
+  salvaDocumento: scrive('documenti', 'scrivere i documenti', (w, d) => w.salvaDocumento(d)),
+  caricaVersione: scrive('documenti', 'caricare le revisioni dei documenti', (w, d) => w.caricaVersione(d)),
+  // Chi approva lo decide il server (titolare e amministrazione con documenti 2).
+  approvaVersione: { scrive: true, modulo: 'documenti', livello: 1, cosa: 'vedere i documenti', fn: (w, d) => w.decidiVersione(d, 'approva') },
+  respingiVersione: { scrive: true, modulo: 'documenti', livello: 1, cosa: 'vedere i documenti', fn: (w, d) => w.decidiVersione(d, 'respingi') },
+  annullaDecisione: { scrive: true, modulo: 'documenti', livello: 1, cosa: 'vedere i documenti', fn: (w, d) => w.decidiVersione(d, 'annulla') },
+  togliVersione: scrive('documenti', 'togliere le revisioni dei documenti', (w, d) => w.togliVersione(d)),
+  archiviaDocumento: scrive('documenti', 'archiviare i documenti', (w, d) => w.archiviaDocumento(d)),
+  inviaDocumento: { modulo: 'documenti', livello: 2, cosa: 'mandare i documenti', asincrona: true, soloPost: true, fn: (w, d) => w.inviaDocumento(d) },
+  condividiDocumento: scrive('documenti', 'condividere i documenti', (w, d) => w.condividiDocumento(d)),
+  revocaCondivisione: scrive('documenti', 'revocare i link dei documenti', (w, d) => w.revocaCondivisione(d)),
+  categorieDocumenti: legge('documenti', 'vedere i documenti', w => ({ ok: true, categorie: w.leggiCategorie() })),
+  salvaCategoria: scrive('amministrazione', 'cambiare le categorie dei documenti', (w, d) => w.salvaCategoria(d)),
+  modelli: legge('documenti', 'vedere i modelli', w => w.leggiModelli()),
+  salvaTestoModello: scrive('amministrazione', 'cambiare i testi dei modelli', (w, d) => w.salvaTestoModello(d)),
+  componiModello: legge('documenti', 'vedere i modelli', (w, d) => w.componiModello(d)),
+  spazio: legge('amministrazione', 'vedere lo spazio sul NAS', w => w.leggiSpazio()),
+  svuotaCestino: scrive('amministrazione', 'svuotare il cestino', (w, d) => w.svuotaCestino(d)),
+
+  // --- scadenze (fase 5): documenti 1 o ticket 1 per leggere; per scrivere lo decide la scadenza (documenti 2, o ticket 2 per i contratti)
+  scadenze: { vede: ['documenti', 'ticket'], cosa: 'vedere le scadenze', fn: (w, d) => w.leggiScadenze(d) },
+  salvaScadenza: { scrive: true, vede: ['documenti', 'ticket'], cosa: 'scrivere le scadenze', fn: (w, d) => w.salvaScadenza(d) },
+  faiScadenza: { scrive: true, vede: ['documenti', 'ticket'], cosa: 'scrivere le scadenze', fn: (w, d) => w.faiScadenza(d) },
+  togliScadenza: { scrive: true, vede: ['documenti', 'ticket'], cosa: 'scrivere le scadenze', fn: (w, d) => w.togliScadenza(d) },
+
+  // --- ticket e assistenza (fase 5)
+  tickets: legge('ticket', 'vedere i ticket', (w, d) => w.leggiTicket(d)),
+  ticket: legge('ticket', 'vedere i ticket', (w, d) => ({ ok: true, ticket: w.ticketCompleto(w.rigaTicket(d.id)) })),
+  salvaTicket: scrive('ticket', 'scrivere i ticket', (w, d) => w.salvaTicket(d)),
+  prendiTicket: scrive('ticket', 'prendere i ticket', (w, d) => w.prendiTicket(d)),
+  assegnaTicket: scrive('ticket', 'assegnare i ticket', (w, d) => w.assegnaTicket(d)),
+  sospendiTicket: scrive('ticket', 'cambiare i ticket', (w, d) => w.sospendiTicket(d)),
+  riprendiTicket: scrive('ticket', 'cambiare i ticket', (w, d) => w.riprendiTicket(d)),
+  risolviTicket: scrive('ticket', 'cambiare i ticket', (w, d) => w.risolviTicket(d)),
+  altroIntervento: scrive('ticket', 'cambiare i ticket', (w, d) => w.altroIntervento(d)),
+  riapriTicket: scrive('ticket', 'riaprire i ticket', (w, d) => w.riapriTicket(d)),
+  annullaTicket: scrive('ticket', 'annullare i ticket', (w, d) => w.annullaTicket(d)),
+  pianificaTicket: scrive('ticket', 'pianificare i ticket', (w, d) => w.pianificaTicket(d)),
+  chiudiTicket: scrive('ticket', 'chiudere i ticket', (w, d) => w.chiudiTicket(d)),
+  legaRapportino: scrive('rapportini', 'legare i rapportini ai ticket', (w, d) => w.legaRapportino(d)),
+  togliFotoTicket: scrive('ticket', 'togliere le foto dei ticket', (w, d) => w.togliFotoTicket(d)),
+  storicoImpianto: { vede: ['clienti', 'ticket'], cosa: 'vedere gli impianti', fn: (w, d) => w.storicoImpianto(d) },
+  statisticheTicket: legge('ticket', 'vedere le statistiche dei ticket', (w, d) => w.statisticheTicket(d)),
+
+  // --- contratti di assistenza (fase 5): leggere con ticket 1 (senza canone chi non ha i soldi); scrivere con ticket 2 e costi 2
+  contratti: legge('ticket', 'vedere i contratti', (w, d) => w.leggiContratti(d)),
+  contratto: legge('ticket', 'vedere i contratti', (w, d) => ({ ok: true, contratto: w.contrattoDaRiga(w.rigaContratto(d.id), true) })),
+  salvaContratto: scrive('ticket', 'scrivere i contratti di assistenza', (w, d) => w.salvaContratto(d)),
+  attivaContratto: scrive('ticket', 'scrivere i contratti di assistenza', (w, d) => w.attivaContratto(d)),
+  rinnovaContratto: scrive('ticket', 'scrivere i contratti di assistenza', (w, d) => w.rinnovaContratto(d)),
+  disdiciContratto: scrive('ticket', 'scrivere i contratti di assistenza', (w, d) => w.disdiciContratto(d)),
+  chiudiContratto: scrive('ticket', 'scrivere i contratti di assistenza', (w, d) => w.chiudiContratto(d)),
 };
 
 /**
@@ -289,6 +347,8 @@ async function esegui(w, d, opzioni) {
     try {
       const serve = voce.modulo ? [voce.modulo, voce.livello, voce.cosa] : voce.controllo ? voce.controllo(d) : null;
       if (serve && permessi && (permessi[serve[0]] || 0) < serve[1]) throw senzaPermesso(serve[2]);
+      // Fase 5: basta uno di questi moduli in lettura (scadenze: documenti o ticket; storico dell'impianto: clienti o ticket).
+      if (voce.vede && permessi && !voce.vede.some(m => (permessi[m] || 0) >= 1)) throw senzaPermesso(voce.cosa);
       if (voce.costi && permessi && !permessi.costi) throw new Rifiuto(SENZA_COSTI[voce.modulo] || SENZA_COSTI.fatturazione, { permesso: false });
       if (voce.asincrona) risposta = await voce.fn(w, d);
       else if (voce.scrive) risposta = w.db.transazione(() => voce.fn(w, d));

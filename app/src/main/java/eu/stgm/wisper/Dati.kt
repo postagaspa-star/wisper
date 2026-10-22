@@ -479,6 +479,15 @@ interface Dati {
      * movimenti, scadenziario, tributi, situazione. Tutto in diretta (con la rete).
      */
     val fase4: eu.stgm.wisper.rapportino.ServizioFase4
+
+    // ------------------------------------------------------------- fase 5: documenti, ticket e assistenza (docs/gestionale/fase5.md)
+
+    /**
+     * Ticket, contratti, storico degli impianti, documenti, scadenze, modelli. In
+     * diretta, tranne quello che si fa anche senza rete (nuovo ticket, Prendo io, foto,
+     * Il lavoro è finito, scadenza fatta), che va nella coda come i rapportini.
+     */
+    val fase5: eu.stgm.wisper.rapportino.ServizioFase5
 }
 
 /**

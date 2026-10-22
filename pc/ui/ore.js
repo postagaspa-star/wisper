@@ -490,6 +490,8 @@
         }
         if (esistente) x.id = esistente.id;
         else if (!soloSuoi() && m.idUtente && String(m.idUtente) !== String(io())) x.idUtente = m.idUtente;
+        // Fase 5: le ore di un ticket (assistenza al telefono, preparazione) nascono col ticket.
+        if (!esistente && b.idTicket) x.idTicket = b.idTicket;
         if (bozza) x.bozza = true;
         return x;
       };
@@ -515,8 +517,8 @@
         M.approvare = null;
         const st = ris.riga ? ris.riga.stato : '';
         avviso(st === 'bozza' ? 'Ore salvate in bozza' : st === 'da_approvare' ? 'Ore salvate: vanno in approvazione' : 'Ore salvate', false, null,
-          !esistente && ris.riga ? { testo: 'Annulla', fn: async () => { if (await lavora('Tolgo le ore', () => Rete.post('/server/togliOre', { id: ris.riga.id }))) { M.ore = null; W.ridisegna(); } } } : null);
-        W.ridisegna();
+          !esistente && ris.riga ? { testo: 'Annulla', fn: async () => { if (await lavora('Tolgo le ore', () => Rete.post('/server/togliOre', { id: ris.riga.id }))) { M.ore = null; if (b.dopo) b.dopo(); else W.ridisegna(); } } } : null);
+        if (b.dopo) b.dopo(); else W.ridisegna();
         W.caricaDashboard();
         W.Visita.azione('salva-ore');
       };

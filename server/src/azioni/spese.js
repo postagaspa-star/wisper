@@ -122,6 +122,8 @@ module.exports = {
       approvataDaNome: r.approvata_da ? a.utenti[r.approvata_da] || '' : '', approvataIl: dataOraIso(r.approvata_il),
       motivoRifiuto: r.motivo, rimborsataIl: dataOraIso(r.rimborsata_il), fatturataIl: dataOraIso(r.fatturata_il),
       dalRapportino: r.dal_rapportino === 1, foto: a.foto[r.id] || [], tolta: dataOraIso(r.tolta),
+      // Fase 5
+      idTicket: r.ticket_id === null || r.ticket_id === undefined ? null : r.ticket_id, ticket: r.ticket_id ? (a.ticket || {})[r.ticket_id] || '' : '',
       puoScrivere: this.livello('spese') >= 2 && this.vedeDi(r.utente_id) && (!b.bloccata || !!b.soloCampi),
       bloccata: b.bloccata, soloCampi: b.soloCampi,
       creato: dataOraIso(r.creato), modificato: dataOraIso(r.modificato),
@@ -179,6 +181,7 @@ module.exports = {
       par.push(dest);
     }
     if (testo(d.categoria)) { cond.push('x.categoria = ?'); par.push(testo(d.categoria)); }
+    if (testo(d.ticket || d.idTicket)) { cond.push('x.ticket_id = ?'); par.push(this.idTicketDa(d.ticket || d.idTicket)); }
     const righe = this.db.righe('SELECT x.* FROM spese x WHERE ' + cond.join(' AND ') + ' ORDER BY x.data DESC, x.id DESC', ...par);
     return { righe, da: p.da || '', a: p.a || '' };
   },
@@ -258,18 +261,31 @@ module.exports = {
     }
     if (utente === null && !rap) throw new Rifiuto('Di chi è questa spesa? Manca la persona');
 
+    // Fase 5: il ticket della spesa (quelle di un rapportino hanno il ticket del rapportino).
+    let tk = null;
+    if (rap) tk = rap.ticket_id ? this.db.riga('SELECT * FROM ticket WHERE id = ?', rap.ticket_id) : null;
+    else if (x.idTicket !== undefined) tk = testo(x.idTicket) ? this.rigaTicket(x.idTicket) : null;
+    else if (prima && prima.ticket_id) tk = this.db.riga('SELECT * FROM ticket WHERE id = ?', prima.ticket_id);
+    if (tk && !rap && (!prima || prima.ticket_id !== tk.id)) {
+      if (['chiuso', 'annullato'].indexOf(tk.stato) >= 0) throw new Rifiuto('Il ticket ' + tk.numero + ' è ' + (tk.stato === 'chiuso' ? 'chiuso: riaprilo per aggiungere spese' : 'annullato'));
+      this.controllaTicketLibero(tk, false);
+    }
+    if (prima && prima.ticket_id && !rap && (!tk || tk.id !== prima.ticket_id)) {
+      const vecchio = this.db.riga('SELECT * FROM ticket WHERE id = ?', prima.ticket_id);
+      if (vecchio) this.controllaTicketLibero(vecchio, false);
+    }
     let idCommessa;
     if (rap) idCommessa = testo(rap.id_commessa);
     else if (x.idCommessa !== undefined) idCommessa = testo(x.idCommessa);
     else if (prima) idCommessa = prima.commessa_id;
-    else idCommessa = tr ? tr.commessa_id : '';
+    else idCommessa = tk ? tk.commessa_id : tr ? tr.commessa_id : '';
     const commessa = rap ? (idCommessa ? this.commessa(idCommessa) : null) : this.commessaPerCodice(idCommessa);
     let idCliente;
     if (rap) idCliente = testo(rap.id_cliente);
     else if (commessa) idCliente = commessa.idCliente;
     else if (x.idCliente !== undefined) idCliente = testo(x.idCliente);
     else if (prima) idCliente = prima.cliente_id;
-    else idCliente = tr ? tr.cliente_id : '';
+    else idCliente = tk ? tk.cliente_id : tr ? tr.cliente_id : '';
     if (idCliente && !rap && !this.db.riga('SELECT id FROM soggetti WHERE id = ?', idCliente)) throw new Rifiuto('Cliente ' + idCliente + ' non trovato');
 
     let destinazione = x.destinazione !== undefined ? testo(x.destinazione).toLowerCase() : prima ? prima.destinazione : (rap || commessa || idCliente ? 'cliente' : 'studio');
@@ -293,11 +309,11 @@ module.exports = {
     const v = {
       utente_id: utente, data, importo, categoria, descrizione, commessa_id: commessa ? commessa.id : idCommessa, cliente_id: idCliente,
       rapportino_id: rap ? rap.id : null, trasferta_id: tr ? tr.id : null, destinazione, anticipazione: anticipazione ? 1 : 0,
-      pagata_da_me: pagataDaMe ? 1 : 0,
+      pagata_da_me: pagataDaMe ? 1 : 0, ticket_id: tk ? tk.id : null,
     };
     if (prima && blocco.soloCampi) {
       // Rapportino gia' firmato: importo, destinazione, rapportino e il resto non si toccano.
-      const permessi = { categoria: 1, descrizione: 1, pagata_da_me: 1 };
+      const permessi = { categoria: 1, descrizione: 1, pagata_da_me: 1, ticket_id: 1 };
       const cambia = Object.keys(v).filter(k => !permessi[k] && diverso(prima[k], v[k]));
       if (cambia.length) throw new Rifiuto(blocco.bloccata);
     }
@@ -362,6 +378,10 @@ module.exports = {
     // Fase 4: una spesa in una bozza o in una fattura non si toglie (la frase dice dove sta).
     const ferma = this.fraseSorgenteFerma('spesa', r.id);
     if (ferma) throw new Rifiuto(ferma);
+    if (r.ticket_id && !r.rapportino_id) {
+      const t = this.db.riga('SELECT * FROM ticket WHERE id = ?', r.ticket_id);
+      if (t) this.controllaTicketLibero(t, false);
+    }
     const b = this.speseBloccate(Object.assign({}, r, { tolta: null }));
     if (b.bloccata) throw new Rifiuto(b.soloCampi ? 'Il rapportino ' + r.rapportino_id + ' è già firmato: per togliere la spesa riportalo in bozza' : b.bloccata);
     this.aggiorna('spese', r.id, { tolta: annulla ? null : adesso(), modificato: adesso() });
@@ -389,6 +409,7 @@ module.exports = {
     const gia = idClient
       ? this.db.riga("SELECT * FROM file WHERE tipo = 'spesa' AND spesa_id = ? AND id_client = ? AND cestinato IS NULL", s.id, idClient) : null;
     if (gia) return { id: gia.id, url: urlFile(gia.id), nome: gia.nome };
+    this.controllaSpazio('lavoro');
     const f = this.salvaFile({
       dati, nome: testo(d.nome) || ('spesa ' + s.id + ' ' + (idClient || Date.now()) + estensione), mime, tipo: 'spesa',
       rapportinoId: s.rapportino_id && s.destinazione === 'cliente' ? s.rapportino_id : null, idClient, spesaId: s.id,
@@ -457,7 +478,8 @@ module.exports = {
     const ora = adesso();
     let passo3 = null;
     for (const s of this.db.righe('SELECT * FROM spese WHERE rapportino_id = ? ORDER BY id', r.id)) {
-      const v = Object.assign({ commessa_id: testo(r.id_commessa), cliente_id: testo(r.id_cliente) }, stato);
+      // Fase 5: anche il ticket del rapportino.
+      const v = Object.assign({ commessa_id: testo(r.id_commessa), cliente_id: testo(r.id_cliente), ticket_id: r.ticket_id === undefined ? null : r.ticket_id }, stato);
       if (r.utente_id !== null) v.utente_id = r.utente_id;
       v.fatturata_il = conFattura.has(s.id) ? s.fatturata_il : s.destinazione === 'cliente' ? fatturato : '';
       if (s.dal_rapportino === 1) {

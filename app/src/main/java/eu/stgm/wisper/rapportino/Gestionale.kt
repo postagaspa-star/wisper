@@ -27,6 +27,10 @@ object Moduli {
     const val FATTURAZIONE = "fatturazione"
     /** Banche e scadenze (fase 4, voce 9). */
     const val BANCHE = "banche"
+    /** Documenti (fase 5, voce 11): archivio, revisioni, scadenze, modelli. */
+    const val DOCUMENTI = "documenti"
+    /** Ticket e assistenza (fase 5, voce 12): ticket, contratti, storico degli impianti. */
+    const val TICKET = "ticket"
     const val AMMINISTRAZIONE = "amministrazione"
 
     /** Tariffe, totali, costi orari, budget in euro, margini. */
@@ -37,7 +41,7 @@ object Moduli {
     val FASE1 = listOf(DASHBOARD, CLIENTI, COMMESSE, RAPPORTINI, FATTURAZIONE, AMMINISTRAZIONE)
 
     /** Quelli che funzionano dalla fase 3 (spese e trasferte), nell'ordine del menu. */
-    val FUNZIONANTI = listOf(DASHBOARD, CLIENTI, COMMESSE, PREVENTIVI, ATTIVITA, RAPPORTINI, SPESE, FATTURAZIONE, BANCHE, AMMINISTRAZIONE)
+    val FUNZIONANTI = listOf(DASHBOARD, CLIENTI, COMMESSE, PREVENTIVI, ATTIVITA, RAPPORTINI, SPESE, FATTURAZIONE, BANCHE, DOCUMENTI, TICKET, AMMINISTRAZIONE)
 
     /** Fatturazione e Banche si vedono solo col modulo e col permesso dei soldi (§15.1). */
     val CON_SOLDI = setOf(FATTURAZIONE, BANCHE)
@@ -133,6 +137,8 @@ data class Permessi(val livelli: Map<String, Int>) {
                 Ruoli.COLLABORATORE -> {
                     p[Moduli.DASHBOARD] = 1; p[Moduli.CLIENTI] = 1; p[Moduli.COMMESSE] = 1; p[Moduli.RAPPORTINI] = 2
                     p[Moduli.ATTIVITA] = 2; p[Moduli.SPESE] = 2
+                    // Fase 5 (architettura.md §16.1): i documenti in lettura, i ticket in scrittura.
+                    p[Moduli.DOCUMENTI] = 1; p[Moduli.TICKET] = 2
                 }
                 Ruoli.LETTURA -> {
                     Moduli.FUNZIONANTI.forEach { p[it] = 1 }
@@ -157,12 +163,21 @@ data class Interfaccia(
     /** "collaboratori" | "tutti" | "nessuno". */
     val approvazione: String = "collaboratori",
     val oreGiornaliere: Double = 8.0,
+    /** Fase 5 (§16.2): chi approva le revisioni dei documenti, chi chiude i ticket, i link per i clienti, i MB di un file. */
+    val puoApprovareDocumenti: Boolean? = null,
+    val puoChiudereTicket: Boolean? = null,
+    val condivisioneCollegata: Boolean = false,
+    val fileMaxMb: Int = 50,
 ) {
     fun aJson(): JSONObject = JSONObject()
         .put("puoApprovare", puoApprovare ?: JSONObject.NULL)
         .put("puoSegnareRimborsi", puoSegnareRimborsi ?: JSONObject.NULL)
         .put("approvazione", approvazione)
         .put("oreGiornaliere", oreGiornaliere)
+        .put("puoApprovareDocumenti", puoApprovareDocumenti ?: JSONObject.NULL)
+        .put("puoChiudereTicket", puoChiudereTicket ?: JSONObject.NULL)
+        .put("condivisioneCollegata", condivisioneCollegata)
+        .put("fileMaxMb", fileMaxMb)
 
     companion object {
         fun daJson(o: JSONObject?) = Interfaccia(
@@ -170,6 +185,10 @@ data class Interfaccia(
             puoSegnareRimborsi = o?.booleanoONull("puoSegnareRimborsi"),
             approvazione = o?.testo("approvazione")?.ifBlank { null } ?: "collaboratori",
             oreGiornaliere = o?.numero("oreGiornaliere") ?: 8.0,
+            puoApprovareDocumenti = o?.booleanoONull("puoApprovareDocumenti"),
+            puoChiudereTicket = o?.booleanoONull("puoChiudereTicket"),
+            condivisioneCollegata = o?.vero("condivisioneCollegata") == true,
+            fileMaxMb = o?.numero("fileMaxMb")?.toInt() ?: 50,
         )
     }
 }
@@ -192,6 +211,17 @@ data class Sessione(
     /** Segna rimborsato: solo titolare e amministrazione, con le spese in scrittura. */
     val puoSegnareRimborsi: Boolean
         get() = interfaccia.puoSegnareRimborsi ?: (approvaPerRuolo && permessi.modifica(Moduli.SPESE))
+
+    /** Fase 5 (§16.19): approvare le revisioni, titolare e amministrazione coi documenti in scrittura. */
+    val puoApprovareDocumenti: Boolean
+        get() = interfaccia.puoApprovareDocumenti ?: (approvaPerRuolo && permessi.modifica(Moduli.DOCUMENTI))
+
+    /** Chiudere i ticket (e scegliere come si fatturano): titolare e amministrazione, coi ticket in scrittura e i soldi. */
+    val puoChiudereTicket: Boolean
+        get() = interfaccia.puoChiudereTicket ?: (approvaPerRuolo && permessi.modifica(Moduli.TICKET) && permessi.costi)
+
+    /** Il collaboratore vede e cambia solo i suoi ticket (§16.19). */
+    val collaboratore: Boolean get() = utente.ruolo == Ruoli.COLLABORATORE
 
     /** Lo stato che avra' una riga scritta adesso da chi e' entrato, per mostrarla subito senza rete. */
     val statoPrevisto: String get() = FilaOreSpese.statoPrevisto(interfaccia.approvazione, utente.ruolo)
@@ -242,6 +272,17 @@ data class Sede(
     val provincia: String = "",
     val note: String = "",
     val archiviata: Boolean = false,
+    // ---- fase 5 (§16.2): i dati dell'impianto, tutti facoltativi
+    val categoria: String = "",
+    val categoriaNome: String = "",
+    val sedePadreId: String = "",
+    val matricola: String = "",
+    val potenza: String = "",
+    val tensione: String = "",
+    val messaInServizio: String = "",
+    val ambiente: String = "",
+    val referenteId: String = "",
+    val datiTecnici: String = "",
 ) {
     val impianto: Boolean get() = tipo.equals("impianto", ignoreCase = true)
 
@@ -253,6 +294,9 @@ data class Sede(
     fun aJson(): JSONObject = JSONObject().put("id", id).put("soggettoId", idSoggetto).put("tipo", tipo).put("nome", nome)
         .put("indirizzo", indirizzo).put("cap", cap).put("citta", citta).put("provincia", provincia)
         .put("note", note).put("archiviata", archiviata)
+        .put("categoria", categoria).put("categoriaNome", categoriaNome).put("sedePadreId", sedePadreId)
+        .put("matricola", matricola).put("potenza", potenza).put("tensione", tensione).put("messaInServizio", messaInServizio)
+        .put("ambiente", ambiente).put("referenteId", referenteId).put("datiTecnici", datiTecnici)
 
     companion object {
         fun daJson(o: JSONObject) = Sede(
@@ -266,6 +310,16 @@ data class Sede(
             provincia = o.testo("provincia"),
             note = o.testo("note"),
             archiviata = o.vero("archiviata"),
+            categoria = o.testo("categoria"),
+            categoriaNome = o.testo("categoriaNome"),
+            sedePadreId = o.testo("sedePadreId"),
+            matricola = o.testo("matricola"),
+            potenza = o.testo("potenza"),
+            tensione = o.testo("tensione"),
+            messaInServizio = o.testo("messaInServizio"),
+            ambiente = o.testo("ambiente"),
+            referenteId = o.testo("referenteId"),
+            datiTecnici = o.testo("datiTecnici"),
         )
     }
 }
@@ -440,6 +494,8 @@ data class Dashboard(
     val fase3: NumeriFase3 = NumeriFase3(),
     /** Dalla fase 4 (§15.16): i soldi di fatture e banche; null per chi non li vede. */
     val fase4: NumeriFase4? = null,
+    /** Dalla fase 5 (§16.18): ticket, documenti, scadenze, contratti, spazio. */
+    val fase5: NumeriFase5 = NumeriFase5(),
 ) {
     val vuota: Boolean get() = urgenti.isEmpty() && settimana.isEmpty() && pianificare.isEmpty()
 
@@ -451,7 +507,60 @@ data class Dashboard(
             commesse = NumeriCommesse.daJson(o.optJSONObject("numeri")?.optJSONObject("commesse") ?: o.optJSONObject("commesse")),
             fase3 = NumeriFase3.daJson(o.optJSONObject("numeri")),
             fase4 = NumeriFase4.daJson(o.optJSONObject("numeri")?.optJSONObject("soldi")),
+            fase5 = NumeriFase5.daJson(o.optJSONObject("numeri")),
         )
+    }
+}
+
+/** I numeri della fase 5 (§16.18): quelli null il ruolo non li vede. */
+data class NumeriFase5(
+    val ticketAperti: Int? = null,
+    val ticketUrgenti: Int = 0,
+    val ticketNonAssegnati: Int = 0,
+    val ticketInRitardo: Int = 0,
+    val interventiOggi: Int = 0,
+    val risoltiDaChiudere: Int = 0,
+    val programmatiDaPianificare: Int = 0,
+    val documentiDaApprovare: Int? = null,
+    val documentiInScadenza: Int = 0,
+    val documentiScaduti: Int = 0,
+    val daClassificare: Int = 0,
+    val scadenzeScadute: Int? = null,
+    val scadenzeEntro: Int = 0,
+    val scadenzeVicine: Int = 0,
+    val contrattiAttivi: Int? = null,
+    val contrattiInScadenza: Int = 0,
+    val liberoMb: Double? = null,
+    val spazioAvviso: Boolean = false,
+) {
+    companion object {
+        fun daJson(n: JSONObject?): NumeriFase5 {
+            val t = n?.optJSONObject("ticket")
+            val d = n?.optJSONObject("documenti")
+            val s = n?.optJSONObject("scadenze")
+            val c = n?.optJSONObject("contratti")
+            val sp = n?.optJSONObject("spazio")
+            return NumeriFase5(
+                ticketAperti = t?.optInt("aperti"),
+                ticketUrgenti = t?.optInt("urgenti") ?: 0,
+                ticketNonAssegnati = t?.optInt("nonAssegnati") ?: 0,
+                ticketInRitardo = t?.optInt("inRitardo") ?: 0,
+                interventiOggi = t?.optInt("interventiOggi") ?: 0,
+                risoltiDaChiudere = t?.optInt("risoltiDaChiudere") ?: 0,
+                programmatiDaPianificare = t?.optInt("programmatiDaPianificare") ?: 0,
+                documentiDaApprovare = d?.optInt("daApprovare"),
+                documentiInScadenza = d?.optInt("inScadenza") ?: 0,
+                documentiScaduti = d?.optInt("scaduti") ?: 0,
+                daClassificare = d?.optInt("daClassificare") ?: 0,
+                scadenzeScadute = s?.optInt("scadute"),
+                scadenzeEntro = s?.optInt("entro") ?: 0,
+                scadenzeVicine = s?.optInt("vicine") ?: 0,
+                contrattiAttivi = c?.optInt("attivi"),
+                contrattiInScadenza = c?.optInt("inScadenza") ?: 0,
+                liberoMb = sp?.numero("liberoMb"),
+                spazioAvviso = sp?.vero("avviso") == true,
+            )
+        }
     }
 }
 

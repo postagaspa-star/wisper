@@ -269,8 +269,13 @@ object SceltaDaFatturare {
 
     const val UN_CLIENTE = "Una fattura è per un cliente solo: ho tolto le altre"
 
-    /** Le chiavi che vanno insieme a [v]: il rapportino e tutte le sue spese. */
+    /**
+     * Le chiavi che vanno insieme a [v]: il rapportino e tutte le sue spese. Dalla
+     * fase 5 (§16.14) anche il ticket "una riga" e le sue spese anticipate, che hanno
+     * lo stesso gruppo `ticket:{numero}`: scegliere il ticket le porta, sceglierne una porta il ticket.
+     */
     fun insieme(v: VoceDaFatturare, tutte: List<VoceDaFatturare>): Set<String> {
+        if (v.gruppo.startsWith("ticket:")) return (tutte.filter { it.gruppo == v.gruppo }.map { it.chiave } + v.chiave).toSet()
         val idRap = when {
             v.tipo == "rapportino" -> v.id
             v.tipo == "spesa" && v.idRapportino.isNotBlank() -> v.idRapportino

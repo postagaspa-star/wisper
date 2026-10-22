@@ -241,6 +241,9 @@ data class RigaOre(
     val bloccata: String = "",
     val creato: String = "",
     val modificato: String = "",
+    /** Fase 5 (§16.2): il ticket delle ore (id interno, o l'idLocale di uno nato qui) e il suo numero. */
+    val idTicket: String = "",
+    val ticket: String = "",
     // ---- del telefono
     val idLocale: String = "",
     val inCoda: Boolean = false,
@@ -272,6 +275,7 @@ data class RigaOre(
             .put("descrizione", descrizione.trim())
             .put("fatturabile", fatturabile)
             .put("tipo", tipo)
+        if (idTicket.isNotBlank()) o.put("idTicket", PonteServer.idJson(idTicket))
         if (bozza) o.put("bozza", true)
         return o
     }
@@ -316,6 +320,8 @@ data class RigaOre(
             bloccata = o.testo("bloccata"),
             creato = o.testo("creato"),
             modificato = o.testo("modificato"),
+            idTicket = o.testo("idTicket"),
+            ticket = o.testo("ticket"),
         )
 
         /**
@@ -595,6 +601,9 @@ data class Spesa(
     val soloCampi: List<String>? = null,
     val creato: String = "",
     val modificato: String = "",
+    /** Fase 5 (§16.2): il ticket della spesa (quelle di un rapportino hanno quello del rapportino). */
+    val idTicket: String = "",
+    val ticket: String = "",
     // ---- del telefono
     val idLocale: String = "",
     val inCoda: Boolean = false,
@@ -627,6 +636,7 @@ data class Spesa(
             .put("pagataDaMe", pagataDaMe)
         if (idCliente.isNotBlank() && idCommessa.isBlank()) o.put("idCliente", idCliente)
         if (idTrasferta.isNotBlank()) o.put("idTrasferta", PonteServer.idJson(idTrasferta))
+        if (idTicket.isNotBlank() && idRapportino.isBlank()) o.put("idTicket", PonteServer.idJson(idTicket))
         if (bozza) o.put("bozza", true)
         return o
     }
@@ -666,6 +676,8 @@ data class Spesa(
             soloCampi = if (o.has("soloCampi") && !o.isNull("soloCampi")) o.optJSONArray("soloCampi")?.stringhe() else null,
             creato = o.testo("creato"),
             modificato = o.testo("modificato"),
+            idTicket = o.testo("idTicket"),
+            ticket = o.testo("ticket"),
         )
 
         /** Una spesa ancora in coda, dal corpo di salvaSpesa: quello che si vede finché il server non risponde. */
@@ -1141,11 +1153,17 @@ object TestiCoda {
     fun rifiutata(tipo: CodaInvii.Tipo): String = when (tipo) {
         CodaInvii.Tipo.ORE -> "Il server non ha accettato delle ore"
         CodaInvii.Tipo.SPESA, CodaInvii.Tipo.FOTO_SPESA -> "Il server non ha accettato una spesa"
+        CodaInvii.Tipo.TICKET, CodaInvii.Tipo.AZIONE_TICKET, CodaInvii.Tipo.FOTO_TICKET -> "Il server non ha accettato un ticket"
+        CodaInvii.Tipo.FAI_SCADENZA -> "Il server non ha accettato una scadenza"
         else -> "Il server non ha accettato un rapportino"
     }
 
-    fun titoloNonPartite(ops: List<CodaInvii.Operazione>): String =
-        if (ops.none { it.fase3 }) "Rapportini non ancora partiti" else if (ops.all { it.fase3 }) "Ore e spese non ancora partite" else "Modifiche non ancora partite"
+    fun titoloNonPartite(ops: List<CodaInvii.Operazione>): String = when {
+        ops.all { !it.fase3 && !it.fase5 } -> "Rapportini non ancora partiti"
+        ops.all { it.fase3 } -> "Ore e spese non ancora partite"
+        ops.all { it.fase5 } -> "Ticket non ancora partiti"
+        else -> "Modifiche non ancora partite"
+    }
 
     /**
      * La pillola calma della rete: "2 rapportini partono appena c'è rete", "1 spesa
@@ -1155,6 +1173,21 @@ object TestiCoda {
      */
     fun inAttesa(ops: List<CodaInvii.Operazione>): String? {
         val vive = ops.filter { !it.rifiutata }
+        // Fase 5 (fase5.md §3.9): "1 ticket e 1 rapportino partono appena c'è rete".
+        val ticket = vive.filter { it.tipo == CodaInvii.Tipo.TICKET || it.tipo == CodaInvii.Tipo.AZIONE_TICKET || it.tipo == CodaInvii.Tipo.FOTO_TICKET }.map { it.idLocale }.distinct().size
+        val scadenze = vive.count { it.tipo == CodaInvii.Tipo.FAI_SCADENZA }
+        if (ticket > 0 || scadenze > 0) {
+            val rap = vive.filter { !it.fase3 && !it.fase5 }.map { it.idLocale }.distinct().size
+            val altre = vive.count { it.fase3 }
+            val pezzi = listOfNotNull(
+                ticket.takeIf { it > 0 }?.let { "$it ticket" },
+                rap.takeIf { it > 0 }?.let { if (it == 1) "1 rapportino" else "$it rapportini" },
+                scadenze.takeIf { it > 0 }?.let { if (it == 1) "1 scadenza" else "$it scadenze" },
+                altre.takeIf { it > 0 }?.let { if (it == 1) "1 riga di ore o spese" else "$it righe di ore o spese" },
+            )
+            val tante = ticket + rap + scadenze + altre > 1
+            return pezzi.joinToString(", ").replace(Regex(", ([^,]+)$"), " e $1") + if (tante) " partono appena c'è rete" else " parte appena c'è rete"
+        }
         val rapportini = vive.count { !it.fase3 }
         val ore = vive.count { it.tipo == CodaInvii.Tipo.ORE }
         val spese = vive.filter { it.tipo == CodaInvii.Tipo.SPESA || it.tipo == CodaInvii.Tipo.FOTO_SPESA }.map { it.idLocale }.distinct().size

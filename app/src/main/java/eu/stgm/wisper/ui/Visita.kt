@@ -80,7 +80,7 @@ class Visita {
     )
 
     val passi = listOf(
-        Passo("menu", "Il menu", "Clienti, commesse, preventivi, attività, ore, spese, fatture e banche: tocca Menu, o scorri dal bordo sinistro.", false, "dashboard"),
+        Passo("menu", "Il menu", "Clienti, commesse, preventivi, attività, ore, spese, fatture, banche, documenti e ticket: tocca Menu, o scorri dal bordo sinistro.", false, "dashboard"),
         Passo("cosa-fare", "La Dashboard", "Qui vedi cosa fare adesso: ogni riga porta dove si sistema.", false, "dashboard"),
         Passo("settimana", "Questa settimana", "Appuntamenti di oggi, attività e preventivi in scadenza: tocca una riga per aprirla.", false, "dashboard"),
         Passo("giorno", "Il tuo giorno", "Qui vedi subito se il rapportino di oggi è scritto.", false, "dashboard"),
@@ -102,6 +102,9 @@ class Visita {
         // Fase 4: Fatturazione e Banche e scadenze (fase4.md §13).
         Passo("prepara-bozza", "Fatturazione", "Quello che è pronto da fatturare, per cliente: scegli le voci e prepara la bozza per il tuo programma.", false, "fatturazione"),
         Passo("scadenziario", "Banche e scadenze", "Quando entrano ed escono i soldi: tocca una scadenza per segnare l'incasso, anche in parte.", false, "banche"),
+        // Fase 5 (fase5.md §12.5): le richieste d'intervento e il pulsante giallo del ticket.
+        Passo("ticket-urgente", "Le richieste", "In cima c'è quello che va fatto prima.", false, "ticket"),
+        Passo("ticket-giallo", "Il pulsante giallo", "Ti dice cosa fare adesso: prendere, pianificare, scrivere il rapportino.", false, "ticket-pagina"),
         Passo(null, "Ecco fatto", "Adesso Wisper lavora con i tuoi dati veri.", false, "dashboard"),
     )
 

@@ -34,7 +34,8 @@ const dataBreve = iso => (iso ? iso.slice(8, 10) + '/' + iso.slice(5, 7) : '');
 const giorniTra = (da, a) => Math.round((Date.parse(a + 'T12:00:00') - Date.parse(da + 'T12:00:00')) / 86400000);
 const STATI = ['bozza', 'pronta', 'emessa', 'scartata', 'annullata'];
 const VIVE = ['bozza', 'pronta'];
-const TIPI_SORGENTE = ['scadenza', 'rapportino', 'spesa', 'ore'];
+// Fase 5: il ticket chiuso "una riga per l'intervento" (fase5.md §7.6) e' una sorgente come le altre, con lo stesso indice unico.
+const TIPI_SORGENTE = ['scadenza', 'rapportino', 'spesa', 'ore', 'ticket'];
 const RIFERIMENTO_N1 = 'Escluse ex art. 15 DPR 633/72';
 const RIFERIMENTO_FORFETTARIO = 'Operazione in franchigia da IVA (regime forfettario)';
 
@@ -105,6 +106,7 @@ module.exports = {
   /** Come si chiama una sorgente nelle frasi: "Il rapportino RAP/2026/0142", "La spesa «Pedaggio» del 21/10"... */
   nomeSorgente(tipo, id, breve) {
     if (tipo === 'rapportino') return breve ? String(id) : 'Il rapportino ' + id;
+    if (tipo === 'ticket') return breve ? String(id) : 'Il ticket ' + id;
     if (tipo === 'scadenza') {
       const s = this.db.riga('SELECT descrizione, commessa_id FROM scadenze_pagamento WHERE id = ?', Number(id) || 0);
       return s ? (breve ? '«' + s.descrizione + '» di ' + s.commessa_id : 'La scadenza «' + s.descrizione + '» di ' + s.commessa_id) : 'La scadenza ' + id;
@@ -152,7 +154,7 @@ module.exports = {
     const a = this.sorgenteAttiva(tipo, id);
     if (!a) return '';
     const nome = this.nomeSorgente(tipo, id);
-    const f = { rapportino: ['è', 'toglilo', 'cambiarlo'], scadenza: ['è', 'toglila', 'cambiarla'], spesa: ['è', 'toglila', 'cambiarla'], ore: ['sono', 'toglile', 'cambiarle'] }[tipo];
+    const f = { rapportino: ['è', 'toglilo', 'cambiarlo'], ticket: ['è', 'toglilo', 'cambiarlo'], scadenza: ['è', 'toglila', 'cambiarla'], spesa: ['è', 'toglila', 'cambiarla'], ore: ['sono', 'toglile', 'cambiarle'] }[tipo];
     if (VIVE.indexOf(a.stato) >= 0) return nome + ' ' + f[0] + ' ' + this.doveSta(a) + ': ' + f[1] + ' prima dalla bozza';
     return nome + ' ' + f[0] + ' ' + this.doveSta(a) + ': per ' + f[2] + ' serve una nota di credito';
   },
@@ -179,6 +181,19 @@ module.exports = {
     const commessaDi = id => (id ? commesse[String(id).toUpperCase()] || null : null);
     const fattura_a_ore = m => !m || m.modo_fatturazione !== 'corpo';
     const voci = [];
+    // Fase 5 (§3.4): le cose di un ticket aspettano la sua chiusura; chiuso "una riga" stanno dentro la voce del ticket,
+    // "separati" sono sorgenti normali, "contratto" mai (tranne le spese al cliente se i materiali non sono compresi,
+    // e le anticipazioni), "no" mai. Un ticket annullato non trattiene niente.
+    const tickets = {};
+    this.db.righe('SELECT t.*, c.materiali_inclusi FROM ticket t LEFT JOIN contratti c ON c.id = t.contratto_id').forEach(t => { tickets[t.id] = t; });
+    const fuoriPerTicket = (idTicket, tipo, anticipazione) => {
+      const t = idTicket !== null && idTicket !== undefined ? tickets[idTicket] : null;
+      if (!t || t.stato === 'annullato') return false;
+      if (t.stato !== 'chiuso') return true;
+      if (t.fatturazione === 'separati' || t.fatturazione === '') return false;
+      if (t.fatturazione === 'contratto') return tipo === 'spesa' ? !anticipazione && t.materiali_inclusi === 1 : true;
+      return true;
+    };
 
     // Scadenze di pagamento delle commesse (acconti, avanzamenti, saldo).
     for (const s of this.db.righe("SELECT * FROM scadenze_pagamento WHERE commessa_id <> '' AND stato = 'prevista' ORDER BY commessa_id, ordine, id")) {
@@ -187,7 +202,9 @@ module.exports = {
       let pronta = true;
       if (s.quando === 'fine') pronta = String(m.stato).toUpperCase() === 'CHIUSA';
       else if (s.quando === 'data') pronta = !!s.data && s.data <= C.giorniDopo(t, 15);
-      const contratto = s.preventivo_id ? contratti[s.preventivo_id] || '' : '';
+      // Fase 5: la rata del canone di un contratto d'assistenza porta il numero del contratto (CA/2026/002).
+      const ca = s.contratto_id ? this.db.riga('SELECT numero FROM contratti WHERE id = ?', s.contratto_id) : null;
+      const contratto = s.preventivo_id ? contratti[s.preventivo_id] || '' : ca ? ca.numero : '';
       voci.push({
         tipo: 'scadenza', id: s.id, idCliente: m.cliente_id, idCommessa: m.id, data: s.data || '', titolo: s.descrizione,
         dettaglio: [m.id, m.descrizione, contratto].filter(Boolean).join(' · '), quando: s.quando, pronta,
@@ -207,6 +224,7 @@ module.exports = {
     for (const r of Object.values(rapportini)) {
       const m = commessaDi(r.id_commessa);
       if (!testo(r.id_cliente) || !fattura_a_ore(m) || !libera('rapportino', r.id)) continue;
+      if (fuoriPerTicket(r.ticket_id, 'rapportino')) continue;
       // Un rapportino di prima della fase 3 con spese e nessuna riga di spese le porta nel suo importo (§5.1).
       const speseSenzaRighe = numero(r.spese) > 0 && !speseDeiRapportini[r.id] ? centesimi(numero(r.spese)) : 0;
       const ore = C.orePagate({ oreLavoro: r.ore_lavoro, oreExtra: r.ore_extra, oreViaggio: r.ore_viaggio, pagaViaggio: r.paga_viaggio === 1 });
@@ -224,6 +242,7 @@ module.exports = {
     // Spese al cliente, approvate, non ancora fatturate. Quelle di un rapportino vanno con lui.
     for (const s of this.db.righe("SELECT * FROM spese WHERE destinazione = 'cliente' AND stato = 'approvata' AND fatturata_il = '' AND tolta IS NULL ORDER BY data, id")) {
       if (!libera('spesa', s.id)) continue;
+      if (fuoriPerTicket(s.ticket_id, 'spesa', s.anticipazione === 1)) continue;
       let idCliente = testo(s.cliente_id);
       const m = commessaDi(s.commessa_id);
       if (!idCliente && m) idCliente = m.cliente_id;
@@ -249,6 +268,7 @@ module.exports = {
     for (const o of this.db.righe("SELECT * FROM ore WHERE fatturabile = 1 AND stato = 'approvata' AND fatturata_il = '' AND tolta IS NULL AND commessa_id <> '' ORDER BY data, id")) {
       const m = commessaDi(o.commessa_id);
       if (!m || !fattura_a_ore(m) || !libera('ore', o.id) || !soggetti[m.cliente_id]) continue;
+      if (fuoriPerTicket(o.ticket_id, 'ore')) continue;
       const cliente = soggetti[m.cliente_id];
       const prezzo = C.prezzoOrarioDi({ tariffaFissa: cliente.tariffa_fissa }, { prezzoOrario: m.prezzo_orario });
       const ore = Math.round(numero(o.ore) * 100) / 100;
@@ -258,6 +278,27 @@ module.exports = {
         pronta: true, importo: prezzo !== null ? centesimi(ore * prezzo) : 0, senzaPrezzo: prezzo === null, prezzo,
         anticipazione: false, gruppo: 'ore:' + m.id + ':' + String(o.data).slice(0, 7), riga: o, commessa: m,
       });
+    }
+    // Fase 5: i ticket chiusi "una riga per l'intervento", non riservati e non fatturati. Le loro spese anticipate
+    // seguono la voce (una voce "spesa" ciascuna, col gruppo del ticket), come le spese di un rapportino.
+    for (const t of Object.values(tickets)) {
+      if (t.stato !== 'chiuso' || t.fatturazione !== 'ticket' || t.fatturato_il || !libera('ticket', t.numero) || !soggetti[t.cliente_id]) continue;
+      const vt = this.voceTicket(t);
+      const m = commessaDi(t.commessa_id);
+      const v = {
+        tipo: 'ticket', id: t.numero, idTicket: t.id, idCliente: t.cliente_id, idCommessa: m ? m.id : testo(t.commessa_id), data: dataIso(t.risolto_il) || dataIso(t.chiuso_il),
+        titolo: t.titolo, dettaglio: vt.dettaglio, pronta: vt.pronta, perche: vt.perche, importo: vt.importo, aCorpo: vt.aCorpo, dentro: vt.dentro,
+        spese: vt.anticipazioni.map(s => s.id), senzaPrezzo: vt.senzaPrezzo, anticipazione: false, gruppo: vt.gruppo, riga: t, voceTicket: vt,
+      };
+      voci.push(v);
+      for (const s of vt.anticipazioni) {
+        if (!libera('spesa', s.id)) continue;
+        voci.push({
+          tipo: 'spesa', id: s.id, idCliente: t.cliente_id, idCommessa: v.idCommessa, idTicket: t.numero, data: s.data, titolo: s.descrizione || 'Spesa',
+          dettaglio: [v.idCommessa, 'ricevuta intestata al cliente'].filter(Boolean).join(' · '), pronta: vt.pronta, importo: centesimi(numero(s.importo)),
+          anticipazione: true, gruppo: vt.gruppo, riga: s,
+        });
+      }
     }
     for (const v of voci) {
       if (v.tipo === 'rapportino') v.totaleConSpese = centesimi(v.importo + voci.filter(s => s.tipo === 'spesa' && s.idRapportino === v.id && !s.anticipazione)
@@ -290,7 +331,8 @@ module.exports = {
     const perCliente = new Map();
     const piuAvanti = [];
     for (const v of voci) {
-      if (v.tipo === 'scadenza' && !v.pronta) {
+      // Le scadenze non pronte e (fase 5) i ticket non pronti, con le loro spese anticipate, stanno in "piu' avanti".
+      if ((v.tipo === 'scadenza' || v.tipo === 'ticket' || (v.tipo === 'spesa' && v.idTicket)) && !v.pronta) {
         piuAvanti.push(this.voceDaFatturare(v, soggetti));
         continue;
       }
@@ -303,9 +345,13 @@ module.exports = {
       // Ordine: scadenze, spese della commessa, rapportini per data (ognuno seguito dalle sue spese), ore.
       const rapportini = lista.filter(v => v.tipo === 'rapportino').sort((a, b) => (a.data < b.data ? -1 : a.data > b.data ? 1 : (a.id < b.id ? -1 : 1)));
       const sueSpese = id => lista.filter(v => v.tipo === 'spesa' && v.idRapportino === id);
+      // Fase 5: ogni ticket e' seguito dalle sue spese anticipate, dopo i rapportini e prima delle ore.
+      const ticket = lista.filter(v => v.tipo === 'ticket').sort((a, b) => (a.data < b.data ? -1 : a.data > b.data ? 1 : (a.id < b.id ? -1 : 1)));
+      const delTicket = id => lista.filter(v => v.tipo === 'spesa' && v.idTicket === id);
       const ordinate = lista.filter(v => v.tipo === 'scadenza')
-        .concat(lista.filter(v => v.tipo === 'spesa' && !v.idRapportino))
+        .concat(lista.filter(v => v.tipo === 'spesa' && !v.idRapportino && !v.idTicket))
         .concat([].concat(...rapportini.map(r => [r].concat(sueSpese(r.id)))))
+        .concat([].concat(...ticket.map(t => [t].concat(delTicket(t.id)))))
         .concat(lista.filter(v => v.tipo === 'ore'));
       gruppi.push({
         idCliente, cliente: s ? s.nome : idCliente, sostituto: this.sostitutoDi(s), mancano: this.mancanoCliente(s),
@@ -355,9 +401,17 @@ module.exports = {
     };
     if (v.tipo === 'scadenza') o.quando = v.quando;
     if (v.idRapportino) o.idRapportino = v.idRapportino;
+    if (v.tipo === 'spesa' && v.idTicket) o.idTicket = v.idTicket;
     o.pronta = v.pronta;
     o.importo = v.importo;
     if (v.tipo === 'rapportino') { o.spese = v.spese; o.totaleConSpese = v.totaleConSpese; }
+    if (v.tipo === 'ticket') {
+      o.aCorpo = v.aCorpo;
+      o.dentro = v.dentro;
+      o.spese = v.spese;
+      o.senzaPrezzo = !!v.senzaPrezzo;
+      if (!v.pronta) o.perche = v.perche;
+    }
     if (v.tipo === 'ore') o.senzaPrezzo = !!v.senzaPrezzo;
     o.anticipazione = !!v.anticipazione;
     o.gruppo = v.gruppo;
@@ -375,12 +429,15 @@ module.exports = {
     const gruppi = [];
     const scadenze = scelte.filter(v => v.tipo === 'scadenza');
     for (const v of scadenze) {
+      // Fase 5: una rata del canone di un contratto d'assistenza dice il contratto e la commessa (fase5.md §8.3).
+      const ca = v.riga.contratto_id ? this.db.riga('SELECT numero, titolo FROM contratti WHERE id = ?', v.riga.contratto_id) : null;
       gruppi.push({
-        gruppo: 'scadenza:' + v.id, righe: [C.rigaScadenza({ descrizione: v.riga.descrizione, importo: v.importo }, v.commessa, v.contratto)],
+        gruppo: 'scadenza:' + v.id, righe: [ca ? C.rigaCanone({ descrizione: v.riga.descrizione, importo: v.importo }, ca, v.commessa)
+          : C.rigaScadenza({ descrizione: v.riga.descrizione, importo: v.importo }, v.commessa, v.contratto)],
         sorgenti: [{ tipo: 'scadenza', id: String(v.id), importo: v.importo }],
       });
     }
-    for (const v of scelte.filter(x => x.tipo === 'spesa' && !x.idRapportino)) {
+    for (const v of scelte.filter(x => x.tipo === 'spesa' && !x.idRapportino && !x.idTicket)) {
       gruppi.push({
         gruppo: 'spesa:' + v.id,
         righe: [C.rigaSpesa({ descrizione: v.riga.descrizione, data: v.riga.data, importo: v.importo, anticipazione: v.anticipazione, idCommessa: v.idCommessa })],
@@ -402,6 +459,8 @@ module.exports = {
       });
       gruppi.push(...r);
     }
+    // Fase 5: i ticket, una riga per l'intervento (con le loro spese anticipate a parte), coi testi di §7.6.
+    for (const v of scelte.filter(x => x.tipo === 'ticket')) gruppi.push(...C.righeTicket(v.voceTicket.ingresso));
     // Ore: per commessa, mese e prezzo.
     const perOre = new Map();
     for (const v of scelte.filter(x => x.tipo === 'ore')) {
@@ -454,7 +513,7 @@ module.exports = {
   /** Lega le sorgenti alla fattura: l'indice unico del database rifiuta quelle gia' in un'altra fattura viva. */
   legaSorgenti(idFattura, gruppo, sorgenti) {
     for (const s of sorgenti) {
-      if (TIPI_SORGENTE.indexOf(s.tipo) < 0) throw new Rifiuto('Tipo: scadenza, rapportino, spesa o ore');
+      if (TIPI_SORGENTE.indexOf(s.tipo) < 0) throw new Rifiuto('Tipo: scadenza, rapportino, spesa, ore o ticket');
       const gia = this.sorgenteAttiva(s.tipo, s.id);
       if (gia) throw new Rifiuto(this.fraseGiaRiservata(s.tipo, s.id, gia));
       try {
@@ -497,7 +556,7 @@ module.exports = {
     for (const x of voci) {
       const tipo = testo(x && x.tipo);
       const id = testo(x && x.id);
-      if (TIPI_SORGENTE.indexOf(tipo) < 0) throw new Rifiuto('Tipo: scadenza, rapportino, spesa o ore');
+      if (TIPI_SORGENTE.indexOf(tipo) < 0) throw new Rifiuto('Tipo: scadenza, rapportino, spesa, ore o ticket');
       const v = perChiave.get(tipo + '|' + id);
       if (!v) {
         const gia = this.sorgenteAttiva(tipo, id);
@@ -505,6 +564,16 @@ module.exports = {
       }
       if (v.idCliente !== idCliente) throw new Rifiuto('Una fattura è per un cliente solo');
       scelte.set(tipo + '|' + id, v);
+    }
+    // Fase 5: un ticket porta le sue spese anticipate; una di loro porta il ticket. Un ticket non pronto non si fattura.
+    for (const v of Array.from(scelte.values())) {
+      const numeroT = v.tipo === 'ticket' ? v.id : v.tipo === 'spesa' && v.idTicket ? v.idTicket : '';
+      if (!numeroT) continue;
+      const t = perChiave.get('ticket|' + numeroT);
+      if (!t) continue;
+      if (!t.pronta) throw new Rifiuto('Il ticket ' + numeroT + ' non è ancora pronto: ' + t.perche);
+      scelte.set('ticket|' + numeroT, t);
+      for (const s of tutte.filter(x => x.tipo === 'spesa' && x.idTicket === numeroT)) scelte.set('spesa|' + s.id, s);
     }
     // Un rapportino porta le sue spese; una spesa di un rapportino porta il rapportino (e le altre sue spese).
     for (const v of Array.from(scelte.values())) {
@@ -553,6 +622,7 @@ module.exports = {
       }
       if (g.indexOf('rapportini:') === 0) return 'Prestazioni di ' + C.nomeMese(g.slice(-7)) + (idCommessa ? ', commessa ' + idCommessa : '');
       if (g.indexOf('rapportino:') === 0) return 'Rapportino ' + g.slice(11) + (idCommessa ? ', commessa ' + idCommessa : '');
+      if (g.indexOf('ticket:') === 0) return 'Intervento ' + g.slice(7) + (idCommessa ? ', commessa ' + idCommessa : '');
     }
     return 'Prestazioni professionali' + (idCommessa ? ', commessa ' + idCommessa : '');
   },
@@ -827,6 +897,10 @@ module.exports = {
 
   /** Due parole su una sorgente, per la pagina della fattura. */
   descrizioneSorgente(tipo, id) {
+    if (tipo === 'ticket') {
+      const t = this.db.riga('SELECT titolo, risolto_il FROM ticket WHERE numero = ?', String(id));
+      return id + (t ? ' · ' + dataBreve(dataIso(t.risolto_il)) + ' · ' + t.titolo : '');
+    }
     if (tipo === 'rapportino') {
       const r = this.db.riga('SELECT descrizione, data FROM rapportini WHERE id = ?', id);
       return id + (r ? ' · ' + dataBreve(dataIso(r.data)) + (r.descrizione ? ' · ' + r.descrizione : '') : '');
@@ -1234,6 +1308,11 @@ module.exports = {
       this.aggiorna('spese', Number(id), { fatturata_il: data, modificato: ora }, 'id', nota);
     } else if (tipo === 'ore') {
       this.aggiorna('ore', Number(id), { fatturata_il: data, modificato: ora }, 'id', nota);
+    } else if (tipo === 'ticket') {
+      const t = this.db.riga('SELECT * FROM ticket WHERE numero = ?', String(id));
+      if (!t) return;
+      this.aggiorna('ticket', t.id, { fatturato_il: data, modificato: ora }, 'id', nota);
+      this.eventoTicket(t.id, 'Fatturato' + (nota ? ' (' + nota + ')' : ''));
     }
   },
 
@@ -1251,6 +1330,11 @@ module.exports = {
       this.aggiorna('spese', Number(id), { fatturata_il: '', modificato: ora }, 'id', nota);
     } else if (tipo === 'ore') {
       this.aggiorna('ore', Number(id), { fatturata_il: '', modificato: ora }, 'id', nota);
+    } else if (tipo === 'ticket') {
+      const t = this.db.riga('SELECT * FROM ticket WHERE numero = ?', String(id));
+      if (!t) return;
+      this.aggiorna('ticket', t.id, { fatturato_il: '', modificato: ora }, 'id', nota);
+      this.eventoTicket(t.id, 'Non più fatturato' + (nota ? ' (' + nota + ')' : ''));
     }
   },
 
@@ -1371,11 +1455,32 @@ module.exports = {
     for (const x of voci) {
       const tipo = testo(x && x.tipo);
       const id = testo(x && x.id);
-      if (TIPI_SORGENTE.indexOf(tipo) < 0) throw new Rifiuto('Tipo: scadenza, rapportino, spesa o ore');
+      if (TIPI_SORGENTE.indexOf(tipo) < 0) throw new Rifiuto('Tipo: scadenza, rapportino, spesa, ore o ticket');
       const gia = this.sorgenteAttiva(tipo, id);
       if (gia) throw new Rifiuto(this.fraseGiaRiservata(tipo, id, gia));
       const riga = this.rigaSorgente(tipo, id);
       if (!riga) throw new Rifiuto(this.nomeSorgente(tipo, id) + ' non trovata');
+      // Fase 5: un ticket "una riga per l'intervento" fatturato fuori porta con se' rapportini, spese e ore che ha dentro.
+      if (tipo === 'ticket') {
+        if (riga.stato !== 'chiuso' || riga.fatturazione !== 'ticket') throw new Rifiuto('Il ticket ' + riga.numero + ' non è chiuso con «Una riga per l\'intervento»');
+        const voceT = annulla ? null : this.voceTicket(riga);
+        if (voceT && !voceT.pronta && !this.fatturataFuori('ticket', riga)) throw new Rifiuto('Il ticket ' + riga.numero + ' non è ancora pronto: ' + voceT.perche);
+        const dentro = voceT ? voceT.dentro.concat(voceT.anticipazioni.map(s => ({ tipo: 'spesa', id: s.id }))) : [];
+        if (annulla) {
+          if (!this.fatturataFuori('ticket', riga)) throw new Rifiuto('Il ticket ' + riga.numero + ' non è segnato come fatturato fuori da Wisper');
+          this.togliFatturata('ticket', riga.numero, nota);
+          const c = this.contenutoTicket(riga);
+          for (const r of c.rapportini) if (testo(r.stato).toUpperCase() === 'FATTURATO' && !this.sorgenteAttiva('rapportino', r.id)) this.togliFatturata('rapportino', r.id, nota);
+          for (const s of c.spese) if (s.fatturata_il && !this.sorgenteAttiva('spesa', s.id)) this.togliFatturata('spesa', s.id, nota);
+          for (const o of c.ore) if (o.fatturata_il && !this.sorgenteAttiva('ore', o.id)) this.togliFatturata('ore', o.id, nota);
+        } else {
+          if (this.fatturataFuori('ticket', riga)) continue;
+          this.segnaSorgenteFatturata('ticket', riga.numero, oggi(), null, nota);
+          for (const x of dentro) if (!this.sorgenteAttiva(x.tipo, x.id)) this.segnaSorgenteFatturata(x.tipo, x.id, oggi(), null, nota);
+        }
+        fatte.push({ tipo, id });
+        continue;
+      }
       if (annulla) {
         if (!this.fatturataFuori(tipo, riga)) throw new Rifiuto(this.nomeSorgente(tipo, id) + ' non è segnata come fatturata fuori da Wisper');
         this.togliFatturata(tipo, riga.id, nota);
@@ -1395,6 +1500,7 @@ module.exports = {
 
   rigaSorgente(tipo, id) {
     if (tipo === 'rapportino') return this.db.riga('SELECT * FROM rapportini WHERE id = ?', id);
+    if (tipo === 'ticket') return this.db.riga('SELECT * FROM ticket WHERE numero = ?', String(id));
     if (tipo === 'scadenza') return this.db.riga('SELECT * FROM scadenze_pagamento WHERE id = ?', Number(id) || 0);
     if (tipo === 'spesa') return this.db.riga('SELECT * FROM spese WHERE id = ?', Number(id) || 0);
     return this.db.riga('SELECT * FROM ore WHERE id = ?', Number(id) || 0);
@@ -1402,6 +1508,7 @@ module.exports = {
 
   fatturataFuori(tipo, r) {
     if (tipo === 'rapportino') return testo(r.stato).toUpperCase() === 'FATTURATO';
+    if (tipo === 'ticket') return !!testo(r.fatturato_il);
     if (tipo === 'scadenza') return r.stato === 'fatturata';
     return !!testo(r.fatturata_il);
   },
@@ -1429,6 +1536,8 @@ module.exports = {
     }
     return this.db.transazione(() => {
       this.aggiorna('fatture', f.id, { avviso_inviato_il: adesso(), modificato: adesso() }, 'id', 'avviso di parcella mandato a ' + a);
+      // Fase 5: la copia del PDF mandato (COPIA_INVIATI), nella categoria Mandati ai clienti.
+      this.copiaInviati({ allegati: posta.allegati, a, idCliente: f.cliente_id, idCommessa: f.commessa_id });
       return { ok: true, fattura: this.fatturaCompleta(this.db.riga('SELECT * FROM fatture WHERE id = ?', f.id)) };
     });
   },

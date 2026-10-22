@@ -35,7 +35,16 @@ class CodaInvii(private val file: File) {
      * gestionale anche ORE (salvaOre), SPESA (salvaSpesa) e FOTO_SPESA (lo
      * scontrino di una spesa): si scrivono spesso in cantiere senza rete.
      */
-    enum class Tipo { SALVA, FOTO, FIRMA, STATO, TOGLI_FOTO, ORE, SPESA, FOTO_SPESA }
+    enum class Tipo {
+        SALVA, FOTO, FIRMA, STATO, TOGLI_FOTO, ORE, SPESA, FOTO_SPESA,
+        /**
+         * Fase 5 (fase5.md §3.9): il ticket nato senza rete (salvaTicket col suo
+         * idLocale "T-..."), le azioni di stato che il server riconosce ripetute
+         * (prendi, risolvi, altro intervento, riprendi, sospendi), la foto del ticket
+         * (caricaFile con lo stesso idFile) e la scadenza segnata fatta.
+         */
+        TICKET, AZIONE_TICKET, FOTO_TICKET, FAI_SCADENZA,
+    }
 
     /**
      * @param errore il motivo per cui il foglio ha detto di no. Un'operazione
@@ -65,11 +74,16 @@ class CodaInvii(private val file: File) {
          * stesso a ogni tentativo: il server non la crea due volte (InvioFase3).
          */
         val idRemoto: String = "",
+        /** Quando è stata fatta sul telefono (istante "2026-10-22T10:05:00"): la cronologia del ticket. */
+        val quando: String = "",
     ) {
         val rifiutata: Boolean get() = errore.isNotBlank()
 
         /** Le cose della fase 3 (ore, spese, scontrini): non sono di un rapportino. */
         val fase3: Boolean get() = tipo == Tipo.ORE || tipo == Tipo.SPESA || tipo == Tipo.FOTO_SPESA
+
+        /** Le cose della fase 5 (ticket, foto del ticket, scadenze): non sono di un rapportino. */
+        val fase5: Boolean get() = tipo == Tipo.TICKET || tipo == Tipo.AZIONE_TICKET || tipo == Tipo.FOTO_TICKET || tipo == Tipo.FAI_SCADENZA
 
         fun corpoJson(): JSONObject = runCatching { JSONObject(corpo) }.getOrDefault(JSONObject())
     }
@@ -83,7 +97,7 @@ class CodaInvii(private val file: File) {
      */
     fun aggiungi(op: Operazione): Operazione = synchronized(lucchetto) {
         val attuali = leggi()
-        val doppione = if (op.tipo == Tipo.SALVA || op.tipo == Tipo.ORE || op.tipo == Tipo.SPESA) {
+        val doppione = if (op.tipo == Tipo.SALVA || op.tipo == Tipo.ORE || op.tipo == Tipo.SPESA || op.tipo == Tipo.TICKET) {
             attuali.firstOrNull { it.tipo == op.tipo && it.idLocale == op.idLocale && !it.rifiutata }
         } else null
         if (doppione != null) {
@@ -126,6 +140,24 @@ class CodaInvii(private val file: File) {
     /** Lo scontrino della spesa [chiave], gia' ridotto in [percorso]. [idFile] e' lo stesso a ogni tentativo. */
     fun fotoSpesa(chiave: String, idFile: String, percorso: String, idRemoto: String = "") =
         aggiungi(Operazione(nuovoId(), Tipo.FOTO_SPESA, chiave, idFile = idFile, percorso = percorso, idRemoto = idRemoto))
+
+    private fun adesso(): String = java.time.LocalDateTime.now().withNano(0).toString()
+
+    /** Un ticket nato qui (salvaTicket {ticket}): [chiave] è il suo idLocale "T-...", lo stesso a ogni tentativo. */
+    fun ticket(chiave: String, corpo: JSONObject) =
+        aggiungi(Operazione(nuovoId(), Tipo.TICKET, chiave, corpo = corpo.toString(), quando = adesso()))
+
+    /** Un'azione di stato del ticket [chiave] (id, numero o idLocale): {azione, motivo?, esito?}. */
+    fun azioneTicket(chiave: String, corpo: JSONObject) =
+        aggiungi(Operazione(nuovoId(), Tipo.AZIONE_TICKET, chiave, corpo = corpo.toString(), quando = adesso()))
+
+    /** La foto del ticket [chiave], già ridotta in [percorso]. [idFile] è lo stesso a ogni tentativo. */
+    fun fotoTicket(chiave: String, idFile: String, percorso: String) =
+        aggiungi(Operazione(nuovoId(), Tipo.FOTO_TICKET, chiave, idFile = idFile, percorso = percorso, quando = adesso()))
+
+    /** La scadenza [id] segnata fatta (faiScadenza {id, data?, idDocumento?}): ripetuta uguale, il server non rifà niente. */
+    fun faiScadenza(id: String, corpo: JSONObject) =
+        aggiungi(Operazione(nuovoId(), Tipo.FAI_SCADENZA, "scadenza:$id", corpo = corpo.toString(), quando = adesso()))
 
     /**
      * Il server ha risposto per [idOp], col contenuto [corpoInviato]: l'operazione
@@ -217,6 +249,7 @@ class CodaInvii(private val file: File) {
         .put("errore", op.errore)
         .put("corpo", op.corpo)
         .put("idRemoto", op.idRemoto)
+        .put("quando", op.quando)
 
     private fun daJson(o: JSONObject): Operazione? {
         val idOp = o.testo("idOp").takeIf { it.isNotBlank() } ?: return null
@@ -237,6 +270,7 @@ class CodaInvii(private val file: File) {
             // Il corpo e' un JSON scritto come testo: si legge com'e'.
             corpo = if (o.has("corpo") && !o.isNull("corpo")) o.optString("corpo") else "",
             idRemoto = o.testo("idRemoto"),
+            quando = o.testo("quando"),
         )
     }
 }

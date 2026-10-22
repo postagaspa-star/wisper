@@ -4,8 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light dark">
-  <!-- Solo file di questa cartella e solo chiamate a questa origine (/locale, /server, /file): niente internet dalla pagina. -->
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'none'">
+  <!-- Solo file di questa cartella e solo chiamate a questa origine (/locale, /server, /file): niente internet dalla pagina.
+       frame-src 'self': l'anteprima di un PDF dell'archivio (/file/<id>, fase 5), sempre da questa origine. -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; frame-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'">
   <title>Wisper Ufficio</title>
   <link rel="stylesheet" href="stile.css">
 </head>
@@ -53,6 +54,9 @@
   <script src="spese.js"></script>
   <script src="fatture.js"></script>
   <script src="banche.js"></script>
+  <script src="regole-ticket.js"></script>
+  <script src="archivio.js"></script>
+  <script src="ticket.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

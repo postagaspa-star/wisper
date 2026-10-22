@@ -103,7 +103,244 @@ function semina(w) {
   seminaFase2(w, utenti, come);
   seminaFase3(w, utenti, come);
   seminaFase4(w, utenti, come);
+  seminaFase5(w, utenti, come);
   return utenti;
+}
+
+/**
+ * Documenti, ticket e assistenza come nel prototipo della fase 5
+ * (docs/prototipo/Gestionale-fase5.html, oggi = 22/10/2026):
+ *  - Batokyo Srl (C004) e gli impianti 4-9 del prototipo (Cabina MT Acme di
+ *    Rossi Impianti, il magazzino e l'impianto di terra di Batokyo, il
+ *    fotovoltaico di Mario Bianchi, il quadro di linea 3 di Elettrodinamica);
+ *  - i contratti CA/2026/001 (Batokyo, solo visite), CA/2026/002 (cabina MT
+ *    Acme, visite e guasti, tacito: la disdetta entro il 01/11/2026) e
+ *    CA/2025/004 (fotovoltaico, in scadenza), attivi: le loro commesse
+ *    "Assistenza ..." (26ST004-26ST006, a corpo) e le rate del canone segnate
+ *    fatturate fuori da Wisper (come nel prototipo, gia' fatturate);
+ *  - i ticket TK/2026/0009-0014 (0014 urgente aperto stamattina sulla cabina,
+ *    0013 in carico a Marco con l'intervento di oggi alle 14:30, 0012 risolto
+ *    col rapportino firmato da Mario Bianchi, da chiudere, 0011 in attesa,
+ *    0010 chiuso e fatturato, 0009 chiuso "non si fattura") e i programmati
+ *    nati dalle visite dei contratti (0015 la manutenzione della cabina del 20/11);
+ *  - documenti con revisioni (lo schema unifilare della cabina: rev. 3 da
+ *    approvare), una DiCo, un verbale DPR 462 con la sua scadenza, il
+ *    contratto firmato (vede: costi), collegamenti OneDrive, Google Drive, un
+ *    sito e un percorso dello studio, tre documenti da classificare, un
+ *    certificato che scade fra poco, un modello dello studio;
+ *  - le scadenze: protezioni SPG/SPI scadute, DPR 462 di Batokyo (12/01/2027),
+ *    la disdetta del contratto, le visite.
+ * I giorni dei ticket aperti sono contati da adesso (la Dashboard ha sempre
+ * l'urgente di stamattina); quelli chiusi hanno le date del prototipo.
+ */
+function seminaFase5(w, utenti, come) {
+  const quando = (giorno, ora) => istante(new Date(giorno + 'T' + ora));
+  const T = oggi();
+  const ieri = piuGiorni(T, -1);
+  const pdf = nome => Buffer.from('%PDF-1.4\n% Documento di esempio: ' + nome + '\n1 0 obj << /Type /Catalog >> endobj\n%%EOF\n', 'utf8');
+  /** Un file come se fosse arrivato con /carica, di quella persona. */
+  const carica = (nome, mime, dati, chi) => {
+    const f = w.salvaFile({ dati, nome, mime, tipo: 'caricato' });
+    w.db.esegui('UPDATE file SET caricato_da = ? WHERE id = ?', (chi || utenti.titolare).id, f.id);
+    return f.id;
+  };
+  // La cronologia dei ticket con le ore di quando sono successe le cose (solo qui, per i dati di esempio).
+  let orologio = null;
+  w.eventoTicket = function (idTicket, frase) {
+    const c = this.chi();
+    this.db.esegui('INSERT INTO ticket_eventi (ticket_id, quando, utente_id, testo) VALUES (?, ?, ?, ?)', idTicket, orologio || adesso(), c.utente ? c.utente.id : null, frase);
+  };
+  const retrodata = (tabella, id, campi) => {
+    const k = Object.keys(campi);
+    w.db.esegui('UPDATE ' + tabella + ' SET ' + k.map(c => c + ' = ?').join(', ') + ' WHERE id = ?', ...k.map(c => campi[c]), id);
+  };
+  const ids = {};
+
+  come('titolare', () => {
+    // ------------------------------------------------ Batokyo Srl, i referenti, gli impianti 4-9
+    w.salvaSoggetto({ nome: 'Batokyo Srl', partitaIva: partitaIvaDiProva('0135792468'), email: 'tecnico@batokyo.example', indirizzo: 'Zona industriale 4',
+      cap: '36015', citta: 'Schio', provincia: 'VI', codiceSdi: 'BTK0001' });
+    w.salvaSoggetto({ id: 'C003', pagaViaggio: false });
+    const ferretti = w.salvaReferente({ idSoggetto: 'C002', nome: 'Sig. Ferretti', ruolo: 'Manutenzione Acme', telefono: '0445 000201' }).id;
+    const anna = w.salvaReferente({ idSoggetto: 'C002', nome: 'Anna Rossi', ruolo: 'Acquisti', telefono: '0445 000004' }).id;
+    const ufficio = w.salvaReferente({ idSoggetto: 'C004', nome: 'Ufficio tecnico Batokyo', ruolo: 'Ufficio tecnico', email: 'tecnico@batokyo.example', telefono: '0445 000301' }).id;
+    w.salvaReferente({ idSoggetto: 'C003', nome: 'Mario Bianchi', ruolo: 'Proprietario', telefono: '333 0000123' });
+    const imp = x => w.salvaSede(Object.assign({ tipo: 'impianto', provincia: 'VI', ambiente: 'ordinario' }, x)).id;
+    ids.cabina = imp({ idSoggetto: 'C002', nome: 'Cabina MT Acme', indirizzo: 'Via dell\'Artigianato 9', cap: '36010', citta: 'Zanè', categoria: 'cabina_mt',
+      potenza: '630 kVA', tensione: '15 kV / 400 V', messaInServizio: '2014-05-20', referenteId: ferretti, matricola: 'TR-2014-0571',
+      datiTecnici: 'Trasformatore in resina, due scomparti MT' });
+    ids.quadroRossi = imp({ idSoggetto: 'C002', nome: 'Quadro generale capannone', indirizzo: 'Via Nuova 3', cap: '36061', citta: 'Bassano del Grappa', categoria: 'quadro',
+      potenza: '250 A', tensione: '400 V', messaInServizio: '2019-03-11', referenteId: anna });
+    ids.magazzino = imp({ idSoggetto: 'C004', nome: 'Magazzino automatico', indirizzo: 'Zona industriale', cap: '36015', citta: 'Schio', categoria: 'automazione',
+      tensione: '400 V', messaInServizio: '2023-09-04', referenteId: ufficio, matricola: 'MAG-02', datiTecnici: 'Due navette, PLC di linea' });
+    ids.terra = imp({ idSoggetto: 'C004', nome: 'Impianto di terra stabilimento', indirizzo: 'Zona industriale', cap: '36015', citta: 'Schio', categoria: 'terra',
+      messaInServizio: '2012-01-12', referenteId: ufficio });
+    ids.fotovoltaico = imp({ idSoggetto: 'C003', nome: 'Impianto fotovoltaico 6 kW', indirizzo: 'Via Montegrappa 8', cap: '36063', citta: 'Marostica', categoria: 'fotovoltaico',
+      potenza: '6 kW', tensione: '230 V', messaInServizio: '2021-06-30', matricola: 'INV-6K-2231', datiTecnici: 'Inverter monofase' });
+    ids.linea3 = imp({ idSoggetto: 'C001', nome: 'Quadro di linea 3', indirizzo: 'Via dell\'Industria 12', cap: '36016', citta: 'Thiene', categoria: 'quadro',
+      tensione: '400 V', messaInServizio: '2024-02-15' });
+
+    // ------------------------------------------------ i contratti: in bozza, poi attivi (le visite fanno nascere i programmati dopo i ticket)
+    const c1 = w.salvaContratto({ contratto: { idCliente: 'C004', titolo: 'Assistenza magazzino automatico', dal: '2026-03-01', al: '2027-02-28', rinnovo: 'no',
+      canone: 2400, fatturazioneCanone: 'annuale', copre: 'visite', tariffaExtra: 45, impianti: [{ idSede: ids.magazzino, ogniMesi: 3, primaVisita: '2026-12-01' }] } }).contratto;
+    const c2 = w.salvaContratto({ contratto: { idCliente: 'C002', titolo: 'Manutenzione cabina MT Acme', dal: '2026-01-01', al: '2026-12-31', rinnovo: 'tacito',
+      disdettaGiorni: 60, canone: 1200, fatturazioneCanone: 'semestrale', copre: 'visite_guasti', tariffaExtra: 45, tempi: { urgente: { presa: 1, intervento: 4 } },
+      impianti: [{ idSede: ids.cabina, ogniMesi: 6, primaVisita: '2026-11-20' }] } }).contratto;
+    const c3 = w.salvaContratto({ contratto: { idCliente: 'C003', titolo: 'Controllo annuale fotovoltaico', dal: '2025-11-01', al: '2026-10-31', rinnovo: 'no',
+      canone: 120, fatturazioneCanone: 'annuale', copre: 'visite', impianti: [{ idSede: ids.fotovoltaico, ogniMesi: 12, primaVisita: '2026-10-28' }] } }, { numero: 4 }).contratto;
+
+    w.generaTicketDaScadenze = () => 0;
+    for (const c of [c1, c2, c3]) w.attivaContratto({ id: c.id });
+    delete w.generaTicketDaScadenze;
+    // Le rate del canone di questi periodi sono gia' fatturate (prima di Wisper).
+    const rate = w.db.righe('SELECT id FROM scadenze_pagamento WHERE contratto_id IS NOT NULL');
+    w.segnaFatturataFuori({ voci: rate.map(r => ({ tipo: 'scadenza', id: r.id })), nota: 'canoni fatturati prima di Wisper' });
+    ids.c1 = c1.id;
+    ids.c2 = c2.id;
+    ids.c3 = c3.id;
+
+    // ------------------------------------------------ i ticket TK/2026/0009 ... 0014 (gli id come nel prototipo)
+    w.db.esegui("INSERT INTO sqlite_sequence (name, seq) SELECT 'ticket', 8 WHERE NOT EXISTS (SELECT 1 FROM sqlite_sequence WHERE name = 'ticket')");
+    const tk = (x, numero) => w.salvaTicket({ ticket: Object.assign({ numero }, x) }).ticket;
+    orologio = quando('2026-10-09', '15:00:00');
+    ids.tk9 = tk({ idCliente: 'C004', idSede: ids.magazzino, titolo: 'Domanda sulla selettività degli interruttori', tipo: 'assistenza', origine: 'telefono',
+      impatto: 'nessuno', urgenza: 'quando_si_puo', responsabileId: utenti.collaboratore.id, apertoIl: '2026-10-09T15:00:00', richiedente: 'Ufficio tecnico Batokyo' }, 'TK/2026/0009').id;
+    orologio = quando('2026-10-12', '08:05:00');
+    ids.tk10 = tk({ idCliente: 'C002', idSede: ids.quadroRossi, titolo: 'Presa del quadro bruciata', tipo: 'guasto', origine: 'telefono', impatto: 'ridotto', urgenza: 'subito',
+      responsabileId: utenti.titolare.id, apertoIl: '2026-10-12T08:05:00', idReferente: anna }, 'TK/2026/0010').id;
+    orologio = quando('2026-10-15', '11:00:00');
+    ids.tk11 = tk({ idCliente: 'C001', idSede: ids.linea3, titolo: 'Aggiungere un\'uscita al PLC', descrizione: 'Serve un\'uscita in più per la nuova sirena di linea.',
+      tipo: 'piccolo', origine: 'sopralluogo', impatto: 'nessuno', urgenza: 'quando_si_puo', responsabileId: utenti.titolare.id, apertoIl: '2026-10-15T11:00:00',
+      richiedente: 'Giulia Bianchi' }, 'TK/2026/0011').id;
+    orologio = quando('2026-10-15', '11:30:00');
+    w.sospendiTicket({ id: ids.tk11, motivo: 'Aspetta il modulo di uscite dal fornitore' });
+    orologio = quando('2026-10-20', '09:15:00');
+    ids.tk12 = tk({ idCliente: 'C003', idSede: ids.fotovoltaico, titolo: 'Inverter in errore di isolamento',
+      descrizione: 'L\'inverter si spegne la mattina con l\'errore di isolamento e riparte a mezzogiorno.', tipo: 'guasto', origine: 'telefono',
+      impatto: 'ridotto', urgenza: 'presto', apertoIl: '2026-10-20T09:15:00', richiedente: 'Mario Bianchi · 333 0000123' }, 'TK/2026/0012').id;
+    orologio = quando('2026-10-20', '09:16:00');
+    w.prendiTicket({ id: ids.tk12 });
+    orologio = quando(ieri, '16:10:00');
+    ids.tk13 = tk({ idCliente: 'C004', idSede: ids.magazzino, titolo: 'Navetta 2 si ferma in errore',
+      descrizione: 'La navetta 2 va in errore di posizione due o tre volte al giorno. La linea va avanti con la navetta 1.', tipo: 'guasto', origine: 'email',
+      impatto: 'ridotto', urgenza: 'subito', apertoIl: ieri + 'T16:10:00', richiedente: 'Ufficio tecnico Batokyo', idReferente: ufficio, rifCliente: 'Richiesta 4471' }, 'TK/2026/0013').id;
+    const apertoTk14 = new Date(Date.now() - 85 * 60000);
+    orologio = istante(apertoTk14);
+    ids.tk14 = tk({ idCliente: 'C002', idSede: ids.cabina, titolo: 'Scatta il generale MT',
+      descrizione: 'Il generale della cabina scatta appena lo riarmano. Lo stabilimento è fermo.', tipo: 'guasto', origine: 'telefono', impatto: 'fermo', urgenza: 'subito',
+      apertoIl: istante(apertoTk14), richiedente: 'Sig. Ferretti, manutenzione Acme', idReferente: ferretti }, 'TK/2026/0014').id;
+    w.caricaFile({ tipo: 'ticket', idTicket: ids.tk14, base64: SCONTRINO, mime: 'image/png', nome: 'Quadro MT.png', idFile: 'foto-tk14-1' });
+  });
+
+  // TK/2026/0013: lo prende Marco e pianifica l'intervento di oggi alle 14:30 (accanto al sopralluogo della fase 2).
+  come('collaboratore', () => {
+    orologio = quando(ieri, '16:25:00');
+    w.prendiTicket({ id: ids.tk13 });
+    orologio = quando(ieri, '16:27:00');
+    w.pianificaTicket({ id: ids.tk13, inizio: T + 'T14:30:00', fine: T + 'T16:00:00', conferma: true });
+  });
+
+  come('titolare', () => {
+    // TK/2026/0012: l'intervento del 21/10, il rapportino firmato da Mario Bianchi coi fusibili, risolto (da chiudere).
+    orologio = quando('2026-10-20', '09:20:00');
+    const att = w.pianificaTicket({ id: ids.tk12, inizio: '2026-10-21T09:00:00', fine: '2026-10-21T11:30:00', conferma: true }).attivita;
+    orologio = quando('2026-10-21', '11:30:00');
+    const r12 = w.salvaRapportino({ idLocale: 'seme-f5-tk12', idTicket: ids.tk12, tecnico: 'Manuel Gasparotto', data: '2026-10-21', idCliente: 'C003',
+      idCommessa: w.db.riga('SELECT commessa_id FROM ticket WHERE id = ?', ids.tk12).commessa_id, luogo: 'Via Montegrappa 8, Marostica',
+      descrizione: 'Cambiati i fusibili della stringa 2, isolamento a posto', oreLavoro: 2, oreViaggio: 0.5, km: 24, tariffa: 45, spese: 18.5, noteSpese: 'Fusibili e portafusibili' });
+    const spesa = w.db.riga('SELECT id FROM spese WHERE rapportino_id = ? AND dal_rapportino = 1', r12.id);
+    w.salvaSpesa({ id: spesa.id, categoria: 'materiale' });
+    w.faiAttivita({ id: att.id, fatta: true });
+    orologio = quando('2026-10-21', '11:40:00');
+    w.caricaFile({ tipo: 'firma', id: r12.id, base64: SCONTRINO, mime: 'image/png', idFile: 'firma-f5-tk12', firmatario: 'Mario Bianchi', firmatoIl: '2026-10-21T11:40:00' });
+    w.caricaFile({ tipo: 'ticket', idTicket: ids.tk12, base64: SCONTRINO, mime: 'image/png', nome: 'Inverter.png', idFile: 'foto-tk12-1' });
+    w.caricaFile({ tipo: 'ticket', idTicket: ids.tk12, base64: SCONTRINO, mime: 'image/png', nome: 'Fusibili.png', idFile: 'foto-tk12-2' });
+    orologio = quando('2026-10-21', '11:41:00');
+    w.risolviTicket({ id: ids.tk12, esito: 'cambiati i fusibili della stringa 2, isolamento a posto' });
+    retrodata('rapportini', r12.id, { creato: quando('2026-10-21', '11:30:00') });
+    retrodata('ticket', ids.tk12, { preso_il: quando('2026-10-20', '09:16:00'), risolto_il: quando('2026-10-21', '11:41:00') });
+    w.ricalcolaIntervento(ids.tk12);
+
+    // TK/2026/0010: il rapportino del 13/10 firmato da Anna Rossi, chiuso "una riga" il 14/10 e gia' fatturato (prima di Wisper).
+    orologio = quando('2026-10-13', '17:00:00');
+    const r10 = w.salvaRapportino({ idLocale: 'seme-f5-tk10', idTicket: ids.tk10, tecnico: 'Manuel Gasparotto', data: '2026-10-13', idCliente: 'C002',
+      luogo: 'Via Nuova 3, Bassano del Grappa', descrizione: 'Sostituita la presa bruciata del quadro generale', oreLavoro: 1.5, oreViaggio: 0.5, km: 48, tariffa: 42 });
+    w.caricaFile({ tipo: 'firma', id: r10.id, base64: SCONTRINO, mime: 'image/png', idFile: 'firma-f5-tk10', firmatario: 'Anna Rossi', firmatoIl: '2026-10-13T17:00:00' });
+    w.caricaFile({ tipo: 'ticket', idTicket: ids.tk10, base64: SCONTRINO, mime: 'image/png', nome: 'Presa bruciata.png', idFile: 'foto-tk10-1' });
+    orologio = quando('2026-10-13', '17:05:00');
+    w.risolviTicket({ id: ids.tk10 });
+    orologio = quando('2026-10-14', '09:00:00');
+    w.chiudiTicket({ id: ids.tk10, fatturazione: 'ticket' });
+    w.segnaFatturataFuori({ voci: [{ tipo: 'ticket', id: 'TK/2026/0010' }], nota: 'fattura 47/2026, fatta prima di Wisper' });
+    retrodata('rapportini', r10.id, { creato: quando('2026-10-13', '16:30:00') });
+    retrodata('ticket', ids.tk10, { preso_il: quando('2026-10-12', '08:05:00'), risolto_il: quando('2026-10-13', '17:05:00'), chiuso_il: quando('2026-10-14', '09:00:00') });
+    w.ricalcolaIntervento(ids.tk10);
+
+    // TK/2026/0009: una domanda al telefono, chiusa subito "non si fattura".
+    orologio = quando('2026-10-09', '15:20:00');
+    w.chiudiTicket({ id: ids.tk9, fatturazione: 'no', motivo: 'Risposto al telefono: nel contratto sono comprese le domande' });
+    retrodata('ticket', ids.tk9, { preso_il: quando('2026-10-09', '15:00:00'), risolto_il: quando('2026-10-09', '15:20:00'), chiuso_il: quando('2026-10-09', '15:20:00') });
+    w.ricalcolaIntervento(ids.tk9);
+    retrodata('ticket', ids.tk13, { preso_il: quando(ieri, '16:25:00') });
+    orologio = null;
+
+    // ------------------------------------------------ le visite dei contratti: la manutenzione della cabina (TK/2026/0015) e le altre in anticipo
+    const cabina = w.db.riga("SELECT * FROM scadenze WHERE contratto_id = ? AND tipo = 'manutenzione' AND stato = 'aperta'", ids.c2);
+    if (cabina && !cabina.ticket_id && piuGiorni(cabina.data, -(cabina.anticipo_giorni || 30)) <= T) {
+      orologio = quando(ieri, '02:30:00');
+      const id15 = w.ticketDaScadenza(cabina);
+      w.assegnaTicket({ id: id15, responsabileId: utenti.titolare.id });
+      retrodata('ticket', id15, { aperto_il: quando(ieri, '02:30:00') });
+      orologio = null;
+    }
+    w.generaTicketDaScadenze();
+
+    // ------------------------------------------------ i documenti
+    const cat = nome => w.db.riga('SELECT id FROM documento_categorie WHERE nome = ?', nome).id;
+    const doc = (x, file) => w.salvaDocumento({ documento: Object.assign(file ? { origine: 'file', idFile: file } : {}, x) }).documento;
+    const comm2 = w.db.riga('SELECT commessa_id FROM contratti WHERE id = ?', ids.c2).commessa_id;
+    // Lo schema unifilare della cabina: rev. 0, 1, 2 approvate (la 2 e' la valida), la rev. 3 caricata da Marco da approvare.
+    const schema = doc({ titolo: 'Schema unifilare cabina MT', idCategoria: cat('Progetti e schemi'), idSede: ids.cabina, idCommessa: comm2, dataDocumento: '2026-06-18',
+      parole: 'unifilare MT cabina protezioni' }, carica('Schema unifilare cabina rev0.pdf', 'application/pdf', pdf('Schema unifilare rev. 0')));
+    w.caricaVersione({ id: schema.id, idFile: carica('Schema unifilare cabina rev1.pdf', 'application/pdf', pdf('Schema unifilare rev. 1')), nota: 'Prima emissione dopo il rilievo' });
+    w.caricaVersione({ id: schema.id, idFile: carica('Schema unifilare cabina rev2.pdf', 'application/pdf', pdf('Schema unifilare rev. 2')), nota: 'Nuove protezioni SPG' });
+    w.come({ utente: utenti.collaboratore, permessi: Object.assign({}, w.permessiDi('collaboratore'), { documenti: 2 }), app: 'prova', dispNome: 'dati di esempio' }, () => w.db.transazione(() => {
+      const f = w.salvaFile({ dati: pdf('Schema unifilare rev. 3'), nome: 'Schema unifilare cabina rev3.pdf', mime: 'application/pdf', tipo: 'caricato' });
+      w.aggiungiVersione(schema.id, w.db.riga('SELECT * FROM file WHERE id = ?', f.id), 'Aggiunto il trasformatore di riserva', 'da_approvare');
+    }));
+    doc({ titolo: 'Dichiarazione di conformità quadro generale', idCategoria: cat('Dichiarazioni di conformità'), idSede: ids.quadroRossi, riferimento: 'DiCo 7/2019',
+      dataDocumento: '2019-03-11' }, carica('DiCo 7-2019 quadro generale.pdf', 'application/pdf', pdf('DiCo 7/2019')));
+    const verbale = doc({ titolo: 'Verbale verifica impianto di terra 2022', idCategoria: cat('Verbali di verifica'), idSede: ids.terra, dataDocumento: '2022-01-12',
+      riferimento: 'Verbale ARPA 0112/2022' }, carica('Verbale verifica terra 2022.pdf', 'application/pdf', pdf('Verbale verifica terra 2022')));
+    w.salvaScadenza({ scadenza: { tipo: 'verifica_terra', idSede: ids.terra, idDocumento: verbale.id, data: '2027-01-12', assegnataA: utenti.titolare.id } });
+    doc({ titolo: 'Cartella della commessa 26ST003', idCategoria: cat('Progetti e schemi'), idCommessa: '26ST003', origine: 'collegamento', principale: true,
+      url: 'https://esempio-my.sharepoint.com/:f:/g/personal/studio/Commesse/26ST003', dataDocumento: '2026-10-15' });
+    doc({ titolo: 'Progetto impianto fotovoltaico Bianchi', idCategoria: cat('Progetti e schemi'), idSede: ids.fotovoltaico, origine: 'collegamento',
+      url: 'https://drive.google.com/file/d/1AbCdEsempio/view', dataDocumento: '2021-05-02' });
+    const firmato = doc({ titolo: 'Contratto CA/2026/002 firmato', idCategoria: cat('Contratti'), idSede: ids.cabina, idContratto: ids.c2, idCommessa: comm2,
+      dataDocumento: '2025-12-18' }, carica('Contratto CA-2026-002 firmato.pdf', 'application/pdf', pdf('Contratto CA/2026/002')));
+    w.salvaContratto({ contratto: { id: ids.c2, idDocumento: firmato.id } });
+    doc({ titolo: 'Certificato di taratura del misuratore di terra', idCategoria: cat('Certificati'), dataDocumento: '2025-11-15', riferimento: 'LAT 0000/25',
+      scadenza: { data: '2026-11-15', ogniMesi: 12, preavvisoGiorni: 60 } }, carica('Certificato taratura misuratore.pdf', 'application/pdf', pdf('Certificato di taratura')));
+    doc({ titolo: 'Manuale dell\'inverter', idCategoria: cat('Manuali e schede tecniche'), idSede: ids.fotovoltaico, origine: 'collegamento',
+      url: 'https://www.esempio-inverter.example/manuali/6k.pdf', dataDocumento: '2021-06-30' });
+    doc({ titolo: 'Schemi elettrici archivio 2019', idCategoria: cat('Documenti dello studio'), origine: 'collegamento', url: '\\\\SERVER-STUDIO\\Archivio\\2019\\Schemi',
+      dataDocumento: '2019-12-31' });
+    doc({ titolo: 'Modulo della dichiarazione di conformità', idCategoria: cat('Modelli dello studio'), descrizione: 'Il modello della DiCo da compilare a mano' },
+      carica('Modulo DiCo.pdf', 'application/pdf', pdf('Modulo DiCo')));
+    doc({ titolo: 'Rilievo quadri linea 3', idCategoria: cat('Da classificare'), idCommessa: '26ST001', dataDocumento: '2026-09-02' },
+      carica('Rilievo quadri linea 3.pdf', 'application/pdf', pdf('Rilievo quadri linea 3')));
+    doc({ titolo: 'Offerta materiali quadro', idCategoria: cat('Da classificare'), idCommessa: '26ST002', dataDocumento: '2026-08-21' },
+      carica('Offerta materiali quadro.pdf', 'application/pdf', pdf('Offerta materiali')));
+    doc({ titolo: 'Foto quadro prima dei lavori', idCategoria: cat('Da classificare'), idCommessa: '26ST002', dataDocumento: '2026-08-20' },
+      carica('Foto quadro prima dei lavori.png', 'image/png', Buffer.from(SCONTRINO, 'base64')));
+
+    // ------------------------------------------------ le altre scadenze degli impianti
+    w.salvaScadenza({ scadenza: { titolo: 'Verifica protezioni SPG e SPI', tipo: 'verifica_protezioni', idSede: ids.cabina, data: '2026-09-30' } });
+    w.salvaScadenza({ scadenza: { tipo: 'verifica_terra', idSede: ids.quadroRossi, data: '2029-03-11' } });
+  });
+  delete w.eventoTicket;
+  return ids;
 }
 
 /**

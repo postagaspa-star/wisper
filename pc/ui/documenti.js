@@ -624,7 +624,64 @@
       stile({ RAGIONE_SOCIALE: piede, PARTITA_IVA: '' }) + '</head><body>' + corpo + '</body></html>';
   }
 
-  const Documenti = { rapportino, riepilogo, preventivo, incarico, numeroPreventivo, esc, idDaUrl, sezioniProspetto, prospettoFattura, avvisoParcella };
+  /**
+   * Fase 5 (fase5.md §5.7): la lettera, impaginata qui come gli altri documenti (uguale su telefono e computer).
+   * x: { titolo, testo, cliente (nome, oppure { nome, righe }), impianto? }. Il testo è quello del modello coi
+   * segnaposti già riempiti dal server (componiModello) e corretto dalla persona: si stampa com'è.
+   */
+  /** "1 ora", "4 ore", "1,5 ore". */
+  const ore = n => C.numero(n) + (Number(n) === 1 ? ' ora' : ' ore');
+
+  function lettera(x, imp0) {
+    const imp = imp0 || {};
+    const o = x || {};
+    const cliente = typeof o.cliente === 'string' ? { nome: o.cliente, righe: [] } : (o.cliente || { nome: '', righe: [] });
+    const oggi = C.data(C.oggiIso());
+    let corpo = intestazione(imp, 'Lettera', '', [imp.INDIRIZZO ? String(imp.INDIRIZZO).split(',').pop().trim() : '', oggi].filter(Boolean).join(', '));
+    corpo += '<div class="parti">' + mittente(imp) + destinatario(cliente.nome || '', (cliente.righe || []).filter(Boolean)) + '</div>';
+    corpo += '<div class="barra">Oggetto: ' + esc(o.titolo || '') + (o.impianto ? ' · ' + esc(o.impianto) : '') + '</div>';
+    corpo += '<div class="lettera-testo">' + esc(o.testo || '') + '</div>';
+    corpo += '<div class="firme"><div class="firma"></div><div class="firma"><div class="spazio">' + immagine(idDaUrl(imp.FIRMA_TECNICO), 'sig') + '</div>' +
+      '<div class="chi">' + esc(imp.TECNICO || imp.RAGIONE_SOCIALE || '') + '</div></div></div>';
+    return pagina(imp, o.titolo || 'Lettera', corpo).replace('</style>', '.lettera-testo { white-space: pre-wrap; font-size: 11.5px; line-height: 1.6; margin: 18px 2px 8px; }</style>');
+  }
+
+  /**
+   * Fase 5: il contratto di assistenza (dal contratto del server, contratto {id}), con le condizioni
+   * (il testo CONTRATTO_CONDIZIONI riempito) e le firme. Il canone si stampa solo se c'è nei dati
+   * (chi non vede i soldi non lo riceve dal server).
+   */
+  function contrattoAssistenza(k0, imp0) {
+    const imp = imp0 || {};
+    const k = k0 || {};
+    const rate = { annuale: ', una rata all\'anno', semestrale: ', rate semestrali', trimestrale: ', rate trimestrali', mensile: ', rate mensili' };
+    let corpo = intestazione(imp, 'Contratto di assistenza', k.numero || '', 'dal ' + C.data(k.dal) + ' al ' + C.data(k.al));
+    corpo += '<div class="parti">' + mittente(imp) + destinatario(k.cliente || '', []) + '</div>';
+    corpo += '<div class="barra">Oggetto: ' + esc(k.titolo || '') + '</div>';
+    corpo += '<div class="griglia">' +
+      cella('Periodo', 'dal ' + C.data(k.dal) + ' al ' + C.data(k.al)) +
+      cella('Rinnovo', k.rinnovo === 'tacito' ? 'Tacito, disdetta ' + (k.disdettaGiorni || 0) + ' giorni prima' : 'Senza rinnovo') +
+      cella('Copre', (k.copre === 'visite_guasti' ? 'Visite e guasti' : 'Visite programmate') + (k.materialiInclusi ? ', materiali compresi' : ', materiali esclusi')) +
+      cella('Canone', k.canone !== undefined && k.canone !== null ? C.euro(k.canone) + ' all\'anno' + (rate[k.fatturazioneCanone] || '') : '—') +
+      '</div>';
+    const impianti = k.impianti || [];
+    if (impianti.length) {
+      corpo += '<h3 class="sez">Impianti e visite</h3><table><thead><tr><th>Impianto</th><th>Visite</th><th>Prima visita</th></tr></thead><tbody>' +
+        impianti.map(i => '<tr><td>' + esc(i.nome || '') + '</td><td>' + esc(i.ogniMesi ? 'ogni ' + i.ogniMesi + ' mesi' : 'nessuna programmata') + '</td><td>' +
+          esc(i.primaVisita ? C.data(i.primaVisita) : (i.prossimaVisita ? C.data(i.prossimaVisita) : '—')) + '</td></tr>').join('') + '</tbody></table>';
+    }
+    if (k.tariffaExtra !== undefined && k.tariffaExtra !== null) corpo += '<div class="blocco"><div class="etichetta">Lavoro fuori contratto</div><div class="testo">' + esc(C.euro(k.tariffaExtra) + ' all\'ora') + '</div></div>';
+    if (k.tempi) {
+      const nomi = { urgente: 'Urgente', alta: 'Alta', normale: 'Normale', bassa: 'Bassa' };
+      corpo += '<div class="blocco"><div class="etichetta">Tempi d\'intervento</div><div class="testo">' + esc(Object.keys(k.tempi).map(p => nomi[p] + ': presa in carico entro ' +
+        ore(k.tempi[p].presa) + ', intervento entro ' + ore(k.tempi[p].intervento)).join('\n')) + '</div></div>';
+    }
+    if (k.condizioni) corpo += '<div class="blocco"><div class="etichetta">Condizioni</div><div class="testo">' + esc(k.condizioni) + '</div></div>';
+    corpo += firmeDocumento({}, imp, 'Per lo studio');
+    return pagina(imp, 'Contratto di assistenza ' + (k.numero || ''), corpo);
+  }
+
+  const Documenti = { rapportino, riepilogo, preventivo, incarico, numeroPreventivo, esc, idDaUrl, sezioniProspetto, prospettoFattura, avvisoParcella, lettera, contrattoAssistenza };
   if (typeof module !== 'undefined' && module.exports) module.exports = Documenti;
   else radice.WisperDocumenti = Documenti;
 })(typeof window !== 'undefined' ? window : globalThis);

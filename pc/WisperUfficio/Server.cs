@@ -124,6 +124,51 @@ public sealed class Server
         }
     }
 
+    /// <summary>
+    /// Fase 5: un file in byte al server (POST /carica?nome=&amp;mime=&amp;idFile=&amp;per=), letto dal disco o da
+    /// quello che la pagina ha trascinato, senza base64 e senza tenerlo tutto in memoria. La risposta è
+    /// quella del server ({ok, file, gia} o l'errore), come per /exec.
+    /// </summary>
+    public async Task<(int Stato, string Json)> CaricaAsync(Stream dati, long? lunghezza, string nome, string mime, string idFile, string per)
+    {
+        config.RileggiSeCambiato();
+        if (!config.Entrato) return Uscito();
+        var q = new StringBuilder("?nome=").Append(Uri.EscapeDataString(nome))
+            .Append("&mime=").Append(Uri.EscapeDataString(mime))
+            .Append("&per=").Append(Uri.EscapeDataString(per));
+        if (idFile.Length > 0) q.Append("&idFile=").Append(Uri.EscapeDataString(idFile));
+        try
+        {
+            using var rq = new HttpRequestMessage(HttpMethod.Post, config.Server + "/carica" + q);
+            rq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", config.Token);
+            rq.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+            rq.Headers.Add("X-Wisper-Disp", config.Dispositivo);
+            rq.Headers.Add("X-Wisper-App", "ufficio " + Versione);
+            var corpo = new StreamContent(dati, 81920);
+            corpo.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
+            if (lunghezza is long n) corpo.Headers.ContentLength = n;
+            rq.Content = corpo;
+            // Un file grande su una rete lenta può metterci più dei 90 secondi delle chiamate normali.
+            using var tempo = new CancellationTokenSource(TimeSpan.FromMinutes(15));
+            using var r = await caricatore.SendAsync(rq, tempo.Token).ConfigureAwait(false);
+            var testo = await r.Content.ReadAsStringAsync().ConfigureAwait(false);
+            if (!testo.TrimStart().StartsWith('{')) return (502, Errore($"Il server ha risposto {(int)r.StatusCode}", rete: true).ToJsonString());
+            if (testo.Contains("\"accesso\":false", StringComparison.Ordinal)) config.Esci();
+            return (200, testo);
+        }
+        catch (Exception e) when (e is HttpRequestException or TaskCanceledException or IOException or UriFormatException or InvalidOperationException)
+        {
+            Log.Errore("file non caricato", e);
+            return (502, Errore(e is TaskCanceledException ? "Il file non è arrivato in tempo: riprova" : "Il server non risponde: controlla la rete e riprova", rete: true).ToJsonString());
+        }
+    }
+
+    /// <summary>Per /carica: senza il limite di 90 secondi del client delle chiamate normali (lo decide CaricaAsync).</summary>
+    private readonly HttpClient caricatore = new(new SocketsHttpHandler { AllowAutoRedirect = false, PooledConnectionLifetime = TimeSpan.FromMinutes(5) })
+    {
+        Timeout = System.Threading.Timeout.InfiniteTimeSpan,
+    };
+
     private async Task<(int, string)> ChiamaAsync(Func<HttpRequestMessage> richiesta, bool conChiave = true)
     {
         try

@@ -114,7 +114,7 @@ test('salvaAttivita: valori di base, campi controllati, cliente dalla commessa, 
   assert.deepEqual(k2.attivita.checklist.map(x => [x.testo, x.fatta]), [['Chiedere del permesso', true]]);
   const no = async (a, frase) => assert.equal((await manuel('salvaAttivita', { attivita: a })).errore, frase);
   await no({ titolo: '' }, 'Titolo: scrivi cosa c\'è da fare');
-  await no({ titolo: 'X', tipo: 'riunione' }, 'Tipo: attivita, appuntamento o sopralluogo');
+  await no({ titolo: 'X', tipo: 'riunione' }, 'Tipo: attivita, appuntamento, sopralluogo o intervento');
   await no({ titolo: 'X', priorita: 'massima' }, 'Priorità: alta, normale o bassa');
   await no({ titolo: 'X', tipo: 'sopralluogo' }, 'Inizio: scrivi quando comincia');
   await no({ titolo: 'X', inizio: g(5) + 'T10:00:00', fine: g(5) + 'T09:00:00' }, 'Fine: deve venire dopo l\'inizio');

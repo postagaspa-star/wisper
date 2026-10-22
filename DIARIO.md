@@ -11,6 +11,7 @@ mai dati veri di clienti.
 
 | Data | Versione | In breve |
 |------|----------|----------|
+| 22/10/2026 | gestionale, fase 5 (non pubblicata) | [Documenti, ticket e assistenza](#gestionale-fase-5) |
 | 22/10/2026 | gestionale, fase 4 (non pubblicata) | [Fatture, banche e scadenze](#gestionale-fase-4) |
 | 22/10/2026 | gestionale, fase 3 (non pubblicata) | [Ore, timer, spese e trasferte](#gestionale-fase-3) |
 | 22/10/2026 | gestionale, fase 2 (non pubblicata) | [Preventivi, attività e calendario](#gestionale-fase-2) |
@@ -28,6 +29,55 @@ mai dati veri di clienti.
 | 26/09–14/10/2026 | 0.1 | [Un rapportino confermato non si perde più](#coda) |
 | 7–9/08/2026 | 0.1.0 | [Hackathon NGN Hacks: la versione a voce, senza mani](#v0-1-0) |
 | marzo–giugno 2026 | prima del repository | [Le prime versioni](#prima) |
+
+---
+
+<a id="gestionale-fase-5"></a>
+## 22 ottobre 2026 · gestionale, fase 5 · Documenti, ticket e assistenza
+
+**Perché.** Quinta fase del gestionale (`docs/specifiche-stgm.md`, moduli 11 e 12). Le specifiche chiedono di
+collegarsi agli archivi che lo studio ha già, senza copiare i file, e di gestire guasti, verifiche e manutenzioni sugli
+impianti dei clienti fino al rapportino firmato e alla fattura. Prima la ricerca (`docs/gestionale/ricerca-fase5.md`)
+e il prototipo (`docs/prototipo/Gestionale-fase5.html`), poi il codice.
+
+**Cosa cambia.**
+
+- **Documenti**: un documento è un file sul NAS **oppure un collegamento** a OneDrive, SharePoint, Google Drive o a una
+  cartella dello studio (si incolla sul computer, o arriva dal Condividi del telefono); Wisper riconosce il tipo e non
+  copia niente. Revisioni (la vecchia resta da consultare), categorie, documenti da approvare, chi vede cosa, ricerca,
+  "manda per email" con una copia di quello che si è mandato. I documenti di prima entrano nell'archivio con lo stesso
+  indirizzo. Sfogliare OneDrive e Drive da dentro Wisper e il link per i clienti: "non collegato".
+- **Scadenze documentali** con promemoria (verifiche degli impianti di terra, dichiarazioni, polizze), con le
+  periodicità proposte da confermare con Manuel; lettere e contratti dai modelli, con i testi modificabili e
+  l'impaginazione che resta quella dei PDF di oggi.
+- **Ticket**: la richiesta d'intervento su un cliente e un impianto; la priorità nasce da due domande ("L'impianto è
+  fermo?", "Per quando?") e si può cambiare. Il ticket non duplica niente: l'intervento è un'attività del calendario,
+  ore e spese sono quelle della fase 3, si chiude col **rapportino di sempre** in tre passi con la firma del cliente.
+  Sul telefono si apre e si chiude **anche senza rete**: ticket, foto, rapportino e firma restano in coda e partono da
+  soli, una volta sola.
+- **Chiudere un ticket** vuol dire scegliere come si fattura: una riga per l'intervento, con gli altri rapportini, nel
+  contratto, o non si fattura (col motivo). La riga entra in Da fatturare sotto lo stesso blocco della fase 4: né il
+  ticket né i suoi rapportini possono finire in due fatture. Chiudono titolare e amministrazione; il collaboratore lo
+  segna risolto.
+- **Contratti di assistenza** con il loro canone (che si fattura come le scadenze di pagamento) e le visite periodiche
+  che fanno nascere da sole i ticket programmati; statistiche dei tempi di presa in carico e di chiusura.
+- I file si caricano in byte fino a 50 MB; sotto 2 GB liberi sul NAS si fermano i documenti nuovi ma foto e firme dei
+  rapportini passano sempre. Server 0.8.0 sul NAS, ancora vuoto, con la copia fatta prima delle tabelle nuove.
+
+Prove: server 387, script del foglio 65, telefono 229, computer 193, tutte verdi; il giro senza rete (ticket nuovo,
+foto, rapportino firmato, risolto) provato sull'emulatore in modalità aereo; il giro dal ticket urgente alla riga in Da
+fatturare cliccato in 15 passi su Wisper Ufficio contro il server di prova. Non provati: trascinare file dal computer,
+aprire davvero i collegamenti esterni, un caricamento da 50 MB su rete lenta.
+
+<p>
+<img src="docs/diario/2026-10-22-gest5-tel-ticket.png" width="220" alt="Telefono: il ticket urgente">
+</p>
+
+<img src="docs/diario/2026-10-22-gest5-pc-chiudi.png" width="720" alt="Wisper Ufficio: chiudere il ticket e scegliere come si fattura">
+
+<img src="docs/diario/2026-10-22-gest5-pc-pianifica.png" width="720" alt="Wisper Ufficio: pianificare l'intervento nel calendario">
+
+Versione: non ancora pubblicata (ramo `gestionale`).
 
 ---
 

@@ -358,8 +358,10 @@ fun SchermataRegistraOre(dati: Dati, nav: Navigatore, arg: String) {
     val recenti = remember(ana, viste, ore) { FilaOreSpese.commesseRecenti(ana, viste.map { it.rapportino }, ore?.ore.orEmpty()) }
     val giornoIniziale = remember(arg) { runCatching { LocalDate.parse(arg.removePrefix("nuova/")) }.getOrNull() ?: esistente?.data ?: LocalDate.now() }
 
+    // Fase 5 (§7.5): "+ Ore" dal ticket (assistenza al telefono, preparazione): la commessa e il ticket.
+    val delTicket = remember(arg) { if (nuova) RicordoTicket.perOreSpese.also { RicordoTicket.perOreSpese = null } else null }
     var data by rememberSaveable { mutableStateOf(giornoIniziale) }
-    var idCommessa by rememberSaveable { mutableStateOf(esistente?.idCommessa ?: recenti.firstOrNull()?.id ?: "") }
+    var idCommessa by rememberSaveable { mutableStateOf(esistente?.idCommessa ?: delTicket?.idCommessa ?: recenti.firstOrNull()?.id ?: "") }
     var conOrari by rememberSaveable { mutableStateOf(esistente?.let { it.inizio.isNotBlank() } ?: false) }
     var quante by rememberSaveable { mutableStateOf(esistente?.ore?.takeIf { it > 0 && !(esistente.inizio.isNotBlank()) } ?: 2.0) }
     var inizio by rememberSaveable { mutableStateOf(esistente?.inizio.orEmpty()) }
@@ -381,7 +383,7 @@ fun SchermataRegistraOre(dati: Dati, nav: Navigatore, arg: String) {
 
     fun salva() {
         errore = null
-        val r = (esistente ?: RigaOre(idLocale = "")).copy(
+        val r = (esistente ?: RigaOre(idLocale = "", idTicket = delTicket?.chiave.orEmpty())).copy(
             data = data,
             idCommessa = idCommessa,
             idPrestazione = idPrestazione.takeIf { id -> prestazioni.any { it.id == id } }.orEmpty(),

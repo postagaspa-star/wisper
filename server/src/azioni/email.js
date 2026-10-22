@@ -55,6 +55,12 @@ module.exports = {
     } catch (err) {
       throw new Rifiuto('L\'email non è partita: ' + err.message, err.rete ? { rete: true } : {});
     }
+    // Fase 5: la copia dei PDF mandati (COPIA_INVIATI), legata al cliente, alla commessa e al ticket dei rapportini.
+    if (!aMe) {
+      const righe = ids.map(id => this.trovaRiga(id, id)).filter(Boolean);
+      const unico = k => (righe.length && righe.every(r => testo(r[k]) === testo(righe[0][k])) ? righe[0][k] : '');
+      this.db.transazione(() => this.copiaInviati({ allegati: posta.allegati, a: destinatario, idCliente: unico('id_cliente'), idCommessa: unico('id_commessa'), idTicket: unico('ticket_id') || null }));
+    }
     if (aMe || !ids.length) return [];
     return this.db.transazione(() => {
       const daSegnare = ids.filter(id => {

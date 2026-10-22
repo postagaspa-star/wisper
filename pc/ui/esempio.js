@@ -50,12 +50,13 @@
   /** I permessi iniziali dei quattro ruoli (architettura §3), per i moduli che ci sono. */
   function permessiDi(ruolo) {
     const p = {};
-    const tutti = ['dashboard', 'clienti', 'commesse', 'preventivi', 'attivita', 'rapportini', 'spese', 'fatturazione', 'banche', 'documenti', 'amministrazione', 'costi', 'riservati'];
+    const tutti = ['dashboard', 'clienti', 'commesse', 'preventivi', 'attivita', 'rapportini', 'spese', 'fatturazione', 'banche', 'documenti', 'ticket', 'amministrazione', 'costi', 'riservati'];
     tutti.forEach(m => { p[m] = 0; });
     if (ruolo === 'titolare') tutti.forEach(m => { p[m] = 2; });
-    if (ruolo === 'amministrazione') Object.assign(p, { dashboard: 2, clienti: 2, commesse: 2, preventivi: 2, attivita: 2, rapportini: 2, spese: 2, fatturazione: 2, banche: 2, documenti: 2, amministrazione: 1, costi: 2 });
-    if (ruolo === 'collaboratore') Object.assign(p, { dashboard: 1, clienti: 1, commesse: 1, attivita: 2, rapportini: 2, spese: 2, documenti: 1 });
-    if (ruolo === 'lettura') Object.assign(p, { dashboard: 1, clienti: 1, commesse: 1, preventivi: 1, attivita: 1, rapportini: 1, spese: 1, fatturazione: 1, banche: 1, documenti: 1, costi: 1 });
+    if (ruolo === 'amministrazione') Object.assign(p, { dashboard: 2, clienti: 2, commesse: 2, preventivi: 2, attivita: 2, rapportini: 2, spese: 2, fatturazione: 2, banche: 2, documenti: 2, ticket: 2, amministrazione: 1, costi: 2 });
+    // Fase 5: il collaboratore legge i documenti e lavora i ticket (architettura §16.1).
+    if (ruolo === 'collaboratore') Object.assign(p, { dashboard: 1, clienti: 1, commesse: 1, attivita: 2, rapportini: 2, spese: 2, documenti: 1, ticket: 2 });
+    if (ruolo === 'lettura') Object.assign(p, { dashboard: 1, clienti: 1, commesse: 1, preventivi: 1, attivita: 1, rapportini: 1, spese: 1, fatturazione: 1, banche: 1, documenti: 1, ticket: 1, costi: 1 });
     return p;
   }
 
@@ -628,7 +629,16 @@
       case 'dashboard':
         return dashboard(dati);
       case 'documenti':
+        // Fase 5: l'archivio nuovo (archivio: true) e la risposta di prima (solo idCommessa).
+        if (b.archivio) return { ok: true, pagina: 1, pagine: 1, quanti: 0, conteggi: { daApprovare: 0, inScadenza: 0, scaduti: 0, daClassificare: 0 }, documenti: [], daWisper: [] };
         return { ok: true, cartella: '', documenti: [] };
+      // Fase 5: documenti, scadenze, ticket e contratti nella visita sono vuoti (la visita del computer non li mostra).
+      case 'categorieDocumenti': return { ok: true, categorie: [] };
+      case 'modelli': return { ok: true, wisper: [], studio: [], segnaposti: [], lettere: [] };
+      case 'scadenze': return b.da ? { ok: true, oggi: dati.oggi, da: b.da, a: b.a, scadenze: [] } : { ok: true, oggi: dati.oggi, scadute: [], entro: [], piuAvanti: [], conteggi: { scadute: 0, entro: 0, piuAvanti: 0 } };
+      case 'tickets': return { ok: true, adesso, segmento: b.segmento || 'aperti', conteggi: { aperti: 0, urgenti: 0, nonAssegnati: 0, inRitardo: 0, risoltiDaChiudere: 0, programmatiDaPianificare: 0 }, ticket: [] };
+      case 'contratti': return { ok: true, oggi: dati.oggi, contratti: [] };
+      case 'statisticheTicket': return { ok: true, per: b.per || 'tipo', totale: { aperti: 0, chiusi: 0, inCorso: 0, presaMediaOre: null, interventoMedioOre: null, chiusuraMediaGiorni: null, entroITempi: null, ore: 0, km: 0, nelContratto: 0 }, righe: [] };
       case 'cambiaPassword':
         return String(b.nuova || '').length >= 8 ? { ok: true } : { ok: false, errore: 'La password nuova deve avere almeno 8 caratteri' };
 

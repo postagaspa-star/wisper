@@ -129,9 +129,12 @@ fun SchermataRapportino(
     onFirma: (String) -> Unit,
     onChiudi: () -> Unit,
     onInvia: (String) -> Unit = {},
+    /** Fase 5: salvato senza firma, col ticket: si chiede "Il lavoro è finito?". */
+    onSalvatoSenzaFirma: (eu.stgm.wisper.rapportino.Rapportino) -> Unit = {},
 ) {
     val c = W.colori
     val ctx = LocalContext.current
+    var legaTicket by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val visita = LocalVisita.current
     val avvisi = LocalAvvisi.current
@@ -147,7 +150,8 @@ fun SchermataRapportino(
     LaunchedEffect(vista?.rapportino?.id, vista?.rapportino?.stato, vista?.rapportino?.foto) {
         vista?.rapportino?.let { r ->
             stato.base = stato.base.copy(id = r.id, foto = r.foto, firma = r.firma, firmatario = r.firmatario,
-                firmatoIl = r.firmatoIl, stato = r.stato, gruppo = r.gruppo)
+                firmatoIl = r.firmatoIl, stato = r.stato, gruppo = r.gruppo,
+                idTicket = r.idTicket.ifBlank { stato.base.idTicket }, numeroTicket = r.numeroTicket.ifBlank { stato.base.numeroTicket }, nonSiFattura = r.nonSiFattura)
         }
     }
     // La copia su disco a ogni modifica, se Android chiude l'app (non nella visita).
@@ -443,7 +447,7 @@ fun SchermataRapportino(
                         else PulsantePrincipale("Fai firmare al cliente", {
                             if (salva()) onFirma(stato.base.idLocale)
                         }, Modifier.bersaglio("firma"), icona = Icone.firma)
-                        PulsanteTesto("Salva senza firma", { if (salva()) onChiudi() }, colore = c.testo2)
+                        PulsanteTesto("Salva senza firma", { val r = stato.rapportino(); if (salva()) { onChiudi(); onSalvatoSenzaFirma(r) } }, colore = c.testo2)
                     }
                     // UN pulsante giallo, la cosa da fare adesso; il resto è nel menu ⋯.
                     stato.passo == 4 && bloccato -> Column(
@@ -537,9 +541,22 @@ fun SchermataRapportino(
                 VoceMenu(Icone.indietroStato, "Non ancora fatturato", { menu = false; segna(Stato.INVIATO, "Non più fatturato") })
             }
             if (st != Stato.BOZZA) VoceMenu(Icone.indietroStato, "Riporta in bozza", { menu = false; chiediBozza = true })
+            // Fase 5 (§3.3): legare dopo un rapportino scritto dalla strada solita, o toglierlo dal ticket.
+            if (stato.base.id.isNotBlank() && st != Stato.FATTURATO && LocalPermessi.current.vede(eu.stgm.wisper.rapportino.Moduli.TICKET) && !dati.esempio) {
+                if (stato.base.conTicket) VoceMenu(Icone.chiudi, "Togli dal ticket", {
+                    menu = false
+                    scope.launch {
+                        dati.fase5.legaRapportino(stato.base.id, null).onSuccess { r -> stato.base = stato.base.copy(idTicket = "", idLocaleTicket = "", numeroTicket = "", ticket = r.ticket); stato.ticket = r.ticket; dati.aggiorna(); avvisi.mostra("Tolto dal ticket") }
+                            .onFailure { avvisi.mostra(spiegaErrore2(it, "Non è stato tolto: riprova")) }
+                    }
+                })
+                else VoceMenu(Icone.chiave, "Lega a un ticket", { menu = false; legaTicket = true })
+            }
             if (st == Stato.BOZZA) VoceMenu(Icone.cestino, "Elimina", { menu = false; chiediElimina = true }, pericolo = true)
         }
     }
+
+    if (legaTicket) FoglioLegaTicket(dati, stato.base, onChiudi = { legaTicket = false }, onLegato = { legaTicket = false; onChiudi() })
 
     if (sceltaScontrino) {
         FoglioDalBasso({ sceltaScontrino = false }) {
@@ -737,6 +754,8 @@ private fun ColumnScope.PassoOre(
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Text(listOf(stato.cliente, stato.idCommessa.ifBlank { stato.codiceProposto }.ifBlank { stato.commessa }.takeIf { it.isNotBlank() }).filterNotNull().joinToString(" · "),
             style = Testi.secondarioGrande, color = c.tenue, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        // Fase 5 (§3.3): il rapportino del ticket lo dice con la pillola grigia.
+        if (stato.base.numeroTicket.isNotBlank()) Parola5("Ticket ${stato.base.numeroTicket}", Modifier.padding(vertical = 4.dp), colore = eu.stgm.wisper.rapportino.ColoreFase5.GRIGIO)
         Text("Ore e strada", style = Testi.titoloPagina, color = c.testo)
     }
 
@@ -965,6 +984,12 @@ private fun ColumnScope.PassoRiepilogo(
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Text(dataLungaIt(stato.data), style = Testi.secondarioGrande, color = c.tenue)
         Text(if (stato.base.id.isNotBlank()) stato.base.id else "Riepilogo", style = Testi.titoloPagina, color = c.testo)
+        if (stato.base.numeroTicket.isNotBlank() || stato.base.nonSiFattura.isNotBlank()) Row(
+            Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            if (stato.base.numeroTicket.isNotBlank()) Parola5("Ticket ${stato.base.numeroTicket}", colore = eu.stgm.wisper.rapportino.ColoreFase5.GRIGIO)
+            if (stato.base.nonSiFattura.isNotBlank()) Parola5(stato.base.nonSiFattura, colore = eu.stgm.wisper.rapportino.ColoreFase5.GRIGIO)
+        }
     }
 
     Scheda(verticale = 4.dp, spazio = 0.dp) {

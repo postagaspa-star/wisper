@@ -14,7 +14,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const zlib = require('node:zlib');
-const { Rifiuto, testo, adesso, oggi, dataOraIso, istante, messaggio } = require('../utili');
+const { Rifiuto, testo, numero, adesso, oggi, dataOraIso, istante, messaggio } = require('../utili');
 
 const GIORNI_TENUTE = 30;
 const MESI_TENUTE = 12;
@@ -56,7 +56,7 @@ module.exports = {
             const dati = zlib.gzipSync(fs.readFileSync(file));
             await this.postino.copia({ cartella: 'database', nome: nome + '.gz', mime: 'application/gzip', dati });
             const n = await this.copiaFileNuovi();
-            esito.fuori = 'ok' + (n ? ' · ' + n + (n === 1 ? ' file' : ' file') : '');
+            esito.fuori = 'ok' + (n.copiati ? ' · ' + n.copiati + ' file' : '') + (n.restano ? ' · ' + n.restano + ' restano per domani' : '');
           } catch (err) {
             esito.fuori = 'errore: ' + messaggio(err);
           }
@@ -87,18 +87,48 @@ module.exports = {
    * I file arrivati dopo l'ultima copia fuori casa riuscita (la prima volta:
    * quelli dell'ultimo giorno). Quelli copiati da Drive no: l'originale e' gia' li'.
    */
-  async copiaFileNuovi() {
-    const ultima = this.db.riga("SELECT quando FROM copie WHERE fuori LIKE 'ok%' ORDER BY id DESC LIMIT 1");
-    const da = ultima ? ultima.quando : istante(new Date(Date.now() - 24 * 3600 * 1000));
-    const nuovi = this.db.righe('SELECT * FROM file WHERE percorso IS NOT NULL AND drive_url IS NULL ORDER BY creato')
-      .filter(f => Date.parse(f.creato) > Date.parse(da));
-    for (const f of nuovi) {
+  async copiaFileNuovi(opzioni) {
+    // Fase 5 (fase5.md §5.9): uno per richiesta al postino, dai piu' vecchi, per al massimo 20 minuti; un file che non
+    // riesce non ferma gli altri e si riprova la notte dopo; uno oltre COPIA_FUORI_MAX_MB prende fuori_no = 'troppo
+    // grande' e non si riprova. Torna {copiati, falliti, restano, troppoGrandi, ultimoErrore}.
+    const minuti = opzioni && opzioni.minuti !== undefined ? opzioni.minuti : 20;
+    const inizio = Date.now();
+    const massimo = (numero(this.leggiImpostazioni().COPIA_FUORI_MAX_MB) || 25) * 1024 * 1024;
+    const esito = { copiati: 0, falliti: 0, restano: 0, troppoGrandi: 0, ultimoErrore: '' };
+    for (const f of this.fileDaCopiareFuori()) {
+      if (Date.now() - inizio > minuti * 60000) break;
+      if ((Number(f.byte) || 0) > massimo) {
+        this.db.transazione(() => this.aggiorna('file', f.id, { fuori_no: 'troppo grande' }, 'id', 'troppo grande per la copia fuori casa: resta solo sul NAS'));
+        esito.troppoGrandi++;
+        continue;
+      }
       const p = this.percorsoFile(f.percorso);
-      if (!fs.existsSync(p)) continue;
+      if (!fs.existsSync(p)) {
+        this.db.transazione(() => this.aggiorna('file', f.id, { fuori_no: 'manca sul disco' }, 'id', 'il file non c\'è sul disco del NAS: non si copia'));
+        continue;
+      }
       const pulito = String(f.nome || '').replace(/[\\/:*?"<>|]/g, '-');
-      await this.postino.copia({ cartella: 'file', nome: f.id + ' ' + pulito, mime: f.mime || 'application/octet-stream', dati: fs.readFileSync(p) });
+      try {
+        await this.postino.copia({ cartella: 'file', nome: f.id + ' ' + pulito, mime: f.mime || 'application/octet-stream', dati: fs.readFileSync(p) });
+        // Senza riga nel registro: sarebbe una riga per file per notte. L'esito sta nella tabella copie.
+        this.db.esegui('UPDATE file SET fuori_il = ? WHERE id = ?', adesso(), f.id);
+        esito.copiati++;
+      } catch (err) {
+        esito.falliti++;
+        esito.ultimoErrore = messaggio(err);
+      }
     }
-    return nuovi.length;
+    esito.restano = this.fileDaCopiareFuori().length;
+    return esito;
+  },
+
+  /**
+   * I file non ancora arrivati fuori casa (fuori_il e fuori_no vuoti), dai piu'
+   * vecchi. Quelli copiati da Drive no (l'originale e' gia' li'), i caricati non
+   * ancora legati no, quelli tolti per sempre col cestino svuotato no.
+   */
+  fileDaCopiareFuori() {
+    return this.db.righe("SELECT * FROM file WHERE percorso IS NOT NULL AND drive_url IS NULL AND svuotato IS NULL AND tipo <> 'caricato' AND fuori_il = '' AND fuori_no = '' ORDER BY creato, rowid");
   },
 
   async avvisaCopiaFallita(errore) {
@@ -229,11 +259,22 @@ module.exports = {
           // Fase 4: gli impegni ricorrenti (affitto, F24) per i prossimi 12 mesi.
           const i = this.allungaImpegni();
           if (i) console.log('[impegni] ' + i + ' scadenze nuove');
+          // Fase 5: i contratti col rinnovo tacito finiti si rinnovano; le visite e le scadenze a ticket fanno nascere i ticket programmati.
+          const r = this.db.transazione(() => this.rinnoviContratti());
+          if (r) console.log('[contratti] ' + r + ' rinnovati da soli');
+          const t = this.db.transazione(() => this.generaTicketDaScadenze());
+          if (t) console.log('[ticket] ' + t + ' ticket programmati nuovi');
         } catch (err) {
           console.error('[ricorrenze] non riuscito: ' + messaggio(err));
         }
       }
       // Fase 4: le letture degli XML in attesa di conferma durano un'ora.
+      // Fase 5: i file di /carica mai legati vanno nel cestino dopo 24 ore.
+      try {
+        this.pulisciCaricati();
+      } catch (err) {
+        console.error('[caricati] non riuscito: ' + messaggio(err));
+      }
       try {
         this.pulisciLetture();
       } catch (err) {

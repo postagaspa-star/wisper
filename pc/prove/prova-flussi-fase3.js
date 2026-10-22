@@ -140,7 +140,8 @@ async function main() {
     // ============================================================ il collaboratore (Marco)
     await entra('marco@esempio.it');
     const vociMarco = await valuta("[...document.querySelectorAll('#voci .voce')].map(x => x.dataset.nome)");
-    assert.deepEqual(vociMarco.slice(-2), ['Ore e rapportini', 'Spese e trasferte'], 'Spese e trasferte dopo Ore e rapportini');
+    // Fase 5: dopo vengono Documenti e Ticket e assistenza; Spese e trasferte resta subito dopo Ore e rapportini.
+    assert.equal(vociMarco[vociMarco.indexOf('Ore e rapportini') + 1], 'Spese e trasferte', 'Spese e trasferte dopo Ore e rapportini: ' + vociMarco.join(', '));
     passo('menu: Spese e trasferte al suo posto, dopo Ore e rapportini');
     // Un rapportino di Marco: nasce da approvare (il titolare lo guarda più avanti).
     const rapMarco = (await server('salvaRapportino', { rapportino: { idLocale: 'fase3-marco-' + GIRO, data: C.oggiIso(), idCliente: 'C002', idCommessa: '26ST002',

@@ -76,7 +76,24 @@ data class Rapportino(
     val statoApprovazione: String = "",
     /** Il motivo del rifiuto, se e' respinto. */
     val motivoRifiuto: String = "",
+    /**
+     * Fase 5 (§16.2): il ticket di cui e' il rapportino. [idTicket] e' l'id interno
+     * del server; [idLocaleTicket] quello di un ticket nato sul telefono e non ancora
+     * partito. [numeroTicket] il numero (TK/2026/0014) per la pillola: il campo
+     * [ticket] resta il testo di sempre, stampato nel PDF (lo riempie il server).
+     */
+    val idTicket: String = "",
+    val idLocaleTicket: String = "",
+    val numeroTicket: String = "",
+    /** "Nel contratto CA/2026/002" o "Non si fattura" per un ticket chiuso così, se no vuoto. */
+    val nonSiFattura: String = "",
 ) {
+    /** Il rapportino e' di un ticket (anche nato senza rete). */
+    val conTicket: Boolean get() = idTicket.isNotBlank() || idLocaleTicket.isNotBlank()
+
+    /** La chiave del ticket per le azioni del server: l'id, o l'idLocale di uno nato senza rete. */
+    val chiaveTicket: String get() = idTicket.ifBlank { idLocaleTicket }
+
     /** La pillola dell'elenco: "Da approvare", "Respinto: motivo", o null. */
     val pillolaApprovazione: String?
         get() = when (statoApprovazione) {
@@ -97,6 +114,7 @@ data class Rapportino(
         luogo = luogo, descrizione = descrizione, oreLavoro = oreLavoro, oreExtra = oreExtra,
         oreViaggio = oreViaggio, km = km, spese = spese, noteSpese = noteSpese,
         tariffa = tariffa, noteInterne = noteInterne,
+        idTicket = idTicket, idLocaleTicket = idLocaleTicket, numeroTicket = numeroTicket,
     )
 
     /** Quello che si manda allo script con "salvaRapportino". */
@@ -121,6 +139,11 @@ data class Rapportino(
         .put("noteSpese", noteSpese)
         .put("tariffa", tariffa ?: JSONObject.NULL)
         .put("noteInterne", noteInterne)
+        .apply {
+            // Fase 5: l'id del ticket se il server lo conosce, se no l'idLocale del ticket nato qui.
+            if (idTicket.isNotBlank()) put("idTicket", PonteServer.idJson(idTicket))
+            else if (idLocaleTicket.isNotBlank()) put("idLocaleTicket", idLocaleTicket)
+        }
 
     /** Tutto, per le copie sul telefono (coda e ultimo elenco letto). */
     fun aJson(): JSONObject = perIlFoglio()
@@ -136,7 +159,11 @@ data class Rapportino(
         .put("costoOrario", costoOrario ?: JSONObject.NULL)
         .put("statoApprovazione", statoApprovazione)
         .put("motivoRifiuto", motivoRifiuto)
+        .put("idLocaleTicket", idLocaleTicket)
+        .put("numeroTicket", numeroTicket)
+        .put("nonSiFattura", nonSiFattura)
         .apply {
+            if (idTicket.isNotBlank() && !has("idTicket")) put("idTicket", PonteServer.idJson(idTicket))
             conto?.let {
                 put("oreTotali", it.oreTotali)
                 put("compensoOre", it.compensoOre)
@@ -225,6 +252,10 @@ data class Rapportino(
                 costoOrario = o.numero("costoOrario"),
                 statoApprovazione = o.testo("statoApprovazione"),
                 motivoRifiuto = o.testo("motivoRifiuto"),
+                idTicket = o.testo("idTicket"),
+                idLocaleTicket = o.testo("idLocaleTicket"),
+                numeroTicket = o.testo("numeroTicket"),
+                nonSiFattura = o.testo("nonSiFattura"),
             )
         }
     }

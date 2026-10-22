@@ -68,6 +68,10 @@ import eu.stgm.wisper.rapportino.RigaOre
 import eu.stgm.wisper.rapportino.Rimborsi
 import eu.stgm.wisper.rapportino.EsecutoreFase4
 import eu.stgm.wisper.rapportino.ServizioFase4
+import eu.stgm.wisper.rapportino.ServizioFase5
+import eu.stgm.wisper.rapportino.CodaFase5
+import eu.stgm.wisper.rapportino.InvioFase5
+import eu.stgm.wisper.rapportino.Scaffale
 import eu.stgm.wisper.rapportino.Spesa
 import eu.stgm.wisper.rapportino.StatisticheOre
 import eu.stgm.wisper.rapportino.StatoVoce
@@ -294,6 +298,7 @@ class Archivio(private val ctx: Context) : Dati {
         _timer.value = null
         _speseLette.value = null
         _trasferteLette.value = null
+        fase5.scaffale.svuota()
         Promemoria.programma(ctx, emptyList(), "")
     }
 
@@ -1519,6 +1524,30 @@ class Archivio(private val ctx: Context) : Dati {
         )
     }
 
+    // ------------------------------------------------------------- fase 5: documenti, ticket e assistenza
+
+    /** Quello che si fa anche senza rete (fase5.md §3.9) va nella coda su disco, come i rapportini. */
+    private val codaFase5 = object : CodaFase5 {
+        override fun ticket(chiave: String, corpo: JSONObject) { coda.ticket(chiave, corpo); dopoModifica() }
+        override fun azioneTicket(chiave: String, corpo: JSONObject) { coda.azioneTicket(chiave, corpo); dopoModifica() }
+        override fun fotoTicket(chiave: String, file: File) { coda.fotoTicket(chiave, file.nameWithoutExtension, file.path); dopoModifica() }
+        override fun faiScadenza(id: String, corpo: JSONObject) { coda.faiScadenza(id, corpo); dopoModifica() }
+    }
+
+    /** Ticket, documenti, scadenze, contratti: in diretta, tranne quello che va in coda; le letture restano sul telefono. */
+    override val fase5: ServizioFase5 by lazy {
+        ServizioFase5(
+            ponte, ctx.cacheDir, File(ctx.filesDir, "documenti"), Scaffale(File(ctx.filesDir, "fase5")),
+            object : EsecutoreFase4 {
+                override suspend fun <T> esegui(lavoro: suspend () -> T): Result<T> = inDiretta { lavoro() }
+            },
+            codaFase5,
+            dopoScrittura = { aggiornaDashboard() },
+        )
+    }
+
+    private val invio5 by lazy { InvioFase5(fase5.f) }
+
     override suspend fun segnaRimborsato(voci: List<VoceRimborso>, annulla: Boolean): Result<Pair<Int, Double>> = inDiretta {
         ponte.segnaRimborsato(voci, annulla).also { meseSpese?.let { m -> provaONull { leggiSpese(m) } } }
     }.also { aggiornaDashboard() }
@@ -1610,6 +1639,7 @@ class Archivio(private val ctx: Context) : Dati {
     suspend fun mandaCoda(): Esito = invio.withLock {
         var salvati = false
         var fase3 = false
+        var fase5 = false
         var unoAllaVolta = false
         try {
             while (true) {
@@ -1633,6 +1663,7 @@ class Archivio(private val ctx: Context) : Dati {
                     // cambiate di nuovo restano, e ripartono come modifica.
                     if (op.fase3) fase3 = true else gruppo.forEach { coda.togli(it.idOp) }
                     if (op.tipo == CodaInvii.Tipo.SALVA) salvati = true
+                    if (op.fase5) fase5 = true
                     _coda.value = coda.tutte()
                 } catch (e: CancellationException) {
                     throw e
@@ -1673,6 +1704,8 @@ class Archivio(private val ctx: Context) : Dati {
             // si rilegge l'anagrafica perche' abbiano il loro codice.
             if (salvati) scope.launch { aggiornaOra() }
             else if (fase3) scope.launch { rileggiFase3() }
+            // Partiti ticket o scadenze: si rileggono gli aperti e la Dashboard, coi numeri veri.
+            if (fase5) scope.launch { provaONull { this@Archivio.fase5.tickets() }; provaONull { leggiDashboard() } }
         }
     }
 
@@ -1709,6 +1742,8 @@ class Archivio(private val ctx: Context) : Dati {
             CodaInvii.Tipo.STATO -> sostituisciRemoto(ponte.stato(chiaveFoglio(op.idLocale), op.stato!!))
 
             CodaInvii.Tipo.TOGLI_FOTO -> sostituisciRemoto(ponte.togliFile(chiaveFoglio(op.idLocale), op.fileId))
+
+            CodaInvii.Tipo.TICKET, CodaInvii.Tipo.AZIONE_TICKET, CodaInvii.Tipo.FOTO_TICKET, CodaInvii.Tipo.FAI_SCADENZA -> invio5.esegui(op)
 
             CodaInvii.Tipo.ORE, CodaInvii.Tipo.SPESA, CodaInvii.Tipo.FOTO_SPESA -> when (val a = invio3.esegui(op)) {
                 is InvioFase3.Arrivato.Ore -> mettiOre(a.riga)
@@ -1819,6 +1854,8 @@ class Archivio(private val ctx: Context) : Dati {
                 )
                 // Ore e spese della fase 3: non sono rapportini (le mostrano [ore] e [spese]).
                 CodaInvii.Tipo.ORE, CodaInvii.Tipo.SPESA, CodaInvii.Tipo.FOTO_SPESA -> null
+                // Ticket e scadenze della fase 5: li mostra fase5 (TicketInCoda).
+                CodaInvii.Tipo.TICKET, CodaInvii.Tipo.AZIONE_TICKET, CodaInvii.Tipo.FOTO_TICKET, CodaInvii.Tipo.FAI_SCADENZA -> null
             }
             if (nuova != null) {
                 viste[op.idLocale] = nuova.copy(

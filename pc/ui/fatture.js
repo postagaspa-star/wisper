@@ -291,14 +291,18 @@
       function rigaVoce(g, r, colonne) {
         if (r.tipo === 'mese') return rigaMese(g, r, colonne);
         const v = r.voce;
-        const tipo = { scadenza: quandoDi(v) || 'Scadenza di pagamento', spesa: v.anticipazione ? 'Spesa anticipata' : 'Spesa', ore: 'Ore registrate', rapportino: 'Rapportino' }[v.tipo];
+        const tipo = { scadenza: quandoDi(v) || 'Scadenza di pagamento', spesa: v.anticipazione ? 'Spesa anticipata' : 'Spesa', ore: 'Ore registrate', rapportino: 'Rapportino', ticket: 'Intervento ' + v.id }[v.tipo];
+        // Fase 5: il ticket chiuso "una riga per l'intervento" è una voce sola; le sue spese anticipate vanno con lui (righe a parte, senza IVA).
+        const anticipate = r.tipo === 'ticket' && (r.spese || []).length ? ' · anticipate ' + (r.spese || []).map(s => euro(s.importo)).join(', ') : '';
         return [h('div', { class: 'r' + (M.scelte.has(r.chiave) ? ' scelta' : ''), style: { gridTemplateColumns: colonne } },
           h('span', null, casella(r.chiave, v, g.idCliente, M.scelte.has(r.chiave))),
-          h('span', { class: 'doppia' }, h('span', null, v.titolo), h('span', null, tipo + (v.dettaglio ? ' · ' + v.dettaglio : ''))),
+          r.tipo === 'ticket' && v.idTicket && W.puo('ticket')
+            ? h('button', { type: 'button', class: 'doppia apri-rap', onclick: () => W.vai('#ticket/tk/' + v.idTicket) }, h('span', null, v.titolo), h('span', null, tipo + (v.dettaglio ? ' · ' + v.dettaglio : '') + anticipate))
+            : h('span', { class: 'doppia' }, h('span', null, v.titolo), h('span', null, tipo + (v.dettaglio ? ' · ' + v.dettaglio : '') + anticipate)),
           h('span', { class: 't2' }, v.idCommessa || ''),
           h('span', { class: 't2' }, giornoBreve(v.data)),
           h('span', { class: 't2' }, v.tipo === 'scadenza' ? quandoDi(v) : (v.pronta === false ? 'più avanti' : 'pronta')),
-          h('span', { class: 'n importo-df' }, h('b', null, euro(v.importo)), v.anticipazione ? pillola('Senza IVA', 'grigio') : null, v.senzaPrezzo ? pillola('Senza prezzo', 'giallo') : null))];
+          h('span', { class: 'n importo-df' }, h('b', null, euro(r.tipo === 'ticket' ? r.importo : v.importo)), v.anticipazione ? pillola('Senza IVA', 'grigio') : null, v.senzaPrezzo ? pillola('Senza prezzo', 'giallo') : null, v.aCorpo ? pillola('A corpo', 'grigio') : null))];
       }
 
       function rigaMese(g, r, colonne) {
@@ -357,7 +361,7 @@
           h('div', { class: 'righe-piu' }, lista.map(v => {
             const k = v.tipo + ':' + v.id;
             return h('label', { class: 'voce-piu' }, casella(k, v, v.idCliente, M.scelte.has(k)),
-              h('span', { class: 'corpo' }, h('span', { class: 't1' }, v.titolo + ' · ' + (v.cliente || '')), h('span', { class: 't2' }, [quandoDi(v), v.dettaglio].filter(Boolean).join(' · '))),
+              h('span', { class: 'corpo' }, h('span', { class: 't1' }, v.titolo + ' · ' + (v.cliente || '')), h('span', { class: 't2' }, [quandoDi(v), v.dettaglio, v.perche].filter(Boolean).join(' · '))),
               h('span', { class: 'quanto' }, euro(v.importo)));
           }))]);
         return d;

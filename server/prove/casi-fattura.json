@@ -141,6 +141,13 @@
      "spese": [],
      "atteso": {"righe": [
        {"tipo": "compenso", "descrizione": "Prestazioni professionali di ottobre 2026 (2 rapportini, 12 ore di cui 2 straordinarie)", "quantita": 1, "unita": "", "prezzo": 525, "importo": 525}],
-       "sorgenti": 2}}
+       "sorgenti": 2}},
+    {"nome": "E. ticket TK/2026/0012 (Mario Bianchi): un rapportino e il materiale in una riga",
+     "ticket": {"numero": "TK/2026/0012", "titolo": "Inverter in errore di isolamento", "impianto": "Impianto fotovoltaico 6 kW", "risolto": "2026-10-21", "fatturazione": "ticket"},
+     "cliente": {"id": "C003", "tariffaFissa": null, "pagaViaggio": false},
+     "rapportini": [{"id": "RAP/2026/0151", "data": "2026-10-21", "oreLavoro": 2, "oreExtra": 0, "oreViaggio": 0.5, "tariffa": 45, "maggExtra": 0, "compensoOre": 90, "km": 24, "euroKm": 0.76, "rimborsoKm": 18.24}],
+     "spese": [{"id": 41, "idRapportino": "RAP/2026/0151", "data": "2026-10-21", "descrizione": "Fusibili e portafusibili", "categoria": "materiale", "importo": 18.5, "anticipazione": false}],
+     "atteso": {"righe": [{"tipo": "compenso", "descrizione": "Intervento TK/2026/0012 del 21/10/2026: Inverter in errore di isolamento - Impianto fotovoltaico 6 kW (2 ore, 24 km, materiale e spese 18,50 €)", "quantita": 1, "unita": "", "prezzo": 126.74, "importo": 126.74}],
+       "gruppo": "ticket:TK/2026/0012", "sorgenti": 3}}
   ]
 }

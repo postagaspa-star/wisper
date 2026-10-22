@@ -155,6 +155,14 @@ fun SchermataDashboard(
                     val urgenti = d.urgenti.drop(1)
                     if (urgenti.isNotEmpty()) SezioneDashboard("Urgenti", urgenti, if (prima == null) Modifier.bersaglio("cosa-fare") else Modifier) { apri(it) }
                     if (d.settimana.isNotEmpty()) SezioneDashboard("Questa settimana", d.settimana, Modifier.bersaglio("settimana")) { apri(it) }
+                    // Fase 5 (fase5.md §12.5): per chi vede i ticket, quattro riquadri in due colonne, toccabili.
+                    val n5 = d.fase5
+                    if (perm.vede(Moduli.TICKET) && n5.ticketAperti != null) RiquadriDue(listOf(
+                        Triple("${n5.ticketAperti}", "ticket aperti", { apri(Collegamento("tickets")) }),
+                        Triple("${n5.ticketUrgenti}", "urgenti", { apri(Collegamento("tickets", parametri = mapOf("priorita" to "urgente"))) }),
+                        Triple("${n5.interventiOggi}", "interventi oggi", { apri(Collegamento("calendario")) }),
+                        Triple("${(n5.scadenzeScadute ?: 0) + n5.scadenzeEntro}", "scadenze vicine", if (perm.vede(Moduli.DOCUMENTI)) ({ apri(Collegamento("documenti", parametri = mapOf("segmento" to "scadenze"))) }) else null),
+                    ), rossi = if (n5.ticketUrgenti > 0) setOf(1) else emptySet())
                     if (perm.vede(Moduli.COMMESSE)) NumeriDelleCommesse(d.commesse) { filtro -> apri(Collegamento("commesse", filtro = filtro)) }
                     if (d.pianificare.isNotEmpty()) SezioneDashboard("Da pianificare", d.pianificare) { apri(it) }
                     if (d.vuota) NienteDaSistemare(if (prima == null) Modifier.bersaglio("cosa-fare") else Modifier)
@@ -256,8 +264,18 @@ fun apriCollegamento(col: Collegamento?, nav: Navigatore, rapportini: List<Rappo
         "amministrazione" -> when (p["sezione"]) {
             "veicoli" -> nav.vai("amm/veicoli")
             "fiscale" -> nav.vai("amm/fiscale")
+            "spazio" -> nav.vai("amm/spazio")
             else -> nav.sezione(Sezione.AMMINISTRAZIONE)
         }
+        // Fase 5 (§16.18): ticket, contratti, documenti, scadenze, impianti, spazio.
+        "tickets" -> { RicordoTicket.mostra(p["segmento"].orEmpty(), p["priorita"].orEmpty(), p["nonAssegnati"] == "true", p["mie"] == "true"); nav.sezione(Sezione.TICKET) }
+        "ticket" -> if (col.id.isNotBlank()) nav.vai("ticket/${col.id}") else nav.sezione(Sezione.TICKET)
+        "contratti" -> { RicordoTicket.segmento = SegmentoTicket.CONTRATTI; nav.sezione(Sezione.TICKET) }
+        "contratto" -> if (col.id.isNotBlank()) nav.vai("contratto-ca/${col.id}") else { RicordoTicket.segmento = SegmentoTicket.CONTRATTI; nav.sezione(Sezione.TICKET) }
+        "documenti" -> { RicordoDocumenti.mostra(p["segmento"].orEmpty(), p["daClassificare"] == "true"); nav.sezione(Sezione.DOCUMENTI) }
+        "documento" -> if (col.id.isNotBlank()) nav.vai("documento/${col.id}") else nav.sezione(Sezione.DOCUMENTI)
+        "scadenza" -> if (col.id.isNotBlank()) nav.vai("scadenza/${col.id}") else { RicordoDocumenti.mostra("scadenze"); nav.sezione(Sezione.DOCUMENTI) }
+        "impianto" -> if (col.id.isNotBlank()) nav.vai("impianto/${col.id}")
         "copie" -> nav.vai("amm/copie")
         "utenti" -> nav.vai("amm/utenti")
         "registro" -> nav.vai("amm/registro")
@@ -315,6 +333,13 @@ private fun azioneDi(col: Collegamento?): String = when (col?.pagina?.lowercase(
     "preventivi" -> "Vedi i preventivi"
     "attivita" -> if (col.id.isNotBlank()) "Apri l'attività" else "Vedi le attività"
     "calendario" -> "Apri il calendario"
+    "ticket" -> "Apri il ticket"
+    "tickets" -> "Vedi i ticket"
+    "contratto", "contratti" -> "Apri il contratto"
+    "documento" -> "Apri il documento"
+    "documenti" -> when (col.parametri["segmento"]) { "approvare" -> "Vedi cosa approvare"; "scadenze" -> "Vedi le scadenze"; else -> "Vedi i documenti" }
+    "scadenza" -> "Apri la scadenza"
+    "impianto" -> "Apri l'impianto"
     else -> "Apri"
 }
 
@@ -399,6 +424,12 @@ private fun iconaDi(v: VoceDashboard): ImageVector = when (v.tipo.lowercase()) {
     "impegno" -> Icone.calendario
     "cassa", "conto" -> Icone.barre
     "fiscale" -> Icone.scudo
+    // Fase 5 (§16.18)
+    "ticket" -> Icone.chiave
+    "intervento" -> Icone.calendario
+    "documento" -> Icone.documento
+    "contratto" -> Icone.preventivo
+    "spazio" -> Icone.disco
     else -> when (v.gravita.lowercase()) {
         "urgente" -> Icone.allarme
         "attenzione" -> Icone.avviso

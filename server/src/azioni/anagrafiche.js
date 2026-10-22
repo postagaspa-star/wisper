@@ -123,6 +123,8 @@ function commessaDaRiga(r, persone) {
     modificato: dataOraIso(r.modificato),
     // Fase 4: come si fattura (ore: rapportini e ore; corpo: le scadenze del contratto; misto: tutti e due).
     modoFatturazione: r.modo_fatturazione || 'ore',
+    // Fase 5: la commessa di un contratto d'assistenza (pillola "Assistenza").
+    idContratto: r.contratto_id === null || r.contratto_id === undefined ? null : r.contratto_id,
   };
 }
 
@@ -140,10 +142,21 @@ function referenteDaRiga(r) {
   };
 }
 
+/** Fase 5: le categorie degli impianti e gli ambienti (l'ambiente propone la periodicita' delle verifiche DPR 462). */
+const CATEGORIE_IMPIANTO = { cabina_mt: 'Cabina MT', quadro: 'Quadro', terra: 'Impianto di terra', scariche: 'Protezione dalle scariche',
+  fotovoltaico: 'Fotovoltaico', automazione: 'Automazione', illuminazione: 'Illuminazione', altro: 'Altro' };
+const AMBIENTI = ['ordinario', 'cantiere', 'medico', 'incendio', 'esplosione'];
+
 function sedeDaRiga(r) {
   return {
     id: r.id, idSoggetto: r.soggetto_id, tipo: r.tipo, nome: r.nome, indirizzo: r.indirizzo, cap: r.cap,
     citta: r.citta, provincia: r.provincia, note: r.note, archiviata: r.archiviata === 1,
+    // Fase 5: i dati dell'impianto (tutti facoltativi).
+    categoria: r.categoria || '', categoriaNome: CATEGORIE_IMPIANTO[r.categoria] || '',
+    sedePadreId: r.sede_padre_id === null || r.sede_padre_id === undefined ? null : r.sede_padre_id,
+    matricola: r.matricola || '', potenza: r.potenza || '', tensione: r.tensione || '', messaInServizio: r.messa_in_servizio || '',
+    ambiente: r.ambiente || '', referenteId: r.referente_id === null || r.referente_id === undefined ? null : r.referente_id,
+    datiTecnici: r.dati_tecnici || '',
   };
 }
 
@@ -482,6 +495,33 @@ module.exports = {
     if (x.archiviata !== undefined) v.archiviata = x.archiviata ? 1 : 0;
     if (v.cap && !/^\d{5}$/.test(v.cap)) throw new Rifiuto('CAP: deve avere 5 cifre');
     if (v.provincia) v.provincia = v.provincia.toUpperCase();
+    // Fase 5: i dati dell'impianto.
+    ['matricola', 'potenza', 'tensione'].forEach(k => { if (x[k] !== undefined) v[k] = testo(x[k]); });
+    if (x.datiTecnici !== undefined) v.dati_tecnici = testo(x.datiTecnici);
+    if (x.categoria !== undefined) {
+      v.categoria = testo(x.categoria);
+      if (v.categoria && !CATEGORIE_IMPIANTO[v.categoria]) throw new Rifiuto('Categoria: ' + Object.keys(CATEGORIE_IMPIANTO).join(', '));
+    }
+    if (x.ambiente !== undefined) {
+      v.ambiente = testo(x.ambiente);
+      if (v.ambiente && AMBIENTI.indexOf(v.ambiente) < 0) throw new Rifiuto('Ambiente: ' + AMBIENTI.join(', '));
+    }
+    if (x.messaInServizio !== undefined) v.messa_in_servizio = testo(x.messaInServizio) ? dataDaIso(x.messaInServizio) : '';
+    const soggettoDi = () => (x.id ? (this.db.riga('SELECT soggetto_id FROM sedi WHERE id = ?', Number(x.id)) || {}).soggetto_id : testo(x.idSoggetto || x.soggettoId));
+    if (x.sedePadreId !== undefined) {
+      v.sede_padre_id = vuoto(x.sedePadreId) ? null : Number(x.sedePadreId);
+      if (v.sede_padre_id !== null) {
+        const padre = this.db.riga('SELECT * FROM sedi WHERE id = ?', v.sede_padre_id);
+        if (!padre || padre.soggetto_id !== soggettoDi() || (x.id && padre.id === Number(x.id))) throw new Rifiuto('Sede: scegli una sede dello stesso cliente');
+      }
+    }
+    if (x.referenteId !== undefined) {
+      v.referente_id = vuoto(x.referenteId) ? null : Number(x.referenteId);
+      if (v.referente_id !== null) {
+        const ref = this.db.riga('SELECT * FROM referenti WHERE id = ?', v.referente_id);
+        if (!ref || ref.soggetto_id !== soggettoDi()) throw new Rifiuto('Referente: scegli un referente dello stesso cliente');
+      }
+    }
     if (x.id) {
       const prima = this.db.riga('SELECT * FROM sedi WHERE id = ?', Number(x.id));
       if (!prima) throw new Rifiuto('Sede ' + x.id + ' non trovata');
