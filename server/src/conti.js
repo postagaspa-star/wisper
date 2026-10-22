@@ -6,7 +6,7 @@
  */
 'use strict';
 
-const { numero, numeroONull, normalizza, centesimi, testo } = require('./utili');
+const { numero, numeroONull, normalizza, centesimi, testo, due, Rifiuto } = require('./utili');
 
 /**
  * Elettrodinamica: il cliente a cui si fattura a tariffa fissa, 30 euro l'ora,
@@ -245,8 +245,186 @@ function contiPreventivo(p) {
   };
 }
 
+// ------------------------------------------------------------------ fase 3: ore, trasferte, rimborsi, costo della commessa
+//
+// Come per il preventivo, i conti stanno solo qui; telefono e computer li rifanno
+// per l'anteprima con i casi di server/prove/casi-ore-spese.json.
+
+/** "8:30", "08:30", "08.30" o "08:30:00" -> minuti dalla mezzanotte (510), oppure null. */
+function minutiDa(ora) {
+  const m = testo(ora).match(/^(\d{1,2})[:.](\d{2})(?::\d{2})?$/);
+  if (!m) return null;
+  const h = Number(m[1]);
+  const mi = Number(m[2]);
+  return h > 23 || mi > 59 ? null : h * 60 + mi;
+}
+
+/** 510 -> "08:30". */
+const oraDaMinuti = minuti => due(Math.floor(minuti / 60)) + ':' + due(minuti % 60);
+
+/**
+ * Le ore di una riga da inizio, fine e pausa (in minuti).
+ *
+ * La regola della mezzanotte: una fine PRIMA dell'inizio e' del giorno dopo
+ * (22:00-06:00 sono 8 ore) e la riga resta del giorno in cui il lavoro e'
+ * cominciato. Una fine uguale all'inizio e' un errore (zero o 24 ore? non si
+ * indovina). La pausa non puo' essere lunga quanto il lavoro. Le ore sono
+ * arrotondate a due decimali (8:00-12:20 = 4,33).
+ */
+function oreDaOrari(inizio, fine, pausaMinuti) {
+  const a = minutiDa(inizio);
+  if (a === null) throw new Rifiuto('Inizio: scrivi l\'ora come 8:30');
+  const b = minutiDa(fine);
+  if (b === null) throw new Rifiuto('Fine: scrivi l\'ora come 17:30');
+  if (a === b) throw new Rifiuto('Fine: deve essere diversa dall\'inizio');
+  const pausa = pausaMinuti === undefined || pausaMinuti === null || pausaMinuti === '' ? 0 : Number(pausaMinuti);
+  if (!(pausa >= 0) || Math.round(pausa) !== pausa) throw new Rifiuto('Pausa: scrivi i minuti, da zero in su');
+  const giornoDopo = b < a;
+  const durata = (giornoDopo ? b + 1440 : b) - a;
+  if (pausa >= durata) throw new Rifiuto('Pausa: è più lunga del lavoro');
+  const minuti = durata - pausa;
+  return { inizio: oraDaMinuti(a), fine: oraDaMinuti(b), pausaMinuti: pausa, minuti, ore: Math.round(minuti / 60 * 100) / 100, giornoDopo };
+}
+
+/**
+ * Il rimborso di una trasferta: km (x2 con andata e ritorno) x euro al km
+ * congelato, al centesimo; piu' l'indennita'. Ogni pezzo arrotondato prima di
+ * sommare, come i rapportini.
+ */
+function rimborsoTrasferta(t) {
+  const kmTotali = Math.round(numero(t.km) * (t.andataRitorno ? 2 : 1) * 100) / 100;
+  const rimborsoKm = centesimi(kmTotali * numero(t.euroKm));
+  const indennita = centesimi(numero(t.indennita));
+  return { kmTotali, rimborsoKm, indennita, totale: centesimi(rimborsoKm + indennita) };
+}
+
+/** Le ore di un rapportino per le statistiche: tutte, fatturabili (il viaggio solo se si paga) e il loro costo. */
+function oreDelRapportino(r, costoOrarioDiRiserva) {
+  const lavoro = numero(r.oreLavoro) + numero(r.oreExtra);
+  const viaggio = numero(r.oreViaggio);
+  const co = scritto(r.costoOrario) ? numero(r.costoOrario) : (costoOrarioDiRiserva === undefined ? null : costoOrarioDiRiserva);
+  return {
+    ore: Math.round((numero(r.oreTotali) || lavoro + viaggio) * 100) / 100,
+    fatturabili: Math.round((lavoro + (r.pagaViaggio ? viaggio : 0)) * 100) / 100,
+    // Come il cruscotto della fase 1: il costo orario comprende gia' il viaggio.
+    costo: co === null ? null : centesimi(lavoro * co),
+  };
+}
+
+/** Una riga che conta nei conti: mandata o approvata (non bozza, non respinta, non tolta). */
+const contaNeiConti = x => !x.tolta && (x.stato === 'da_approvare' || x.stato === 'approvata');
+
+/**
+ * I rimborsi dovuti a ogni persona: le spese che ha pagato lei (pagataDaMe),
+ * approvate, che non sono "Mia" (personale), piu' le trasferte approvate
+ * (rimborso km + indennita'), meno quelle gia' rimborsate. inAttesa = le stesse
+ * cose ancora da approvare. spese e trasferte sono quelle delle risposte
+ * (spesaDaRiga, trasfertaDaRiga); le spese dei rapportini annullati vanno
+ * tolte prima. Le persone in ordine di idUtente.
+ */
+function rimborsiDovuti(spese, trasferte) {
+  const per = {};
+  const di = id => per[id] || (per[id] = { idUtente: id, totale: 0, inAttesa: 0, spese: 0, trasferte: 0, km: 0, voci: [] });
+  for (const s of spese || []) {
+    if (!s.pagataDaMe || s.destinazione === 'personale' || s.rimborsataIl || s.tolta || s.idUtente === null || s.idUtente === undefined) continue;
+    const p = di(s.idUtente);
+    const euro = centesimi(numero(s.importo));
+    if (s.stato === 'approvata') {
+      p.totale = centesimi(p.totale + euro);
+      p.spese++;
+      p.voci.push(Object.assign({ tipo: 'spesa' }, s));
+    } else if (s.stato === 'da_approvare') p.inAttesa = centesimi(p.inAttesa + euro);
+  }
+  for (const t of trasferte || []) {
+    if (t.rimborsataIl || t.tolta || t.idUtente === null || t.idUtente === undefined) continue;
+    const r = rimborsoTrasferta(t);
+    if (!(r.totale > 0)) continue;
+    const p = di(t.idUtente);
+    if (t.stato === 'approvata') {
+      p.totale = centesimi(p.totale + r.totale);
+      p.trasferte++;
+      p.km = Math.round((p.km + r.kmTotali) * 100) / 100;
+      p.voci.push(Object.assign({ tipo: 'trasferta' }, t));
+    } else if (t.stato === 'da_approvare') p.inAttesa = centesimi(p.inAttesa + r.totale);
+  }
+  return Object.values(per).filter(p => p.totale > 0 || p.inAttesa > 0).sort((a, b) => a.idUtente - b.idUtente);
+}
+
+/**
+ * Il costo di una commessa (architettura.md §14.10). La prima parte e' quella
+ * del cruscotto della fase 1 (pc/ui/conti.js, cruscotto): le ore di lavoro e
+ * straordinarie dei rapportini non annullati al loro costo orario (quello di
+ * oggi se la riga non l'ha), i km al loro euro al km, le spese dei rapportini.
+ * La fase 3 aggiunge: le ore registrate (mandate o approvate) al costo orario
+ * congelato nella riga, le spese della commessa fuori dai rapportini (al
+ * cliente e allo studio; le "Mia" no), le spese di un rapportino spostate allo
+ * studio (uscite dal suo conto), le trasferte (rimborso km + indennita').
+ * soloRapportini = il numero della fase 1: senza ore, spese e trasferte nuove
+ * i due coincidono al centesimo.
+ */
+function costoCommessa({ commessa, cliente, impostazioni, rapportini, ore, spese, trasferte }) {
+  const id = String(commessa.id).toUpperCase();
+  const stessa = x => String(x || '').toUpperCase() === id;
+  const costoOggi = costoOrarioDi(cliente, commessa, impostazioni);
+  const euroKmOggi = numero((impostazioni || {}).EURO_KM);
+  let lavoro = 0;
+  let lavoroNoto = true;
+  let auto = 0;
+  let speseRapportini = 0;
+  const annullati = new Set();
+  for (const r of rapportini || []) {
+    if (!stessa(r.idCommessa)) continue;
+    if (r.stato === 'ANNULLATO') { annullati.add(r.id); continue; }
+    const co = scritto(r.costoOrario) ? numero(r.costoOrario) : costoOggi;
+    if (co === null) lavoroNoto = false;
+    else lavoro += (numero(r.oreLavoro) + numero(r.oreExtra)) * co;
+    auto += numero(r.km) * (numero(r.euroKm) || euroKmOggi);
+    speseRapportini += numero(r.spese);
+  }
+  lavoro = centesimi(lavoro);
+  auto = centesimi(auto);
+  speseRapportini = centesimi(speseRapportini);
+
+  let oreRegistrate = 0;
+  let oreRegistrateCosto = 0;
+  for (const o of ore || []) {
+    if (!stessa(o.idCommessa) || !contaNeiConti(o)) continue;
+    const co = scritto(o.costoOrario) ? numero(o.costoOrario) : costoOggi;
+    oreRegistrate += numero(o.ore);
+    if (co === null) lavoroNoto = false;
+    else oreRegistrateCosto += numero(o.ore) * co;
+  }
+  let speseFuori = 0;
+  for (const s of spese || []) {
+    if (!stessa(s.idCommessa) || s.tolta || s.destinazione === 'personale') continue;
+    if (s.idRapportino) {
+      // Quelle al cliente sono gia' nella colonna spese del rapportino; quelle spostate allo studio no.
+      if (s.destinazione === 'studio' && !annullati.has(s.idRapportino) && (rapportini || []).some(r => r.id === s.idRapportino)) speseFuori += numero(s.importo);
+    } else if (contaNeiConti(s)) speseFuori += numero(s.importo);
+  }
+  let costoTrasferte = 0;
+  let kmTrasferte = 0;
+  for (const t of trasferte || []) {
+    if (!stessa(t.idCommessa) || !contaNeiConti(t)) continue;
+    const r = rimborsoTrasferta(t);
+    costoTrasferte += r.totale;
+    kmTrasferte += r.kmTotali;
+  }
+  const oreCosto = centesimi(oreRegistrateCosto);
+  const fuori = centesimi(speseFuori);
+  const tr = centesimi(costoTrasferte);
+  return {
+    lavoro, lavoroNoto, auto, speseRapportini,
+    oreRegistrate: Math.round(oreRegistrate * 100) / 100, costoOreRegistrate: oreCosto,
+    speseFuoriRapportini: fuori, trasferte: tr, kmTrasferte: Math.round(kmTrasferte * 100) / 100,
+    soloRapportini: centesimi(lavoro + auto + speseRapportini),
+    totale: centesimi(lavoro + auto + speseRapportini + oreCosto + fuori + tr),
+  };
+}
+
 module.exports = {
   ELETTRODINAMICA, STATI, STATI_BLOCCATI, regoleDi, calcola, prossimoCodice, RE_CODICE_COMMESSA,
   tariffaProposta, prezzoOrarioDi, costoOrarioDi, budgetDi, partitaIvaItalianaValida,
   importoVoce, vociCheContano, gruppoAlternativa, contiPreventivo,
+  minutiDa, oraDaMinuti, oreDaOrari, rimborsoTrasferta, oreDelRapportino, contaNeiConti, rimborsiDovuti, costoCommessa,
 };

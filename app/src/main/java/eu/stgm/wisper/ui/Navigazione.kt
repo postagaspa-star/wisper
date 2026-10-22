@@ -66,6 +66,7 @@ enum class Sezione(val nome: String, val icona: ImageVector, val modulo: String)
     PREVENTIVI("Preventivi e contratti", Icone.preventivo, Moduli.PREVENTIVI),
     ATTIVITA("Attività e calendario", Icone.calendario, Moduli.ATTIVITA),
     RAPPORTINI("Ore e rapportini", Icone.ore, Moduli.RAPPORTINI),
+    SPESE("Spese e trasferte", Icone.scontrino, Moduli.SPESE),
     FATTURAZIONE("Fatturazione", Icone.fatturazione, Moduli.FATTURAZIONE),
     AMMINISTRAZIONE("Amministrazione", Icone.amministrazione, Moduli.AMMINISTRAZIONE),
 }
@@ -116,7 +117,9 @@ fun rottaCompito(rotta: String?): Boolean =
     rotta != null && (rotta.startsWith("invio/") || rotta.startsWith("commessa-modifica/") || rotta.startsWith("commessa-nuova") ||
         rotta.startsWith("cliente-modifica/") || rotta.startsWith("cliente-nuovo") || rotta.startsWith("fornitore-nuovo") ||
         rotta.startsWith("preventivo-modifica/") || rotta.startsWith("preventivo-nuovo") ||
-        rotta.startsWith("attivita-modifica/") || rotta.startsWith("attivita-nuova"))
+        rotta.startsWith("attivita-modifica/") || rotta.startsWith("attivita-nuova") ||
+        rotta.startsWith("ore-registra") || rotta.startsWith("spesa-nuova") || rotta.startsWith("spesa/") ||
+        rotta.startsWith("trasferta-nuova") || rotta.startsWith("trasferta/") || rotta.startsWith("amm/veicolo"))
 
 /** La sezione di una pagina interna: dice il nome piccolo accanto a "indietro" e il permesso che serve. */
 fun sezioneDiRotta(rotta: String?, base: Sezione): Sezione = when {
@@ -126,6 +129,8 @@ fun sezioneDiRotta(rotta: String?, base: Sezione): Sezione = when {
     rotta.startsWith("commess") -> Sezione.COMMESSE
     rotta.startsWith("preventiv") || rotta == "listino" || rotta == "contratti" || rotta.startsWith("invio/preventivo") -> Sezione.PREVENTIVI
     rotta.startsWith("attivita") || rotta.startsWith("calendario") -> Sezione.ATTIVITA
+    rotta.startsWith("ore-") -> Sezione.RAPPORTINI
+    rotta.startsWith("spes") || rotta.startsWith("trasfert") -> Sezione.SPESE
     rotta.startsWith("amm/") -> Sezione.AMMINISTRAZIONE
     else -> base
 }

@@ -950,3 +950,574 @@ Tabelle nuove (migrazione `002-preventivi-attivita.sql`, con la copia `wisper.db
 `"tolta: la ricorrenza è cambiata"`, `"tolta: la serie non si ripete più"`, `"tolta: la serie finisce prima"`).
 L'allungamento delle ricorrenze gira nella pianificazione delle copie: all'avvio del server e ogni notte dopo
 mezzanotte (`[ricorrenze] N occorrenze nuove` nel log).
+
+## 14. Fase 3: le risposte, campo per campo
+
+Ore senza rapportino, timer, approvazioni, spese, trasferte, veicoli e rimborsi (accordo in [`fase3.md`](fase3.md),
+migrazione `003-ore-spese`, server 0.6.0). Valgono le regole comuni della §12.1: `ok`, `permesso:false`, date
+`"2026-10-21"`, istanti `"2026-10-21T14:30:00"` (ora italiana, senza fuso), le azioni che scrivono vogliono una POST.
+Gli esempi sono le risposte vere del server di prova (`node server/src/avvio.js --prova ...`, 22/10/2026), accorciate
+dove un elenco si ripete: i dati di esempio hanno i giorni contati da oggi (gli ultimi giorni feriali), quindi date e
+numeri cambiano col giorno in cui lo si accende.
+
+### 14.1 Regole comuni della fase 3
+
+- **Moduli.** Ore, timer, statistiche e l'approvazione di ore e rapportini sono del modulo `rapportini` (voce 6, Ore e
+  rapportini): leggere 1, scrivere 2. Spese, trasferte, rimborsi, riepiloghi e veicoli sono del modulo `spese` (voce 7):
+  leggere 1, scrivere 2. `salvaVeicolo` vuole `amministrazione` 2; `costoCommessa` vuole `commesse` 1.
+- **Chi vede.** Un **collaboratore** vede e scrive solo le sue ore, il suo timer, le sue spese, trasferte e rimborsi
+  (anche nelle statistiche, nei riepiloghi e nelle esportazioni): il filtro `utente` per lui non conta. Le cose degli
+  altri non le trova (`"Ore 12 non trovate"`, `"Spesa 6 non trovata"`: non si dice che esistono). **Lettura** vede tutto
+  e non scrive. **Titolare e amministrazione** vedono tutto e scrivono anche per gli altri (`idUtente`).
+- **Chi approva**: titolare e amministrazione, col modulo in scrittura (ore e rapportini: `rapportini` 2; spese e
+  trasferte: `spese` 2). Il collaboratore non approva mai, nemmeno se e' responsabile della commessa (vedi §14.17).
+- **Stati** di ore, spese e trasferte: `bozza` | `da_approvare` | `approvata` | `respinta`. Dei rapportini
+  (`statoApprovazione`, accanto agli stati di sempre): `""` (non serve) | `da_approvare` | `approvato` | `respinto`.
+- **Impostazione `APPROVAZIONE`**: `collaboratori` (di base: servono le approvazioni solo per le cose scritte da un
+  collaboratore), `tutti`, `nessuno`. Quello che non ha bisogno di approvazione nasce gia' approvato
+  (`stato: "approvata"`, `approvataDa: null`).
+- **Lo stato dopo un salvataggio** (ore, spese, trasferte): con `bozza: true` resta in bozza; una riga nuova, o che era
+  in bozza, o che chi l'ha scritta cambia davvero (o rimanda dopo un rifiuto), va **da approvare** (o approvata, se per
+  quella persona non serve); se la cambia chi approva, lo stato resta quello che era. Quando lo stato cambia,
+  `approvataDa`, `approvataIl` e `motivoRifiuto` si svuotano (restano nel registro).
+- **Chi ha deciso**: `approvataDa` (id), `approvataDaNome`, `approvataIl` sono chi ha approvato **o respinto** e quando;
+  `motivoRifiuto` e' il motivo del rifiuto (vuoto se non e' respinta).
+- **Togliere** (ore, spese, trasferte): non si cancella niente. `togli... {id}` mette `tolta` (l'istante) e la riga
+  esce dagli elenchi e dai conti; `togli... {id, annulla: true}` la rimette (l'Annulla dell'avviso).
+- **Cosa si puo' cambiare.** Ogni riga ha `puoScrivere` (permesso e niente blocco) e `bloccata` (la frase pronta da
+  mostrare, o `""`). Le spese hanno anche `soloCampi`: `null`, oppure `["categoria", "descrizione", "pagataDaMe"]`
+  quando sono di un rapportino gia' firmato (si cambia solo quello).
+- **Soldi.** Senza il permesso `costi` non ci sono (§12.1) anche: `costo` (ore x costo orario), `costoOrario` delle ore,
+  `costoCommessa` (tutto l'oggetto), `costoOreRegistrate`. **I soldi della persona invece si vedono sempre**, anche senza
+  `costi`, perche' sono suoi: l'`importo` delle spese, l'`euroKm`, il `rimborsoKm` e il `totale` delle trasferte,
+  l'`euroKm` dei veicoli, il `totale` e gli `importo` dei rimborsi, i totali dei riepiloghi delle spese. Il server li
+  tiene solo dentro questi oggetti (spesa, trasferta, veicolo, rimborso, riepilogo): `importo` di un preventivo, `totale`
+  di un rapportino e `euroKm` di un rapportino o di una commessa restano campi dei costi come prima. (L'euro al km del
+  veicolo e' la tabella ACI, pubblica, e decide il rimborso della persona: si vede.) La Dashboard del collaboratore
+  resta senza soldi e senza "€" (§12.7).
+- **`io`** ha in piu' in `interfaccia`: `"puoApprovare": false` (mostra il segmento Da approvare),
+  `"puoSegnareRimborsi": false` (il pulsante Segna rimborsato), `"approvazione": "collaboratori"`,
+  `"oreGiornaliere": 8`; e `versioneServer` e' `"0.6.0"` (anche in `/salute`).
+
+### 14.2 Impostazioni nuove
+
+`anagrafiche.impostazioni` ha in piu': `APPROVAZIONE` (`"collaboratori"`), `ACI_ANNO` (`2026`, l'anno delle tabelle ACI
+dei veicoli), `INDENNITA_TRASFERTA` (`""`: l'indennita' proposta **per ogni giorno** di trasferta, in euro; vuota =
+nessuna), `ORE_GIORNALIERE` (`8`: oltre 4 ore in piu' in un giorno e' un'anomalia). Si salvano con `salvaImpostazioni`.
+`EURO_KM` e `AUTO` restano quelle dei rapportini (il prezzo al km per il cliente): il rimborso delle trasferte segue il
+veicolo (§14.9). Alla migrazione il primo veicolo nasce da `AUTO` ed `EURO_KM`; dopo, le due cose sono separate.
+
+### 14.3 Ore: l'elenco
+
+`ore {da?, a?, utente?, commessa?, stato?}` (rapportini 1). Di base la settimana di oggi (da lunedi' a domenica).
+`commessa: "studio"` = le ore senza commessa (attivita' dello studio). `stato`: uno dei quattro o `tutte` (di base tutte,
+tranne le tolte). Le righe in ordine di giorno, inizio, id.
+```json
+{"ok": true, "da": "2026-10-19", "a": "2026-10-25", "oreGiornaliere": 8,
+ "ore": [
+  {"id": 12, "idUtente": 1, "utente": "Manuel Gasparotto", "data": "2026-10-21", "inizio": "22:00", "fine": "06:00",
+   "pausaMinuti": 30, "ore": 7.5, "giornoDopo": true, "idCommessa": "26ST002", "commessa": "Quadro elettrico capannone",
+   "idCliente": "C002", "cliente": "Rossi Impianti Srl", "idPrestazione": null, "prestazione": "", "idAttivita": null,
+   "attivita": "", "descrizione": "Prova notturna del quadro", "fatturabile": true, "tipo": "ordinaria",
+   "costoOrario": 25, "costo": 187.5, "stato": "approvata", "approvataDa": null, "approvataDaNome": "", "approvataIl": "",
+   "motivoRifiuto": "", "dalTimer": false, "tolta": "", "puoScrivere": true, "bloccata": "",
+   "creato": "2026-10-22T01:41:11", "modificato": "2026-10-22T01:41:11"},
+  {"id": 11, "idUtente": 3, "utente": "Marco Collaboratore", "data": "2026-10-19", "inizio": "", "fine": "", "pausaMinuti": 0,
+   "ore": 2, "giornoDopo": false, "idCommessa": "", "commessa": "", "descrizione": "Riordino del magazzino",
+   "fatturabile": false, "costoOrario": 15, "costo": 30, "stato": "respinta", "approvataDa": 1,
+   "approvataDaNome": "Manuel Gasparotto", "approvataIl": "2026-10-22T01:40:39",
+   "motivoRifiuto": "Il riordino del magazzino non si segna: è dentro le ore di studio", "...": "..."}],
+ "giorni": [{"data": "2026-10-19", "ore": 3, "oreRapportini": 0}, {"data": "2026-10-20", "ore": 12, "oreRapportini": 0},
+            {"data": "2026-10-21", "ore": 28, "oreRapportini": 0}, "... fino a domenica"],
+ "totali": {"ore": 47, "fatturabili": 38, "straordinarie": 5, "oreRapportini": 0, "daApprovare": 3}}
+```
+- `inizio`/`fine`: ore del giorno `"HH:MM"`, vuote se le ore sono scritte a mano. `giornoDopo: true` = la fine e' del
+  giorno dopo (lavoro a cavallo della mezzanotte); la riga resta del giorno in cui e' cominciato (`data`).
+- `idCommessa: ""` = attivita' dello studio (il prototipo la chiama "Studio"). `tipo`: `ordinaria` | `straordinaria`.
+- `costoOrario` e' congelato alla nascita della riga (§14.4); `costo` = ore x costo orario, al centesimo, `null` se il
+  costo orario non c'e'. Tutti e due solo con `costi`.
+- `dalTimer`: nata fermando il timer. `tolta`: `""` (le tolte non arrivano negli elenchi).
+- `giorni`: ogni giorno del periodo con le ore registrate (non respinte) e le ore dei rapportini (non annullati) della
+  stessa persona o di tutti: serve alla settimana del telefono ("come Il tuo giorno") e alle colonne del timesheet.
+- `totali`: delle righe non respinte; `daApprovare` = quante righe aspettano.
+- **Timesheet del computer**: righe = commesse (piu' "Studio"), colonne = giorni, cella = somma delle righe di quella
+  persona, commessa e giorno. Scrivere una cella: con una riga sola si cambia quella (`salvaOre` con `id` e `ore`); senza
+  righe se ne crea una; con piu' righe la cella non si scrive (si apre il giorno).
+
+### 14.4 Ore: salvaOre e togliOre
+
+`salvaOre {riga: {id?, idUtente?, data?, inizio?, fine?, pausaMinuti?, ore?, idCommessa?, idPrestazione?, idAttivita?,
+descrizione?, fatturabile?, tipo?, bozza?}}` (rapportini 2) → `{"ok": true, "riga": {...come in ore}}`. Senza `id` crea
+(di base oggi, la persona che scrive), con `id` cambia solo i campi mandati.
+- **Inizio e fine**: se ci sono tutti e due, le ore si calcolano (`oreDaOrari`, §14.15) e un `ore` mandato non conta.
+  **La regola della mezzanotte**: una fine prima dell'inizio e' del giorno dopo (22:00-06:00 = 8 ore). Per passare alle
+  ore scritte a mano si mandano `inizio: ""` e `fine: ""`. `pausaMinuti` conta solo con inizio e fine.
+- **Ore a mano**: `ore` da 0 a 24 (gli stepper vanno a mezz'ore, il server accetta i decimali), due decimali.
+- `fatturabile` di base: si' con una commessa, no per lo studio. `tipo` di base `ordinaria` (`straordinaria: true` vale
+  come `tipo: "straordinaria"`). La prestazione deve essere della commessa (senza commessa, la commessa e' quella della
+  prestazione).
+- **Costo orario congelato**: alla nascita, quello di adesso per quella commessa (il costo fisso del cliente, poi quello
+  della commessa, poi `COSTO_ORARIO`; dalla fase 6 quello della persona). Si rifa' solo se cambia la commessa, come i
+  rapportini: cambiare impostazioni o commessa dopo non riscrive le ore gia' scritte.
+- `bozza: true`: resta in bozza (anche con zero ore). Senza: la riga va a chi approva (§14.1).
+- Il collaboratore scrive solo per se' (`idUtente` di un altro: `permesso:false`); una riga **approvata** non la cambia
+  e non la toglie piu' (`bloccata`); chi approva la corregge e lo stato resta.
+Errori: `"Ore: scrivi quante ore hai lavorato"` (zero, senza bozza), `"Ore: da 0 a 24"`, `"Scrivi l'inizio e la fine,
+oppure solo le ore"`, `"Inizio: scrivi l'ora come 8:30"`, `"Fine: scrivi l'ora come 17:30"`, `"Fine: deve essere diversa
+dall'inizio"`, `"Pausa: è più lunga del lavoro"`, `"Pausa: scrivi i minuti, da zero in su"`, `"Tipo: ordinaria o
+straordinaria"`, `"Commessa 26ST999 non trovata"`, `"Prestazione 9 non trovata in 26ST001"`, `"Attività 9 non trovata"`,
+`"Persona 9 non trovata"`, `"Sono già approvate: per cambiarle chiedi a chi approva"`, `"Le ore non cambiano persona:
+toglile e scrivile per l'altra persona"`, `"Queste ore sono state tolte: rimettile prima di cambiarle"`.
+
+`togliOre {id, annulla?}` (rapportini 2) → `{"ok": true, "riga": {..., "tolta": "2026-10-22T01:41:11"}}`; con
+`annulla: true` torna `"tolta": ""`. Approvate e collaboratore: `"Sono già approvate: per toglierle chiedi a chi approva"`.
+
+**Senza doppioni dalla coda del telefono** (aggiunto il 22/10/2026). `salvaOre` e `salvaSpesa` accettano `idLocale`
+(il codice che il telefono dà alla riga quando la mette in coda, uguale a ogni nuovo tentativo). Se una riga con quell'`idLocale`
+esiste già, il server non ne crea un'altra e risponde con quella (`salvaOre` aggiunge `"giaArrivata": true`). Colonna
+`id_locale` (unica) nelle tabelle `ore` e `spese`.
+
+### 14.5 Il timer
+
+Uno per persona, nel database: sopravvive al riavvio del server e alla chiusura dell'app.
+
+`timer {}` (rapportini 1) → il proprio:
+```json
+{"ok": true, "adesso": "2026-10-22T01:41:11",
+ "timer": {"partitoIl": "2026-10-22T00:10:39", "idCommessa": "26ST001", "commessa": "Nuovo magazzino automatico Batokyo",
+           "idPrestazione": null, "idAttivita": null, "descrizione": "Cablaggio quadro di linea 3", "fatturabile": true,
+           "secondi": 5432}}
+```
+`timer: null` se e' spento. `adesso` e `secondi` sono del server: l'app fa scorrere il tempo da li' (l'orologio del
+telefono puo' essere sbagliato).
+
+`avviaTimer {idCommessa?, idPrestazione?, idAttivita?, descrizione?, fatturabile?}` (rapportini 2) → come `timer`. Gia'
+acceso (vero): `{"ok": false, "errore": "Il timer è già acceso dalle 00:10 (26ST001): fermalo prima di avviarne un
+altro", "timer": {...quello acceso}}` (l'app lo mostra invece di riprovare).
+
+`fermaTimer {}` (rapportini 2) → la riga di ore **in bozza** dal giorno e dall'ora in cui e' partito fino ad adesso, da
+correggere e mandare con `salvaOre`:
+```json
+{"ok": true, "timer": null,
+ "riga": {"id": 14, "idUtente": 3, "data": "2026-10-22", "inizio": "00:10", "fine": "01:41", "pausaMinuti": 0, "ore": 1.52,
+          "giornoDopo": false, "idCommessa": "26ST001", "descrizione": "Cablaggio quadro di linea 3", "fatturabile": true,
+          "stato": "bozza", "dalTimer": true, "...": "..."}}
+```
+Le ore seguono la regola di inizio e fine (anche dopo mezzanotte), con inizio e fine al minuto. Fermato nello stesso
+minuto: fine vuota e zero ore. **Acceso da piu' di 24 ore**: la bozza ha solo l'inizio, zero ore e in piu'
+`"avviso": "Il timer era acceso da più di un giorno: scrivi tu le ore giuste"`. Spento: `"Il timer non è acceso"` (una
+richiesta ripetuta dalla coda: la bozza c'e' gia', si rilegge con `ore`). Nel registro: tabella `timer`, nota
+`"fermato: ore 14 in bozza"`.
+
+### 14.6 Approvazioni
+
+`daApprovare {}` (chi approva; gli altri `"Non hai il permesso per approvare ore, rapportini e spese: chiedi al
+titolare"`, `permesso:false`):
+```json
+{"ok": true, "oggi": "2026-10-22", "quante": 8, "conAnomalie": 5,
+ "persone": [{"idUtente": 3, "nome": "Marco Collaboratore", "quante": 8, "conAnomalie": 5, "voci": [
+   {"tipo": "rapportino", "id": "RAP/2026/0006", "idUtente": 3, "data": "2026-10-16", "cosa": "Rapportino",
+    "dettaglio": "RAP/2026/0006 · Verifica impianto di terra · venerdì 16", "quanto": 4.5, "unita": "ore", "km": 22, "anomalie": []},
+   {"tipo": "spesa", "id": 12, "idUtente": 3, "data": "2026-10-20", "cosa": "Spesa",
+    "dettaglio": "Albergo per il collaudo notturno · 26ST001 · martedì 20", "quanto": 230, "unita": "euro",
+    "anomalie": [{"tipo": "sopra200", "testo": "Spesa sopra i 200 €"}]},
+   {"tipo": "trasferta", "id": 2, "idUtente": 3, "data": "2026-10-20", "cosa": "Trasferta",
+    "dettaglio": "Schio, passando dal fornitore a Padova · 26ST001 · martedì 20", "quanto": 136.8, "unita": "euro", "km": 180,
+    "anomalie": [{"tipo": "kmDiversi", "testo": "Km diversi dal solito: 180 invece di circa 96"}]},
+   {"tipo": "ore", "id": 8, "idUtente": 3, "data": "2026-10-21", "cosa": "Ore",
+    "dettaglio": "26ST001 · Cablaggio quadro di linea 3 · mercoledì 21", "quanto": 8, "unita": "ore",
+    "anomalie": [{"tipo": "troppeOre", "testo": "13 ore in un giorno"}]},
+   {"tipo": "spesa", "id": 9, "idUtente": 3, "data": "2026-10-21", "cosa": "Spesa", "dettaglio": "Pranzo · senza commessa · mercoledì 21",
+    "quanto": 16.5, "unita": "euro", "anomalie": [{"tipo": "senzaFoto", "testo": "Senza scontrino"}]}]}]}
+```
+- Gruppi per persona (in ordine di nome), voci per giorno (poi ore, rapportino, spesa, trasferta). `cosa` e `dettaglio`
+  sono pronti da mostrare ("Ore · 26ST046 · martedì 21"); `quanto` + `unita` (`ore` | `euro`) il numero a destra; `km`
+  per rapportini e trasferte. Per le trasferte `quanto` = rimborso km + indennita'.
+- Ci sono le ore, le spese (non dei rapportini) e le trasferte `da_approvare`, e i rapportini con `statoApprovazione:
+  "da_approvare"` non annullati. Le spese di un rapportino non si elencano a parte: si approvano col rapportino.
+- **Anomalie** (`tipo` e `testo` pronto, in giallo scuro): `troppeOre` = in quel giorno la persona ha piu' di
+  `ORE_GIORNALIERE` + 4 ore, contando ore registrate (mandate o approvate) e rapportini non annullati (su ogni voce di quel
+  giorno: `"12,5 ore in un giorno"`); `senzaFoto` = spesa senza scontrino (`"Senza scontrino"`), rapportino con spese e
+  senza foto (`"Spese senza scontrino"`); `sopra200` = spesa oltre 200 euro (`"Spesa sopra i 200 €"`, nel rapportino
+  `"Una spesa sopra i 200 €"`); `kmDiversi` = rapportino o trasferta con commessa i cui km (totali) si scostano di piu' di
+  un quarto, e almeno 10 km, dalla mediana degli altri km di quella commessa (servono almeno due altri valori).
+
+`approva {voci: [{tipo, id}]}`, `respingi {voci, motivo}`, `annullaApprovazione {voci}` (chi approva il modulo della
+voce; POST) → vero:
+```json
+{"ok": true, "fatte": 4, "voci": [{"tipo": "ore", "id": 7, "stato": "approvata"}, {"tipo": "ore", "id": 8, "stato": "approvata"},
+  {"tipo": "ore", "id": 9, "stato": "approvata"}, {"tipo": "rapportino", "id": "RAP/2026/0006", "stato": "approvato"}]}
+```
+- `tipo`: `ore` | `rapportino` (id = il numero RAP) | `spesa` | `trasferta`. Tutto o niente (una transazione).
+- Una voce gia' nello stato voluto si salta (`fatte` non la conta, `voci` la riporta): la coda del telefono puo'
+  ripetere. Una approvata si puo' respingere (e viceversa) finche' non e' rimborsata, fatturata o (rapportino) mandata.
+- `respingi` vuole il motivo, che arriva a chi ha scritto: e' nel registro (`azione: "respingi"`, `dopo.motivo`), nella
+  riga (`motivoRifiuto`) e nella sua Dashboard (§14.13). Approvare o respingere un rapportino fa lo stesso alle sue spese.
+- `annullaApprovazione` (l'Annulla dell'avviso dopo Approva o Respingi): rimette `da_approvare`.
+Errori: `"Scrivi il motivo: arriva a chi l'ha scritta"`, `"Scegli cosa approvare"` (o `respingere`, `rimettere da
+approvare`), `"Tipo: ore, rapportino, spesa o trasferta"`, `"Le ore del 21/10 sono ancora in bozza: chi le ha
+scritte deve prima mandarle"` (o `"La spesa del 21/10 è ancora in bozza: chi l'ha scritta deve prima mandarla"`), `"La spesa 3 è nel rapportino RAP/2026/0002: si approva insieme al rapportino"`, `"La spesa
+è già stata rimborsata il 22/10: non si respinge più"`, `"Il rapportino RAP/2026/0005 è già stato mandato al cliente: non
+si rimette da approvare"`, `"Non hai il permesso per approvare ore e rapportini: chiedi al titolare"` (`permesso:false`,
+prima di cercare la voce), `"Ore 9 non trovate"`.
+
+### 14.7 Rapportini: cosa cambia
+
+Ogni rapportino ha in piu' (vero, di Marco, respinto e poi corretto):
+```json
+{"statoApprovazione": "da_approvare", "approvatoDa": null, "approvatoIl": "", "motivoRifiuto": "",
+ "righeSpese": [{"id": 1, "importo": 14.5, "categoria": "altro", "descrizione": "Pranzo", "destinazione": "cliente",
+   "dalRapportino": true, "stato": "approvata", "foto": [], "...": "tutti i campi di una spesa (§14.8)"}]}
+```
+- **Pillola**: `statoApprovazione: "da_approvare"` → "Da approvare"; `"respinto"` → "Respinto: " + `motivoRifiuto`.
+  `""` (tutti quelli di prima, e quelli di titolare e amministrazione con `APPROVAZIONE` di base) = niente pillola.
+- Nasce `da_approvare` il rapportino scritto da chi deve far approvare; ci torna quando chi l'ha scritto lo cambia davvero
+  (una ripetizione uguale dalla coda no) o lo rimanda dopo un rifiuto. Chi approva puo' cambiarlo senza toccare
+  l'approvazione. Firmare si puo' sempre (il cliente firma in cantiere).
+- **Non si manda al cliente e non si fattura finche' non e' approvato**: `stato` a `INVIATO` o `FATTURATO` e `inviaEmail`
+  (non `aMe`) rispondono, prima di spedire, `"Il rapportino RAP/2026/0012 aspetta l'approvazione: si manda al cliente e si
+  fattura solo dopo"` o `"Il rapportino RAP/2026/0012 è stato respinto (Le ore di viaggio mancano): correggilo e
+  rimandalo in approvazione"`. La Dashboard non lo conta tra i "firmati da mandare".
+- `righeSpese`: le righe di spese del rapportino (non tolte), anche quelle spostate allo studio o "Mia". `spese` resta
+  **il totale di quelle al cliente** (§14.12). Le foto (`foto`) sono quelle di sempre: i file `spesa` col suo
+  `rapportino_id`, cioe' gli scontrini delle sue spese al cliente.
+- `rapportini` accetta anche il filtro `statoApprovazione` (`da_approvare` | `approvato` | `respinto` | `nessuno` = `""`).
+- Il collaboratore continua a non vedere `tariffa`, `totale`, `euroKm`...; vede l'`importo` delle sue `righeSpese`.
+
+### 14.8 Spese
+
+`spese {da?, a?, utente?, commessa?, stato?, destinazione?, categoria?, idRapportino?, idTrasferta?}` (spese 1). Di base
+il mese di oggi; i piu' recenti prima. Le spese di un rapportino annullato non ci sono (tornano col ripristino), tranne
+chiedendo `idRapportino`.
+```json
+{"ok": true, "da": "2026-10-01", "a": "2026-10-31",
+ "spese": [
+  {"id": 6, "idUtente": 1, "utente": "Manuel Gasparotto", "data": "2026-10-20", "importo": 52, "categoria": "altro",
+   "descrizione": "Diritti di segreteria del Comune", "idCommessa": "26ST002", "commessa": "Quadro elettrico capannone",
+   "idCliente": "C002", "cliente": "Rossi Impianti Srl", "idRapportino": "", "idTrasferta": null, "destinazione": "cliente",
+   "anticipazione": true, "pagataDaMe": true, "stato": "approvata", "approvataDa": null, "approvataDaNome": "",
+   "approvataIl": "", "motivoRifiuto": "", "rimborsataIl": "", "fatturataIl": "", "dalRapportino": false,
+   "foto": [{"id": "lAhnld7qj9SelrDrp4Y5ZlC0-UtT", "url": "/file/lAhnld7qj9SelrDrp4Y5ZlC0-UtT"}], "tolta": "",
+   "puoScrivere": true, "bloccata": "", "soloCampi": null, "creato": "2026-10-22T01:40:39", "modificato": "2026-10-22T01:40:39"},
+  {"id": 1, "data": "2026-10-02", "importo": 14.5, "categoria": "altro", "descrizione": "Pranzo", "idCommessa": "26ST001",
+   "idRapportino": "RAP/2026/0002", "destinazione": "cliente", "pagataDaMe": false, "stato": "approvata", "dalRapportino": true,
+   "foto": [], "puoScrivere": true,
+   "bloccata": "È nel rapportino RAP/2026/0002, già firmato: si cambiano solo categoria, descrizione e chi l'ha pagata",
+   "soloCampi": ["categoria", "descrizione", "pagataDaMe"], "...": "..."}],
+ "totali": {"quante": 12, "cliente": 320.8, "studio": 110.2, "personale": 12, "daRimborsare": 332.6, "senzaFoto": 4}}
+```
+- `categoria`: `carburante` | `pedaggio` | `parcheggio` | `vitto` | `alloggio` | `treno` | `aereo` | `taxi` | `materiale` |
+  `altro`. `destinazione`: `cliente` ("Al cliente", pillola blu) | `studio` ("Allo studio", grigia) | `personale` ("Mia",
+  viola). `anticipazione` (documento intestato al cliente, art. 15) solo con `cliente`. `pagataDaMe` = "L'ho pagata io":
+  la paga lo studio a chi l'ha scritta (`idUtente`).
+- `idRapportino` (`""` se no) e `dalRapportino` (la riga dell'importo del passo 3); `idTrasferta` (`null` se no).
+- `rimborsataIl`, `fatturataIl`: `""` o l'istante. Le spese al cliente di un rapportino fatturato hanno `fatturataIl` del
+  rapportino (la fase 4 non le rifattura); le altre al cliente sono quelle da riaddebitare.
+- `totali` (delle righe non respinte): i tre riquadri Al cliente · Allo studio · "Mia", e `daRimborsare` = di queste,
+  quelle pagate da chi le ha scritte, non "Mia", non rimborsate, mandate o approvate (il riquadro Da rimborsare somma
+  anche `trasferte.totali.daRimborsare`); `senzaFoto` = quante senza scontrino.
+
+`salvaSpesa {spesa: {id?, idUtente?, data?, importo, categoria?, descrizione?, idCommessa?, idCliente?, idRapportino?,
+idTrasferta?, destinazione?, anticipazione?, pagataDaMe?, bozza?}}` (spese 2) → `{"ok": true, "spesa": {...}}` (vero, di
+Marco: `"stato": "da_approvare"`, `"importo": 8.4`). Senza `id` crea (di base oggi, `altro`, `pagataDaMe: false`: l'app
+lo manda sempre), con `id` cambia solo i campi mandati.
+- **A chi va, di base**: al cliente se c'e' una commessa, un cliente o un rapportino; allo studio se no. `"mia"` vale
+  `personale`. Con la commessa il cliente e' il suo.
+- Con `idRapportino`: persona, commessa e cliente sono quelli del rapportino, e lo stato segue la sua approvazione; la
+  colonna `spese` e il `totale` del rapportino si rifanno (§14.12). Con `idTrasferta`: la persona e' quella della
+  trasferta, commessa e cliente di base i suoi.
+- `importo` al centesimo, piu' di zero (zero solo in bozza).
+- Bloccate: rimborsata, fatturata, approvata (per il collaboratore, se non e' di un rapportino); di un rapportino firmato,
+  inviato o fatturato si cambiano solo `categoria`, `descrizione`, `pagataDaMe`.
+Errori: `"Importo: scrivi quanto hai speso"`, `"Categoria: carburante, pedaggio, parcheggio, vitto, alloggio, treno,
+aereo, taxi, materiale o altro"`, `"A chi va: cliente, studio o personale"`, `"Al cliente: scegli la commessa o il
+cliente"`, `"Commessa 26ST999 non trovata"`, `"Cliente C009 non trovato"`, `"Rapportino RAP/2026/0099 non trovato"`,
+`"Trasferta 9 non trovata"`, `"Il rapportino RAP/2026/0011 è già firmato: per aggiungere spese riportalo in bozza"`, la
+frase di `bloccata`, `"La spesa non cambia persona: toglila e scrivila per l'altra persona"`, `permesso:false` per le
+spese degli altri.
+
+La foto dello scontrino: `caricaFile {tipo: "spesa", idSpesa, base64, mime, nome?, idFile}` (spese 2) →
+`{"ok": true, "file": {"id": "M8kCHDq-MmK52LrPOKnB_9p9bUyK", "url": "/file/M8kCHDq-MmK52LrPOKnB_9p9bUyK", "nome": "spesa 13
+contratto-1.png"}}` (lo stesso `idFile` non crea doppioni). Senza `idSpesa`, `caricaFile {tipo: "spesa", id | idLocale}`
+resta la foto del rapportino di sempre, e va anche alla riga del passo 3. `GET /file/<id>`: chi vede la spesa (o il suo
+rapportino). `togliFotoSpesa {id}` (id del file, spese 2) → `{"ok": true, "spesa": {...}}`: la foto va nel cestino
+(`cestino` ha in piu' `idSpesa`).
+
+`togliSpesa {id, annulla?}` (spese 2) → `{"ok": true, "spesa": {..., "tolta": "..."}}`. Una spesa di un rapportino tolta
+esce dal suo conto; di un rapportino firmato: `"Il rapportino RAP/2026/0001 è già firmato: per togliere la spesa riportalo
+in bozza"`.
+
+### 14.9 Trasferte e veicoli
+
+`trasferte {da?, a?, utente?, commessa?, stato?}` (spese 1): di base il mese di oggi (per il giorno di partenza).
+```json
+{"ok": true, "da": "2026-10-01", "a": "2026-10-31",
+ "trasferte": [
+  {"id": 2, "idUtente": 3, "utente": "Marco Collaboratore", "dal": "2026-10-20", "al": "2026-10-21", "giorni": 2,
+   "destinazione": "Schio, passando dal fornitore a Padova", "motivo": "Collaudo notturno della linea 3",
+   "idCommessa": "26ST001", "commessa": "Nuovo magazzino automatico Batokyo", "idCliente": "C001", "cliente": "Elettrodinamica",
+   "km": 90, "andataRitorno": true, "kmTotali": 180, "idVeicolo": 1, "veicolo": "Volvo XC40", "euroKm": 0.76,
+   "rimborsoKm": 136.8, "indennita": 0, "totale": 136.8, "stato": "da_approvare", "approvataDa": null, "approvataDaNome": "",
+   "approvataIl": "", "motivoRifiuto": "", "rimborsataIl": "",
+   "spese": [{"id": 12, "importo": 230, "categoria": "alloggio", "descrizione": "Albergo per il collaudo notturno", "idTrasferta": 2, "...": "..."}],
+   "speseTotale": 230, "tolta": "", "puoScrivere": true, "bloccata": "", "creato": "2026-10-22T01:40:39", "modificato": "2026-10-22T01:40:39"}],
+ "totali": {"quante": 2, "km": 276, "rimborsoKm": 209.76, "indennita": 0, "totale": 209.76, "daRimborsare": 209.76}}
+```
+- `motivo` = perche' si e' andati; il motivo del rifiuto e' `motivoRifiuto` come altrove.
+- `km` = quelli scritti; `kmTotali` = x2 con `andataRitorno`. `euroKm` e `veicolo` sono **congelati** alla nascita (e
+  quando si cambia veicolo): `rimborsoKm` = kmTotali x euroKm al centesimo; `totale` = rimborsoKm + indennita'.
+- `spese`: le spese della trasferta (si aggiungono con `salvaSpesa {idTrasferta}`); `speseTotale` quelle non respinte.
+- `totali`: delle trasferte non respinte; `daRimborsare` = non rimborsate, mandate o approvate.
+
+`salvaTrasferta {trasferta: {id?, idUtente?, dal?, al?, destinazione, motivo?, idCommessa?, idCliente?, km?,
+andataRitorno?, idVeicolo?, indennita?, bozza?}}` (spese 2) → `{"ok": true, "trasferta": {...}}` (vero: 11 km andata e
+ritorno a 0,76 = `"kmTotali": 22, "rimborsoKm": 16.72`). Di base: oggi, `al` = `dal`, il primo veicolo attivo,
+`indennita` = `INDENNITA_TRASFERTA` x giorni (vuota = 0). Cambiare il veicolo prende il suo euro al km di adesso; cambiare
+altro tiene quello congelato. Errori: `"Destinazione: scrivi dove sei andato"`, `"Al: non può venire prima della
+partenza"`, `"Km: non possono essere negativi"`, `"Veicolo 9 non trovato"`, `"Veicolo: scegli con quale veicolo, per il
+rimborso al km"` (km senza veicoli), `"Indennità: non può essere negativa"`, `"Rimborsata il 22/10/2026: non si cambia"`,
+`"È già approvata: per cambiarla chiedi a chi approva"` (collaboratore).
+`togliTrasferta {id, annulla?}` (spese 2) → `{"ok": true, "trasferta": {...}}`; con spese ancora sue: `"La trasferta ha
+1 spesa: prima toglile o spostale"`.
+
+`veicoli {tutti?}` (spese 1; `tutti` = anche quelli non piu' in uso):
+```json
+{"ok": true, "aciAnno": 2026, "paginaAci": "https://www.aci.it/",
+ "veicoli": [{"id": 1, "nome": "Volvo XC40", "alimentazione": "", "euroKm": 0.76, "annoAci": 2026, "attivo": true,
+              "trasferte": 2, "creato": "2026-10-22T01:40:39", "modificato": "2026-10-22T01:40:39"}]}
+```
+`trasferte` = quante (non tolte) lo usano. `paginaAci` e' il sito dell'ACI, dove stanno le tabelle dei costi
+chilometrici (Amministrazione › Veicoli e rimborso km lo apre).
+`salvaVeicolo {veicolo: {id?, nome, alimentazione?, euroKm, annoAci?, attivo?}}` (amministrazione 2) → `{"ok": true,
+"veicolo": {...}}` (vero: `{"id": 2, "nome": "Furgone di prova", "alimentazione": "gasolio", "euroKm": 0.5432, "annoAci":
+2026, "attivo": true, "trasferte": 0, ...}`). `euroKm` fino a 4 decimali; `alimentazione` testo libero (benzina, gasolio,
+ibrida, elettrica...); `annoAci` di base `ACI_ANNO`, e un anno piu' nuovo di `ACI_ANNO` lo aggiorna. Non si cancellano:
+`attivo: false`. Cambiare l'euro al km **non riscrive le trasferte gia' scritte**. Errori: `"Nome: scrivi il nome del
+veicolo"`, `"Euro al km: non può essere negativo"`, `"Anno ACI: scrivi l'anno delle tabelle, per esempio 2026"`.
+
+### 14.10 Rimborsi e riepiloghi
+
+`rimborsi {utente?}` (spese 1): cosa va restituito a chi (`rimborsiDovuti`, §14.15):
+```json
+{"ok": true, "totale": 150.66, "puoSegnare": true,
+ "persone": [
+  {"idUtente": 1, "nome": "Manuel Gasparotto", "totale": 136.36, "inAttesa": 0, "spese": 3, "trasferte": 1, "km": 96, "voci": [
+    {"tipo": "spesa", "id": 4, "data": "2026-10-22", "descrizione": "Parcheggio Schio centro", "categoria": "parcheggio",
+     "idCommessa": "26ST001", "importo": 3, "km": null},
+    {"tipo": "trasferta", "id": 1, "data": "2026-10-21", "descrizione": "Schio, cantiere Batokyo", "categoria": "",
+     "idCommessa": "26ST001", "importo": 72.96, "km": 96}]},
+  {"idUtente": 3, "nome": "Marco Collaboratore", "totale": 4.5, "inAttesa": 391.7, "spese": 1, "trasferte": 0, "km": 0,
+   "voci": [{"tipo": "spesa", "id": 11, "data": "2026-10-19", "descrizione": "Parcheggio Batokyo", "importo": 4.5, "...": "..."}]}]}
+```
+`totale` = da restituire adesso (spese pagate da lei, approvate, non "Mia", piu' trasferte approvate, non ancora
+rimborsate); `inAttesa` = le stesse cose ancora da approvare (non si rimborsano finche' non sono approvate); `km` = i km
+delle trasferte dovute. Il collaboratore riceve solo la sua scheda. `puoSegnare`: titolare e amministrazione.
+
+`segnaRimborsato {voci: [{tipo: "spesa"|"trasferta", id}] | idUtente, annulla?}` (spese 2, **solo titolare e
+amministrazione**; gli altri `"Non hai il permesso per segnare i rimborsi: chiedi al titolare"`) → vero `{"ok": true,
+"fatte": 1, "totale": 9.8}`. Con `idUtente` = tutto quello che e' dovuto a quella persona. `annulla: true` toglie il
+"rimborsato" (l'Annulla dell'avviso). Una spesa o trasferta rimborsata non si cambia piu' (`bloccata`). Errori: `"La spesa
+3 non l'ha pagata chi l'ha scritta: non c'è niente da rimborsare"`, `"La spesa 7 è "Mia": non si rimborsa"`, `"La spesa 9
+non è ancora approvata"`, `"Non c'è niente da rimborsare a questa persona"`, `"Scegli cosa segnare come rimborsato"`.
+
+`riepilogoSpese {da?, a?, per: "persona"|"commessa"|"categoria", utente?, commessa?}` (spese 1; di base il mese):
+```json
+{"ok": true, "da": "2026-10-01", "a": "2026-10-31", "per": "persona",
+ "righe": [{"chiave": 1, "nome": "Manuel Gasparotto", "quante": 6, "cliente": 77.9, "studio": 83.9, "personale": 0,
+            "anticipazioni": 52, "daRimborsare": 136.36, "inAttesa": 0, "trasferte": 1, "km": 96, "rimborsoKm": 72.96,
+            "indennita": 0, "totale": 234.76}],
+ "totale": {"quante": 12, "cliente": 320.8, "studio": 110.2, "personale": 12, "anticipazioni": 52, "daRimborsare": 542.36,
+            "inAttesa": 391.7, "trasferte": 2, "km": 276, "rimborsoKm": 209.76, "indennita": 0, "totale": 640.76}}
+```
+Contano le spese e le trasferte mandate o approvate (non bozze, non respinte, non tolte). `chiave`: id della persona
+(`"nessuno"` senza persona), codice commessa (`""` = "Senza commessa", con `idCliente` e `nomeCliente`: `cliente` resta la somma delle spese al cliente), o la categoria (con
+`nome` = "Pedaggio"...; per categoria niente trasferte). **`totale` = cliente + studio + rimborso km + indennita'** (le
+"Mia" sono della persona, non dello studio). `daRimborsare` qui comprende anche quelle ancora da approvare (`inAttesa` e'
+quella parte). Righe dalla piu' grande.
+
+### 14.11 Statistiche delle ore e costo della commessa
+
+`statisticheOre {da?, a?, per: "persona"|"commessa"}` (rapportini 1; di base il mese):
+```json
+{"ok": true, "da": "2026-10-01", "a": "2026-10-31", "per": "commessa",
+ "righe": [{"chiave": "26ST001", "nome": "Nuovo magazzino automatico Batokyo", "ore": 52, "fatturabili": 50.5, "percentuale": 97,
+            "oreRapportini": 26, "oreRegistrate": 26, "costo": 1111, "costoNoto": true, "idCliente": "C001", "cliente": "Elettrodinamica"},
+           {"chiave": "", "nome": "Attività dello studio", "ore": 9, "fatturabili": 0, "percentuale": 0, "oreRapportini": 0,
+            "oreRegistrate": 9, "costo": 135, "costoNoto": true, "idCliente": "", "cliente": ""}],
+ "totale": {"ore": 77, "fatturabili": 66, "percentuale": 86, "oreRapportini": 34, "oreRegistrate": 43, "costo": 1633.5, "costoNoto": true}}
+```
+- Contano i **rapportini** non annullati e non respinti (ore = lavoro + straordinari + viaggio; fatturabili = lavoro +
+  straordinari, + viaggio solo se il cliente lo paga; costo = (lavoro + straordinari) x il costo orario congelato nel
+  rapportino, o quello di oggi se non c'e': il viaggio e' dentro il costo orario, come il cruscotto della fase 1) e le
+  **ore registrate** mandate o approvate (fatturabili se `fatturabile`; costo = ore x costo orario congelato).
+- `per: "persona"`: `chiave` = id dell'utente (i rapportini importati dal foglio, senza persona, hanno `chiave`
+  `"foglio:<tecnico>"` e `nome` = il tecnico). `percentuale` = fatturabili / ore x 100, intera (`null` senza ore).
+- `costo` solo con `costi`; `costoNoto: false` se manca il costo orario di qualcosa. Il collaboratore vede solo le sue.
+
+`costoCommessa {idCommessa}` (commesse 1; un collaboratore solo per le commesse dove e' responsabile o tra le persone):
+```json
+{"ok": true, "idCommessa": "26ST001",
+ "costoCommessa": {"lavoro": 671, "lavoroNoto": true, "auto": 291.84, "speseRapportini": 14.5, "oreRegistrate": 26,
+   "costoOreRegistrate": 572, "speseFuoriRapportini": 245.9, "trasferte": 209.76, "kmTrasferte": 276,
+   "soloRapportini": 977.34, "totale": 2005}}
+```
+Senza `costi` la risposta e' solo `{"ok": true, "idCommessa": "26ST001"}`. Le parti (`costoCommessa` in conti.js):
+- `lavoro`, `auto`, `speseRapportini`, `lavoroNoto`: **esattamente il cruscotto della fase 1** (`cruscotto()` di
+  `pc/ui/conti.js`, uguale in Kotlin): ore di lavoro e straordinari dei rapportini non annullati x il loro costo orario
+  (quello di oggi se manca), km x il loro euro al km, la colonna spese. `soloRapportini` = la loro somma = il
+  `costo.totale` della fase 1 (la prova lo confronta col cruscotto vero);
+- in piu' dalla fase 3: `costoOreRegistrate` (ore registrate mandate o approvate x costo orario congelato; `oreRegistrate`
+  sono le ore), `speseFuoriRapportini` (spese della commessa al cliente e allo studio non legate a un rapportino, mandate
+  o approvate, piu' quelle di un rapportino spostate allo studio; le "Mia" mai), `trasferte` (rimborso km + indennita'
+  delle trasferte mandate o approvate; `kmTrasferte` i km);
+- `totale` = tutto. Senza ore registrate, spese fuori dai rapportini e trasferte, `totale` = `soloRapportini` al centesimo.
+
+**Cosa cambia per il margine della fase 1.** I numeri gia' mostrati non cambiano da soli: telefono e computer li
+calcolano dai rapportini e restano uguali (`soloRapportini`). Ma dalla fase 3 sono **incompleti**: non sanno delle ore
+registrate, delle spese fuori dai rapportini e delle trasferte, quindi con quei dati il costo sostenuto della fase 1 e'
+piu' basso del vero e il margine atteso piu' alto. Le app nuove, nella pagina della commessa, prendono il costo da
+`costoCommessa`: costo sostenuto = `totale`; lavoro = `lavoro` + `costoOreRegistrate`; costo atteso = max(lavoro, costo
+previsto dal budget) + `auto` + `speseRapportini` + `speseFuoriRapportini` + `trasferte`; margine atteso = valore atteso
+meno costo atteso (la stessa regola della fase 1, coi pezzi nuovi). Le ore del budget della Dashboard ("ore oltre il
+budget") restano quelle dei rapportini, come prima.
+
+### 14.12 Le spese dei rapportini: la migrazione e le versioni vecchie
+
+**La regola della migrazione** (`003-ore-spese.sql` + `003-ore-spese.js`, con la copia `wisper.db.prima-3` prima): ogni
+rapportino gia' scritto con un importo di spese diverso da zero riceve **una** riga `spese` legata a lui
+(`dal_rapportino` 1), con **lo stesso identico importo** (anche tre decimali, un numero scritto come testo con la virgola,
+un negativo: quello che `numero()` legge), destinazione `cliente`, categoria `altro`, descrizione = le note spese (o
+"Spese del rapportino"), la sua data, commessa, cliente e persona, `approvata` (prima non serviva approvare), fatturata
+se il rapportino e' fatturato. Le sue foto diventano le foto della riga (anche quelle nel cestino). Anche gli annullati
+ricevono la riga (un ripristino li riporta com'erano). Spese vuote, `null` o zero: nessuna riga. **Il rapportino non si
+tocca**: la colonna `spese` resta quella, quindi totali, conti, PDF, riepiloghi e fine mese restano identici al centesimo.
+La prova (`server/prove/migrazione-spese.test.js`) apre un database del server 0.5.0 coi casi limite, lo migra e confronta
+i rapportini campo per campo, il CSV carattere per carattere e i soldi della Dashboard con quelli che il server 0.5.0 dava
+sullo stesso database (`prove/migrazione-003/prima.json`, scritto col codice della fase 2). L'importazione dal foglio fa
+la stessa cosa dopo aver scritto i rapportini.
+
+**Dopo**: la colonna `spese` del rapportino e' sempre il totale delle sue righe al cliente non tolte.
+- `salvaRapportino` (app nuove e **versioni vecchie dal ponte**, che mandano `spese` e le foto come oggi): la colonna e'
+  quella mandata; se le righe al cliente non sommano a lei si cambia la riga del passo 3 (nasce se non c'e', si toglie
+  se va a zero, torna la stessa riga se le spese tornano); la sua descrizione segue le note spese quando cambiano. Le foto
+  caricate come oggi vanno al rapportino e alla riga del passo 3. Se le spese del rapportino sono divise in piu' righe e
+  il nuovo totale e' piu' piccolo delle altre, non si indovina: `"Le spese di RAP/2026/0007 sono divise in più righe:
+  cambiale da Spese e trasferte"` e il rapportino non si salva (la coda del telefono si ferma su quello).
+- Una spesa del rapportino **spostata allo studio o "Mia"** (o tolta) esce dal conto: la colonna scende e il `totale` si
+  rifa' coi pezzi congelati (`compensoOre` + `rimborsoKm` + spese, come `calcola()`); le sue foto escono dalle foto del
+  rapportino (e dal PDF). Vera, sul rapportino in bozza con 0,10 di spese: `spese` 0,10 → 0, `totale` 206,50 → 206,40;
+  tornata al cliente, di nuovo 0,10 e 206,50. Se a cambiarla e' chi ha scritto il rapportino e deve farlo approvare, il
+  rapportino torna da approvare.
+- **Da firmato in poi** (FIRMATO, INVIATO, FATTURATO) le spese del rapportino non cambiano importo, destinazione, data,
+  rapportino; non si tolgono e non se ne aggiungono: si cambiano solo categoria, descrizione e chi l'ha pagata. Cosi' un
+  documento firmato non cambia mai numeri. Per cambiarle si riporta il rapportino in bozza, come oggi.
+
+### 14.13 Dashboard: cosa si aggiunge
+
+- `numeri.ore` (con rapportini ≥ 1): `{"settimana": 43, "mese": 43, "fatturabiliMese": 34, "timerAcceso": false}` (le
+  ore registrate mandate o approvate: le sue per il collaboratore, di tutti per gli altri; `timerAcceso` = il proprio).
+- `numeri.approvare` (chi approva, non nella vista del collaboratore): `{"voci": 8, "conAnomalie": 5}`.
+- `numeri.rimborsi` (chi segna i rimborsi, con `costi`): `{"daFare": 150.66, "persone": 3}`.
+- Le voci nuove (vere; il timer e le tabelle ACI vengono dalle prove, che spostano l'orologio):
+```json
+{"urgenti": [
+  {"tipo": "approvare", "gravita": "attenzione", "titolo": "8 cose da approvare di Marco Collaboratore",
+   "dettaglio": "Ore, spese, una trasferta e un rapportino · 5 con un'anomalia", "quanto": 8, "unita": "voci",
+   "collegamento": {"pagina": "rapportini", "filtro": {"segmento": "daApprovare"}}},
+  {"tipo": "respinta", "gravita": "attenzione", "titolo": "Ore del 19/10 respinte",
+   "dettaglio": "Motivo: Il riordino del magazzino non si segna: è dentro le ore di studio · Manuel Gasparotto",
+   "quanto": null, "unita": null, "collegamento": {"pagina": "rapportini", "filtro": {"segmento": "ore", "giorno": "2026-10-19"}}},
+  {"tipo": "timer", "gravita": "attenzione", "titolo": "Il timer è acceso da 11 ore",
+   "dettaglio": "26ST001 · dalle 7:45 · fermalo e correggi le ore", "quanto": 11, "unita": "ore",
+   "collegamento": {"pagina": "rapportini", "filtro": {"segmento": "ore"}}}],
+ "settimana": [
+  {"tipo": "rimborsi", "gravita": "soldi", "titolo": "Rimborsi da fare",
+   "dettaglio": "Laura Amministrazione 9,80 €, Manuel Gasparotto 136,36 €, Marco Collaboratore 4,50 €", "quanto": 150.66,
+   "unita": "euro", "collegamento": {"pagina": "spese", "filtro": {"segmento": "rimborsi"}}},
+  {"tipo": "veicoli", "gravita": "attenzione", "titolo": "Aggiorna il rimborso km con le tabelle ACI 2027",
+   "dettaglio": "I rimborsi km sono ancora quelli delle tabelle 2026: le trasferte già scritte restano come sono",
+   "quanto": null, "unita": null, "collegamento": {"pagina": "amministrazione", "filtro": {"sezione": "veicoli"}}}]}
+```
+- **urgenti**: cose da approvare (chi approva; "di <nome>" se sono di una persona sola); le proprie cose respinte col
+  motivo e chi le ha respinte (una per una fino a 3, poi `"5 cose respinte da correggere"`): `"Ore del 19/10 respinte"`,
+  `"RAP/2026/0012 respinto"`, `"Spesa del 21/10 respinta"`, `"Trasferta del 20/10 respinta"`; il proprio timer acceso da
+  piu' di 10 ore e, per chi approva, quelli degli altri (`"Il timer di Marco Collaboratore è acceso da 11 ore"`; nel
+  dettaglio `"dalle 7:45 del 21/10"` se e' partito un altro giorno).
+- **settimana**: rimborsi da fare (titolare e amministrazione, con `costi`; i primi tre nomi); **dall'anno nuovo**, finche'
+  un veicolo attivo o `ACI_ANNO` hanno l'anno vecchio, `"Aggiorna il rimborso km con le tabelle ACI {anno}"` (a chi ha
+  `amministrazione` 2). Aggiornare l'anno del veicolo (`salvaVeicolo {annoAci}`) la fa sparire.
+- `collegamento.pagina` nuova: `spese` (Spese e trasferte) con `filtro.segmento` `spese` | `trasferte` | `rimborsi` e
+  `id`; `rapportini` (Ore e rapportini) con `filtro.segmento` `ore` | `rapportini` | `daApprovare` (e `giorno`, `id`,
+  `stato`); `amministrazione` con `filtro.sezione: "veicoli"`. `tipo` nuovi: `approvare`, `respinta`, `timer`,
+  `rimborsi`, `veicoli`. Unita' nuova: `voci`.
+- Il collaboratore: le sue ore, le sue respinte e il suo timer; niente soldi, niente "€", niente cose da approvare.
+- I rapportini che aspettano l'approvazione non sono tra i "firmati da mandare".
+
+### 14.14 Esportazione
+
+`esporta {cosa: "ore"|"spese"|"trasferte"|"rimborsi", ...i filtri dell'elenco}`: stesso CSV della §12.13, stessi periodi
+di base degli elenchi (ore: la settimana; spese e trasferte: il mese; rimborsi: tutti quelli dovuti). Un collaboratore
+esporta solo i suoi.
+- **ore** (rapportini 1): Data, Persona, Inizio, Fine, Pausa (minuti), Ore, Codice commessa, Commessa ("Attività dello
+  studio" senza commessa), Cliente, Prestazione, Attività, Descrizione, Fatturabile, Tipo, Costo orario, Costo (questi due
+  solo con `costi`), Stato (Bozza, Da approvare, Approvata, Respinta), Approvata o respinta da, Il, Motivo del rifiuto, Dal
+  timer.
+- **spese** (spese 1): Data, Persona, Categoria, Descrizione, Importo, A chi va (Al cliente, Allo studio, Mia),
+  Anticipazione, Pagata da chi l'ha scritta, Codice commessa, Commessa, Codice cliente, Cliente, Rapportino, Trasferta,
+  Scontrino (Sì/No), Stato, Approvata o respinta da, Il, Motivo del rifiuto, Rimborsata il, Fatturata il.
+- **trasferte** (spese 1): Dal, Al, Giorni, Persona, Destinazione, Motivo, Codice commessa, Commessa, Cliente, Veicolo,
+  Km, Andata e ritorno, Km totali, Euro al km, Rimborso km, Indennità, Totale, Stato, Approvata o respinta da, Il, Motivo
+  del rifiuto, Rimborsata il.
+- **rimborsi** (spese 1): Persona, Tipo (Spesa, Trasferta), Data, Descrizione, Codice commessa, Km, Importo.
+Importi di spese, trasferte e rimborsi ci sono anche senza `costi` (soldi della persona, §14.1).
+
+### 14.15 I conti condivisi
+
+In `server/src/conti.js`, coi casi in **`server/prove/casi-ore-spese.json`** (telefono e computer li rifanno per
+l'anteprima e devono ritrovare gli stessi numeri e le stesse frasi):
+- `oreDaOrari(inizio, fine, pausaMinuti)` → `{inizio, fine, pausaMinuti, minuti, ore, giornoDopo}`: minuti = fine − inizio
+  − pausa; fine prima dell'inizio = giorno dopo (+24 ore); fine uguale all'inizio = errore; pausa ≥ durata = errore;
+  `ore = Math.round(minuti / 60 * 100) / 100`; le ore si scrivono 8:30, 08:30, 08.30 o 08:30:00 e tornano 08:30.
+- `rimborsoTrasferta({km, andataRitorno, euroKm, indennita})` → `{kmTotali, rimborsoKm, indennita, totale}`, ogni pezzo
+  al centesimo (`centesimi(n) = Math.round(n * 100) / 100`) prima di sommare.
+- `rimborsiDovuti(spese, trasferte)` → per persona (in ordine di id) `{idUtente, totale, inAttesa, spese, trasferte, km,
+  voci}`.
+- `costoCommessa(...)` (§14.11) e `oreDelRapportino(...)` (§14.11) restano del server: le app mostrano quello che risponde.
+
+### 14.16 Note per chi legge il database
+
+Tabelle nuove (migrazione `003-ore-spese.sql`): `veicoli`, `ore`, `timer`, `trasferte`, `spese`; colonne nuove
+`rapportini.stato_approvazione`, `approvato_da`, `approvato_il`, `motivo`, e `file.spesa_id` (le foto di una spesa sono i
+suoi file `spesa` non cestinati). In piu' dell'accordo, perche' servivano: `ore.dal_timer`, `ore.tolta`,
+`spese.approvata_da`, `spese.approvata_il`, `spese.dal_rapportino` (la riga del passo 3), `spese.tolta`,
+`trasferte.andata_ritorno`, `trasferte.veicolo_id` accanto a `veicolo` (il nome, congelato), `trasferte.approvata_da`,
+`approvata_il`, `motivo_rifiuto` (perche' `motivo` e' il motivo della trasferta), `trasferte.tolta`, `timer.fatturabile`,
+`veicoli.creato`/`modificato`. Le ore del giorno stanno come `"HH:MM"`; le tabelle da cui si tolgono righe hanno
+`AUTOINCREMENT`. Le migrazioni possono avere accanto un file `.js` con lo stesso numero, che gira dopo l'SQL nella stessa
+transazione (`db.js`). Nel registro le tabelle nuove si chiamano come qui sopra (piu' `timer`: nuovo, e fermato con la
+nota `"fermato: ore N in bozza"`); le righe nate dalla migrazione hanno `utente: "sistema"`, `azione: "migrazione"` e la
+nota `"migrazione 003: le spese del rapportino diventano una riga di spese"`. Nel prima/dopo del registro, senza
+`costi`, mancano anche `importo` e `costo_orario` (come gli altri campi dei costi).
+
+### 14.17 Decisioni prese dove l'accordo non diceva
+
+- **Mezzanotte**: la fine prima dell'inizio e' del giorno dopo, la riga resta del giorno di inizio; fine uguale
+  all'inizio e' un errore (zero o 24 ore non si indovina). Il timer acceso piu' di 24 ore non inventa le ore.
+- **Chi approva**: titolare e amministrazione. Il "responsabile della commessa" dell'accordo, se collaboratore, oggi non
+  approva (la richiesta di questa fase: il collaboratore non approva e non vede le cose degli altri); si potra' aprire
+  dalla fase 6 (Persone).
+- **Spese di un rapportino**: seguono la sua approvazione (non si approvano a parte) e, da firmato in poi, non cambiano
+  i suoi numeri. Le foto di una spesa stanno nel rapportino solo finche' la spesa va al cliente.
+- **"Mia" non si rimborsa**: e' una spesa della persona; si rimborsano solo quelle pagate da lei che vanno al cliente o
+  allo studio. `pagataDaMe` di base no (nessun rimborso fantasma dalle righe migrate o dalle app vecchie).
+- **Approvazione cambiata dopo**: con `APPROVAZIONE` a `tutti` anche il titolare manda in approvazione e puo' approvare
+  le sue cose.
+- **Una trasferta con spese** non si toglie finche' ha spese (niente cancellazioni a cascata).
+- **Rimborsi della trasferta e veicoli senza `costi`**: si vedono (soldi della persona; l'euro al km e' la tabella ACI
+  pubblica e dal rimborso si ricava comunque).
+- **Indennita'**: `INDENNITA_TRASFERTA` e' per giorno; la trasferta tiene il totale.
+- **Promemoria ACI**: non solo a gennaio ma da gennaio finche' non si aggiorna (se lo si dimentica, resta).
+- `EURO_KM` (rapportini) e l'euro al km dei veicoli (trasferte) sono separati dopo la migrazione: cambiare il veicolo non
+  cambia quanto si fattura al cliente per i km.
+- La Dashboard "ore oltre il budget" e i "giorni senza rapportino" restano come nella fase 1 (contano solo i
+  rapportini).

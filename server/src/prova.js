@@ -101,7 +101,88 @@ function semina(w) {
     w.salvaRapportino({ idLocale: 'marco-2', data: '2026-10-16', idCliente: 'C002', idCommessa: '26ST002', descrizione: 'Verifica impianto di terra', oreLavoro: 4, oreViaggio: 0.5, km: 22 });
   });
   seminaFase2(w, utenti, come);
+  seminaFase3(w, utenti, come);
   return utenti;
+}
+
+/** Una foto di scontrino finta (un PNG di 1x1). */
+const SCONTRINO = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+
+/**
+ * Ore, timer, approvazioni, spese e trasferte come nel prototipo della fase 3
+ * (docs/prototipo/Gestionale-fase3.html), con i giorni contati da oggi (gli
+ * ultimi giorni feriali):
+ *  - ore registrate di Manuel, Laura e Marco (una bozza di Manuel di oggi);
+ *  - il timer di Marco acceso da un'ora e mezza;
+ *  - da approvare (di Marco): ore con un giorno da 13 ore (anomalia), un
+ *    rapportino (RAP/aaaa/0006; il 0005 e' approvato), un pranzo senza
+ *    scontrino (anomalia), un pedaggio, una trasferta coi km diversi dal
+ *    solito e un albergo sopra i 200 euro (anomalie);
+ *  - ore di Marco respinte con il motivo;
+ *  - spese con e senza foto al cliente, allo studio e "Mia", un'anticipazione
+ *    (diritti di segreteria intestati al cliente), una trasferta di Manuel;
+ *  - rimborsi da fare a Manuel, Laura e Marco.
+ */
+function seminaFase3(w, utenti, come) {
+  const T = oggi();
+  const feriali = [];
+  for (let i = 0; feriali.length < 5; i++) {
+    const g = piuGiorni(T, -i);
+    const dow = new Date(g + 'T12:00:00').getDay();
+    if (dow !== 0 && dow !== 6) feriali.push(g);
+  }
+  const [g0, g1, g2, g3] = feriali;
+  let foto = 0;
+  const scontrino = s => w.caricaFile({ tipo: 'spesa', idSpesa: s.id, base64: SCONTRINO, mime: 'image/png', idFile: 'scontrino-' + (++foto) });
+  const ore = riga => w.salvaOre({ riga }).riga;
+  const ids = {};
+
+  come('titolare', () => {
+    ore({ data: g1, idCommessa: '26ST001', inizio: '08:30', fine: '15:00', pausaMinuti: 30, descrizione: 'Progetto esecutivo: schema unifilare' });
+    ore({ data: g1, ore: 1.5, fatturabile: false, descrizione: 'Aggiornamento normativa CEI' });
+    ore({ data: g2, idCommessa: '26ST002', ore: 3, descrizione: 'Calcolo delle sezioni del quadro' });
+    ore({ data: g0, idCommessa: '26ST002', ore: 4, descrizione: 'Collaudo quadro: preparazione verbali', bozza: true });
+    const pedaggio = w.salvaSpesa({ data: g1, importo: 8.4, categoria: 'pedaggio', descrizione: 'Pedaggio A4 Vicenza Ovest', idCommessa: '26ST001', pagataDaMe: true });
+    scontrino(pedaggio);
+    scontrino(w.salvaSpesa({ data: g2, importo: 62, categoria: 'carburante', descrizione: 'Gasolio', destinazione: 'studio' }));
+    w.salvaSpesa({ data: g0, importo: 3, categoria: 'parcheggio', descrizione: 'Parcheggio Schio centro', idCommessa: '26ST001', pagataDaMe: true });
+    scontrino(w.salvaSpesa({ data: g0, importo: 21.9, categoria: 'materiale', descrizione: 'Morsetti e fascette', destinazione: 'studio' }));
+    scontrino(w.salvaSpesa({ data: g2, importo: 52, categoria: 'altro', descrizione: 'Diritti di segreteria del Comune', idCommessa: '26ST002',
+      anticipazione: true, pagataDaMe: true }));
+    w.salvaTrasferta({ dal: g1, destinazione: 'Schio, cantiere Batokyo', motivo: 'Riunione di cantiere', idCommessa: '26ST001', km: 48, andataRitorno: true });
+  });
+
+  come('amministrazione', () => {
+    ore({ data: g1, inizio: '08:30', fine: '17:00', pausaMinuti: 60, fatturabile: false, descrizione: 'Fatture e prima nota' });
+    ore({ data: g2, idCommessa: '26ST002', ore: 2, descrizione: 'Pratica al distributore di energia' });
+    w.salvaSpesa({ data: g1, importo: 12, categoria: 'vitto', descrizione: 'Pranzo', destinazione: 'personale', pagataDaMe: true });
+    scontrino(w.salvaSpesa({ data: g2, importo: 9.8, categoria: 'treno', descrizione: 'Treno per la Camera di commercio', destinazione: 'studio', pagataDaMe: true }));
+  });
+
+  come('collaboratore', () => {
+    ore({ data: g2, idCommessa: '26ST001', ore: 7, descrizione: 'Schema del quadro di linea 3' });
+    ore({ data: g1, idCommessa: '26ST001', inizio: '08:00', fine: '17:00', pausaMinuti: 60, descrizione: 'Cablaggio quadro di linea 3' });
+    ore({ data: g1, idCommessa: '26ST001', inizio: '17:30', fine: '22:30', descrizione: 'Collaudo notturno della linea 3', tipo: 'straordinaria' });
+    ids.oreApprovate = ore({ data: g3, idCommessa: '26ST002', ore: 3, descrizione: 'Verifica impianto di terra' }).id;
+    ids.oreRespinte = ore({ data: g3, ore: 2, fatturabile: false, descrizione: 'Riordino del magazzino' }).id;
+    w.salvaSpesa({ data: g1, importo: 16.5, categoria: 'vitto', descrizione: 'Pranzo', destinazione: 'studio', pagataDaMe: true });
+    scontrino(w.salvaSpesa({ data: g2, importo: 8.4, categoria: 'pedaggio', descrizione: 'Pedaggio A4', idCommessa: '26ST002', pagataDaMe: true }));
+    const parcheggio = w.salvaSpesa({ data: g3, importo: 4.5, categoria: 'parcheggio', descrizione: 'Parcheggio Batokyo', idCommessa: '26ST001', pagataDaMe: true });
+    scontrino(parcheggio);
+    ids.parcheggio = parcheggio.id;
+    const tr = w.salvaTrasferta({ dal: g2, al: g1, destinazione: 'Schio, passando dal fornitore a Padova', motivo: 'Collaudo notturno della linea 3',
+      idCommessa: '26ST001', km: 90, andataRitorno: true });
+    scontrino(w.salvaSpesa({ data: g2, importo: 230, categoria: 'alloggio', descrizione: 'Albergo per il collaudo notturno', idCommessa: '26ST001',
+      idTrasferta: tr.id, pagataDaMe: true }));
+    w.avviaTimer({ idCommessa: '26ST001', descrizione: 'Cablaggio quadro di linea 3' });
+  });
+  // Il timer di Marco e' partito un'ora e mezza fa.
+  w.db.esegui('UPDATE timer SET partito_il = ? WHERE utente_id = ?', istante(new Date(Date.now() - 90 * 60000)), utenti.collaboratore.id);
+
+  come('titolare', () => {
+    w.decidi({ voci: [{ tipo: 'rapportino', id: 'RAP/2026/0005' }, { tipo: 'ore', id: ids.oreApprovate }, { tipo: 'spesa', id: ids.parcheggio }] }, 'approva');
+    w.decidi({ voci: [{ tipo: 'ore', id: ids.oreRespinte }], motivo: 'Il riordino del magazzino non si segna: è dentro le ore di studio' }, 'respingi');
+  });
 }
 
 /**

@@ -220,3 +220,12 @@ test('esempio: una serie settimanale, poi "solo questa", "da questa in poi", e s
   assert.equal(serie[6].stato, 'da_fare');
   assert.ok(g('faiAttivita', { id: serie[0].id, fatta: true }).attivita.fattaIl);
 });
+
+test('pianificazione: le parole lunghe vanno a capo solo dove si può', () => {
+  const t = s => RA.aCapoMorbido(s).replace(/\u00AD/g, '-');
+  assert.equal(t('Mandare lo schema unifilare a Elettrodinamica'), 'Mandare lo schema uni-fi-lare a Elet-tro-di-na-mica');
+  assert.equal(t('Sopralluogo cabina MT Acme'), 'Sopral-luogo cabina MT Acme');
+  assert.equal(RA.aCapoMorbido('Riunione cantiere Batokyo'), 'Riunione cantiere Batokyo');
+  assert.equal(RA.aCapoMorbido('Elettrodinamica').replace(/\u00AD/g, ''), 'Elettrodinamica');
+  assert.equal(RA.aCapoMorbido(''), '');
+});

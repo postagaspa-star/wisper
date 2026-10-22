@@ -85,7 +85,13 @@ import eu.stgm.wisper.ui.SchermataFirma
 import eu.stgm.wisper.ui.SchermataInvio
 import eu.stgm.wisper.ui.SchermataModificaCliente
 import eu.stgm.wisper.ui.SchermataModificaCommessa
-import eu.stgm.wisper.ui.SchermataRapportini
+import eu.stgm.wisper.ui.SchermataOreERapportini
+import eu.stgm.wisper.ui.SchermataRegistraOre
+import eu.stgm.wisper.ui.SchermataRiepilogoSpese
+import eu.stgm.wisper.ui.SchermataStatisticheOre
+import eu.stgm.wisper.ui.SchermataSpesa
+import eu.stgm.wisper.ui.SchermataSpese
+import eu.stgm.wisper.ui.SchermataTrasferta
 import eu.stgm.wisper.ui.SchermataRapportino
 import eu.stgm.wisper.ui.SchermataSoggettiArchiviati
 import eu.stgm.wisper.ui.SchermataUfficio
@@ -224,7 +230,23 @@ private fun Wisper(archivio: Archivio, attivita: ComponentActivity) {
             pagina = "sezioni"
         }
 
-        visita.vaiA = { p -> if (p == "dashboard") { modulo = null; scope.launch { cassetto.close() }; aCasa() } else pagina = p }
+        visita.vaiA = { p ->
+            when (p) {
+                "dashboard" -> { modulo = null; scope.launch { cassetto.close() }; aCasa() }
+                // Fase 3: la visita passa da Spese e trasferte (Nuova spesa) e da Ore e rapportini (il timer).
+                "spese", "ore" -> {
+                    modulo = null
+                    scope.launch { cassetto.close() }
+                    val s = if (p == "spese") Sezione.SPESE else Sezione.RAPPORTINI
+                    if (p == "spese") eu.stgm.wisper.ui.RicordoSpese.segmento = eu.stgm.wisper.ui.SegmentoSpese.SPESE
+                    else eu.stgm.wisper.ui.RicordoOre.segmento = eu.stgm.wisper.ui.SegmentoOre.ORE
+                    mettiPila(s, emptyList())
+                    sezioneNome = s.name
+                    pagina = "sezioni"
+                }
+                else -> pagina = p
+            }
+        }
         visita.allaFine = {
             modulo = null
             aCasa()
@@ -271,6 +293,8 @@ private fun Wisper(archivio: Archivio, attivita: ComponentActivity) {
             onSezione = { s, f ->
                 avanti = true
                 if (f != null) filtro = f
+                // Un filtro dei rapportini (dalla Dashboard, da una commessa) apre il segmento Rapportini.
+                if (s == Sezione.RAPPORTINI && f != null) eu.stgm.wisper.ui.RicordoOre.segmento = eu.stgm.wisper.ui.SegmentoOre.RAPPORTINI
                 mettiPila(s, emptyList())
                 sezioneNome = s.name
                 pagina = "sezioni"
@@ -500,7 +524,8 @@ private fun PaginaSezione(
             Sezione.COMMESSE -> SchermataCommesse(dati, nav)
             Sezione.PREVENTIVI -> SchermataPreventivi(dati, nav)
             Sezione.ATTIVITA -> SchermataAttivita(dati, nav)
-            Sezione.RAPPORTINI -> SchermataRapportini(dati, nav, filtro, onFiltro)
+            Sezione.RAPPORTINI -> SchermataOreERapportini(dati, nav, filtro, onFiltro)
+            Sezione.SPESE -> SchermataSpese(dati, nav)
             Sezione.FATTURAZIONE -> SchermataUfficio(dati, nav)
             Sezione.AMMINISTRAZIONE -> SchermataAmministrazione(dati, archivio, nav)
         }
@@ -521,6 +546,14 @@ private fun PaginaSezione(
         rotta.startsWith("commessa/") -> SchermataCommessa(dati, nav, rotta.removePrefix("commessa/"))
         rotta.startsWith("commessa-modifica/") -> SchermataModificaCommessa(dati, nav, rotta.removePrefix("commessa-modifica/"), null)
         rotta.startsWith("commessa-nuova") -> SchermataModificaCommessa(dati, nav, null, rotta.removePrefix("commessa-nuova").removePrefix("/").ifBlank { null })
+        // Fase 3: ore, spese, trasferte (docs/gestionale/fase3.md)
+        rotta.startsWith("ore-registra/") -> SchermataRegistraOre(dati, nav, rotta.removePrefix("ore-registra/"))
+        rotta.startsWith("spesa-nuova") -> SchermataSpesa(dati, nav, "nuova" + rotta.removePrefix("spesa-nuova"))
+        rotta.startsWith("spesa/") -> SchermataSpesa(dati, nav, rotta.removePrefix("spesa/"))
+        rotta == "trasferta-nuova" -> SchermataTrasferta(dati, nav, "nuova")
+        rotta.startsWith("trasferta/") -> SchermataTrasferta(dati, nav, rotta.removePrefix("trasferta/"))
+        rotta == "spese-riepilogo" -> SchermataRiepilogoSpese(dati, nav)
+        rotta == "ore-statistiche" -> SchermataStatisticheOre(dati, nav)
         rotta == "clienti" -> SchermataClienti(dati, nav)
         rotta == "soggetti-archiviati" -> SchermataSoggettiArchiviati(dati, nav)
         rotta.startsWith("cliente/") -> SchermataCliente(dati, nav, rotta.removePrefix("cliente/"))

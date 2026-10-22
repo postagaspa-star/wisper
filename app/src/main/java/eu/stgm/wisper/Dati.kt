@@ -30,6 +30,23 @@ import eu.stgm.wisper.rapportino.UtenteSalvato
 import eu.stgm.wisper.rapportino.Rapportino
 import eu.stgm.wisper.rapportino.Salvataggio
 import eu.stgm.wisper.rapportino.Stato
+import eu.stgm.wisper.rapportino.DaApprovare
+import eu.stgm.wisper.rapportino.ElencoOre
+import eu.stgm.wisper.rapportino.ElencoSpese
+import eu.stgm.wisper.rapportino.ElencoTrasferte
+import eu.stgm.wisper.rapportino.ElencoVeicoli
+import eu.stgm.wisper.rapportino.EsitoApprovazione
+import eu.stgm.wisper.rapportino.RiepilogoSpese
+import eu.stgm.wisper.rapportino.RigaOre
+import eu.stgm.wisper.rapportino.Rimborsi
+import eu.stgm.wisper.rapportino.Spesa
+import eu.stgm.wisper.rapportino.StatisticheOre
+import eu.stgm.wisper.rapportino.TimerFermato
+import eu.stgm.wisper.rapportino.TimerLetto
+import eu.stgm.wisper.rapportino.Trasferta
+import eu.stgm.wisper.rapportino.Veicolo
+import eu.stgm.wisper.rapportino.VoceDaApprovare
+import eu.stgm.wisper.rapportino.VoceRimborso
 import kotlinx.coroutines.flow.StateFlow
 import org.json.JSONArray
 import org.json.JSONObject
@@ -360,6 +377,100 @@ interface Dati {
 
     /** Toglie un allegato (va nel cestino). */
     suspend fun togliAllegatoAttivita(idAttivita: String, idFile: String): Result<Attivita>
+
+    // ------------------------------------------------------------- fase 3: ore, timer, approvazioni (docs/gestionale/fase3.md)
+
+    /**
+     * Le ore di chi è entrato nel periodo letto per ultimo (di solito la settimana
+     * aperta), con sopra quelle ancora in coda: si vedono subito, anche senza rete.
+     * Null finché non si è letto niente.
+     */
+    val ore: StateFlow<ElencoOre?>
+
+    /** Rilegge le ore di chi è entrato fra [da] e [a]; un errore va in [aggiornamento]. */
+    fun aggiornaOre(da: LocalDate, a: LocalDate)
+
+    /** Il proprio timer, l'ultimo letto (resta anche senza rete). Null finché non lo si è letto. */
+    val timer: StateFlow<TimerLetto?>
+
+    fun aggiornaTimer()
+
+    /** Il timer vive sul server: serve la rete. Già acceso: il messaggio del server dice da quando. */
+    suspend fun avviaTimer(idCommessa: String, descrizione: String = ""): Result<TimerLetto>
+
+    /** Torna la riga in bozza dal momento in cui è partito, da correggere e mandare con [salvaOre]. */
+    suspend fun fermaTimer(): Result<TimerFermato>
+
+    /**
+     * Crea o cambia una riga di ore: va nella coda su disco e parte quando c'è
+     * rete, come i rapportini. Con [bozza] resta in bozza.
+     */
+    fun salvaOre(riga: RigaOre, bozza: Boolean = false)
+
+    /**
+     * Toglie una riga: se non è ancora partita esce dalla coda e basta; se è sul
+     * server la toglie lì (serve la rete). Con [annulla] la rimette (l'Annulla).
+     */
+    suspend fun togliOre(riga: RigaOre, annulla: Boolean = false): Result<Unit>
+
+    /** Ore, rapportini, spese e trasferte in attesa, per persona, con le anomalie (solo chi approva). */
+    suspend fun daApprovare(): Result<DaApprovare>
+    suspend fun approva(voci: List<VoceDaApprovare>): Result<EsitoApprovazione>
+
+    /** Il motivo è obbligatorio: arriva a chi le ha scritte. */
+    suspend fun respingi(voci: List<VoceDaApprovare>, motivo: String): Result<EsitoApprovazione>
+
+    /** L'Annulla dell'avviso dopo Approva o Respingi: tornano da approvare. */
+    suspend fun annullaApprovazione(voci: List<VoceDaApprovare>): Result<EsitoApprovazione>
+
+    // ------------------------------------------------------------- fase 3: spese, trasferte, rimborsi, veicoli
+
+    /** Le spese del mese letto per ultimo, con sopra quelle ancora in coda (scontrino compreso). */
+    val spese: StateFlow<ElencoSpese?>
+
+    /** Le trasferte del mese letto per ultimo. */
+    val trasferte: StateFlow<ElencoTrasferte?>
+
+    /** Rilegge spese e trasferte del mese. */
+    fun aggiornaSpese(mese: YearMonth)
+
+    /**
+     * Crea o cambia una spesa, con lo scontrino [foto] già ridotto ([preparaFoto]):
+     * va nella coda su disco, foto compresa, e parte quando c'è rete.
+     */
+    fun salvaSpesa(spesa: Spesa, foto: File? = null)
+
+    /** Solo lo scontrino, per una spesa che c'è già (la foto si aggiunge anche a una spesa approvata). In coda. */
+    fun aggiungiScontrino(spesa: Spesa, foto: File)
+
+    /** Come [togliOre], per una spesa. */
+    suspend fun togliSpesa(spesa: Spesa, annulla: Boolean = false): Result<Unit>
+
+    /** Le trasferte si salvano in diretta (serve la rete): il rimborso km si vede già prima. */
+    suspend fun salvaTrasferta(t: Trasferta): Result<Trasferta>
+    suspend fun togliTrasferta(id: String, annulla: Boolean = false): Result<Trasferta>
+
+    suspend fun rimborsi(): Result<Rimborsi>
+    suspend fun segnaRimborsato(voci: List<VoceRimborso>, annulla: Boolean = false): Result<Pair<Int, Double>>
+
+    suspend fun veicoli(tutti: Boolean = false): Result<ElencoVeicoli>
+    suspend fun salvaVeicolo(v: Veicolo): Result<Veicolo>
+
+    /** [per]: "persona", "commessa" o "categoria". */
+    suspend fun riepilogoSpese(mese: YearMonth, per: String): Result<RiepilogoSpese>
+
+    /** Lo scontrino già sul server va nel cestino (serve la rete). Torna la spesa senza. */
+    suspend fun togliFotoSpesa(idFile: String): Result<Spesa>
+
+    /** Le statistiche delle ore del mese, [per] "persona" o "commessa" (§14.11). */
+    suspend fun statisticheOre(mese: YearMonth, per: String): Result<StatisticheOre>
+
+    /**
+     * Un file per Excel di [cosa] ("ore", "spese", "trasferte", "rimborsi", §14.14)
+     * fra [da] e [a] (null = il periodo di base del server). Il collaboratore esporta
+     * solo le sue. Torna il file nella cartella dei PDF, pronto per Condividi.
+     */
+    suspend fun esportaPeriodo(cosa: String, da: LocalDate?, a: LocalDate?, utente: String = ""): Result<File>
 }
 
 /**

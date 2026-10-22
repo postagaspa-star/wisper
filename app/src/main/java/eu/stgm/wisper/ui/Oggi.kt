@@ -69,7 +69,7 @@ fun AvvisoRifiuto(dati: Dati) {
         Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(c.rossoTenue).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Text("Il server non ha accettato un rapportino", style = Testi.forte, color = c.rossoTesto)
+        Text(eu.stgm.wisper.rapportino.TestiCoda.rifiutata(rifiutata.tipo), style = Testi.forte, color = c.rossoTesto)
         Text(rifiutata.errore, style = Testi.secondario, color = c.testo2)
         Row {
             PulsanteTesto("Riprova", { dati.riprova(rifiutata.idOp) }, colore = c.testo)
@@ -245,12 +245,9 @@ fun VersioneNuova(dati: Dati) {
 @Composable
 fun PillolaReteRapportini(dati: Dati, modifier: Modifier = Modifier) {
     val operazioni by dati.operazioni.collectAsStateWithLifecycle()
-    val inAttesa = operazioni.count { !it.rifiutata }
-    if (inAttesa > 0) {
-        PillolaRete(
-            if (inAttesa == 1) "1 rapportino parte appena c'è rete" else "$inAttesa rapportini partono appena c'è rete",
-            modifier.padding(horizontal = 20.dp, vertical = 16.dp),
-        )
+    // Dalla fase 3 in coda ci sono anche ore e spese: la frase dice cosa aspetta.
+    eu.stgm.wisper.rapportino.TestiCoda.inAttesa(operazioni)?.let { testo ->
+        PillolaRete(testo, modifier.padding(horizontal = 20.dp, vertical = 16.dp))
     }
 }
 

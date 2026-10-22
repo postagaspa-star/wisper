@@ -185,6 +185,11 @@ module.exports = {
         tecnico: this.soloSuoi() ? c.utente.nome : testo(imp.TECNICO),
         soloSuoi: this.soloSuoi(),
         versioneServer: this.versione,
+        // Fase 3: il segmento "Da approvare", il pulsante "Segna rimborsato", le ore di una giornata normale.
+        puoApprovare: this.puoApprovare('rapportini') || this.puoApprovare('spese'),
+        puoSegnareRimborsi: this.puoSegnareRimborsi() && this.livello('spese') >= 2,
+        approvazione: this.regolaApprovazione(),
+        oreGiornaliere: Number(imp.ORE_GIORNALIERE) || 8,
       },
     };
   },

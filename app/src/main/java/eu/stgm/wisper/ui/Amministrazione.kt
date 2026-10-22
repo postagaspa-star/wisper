@@ -103,6 +103,9 @@ fun SchermataAmministrazione(dati: Dati, archivio: Archivio, nav: Navigatore) {
     val c = W.colori
     val ana by dati.anagrafiche.collectAsStateWithLifecycle()
     val copie = rememberLettura(Unit, 0) { dati.copie() }
+    // Fase 3: i veicoli col loro euro al km (si leggono col modulo Spese).
+    val vedeSpese = LocalPermessi.current.vede(Moduli.SPESE)
+    val veicoli = rememberLettura(vedeSpese, 0) { if (vedeSpese) dati.veicoli() else Result.failure(Exception("")) }
     val anno = LocalDate.now().year
     val numCommesse = ana.numerazione("commessa")?.prossimoNumero(anno) ?: ana.prossimoCodiceCommessa(anno)
     val numRapportini = ana.numerazione("rapportino")?.prossimoNumero(anno)
@@ -122,6 +125,12 @@ fun SchermataAmministrazione(dati: Dati, archivio: Archivio, nav: Navigatore) {
                 .joinToString(", ").ifBlank { "Rimborso km, costo orario" },
             Icone.fatturazione, "tariffe",
         ),
+        VoceAmm(
+            "Veicoli e rimborso km",
+            (veicoli as? Lettura.Pronta)?.dato?.veicoli?.firstOrNull()?.let { v -> v.nome + " · " + v.euroKmTesto + (v.annoAci?.let { " (ACI $it)" } ?: "") }
+                ?: "Il veicolo, il suo €/km, le tabelle ACI",
+            Icone.auto, "veicoli",
+        ).takeIf { vedeSpese },
         VoceAmm("Registro attività", "Chi ha cambiato cosa", Icone.lista, "registro"),
         VoceAmm(
             "Copie ed esportazioni",
@@ -131,7 +140,7 @@ fun SchermataAmministrazione(dati: Dati, archivio: Archivio, nav: Navigatore) {
         ),
         VoceAmm("Cestino", "File tolti, recuperabili", Icone.cestino, "cestino"),
         VoceAmm("L'app", "Tema, visita guidata, versione", Icone.amministrazione, "app"),
-    )
+    ).filterNotNull()
     Column(
         Modifier.fillMaxSize().background(c.fondo).verticalScroll(rememberScrollState()).padding(MarginePagina).padding(bottom = 40.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
@@ -173,6 +182,9 @@ fun PaginaAmministrazione(
         quale == "registro" -> PaginaRegistro(dati, indietro)
         quale == "copie" -> PaginaCopie(dati, puo, indietro)
         quale == "cestino" -> PaginaCestino(dati, puo, indietro)
+        quale == "veicoli" -> PaginaVeicoli(dati, nav, puo)
+        quale == "veicolo-nuovo" -> PaginaVeicolo(dati, nav, "", puo)
+        quale.startsWith("veicolo/") -> PaginaVeicolo(dati, nav, quale.removePrefix("veicolo/"), puo)
         else -> PaginaStudio(dati, puo, indietro)
     }
 }

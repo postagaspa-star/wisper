@@ -22,6 +22,8 @@ object Moduli {
     const val PREVENTIVI = "preventivi"
     const val ATTIVITA = "attivita"
     const val RAPPORTINI = "rapportini"
+    /** Spese e trasferte (fase 3, voce 7). */
+    const val SPESE = "spese"
     const val FATTURAZIONE = "fatturazione"
     const val AMMINISTRAZIONE = "amministrazione"
 
@@ -32,8 +34,8 @@ object Moduli {
     /** Quelli che funzionano nella fase 1, nell'ordine del menu. */
     val FASE1 = listOf(DASHBOARD, CLIENTI, COMMESSE, RAPPORTINI, FATTURAZIONE, AMMINISTRAZIONE)
 
-    /** Quelli che funzionano dalla fase 2 (preventivi e attivita'), nell'ordine del menu. */
-    val FUNZIONANTI = listOf(DASHBOARD, CLIENTI, COMMESSE, PREVENTIVI, ATTIVITA, RAPPORTINI, FATTURAZIONE, AMMINISTRAZIONE)
+    /** Quelli che funzionano dalla fase 3 (spese e trasferte), nell'ordine del menu. */
+    val FUNZIONANTI = listOf(DASHBOARD, CLIENTI, COMMESSE, PREVENTIVI, ATTIVITA, RAPPORTINI, SPESE, FATTURAZIONE, AMMINISTRAZIONE)
 }
 
 /** I quattro ruoli, con la frase che li spiega (docs/gestionale/fase1-schermate.md §7). */
@@ -125,7 +127,7 @@ data class Permessi(val livelli: Map<String, Int>) {
                 }
                 Ruoli.COLLABORATORE -> {
                     p[Moduli.DASHBOARD] = 1; p[Moduli.CLIENTI] = 1; p[Moduli.COMMESSE] = 1; p[Moduli.RAPPORTINI] = 2
-                    p[Moduli.ATTIVITA] = 2
+                    p[Moduli.ATTIVITA] = 2; p[Moduli.SPESE] = 2
                 }
                 Ruoli.LETTURA -> {
                     Moduli.FUNZIONANTI.forEach { p[it] = 1 }
@@ -138,13 +140,57 @@ data class Permessi(val livelli: Map<String, Int>) {
     }
 }
 
+/**
+ * Quello che `io` dice dell'interfaccia dalla fase 3 (§14.1): chi vede il
+ * segmento Da approvare e il pulsante Segna rimborsato, la regola delle
+ * approvazioni, le ore di una giornata. Null = il server non l'ha detto (una
+ * versione vecchia, o non ancora letto): vale la regola dei ruoli.
+ */
+data class Interfaccia(
+    val puoApprovare: Boolean? = null,
+    val puoSegnareRimborsi: Boolean? = null,
+    /** "collaboratori" | "tutti" | "nessuno". */
+    val approvazione: String = "collaboratori",
+    val oreGiornaliere: Double = 8.0,
+) {
+    fun aJson(): JSONObject = JSONObject()
+        .put("puoApprovare", puoApprovare ?: JSONObject.NULL)
+        .put("puoSegnareRimborsi", puoSegnareRimborsi ?: JSONObject.NULL)
+        .put("approvazione", approvazione)
+        .put("oreGiornaliere", oreGiornaliere)
+
+    companion object {
+        fun daJson(o: JSONObject?) = Interfaccia(
+            puoApprovare = o?.booleanoONull("puoApprovare"),
+            puoSegnareRimborsi = o?.booleanoONull("puoSegnareRimborsi"),
+            approvazione = o?.testo("approvazione")?.ifBlank { null } ?: "collaboratori",
+            oreGiornaliere = o?.numero("oreGiornaliere") ?: 8.0,
+        )
+    }
+}
+
 /** Chi e' entrato su questo telefono e cosa puo' fare. */
 data class Sessione(
     val utente: Utente,
     val permessi: Permessi,
     /** Vero quando il server ha detto che l'accesso e' scaduto o revocato: si torna alla schermata di accesso. */
     val scaduta: Boolean = false,
+    val interfaccia: Interfaccia = Interfaccia(),
 ) {
+    private val approvaPerRuolo: Boolean
+        get() = utente.ruolo == Ruoli.TITOLARE || utente.ruolo == Ruoli.AMMINISTRAZIONE
+
+    /** Il segmento Da approvare: titolare e amministrazione col modulo in scrittura (§14.1), o quello che dice il server. */
+    val puoApprovare: Boolean
+        get() = interfaccia.puoApprovare ?: (approvaPerRuolo && (permessi.modifica(Moduli.RAPPORTINI) || permessi.modifica(Moduli.SPESE)))
+
+    /** Segna rimborsato: solo titolare e amministrazione, con le spese in scrittura. */
+    val puoSegnareRimborsi: Boolean
+        get() = interfaccia.puoSegnareRimborsi ?: (approvaPerRuolo && permessi.modifica(Moduli.SPESE))
+
+    /** Lo stato che avra' una riga scritta adesso da chi e' entrato, per mostrarla subito senza rete. */
+    val statoPrevisto: String get() = FilaOreSpese.statoPrevisto(interfaccia.approvazione, utente.ruolo)
+
     companion object {
         val NESSUNA = Sessione(Utente("", ""), Permessi(emptyMap()))
     }
@@ -385,6 +431,8 @@ data class Dashboard(
     val settimana: List<VoceDashboard> = emptyList(),
     val pianificare: List<VoceDashboard> = emptyList(),
     val commesse: NumeriCommesse = NumeriCommesse(),
+    /** Dalla fase 3 (§14.13): ore, cose da approvare, rimborsi da fare. */
+    val fase3: NumeriFase3 = NumeriFase3(),
 ) {
     val vuota: Boolean get() = urgenti.isEmpty() && settimana.isEmpty() && pianificare.isEmpty()
 
@@ -394,6 +442,7 @@ data class Dashboard(
             settimana = o.optJSONArray("settimana").oggetti().map(VoceDashboard::daJson),
             pianificare = o.optJSONArray("pianificare").oggetti().map(VoceDashboard::daJson),
             commesse = NumeriCommesse.daJson(o.optJSONObject("numeri")?.optJSONObject("commesse") ?: o.optJSONObject("commesse")),
+            fase3 = NumeriFase3.daJson(o.optJSONObject("numeri")),
         )
     }
 }

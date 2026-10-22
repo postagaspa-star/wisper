@@ -19,7 +19,7 @@ import java.io.File
  * Il rischio e' lavorare su dati vecchi di qualche ora, ed e' piccolo: clienti
  * e commesse cambiano qualche volta al mese.
  */
-class CopiaLocale(cartella: File) {
+class CopiaLocale(private val cartella: File) {
 
     constructor(ctx: Context) : this(ctx.filesDir)
 
@@ -109,6 +109,21 @@ class CopiaLocale(cartella: File) {
         }
     }.toString())
 
+    // ---- fase 3: ore, timer, spese, trasferte (l'ultima risposta del server, com'era)
+
+    private val nomiFase3 = listOf("ore", "timer", "spese", "trasferte")
+    private fun fileFase3(nome: String) = File(cartella, "fase3-$nome.json")
+
+    /** L'ultima risposta letta per [nome] ("ore", "timer", "spese", "trasferte"), o null. */
+    fun fase3(nome: String): JSONObject? = try {
+        val f = fileFase3(nome)
+        if (!f.exists()) null else JSONObject(f.readText())
+    } catch (_: Exception) {
+        null
+    }
+
+    fun scriviFase3(nome: String, o: JSONObject) = scriviAtomico(fileFase3(nome), o.toString())
+
     private fun elenco(f: File): List<JSONObject> = try {
         if (!f.exists()) emptyList() else JSONArray(f.readText()).oggetti()
     } catch (_: Exception) {
@@ -120,7 +135,7 @@ class CopiaLocale(cartella: File) {
      * solo il suo. La coda dei rapportini da mandare sta altrove e non si tocca.
      */
     fun svuota() {
-        listOf(fileAnagrafiche, fileRapportini, fileStorico, fileDashboard, filePreventivi, fileDettagli, fileListino, fileAttivita)
+        (listOf(fileAnagrafiche, fileRapportini, fileStorico, fileDashboard, filePreventivi, fileDettagli, fileListino, fileAttivita) + nomiFase3.map(::fileFase3))
             .forEach { runCatching { it.delete() } }
         runCatching { cartellaFile.listFiles()?.forEach { it.delete() } }
     }

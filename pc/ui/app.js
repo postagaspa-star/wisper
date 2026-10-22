@@ -23,6 +23,7 @@
   const Visita = window.WisperVisita;
   const Esempio = window.WisperEsempio;
   const RA = window.WisperRegoleAttivita;
+  const RO = window.WisperRegoleOreSpese;
   const { $, h, aggiungi, svuota, icona, tondo, iniziali, stato, avviso, lavora, finestra, conferma, apriMenu, chiudiMenu,
     campo, conSuffisso, selezione, segmenti, cerca, riga, quadrato, segnaposto } = B;
 
@@ -170,7 +171,9 @@
   async function caricaDashboard() {
     if (!puo('dashboard')) return;
     try {
-      S.dash = await Rete.get('/server/dashboard');
+      // Fase 3: il proprio timer acceso si vede sulla Dashboard.
+      const [dash] = await Promise.all([Rete.get('/server/dashboard'), Ore.leggiTimer()]);
+      S.dash = dash;
       S.dashErrore = '';
     } catch (e) {
       if (e.accesso === false) return;
@@ -236,6 +239,8 @@
     });
     // I numeri della Dashboard cambiano con i rapportini: si rileggono senza fretta.
     caricaDashboard();
+    // Fase 3: le spese di un rapportino sono righe di Spese e trasferte.
+    Spese.daRileggere();
   }
 
   const cliente = id => S.ana.soggetti.find(c => c.id === id);
@@ -299,12 +304,16 @@
   }
 
   window.addEventListener('hashchange', () => {
+    // Fase 3: entrando in una pagina ore e spese si rileggono (un telefono può averle cambiate).
+    Ore.daRileggere();
+    Spese.daRileggere();
     mostra();
     const nome = percorso().split('/')[0];
     if (nome === 'rapportini') Visita.azione('nav-rapportini');
     if (nome === 'fatturazione') Visita.azione('nav-fatturazione');
     if (nome === 'preventivi') Visita.azione('nav-preventivi');
     if (nome === 'attivita') Visita.azione('nav-attivita');
+    if (nome === 'spese') Visita.azione('nav-spese');
   });
 
   /** Cambio di pagina: si chiude il pannello e si ridisegna da capo. */
@@ -339,6 +348,14 @@
     }
     if (d.hash === '#commesse') S.filtriCommesse = filtriCommesse(f || {});
     if (c.pagina === 'commessa' && f && f.sezione) S.schedaCommessa[c.id] = f.sezione;
+    // Fase 3: Ore e rapportini ha i segmenti Ore · Rapportini · Da approvare.
+    if (d.hash === '#rapportini' && f && (f.segmento === 'ore' || f.segmento === 'daApprovare')) {
+      S.filtroOre = { segmento: f.segmento, giorno: f.giorno || '' };
+      vai(d.hash);
+      return;
+    }
+    if (d.hash === '#rapportini') Ore.M.segmento = 'rapportini';
+    if (d.hash === '#spese') S.filtroSpese = f ? Object.assign({}, f, c.id ? { id: c.id } : {}) : null;
     if (d.hash === '#rapportini') {
       const x = f || {};
       // "stato": BOZZA è il segmento Da firmare; gli altri stati una pillola col filtro. Di tutti i mesi.
@@ -347,7 +364,7 @@
         mese: x.stato || x.quali === 'firmare' ? '' : (x.mese !== undefined ? x.mese : meseDiOggi()),
         cliente: x.idCliente || x.cliente || '', commessa: x.idCommessa || x.commessa || '' });
       S.scelti.clear();
-      S.apriDopo = x.apri || null;
+      S.apriDopo = x.apri || x.id || null;
     }
     if (d.hash === '#fatturazione' && f && f.mese) S.mese = f.mese;
     if (d.hash === '#clienti' && f) S.filtriSoggetti = Object.assign({ tipo: 'clienti', testo: '', archiviati: false }, f);
@@ -392,7 +409,8 @@
 
     if (nome === 'clienti') a1 ? Clienti.scheda(pagina, decodeURIComponent(a1)) : Clienti.vista(pagina);
     else if (nome === 'commesse') a1 ? Commesse.pagina(pagina, decodeURIComponent(a1)) : Commesse.vista(pagina);
-    else if (nome === 'rapportini') vistaRapportini(pagina);
+    else if (nome === 'rapportini') { const f = S.filtroOre; S.filtroOre = null; Ore.vista(pagina, a1 ? decodeURIComponent(a1) : '', f); }
+    else if (nome === 'spese') { const f = S.filtroSpese; S.filtroSpese = null; Spese.vista(pagina, a1 ? decodeURIComponent(a1) : '', f); }
     else if (nome === 'fatturazione') vistaFatturazione(pagina);
     else if (nome === 'amministrazione') Amministrazione.vista(pagina, a1 || '', a2 ? decodeURIComponent(a2) : '');
     else if (nome === 'preventivi') Preventivi.vista(pagina, a1 ? decodeURIComponent(a1) : '', a2 || '');
@@ -431,7 +449,7 @@
   /** Quanti clienti hanno qualcosa da fatturare nel mese: il numerino giallo su Fatturazione. */
   function clientiDaFatturare() {
     const mese = meseDiOggi();
-    return perChiPaga(attivi().filter(r => (r.stato === 'FIRMATO' || r.stato === 'INVIATO') && String(r.data).slice(0, 7) === mese)).length;
+    return perChiPaga(attivi().filter(r => (r.stato === 'FIRMATO' || r.stato === 'INVIATO') && String(r.data).slice(0, 7) === mese && !RO.bloccoInvio(r))).length;
   }
 
   function disegnaLato() {
@@ -696,7 +714,9 @@
     return { budget: 'allarme', scadenza: 'calendario', firma: 'firma', giorno: 'calendario', giorni: 'calendario', fatturare: 'fatturazione',
       fatturazione: 'fatturazione', responsabile: 'clienti', sdi: 'fatturazione', cliente: 'clienti', rapportini: 'firma', rapportino: 'rapportini',
       prestazioni: 'lista', preventivo: 'preventivo', preventivi: 'preventivo', attivita: 'lista', appuntamento: 'calendario', sopralluogo: 'luogo',
-      calendario: 'calendario', listino: 'libro' }[v.tipo] ||
+      calendario: 'calendario', listino: 'libro',
+      // fase 3
+      approvare: 'spunta', respinta: 'allarme', timer: 'orologio', rimborsi: 'scontrino', veicoli: 'auto' }[v.tipo] ||
       ({ urgente: 'allarme', attenzione: 'calendario', soldi: 'fatturazione' }[v.gravita] || 'lista');
   }
 
@@ -729,6 +749,10 @@
         box(n.inRitardo, 'in ritardo', { stato: 'APERTA', ritardo: true }, true),
         box(n.chiuse, n.chiuse === 1 ? 'chiusa' : 'chiuse', { stato: 'CHIUSA' }))]);
     }
+
+    // Fase 3: il timer acceso, in vista appena si apre il programma.
+    const timer = Ore.schedaTimer();
+    if (timer) aggiungi(pagina, [timer]);
 
     const corpo = h('div', { class: 'dash-corpo', 'data-visita': 'dashboard' });
     aggiungi(pagina, [corpo]);
@@ -769,7 +793,9 @@
     const scrive = puo('fatturazione', 2);
     const delMese = attivi().filter(r => String(r.data).slice(0, 7) === mese);
     const t = C.totali(delMese);
-    const daFatturare = delMese.filter(r => r.stato === 'FIRMATO' || r.stato === 'INVIATO');
+    // Fase 3: i firmati che aspettano l'approvazione non si fatturano ancora (stanno a parte).
+    const daFatturare = delMese.filter(r => (r.stato === 'FIRMATO' || r.stato === 'INVIATO') && !RO.bloccoInvio(r));
+    const inAttesa = delMese.filter(r => (r.stato === 'FIRMATO' || r.stato === 'INVIATO') && RO.bloccoInvio(r));
     const bozze = delMese.filter(r => r.stato === 'BOZZA');
     const fatturati = delMese.filter(r => r.stato === 'FATTURATO');
     const spostaMese = d => {
@@ -799,7 +825,12 @@
       aggiungi(sez, [h('div', { class: 'calmo' }, icona('spunta', 20, 2.8), 'Niente da fatturare a ' + meseMinuscolo(mese))]);
     }
     gruppi.forEach((g, i) => aggiungi(sez, [schedaChiPaga(g, i === 0, scrive)]));
-    const prima = attivi().filter(r => (r.stato === 'FIRMATO' || r.stato === 'INVIATO') && String(r.data).slice(0, 7) < mese);
+    if (inAttesa.length) {
+      const puoApprovare = !!(S.io && S.io.interfaccia && S.io.interfaccia.puoApprovare);
+      aggiungi(sez, [h('div', { class: 'secondario' }, (inAttesa.length === 1 ? '1 rapportino firmato aspetta' : inAttesa.length + ' rapportini firmati aspettano') + ' l\'approvazione: si fatturano dopo. ',
+        puoApprovare ? h('button', { type: 'button', class: 'btn collegamento', onclick: () => vaiA({ pagina: 'rapportini', filtro: { segmento: 'daApprovare' } }) }, 'Vai a Da approvare') : null)]);
+    }
+    const prima = attivi().filter(r => (r.stato === 'FIRMATO' || r.stato === 'INVIATO') && String(r.data).slice(0, 7) < mese && !RO.bloccoInvio(r));
     if (prima.length) {
       const ultimoMese = prima.map(r => String(r.data).slice(0, 7)).sort().reverse()[0];
       aggiungi(sez, [h('div', { class: 'secondario' }, 'Restano da fatturare anche ' + nRapportini(prima.length) + ' dei mesi prima. ',
@@ -887,12 +918,15 @@
   function vaiARapportini(filtri) {
     S.filtri = filtriRapportini(filtri);
     S.scelti.clear();
+    Ore.M.segmento = 'rapportini';
     vai('#rapportini');
   }
 
   // ======================================================================= RAPPORTINI
 
-  function vistaRapportini(pagina) {
+  /** Il segmento Rapportini di Ore e rapportini (ore.js mette i segmenti sotto la testata). */
+  function vistaRapportini(pagina, extra) {
+    const ex = extra || {};
     const f = S.filtri;
     const mesi = Array.from(new Set(attivi().map(r => String(r.data).slice(0, 7)).concat([meseDiOggi()])))
       .filter(Boolean).sort().reverse();
@@ -912,6 +946,7 @@
     aggiungi(pagina, [
       h('div', { class: 'testata' }, h('div', { class: 'titoli' }, h('span', { class: 'dove' }, 'Ore e rapportini'), h('h1', null, 'Rapportini')),
         puo('rapportini', 2) ? h('button', { type: 'button', class: 'btn giallo', onclick: () => moduloRapportino(null) }, icona('piu', 18, 2.6), 'Nuovo rapportino') : null),
+      ex.segmenti ? h('div', null, ex.segmenti) : null,
       h('div', { class: 'filtri' },
         cerca(f.testo, 'Cliente, commessa, lavoro, numero', v => { f.testo = v; S.scelti.clear(); elencoRapportini(area); }),
         selezione([['', 'Tutti i mesi']].concat(mesi.map(m => [m, C.nomeMese(m)])), f.mese, v => { f.mese = v; S.scelti.clear(); elencoRapportini(area); }),
@@ -983,7 +1018,7 @@
         h('span', { class: 'n' }, C.numero(r.km)),
         soldi() ? h('span', { class: 'n t2' }, C.num(r.spese) ? C.euro(r.spese) : '') : null,
         soldi() ? h('span', { class: 'n forte' }, C.euro(r.totale)) : null,
-        h('span', null, stato(r.stato)))]);
+        statoRapportino(r))]);
         primaRiga = false;
       });
       aggiungi(area, [h('div', { class: 'gruppo-tab' }, intesta, tab)]);
@@ -1001,6 +1036,25 @@
         h('button', { type: 'button', class: 'btn piccolo', onclick: () => cambiaStato(sel, 'FATTURATO') }, 'Segna fatturati'),
         h('button', { type: 'button', class: 'btn piccolo', onclick: () => { S.scelti.clear(); elencoRapportini(area); } }, 'Deseleziona'))]);
     }
+  }
+
+  /** La parola dello stato e, sotto, la pillola dell'approvazione (fase 3: "Da approvare", "Respinto: motivo"). */
+  function statoRapportino(r) {
+    const p = RO.pillolaApprovazione(r);
+    if (!p) return h('span', null, stato(r.stato));
+    return h('span', { class: 'stato-doppio' }, stato(r.stato), h('span', { class: 'pill piccola p-' + p.colore, title: p.testo }, p.testo));
+  }
+
+  /**
+   * Un rapportino che aspetta l'approvazione non si manda al cliente e non si fattura:
+   * il server lo rifiuterebbe, qui lo si dice prima (con la sua frase). true = si può.
+   */
+  function puoMandare(lista) {
+    const fermo = (lista || []).find(r => RO.bloccoInvio(r));
+    if (!fermo) return true;
+    const altri = lista.filter(r => RO.bloccoInvio(r)).length - 1;
+    avviso(RO.bloccoInvio(fermo) + (altri > 0 ? ' (e altri ' + altri + ')' : ''), true);
+    return false;
   }
 
   // ----------------------------------------------------------------------- pannello
@@ -1054,10 +1108,15 @@
     if (!r) { if (vecchio) vecchio.remove(); S.aperto = null; return; }
     const bloccato = ['FIRMATO', 'INVIATO', 'FATTURATO'].indexOf(r.stato) >= 0;
     const commessaLunga = r.idCommessa ? r.idCommessa + ' ' + (r.commessa || '') : (r.commessa || 'Senza commessa');
+    // Fase 3: da approvare o respinto = non si manda al cliente e non si fattura.
+    const approvazione = RO.pillolaApprovazione(r);
+    const fermo = !!RO.bloccoInvio(r);
 
     const corpo = h('div', { class: 'corpo' },
       h('div', { class: 'alto' }, h('span', { class: 'numero' }, r.id || 'Rapportino'), stato(r.stato, true), tondo('chiudi', 'Chiudi', () => chiudiPannello(), 'piccolo')),
       passi(r.stato),
+      approvazione ? h('div', { class: approvazione.colore === 'rosso' ? 'banda' : 'banda calma' }, icona(approvazione.colore === 'rosso' ? 'avviso' : 'orologio', 20),
+        h('span', { class: 'spazio' }, approvazione.colore === 'rosso' ? approvazione.testo : 'Da approvare: si manda al cliente e si fattura dopo l\'approvazione')) : null,
       h('div', null, h('div', { style: { fontSize: '18px', fontWeight: '800' } }, r.cliente),
         h('div', { class: 't2', style: { fontSize: '15px', color: 'var(--testo2)' } }, commessaLunga + ' · ' + dataLunga(r.data))),
       h('div', { class: 'lavoro' }, r.descrizione || '—'),
@@ -1077,7 +1136,7 @@
     const pdf = giallo => h('button', { type: 'button', class: 'btn grande' + (giallo ? ' giallo' : ''), 'data-visita': giallo ? 'azione-gialla' : null, onclick: () => pdfRapportino(r, { apri: true }) }, 'PDF');
     // Chi scrive rapportini li corregge; invii e stati della fatturazione sono di chi fattura.
     const scrive = puo('rapportini', 2);
-    const fattura = puo('fatturazione', 2) && soldi();
+    const fattura = puo('fatturazione', 2) && soldi() && !fermo;
     const voci = [
       bloccato || !scrive ? null : (r.stato !== 'BOZZA' ? { testo: 'Modifica', fn: () => moduloRapportino(r) } : null),
       fattura && (r.stato === 'BOZZA' || r.stato === 'INVIATO') ? { testo: r.stato === 'INVIATO' ? 'Invia di nuovo al cliente' : 'Invia al cliente', fn: () => preparaInvio([r], true) } : null,
@@ -1117,6 +1176,7 @@
 
   async function cambiaStato(lista, st) {
     if (!lista.length) { avviso('Niente da cambiare', true); return false; }
+    if ((st === 'INVIATO' || st === 'FATTURATO') && !puoMandare(lista)) return false;
     const ids = lista.map(r => r.id || r.idLocale);
     const fatto = await lavora('Aggiorno', async () => {
       const ris = await Rete.post('/server/stato', { ids, stato: st });
@@ -1223,6 +1283,7 @@
   function preparaInvio(lista0, singolo) {
     const lista = C.ordina(lista0, 'data', 1);
     if (!lista.length) { avviso('Non c\'è niente da mettere nel riepilogo', true); return; }
+    if (!puoMandare(lista)) return;
     const r0 = singolo ? lista[0] : null;
     // Il rapportino singolo va al cliente (o, senza la sua email, a chi paga); il riepilogo a chi paga.
     const intest = r0
@@ -1643,7 +1704,7 @@
         h('span', { class: 'doppia' }, h('span', null, r.cliente), h('span', null, r.idCommessa)),
         h('span', { class: 'taglia t2', title: r.descrizione }, r.descrizione),
         h('span', { class: 'n' }, C.numero(r.oreTotali)), h('span', { class: 'n' }, C.numero(r.km)),
-        soldi() ? h('span', { class: 'n t2' }, C.num(r.spese) ? C.euro(r.spese) : '') : null, soldi() ? h('span', { class: 'n forte' }, C.euro(r.totale)) : null, h('span', null, stato(r.stato)))]);
+        soldi() ? h('span', { class: 'n t2' }, C.num(r.spese) ? C.euro(r.spese) : '') : null, soldi() ? h('span', { class: 'n forte' }, C.euro(r.totale)) : null, statoRapportino(r))]);
     });
     const t = C.totali(lista);
     aggiungi(tab, [h('div', { class: 'r piede', style: { gridTemplateColumns: colonne } }, h('span', { style: { gridColumn: 'span 3' } }, 'Totale · ' + nRapportini(t.n)),
@@ -1666,12 +1727,37 @@
     iniziaVisita, cercaAggiornamenti, riavvia, statoAggiornamenti, mostraLicenza, esci, filtriCommesse, titolare,
     // fase 2
     senzaPermesso, nomeFile, prossimoCodiceCommessa, attivitaLette, scriviConConferma,
+    // fase 3
+    vistaRapportini, esporta, rileggiRapportini,
   };
   const Clienti = window.WisperClienti(W);
   const Commesse = window.WisperCommesse(W);
   const Amministrazione = window.WisperAmministrazione(W);
   const Preventivi = window.WisperPreventivi(W);
   const Attivita = window.WisperAttivita(W);
+  const Ore = window.WisperOre(W);
+  const Spese = window.WisperSpese(W);
+
+  /**
+   * L'esportazione per Excel (§12.13, §13.9, §14.14): il server prepara il CSV coi
+   * filtri dell'elenco, il programma lo salva con la finestra Salva di Windows.
+   */
+  async function esporta(cosa, filtri) {
+    const ris = await lavora('Preparo il file', () => Rete.post('/server/esporta', Object.assign({ cosa }, filtri || {})));
+    if (!ris) return;
+    if (S.esempio) { avviso('Nella visita non si salva niente'); return; }
+    const fatto = await lavora('Salvo il file', () => Api.post('/locale/salva-file', { nome: ris.nome || R.nomeEsportazione(cosa), testo: ris.csv || ris.testo || '', base64: ris.base64 || '' }));
+    if (fatto && fatto.ok) avviso('Salvato in ' + fatto.percorso);
+  }
+
+  /** Dopo un'approvazione i rapportini cambiano (statoApprovazione): si rileggono. */
+  async function rileggiRapportini() {
+    if (!(puo('rapportini') || puo('fatturazione') || puo('commesse'))) return;
+    try {
+      const r = await Rete.get('/server/rapportini');
+      S.rapportini = r.rapportini || [];
+    } catch (e) { /* alla prossima lettura */ }
+  }
 
   // ======================================================================= promemoria
 
@@ -1753,6 +1839,9 @@
   function svuotaFase2() {
     Object.assign(Preventivi.M, { lista: null, listino: null, aperti: {}, bozza: null, chiave: '' });
     Object.assign(Attivita.M, { aperte: null, periodo: null, da: '', a: '' });
+    // fase 3: ore, timer, approvazioni, spese
+    Object.assign(Ore.M, { ore: null, chiave: '', approvare: null, stat: null, timer: null, attivita: null, aggiunte: {}, persona: null, segmento: 'ore' });
+    Object.assign(Spese.M, { spese: null, trasferte: null, rimborsi: null, veicoli: null, riep: null, persona: '', segmento: 'spese' });
   }
 
   function iniziaVisita() {

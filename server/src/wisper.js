@@ -100,6 +100,8 @@ class Wisper {
       for (const n of NUMERAZIONI_INIZIALI) {
         this.db.esegui('INSERT OR IGNORE INTO numerazioni (tipo, formato, annuale) VALUES (?, ?, ?)', n.tipo, n.formato, n.annuale);
       }
+      // Fase 3: il primo veicolo e' l'auto delle impostazioni (AUTO, EURO_KM), se non ce n'e' nessuno.
+      this.preparaVeicoli();
     });
   }
 
@@ -130,7 +132,7 @@ class Wisper {
     return this.livello('costi') > 0;
   }
 
-  /** Un collaboratore vede e scrive solo i suoi rapportini (e, dalla fase 2, le sue spese). */
+  /** Un collaboratore vede e scrive solo i suoi rapportini (e, dalla fase 3, le sue ore, spese e trasferte). */
   soloSuoi() {
     const c = this.chi();
     return !!(c.utente && c.utente.ruolo === 'collaboratore');
@@ -343,6 +345,6 @@ module.exports = {
 
 // Le azioni, divise per argomento: ognuna aggiunge i suoi metodi al server.
 for (const parte of ['anagrafiche', 'rapportini', 'file', 'accesso', 'amministrazione', 'dashboard', 'esporta', 'copie', 'email', 'vies',
-  'preventivi', 'attivita']) {
+  'preventivi', 'attivita', 'ore', 'spese']) {
   Object.assign(Wisper.prototype, require('./azioni/' + parte));
 }

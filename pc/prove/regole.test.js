@@ -17,10 +17,10 @@ const ruolo = r => E.permessiDi(r);
 
 test('permessi: le voci del menu nell\'ordine delle specifiche, solo quelle del ruolo', () => {
   assert.deepEqual(R.vociMenu(ruolo('titolare')).map(v => v.nome),
-    ['Dashboard', 'Clienti e fornitori', 'Progetti e commesse', 'Preventivi e contratti', 'Attività e calendario', 'Ore e rapportini', 'Fatturazione', 'Amministrazione']);
-  // Fase 2: il collaboratore vede Attività e calendario, non i preventivi.
-  assert.deepEqual(R.vociMenu(ruolo('collaboratore')).map(v => v.modulo), ['dashboard', 'clienti', 'commesse', 'attivita', 'rapportini']);
-  assert.deepEqual(R.vociMenu(ruolo('lettura')).map(v => v.modulo), ['dashboard', 'clienti', 'commesse', 'preventivi', 'attivita', 'rapportini', 'fatturazione']);
+    ['Dashboard', 'Clienti e fornitori', 'Progetti e commesse', 'Preventivi e contratti', 'Attività e calendario', 'Ore e rapportini', 'Spese e trasferte', 'Fatturazione', 'Amministrazione']);
+  // Fase 2: il collaboratore vede Attività e calendario, non i preventivi. Fase 3: Spese e trasferte, voce 7.
+  assert.deepEqual(R.vociMenu(ruolo('collaboratore')).map(v => v.modulo), ['dashboard', 'clienti', 'commesse', 'attivita', 'rapportini', 'spese']);
+  assert.deepEqual(R.vociMenu(ruolo('lettura')).map(v => v.modulo), ['dashboard', 'clienti', 'commesse', 'preventivi', 'attivita', 'rapportini', 'spese', 'fatturazione']);
   assert.ok(R.vociMenu(ruolo('amministrazione')).some(v => v.modulo === 'amministrazione'), 'amministrazione in lettura la vede');
   assert.deepEqual(R.vociMenu(null), []);
 });
@@ -42,7 +42,7 @@ test('permessi: livelli, pagine permesse, l\'app è di tutti', () => {
   assert.equal(R.moduloDi(''), 'dashboard');
   assert.equal(R.primaPagina(c), 'dashboard');
   assert.equal(R.primaPagina({}), 'amministrazione/app');
-  assert.deepEqual(Object.keys(R.permessiTutti()).sort(), ['amministrazione', 'attivita', 'commesse', 'costi', 'clienti', 'dashboard', 'fatturazione', 'preventivi', 'rapportini', 'riservati'].sort());
+  assert.deepEqual(Object.keys(R.permessiTutti()).sort(), ['amministrazione', 'attivita', 'commesse', 'costi', 'clienti', 'dashboard', 'fatturazione', 'preventivi', 'rapportini', 'riservati', 'spese'].sort());
 });
 
 test('permessi: il titolare da chiamare e l\'ultimo titolare che non si toglie', () => {
@@ -60,7 +60,7 @@ test('permessi: il titolare da chiamare e l\'ultimo titolare che non si toglie',
 
 test('permessi: cosa vedrà chi cambia ruolo, a parole', () => {
   const f = R.descriviRuolo(ruolo('collaboratore'));
-  assert.match(f, /Potrà cambiare: Attività e calendario, Ore e rapportini\./);
+  assert.match(f, /Potrà cambiare: Attività e calendario, Ore e rapportini, Spese e trasferte\./);
   assert.match(f, /Solo da leggere: Dashboard, Clienti e fornitori, Progetti e commesse\./);
   assert.match(f, /Non vedrà: Preventivi e contratti, Fatturazione, Amministrazione\./);
   assert.match(f, /Senza importi\.$/);
@@ -368,4 +368,14 @@ test('esempio: le scritture finiscono nel registro, con prima e dopo', () => {
   const doppio = E.gestisci(m, 'POST', '/server/salvaSoggetto', { soggetto: { nome: 'rossi impianti', cliente: true } });
   assert.equal(doppio.giaEsisteva, true, 'il doppione torna quello che c\'è');
   assert.equal(doppio.soggetto.id, 'C002');
+});
+
+test('costo della commessa: accanto alle ore il costo orario del conto, non quello di oggi', () => {
+  // 20 ore congelate a 22 €: 440 €, anche se oggi in Amministrazione c'è 15 €.
+  assert.equal(R.costoOrarioDelConto(20, 440), 22);
+  // 10 ore a 15 e 10 a 29 fanno 440: 22 € di media, e 20 × 22 torna al centesimo.
+  assert.equal(R.costoOrarioDelConto(7.5, 165), 22);
+  // Se la media non torna al centesimo, niente numero.
+  assert.equal(R.costoOrarioDelConto(3, 100), null);
+  assert.equal(R.costoOrarioDelConto(0, 0), null);
 });

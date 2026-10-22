@@ -93,16 +93,50 @@ COLONNE.attivita = [
 ];
 const STATO_A_PAROLE = { BOZZA: 'Bozza', INVIATO: 'Inviato', SCADUTO: 'Scaduto', ACCETTATO: 'Accettato', RIFIUTATO: 'Rifiutato', SOSTITUITO: 'Sostituito' };
 
+// Fase 3: ore, spese, trasferte, rimborsi. L'importo delle spese e i rimborsi sono soldi della persona:
+// ci sono anche senza "costi" (un collaboratore esporta solo i suoi); il costo delle ore no.
+const STATO_RIGA = { bozza: 'Bozza', da_approvare: 'Da approvare', approvata: 'Approvata', respinta: 'Respinta' };
+const A_CHI = { cliente: 'Al cliente', studio: 'Allo studio', personale: 'Mia' };
+COLONNE.ore = [
+  ['Data', o => data(o.data)], ['Persona', o => o.utente], ['Inizio', o => o.inizio], ['Fine', o => o.fine], ['Pausa (minuti)', o => o.pausaMinuti],
+  ['Ore', o => o.ore], ['Codice commessa', o => o.idCommessa], ['Commessa', o => (o.idCommessa ? o.commessa : 'Attività dello studio')],
+  ['Cliente', o => o.cliente], ['Prestazione', o => o.prestazione], ['Attività', o => o.attivita], ['Descrizione', o => o.descrizione],
+  ['Fatturabile', o => o.fatturabile], ['Tipo', o => o.tipo], ['Costo orario', o => o.costoOrario, true], ['Costo', o => o.costo, true],
+  ['Stato', o => STATO_RIGA[o.stato] || o.stato], ['Approvata o respinta da', o => o.approvataDaNome], ['Il', o => dataOra(o.approvataIl)],
+  ['Motivo del rifiuto', o => o.motivoRifiuto], ['Dal timer', o => o.dalTimer],
+];
+COLONNE.spese = [
+  ['Data', x => data(x.data)], ['Persona', x => x.utente], ['Categoria', x => x.categoria], ['Descrizione', x => x.descrizione], ['Importo', x => x.importo],
+  ['A chi va', x => A_CHI[x.destinazione] || x.destinazione], ['Anticipazione', x => x.anticipazione], ['Pagata da chi l\'ha scritta', x => x.pagataDaMe],
+  ['Codice commessa', x => x.idCommessa], ['Commessa', x => x.commessa], ['Codice cliente', x => x.idCliente], ['Cliente', x => x.cliente],
+  ['Rapportino', x => x.idRapportino], ['Trasferta', x => x.idTrasferta], ['Scontrino', x => x.foto.length > 0],
+  ['Stato', x => STATO_RIGA[x.stato] || x.stato], ['Approvata o respinta da', x => x.approvataDaNome], ['Il', x => dataOra(x.approvataIl)],
+  ['Motivo del rifiuto', x => x.motivoRifiuto], ['Rimborsata il', x => dataOra(x.rimborsataIl)], ['Fatturata il', x => dataOra(x.fatturataIl)],
+];
+COLONNE.trasferte = [
+  ['Dal', t => data(t.dal)], ['Al', t => data(t.al)], ['Giorni', t => t.giorni], ['Persona', t => t.utente], ['Destinazione', t => t.destinazione],
+  ['Motivo', t => t.motivo], ['Codice commessa', t => t.idCommessa], ['Commessa', t => t.commessa], ['Cliente', t => t.cliente], ['Veicolo', t => t.veicolo],
+  ['Km', t => t.km], ['Andata e ritorno', t => t.andataRitorno], ['Km totali', t => t.kmTotali], ['Euro al km', t => t.euroKm],
+  ['Rimborso km', t => t.rimborsoKm], ['Indennità', t => t.indennita], ['Totale', t => t.totale], ['Stato', t => STATO_RIGA[t.stato] || t.stato],
+  ['Approvata o respinta da', t => t.approvataDaNome], ['Il', t => dataOra(t.approvataIl)], ['Motivo del rifiuto', t => t.motivoRifiuto],
+  ['Rimborsata il', t => dataOra(t.rimborsataIl)],
+];
+COLONNE.rimborsi = [
+  ['Persona', v => v.nome], ['Tipo', v => (v.tipo === 'spesa' ? 'Spesa' : 'Trasferta')], ['Data', v => data(v.data)], ['Descrizione', v => v.descrizione],
+  ['Codice commessa', v => v.idCommessa], ['Km', v => v.km], ['Importo', v => v.importo],
+];
+
 /** Di quale modulo serve almeno la lettura, per ogni cosa da esportare. */
 const MODULO = {
   rapportini: 'rapportini', clienti: 'clienti', fornitori: 'clienti', commesse: 'commesse', registro: 'amministrazione',
   preventivi: 'preventivi', attivita: 'attivita',
+  ore: 'rapportini', spese: 'spese', trasferte: 'spese', rimborsi: 'spese',
 };
 
 module.exports = {
   esporta(d) {
     const cosa = testo(d.cosa);
-    if (!MODULO[cosa]) throw new Rifiuto('Cosa esportare? rapportini, clienti, fornitori, commesse, registro, preventivi o attivita');
+    if (!MODULO[cosa]) throw new Rifiuto('Cosa esportare? rapportini, clienti, fornitori, commesse, registro, preventivi, attivita, ore, spese, trasferte o rimborsi');
     if (this.livello(MODULO[cosa]) < 1) throw senzaPermesso('esportare ' + cosa);
     const costi = this.vedeCosti();
     const scegli = lista => lista.filter(c => costi || !c[2]);
@@ -134,6 +168,19 @@ module.exports = {
     } else if (cosa === 'attivita') {
       colonne = COLONNE.attivita;
       righe = this.leggiAttivita(d);
+    } else if (cosa === 'ore') {
+      colonne = scegli(COLONNE.ore);
+      righe = this.leggiOre(d).ore;
+    } else if (cosa === 'spese') {
+      colonne = COLONNE.spese;
+      righe = this.leggiSpese(d).spese.slice().reverse();
+    } else if (cosa === 'trasferte') {
+      colonne = COLONNE.trasferte;
+      righe = this.leggiTrasferte(d).trasferte.slice().reverse();
+    } else if (cosa === 'rimborsi') {
+      colonne = COLONNE.rimborsi;
+      righe = [];
+      for (const p of this.rimborsi(d).persone) for (const v of p.voci) righe.push(Object.assign({ nome: p.nome }, v));
     } else {
       colonne = COLONNE.registro;
       righe = [];

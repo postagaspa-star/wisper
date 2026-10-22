@@ -9,7 +9,8 @@
  *  - quanto/unita: il numero a destra, se c'e' (euro, ore, giorni, rapportini)
  *  - collegamento: {pagina, id?, filtro?}; pagina tra dashboard, clienti,
  *    cliente, commesse, commessa, rapportini, fatturazione, amministrazione e,
- *    dalla fase 2, preventivi, preventivo, attivita, calendario
+ *    dalla fase 2, preventivi, preventivo, attivita, calendario; dalla fase 3
+ *    spese (Spese e trasferte) e i filtri "segmento" di rapportini e spese
  */
 'use strict';
 
@@ -17,6 +18,7 @@ const { testo, numero, centesimi, oggi, piuGiorni, dataOraIso, dataIso } = requi
 const { budgetDi } = require('../conti');
 const { giornoAttivita } = require('./attivita');
 const { etichettaPreventivo, statoVistoPreventivo } = require('./preventivi');
+const { contaNeiConti } = require('../conti');
 
 const ORDINE = { urgente: 0, soldi: 1, attenzione: 2, info: 3 };
 const MASSIMO_PER_SEZIONE = 20;
@@ -118,7 +120,9 @@ module.exports = {
     const bozze = rapportini.filter(r => (testo(r.stato).toUpperCase() || 'BOZZA') === 'BOZZA');
     const vecchie = bozze.filter(r => r.data && r.data < settimanaFa);
     const recenti = bozze.filter(r => !(r.data && r.data < settimanaFa));
-    const firmati = rapportini.filter(r => testo(r.stato).toUpperCase() === 'FIRMATO');
+    // Fase 3: uno che aspetta l'approvazione non si manda ancora (sta tra le cose da approvare).
+    const firmati = rapportini.filter(r => testo(r.stato).toUpperCase() === 'FIRMATO' &&
+      r.stato_approvazione !== 'da_approvare' && r.stato_approvazione !== 'respinto');
     const daFatturare = rapportini.filter(r => ['FIRMATO', 'INVIATO'].indexOf(testo(r.stato).toUpperCase()) >= 0);
     if (vecchie.length) {
       voce(urgenti, { tipo: 'rapportini', gravita: 'urgente', titolo: plurale(vecchie.length, 'rapportino da far firmare', 'rapportini da far firmare') + ' da più di una settimana',
@@ -188,6 +192,8 @@ module.exports = {
     // ------------------------------------------------------------ fase 2: attivita' e preventivi
     const fase2 = this.dashboardFase2({ mie, costi, io, adesso, voce, urgenti, settimana, pianificare });
     if (soldi && fase2.preventiviInAttesa !== undefined) soldi.preventiviInAttesa = fase2.preventiviInAttesa;
+    // ------------------------------------------------------------ fase 3: ore, approvazioni, rimborsi, ACI
+    const fase3 = this.dashboardFase3({ mie, costi, io, adesso, lunedi, mese, voce, urgenti, settimana, pianificare });
 
     const oreDa = da => Math.round(rapportini.filter(r => r.data && r.data >= da && r.data <= adesso)
       .reduce((s, r) => s + (numero(r.ore_totali) || numero(r.ore_lavoro) + numero(r.ore_extra) + numero(r.ore_viaggio)), 0) * 100) / 100;
@@ -216,7 +222,141 @@ module.exports = {
     if (fase2.preventivi) risposta.numeri.preventivi = fase2.preventivi;
     if (fase2.attivita) risposta.numeri.attivita = fase2.attivita;
     if (fase2.agenda) risposta.agenda = fase2.agenda;
+    if (fase3.ore) risposta.numeri.ore = fase3.ore;
+    if (fase3.approvare) risposta.numeri.approvare = fase3.approvare;
+    if (fase3.rimborsi) risposta.numeri.rimborsi = fase3.rimborsi;
     return risposta;
+  },
+
+  /**
+   * Le voci della fase 3:
+   *  - per chi approva: le cose da approvare (urgenti), con quante hanno
+   *    un'anomalia; i timer degli altri accesi da piu' di 10 ore;
+   *  - per chi ha scritto: le sue cose respinte, col motivo (urgenti), e il suo
+   *    timer acceso da piu' di 10 ore;
+   *  - per chi segna i rimborsi (con "costi"): i rimborsi da fare;
+   *  - per chi cambia i veicoli: dall'anno nuovo, finche' non si fa,
+   *    "Aggiorna il rimborso km con le tabelle ACI {anno}".
+   * Il collaboratore: le sue ore, le sue respinte e il suo timer; niente soldi.
+   */
+  dashboardFase3({ mie, costi, io, adesso, lunedi, mese, voce, urgenti, settimana, pianificare }) {
+    const fuori = {};
+    const nomi = {};
+    this.db.righe('SELECT id, nome FROM utenti').forEach(u => { nomi[u.id] = u.nome; });
+    const vedeOre = this.livello('rapportini') > 0;
+    const vedeSpese = this.livello('spese') > 0;
+
+    // I numeri delle ore registrate: le mie (collaboratore) o di tutto lo studio.
+    if (vedeOre) {
+      const righe = this.db.righe('SELECT * FROM ore WHERE tolta IS NULL AND data >= ? AND data <= ?', mese + '-01', adesso)
+        .filter(o => contaNeiConti(o) && (!mie || o.utente_id === io));
+      const somma = l => Math.round(l.reduce((t, o) => t + numero(o.ore), 0) * 100) / 100;
+      const mio = io ? this.db.riga('SELECT partito_il FROM timer WHERE utente_id = ?', io) : null;
+      const settimanaOre = this.db.righe('SELECT * FROM ore WHERE tolta IS NULL AND data >= ? AND data <= ?', lunedi, adesso)
+        .filter(o => contaNeiConti(o) && (!mie || o.utente_id === io));
+      fuori.ore = {
+        settimana: somma(settimanaOre), mese: somma(righe), fatturabiliMese: somma(righe.filter(o => o.fatturabile === 1)),
+        timerAcceso: !!mio,
+      };
+    }
+
+    // Le cose da approvare.
+    if (!mie && (this.puoApprovare('rapportini') || this.puoApprovare('spese'))) {
+      const da = this.daApprovare();
+      fuori.approvare = { voci: da.quante, conAnomalie: da.conAnomalie };
+      if (da.quante) {
+        const conta = t => da.persone.reduce((n, p) => n + p.voci.filter(v => v.tipo === t).length, 0);
+        const pezzi = [];
+        if (conta('ore')) pezzi.push('ore');
+        if (conta('spesa')) pezzi.push(conta('spesa') === 1 ? 'una spesa' : 'spese');
+        if (conta('trasferta')) pezzi.push(conta('trasferta') === 1 ? 'una trasferta' : conta('trasferta') + ' trasferte');
+        if (conta('rapportino')) pezzi.push(conta('rapportino') === 1 ? 'un rapportino' : conta('rapportino') + ' rapportini');
+        const elenco = pezzi.length > 1 ? pezzi.slice(0, -1).join(', ') + ' e ' + pezzi[pezzi.length - 1] : pezzi[0];
+        voce(urgenti, {
+          tipo: 'approvare', gravita: 'attenzione',
+          titolo: plurale(da.quante, 'cosa da approvare', 'cose da approvare') + (da.persone.length === 1 ? ' di ' + da.persone[0].nome : ''),
+          dettaglio: elenco.charAt(0).toUpperCase() + elenco.slice(1) + (da.conAnomalie ? ' · ' + da.conAnomalie + ' con un\'anomalia' : ''),
+          quanto: da.quante, unita: 'voci', collegamento: { pagina: 'rapportini', filtro: { segmento: 'daApprovare' } },
+        });
+      }
+    }
+
+    // Le mie cose respinte, col motivo: una per una fino a 3, poi una voce sola.
+    if (io) {
+      const respinte = [];
+      const chi = id => (id && nomi[id] ? ' · ' + nomi[id] : '');
+      if (vedeOre) {
+        for (const o of this.db.righe("SELECT * FROM ore WHERE utente_id = ? AND stato = 'respinta' AND tolta IS NULL ORDER BY data", io)) {
+          respinte.push({ titolo: 'Ore del ' + dataBreve(o.data) + ' respinte', dettaglio: 'Motivo: ' + o.motivo + chi(o.approvata_da),
+            collegamento: { pagina: 'rapportini', filtro: { segmento: 'ore', giorno: o.data } } });
+        }
+        for (const r of this.db.righe("SELECT * FROM rapportini WHERE utente_id = ? AND stato_approvazione = 'respinto' AND UPPER(stato) <> 'ANNULLATO' ORDER BY data", io)) {
+          respinte.push({ titolo: r.id + ' respinto', dettaglio: 'Motivo: ' + r.motivo + chi(r.approvato_da),
+            collegamento: { pagina: 'rapportini', filtro: { segmento: 'rapportini', id: r.id } } });
+        }
+      }
+      if (vedeSpese) {
+        for (const x of this.db.righe("SELECT * FROM spese WHERE utente_id = ? AND stato = 'respinta' AND tolta IS NULL AND rapportino_id IS NULL ORDER BY data", io)) {
+          respinte.push({ titolo: 'Spesa del ' + dataBreve(x.data) + ' respinta', dettaglio: 'Motivo: ' + x.motivo + chi(x.approvata_da),
+            collegamento: { pagina: 'spese', filtro: { segmento: 'spese', id: x.id } } });
+        }
+        for (const t of this.db.righe("SELECT * FROM trasferte WHERE utente_id = ? AND stato = 'respinta' AND tolta IS NULL ORDER BY dal", io)) {
+          respinte.push({ titolo: 'Trasferta del ' + dataBreve(t.dal) + ' respinta', dettaglio: 'Motivo: ' + t.motivo_rifiuto + chi(t.approvata_da),
+            collegamento: { pagina: 'spese', filtro: { segmento: 'trasferte', id: t.id } } });
+        }
+      }
+      if (respinte.length && respinte.length <= 3) {
+        for (const r of respinte) voce(urgenti, Object.assign({ tipo: 'respinta', gravita: 'attenzione' }, r));
+      } else if (respinte.length) {
+        voce(urgenti, { tipo: 'respinta', gravita: 'attenzione', titolo: respinte.length + ' cose respinte da correggere',
+          dettaglio: respinte.slice(0, 3).map(r => r.titolo).join(', '), quanto: respinte.length, unita: 'voci',
+          collegamento: { pagina: 'rapportini', filtro: { segmento: 'ore', stato: 'respinta' } } });
+      }
+    }
+
+    // I timer accesi da piu' di 10 ore: il mio sempre, quelli degli altri per chi approva.
+    if (vedeOre) {
+      const altri = !mie && this.puoApprovare('rapportini');
+      for (const t of this.db.righe('SELECT * FROM timer ORDER BY partito_il')) {
+        if (t.utente_id !== io && !altri) continue;
+        const ore = (Date.now() - Date.parse(t.partito_il)) / 3600000;
+        if (ore <= 10) continue;
+        const da = dataOraIso(t.partito_il);
+        const quando = 'dalle ' + Number(da.slice(11, 13)) + ':' + da.slice(14, 16) + (da.slice(0, 10) === adesso ? '' : ' del ' + dataBreve(da.slice(0, 10)));
+        voce(urgenti, {
+          tipo: 'timer', gravita: 'attenzione',
+          titolo: (t.utente_id === io ? 'Il timer è acceso da ' : 'Il timer di ' + (nomi[t.utente_id] || '') + ' è acceso da ') + Math.floor(ore) + ' ore',
+          dettaglio: [t.commessa_id, quando, t.utente_id === io ? 'fermalo e correggi le ore' : ''].filter(Boolean).join(' · '),
+          quanto: Math.floor(ore), unita: 'ore', collegamento: { pagina: 'rapportini', filtro: { segmento: 'ore' } },
+        });
+      }
+    }
+
+    // I rimborsi da fare: per chi li segna, e solo con "costi".
+    if (!mie && costi && vedeSpese && this.puoSegnareRimborsi()) {
+      const r = this.rimborsi({});
+      fuori.rimborsi = { daFare: r.totale, persone: r.persone.filter(p => p.totale > 0).length };
+      const dovuti = r.persone.filter(p => p.totale > 0);
+      if (dovuti.length) {
+        voce(settimana, { tipo: 'rimborsi', gravita: 'soldi', titolo: 'Rimborsi da fare',
+          dettaglio: dovuti.slice(0, 3).map(p => p.nome + ' ' + virgola(p.totale.toFixed(2)) + ' €').join(', '),
+          quanto: r.totale, unita: 'euro', collegamento: { pagina: 'spese', filtro: { segmento: 'rimborsi' } } });
+      }
+    }
+
+    // L'anno nuovo: le tabelle ACI dei veicoli da aggiornare.
+    if (!mie && this.livello('amministrazione') >= 2) {
+      const anno = Number(adesso.slice(0, 4));
+      const aci = Number(this.leggiImpostazioni().ACI_ANNO) || 0;
+      const vecchi = this.db.righe('SELECT anno_aci FROM veicoli WHERE attivo = 1').map(v => Number(v.anno_aci) || 0);
+      const piuVecchio = Math.min(aci || anno, ...vecchi.length ? vecchi : [anno]);
+      if (piuVecchio < anno) {
+        voce(settimana, { tipo: 'veicoli', gravita: 'attenzione', titolo: 'Aggiorna il rimborso km con le tabelle ACI ' + anno,
+          dettaglio: 'I rimborsi km sono ancora quelli delle tabelle ' + piuVecchio + ': le trasferte già scritte restano come sono',
+          collegamento: { pagina: 'amministrazione', filtro: { sezione: 'veicoli' } } });
+      }
+    }
+    return fuori;
   },
 
   /**

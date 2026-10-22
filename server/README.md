@@ -37,6 +37,18 @@ script is in [`docs/gestionale/postino.md`](../docs/gestionale/postino.md).
   shared cases in `prove/casi-preventivo.json`. Tasks, appointments and site visits with checklists, attachments,
   overlap warnings for the same person, and recurring series (occurrences kept 90 days ahead and extended every night;
   edit "this / following / all", skip one).
+- **Phase 3: hours, timer, approvals, expenses, trips, vehicles, reimbursements** (`docs/gestionale/fase3.md`,
+  responses in `architettura.md` §14, migration `003-ore-spese`): hours without a report (start/end/break, also across
+  midnight, or typed by hand, billable or not, overtime), one timer per person that survives a restart and becomes a
+  draft row when stopped, approval of collaborators' hours, reports, expenses and trips (anomalies: too many hours in a
+  day, no receipt, over 200 euro, unusual km; reject only with a reason, undo), a report waiting for approval cannot be
+  sent or invoiced, statistics per person and per job, the full job cost; expenses with receipt photo and "who it goes
+  to" (client, office, mine; client-addressed documents as pass-through costs), trips with km x the vehicle's ACI rate
+  frozen at creation, reimbursements owed and "mark as reimbursed", summaries and CSV exports. The expenses already
+  written in reports became expense rows linked to them, and every existing report gives the same numbers to the cent
+  (proved against the 0.5.0 server in `prove/migrazione-spese.test.js`); old app versions keep working through the
+  bridge. A person always sees the money they spent and are owed, even without the `costi` permission. Shared
+  calculation cases for the apps: `prove/casi-ore-spese.json`.
 
 No npm dependencies: only Node 24 built-in modules.
 
@@ -52,7 +64,9 @@ contacts, sites, work phases and four test users, all with password `prova`: `ma
 `laura@esempio.it` (amministrazione), `marco@esempio.it` (collaboratore, with two reports of his own),
 `lettura@esempio.it` (read-only), and the quotes and tasks of the phase 2 prototype with dates counted from today (a
 sent quote expiring in 6 days, an expired one, a draft without price, an accepted one, overdue and recurring tasks, an
-appointment and a site visit). E-mails and backups go to `<data>/posta-finta/`. Phone emulator:
+appointment and a site visit), and for phase 3 the recent hours of three people, Marco's running timer, things to approve
+with anomalies, a rejected item, expenses with and without receipts for client, office and "mine", a pass-through cost,
+trips and reimbursements to make. E-mails and backups go to `<data>/posta-finta/`. Phone emulator:
 `http://10.0.2.2:8400`; computer: `http://localhost:8400`.
 
 On the NAS (`/volume1/docker/Wisper-NAS`): copy `.env.esempio` to `.env` with the real values, then
@@ -80,4 +94,7 @@ script's tests, "must not see / must not write" for every role, audit log, numbe
 the fake Google's sheets (also a pre-0.3.5 sheet) with totals checked to the cent, `copia-drive` against the fake
 Google, backups through a fake postman, restore, migrations, the bridge with right and wrong secret; for phase 2 the
 quote cases, revisions and lock, acceptance with choices, the job created once, recurrences (this/following/all,
-skip), overlaps and every role on the new actions. Nothing in the tests touches Google or the internet.
+skip), overlaps and every role on the new actions; for phase 3 the hours and reimbursement cases, the timer across a
+restart, approvals with reason and undo, the report that cannot be sent before approval, frozen rates, reimbursements,
+statistics, the job cost (checked against the phase 1 dashboard in `pc/ui/conti.js`), and a 0.5.0 database migrated with
+every report identical to the cent. Nothing in the tests touches Google or the internet.

@@ -60,6 +60,9 @@ data class ColoriWisper(
     val scelta: Color = Color(0xFFFFF8E5),
     /** Il velo del menu laterale: nero al 45%, al 60% nel tema scuro. */
     val veloMenu: Color = Color(0x73000000),
+    // ---- fase 3 (docs/prototipo/Gestionale-fase3.html): la pillola "Mia" delle spese
+    val violaFondo: Color = Color(0xFFF1ECFE),
+    val violaTesto: Color = Color(0xFF5532C9),
 )
 
 val Chiaro = ColoriWisper(
@@ -116,6 +119,8 @@ val Scuro = ColoriWisper(
     ambraTesto = Color(0xFFF2C27A),
     scelta = Color(0xFF2A2414),
     veloMenu = Color(0x99000000),
+    violaFondo = Color(0xFF2A2340),
+    violaTesto = Color(0xFFC4B5FD),
 )
 
 /**

@@ -17,6 +17,7 @@
   const R = radice.WisperRegole || (typeof require === 'function' ? require('./regole.js') : null);
   const RP = radice.WisperRegolePreventivi || (typeof require === 'function' ? require('./regole-preventivi.js') : null);
   const RA = radice.WisperRegoleAttivita || (typeof require === 'function' ? require('./regole-attivita.js') : null);
+  const RO = radice.WisperRegoleOreSpese || (typeof require === 'function' ? require('./regole-ore-spese.js') : null);
 
   const due = n => String(n).padStart(2, '0');
   const iso = d => d.getFullYear() + '-' + due(d.getMonth() + 1) + '-' + due(d.getDate());
@@ -49,12 +50,12 @@
   /** I permessi iniziali dei quattro ruoli (architettura §3), per i moduli che ci sono. */
   function permessiDi(ruolo) {
     const p = {};
-    const tutti = ['dashboard', 'clienti', 'commesse', 'preventivi', 'attivita', 'rapportini', 'fatturazione', 'documenti', 'amministrazione', 'costi', 'riservati'];
+    const tutti = ['dashboard', 'clienti', 'commesse', 'preventivi', 'attivita', 'rapportini', 'spese', 'fatturazione', 'documenti', 'amministrazione', 'costi', 'riservati'];
     tutti.forEach(m => { p[m] = 0; });
     if (ruolo === 'titolare') tutti.forEach(m => { p[m] = 2; });
-    if (ruolo === 'amministrazione') Object.assign(p, { dashboard: 2, clienti: 2, commesse: 2, preventivi: 2, attivita: 2, rapportini: 2, fatturazione: 2, documenti: 2, amministrazione: 1, costi: 2 });
-    if (ruolo === 'collaboratore') Object.assign(p, { dashboard: 1, clienti: 1, commesse: 1, attivita: 2, rapportini: 2, documenti: 1 });
-    if (ruolo === 'lettura') Object.assign(p, { dashboard: 1, clienti: 1, commesse: 1, preventivi: 1, attivita: 1, rapportini: 1, fatturazione: 1, documenti: 1, costi: 1 });
+    if (ruolo === 'amministrazione') Object.assign(p, { dashboard: 2, clienti: 2, commesse: 2, preventivi: 2, attivita: 2, rapportini: 2, spese: 2, fatturazione: 2, documenti: 2, amministrazione: 1, costi: 2 });
+    if (ruolo === 'collaboratore') Object.assign(p, { dashboard: 1, clienti: 1, commesse: 1, attivita: 2, rapportini: 2, spese: 2, documenti: 1 });
+    if (ruolo === 'lettura') Object.assign(p, { dashboard: 1, clienti: 1, commesse: 1, preventivi: 1, attivita: 1, rapportini: 1, spese: 1, fatturazione: 1, documenti: 1, costi: 1 });
     return p;
   }
 
@@ -63,7 +64,12 @@
     'rimborsoKm', 'totale', 'costoOrario', 'prezzoOrario', 'budgetEuro', 'importoContratto', 'valore', 'soldi', 'quanto',
     'EURO_KM', 'COSTO_ORARIO',
     // fase 2: i soldi dei preventivi
-    'prezzo', 'importo', 'imponibile', 'contributo', 'conti', 'scontoEuro', 'IVA', 'EPPI_INTEGRATIVO', 'RITENUTA']);
+    'prezzo', 'importo', 'imponibile', 'contributo', 'conti', 'scontoEuro', 'IVA', 'EPPI_INTEGRATIVO', 'RITENUTA',
+    // fase 3: il costo delle ore e della commessa (i soldi della persona invece si vedono: §14.1)
+    'costo', 'costoCommessa', 'costoOreRegistrate']);
+  // Le risposte coi soldi della persona (importi delle spese, rimborsi km, veicoli): si vedono anche senza "costi".
+  const SOLDI_DELLA_PERSONA = new Set(['spese', 'salvaSpesa', 'togliSpesa', 'togliFotoSpesa', 'trasferte', 'salvaTrasferta', 'togliTrasferta',
+    'rimborsi', 'segnaRimborsato', 'riepilogoSpese', 'veicoli', 'salvaVeicolo']);
   function togliCosti(x) {
     if (Array.isArray(x)) return x.map(togliCosti);
     if (x && typeof x === 'object') {
@@ -91,6 +97,8 @@
       TITOLI: 'Perito industriale iscritto al Collegio dei Periti Industriali di Vicenza. Progettazione elettrotecnica e automazione.',
       IVA: 22, EPPI_INTEGRATIVO: 5, RITENUTA: 20, PREVENTIVO_VALIDITA_GIORNI: 30,
       PREVENTIVO_CONDIZIONI: 'Prezzi validi per le prestazioni descritte. Le varianti richieste durante i lavori si quotano a parte. Pagamenti a 30 giorni dalla fattura.',
+      // fase 3: approvazioni, tabelle ACI, indennità di trasferta, ore di una giornata
+      APPROVAZIONE: 'collaboratori', ACI_ANNO: anno, INDENNITA_TRASFERTA: '', ORE_GIORNALIERE: 8,
     };
     const utenti = [
       { id: 1, nome: 'Manuel Gasparotto', email: 'manuel@esempio.it', ruolo: 'titolare', attivo: true, ultimoAccesso: istante(oggi, 0, '08:12') },
@@ -221,8 +229,13 @@
     r(nelMese(oggi, 1), 'C001', c44, 'Taratura inverter del nastro 2 e prova a vuoto con il capo reparto.', 2.5, 1, 96, 12.5, 'FIRMATO', 1,
       { firmatario: 'Giulia Dal Santo', firmatoIl: nelMese(oggi, 1) + 'T17:02:00' });
     r(nelMese(oggi, 0), 'C002', c45, 'Verifica impianto di terra.', 3, 1, 30, 0, 'BOZZA', 1);
+    // Fase 3: i rapportini di Marco vanno approvati; il più recente aspetta ancora.
+    rapportini.forEach(x => Object.assign(x, { statoApprovazione: x.idUtente === 3 && x.data.slice(0, 7) === oggi.slice(0, 7) ? 'approvato' : '', approvatoDa: null, approvatoIl: '', motivoRifiuto: '', righeSpese: [] }));
+    const ultimoDiMarco = rapportini.filter(x => x.idUtente === 3 && x.stato === 'BOZZA').sort((x, y) => (x.data < y.data ? 1 : -1))[0];
+    if (ultimoDiMarco) ultimoDiMarco.statoApprovazione = 'da_approvare';
 
     numerazioni[1].ultimo = rapportini.filter(x => x.data.slice(0, 4) === String(anno)).length;
+    const fase3 = creaFase3(oggi, anno, aa, impostazioni);
 
     // ------------------------------------------------------------- registro
     const registro = [];
@@ -329,7 +342,64 @@
     if (!o.utente && io.ruolo === 'lettura') io.attivo = true;
     const permessiIo = o.permessi ? Object.assign({}, o.permessi) : permessiDi(io.ruolo);
     return { oggi, ana, rapportini, registro, copie, cestino, sessioni, permessi, io, permessiIo, listino, preventivi, attivita, ricorrenze,
-      contatori: { s: 10, r: 10, p: 20, f: 10, u: 4, reg: nr, sess: 10, prev: 30, sez: 50, voce: 200, scad: 20, att: nAtt + 10, chk: 20, lis: 20, ric: 10 } };
+      ore: fase3.ore, spese: fase3.spese, trasferte: fase3.trasferte, veicoli: fase3.veicoli, timer: {},
+      contatori: { s: 10, r: 10, p: 20, f: 10, u: 4, reg: nr, sess: 10, prev: 30, sez: 50, voce: 200, scad: 20, att: nAtt + 10, chk: 20, lis: 20, ric: 10, ore: 50, spesa: 50, tr: 20, ve: 5 } };
+  }
+
+  /**
+   * I dati di esempio della fase 3: le ore della settimana di Manuel e di Marco (di
+   * Marco qualcuna da approvare, una con 13 ore in un giorno, una respinta), le spese
+   * (al cliente, allo studio, una senza scontrino), due trasferte, un veicolo.
+   */
+  function creaFase3(oggi, anno, aa, impostazioni) {
+    const c44 = aa + 'ST044';
+    const c45 = aa + 'ST045';
+    const c46 = aa + 'ST046';
+    const sett = RO.settimanaDi(oggi);
+    // Un giorno di questa settimana, mai dopo oggi.
+    const g = i => (sett[i] <= oggi ? sett[i] : oggi);
+    const ieri = giorno(oggi, -1);
+    const creato = oggi + 'T08:00:00';
+    let n = 0;
+    const ora = (idUtente, data, ore, idCommessa, descrizione, stato, extra) => Object.assign({
+      id: ++n, idUtente, data, inizio: '', fine: '', pausaMinuti: 0, ore, giornoDopo: false, idCommessa, idPrestazione: null, idAttivita: null, descrizione,
+      fatturabile: !!idCommessa, tipo: 'ordinaria', costoOrario: idCommessa ? impostazioni.COSTO_ORARIO : 15, stato, approvataDa: stato === 'respinta' ? 1 : null, approvataIl: '',
+      motivoRifiuto: '', dalTimer: false, tolta: '', creato, modificato: creato,
+    }, extra || {});
+    const ore = [
+      ora(1, g(0), 6, c44, 'Progetto esecutivo: schema unifilare', 'approvata'),
+      ora(1, g(0), 1.5, '', 'Aggiornamento normativa CEI', 'approvata'),
+      ora(1, g(1), 4, c45, 'Collaudo quadro: preparazione verbali', 'approvata', { inizio: '08:30', fine: '12:30' }),
+      ora(1, oggi, 1.5, c44, 'Riunione di cantiere Batokyo', 'bozza'),
+      ora(3, g(0), 7, c46, 'Calcolo cabina MT', 'da_approvare'),
+      ora(3, ieri, 8, c46, 'Cablaggio quadro della cabina', 'da_approvare', { inizio: '08:00', fine: '17:00', pausaMinuti: 60 }),
+      ora(3, ieri, 5, c46, 'Prova notturna della cabina', 'da_approvare', { tipo: 'straordinaria' }),
+      ora(3, g(0), 2, '', 'Riordino del magazzino', 'respinta', { motivoRifiuto: 'Il riordino del magazzino non si segna: è dentro le ore di studio' }),
+    ];
+    let s = 0;
+    const foto = () => [{ id: 'esempio-scontrino-' + (s + 1), url: '', nome: 'scontrino.jpg' }];
+    const spesa = (idUtente, data, importo, categoria, descrizione, idCommessa, destinazione, pagataDaMe, stato, conFoto, extra) => Object.assign({
+      id: ++s, idUtente, data, importo, categoria, descrizione, idCommessa, idCliente: '', idRapportino: '', idTrasferta: null, destinazione, anticipazione: false, pagataDaMe,
+      stato, approvataDa: null, approvataIl: '', motivoRifiuto: '', rimborsataIl: '', fatturataIl: '', dalRapportino: false, foto: conFoto ? foto() : [], tolta: '', creato, modificato: creato,
+    }, extra || {});
+    const spese = [
+      spesa(1, g(0), 8.4, 'pedaggio', 'Pedaggio A4 Vicenza Ovest', c44, 'cliente', true, 'approvata', true),
+      spesa(1, g(1), 62, 'carburante', 'Gasolio', '', 'studio', false, 'approvata', true),
+      spesa(3, g(1), 14.5, 'vitto', 'Pranzo in cantiere', c45, 'cliente', true, 'da_approvare', false),
+      spesa(1, oggi, 3, 'parcheggio', 'Parcheggio Schio centro', c44, 'cliente', true, 'approvata', false),
+      spesa(1, oggi, 21.9, 'materiale', 'Morsetti e fascette', '', 'studio', false, 'approvata', true),
+      spesa(3, ieri, 8.4, 'pedaggio', 'Pedaggio A4', c46, 'cliente', true, 'da_approvare', true),
+    ];
+    const veicoli = [{ id: 1, nome: 'Volvo XC40', alimentazione: 'ibrida', euroKm: 0.76, annoAci: anno, attivo: true, creato, modificato: creato }];
+    const trasferta = (id, idUtente, dal, destinazione, motivo, idCommessa, km, stato) => ({
+      id, idUtente, dal, al: dal, destinazione, motivo, idCommessa, idCliente: '', km, andataRitorno: true, idVeicolo: 1, veicolo: 'Volvo XC40', euroKm: 0.76, indennita: 0,
+      stato, approvataDa: null, approvataIl: '', motivoRifiuto: '', rimborsataIl: '', tolta: '', creato, modificato: creato,
+    });
+    const trasferte = [
+      trasferta(1, 1, g(0), 'Schio, cantiere Batokyo', 'Riunione di cantiere', c44, 60, 'approvata'),
+      trasferta(2, 3, ieri, 'Zanè, cabina MT Acme', 'Prova notturna della cabina', c46, 18, 'da_approvare'),
+    ];
+    return { ore, spese, trasferte, veicoli };
   }
 
   // ======================================================================= dashboard
@@ -431,8 +501,9 @@
     }
     dashboardFase2(dati, { urgenti, settimana, pianificare, mio, soldi, nome });
     const conta = R.contaCommesse(commesse, oggi);
-    return { ok: true, per: mio ? 'collaboratore' : 'titolare', oggi, urgenti, settimana, pianificare,
-      numeri: { commesse: { aperte: conta.aperte, sospese: conta.sospese, chiuse: conta.chiuse, inRitardo: conta.inRitardo }, giorniSenzaRapportino: senzaRapportino } };
+    const numeri = { commesse: { aperte: conta.aperte, sospese: conta.sospese, chiuse: conta.chiuse, inRitardo: conta.inRitardo }, giorniSenzaRapportino: senzaRapportino };
+    dashboardFase3(dati, { urgenti, settimana, pianificare, mio, soldi }, numeri);
+    return { ok: true, per: mio ? 'collaboratore' : 'titolare', oggi, urgenti, settimana, pianificare, numeri };
   }
 
   // ======================================================================= risposte
@@ -457,6 +528,11 @@
     nuovaRevisione: ['preventivi', 2], inviaPreventivo: ['preventivi', 2], segnaInviato: ['preventivi', 2], accettaPreventivo: ['preventivi', 2],
     rifiutaPreventivo: ['preventivi', 2], riapriPreventivo: ['preventivi', 2], creaCommessaDaPreventivo: ['commesse', 2],
     attivita: ['attivita', 1], salvaAttivita: ['attivita', 2], faiAttivita: ['attivita', 2], togliAttivita: ['attivita', 2], spuntaChecklist: ['attivita', 2],
+    // fase 3 (§14.1): le ore sono di "rapportini", spese e trasferte di "spese"
+    ore: ['rapportini', 1], salvaOre: ['rapportini', 2], togliOre: ['rapportini', 2], timer: ['rapportini', 1], avviaTimer: ['rapportini', 2], fermaTimer: ['rapportini', 2],
+    statisticheOre: ['rapportini', 1], costoCommessa: ['commesse', 1],
+    spese: ['spese', 1], salvaSpesa: ['spese', 2], togliSpesa: ['spese', 2], togliFotoSpesa: ['spese', 2], trasferte: ['spese', 1], salvaTrasferta: ['spese', 2],
+    togliTrasferta: ['spese', 2], rimborsi: ['spese', 1], segnaRimborsato: ['spese', 2], riepilogoSpese: ['spese', 1], veicoli: ['spese', 1], salvaVeicolo: ['amministrazione', 2],
   };
 
   /** I nomi delle colonne del database ("ultimaTariffa" -> "ultima_tariffa"), come nel registro vero. */
@@ -527,7 +603,7 @@
     const serve = SERVE[azione];
     if (serve && !R.puo(dati.permessiIo, serve[0], serve[1])) return NONPERMESSO(serve[1] === 2 ? 'fare questa modifica' : 'vedere questa pagina');
     const risposta = esegui(dati, azione, b);
-    return R.puo(dati.permessiIo, 'costi') ? risposta : togliCosti(risposta);
+    return R.puo(dati.permessiIo, 'costi') || SOLDI_DELLA_PERSONA.has(azione) ? risposta : togliCosti(risposta);
   }
 
   function esegui(dati, azione, b) {
@@ -539,7 +615,11 @@
       case 'io':
         return { ok: true, utente: { id: dati.io.id, nome: dati.io.nome, email: dati.io.email, ruolo: dati.io.ruolo }, permessi: copia(dati.permessiIo),
           titolare: 'Manuel Gasparotto', ragioneSociale: a.impostazioni.RAGIONE_SOCIALE,
-          interfaccia: { ticketAttivo: false, tecnico: dati.io.ruolo === 'collaboratore' ? dati.io.nome : a.impostazioni.TECNICO, soloSuoi: dati.io.ruolo === 'collaboratore', versioneServer: 'esempio' } };
+          interfaccia: { ticketAttivo: false, tecnico: dati.io.ruolo === 'collaboratore' ? dati.io.nome : a.impostazioni.TECNICO, soloSuoi: dati.io.ruolo === 'collaboratore', versioneServer: 'esempio',
+            // fase 3 (§14.1)
+            puoApprovare: dati.io.ruolo !== 'collaboratore' && R.puo(dati.permessiIo, 'rapportini', 2),
+            puoSegnareRimborsi: (dati.io.ruolo === 'titolare' || dati.io.ruolo === 'amministrazione') && R.puo(dati.permessiIo, 'spese', 2),
+            approvazione: a.impostazioni.APPROVAZIONE || 'collaboratori', oreGiornaliere: a.impostazioni.ORE_GIORNALIERE || 8 } };
       case 'anagrafiche':
         return anagrafiche(dati, b.archiviati === '1' || b.archiviati === true || b.archiviati === 'true');
       case 'rapportini':
@@ -598,6 +678,7 @@
       case 'caricaFile': {
         const file = { id: 'esempio' + Date.now(), nome: b.nome || 'file', mime: b.mime || '', url: '' };
         if (b.tipo === 'attivita') { const x = trova(dati.attivita, b.idAttivita); if (x) x.allegati.push(file); }
+        if (b.tipo === 'spesa' && b.idSpesa) { const x = trova(dati.spese, b.idSpesa); if (x) x.foto.push(file); }
         return { ok: true, file };
       }
       case 'togliFile': {
@@ -1216,7 +1297,461 @@
         return { ok: true, attivita: attivitaCompleta(dati, x) };
       }
       default:
+        return fase3(dati, azione, b);
+    }
+  }
+
+  // ======================================================================= fase 3: ore, timer, approvazioni, spese, trasferte
+
+  const due3 = n => String(n).padStart(2, '0');
+  const oraLocale = d => due3(d.getHours()) + ':' + due3(d.getMinutes());
+  const istanteLocale = d => d.getFullYear() + '-' + due3(d.getMonth() + 1) + '-' + due3(d.getDate()) + 'T' + oraLocale(d) + ':' + due3(d.getSeconds());
+
+  /** Le cose scritte da questa persona vanno approvate? (impostazione APPROVAZIONE, §14.1) */
+  function serveApprovazione(dati, idUtente) {
+    const regola = dati.ana.impostazioni.APPROVAZIONE || 'collaboratori';
+    if (regola === 'nessuno') return false;
+    if (regola === 'tutti') return true;
+    const u = dati.ana.utenti.find(x => x.id === Number(idUtente));
+    return !!u && u.ruolo === 'collaboratore';
+  }
+
+  /** Le azioni della fase 3 (fase3.md §4, architettura.md §14), sui dati di esempio. */
+  function fase3(dati, azione, b) {
+    const a = dati.ana;
+    const adesso = istanteLocale(new Date());
+    const io = dati.io.id;
+    const mio = dati.io.ruolo === 'collaboratore';
+    const puoApprovare = !mio && R.puo(dati.permessiIo, 'rapportini', 2);
+    const nome = id => (a.utenti.find(u => u.id === Number(id)) || {}).nome || '';
+    const com = id => a.commesse.find(m => m.id === String(id || '').toUpperCase());
+    const cli = id => a.soggetti.find(s => s.id === id);
+    const visibile = x => !mio || x.idUtente === io;
+    const trova = (lista, id) => lista.find(x => String(x.id) === String(id));
+    const nelPeriodo = (data, da, al) => (!da || data >= da) && (!al || data <= al);
+    const meseDiOggi = RO.periodoMese(dati.oggi.slice(0, 7));
+    const conta = x => !x.tolta && (x.stato === 'da_approvare' || x.stato === 'approvata');
+    const costoOrario = idCommessa => { const m = com(idCommessa); return C.costoOrarioDi(m ? cli(m.idCliente) : null, m || null, a.impostazioni); };
+    const stato = (idUtente, bozza) => (bozza ? 'bozza' : serveApprovazione(dati, idUtente) ? 'da_approvare' : 'approvata');
+
+    const oreCompleta = o => {
+      const m = com(o.idCommessa);
+      const bloccata = mio && o.stato === 'approvata' ? 'Sono già approvate: per cambiarle chiedi a chi approva' : '';
+      return Object.assign({}, o, { utente: nome(o.idUtente), commessa: m ? m.descrizione : '', idCliente: m ? m.idCliente : '', cliente: m && cli(m.idCliente) ? cli(m.idCliente).nome : '',
+        prestazione: '', attivita: '', costo: o.costoOrario ? C.centesimi(o.ore * o.costoOrario) : null, approvataDaNome: o.approvataDa ? nome(o.approvataDa) : '',
+        puoScrivere: R.puo(dati.permessiIo, 'rapportini', 2) && !bloccata, bloccata });
+    };
+    const spesaCompleta = s => {
+      const m = com(s.idCommessa);
+      const bloccata = s.rimborsataIl ? 'Rimborsata il ' + C.data(s.rimborsataIl) + ': non si cambia' : mio && s.stato === 'approvata' ? 'È già approvata: per cambiarla chiedi a chi approva' : '';
+      return Object.assign({}, s, { utente: nome(s.idUtente), commessa: m ? m.descrizione : '', idCliente: m ? m.idCliente : s.idCliente, cliente: m && cli(m.idCliente) ? cli(m.idCliente).nome : (cli(s.idCliente) || {}).nome || '',
+        approvataDaNome: s.approvataDa ? nome(s.approvataDa) : '', puoScrivere: R.puo(dati.permessiIo, 'spese', 2) && !bloccata, bloccata, soloCampi: null });
+    };
+    const trasfertaCompleta = t => {
+      const m = com(t.idCommessa);
+      const r = RO.rimborsoTrasferta(t);
+      const bloccata = t.rimborsataIl ? 'Rimborsata il ' + C.data(t.rimborsataIl) + ': non si cambia' : mio && t.stato === 'approvata' ? 'È già approvata: per cambiarla chiedi a chi approva' : '';
+      const sue = dati.spese.filter(s => String(s.idTrasferta) === String(t.id) && !s.tolta);
+      const giorni = Math.round((new Date(t.al + 'T12:00:00') - new Date(t.dal + 'T12:00:00')) / 86400000) + 1;
+      return Object.assign({}, t, { utente: nome(t.idUtente), giorni, commessa: m ? m.descrizione : '', idCliente: m ? m.idCliente : t.idCliente, cliente: m && cli(m.idCliente) ? cli(m.idCliente).nome : '',
+        kmTotali: r.kmTotali, rimborsoKm: r.rimborsoKm, totale: r.totale, approvataDaNome: t.approvataDa ? nome(t.approvataDa) : '',
+        spese: sue.map(spesaCompleta), speseTotale: C.centesimi(sue.filter(s => s.stato !== 'respinta').reduce((x, s) => x + s.importo, 0)), puoScrivere: R.puo(dati.permessiIo, 'spese', 2) && !bloccata, bloccata });
+    };
+    const timerRisposta = t => (t ? { partitoIl: t.partitoIl, idCommessa: t.idCommessa, commessa: (com(t.idCommessa) || {}).descrizione || '', idPrestazione: null, idAttivita: null,
+      descrizione: t.descrizione, fatturabile: !!t.idCommessa, secondi: Math.floor((Date.now() - t.ms) / 1000) } : null);
+    const rapDelGiorno = (idUtente, g) => dati.rapportini.filter(r => r.stato !== 'ANNULLATO' && r.data === g && (idUtente === null || r.idUtente === idUtente));
+
+    switch (azione) {
+      // ------------------------------------------------- ore
+      case 'ore': {
+        const sett = RO.settimanaDi(dati.oggi);
+        const da = b.da || sett[0];
+        const al = b.a || sett[6];
+        const ut = mio ? io : (b.utente ? Number(b.utente) : null);
+        const righe = dati.ore.filter(o => !o.tolta && nelPeriodo(o.data, da, al) && (ut === null || o.idUtente === ut) &&
+          (!b.commessa || (b.commessa === 'studio' ? !o.idCommessa : o.idCommessa === b.commessa)) && (!b.stato || b.stato === 'tutte' || o.stato === b.stato))
+          .sort((x, y) => (x.data + x.inizio + String(x.id).padStart(6, '0') < y.data + y.inizio + String(y.id).padStart(6, '0') ? -1 : 1)).map(oreCompleta);
+        const giorni = [];
+        for (let gi = da; gi <= al && giorni.length < 400; gi = giorno(gi, 1)) {
+          giorni.push({ data: gi, ore: C.centesimi(righe.filter(o => o.data === gi && o.stato !== 'respinta').reduce((x, o) => x + o.ore, 0)),
+            oreRapportini: C.centesimi(rapDelGiorno(ut, gi).reduce((x, r) => x + C.num(r.oreTotali), 0)) });
+        }
+        const valide = righe.filter(o => o.stato !== 'respinta');
+        const somma = l => C.centesimi(l.reduce((x, o) => x + o.ore, 0));
+        return { ok: true, da, a: al, oreGiornaliere: a.impostazioni.ORE_GIORNALIERE || 8, ore: righe, giorni,
+          totali: { ore: somma(valide), fatturabili: somma(valide.filter(o => o.fatturabile)), straordinarie: somma(valide.filter(o => o.tipo === 'straordinaria')),
+            oreRapportini: C.centesimi(giorni.reduce((x, gi) => x + gi.oreRapportini, 0)), daApprovare: righe.filter(o => o.stato === 'da_approvare').length } };
+      }
+      case 'salvaOre': {
+        const x = b.riga || {};
+        const o = x.id ? trova(dati.ore, x.id) : null;
+        if (x.id && (!o || !visibile(o) || o.tolta)) return { ok: false, errore: 'Ore ' + x.id + ' non trovate' };
+        if (o && mio && o.stato === 'approvata') return { ok: false, errore: 'Sono già approvate: per cambiarle chiedi a chi approva' };
+        if (!o && x.idUtente && mio && Number(x.idUtente) !== io) return NONPERMESSO('registrare le ore');
+        const nuovo = Object.assign({}, o || { id: ++dati.contatori.ore, idUtente: x.idUtente && !mio ? Number(x.idUtente) : io, data: dati.oggi, inizio: '', fine: '', pausaMinuti: 0, ore: 0, giornoDopo: false,
+          idCommessa: '', idPrestazione: null, idAttivita: null, descrizione: '', fatturabile: null, tipo: 'ordinaria', dalTimer: false, tolta: '', creato: adesso, approvataDa: null, approvataIl: '', motivoRifiuto: '' });
+        ['data', 'idCommessa', 'idPrestazione', 'idAttivita', 'descrizione', 'fatturabile', 'tipo', 'inizio', 'fine'].forEach(k => { if (x[k] !== undefined) nuovo[k] = x[k]; });
+        if (x.pausaMinuti !== undefined) nuovo.pausaMinuti = Number(x.pausaMinuti) || 0;
+        if (nuovo.idCommessa && !com(nuovo.idCommessa)) return { ok: false, errore: 'Commessa ' + nuovo.idCommessa + ' non trovata' };
+        if (nuovo.inizio && nuovo.fine) {
+          try { const k = RO.oreDaOrari(nuovo.inizio, nuovo.fine, nuovo.pausaMinuti); Object.assign(nuovo, { inizio: k.inizio, fine: k.fine, ore: k.ore, giornoDopo: k.giornoDopo }); } catch (e) { return { ok: false, errore: e.message }; }
+        } else if (x.ore !== undefined) {
+          const n = Math.round(Number(x.ore) * 100) / 100;
+          if (!(n >= 0 && n <= 24)) return { ok: false, errore: 'Ore: da 0 a 24' };
+          Object.assign(nuovo, { ore: n, giornoDopo: false });
+        }
+        if (!x.bozza && !(nuovo.ore > 0)) return { ok: false, errore: 'Ore: scrivi quante ore hai lavorato' };
+        if (nuovo.fatturabile === null || nuovo.fatturabile === undefined) nuovo.fatturabile = !!nuovo.idCommessa;
+        if (!o || (o && o.idCommessa !== nuovo.idCommessa)) nuovo.costoOrario = costoOrario(nuovo.idCommessa);
+        // Chi approva può correggere le ore degli altri: lo stato resta (§14.1).
+        if (x.bozza) nuovo.stato = 'bozza';
+        else if (!(o && puoApprovare && o.idUtente !== io && o.stato !== 'bozza')) Object.assign(nuovo, { stato: stato(nuovo.idUtente, false), approvataDa: null, approvataIl: '', motivoRifiuto: '' });
+        nuovo.modificato = adesso;
+        if (o) Object.assign(o, nuovo); else dati.ore.push(nuovo);
+        scrivi(dati, 'salvaOre', 'ore', nuovo.id, nuovo.descrizione || 'ore', o ? { ore: o.ore } : null, { ore: nuovo.ore });
+        return { ok: true, riga: oreCompleta(o || nuovo) };
+      }
+      case 'togliOre': {
+        const o = trova(dati.ore, b.id);
+        if (!o || !visibile(o)) return { ok: false, errore: 'Ore ' + b.id + ' non trovate' };
+        if (mio && o.stato === 'approvata') return { ok: false, errore: 'Sono già approvate: per toglierle chiedi a chi approva' };
+        o.tolta = b.annulla ? '' : adesso;
+        return { ok: true, riga: oreCompleta(o) };
+      }
+      case 'timer':
+        return { ok: true, adesso, timer: timerRisposta(dati.timer[io]) };
+      case 'avviaTimer': {
+        const t = dati.timer[io];
+        if (t) return { ok: false, errore: 'Il timer è già acceso dalle ' + t.partitoIl.slice(11, 16) + (t.idCommessa ? ' (' + t.idCommessa + ')' : '') + ': fermalo prima di avviarne un altro', timer: timerRisposta(t) };
+        // Nei dati di esempio parte da 37 minuti fa: fermandolo si vede una bozza vera.
+        const partito = new Date(Date.now() - 37 * 60000);
+        dati.timer[io] = { ms: partito.getTime(), partitoIl: istanteLocale(partito), idCommessa: b.idCommessa || '', descrizione: b.descrizione || '' };
+        return { ok: true, adesso, timer: timerRisposta(dati.timer[io]) };
+      }
+      case 'fermaTimer': {
+        const t = dati.timer[io];
+        if (!t) return { ok: false, errore: 'Il timer non è acceso' };
+        delete dati.timer[io];
+        const inizio = t.partitoIl.slice(11, 16);
+        const fine = oraLocale(new Date());
+        const k = inizio !== fine ? RO.oreDaOrari(inizio, fine, 0) : null;
+        const riga = { id: ++dati.contatori.ore, idUtente: io, data: t.partitoIl.slice(0, 10), inizio, fine: k ? fine : '', pausaMinuti: 0, ore: k ? k.ore : 0, giornoDopo: k ? k.giornoDopo : false,
+          idCommessa: t.idCommessa, idPrestazione: null, idAttivita: null, descrizione: t.descrizione, fatturabile: !!t.idCommessa, tipo: 'ordinaria', costoOrario: costoOrario(t.idCommessa),
+          stato: 'bozza', approvataDa: null, approvataIl: '', motivoRifiuto: '', dalTimer: true, tolta: '', creato: adesso, modificato: adesso };
+        dati.ore.push(riga);
+        return { ok: true, timer: null, riga: oreCompleta(riga) };
+      }
+
+      // ------------------------------------------------- approvazioni
+      case 'daApprovare': {
+        if (!puoApprovare) return { ok: false, errore: 'Non hai il permesso per approvare ore, rapportini e spese: chiedi al titolare', permesso: false };
+        const limite = (Number(a.impostazioni.ORE_GIORNALIERE) || 8) + 4;
+        const oreDi = (idUtente, gi) => C.centesimi(dati.ore.filter(o => conta(o) && o.idUtente === idUtente && o.data === gi).reduce((x, o) => x + o.ore, 0) +
+          rapDelGiorno(idUtente, gi).reduce((x, r) => x + C.num(r.oreTotali), 0));
+        const troppe = (idUtente, gi) => { const t = oreDi(idUtente, gi); return t > limite ? [{ tipo: 'troppeOre', testo: C.numero(t) + ' ore in un giorno' }] : []; };
+        const giornoTesto = gi => RO.giornoLungo(gi).split(' ').slice(0, 2).join(' ');
+        const voci = [];
+        dati.ore.filter(o => !o.tolta && o.stato === 'da_approvare').forEach(o => voci.push({ tipo: 'ore', id: o.id, idUtente: o.idUtente, data: o.data, cosa: 'Ore',
+          dettaglio: [o.idCommessa || 'Studio', o.descrizione, giornoTesto(o.data)].filter(Boolean).join(' · '), quanto: o.ore, unita: 'ore', anomalie: troppe(o.idUtente, o.data) }));
+        dati.rapportini.filter(r => r.stato !== 'ANNULLATO' && r.statoApprovazione === 'da_approvare').forEach(r => voci.push({ tipo: 'rapportino', id: r.id, idUtente: r.idUtente, data: r.data, cosa: 'Rapportino',
+          dettaglio: [r.id, r.descrizione, giornoTesto(r.data)].join(' · '), quanto: C.num(r.oreTotali), unita: 'ore', km: C.num(r.km), anomalie: troppe(r.idUtente, r.data) }));
+        dati.spese.filter(s => !s.tolta && s.stato === 'da_approvare' && !s.idRapportino).forEach(s => voci.push({ tipo: 'spesa', id: s.id, idUtente: s.idUtente, data: s.data, cosa: 'Spesa',
+          dettaglio: [s.descrizione || RO.categoria(s.categoria).nome, s.idCommessa || 'senza commessa', giornoTesto(s.data)].join(' · '), quanto: s.importo, unita: 'euro',
+          anomalie: [].concat(s.foto.length ? [] : [{ tipo: 'senzaFoto', testo: 'Senza scontrino' }], s.importo > 200 ? [{ tipo: 'sopra200', testo: 'Spesa sopra i 200 €' }] : []) }));
+        dati.trasferte.filter(t => !t.tolta && t.stato === 'da_approvare').forEach(t => voci.push({ tipo: 'trasferta', id: t.id, idUtente: t.idUtente, data: t.dal, cosa: 'Trasferta',
+          dettaglio: [t.destinazione, t.idCommessa || 'senza commessa', giornoTesto(t.dal)].join(' · '), quanto: RO.rimborsoTrasferta(t).totale, unita: 'euro', km: RO.rimborsoTrasferta(t).kmTotali, anomalie: [] }));
+        const ordine = { ore: 0, rapportino: 1, spesa: 2, trasferta: 3 };
+        const per = new Map();
+        voci.sort((x, y) => (x.data < y.data ? -1 : x.data > y.data ? 1 : ordine[x.tipo] - ordine[y.tipo])).forEach(v => {
+          if (!per.has(v.idUtente)) per.set(v.idUtente, { idUtente: v.idUtente, nome: nome(v.idUtente), quante: 0, conAnomalie: 0, voci: [] });
+          const p = per.get(v.idUtente);
+          p.voci.push(v);
+          p.quante++;
+          if (v.anomalie.length) p.conAnomalie++;
+        });
+        const persone = Array.from(per.values()).sort((x, y) => x.nome.localeCompare(y.nome, 'it'));
+        return { ok: true, oggi: dati.oggi, quante: voci.length, conAnomalie: voci.filter(v => v.anomalie.length).length, persone };
+      }
+      case 'approva':
+      case 'respingi':
+      case 'annullaApprovazione': {
+        if (!puoApprovare) return { ok: false, errore: 'Non hai il permesso per approvare ore e rapportini: chiedi al titolare', permesso: false };
+        const voci = b.voci || [];
+        if (!voci.length) return { ok: false, errore: 'Scegli cosa ' + (azione === 'approva' ? 'approvare' : azione === 'respingi' ? 'respingere' : 'rimettere da approvare') };
+        if (azione === 'respingi' && !String(b.motivo || '').trim()) return { ok: false, errore: 'Scrivi il motivo: arriva a chi l\'ha scritta' };
+        let fatte = 0;
+        const out = voci.map(v => {
+          const lista = { ore: dati.ore, spesa: dati.spese, trasferta: dati.trasferte }[v.tipo];
+          const x = v.tipo === 'rapportino' ? dati.rapportini.find(r => r.id === v.id) : lista ? trova(lista, v.id) : null;
+          if (!x) return { tipo: v.tipo, id: v.id, stato: '' };
+          if (v.tipo === 'rapportino') {
+            const nuovo = azione === 'approva' ? 'approvato' : azione === 'respingi' ? 'respinto' : 'da_approvare';
+            if (x.statoApprovazione !== nuovo) { Object.assign(x, { statoApprovazione: nuovo, motivoRifiuto: azione === 'respingi' ? b.motivo : '', approvatoDa: azione === 'annullaApprovazione' ? null : io, approvatoIl: azione === 'annullaApprovazione' ? '' : adesso }); fatte++; }
+            return { tipo: v.tipo, id: v.id, stato: nuovo };
+          }
+          const nuovo = azione === 'approva' ? 'approvata' : azione === 'respingi' ? 'respinta' : 'da_approvare';
+          if (x.stato !== nuovo) { Object.assign(x, { stato: nuovo, motivoRifiuto: azione === 'respingi' ? b.motivo : '', approvataDa: azione === 'annullaApprovazione' ? null : io, approvataIl: azione === 'annullaApprovazione' ? '' : adesso }); fatte++; }
+          return { tipo: v.tipo, id: v.id, stato: nuovo };
+        });
+        return { ok: true, fatte, voci: out };
+      }
+
+      // ------------------------------------------------- statistiche e costo della commessa
+      case 'statisticheOre': {
+        const da = b.da || meseDiOggi.da;
+        const al = b.a || meseDiOggi.a;
+        const perPersona = (b.per || 'persona') === 'persona';
+        const righe = new Map();
+        const di = (chiave, base) => righe.get(chiave) || righe.set(chiave, Object.assign({ chiave, ore: 0, fatturabili: 0, oreRapportini: 0, oreRegistrate: 0, costo: 0, costoNoto: true }, base)).get(chiave);
+        const baseCommessa = id => { const m = com(id); return { nome: m ? m.descrizione : 'Attività dello studio', idCliente: m ? m.idCliente : '', cliente: m && cli(m.idCliente) ? cli(m.idCliente).nome : '' }; };
+        dati.rapportini.filter(r => r.stato !== 'ANNULLATO' && r.statoApprovazione !== 'respinto' && nelPeriodo(r.data, da, al) && visibile(r)).forEach(r => {
+          const x = perPersona ? di(r.idUtente, { nome: nome(r.idUtente) }) : di(r.idCommessa || '', baseCommessa(r.idCommessa));
+          const lavoro = C.num(r.oreLavoro) + C.num(r.oreExtra);
+          const tot = C.num(r.oreTotali) || lavoro + C.num(r.oreViaggio);
+          x.ore += tot; x.oreRapportini += tot; x.fatturabili += lavoro + (r.pagaViaggio ? C.num(r.oreViaggio) : 0); x.costo += lavoro * C.num(r.costoOrario);
+        });
+        dati.ore.filter(o => conta(o) && nelPeriodo(o.data, da, al) && visibile(o)).forEach(o => {
+          const x = perPersona ? di(o.idUtente, { nome: nome(o.idUtente) }) : di(o.idCommessa || '', baseCommessa(o.idCommessa));
+          x.ore += o.ore; x.oreRegistrate += o.ore; if (o.fatturabile) x.fatturabili += o.ore; x.costo += o.ore * C.num(o.costoOrario);
+        });
+        const tondo = n => Math.round(n * 100) / 100;
+        const lista = Array.from(righe.values()).map(x => Object.assign(x, { ore: tondo(x.ore), fatturabili: tondo(x.fatturabili), oreRapportini: tondo(x.oreRapportini), oreRegistrate: tondo(x.oreRegistrate),
+          costo: C.centesimi(x.costo), percentuale: x.ore ? Math.round(x.fatturabili / x.ore * 100) : null })).sort((x, y) => y.ore - x.ore);
+        const t = lista.reduce((s, x) => ({ ore: s.ore + x.ore, fatturabili: s.fatturabili + x.fatturabili, oreRapportini: s.oreRapportini + x.oreRapportini, oreRegistrate: s.oreRegistrate + x.oreRegistrate, costo: s.costo + x.costo }),
+          { ore: 0, fatturabili: 0, oreRapportini: 0, oreRegistrate: 0, costo: 0 });
+        return { ok: true, da, a: al, per: perPersona ? 'persona' : 'commessa', righe: lista,
+          totale: { ore: tondo(t.ore), fatturabili: tondo(t.fatturabili), percentuale: t.ore ? Math.round(t.fatturabili / t.ore * 100) : null, oreRapportini: tondo(t.oreRapportini), oreRegistrate: tondo(t.oreRegistrate), costo: C.centesimi(t.costo), costoNoto: true } };
+      }
+      case 'costoCommessa': {
+        const m = com(b.idCommessa);
+        if (!m) return { ok: false, errore: 'Commessa ' + (b.idCommessa || '') + ' non trovata' };
+        const k = C.cruscotto(m, dati.rapportini, a.impostazioni, dati.oggi, cli(m.idCliente));
+        const oreSue = dati.ore.filter(o => conta(o) && o.idCommessa === m.id);
+        const oreRegistrate = C.centesimi(oreSue.reduce((x, o) => x + o.ore, 0));
+        const costoOreRegistrate = C.centesimi(oreSue.reduce((x, o) => x + o.ore * C.num(o.costoOrario), 0));
+        const speseFuori = C.centesimi(dati.spese.filter(s => conta(s) && s.idCommessa === m.id && !s.idRapportino && s.destinazione !== 'personale').reduce((x, s) => x + s.importo, 0));
+        const tr = dati.trasferte.filter(t => conta(t) && t.idCommessa === m.id).map(t => RO.rimborsoTrasferta(t));
+        const trasferte = C.centesimi(tr.reduce((x, r) => x + r.totale, 0));
+        const soloRapportini = C.centesimi(k.costo.lavoro + k.costo.auto + k.costo.spese);
+        return { ok: true, idCommessa: m.id, costoCommessa: { lavoro: k.costo.lavoro, lavoroNoto: k.costo.lavoroNoto, auto: k.costo.auto, speseRapportini: k.costo.spese, oreRegistrate, costoOreRegistrate,
+          speseFuoriRapportini: speseFuori, trasferte, kmTrasferte: Math.round(tr.reduce((x, r) => x + r.kmTotali, 0) * 100) / 100, soloRapportini,
+          totale: C.centesimi(soloRapportini + costoOreRegistrate + speseFuori + trasferte) } };
+      }
+
+      // ------------------------------------------------- spese
+      case 'spese': {
+        const da = b.da || meseDiOggi.da;
+        const al = b.a || meseDiOggi.a;
+        const ut = mio ? io : (b.utente ? Number(b.utente) : null);
+        const lista = dati.spese.filter(s => !s.tolta && nelPeriodo(s.data, da, al) && (ut === null || s.idUtente === ut) && (!b.commessa || s.idCommessa === b.commessa) &&
+          (!b.stato || b.stato === 'tutte' || s.stato === b.stato) && (!b.destinazione || s.destinazione === b.destinazione) && (!b.idTrasferta || String(s.idTrasferta) === String(b.idTrasferta)))
+          .sort((x, y) => (x.data < y.data ? 1 : x.data > y.data ? -1 : y.id - x.id)).map(spesaCompleta);
+        const valide = lista.filter(s => s.stato !== 'respinta');
+        const somma = l => C.centesimi(l.reduce((x, s) => x + s.importo, 0));
+        return { ok: true, da, a: al, spese: lista, totali: { quante: lista.length, cliente: somma(valide.filter(s => s.destinazione === 'cliente')), studio: somma(valide.filter(s => s.destinazione === 'studio')),
+          personale: somma(valide.filter(s => s.destinazione === 'personale')),
+          daRimborsare: somma(valide.filter(s => s.pagataDaMe && s.destinazione !== 'personale' && !s.rimborsataIl && (s.stato === 'da_approvare' || s.stato === 'approvata'))),
+          senzaFoto: valide.filter(s => !s.foto.length).length } };
+      }
+      case 'salvaSpesa': {
+        const x = b.spesa || {};
+        const s = x.id ? trova(dati.spese, x.id) : null;
+        if (x.id && (!s || !visibile(s) || s.tolta)) return { ok: false, errore: 'Spesa ' + x.id + ' non trovata' };
+        if (s && (s.rimborsataIl || (mio && s.stato === 'approvata'))) return { ok: false, errore: spesaCompleta(s).bloccata };
+        const tr = x.idTrasferta ? trova(dati.trasferte, x.idTrasferta) : null;
+        const nuovo = Object.assign({}, s || { id: ++dati.contatori.spesa, idUtente: tr ? tr.idUtente : x.idUtente && !mio ? Number(x.idUtente) : io, data: dati.oggi, importo: 0, categoria: 'altro', descrizione: '',
+          idCommessa: tr ? tr.idCommessa : '', idCliente: '', idRapportino: '', idTrasferta: tr ? tr.id : null, destinazione: null, anticipazione: false, pagataDaMe: false,
+          approvataDa: null, approvataIl: '', motivoRifiuto: '', rimborsataIl: '', fatturataIl: '', dalRapportino: false, foto: [], tolta: '', creato: adesso });
+        ['data', 'categoria', 'descrizione', 'idCommessa', 'idCliente', 'destinazione', 'anticipazione', 'pagataDaMe'].forEach(k => { if (x[k] !== undefined) nuovo[k] = x[k]; });
+        if (x.importo !== undefined) nuovo.importo = C.centesimi(C.num(x.importo));
+        if (nuovo.destinazione === 'mia') nuovo.destinazione = 'personale';
+        if (!nuovo.destinazione) nuovo.destinazione = RO.destinazioneDiBase(nuovo);
+        if (nuovo.destinazione !== 'cliente') nuovo.anticipazione = false;
+        if (!x.bozza && !(nuovo.importo > 0)) return { ok: false, errore: 'Importo: scrivi quanto hai speso' };
+        if (nuovo.destinazione === 'cliente' && !nuovo.idCommessa && !nuovo.idCliente) return { ok: false, errore: 'Al cliente: scegli la commessa o il cliente' };
+        if (x.bozza) nuovo.stato = 'bozza';
+        else if (!(s && puoApprovare && s.idUtente !== io && s.stato !== 'bozza')) Object.assign(nuovo, { stato: stato(nuovo.idUtente, false), approvataDa: null, approvataIl: '', motivoRifiuto: '' });
+        nuovo.modificato = adesso;
+        if (s) Object.assign(s, nuovo); else dati.spese.push(nuovo);
+        scrivi(dati, 'salvaSpesa', 'spese', nuovo.id, nuovo.descrizione || 'spesa', s ? { importo: s.importo } : null, { importo: nuovo.importo });
+        return { ok: true, spesa: spesaCompleta(s || nuovo) };
+      }
+      case 'togliSpesa': {
+        const s = trova(dati.spese, b.id);
+        if (!s || !visibile(s)) return { ok: false, errore: 'Spesa ' + b.id + ' non trovata' };
+        s.tolta = b.annulla ? '' : adesso;
+        return { ok: true, spesa: spesaCompleta(s) };
+      }
+      case 'togliFotoSpesa': {
+        const s = dati.spese.find(y => y.foto.some(f => f.id === b.id));
+        if (!s) return { ok: false, errore: 'Foto non trovata' };
+        s.foto = s.foto.filter(f => f.id !== b.id);
+        return { ok: true, spesa: spesaCompleta(s) };
+      }
+
+      // ------------------------------------------------- trasferte e veicoli
+      case 'trasferte': {
+        const da = b.da || meseDiOggi.da;
+        const al = b.a || meseDiOggi.a;
+        const ut = mio ? io : (b.utente ? Number(b.utente) : null);
+        const lista = dati.trasferte.filter(t => !t.tolta && nelPeriodo(t.dal, da, al) && (ut === null || t.idUtente === ut) && (!b.commessa || t.idCommessa === b.commessa) && (!b.stato || b.stato === 'tutte' || t.stato === b.stato))
+          .sort((x, y) => (x.dal < y.dal ? 1 : -1)).map(trasfertaCompleta);
+        const valide = lista.filter(t => t.stato !== 'respinta');
+        const somma = (l, k) => C.centesimi(l.reduce((x, t) => x + C.num(t[k]), 0));
+        return { ok: true, da, a: al, trasferte: lista, totali: { quante: lista.length, km: somma(valide, 'kmTotali'), rimborsoKm: somma(valide, 'rimborsoKm'), indennita: somma(valide, 'indennita'),
+          totale: somma(valide, 'totale'), daRimborsare: somma(valide.filter(t => !t.rimborsataIl && (t.stato === 'da_approvare' || t.stato === 'approvata')), 'totale') } };
+      }
+      case 'salvaTrasferta': {
+        const x = b.trasferta || {};
+        const t = x.id ? trova(dati.trasferte, x.id) : null;
+        if (x.id && (!t || !visibile(t) || t.tolta)) return { ok: false, errore: 'Trasferta ' + x.id + ' non trovata' };
+        if (!String(x.destinazione !== undefined ? x.destinazione : (t || {}).destinazione || '').trim()) return { ok: false, errore: 'Destinazione: scrivi dove sei andato' };
+        const nuovo = Object.assign({}, t || { id: ++dati.contatori.tr, idUtente: x.idUtente && !mio ? Number(x.idUtente) : io, dal: dati.oggi, al: '', destinazione: '', motivo: '', idCommessa: '', idCliente: '',
+          km: 0, andataRitorno: false, idVeicolo: null, veicolo: '', euroKm: null, indennita: 0, approvataDa: null, approvataIl: '', motivoRifiuto: '', rimborsataIl: '', tolta: '', creato: adesso });
+        ['dal', 'al', 'destinazione', 'motivo', 'idCommessa', 'andataRitorno', 'indennita'].forEach(k => { if (x[k] !== undefined) nuovo[k] = x[k]; });
+        if (x.km !== undefined) nuovo.km = C.num(x.km);
+        if (!nuovo.al) nuovo.al = nuovo.dal;
+        if (nuovo.al < nuovo.dal) return { ok: false, errore: 'Al: non può venire prima della partenza' };
+        const idV = x.idVeicolo !== undefined ? x.idVeicolo : (t ? t.idVeicolo : (dati.veicoli.find(v => v.attivo) || {}).id);
+        if (!t || String(idV) !== String(t.idVeicolo)) {
+          const v = idV ? trova(dati.veicoli, idV) : null;
+          if (nuovo.km > 0 && !v) return { ok: false, errore: 'Veicolo: scegli con quale veicolo, per il rimborso al km' };
+          Object.assign(nuovo, { idVeicolo: v ? v.id : null, veicolo: v ? v.nome : '', euroKm: v ? v.euroKm : null });
+        }
+        if (!x.bozza && !(t && puoApprovare && t.idUtente !== io && t.stato !== 'bozza')) Object.assign(nuovo, { stato: stato(nuovo.idUtente, false), approvataDa: null, approvataIl: '', motivoRifiuto: '' });
+        if (x.bozza) nuovo.stato = 'bozza';
+        nuovo.modificato = adesso;
+        if (t) Object.assign(t, nuovo); else dati.trasferte.push(nuovo);
+        scrivi(dati, 'salvaTrasferta', 'trasferte', nuovo.id, nuovo.destinazione, t ? { km: t.km } : null, { km: nuovo.km });
+        return { ok: true, trasferta: trasfertaCompleta(t || nuovo) };
+      }
+      case 'togliTrasferta': {
+        const t = trova(dati.trasferte, b.id);
+        if (!t || !visibile(t)) return { ok: false, errore: 'Trasferta ' + b.id + ' non trovata' };
+        const sue = dati.spese.filter(s => String(s.idTrasferta) === String(t.id) && !s.tolta).length;
+        if (!b.annulla && sue) return { ok: false, errore: 'La trasferta ha ' + (sue === 1 ? '1 spesa' : sue + ' spese') + ': prima toglile o spostale' };
+        t.tolta = b.annulla ? '' : adesso;
+        return { ok: true, trasferta: trasfertaCompleta(t) };
+      }
+      case 'veicoli':
+        return { ok: true, aciAnno: a.impostazioni.ACI_ANNO, paginaAci: 'https://www.aci.it/',
+          veicoli: dati.veicoli.filter(v => v.attivo || b.tutti).map(v => Object.assign({}, v, { trasferte: dati.trasferte.filter(t => !t.tolta && t.idVeicolo === v.id).length })) };
+      case 'salvaVeicolo': {
+        const x = b.veicolo || {};
+        if (!String(x.nome || '').trim()) return { ok: false, errore: 'Nome: scrivi il nome del veicolo' };
+        if (!(C.num(x.euroKm) >= 0)) return { ok: false, errore: 'Euro al km: non può essere negativo' };
+        const v = x.id ? trova(dati.veicoli, x.id) : null;
+        const nuovo = Object.assign(v || { id: ++dati.contatori.ve, creato: adesso }, { nome: String(x.nome).trim(), alimentazione: x.alimentazione || '', euroKm: Math.round(C.num(x.euroKm) * 10000) / 10000,
+          annoAci: x.annoAci || a.impostazioni.ACI_ANNO, attivo: x.attivo !== false, modificato: adesso });
+        if (!v) dati.veicoli.push(nuovo);
+        if (Number(nuovo.annoAci) > Number(a.impostazioni.ACI_ANNO)) a.impostazioni.ACI_ANNO = Number(nuovo.annoAci);
+        return { ok: true, veicolo: Object.assign({}, nuovo, { trasferte: dati.trasferte.filter(t => !t.tolta && t.idVeicolo === nuovo.id).length }) };
+      }
+
+      // ------------------------------------------------- rimborsi e riepiloghi
+      case 'rimborsi': {
+        const ut = mio ? io : (b.utente ? Number(b.utente) : null);
+        const persone = RO.rimborsiDovuti(dati.spese.filter(s => !s.idRapportino || true), dati.trasferte).filter(p => ut === null || p.idUtente === ut).map(p => Object.assign({}, p, {
+          nome: nome(p.idUtente),
+          voci: p.voci.map(v => v.tipo === 'spesa'
+            ? { tipo: 'spesa', id: v.id, data: v.data, descrizione: v.descrizione, categoria: v.categoria, idCommessa: v.idCommessa, importo: v.importo, km: null }
+            : { tipo: 'trasferta', id: v.id, data: v.dal, descrizione: v.destinazione, categoria: '', idCommessa: v.idCommessa, importo: RO.rimborsoTrasferta(v).totale, km: RO.rimborsoTrasferta(v).kmTotali }),
+        }));
+        return { ok: true, totale: C.centesimi(persone.reduce((x, p) => x + p.totale, 0)), puoSegnare: !mio && R.puo(dati.permessiIo, 'spese', 2) && dati.io.ruolo !== 'lettura', persone };
+      }
+      case 'segnaRimborsato': {
+        if (mio || dati.io.ruolo === 'lettura') return { ok: false, errore: 'Non hai il permesso per segnare i rimborsi: chiedi al titolare', permesso: false };
+        let voci = b.voci || [];
+        if (!voci.length && b.idUtente) {
+          const p = RO.rimborsiDovuti(dati.spese, dati.trasferte).find(x => x.idUtente === Number(b.idUtente));
+          voci = p ? p.voci.map(v => ({ tipo: v.tipo, id: v.id })) : [];
+          if (!voci.length) return { ok: false, errore: 'Non c\'è niente da rimborsare a questa persona' };
+        }
+        if (!voci.length) return { ok: false, errore: 'Scegli cosa segnare come rimborsato' };
+        let fatte = 0;
+        let totale = 0;
+        voci.forEach(v => {
+          const x = trova(v.tipo === 'trasferta' ? dati.trasferte : dati.spese, v.id);
+          if (!x) return;
+          x.rimborsataIl = b.annulla ? '' : adesso;
+          fatte++;
+          totale += v.tipo === 'trasferta' ? RO.rimborsoTrasferta(x).totale : x.importo;
+        });
+        return { ok: true, fatte, totale: C.centesimi(totale) };
+      }
+      case 'riepilogoSpese': {
+        const da = b.da || meseDiOggi.da;
+        const al = b.a || meseDiOggi.a;
+        const per = b.per || 'persona';
+        const righe = new Map();
+        const vuota = (chiave, extra) => Object.assign({ chiave, nome: '', quante: 0, cliente: 0, studio: 0, personale: 0, anticipazioni: 0, daRimborsare: 0, inAttesa: 0, trasferte: 0, km: 0, rimborsoKm: 0, indennita: 0, totale: 0 }, extra);
+        const chiaveDi = x => (per === 'persona' ? x.idUtente : per === 'commessa' ? x.idCommessa || '' : x.categoria);
+        const extraDi = x => (per === 'persona' ? { nome: nome(x.idUtente) } : per === 'commessa' ? { nome: (com(x.idCommessa) || {}).descrizione || 'Senza commessa', idCliente: (com(x.idCommessa) || {}).idCliente || '',
+          nomeCliente: com(x.idCommessa) && cli(com(x.idCommessa).idCliente) ? cli(com(x.idCommessa).idCliente).nome : '' } : { nome: RO.categoria(x.categoria).nome });
+        const riga = x => { const k = chiaveDi(x); if (!righe.has(k)) righe.set(k, vuota(k, extraDi(x))); return righe.get(k); };
+        dati.spese.filter(s => conta(s) && nelPeriodo(s.data, da, al) && visibile(s)).forEach(s => {
+          const r = riga(s);
+          r.quante++;
+          r[s.destinazione] = C.centesimi(r[s.destinazione] + s.importo);
+          if (s.anticipazione) r.anticipazioni = C.centesimi(r.anticipazioni + s.importo);
+          if (s.pagataDaMe && s.destinazione !== 'personale' && !s.rimborsataIl) { r.daRimborsare = C.centesimi(r.daRimborsare + s.importo); if (s.stato === 'da_approvare') r.inAttesa = C.centesimi(r.inAttesa + s.importo); }
+        });
+        if (per !== 'categoria') {
+          dati.trasferte.filter(t => conta(t) && nelPeriodo(t.dal, da, al) && visibile(t)).forEach(t => {
+            const r = riga(t);
+            const k = RO.rimborsoTrasferta(t);
+            r.trasferte++; r.km += k.kmTotali; r.rimborsoKm = C.centesimi(r.rimborsoKm + k.rimborsoKm); r.indennita = C.centesimi(r.indennita + k.indennita);
+            if (!t.rimborsataIl) { r.daRimborsare = C.centesimi(r.daRimborsare + k.totale); if (t.stato === 'da_approvare') r.inAttesa = C.centesimi(r.inAttesa + k.totale); }
+          });
+        }
+        const lista = Array.from(righe.values()).map(r => Object.assign(r, { totale: C.centesimi(r.cliente + r.studio + r.rimborsoKm + r.indennita) })).sort((x, y) => y.totale - x.totale);
+        const totale = vuota('', {});
+        delete totale.chiave;
+        delete totale.nome;
+        lista.forEach(r => Object.keys(totale).forEach(k => { totale[k] = Math.round((totale[k] + C.num(r[k])) * 100) / 100; }));
+        return { ok: true, da, a: al, per, righe: lista, totale };
+      }
+      default:
         return { ok: true };
+    }
+  }
+
+  /** Le voci della Dashboard della fase 3 (§14.13), come le calcola il server. */
+  function dashboardFase3(dati, d, numeri) {
+    const io = dati.io.id;
+    const nome = id => (dati.ana.utenti.find(u => u.id === id) || {}).nome || '';
+    const conta = x => !x.tolta && (x.stato === 'da_approvare' || x.stato === 'approvata');
+    if (R.puo(dati.permessiIo, 'rapportini')) {
+      const sett = RO.settimanaDi(dati.oggi);
+      const mese = RO.periodoMese(dati.oggi.slice(0, 7));
+      const sue = dati.ore.filter(o => conta(o) && (!d.mio || o.idUtente === io));
+      const somma = l => Math.round(l.reduce((x, o) => x + o.ore, 0) * 100) / 100;
+      numeri.ore = { settimana: somma(sue.filter(o => o.data >= sett[0] && o.data <= sett[6])), mese: somma(sue.filter(o => o.data >= mese.da && o.data <= mese.a)),
+        fatturabiliMese: somma(sue.filter(o => o.fatturabile && o.data >= mese.da && o.data <= mese.a)), timerAcceso: !!dati.timer[io] };
+    }
+    if (!d.mio && R.puo(dati.permessiIo, 'rapportini', 2)) {
+      const r = fase3(dati, 'daApprovare', {});
+      if (r.ok && r.quante) {
+        numeri.approvare = { voci: r.quante, conAnomalie: r.conAnomalie };
+        const una = r.persone.length === 1 ? r.persone[0] : null;
+        d.urgenti.push({ tipo: 'approvare', gravita: 'attenzione', titolo: r.quante + (r.quante === 1 ? ' cosa da approvare' : ' cose da approvare') + (una ? ' di ' + una.nome : ''),
+          dettaglio: 'Ore, spese e rapportini' + (r.conAnomalie ? ' · ' + r.conAnomalie + (r.conAnomalie === 1 ? ' con un\'anomalia' : ' con un\'anomalia') : ''), quanto: r.quante, unita: 'voci',
+          collegamento: { pagina: 'rapportini', filtro: { segmento: 'daApprovare' } } });
+      }
+    }
+    // Le proprie cose respinte, col motivo.
+    dati.ore.filter(o => !o.tolta && o.stato === 'respinta' && o.idUtente === io).slice(0, 3).forEach(o => d.urgenti.push({ tipo: 'respinta', gravita: 'attenzione', titolo: 'Ore del ' + C.data(o.data).slice(0, 5) + ' respinte',
+      dettaglio: 'Motivo: ' + o.motivoRifiuto + (o.approvataDa ? ' · ' + nome(o.approvataDa) : ''), quanto: null, unita: null, collegamento: { pagina: 'rapportini', filtro: { segmento: 'ore', giorno: o.data } } }));
+    dati.spese.filter(s => !s.tolta && s.stato === 'respinta' && s.idUtente === io).slice(0, 3).forEach(s => d.urgenti.push({ tipo: 'respinta', gravita: 'attenzione', titolo: 'Spesa del ' + C.data(s.data).slice(0, 5) + ' respinta',
+      dettaglio: 'Motivo: ' + s.motivoRifiuto, quanto: null, unita: null, collegamento: { pagina: 'spese', filtro: { segmento: 'spese', id: s.id } } }));
+    if (d.soldi && !d.mio && (dati.io.ruolo === 'titolare' || dati.io.ruolo === 'amministrazione')) {
+      const dovuti = RO.rimborsiDovuti(dati.spese, dati.trasferte).filter(p => p.totale > 0);
+      if (dovuti.length) {
+        const tot = C.centesimi(dovuti.reduce((x, p) => x + p.totale, 0));
+        numeri.rimborsi = { daFare: tot, persone: dovuti.length };
+        d.settimana.push({ tipo: 'rimborsi', gravita: 'soldi', titolo: 'Rimborsi da fare', dettaglio: dovuti.slice(0, 3).map(p => nome(p.idUtente) + ' ' + C.euro(p.totale)).join(', '),
+          quanto: tot, unita: 'euro', collegamento: { pagina: 'spese', filtro: { segmento: 'rimborsi' } } });
+      }
     }
   }
 
@@ -1295,6 +1830,24 @@
     } else if (b.cosa === 'attivita') {
       intest = ['Titolo', 'Tipo', 'Giorno', 'Inizio', 'Fine', 'Chi', 'Commessa', 'Priorità', 'Stato'];
       righe = attivitaVisibili(dati).map(x => [x.titolo, x.tipo, C.data(RA.giornoDi(x)), RA.ora(x.inizio), RA.ora(x.fine), (a.utenti.find(u => u.id === x.assegnataA) || {}).nome || '', x.idCommessa, x.priorita, x.stato]);
+    } else if (b.cosa === 'ore') {
+      const r = fase3(dati, 'ore', b);
+      intest = ['Data', 'Persona', 'Inizio', 'Fine', 'Pausa (minuti)', 'Ore', 'Codice commessa', 'Commessa', 'Descrizione', 'Fatturabile', 'Tipo'].concat(soldi ? ['Costo orario', 'Costo'] : []).concat(['Stato']);
+      righe = r.ore.map(o => [C.data(o.data), o.utente, o.inizio, o.fine, o.pausaMinuti, o.ore, o.idCommessa, o.commessa || 'Attività dello studio', o.descrizione, o.fatturabile ? 'Sì' : 'No',
+        o.tipo === 'straordinaria' ? 'Straordinaria' : 'Ordinaria'].concat(soldi ? [o.costoOrario, o.costo] : []).concat([RO.STATI[o.stato].parola]));
+    } else if (b.cosa === 'spese') {
+      const r = fase3(dati, 'spese', b);
+      intest = ['Data', 'Persona', 'Categoria', 'Descrizione', 'Importo', 'A chi va', 'Anticipazione', 'Pagata da chi l\'ha scritta', 'Codice commessa', 'Scontrino', 'Stato'];
+      righe = r.spese.map(s => [C.data(s.data), s.utente, RO.categoria(s.categoria).nome, s.descrizione, s.importo, RO.destinazione(s.destinazione).parola, s.anticipazione ? 'Sì' : 'No', s.pagataDaMe ? 'Sì' : 'No',
+        s.idCommessa, s.foto.length ? 'Sì' : 'No', RO.STATI[s.stato].parola]);
+    } else if (b.cosa === 'trasferte') {
+      const r = fase3(dati, 'trasferte', b);
+      intest = ['Dal', 'Al', 'Persona', 'Destinazione', 'Motivo', 'Codice commessa', 'Veicolo', 'Km', 'Andata e ritorno', 'Km totali', 'Euro al km', 'Rimborso km', 'Indennità', 'Totale', 'Stato'];
+      righe = r.trasferte.map(t => [C.data(t.dal), C.data(t.al), t.utente, t.destinazione, t.motivo, t.idCommessa, t.veicolo, t.km, t.andataRitorno ? 'Sì' : 'No', t.kmTotali, t.euroKm, t.rimborsoKm, t.indennita, t.totale, RO.STATI[t.stato].parola]);
+    } else if (b.cosa === 'rimborsi') {
+      const r = fase3(dati, 'rimborsi', b);
+      intest = ['Persona', 'Tipo', 'Data', 'Descrizione', 'Codice commessa', 'Km', 'Importo'];
+      righe = r.persone.reduce((l, p) => l.concat(p.voci.map(v => [p.nome, v.tipo === 'trasferta' ? 'Trasferta' : 'Spesa', C.data(v.data), v.descrizione, v.idCommessa, v.km || '', v.importo])), []);
     } else if (b.cosa === 'registro') {
       intest = ['Quando', 'Chi', 'Azione', 'Su cosa', 'Prima', 'Dopo'];
       righe = dati.registro.map(v => [v.quando.replace('T', ' ').slice(0, 16), v.utente.nome, v.azione, v.nome, JSON.stringify(v.prima || ''), JSON.stringify(v.dopo || '')]);

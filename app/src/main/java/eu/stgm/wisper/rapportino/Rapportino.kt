@@ -68,7 +68,23 @@ data class Rapportino(
      * delle commesse). Null = non scritto: vale quello di oggi.
      */
     val costoOrario: Double? = null,
+    /**
+     * Dalla fase 3 (§14.7): "" (non serve) | "da_approvare" | "approvato" |
+     * "respinto". Gli stati di sempre non cambiano; uno da approvare non si manda
+     * al cliente finche' non e' approvato.
+     */
+    val statoApprovazione: String = "",
+    /** Il motivo del rifiuto, se e' respinto. */
+    val motivoRifiuto: String = "",
 ) {
+    /** La pillola dell'elenco: "Da approvare", "Respinto: motivo", o null. */
+    val pillolaApprovazione: String?
+        get() = when (statoApprovazione) {
+            "da_approvare" -> "Da approvare"
+            "respinto" -> if (motivoRifiuto.isBlank()) "Respinto" else "Respinto: $motivoRifiuto"
+            else -> null
+        }
+
     /** Firmato, inviato o fatturato: il lavoro non si tocca piu', si riporta in bozza. */
     val bloccato: Boolean get() = stato in Stato.BLOCCATI
 
@@ -118,6 +134,8 @@ data class Rapportino(
         .put("fatturatoIl", fatturatoIl)
         .put("creato", creato)
         .put("costoOrario", costoOrario ?: JSONObject.NULL)
+        .put("statoApprovazione", statoApprovazione)
+        .put("motivoRifiuto", motivoRifiuto)
         .apply {
             conto?.let {
                 put("oreTotali", it.oreTotali)
@@ -205,6 +223,8 @@ data class Rapportino(
                 fatturatoIl = o.testo("fatturatoIl"),
                 creato = o.testo("creato"),
                 costoOrario = o.numero("costoOrario"),
+                statoApprovazione = o.testo("statoApprovazione"),
+                motivoRifiuto = o.testo("motivoRifiuto"),
             )
         }
     }

@@ -119,7 +119,9 @@ async function main() {
     // 6. Le pagine, una per una, senza errori; Laura (amministrazione in lettura) non vede i pulsanti per cambiare utenti.
     // Dalla fase 2 anche preventivi, listino, contratti, attività, calendario e pianificazione.
     for (const hash of ['#clienti', '#clienti/C002', '#commesse', '#commesse/26ST001', '#rapportini', '#fatturazione', '#amministrazione', '#amministrazione/utenti', '#amministrazione/permessi', '#amministrazione/registro', '#amministrazione/copie',
-      '#preventivi', '#preventivi/' + encodeURIComponent('PR/' + new Date().getFullYear() + '/012'), '#preventivi/listino', '#preventivi/contratti', '#attivita', '#attivita/calendario', '#attivita/pianificazione']) {
+      '#preventivi', '#preventivi/' + encodeURIComponent('PR/' + new Date().getFullYear() + '/012'), '#preventivi/listino', '#preventivi/contratti', '#attivita', '#attivita/calendario', '#attivita/pianificazione',
+      // fase 3: ore, timer, approvazioni, statistiche, spese e trasferte, veicoli
+      '#rapportini/ore', '#rapportini/elenco', '#rapportini/approvare', '#rapportini/statistiche', '#spese', '#spese/riepiloghi', '#amministrazione/veicoli']) {
       await valuta("location.hash = '" + hash + "'; true");
       await aspetta(900);
       const testo = await valuta("document.querySelector('#principale').innerText.slice(0, 80).replace(/\\s+/g, ' ')");

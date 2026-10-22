@@ -58,14 +58,32 @@ const CAMPI_COSTI = new Set([
   'prezzo', 'importo', 'subtotale', 'sommaVoci', 'scontoPercentuale', 'scontoEuro', 'scontoDaPercentuale',
   'imponibile', 'contributo', 'baseIva', 'iva', 'restoScadenze', 'conti', 'preventiviInAttesa',
   'sconto_percentuale', 'sconto_euro',
+  // Fase 3: il costo delle ore (ore x costo orario congelato) e il costo della commessa.
+  'costo', 'costoCommessa', 'costoOreRegistrate',
 ]);
+
+/**
+ * I soldi della persona (fase 3): una spesa che ha pagato, il rimborso km e
+ * l'indennita' delle sue trasferte, l'euro al km del veicolo con cui si
+ * calcola, i suoi rimborsi. Non sono costi dello studio: chi vede la spesa o la
+ * trasferta li vede anche senza "costi" (un collaboratore vede solo le sue).
+ * Un oggetto segnato con soldiPropri(o, campi) tiene quei campi; tutto il resto
+ * (anche dentro di lui) segue la regola di sempre.
+ */
+const SOLDI_PROPRI = Symbol('soldiPropri');
+
+function soldiPropri(o, campi) {
+  if (o && typeof o === 'object') o[SOLDI_PROPRI] = new Set(campi);
+  return o;
+}
 
 function togliCosti(x) {
   if (Array.isArray(x)) return x.map(togliCosti);
   if (x && typeof x === 'object') {
     const o = {};
+    const tenuti = x[SOLDI_PROPRI];
     for (const k of Object.keys(x)) {
-      if (CAMPI_COSTI.has(k)) continue;
+      if (CAMPI_COSTI.has(k) && !(tenuti && tenuti.has(k))) continue;
       o[k] = togliCosti(x[k]);
     }
     return o;
@@ -73,4 +91,4 @@ function togliCosti(x) {
   return x;
 }
 
-module.exports = { MODULI, SPECIALI, TUTTE, RUOLI, iniziali, CAMPI_COSTI, togliCosti };
+module.exports = { MODULI, SPECIALI, TUTTE, RUOLI, iniziali, CAMPI_COSTI, togliCosti, soldiPropri, SOLDI_PROPRI };

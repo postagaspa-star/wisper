@@ -93,7 +93,9 @@
           scrive() ? h('button', { type: 'button', class: 'btn giallo', 'data-visita': 'nuovo-preventivo', onclick: () => W.vai('#preventivi/nuovo') }, icona('piu', 18, 2.6), 'Nuovo preventivo') : null),
         h('div', { class: 'filtri' },
           segmenti(RP.SEGMENTI.map(s => [s[0], s[1] + ' · ' + n[s[0]]]), f.segmento, x => { f.segmento = x; W.disegnaPagina(); }),
-          cerca(f.testo, 'Numero, oggetto, cliente', x => { f.testo = x; tabella(area); })),
+          cerca(f.testo, 'Numero, oggetto, cliente', x => { f.testo = x; tabella(area); }),
+          // Fase 3: l'esportazione per Excel che il server sa fare dalla fase 2 (§13.9).
+          h('button', { type: 'button', class: 'btn collegamento', onclick: () => W.esporta('preventivi', {}) }, 'Esporta per Excel')),
         area]);
       tabella(area);
     }

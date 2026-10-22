@@ -15,6 +15,26 @@
     const { h, aggiungi, svuota, icona, tondo, iniziali, stato, pillola, avviso, lavora, finestra, conferma, apriMenu, campo, conSuffisso, segmenti, cerca, riga } = B;
     const puo = W.puo;
     const soldi = W.soldi;
+    const RO = radice.WisperRegoleOreSpese;
+
+    /*
+     * Fase 3 (architettura.md §14.11): il costo della commessa con le ore registrate, le
+     * spese fuori dai rapportini e le trasferte lo sa il server (costoCommessa). Si legge
+     * entrando nella pagina della commessa; finché non arriva valgono i numeri della fase 1.
+     */
+    let costi = {};
+    window.addEventListener('hashchange', () => { costi = {}; });
+    function costoDi(m) {
+      if (!soldi()) return null;
+      const c = costi[m.id];
+      if (c) return c.dati;
+      costi[m.id] = { dati: null };
+      Rete.get('/server/costoCommessa?idCommessa=' + encodeURIComponent(m.id)).then(r => {
+        costi[m.id] = { dati: (r && r.costoCommessa) || null };
+        if (r && r.costoCommessa && location.hash === '#commesse/' + encodeURIComponent(m.id)) W.ridisegna();
+      }).catch(() => { costi[m.id] = { dati: null }; });
+      return null;
+    }
 
     // ===================================================================== elenco
 
@@ -107,10 +127,10 @@
             h('button', { type: 'button', class: 'btn', onclick: () => W.moduloRapportino(null, { idCliente: m.idCliente, idCommessa: m.id }) }, icona('piu', 18, 2.6), 'Nuovo rapportino'))]);
         }
         aggiungi(area, [W.tabellaRapportini(C.ordina(k.rapportini, 'data', -1))]);
-      } else if (scheda === 'costi' && soldi()) costiCommessa(area, m, k);
+      } else if (scheda === 'costi' && soldi()) costiCommessa(area, m, k, costoDi(m));
       else if (scheda === 'dafatturare' && soldi()) daFatturare(area, k);
       else if (scheda === 'documenti' && puoDocumenti(1)) documentiCommessa(area, m);
-      else panoramica(area, m, k);
+      else panoramica(area, m, k, soldi() ? RO.costiConFase3(k, costoDi(m)) : null);
     }
 
     /** Si apre su Prestazioni se ce ne sono, altrimenti su Panoramica. */
@@ -368,9 +388,16 @@
 
     // ===================================================================== le schede della 0.4.0
 
-    function panoramica(area, m, k) {
-      const perc = x => x === null ? '' : Math.round(x * 100) + '%';
+    function panoramica(area, m, k, x) {
+      const perc = v => v === null ? '' : Math.round(v * 100) + '%';
       const riquadro = W.riquadro;
+      // Con la risposta del server (fase 3) costo e margine contano anche ore registrate, spese e trasferte.
+      const noto = x ? x.lavoroNoto : k.costo.lavoroNoto;
+      const sostenuto = x ? x.costoSostenuto : k.costo.totale;
+      const margine = x ? x.margine : k.margine;
+      const percMargine = x ? x.percMargine : k.percMargine;
+      const daBudget = x ? x.margineDaBudget : k.margineDaBudget;
+      const costoAtteso = x ? x.costoAtteso : k.costoAtteso;
       if (soldi()) {
         const b = k.previsto;
         if ((b && (b.ore !== null || b.euro !== null || b.prezzo !== null)) || C.num(m.importoContratto)) {
@@ -389,11 +416,11 @@
         }
         aggiungi(area, [h('div', { class: 'tre-colonne' },
           riquadro('Valore atteso', C.euro(k.valoreAtteso), (m.budgetEuro || (k.previsto && k.previsto.euro)) && (m.budgetEuro || k.previsto.euro) >= k.valoreMaturato ? 'il budget della commessa' : 'quello che i rapportini hanno maturato'),
-          riquadro('Costo sostenuto', k.costo.lavoroNoto ? C.euro(k.costo.totale) : '—',
-            k.costo.lavoroNoto ? (k.valoreAtteso > 0 ? perc(k.costo.totale / k.valoreAtteso) + ' del valore atteso' : '') : 'manca il costo orario in Amministrazione'),
-          riquadro('Margine atteso', k.costo.lavoroNoto ? C.euro(k.margine) : '—',
-            k.costo.lavoroNoto && k.percMargine !== null ? perc(k.percMargine) + (k.margine < 0 ? ': costa più di quanto vale'
-              : k.margineDaBudget ? ', dopo ' + C.euro(k.costoAtteso) + ' di costi previsti' : ', dopo i costi') : '', null, k.costo.lavoroNoto && k.margine < 0))]);
+          riquadro('Costo sostenuto', noto ? C.euro(sostenuto) : '—',
+            noto ? (k.valoreAtteso > 0 ? perc(sostenuto / k.valoreAtteso) + ' del valore atteso' : '') : 'manca il costo orario in Amministrazione'),
+          riquadro('Margine atteso', noto ? C.euro(margine) : '—',
+            noto && percMargine !== null ? perc(percMargine) + (margine < 0 ? ': costa più di quanto vale'
+              : daBudget ? ', dopo ' + C.euro(costoAtteso) + ' di costi previsti' : ', dopo i costi') : '', null, noto && margine < 0))]);
 
         const tot = k.fatturato + k.prontoDaFatturare + k.inBozza;
         const pezzo = (x, classe) => tot > 0 && x > 0 ? h('i', { class: classe, style: { width: (x / tot * 100) + '%' } }) : null;
@@ -432,15 +459,23 @@
       if (m.note) aggiungi(area, [h('div', { class: 'scheda' }, h('h2', null, 'Note'), h('div', { class: 'lavoro' }, m.note))]);
     }
 
-    function costiCommessa(area, m, k) {
-      const imp = S.ana.impostazioni;
+    function costiCommessa(area, m, k, cc) {
       const conSpese = k.rapportini.filter(r => C.num(r.spese) > 0 || (r.foto || []).length);
+      const noto = cc ? cc.lavoroNoto !== false : k.costo.lavoroNoto;
+      const rc = (a, b) => h('div', { class: 'rc' }, h('span', null, a), h('span', null, b));
+      // Il costo orario della riga è quello del conto (congelato in ogni rapportino), non quello di oggi in Amministrazione.
+      const lavoro = cc ? cc.lavoro : k.costo.lavoro;
+      const orario = R.costoOrarioDelConto(k.ore, lavoro);
       aggiungi(area, [h('div', { class: 'scheda' },
-        h('h2', null, 'Il costo · ' + (k.costo.lavoroNoto ? C.euro(k.costo.totale) : 'incompleto')),
+        h('h2', null, 'Il costo · ' + (noto ? C.euro(cc ? cc.totale : k.costo.totale) : 'incompleto')),
         h('div', { class: 'conto', style: { borderTop: 'none' } },
-          h('div', { class: 'rc' }, h('span', null, 'Il lavoro · ' + C.numero(k.ore) + ' ore × ' + (imp.COSTO_ORARIO ? C.euro(imp.COSTO_ORARIO) : 'costo orario da mettere in Amministrazione')), h('span', null, k.costo.lavoroNoto ? C.euro(k.costo.lavoro) : '—')),
-          h('div', { class: 'rc' }, h('span', null, 'Auto · ' + C.numero(k.totali.km) + ' km al costo ACI'), h('span', null, C.euro(k.costo.auto))),
-          h('div', { class: 'rc' }, h('span', null, 'Spese · ' + W.nRapportini(conSpese.length)), h('span', null, C.euro(k.costo.spese)))))]);
+          rc('Il lavoro dei rapportini · ' + C.numero(k.ore) + ' ore' + (!noto ? ' · costo orario da mettere in Amministrazione' : orario !== null ? ' × ' + C.euro(orario) : ''), noto ? C.euro(lavoro) : '—'),
+          // Fase 3: le ore registrate senza rapportino, al costo orario congelato nella riga.
+          cc && C.num(cc.oreRegistrate) ? rc('Le ore registrate · ' + C.numero(cc.oreRegistrate) + ' ore', C.euro(cc.costoOreRegistrate)) : null,
+          rc('Auto · ' + C.numero(k.totali.km) + ' km al costo ACI', C.euro(cc ? cc.auto : k.costo.auto)),
+          rc('Spese dei rapportini · ' + W.nRapportini(conSpese.length), C.euro(cc ? cc.speseRapportini : k.costo.spese)),
+          cc && C.num(cc.speseFuoriRapportini) ? rc('Le altre spese, al cliente e allo studio', C.euro(cc.speseFuoriRapportini)) : null,
+          cc && C.num(cc.trasferte) ? rc('Trasferte · ' + C.numero(cc.kmTrasferte) + ' km e indennità', C.euro(cc.trasferte)) : null))]);
       if (conSpese.length) {
         const tab = h('div', { class: 'tab' }, h('div', { class: 'r testa', style: { gridTemplateColumns: '70px 130px minmax(0,1fr) 240px 110px' } },
           h('span', null, 'Data'), h('span', null, 'N°'), h('span', null, 'Di cosa'), h('span', null, 'Scontrini'), h('span', { class: 'n' }, 'Importo')));

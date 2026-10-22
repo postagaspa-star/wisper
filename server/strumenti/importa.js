@@ -28,6 +28,7 @@ const {
 const { calcola, prossimoCodice } = require('../src/conti');
 const { leggiXlsx } = require('./xlsx');
 const F = require('./foglio');
+const { speseDaiRapportini } = require('../src/migrazioni/003-ore-spese');
 
 /** Un istante dal foglio: una Date diventa ISO col fuso; un testo resta com'era (come dataOraIso di Code.gs). */
 function istanteDa(v) {
@@ -280,6 +281,10 @@ function importa(o) {
       // Il prossimo codice commessa continua dal piu' alto del foglio.
       const ultimo = commesse.reduce((m, c) => Math.max(m, w.numeroDi('commessa', c.id) || 0), 0);
       w.segnaNumero('commessa', ultimo);
+      // Fase 3: le spese dei rapportini diventano righe di spese (come la migrazione 003), e il primo veicolo
+      // prende l'auto e il rimborso km del foglio.
+      conteggi.spese = speseDaiRapportini(w.db, 'importazione: le spese del rapportino diventano una riga di spese');
+      w.allineaPrimoVeicolo();
       w.annota('importazione', path.basename(o.foglio), null, conteggi, 'dati importati dal foglio Google');
     }));
   } catch (err) {

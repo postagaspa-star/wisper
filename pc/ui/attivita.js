@@ -110,8 +110,10 @@
       // Quante si vedono davvero: di una ricorrenza conta solo la prossima volta.
       const n = s => RA.raggruppa(RA.filtraAttivita(M.aperte, s, io(), oggi()).filter(a => a.stato !== 'fatta'), oggi()).reduce((t, g) => t + g.voci.length, 0);
       aggiungi(pagina, [testata('Attività', 'elenco'),
-        h('div', null, segmenti([['mie', 'Mie · ' + n('mie')], ['squadra', 'Squadra · ' + n('squadra')], ['libere', 'Non assegnate · ' + n('libere')]], M.segmento,
-          x => { M.segmento = x; W.disegnaPagina(); })),
+        h('div', { class: 'filtri' }, segmenti([['mie', 'Mie · ' + n('mie')], ['squadra', 'Squadra · ' + n('squadra')], ['libere', 'Non assegnate · ' + n('libere')]], M.segmento,
+          x => { M.segmento = x; W.disegnaPagina(); }),
+          // Fase 3: l'esportazione per Excel che il server sa fare dalla fase 2 (§13.9): le aperte, come l'elenco.
+          h('span', { class: 'spazio' }), h('button', { type: 'button', class: 'btn collegamento', onclick: () => W.esporta('attivita', {}) }, 'Esporta per Excel')),
         area]);
       disegnaGruppi(area);
     }
@@ -533,7 +535,7 @@
       const collaboratore = S.io && S.io.utente && S.io.utente.ruolo === 'collaboratore';
       const scheda = a => h('div', { class: 'card-pian ' + (a.assegnataA ? colorePersona(a.assegnataA) : 'libera'), draggable: puoCambiare(a) ? 'true' : null, role: 'button', tabindex: '0', title: a.titolo,
         'data-attivita': a.id, onclick: () => modulo(a), ondragstart: e => { e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', String(a.id)); } catch (x) { /* niente */ } trascinata = a; } },
-      h('b', null, a.titolo), h('span', null, [RA.conOrario(a) && a.inizio && !a.tuttoIlGiorno ? RA.ora(a.inizio) : '', a.idCommessa, !a.assegnataA && RA.giornoDi(a) ? RA.quandoBreve(RA.giornoDi(a), oggi()) : ''].filter(Boolean).join(' · ')));
+      h('b', null, RA.aCapoMorbido(a.titolo)), h('span', null, [RA.conOrario(a) && a.inizio && !a.tuttoIlGiorno ? RA.ora(a.inizio) : '', a.idCommessa, !a.assegnataA && RA.giornoDi(a) ? RA.quandoBreve(RA.giornoDi(a), oggi()) : ''].filter(Boolean).join(' · ')));
       const cella = (u, gi, lista) => {
         const c = h('div', { class: 'cella-pian' + (gi === oggi() ? ' oggi' : ''), 'data-giorno': gi, 'data-utente': u.id }, lista.map(scheda));
         if (scrive() && (!collaboratore || String(u.id) === String(io()))) {

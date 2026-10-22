@@ -11,6 +11,7 @@ mai dati veri di clienti.
 
 | Data | Versione | In breve |
 |------|----------|----------|
+| 22/10/2026 | gestionale, fase 3 (non pubblicata) | [Ore, timer, spese e trasferte](#gestionale-fase-3) |
 | 22/10/2026 | gestionale, fase 2 (non pubblicata) | [Preventivi, attività e calendario](#gestionale-fase-2) |
 | 21/10/2026 | gestionale, fase 1 (non pubblicata) | [Il nucleo del gestionale: server sul NAS, accesso per persona, Dashboard](#gestionale-fase-1) |
 | 21/10/2026 | 0.4.0 | [Tutto l'ufficio anche sul telefono](#v0-4-0) |
@@ -26,6 +27,68 @@ mai dati veri di clienti.
 | 26/09–14/10/2026 | 0.1 | [Un rapportino confermato non si perde più](#coda) |
 | 7–9/08/2026 | 0.1.0 | [Hackathon NGN Hacks: la versione a voce, senza mani](#v0-1-0) |
 | marzo–giugno 2026 | prima del repository | [Le prime versioni](#prima) |
+
+---
+
+<a id="gestionale-fase-3"></a>
+## 22 ottobre 2026 · gestionale, fase 3 · Ore, timer, spese e trasferte
+
+**Perché.** Terza fase del gestionale (`docs/specifiche-stgm.md`, moduli 06 e 07). Finora le ore esistevano solo
+dentro i rapportini: il lavoro in ufficio, la progettazione e le spese fuori dal cantiere non lasciavano traccia, e il
+costo vero di una commessa era più basso del vero. Prima la ricerca e il
+[prototipo](https://claude.ai/artifact/DSHQpAQgBEmY2k9GtSA1j6) (`docs/prototipo/Gestionale-fase3.html`), poi il
+codice, sul server, sul telefono e sul computer.
+
+**Cosa cambia.**
+
+- **Il rapportino non cambia**: tre passi, firma, PDF, anche senza rete. Le ore senza rapportino sono un modulo corto
+  a parte (**Registra ore**): commessa tra le recenti, ore a mezz'ore oppure inizio, fine e pausa, fatturabili o no,
+  straordinarie.
+- **Il timer**: un tocco per partire, uno per fermare, e si apre la bozza da correggere. Uno per persona, vive sul
+  server: sopravvive alla chiusura dell'app e si vede in cima alla Dashboard.
+- **La settimana delle ore**: sul computer una griglia con una riga per commessa e una colonna per giorno; una casella
+  si scrive solo se non si perde niente (con orari o più righe nello stesso giorno si apre il giorno). Statistiche per
+  persona e per commessa: ore, fatturabili, percentuale, costo.
+- **Da approvare**: ore, rapportini, spese e trasferte dei collaboratori passano da chi approva, con le cose strane in
+  evidenza (13 ore in un giorno, spesa sopra i 200 €, senza scontrino, km diversi dal solito). Respingere chiede
+  sempre il motivo, che arriva a chi ha scritto; dopo c'è Annulla. Per Manuel e Andrea non cambia niente: le loro
+  cose sono già approvate.
+- **Spese e trasferte**, voce nuova del menu: la spesa comincia dalla foto dello scontrino; **A chi va**: al cliente,
+  allo studio o mia; "il documento è intestato al cliente" (anticipazione, fuori da IVA nella fattura della fase 4);
+  "l'ho pagata io" (finisce tra i rimborsi). La trasferta calcola subito il rimborso km dal veicolo e dalla tabella ACI
+  dell'anno; i rimborsi da fare per persona, con "Segna rimborsato".
+- **Senza rete non si perde niente**: anche ore e spese, scontrino compreso, vanno nella coda su disco del telefono e
+  partono da sole; il server riconosce un invio ripetuto e non fa doppioni.
+- **I rapportini già scritti restano identici al centesimo**: le loro spese sono diventate righe di spese senza
+  toccare il rapportino. Una prova legge un database di prima col codice della fase 2 e confronta ogni campo, il CSV e
+  i soldi della Dashboard.
+- **Il costo della commessa** conta anche ore registrate, spese fuori dai rapportini e trasferte; la scheda Costi ora
+  scrive il costo orario davvero usato nel conto (prima scriveva quello di oggi in Amministrazione, anche se il conto
+  usava quello fissato in ogni rapportino).
+- Amministrazione › **Veicoli e rimborso km**; esportazioni per Excel di ore, spese, trasferte e rimborsi, e quelle
+  di preventivi e attività che mancavano. Server 0.6.0 sul NAS, ancora vuoto, con la copia fatta prima delle tabelle
+  nuove.
+
+Prove: server 172, script del foglio 65, telefono 185, computer 136, tutte verdi; giri cliccati sull'emulatore (anche
+in modalità aereo: spesa con scontrino e ore in coda, poi inviate da sole) e, in 14 passi, su Wisper Ufficio contro il
+server di prova. Schermate coi dati di esempio. Non provati: trascinare uno scontrino nel programma del computer e le
+finestre vere di Windows; il timer nella notte del cambio dell'ora (sbaglia di un'ora).
+
+<p>
+<img src="docs/diario/2026-10-22-gest3-tel-ore.png" width="220" alt="Telefono: le ore della settimana col timer">
+<img src="docs/diario/2026-10-22-gest3-tel-approvare-scuro.png" width="220" alt="Telefono: da approvare, tema scuro">
+<img src="docs/diario/2026-10-22-gest3-tel-trasferta.png" width="220" alt="Telefono: nuova trasferta col rimborso km">
+</p>
+
+<img src="docs/diario/2026-10-22-gest3-pc-ore.png" width="720" alt="Wisper Ufficio: la settimana delle ore">
+
+<img src="docs/diario/2026-10-22-gest3-pc-approvare.png" width="720" alt="Wisper Ufficio: da approvare con le anomalie">
+
+<img src="docs/diario/2026-10-22-gest3-pc-spese.png" width="720" alt="Wisper Ufficio: spese del mese, a chi vanno">
+
+<img src="docs/diario/2026-10-22-gest3-pc-costi.png" width="720" alt="Wisper Ufficio: il costo della commessa con ore registrate e spese">
+
+Versione: non ancora pubblicata (ramo `gestionale`).
 
 ---
 

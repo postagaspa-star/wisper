@@ -56,6 +56,24 @@ import eu.stgm.wisper.rapportino.Utente
 import eu.stgm.wisper.rapportino.UtenteSalvato
 import eu.stgm.wisper.rapportino.VoceRegistro
 import eu.stgm.wisper.rapportino.istanteLocale
+import eu.stgm.wisper.rapportino.DaApprovare
+import eu.stgm.wisper.rapportino.ElencoOre
+import eu.stgm.wisper.rapportino.ElencoSpese
+import eu.stgm.wisper.rapportino.ElencoTrasferte
+import eu.stgm.wisper.rapportino.ElencoVeicoli
+import eu.stgm.wisper.rapportino.EsitoApprovazione
+import eu.stgm.wisper.rapportino.RiepilogoSpese
+import eu.stgm.wisper.rapportino.RigaOre
+import eu.stgm.wisper.rapportino.Rimborsi
+import eu.stgm.wisper.rapportino.Spesa
+import eu.stgm.wisper.rapportino.StatisticheOre
+import eu.stgm.wisper.rapportino.TimerFermato
+import eu.stgm.wisper.rapportino.TimerLetto
+import eu.stgm.wisper.rapportino.Trasferta
+import eu.stgm.wisper.rapportino.Veicolo
+import eu.stgm.wisper.rapportino.VoceDaApprovare
+import eu.stgm.wisper.rapportino.VoceDashboard
+import eu.stgm.wisper.rapportino.VoceRimborso
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -388,8 +406,14 @@ class DatiEsempio(oggi: LocalDate = LocalDate.now(), private val cartella: File?
         val base = CosaFare.calcola(ana, _viste.value.conConti())
         // Le voci della fase 2 (preventivi, attività, appuntamenti), come le manda il server (§13.8).
         val fase2 = CosaFareFase2.calcola(_preventivi.value, _attivita.value, ana, conti = { it.conto(ContiPreventivo.iva(ana.impostazioni), ContiPreventivo.eppi(ana.impostazioni)).totale })
-        _dashboard.value = CosaFareFase2.unisci(base, fase2)
+        val unita = CosaFareFase2.unisci(base, fase2)
+        // Le voci della fase 3 (cose da approvare, timer, rimborsi), come le manda il server (§14.13).
+        val (urgenti3, settimana3) = fase3OppureNiente()?.vociDashboard() ?: (emptyList<VoceDashboard>() to emptyList())
+        _dashboard.value = unita.copy(urgenti = urgenti3 + unita.urgenti, settimana = unita.settimana + settimana3)
     }
+
+    /** La fase 3 nasce dopo la prima dashboard (la usa mentre si costruisce): fino ad allora niente voci. */
+    private fun fase3OppureNiente(): EsempioFase3? = runCatching { fase3 }.getOrNull()
 
     override fun tariffaProposta(cliente: Cliente?, nomeCliente: String): Double? = cliente?.ultimaTariffa
 
@@ -735,7 +759,7 @@ class DatiEsempio(oggi: LocalDate = LocalDate.now(), private val cartella: File?
                 ana.commesse.filter { !it.modello }.map { listOf(it.id, it.descrizione, ana.cliente(it.idCliente)?.nome.orEmpty(), it.etichettaStato, Numeri.scrivi(it.budgetOre)) }
             else -> listOf(listOf("Quando", "Chi", "Cosa", "Su cosa")) + registroEsempio.map { listOf(it.quando, it.chi, it.frase, it.oggetto + if (it.coda.isNotBlank()) " " + it.coda else "") }
         }
-        val testo = "﻿" + righe.joinToString("\r\n") { r -> r.joinToString(";") { "\"" + it.replace("\"", "\"\"") + "\"" } }
+        val testo = "\uFEFF" + righe.joinToString("\r\n") { r -> r.joinToString(";") { "\"" + it.replace("\"", "\"\"") + "\"" } }
         return runCatching {
             dir.mkdirs()
             File(dir, "Wisper-$cosa-esempio.csv").apply { writeText(testo) }
@@ -1112,6 +1136,61 @@ class DatiEsempio(oggi: LocalDate = LocalDate.now(), private val cartella: File?
     override suspend fun togliAllegatoAttivita(idAttivita: String, idFile: String): Result<Attivita> {
         val a = _attivita.value.firstOrNull { it.id == idAttivita } ?: return errore("Non trovo l'attività")
         return Result.success(mettiAttivita(a.copy(allegati = a.allegati.filterNot { it.id == idFile })))
+    }
+
+    // ------------------------------------------------------------- fase 3: ore, timer, approvazioni, spese (in memoria)
+
+    /** Le ore dei rapportini di Manuel in un giorno, per la settimana delle ore. */
+    private fun oreRapportiniDel(d: LocalDate): Double = _viste.value.map { it.rapportino }.filter { it.data == d && it.stato != Stato.ANNULLATO }.sumOf { it.oreTotali }
+
+    private val fase3 = EsempioFase3(oggiEsempio, { _ana.value }, ::oreRapportiniDel)
+
+    override val ore: StateFlow<ElencoOre?> = fase3.elencoOre.asStateFlow()
+    override fun aggiornaOre(da: LocalDate, a: LocalDate) = fase3.aggiornaOre(da, a)
+    override val timer: StateFlow<TimerLetto?> = fase3.timer.asStateFlow()
+    override fun aggiornaTimer() = Unit
+    override suspend fun avviaTimer(idCommessa: String, descrizione: String): Result<TimerLetto> = fase3.avviaTimer(idCommessa, descrizione)
+    override suspend fun fermaTimer(): Result<TimerFermato> = fase3.fermaTimer()
+    override fun salvaOre(riga: RigaOre, bozza: Boolean) = fase3.salvaOre(riga, bozza)
+    override suspend fun togliOre(riga: RigaOre, annulla: Boolean): Result<Unit> = Result.success(fase3.togliOre(riga, annulla))
+    override suspend fun daApprovare(): Result<DaApprovare> = Result.success(fase3.daApprovare())
+    override suspend fun approva(voci: List<VoceDaApprovare>): Result<EsitoApprovazione> = Result.success(fase3.decidi(voci, false)).also { aggiornaDashboard() }
+    override suspend fun respingi(voci: List<VoceDaApprovare>, motivo: String): Result<EsitoApprovazione> =
+        if (motivo.isBlank()) errore("Scrivi il motivo: arriva a chi l'ha scritta") else Result.success(fase3.decidi(voci, false)).also { aggiornaDashboard() }
+    override suspend fun annullaApprovazione(voci: List<VoceDaApprovare>): Result<EsitoApprovazione> = Result.success(fase3.decidi(voci, true)).also { aggiornaDashboard() }
+
+    override val spese: StateFlow<ElencoSpese?> = fase3.elencoSpese.asStateFlow()
+    override val trasferte: StateFlow<ElencoTrasferte?> = fase3.elencoTrasferte.asStateFlow()
+    override fun aggiornaSpese(mese: YearMonth) = fase3.aggiornaSpese(mese)
+    override fun salvaSpesa(spesa: Spesa, foto: File?) = fase3.salvaSpesa(spesa, foto)
+    override fun aggiungiScontrino(spesa: Spesa, foto: File) = fase3.salvaSpesa(spesa, foto)
+    override suspend fun togliSpesa(spesa: Spesa, annulla: Boolean): Result<Unit> = Result.success(fase3.togliSpesa(spesa, annulla))
+    override suspend fun salvaTrasferta(t: Trasferta): Result<Trasferta> =
+        if (t.destinazione.isBlank()) errore("Destinazione: scrivi dove sei andato") else Result.success(fase3.salvaTrasferta(t))
+    override suspend fun togliTrasferta(id: String, annulla: Boolean): Result<Trasferta> = fase3.togliTrasferta(id, annulla)
+    override suspend fun rimborsi(): Result<Rimborsi> = Result.success(fase3.rimborsi())
+    override suspend fun segnaRimborsato(voci: List<VoceRimborso>, annulla: Boolean): Result<Pair<Int, Double>> =
+        Result.success(fase3.segnaRimborsato(voci, annulla)).also { aggiornaDashboard() }
+    override suspend fun veicoli(tutti: Boolean): Result<ElencoVeicoli> = Result.success(fase3.veicoli(tutti))
+    override suspend fun salvaVeicolo(v: Veicolo): Result<Veicolo> = if (v.nome.isBlank()) errore("Nome: scrivi il nome del veicolo") else fase3.salvaVeicolo(v)
+    override suspend fun riepilogoSpese(mese: YearMonth, per: String): Result<RiepilogoSpese> = Result.success(fase3.riepilogo(mese, per))
+
+    override suspend fun togliFotoSpesa(idFile: String): Result<Spesa> = fase3.togliFotoSpesa(idFile)
+
+    override suspend fun statisticheOre(mese: YearMonth, per: String): Result<StatisticheOre> {
+        // Le ore dei rapportini di Manuel nel mese, per commessa: (tutte, fatturabili: lavoro e straordinari, il viaggio di Elettrodinamica no).
+        val rap = _viste.value.map { it.rapportino }.filter { YearMonth.from(it.data) == mese && it.stato != Stato.ANNULLATO }
+            .groupBy { it.idCommessa }.mapValues { (_, l) -> l.sumOf { it.oreTotali } to l.sumOf { it.oreLavoro + it.oreExtra } }
+        return Result.success(fase3.statistiche(mese, per, rap))
+    }
+
+    override suspend fun esportaPeriodo(cosa: String, da: LocalDate?, a: LocalDate?, utente: String): Result<File> {
+        val dir = cartella?.let { File(it, "pdf") } ?: return errore("Nella visita il file non si salva")
+        val testo = "\uFEFF" + fase3.righeCsv(cosa, da, a, utente).joinToString("\r\n") { r -> r.joinToString(";") { "\"" + it.replace("\"", "\"\"") + "\"" } }
+        return runCatching {
+            dir.mkdirs()
+            File(dir, "Wisper-$cosa-esempio.csv").apply { writeText(testo) }
+        }
     }
 
     private fun <T> errore(messaggio: String): Result<T> = Result.failure(Exception(messaggio))

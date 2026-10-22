@@ -1,0 +1,63 @@
+{
+  "nota": "I conti della fase 3 (docs/gestionale/fase3.md §3, architettura.md §14). Li fa il server (server/src/conti.js: oreDaOrari, rimborsoTrasferta, rimborsiDovuti); telefono e computer li rifanno per l'anteprima (le ore mentre si scrivono inizio, fine e pausa; il rimborso km della trasferta) e devono dare gli stessi numeri e le stesse frasi su ogni caso. Ore: minuti = fine - inizio - pausa; una fine prima dell'inizio e' del giorno dopo (+24 ore, giornoDopo); fine uguale all'inizio e' un errore; la pausa deve essere piu' corta del lavoro; ore = Math.round(minuti / 60 * 100) / 100. Le ore si scrivono 8:30, 08:30, 08.30 o 08:30:00 e tornano 08:30. Trasferta: kmTotali = km x 2 con andata e ritorno; rimborsoKm = centesimi(kmTotali x euroKm); totale = rimborsoKm + centesimi(indennita), con centesimi(n) = Math.round(n * 100) / 100. Rimborsi: per persona le spese pagataDaMe approvate e non 'personale', piu' le trasferte approvate (totale), meno quelle con rimborsataIl; inAttesa = le stesse cose ancora da_approvare; le persone in ordine di idUtente. I valori attesi sono fatti a mano.",
+  "ore": [
+    {"nome": "una mattina", "inizio": "08:30", "fine": "12:30", "pausaMinuti": 0,
+      "atteso": {"inizio": "08:30", "fine": "12:30", "pausaMinuti": 0, "minuti": 240, "ore": 4, "giornoDopo": false}},
+    {"nome": "una giornata con un'ora di pausa", "inizio": "08:00", "fine": "17:00", "pausaMinuti": 60,
+      "atteso": {"inizio": "08:00", "fine": "17:00", "pausaMinuti": 60, "minuti": 480, "ore": 8, "giornoDopo": false}},
+    {"nome": "venti minuti in piu': due decimali", "inizio": "08:00", "fine": "12:20", "pausaMinuti": 0,
+      "atteso": {"inizio": "08:00", "fine": "12:20", "pausaMinuti": 0, "minuti": 260, "ore": 4.33, "giornoDopo": false}},
+    {"nome": "dieci minuti, scritti senza lo zero", "inizio": "8:00", "fine": "8:10",
+      "atteso": {"inizio": "08:00", "fine": "08:10", "pausaMinuti": 0, "minuti": 10, "ore": 0.17, "giornoDopo": false}},
+    {"nome": "a cavallo della mezzanotte, con la pausa", "inizio": "22:00", "fine": "06:00", "pausaMinuti": 30,
+      "atteso": {"inizio": "22:00", "fine": "06:00", "pausaMinuti": 30, "minuti": 450, "ore": 7.5, "giornoDopo": true}},
+    {"nome": "fino a mezzanotte", "inizio": "18:00", "fine": "00:00", "pausaMinuti": 0,
+      "atteso": {"inizio": "18:00", "fine": "00:00", "pausaMinuti": 0, "minuti": 360, "ore": 6, "giornoDopo": true}},
+    {"nome": "un minuto prima di mezzanotte", "inizio": "23:59", "fine": "00:00",
+      "atteso": {"inizio": "23:59", "fine": "00:00", "pausaMinuti": 0, "minuti": 1, "ore": 0.02, "giornoDopo": true}},
+    {"nome": "col punto e coi secondi", "inizio": "8.30", "fine": "12:45:00", "pausaMinuti": 15,
+      "atteso": {"inizio": "08:30", "fine": "12:45", "pausaMinuti": 15, "minuti": 240, "ore": 4, "giornoDopo": false}},
+    {"nome": "pomeriggio con 50 minuti", "inizio": "13:10", "fine": "18:00", "pausaMinuti": 0,
+      "atteso": {"inizio": "13:10", "fine": "18:00", "pausaMinuti": 0, "minuti": 290, "ore": 4.83, "giornoDopo": false}},
+    {"nome": "fine uguale all'inizio", "inizio": "08:00", "fine": "08:00", "errore": "Fine: deve essere diversa dall'inizio"},
+    {"nome": "pausa lunga quanto il lavoro", "inizio": "08:00", "fine": "09:00", "pausaMinuti": 60, "errore": "Pausa: è più lunga del lavoro"},
+    {"nome": "pausa negativa", "inizio": "08:00", "fine": "09:00", "pausaMinuti": -10, "errore": "Pausa: scrivi i minuti, da zero in su"},
+    {"nome": "un'ora che non esiste", "inizio": "25:00", "fine": "26:00", "errore": "Inizio: scrivi l'ora come 8:30"},
+    {"nome": "la fine non e' un'ora", "inizio": "08:00", "fine": "pranzo", "errore": "Fine: scrivi l'ora come 17:30"}
+  ],
+  "trasferte": [
+    {"nome": "60 km andata e ritorno a 0,76", "trasferta": {"km": 60, "andataRitorno": true, "euroKm": 0.76, "indennita": 0},
+      "atteso": {"kmTotali": 120, "rimborsoKm": 91.2, "indennita": 0, "totale": 91.2}},
+    {"nome": "solo andata, euro al km con quattro decimali", "trasferta": {"km": 37.5, "andataRitorno": false, "euroKm": 0.4567, "indennita": 0},
+      "atteso": {"kmTotali": 37.5, "rimborsoKm": 17.13, "indennita": 0, "totale": 17.13}},
+    {"nome": "due giorni con l'indennita'", "trasferta": {"km": 48, "andataRitorno": true, "euroKm": 0.76, "indennita": 92.96},
+      "atteso": {"kmTotali": 96, "rimborsoKm": 72.96, "indennita": 92.96, "totale": 165.92}},
+    {"nome": "arrotondata al centesimo", "trasferta": {"km": 33, "andataRitorno": false, "euroKm": 0.6845, "indennita": 0},
+      "atteso": {"kmTotali": 33, "rimborsoKm": 22.59, "indennita": 0, "totale": 22.59}},
+    {"nome": "senza veicolo: solo l'indennita'", "trasferta": {"km": 0, "andataRitorno": false, "euroKm": null, "indennita": 46.48},
+      "atteso": {"kmTotali": 0, "rimborsoKm": 0, "indennita": 46.48, "totale": 46.48}}
+  ],
+  "rimborsi": [
+    {"nome": "chi ha pagato cosa: approvate si', 'Mia' no, gia' rimborsate no, da approvare in attesa",
+      "spese": [
+        {"id": 1, "idUtente": 3, "importo": 4.5, "pagataDaMe": true, "destinazione": "cliente", "stato": "approvata", "rimborsataIl": ""},
+        {"id": 2, "idUtente": 3, "importo": 12, "pagataDaMe": true, "destinazione": "personale", "stato": "approvata", "rimborsataIl": ""},
+        {"id": 3, "idUtente": 3, "importo": 62, "pagataDaMe": false, "destinazione": "studio", "stato": "approvata", "rimborsataIl": ""},
+        {"id": 4, "idUtente": 3, "importo": 16.5, "pagataDaMe": true, "destinazione": "studio", "stato": "da_approvare", "rimborsataIl": ""},
+        {"id": 5, "idUtente": 3, "importo": 7, "pagataDaMe": true, "destinazione": "cliente", "stato": "approvata", "rimborsataIl": "2026-10-20T18:00:00"},
+        {"id": 6, "idUtente": 3, "importo": 10, "pagataDaMe": true, "destinazione": "studio", "stato": "respinta", "rimborsataIl": ""},
+        {"id": 7, "idUtente": 1, "importo": 8.4, "pagataDaMe": true, "destinazione": "cliente", "stato": "approvata", "rimborsataIl": ""},
+        {"id": 8, "idUtente": 1, "importo": 3, "pagataDaMe": true, "destinazione": "studio", "stato": "approvata", "rimborsataIl": ""},
+        {"id": 9, "idUtente": 2, "importo": 20, "pagataDaMe": false, "destinazione": "studio", "stato": "approvata", "rimborsataIl": ""}
+      ],
+      "trasferte": [
+        {"id": 1, "idUtente": 3, "km": 48, "andataRitorno": true, "euroKm": 0.76, "indennita": 0, "stato": "approvata", "rimborsataIl": ""},
+        {"id": 2, "idUtente": 3, "km": 90, "andataRitorno": true, "euroKm": 0.76, "indennita": 0, "stato": "da_approvare", "rimborsataIl": ""},
+        {"id": 3, "idUtente": 1, "km": 60, "andataRitorno": true, "euroKm": 0.76, "indennita": 0, "stato": "approvata", "rimborsataIl": "2026-10-20T18:00:00"}
+      ],
+      "atteso": [
+        {"idUtente": 1, "totale": 11.4, "inAttesa": 0, "spese": 2, "trasferte": 0, "km": 0},
+        {"idUtente": 3, "totale": 77.46, "inAttesa": 153.3, "spese": 1, "trasferte": 1, "km": 96}
+      ]}
+  ]
+}

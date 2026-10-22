@@ -34,7 +34,9 @@
     // Fase 2 (docs/gestionale/fase2.md §5): voci 4 e 5 del menu.
     { modulo: 'preventivi', nome: 'Preventivi e contratti', spiega: 'Preventivi, listino, incarichi', icona: 'preventivo' },
     { modulo: 'attivita', nome: 'Attività e calendario', spiega: 'Le attività di tutti o solo le sue', icona: 'calendario' },
-    { modulo: 'rapportini', nome: 'Ore e rapportini', spiega: 'I rapportini di tutti o solo i suoi', icona: 'rapportini' },
+    { modulo: 'rapportini', nome: 'Ore e rapportini', spiega: 'Ore, timer, rapportini e approvazioni', icona: 'rapportini' },
+    // Fase 3 (docs/gestionale/fase3.md §5): voce 7, tra Ore e rapportini e Fatturazione.
+    { modulo: 'spese', nome: 'Spese e trasferte', spiega: 'Spese, trasferte, rimborsi', icona: 'scontrino' },
     { modulo: 'fatturazione', nome: 'Fatturazione', spiega: 'Da fatturare, riepiloghi', icona: 'fatturazione' },
     { modulo: 'amministrazione', nome: 'Amministrazione', spiega: 'Studio, utenti, permessi, copie', icona: 'amministrazione' },
   ];
@@ -487,7 +489,9 @@
       case 'rapportini': return { hash: '#rapportini', filtro: c.filtro || null };
       case 'rapportino': return { hash: '#rapportini', filtro: Object.assign({ apri: c.id }, c.filtro || {}) };
       case 'fatturazione': return { hash: '#fatturazione', filtro: c.filtro || null };
-      case 'amministrazione': return { hash: '#amministrazione' + (c.id ? '/' + id : ''), filtro: null };
+      case 'amministrazione': return { hash: '#amministrazione' + (c.id ? '/' + id : c.filtro && c.filtro.sezione ? '/' + encodeURIComponent(c.filtro.sezione) : ''), filtro: null };
+      // Fase 3: Spese e trasferte (filtro.segmento spese | trasferte | rimborsi, e id).
+      case 'spese': return { hash: '#spese', filtro: c.filtro || null };
       // Fase 2: preventivi, attività, calendario.
       case 'preventivi': return { hash: '#preventivi', filtro: c.filtro || null };
       case 'preventivo': return { hash: '#preventivi/' + id, filtro: null };
@@ -504,11 +508,17 @@
   function testoAzione(collegamento) {
     const p = (collegamento || {}).pagina;
     if (p === 'attivita' && collegamento.id) return 'Apri l\'attività';
+    const seg = collegamento && collegamento.filtro ? collegamento.filtro.segmento : '';
+    if (p === 'rapportini' && seg === 'daApprovare') return 'Apri Da approvare';
+    if (p === 'rapportini' && seg === 'ore') return 'Apri le ore';
+    if (p === 'spese' && seg === 'rimborsi') return 'Apri i rimborsi';
+    if (p === 'amministrazione' && collegamento.filtro && collegamento.filtro.sezione === 'veicoli') return 'Apri i veicoli';
     return {
       fatturazione: 'Prepara il riepilogo', commessa: 'Apri la commessa', commesse: 'Apri le commesse',
       cliente: 'Apri la scheda', soggetto: 'Apri la scheda', clienti: 'Apri i clienti',
       rapportini: 'Apri i rapportini', rapportino: 'Apri il rapportino', amministrazione: 'Apri',
       preventivi: 'Apri i preventivi', preventivo: 'Apri il preventivo', attivita: 'Apri le attività', calendario: 'Apri il calendario',
+      spese: 'Apri le spese',
     }[p] || 'Apri';
   }
 
@@ -559,6 +569,8 @@
     // fase 2
     preventivi: 'il preventivo', preventivo_voci: 'le voci del preventivo', listino: 'la voce del listino', attivita: 'l\'attività',
     attivita_checklist: 'la checklist', scadenze_pagamento: 'le scadenze di pagamento', ricorrenze: 'la ricorrenza',
+    // fase 3
+    ore: 'le ore', timer: 'il timer', spese: 'la spesa', trasferte: 'la trasferta', veicoli: 'il veicolo',
   };
 
   function valoreLeggibile(v) {
@@ -672,6 +684,18 @@
    * NIENTE punto delle migliaia. "2.500" (come lo scrive C.numero per leggere) riletto
    * da C.num diventa 2,5: un budget di 2.500 € salvato senza toccarlo diventava 2,50 €.
    */
+  /**
+   * Il costo orario da scrivere accanto alle ore nel costo della commessa: quello che il conto ha usato davvero
+   * (ogni rapportino tiene il suo, congelato), cioè costo del lavoro diviso ore, se torna al centesimo; altrimenti
+   * niente, per non scrivere un numero diverso dal conto. Prima si scriveva il costo orario di oggi.
+   */
+  function costoOrarioDelConto(ore, lavoro) {
+    const o = Number(ore) || 0, l = Number(lavoro) || 0;
+    if (o <= 0) return null;
+    const orario = Math.round(l / o * 100) / 100;
+    return Math.round(orario * o * 100) === Math.round(l * 100) ? orario : null;
+  }
+
   function numeroCampo(n) {
     if (n === null || n === undefined || n === '') return '';
     const x = Number(n);
@@ -709,7 +733,8 @@
 
   /** Il nome del file da salvare: "Wisper registro 2026-10-23.csv". */
   function nomeEsportazione(cosa, oggi) {
-    const nomi = { rapportini: 'rapportini', clienti: 'clienti e fornitori', fornitori: 'fornitori', commesse: 'commesse', registro: 'registro' };
+    const nomi = { rapportini: 'rapportini', clienti: 'clienti e fornitori', fornitori: 'fornitori', commesse: 'commesse', registro: 'registro',
+      preventivi: 'preventivi', attivita: 'attività', ore: 'ore', spese: 'spese', trasferte: 'trasferte', rimborsi: 'rimborsi' };
     return 'Wisper ' + (nomi[cosa] || cosa) + ' ' + (oggi || oggiIso()) + '.csv';
   }
 
@@ -723,7 +748,7 @@
     pezziFormato, formatoDaPezzi, formattaNumero, formatoAParole, erroreFormato,
     destinazione, testoAzione, classeGravita,
     NOMI_CAMPI, campiCambiati, fraseRegistro, primaDopo, valoreLeggibile, valoreCampo,
-    passwordIniziale, csv, nomeEsportazione, numeroCampo,
+    passwordIniziale, csv, nomeEsportazione, numeroCampo, costoOrarioDelConto,
   };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = Regole;

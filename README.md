@@ -43,6 +43,18 @@ services, values and payment schedule. Tasks can be personal, for the team or
 unassigned, with checklists, attachments, reminders and safe recurrence; the calendar
 has day, week and month views, and the office program adds a weekly plan per person.
 
+Phase 3 adds hours, a timer, expenses and trips. The work report keeps its three steps;
+hours without a report have their own short form, and a one-tap timer lives on the server,
+so it survives closing the app. Collaborators' hours, reports, expenses and trips go to
+whoever approves them, with oddities flagged (13 hours in a day, an expense over 200 euro,
+no receipt) and a mandatory reason when something is rejected. An expense starts from the
+photo of the receipt and says plainly who it is for: the client, the studio, or the person.
+Trips compute the mileage refund from the vehicle and the year's ACI table. Offline, hours
+and expenses wait in the same on-disk queue as reports, and the server ignores a repeated
+send. The migration turned the expenses already written in reports into expense rows
+without touching the reports: a test reads a database from before with the phase 2 code
+and checks every report field, the CSV export and the Dashboard money to the cent.
+
 ## What changed
 
 The first Wisper, built for NGN Hacks 2026, was voice only: a wake word, a

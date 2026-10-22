@@ -55,13 +55,15 @@ class Configurazione(ctx: Context) {
         val u = runCatching { Utente.daJson(JSONObject(prefs.getString("utente", "{}").orEmpty())) }.getOrNull()
         val p = runCatching { Permessi.daJson(JSONObject(prefs.getString("permessi", "{}").orEmpty())) }.getOrNull()
         if (u == null || u.id.isBlank()) return Sessione.NESSUNA
-        return Sessione(u, p ?: Permessi(emptyMap()))
+        val i = runCatching { Interfaccia.daJson(JSONObject(prefs.getString("interfaccia", "{}").orEmpty())) }.getOrDefault(Interfaccia())
+        return Sessione(u, p ?: Permessi(emptyMap()), interfaccia = i)
     }
 
     fun salvaSessione(s: Sessione) {
         prefs.edit()
             .putString("utente", s.utente.aJson().toString())
             .putString("permessi", s.permessi.aJson().toString())
+            .putString("interfaccia", s.interfaccia.aJson().toString())
             .apply()
     }
 

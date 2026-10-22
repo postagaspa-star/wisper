@@ -54,6 +54,28 @@ import eu.stgm.wisper.rapportino.Sede
 import eu.stgm.wisper.rapportino.Sessione
 import eu.stgm.wisper.rapportino.StatoCopie
 import eu.stgm.wisper.rapportino.Utente
+import eu.stgm.wisper.rapportino.testo
+import eu.stgm.wisper.rapportino.DaApprovare
+import eu.stgm.wisper.rapportino.ElencoOre
+import eu.stgm.wisper.rapportino.ElencoSpese
+import eu.stgm.wisper.rapportino.ElencoTrasferte
+import eu.stgm.wisper.rapportino.ElencoVeicoli
+import eu.stgm.wisper.rapportino.EsitoApprovazione
+import eu.stgm.wisper.rapportino.FilaOreSpese
+import eu.stgm.wisper.rapportino.InvioFase3
+import eu.stgm.wisper.rapportino.RiepilogoSpese
+import eu.stgm.wisper.rapportino.RigaOre
+import eu.stgm.wisper.rapportino.Rimborsi
+import eu.stgm.wisper.rapportino.Spesa
+import eu.stgm.wisper.rapportino.StatisticheOre
+import eu.stgm.wisper.rapportino.StatoVoce
+import eu.stgm.wisper.rapportino.TestiCoda
+import eu.stgm.wisper.rapportino.TimerFermato
+import eu.stgm.wisper.rapportino.TimerLetto
+import eu.stgm.wisper.rapportino.Trasferta
+import eu.stgm.wisper.rapportino.Veicolo
+import eu.stgm.wisper.rapportino.VoceDaApprovare
+import eu.stgm.wisper.rapportino.VoceRimborso
 import eu.stgm.wisper.rapportino.UtenteSalvato
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -266,6 +288,10 @@ class Archivio(private val ctx: Context) : Dati {
         _dettagli.value = emptyMap()
         _listino.value = emptyList()
         _attivita.value = emptyList()
+        _oreLette.value = null
+        _timer.value = null
+        _speseLette.value = null
+        _trasferteLette.value = null
         Promemoria.programma(ctx, emptyList(), "")
     }
 
@@ -275,7 +301,7 @@ class Archivio(private val ctx: Context) : Dati {
         configurazione.titolare = io.titolare
         configurazione.ragioneSociale = io.ragioneSociale
         if (io.utente.id.isNotBlank()) {
-            val s = Sessione(io.utente, io.permessi)
+            val s = Sessione(io.utente, io.permessi, interfaccia = io.interfaccia)
             configurazione.salvaSessione(s)
             _sessione.value = s
         }
@@ -351,6 +377,10 @@ class Archivio(private val ctx: Context) : Dati {
             if (!tutti) {
                 provaONull { leggiPreventivi() }
                 provaONull { leggiAttivita() }
+                // Fase 3: il timer (si vede in cima alla Dashboard) e gli elenchi già aperti.
+                provaONull { leggiTimer() }
+                periodoOre?.let { (da, a) -> provaONull { leggiOre(da, a) } }
+                meseSpese?.let { provaONull { leggiSpese(it) } }
             }
         } catch (e: CancellationException) {
             throw e
@@ -493,9 +523,17 @@ class Archivio(private val ctx: Context) : Dati {
 
     /** Il foglio aveva rifiutato e non serve piu': si butta, e con lei il suo file. */
     override fun scarta(idOp: String) {
-        coda.tutte().firstOrNull { it.idOp == idOp }?.let { op ->
+        val tutte = coda.tutte()
+        tutte.firstOrNull { it.idOp == idOp }?.let { op ->
             coda.togli(op.idOp)
             if (op.percorso.isNotBlank()) File(op.percorso).delete()
+            // Una spesa mai arrivata si porta via il suo scontrino: senza spesa non avrebbe dove andare.
+            if (op.tipo == CodaInvii.Tipo.SPESA && op.idRemoto.isBlank()) {
+                tutte.filter { it.tipo == CodaInvii.Tipo.FOTO_SPESA && it.idLocale == op.idLocale && it.idRemoto.isBlank() }.forEach { f ->
+                    coda.togli(f.idOp)
+                    if (f.percorso.isNotBlank()) File(f.percorso).delete()
+                }
+            }
         }
         dopoModifica()
     }
@@ -1222,6 +1260,299 @@ class Archivio(private val ctx: Context) : Dati {
         nuova
     }
 
+    // ------------------------------------------------------------- fase 3: ore, timer, approvazioni (architettura.md §14)
+
+    private val invio3 = InvioFase3(ponte, coda, Immagini.cartellaFoto(ctx))
+
+    private val _oreLette = MutableStateFlow(copia.fase3("ore")?.let { runCatching { ElencoOre.daJson(it) }.getOrNull() })
+    override val ore: StateFlow<ElencoOre?> = combine(_oreLette, _coda, _anagrafiche, _sessione) { e, c, a, s -> oreConCoda(e, c, a, s) }
+        .stateIn(scope, SharingStarted.Eagerly, oreConCoda(_oreLette.value, _coda.value, _anagrafiche.value, _sessione.value))
+
+    /** Il periodo delle ore letto per ultimo: si rilegge dopo che la coda ha mandato qualcosa. */
+    @Volatile private var periodoOre: Pair<LocalDate, LocalDate>? = null
+
+    private val _timer = MutableStateFlow(copia.fase3("timer")?.let { runCatching { TimerLetto.daJson(it, it.optLong("lettoAlMs")) }.getOrNull() })
+    override val timer: StateFlow<TimerLetto?> = _timer.asStateFlow()
+
+    /** Le righe in coda sopra quelle lette: si vedono subito, con la nuvola, anche senza rete. */
+    private fun oreConCoda(e: ElencoOre?, ops: List<CodaInvii.Operazione>, ana: Anagrafiche, s: Sessione): ElencoOre? {
+        val inCoda = ops.filter { it.tipo == CodaInvii.Tipo.ORE }.map { op ->
+            val corpo = op.corpoJson()
+            val idNoto = op.idRemoto.ifBlank { corpo.testo("id") }
+            val prima = e?.ore?.firstOrNull { idNoto.isNotBlank() && it.id == idNoto }
+            RigaOre.daCorpo(corpo, op.idLocale, op.idRemoto, prima, ana, s.statoPrevisto)
+                .let { r -> if (prima == null) r.copy(idUtente = s.utente.id, utente = s.utente.nome) else r }
+                .copy(errore = op.errore)
+        }
+        if (e == null) {
+            if (inCoda.isEmpty()) return null
+            val lunedi = FilaOreSpese.lunedi(LocalDate.now())
+            return FilaOreSpese.oreConCoda(ElencoOre(lunedi, lunedi.plusDays(6)), inCoda)
+        }
+        return FilaOreSpese.oreConCoda(e, inCoda)
+    }
+
+    override fun aggiornaOre(da: LocalDate, a: LocalDate) {
+        periodoOre = da to a
+        if (!ponte.configurato) return
+        leggiInSottofondo { leggiOre(da, a) }
+    }
+
+    private suspend fun leggiOre(da: LocalDate, a: LocalDate) {
+        if (!_sessione.value.permessi.vede(Moduli.RAPPORTINI)) return
+        val e = ponte.ore(da, a, utente = _sessione.value.utente.id)
+        _oreLette.value = e
+        e.grezzo?.let { copia.scriviFase3("ore", it) }
+    }
+
+    /** Una riga tornata dal server al suo posto nell'elenco (se è del periodo letto). */
+    private fun mettiOre(r: RigaOre) {
+        _oreLette.update { e ->
+            if (e == null || r.data.isBefore(e.da) || r.data.isAfter(e.a)) e
+            else e.copy(ore = if (r.tolta.isNotBlank()) e.ore.filterNot { it.id == r.id } else sostituisci(e.ore, r) { it.id == r.id })
+        }
+    }
+
+    override fun aggiornaTimer() {
+        if (!ponte.configurato) return
+        leggiInSottofondo { leggiTimer() }
+    }
+
+    private suspend fun leggiTimer() {
+        if (!_sessione.value.permessi.vede(Moduli.RAPPORTINI)) return
+        mettiTimer(ponte.timer(System.currentTimeMillis()))
+    }
+
+    private fun mettiTimer(t: TimerLetto) {
+        _timer.value = t
+        copia.scriviFase3("timer", JSONObject().put("timer", t.timer?.aJson() ?: JSONObject.NULL).put("adesso", t.adesso).put("lettoAlMs", t.lettoAlMs))
+    }
+
+    override suspend fun avviaTimer(idCommessa: String, descrizione: String): Result<TimerLetto> {
+        val esito = inDiretta { ponte.avviaTimer(idCommessa, descrizione, oraMs = System.currentTimeMillis()).also(::mettiTimer) }
+        // Già acceso (magari da un altro telefono): si rilegge, così si vede quello vero.
+        if (esito.isFailure) aggiornaTimer()
+        return esito
+    }
+
+    override suspend fun fermaTimer(): Result<TimerFermato> {
+        val esito = inDiretta {
+            val f = ponte.fermaTimer()
+            mettiTimer(TimerLetto(null, "", System.currentTimeMillis()))
+            mettiOre(f.riga)
+            f
+        }
+        if (esito.isFailure) aggiornaTimer()
+        else aggiornaDashboard()
+        return esito
+    }
+
+    override fun salvaOre(riga: RigaOre, bozza: Boolean) {
+        val chiave = riga.chiave.ifBlank { RigaOre.nuovoIdLocale() }
+        coda.ore(chiave, riga.perSalvare(bozza), idRemoto = riga.id)
+        dopoModifica()
+    }
+
+    override suspend fun togliOre(riga: RigaOre, annulla: Boolean): Result<Unit> {
+        if (riga.id.isBlank()) {
+            // Mai arrivata al server: esce dalla coda e basta (Annulla la rimette).
+            if (annulla) salvaOre(riga, bozza = riga.stato == StatoVoce.BOZZA)
+            else {
+                coda.tutte().filter { it.tipo == CodaInvii.Tipo.ORE && it.idLocale == riga.idLocale }.forEach { coda.togli(it.idOp) }
+                dopoModifica()
+            }
+            return Result.success(Unit)
+        }
+        return inDiretta {
+            if (!annulla) coda.tutte().filter { it.tipo == CodaInvii.Tipo.ORE && it.idLocale == riga.chiave && !it.rifiutata }.forEach { coda.togli(it.idOp) }
+            val r = ponte.togliOre(riga.id, annulla)
+            mettiOre(r)
+            if (annulla) periodoOre?.let { (da, a) -> provaONull { leggiOre(da, a) } }
+            _coda.value = coda.tutte()
+        }
+    }
+
+    override suspend fun daApprovare(): Result<DaApprovare> = inDiretta { ponte.daApprovare() }
+
+    override suspend fun approva(voci: List<VoceDaApprovare>): Result<EsitoApprovazione> = inDiretta { ponte.approva(voci) }.also { aggiornaDashboard() }
+
+    override suspend fun respingi(voci: List<VoceDaApprovare>, motivo: String): Result<EsitoApprovazione> = inDiretta {
+        if (motivo.isBlank()) throw PonteServer.Rifiutato("Scrivi il motivo: arriva a chi l'ha scritta")
+        ponte.respingi(voci, motivo)
+    }.also { aggiornaDashboard() }
+
+    override suspend fun annullaApprovazione(voci: List<VoceDaApprovare>): Result<EsitoApprovazione> =
+        inDiretta { ponte.annullaApprovazione(voci) }.also { aggiornaDashboard() }
+
+    // ------------------------------------------------------------- fase 3: spese, trasferte, rimborsi, veicoli
+
+    private val _speseLette = MutableStateFlow(copia.fase3("spese")?.let { runCatching { ElencoSpese.daJson(it) }.getOrNull() })
+    override val spese: StateFlow<ElencoSpese?> = combine(_speseLette, _coda, _anagrafiche, _sessione) { e, c, a, s -> speseConCoda(e, c, a, s) }
+        .stateIn(scope, SharingStarted.Eagerly, speseConCoda(_speseLette.value, _coda.value, _anagrafiche.value, _sessione.value))
+
+    private val _trasferteLette = MutableStateFlow(copia.fase3("trasferte")?.let { runCatching { ElencoTrasferte.daJson(it) }.getOrNull() })
+    override val trasferte: StateFlow<ElencoTrasferte?> = _trasferteLette.asStateFlow()
+
+    @Volatile private var meseSpese: YearMonth? = null
+
+    /** Gli scontrini delle spese tolte prima di partire: l'Annulla li rimette. */
+    private val scontriniTolti = ConcurrentHashMap<String, String>()
+
+    private fun speseConCoda(e: ElencoSpese?, ops: List<CodaInvii.Operazione>, ana: Anagrafiche, s: Sessione): ElencoSpese? {
+        val foto = ops.filter { it.tipo == CodaInvii.Tipo.FOTO_SPESA }
+        val salvate = ops.filter { it.tipo == CodaInvii.Tipo.SPESA }
+        val inCoda = salvate.map { op ->
+            val corpo = op.corpoJson()
+            val idNoto = op.idRemoto.ifBlank { corpo.testo("id") }
+            val prima = e?.spese?.firstOrNull { idNoto.isNotBlank() && it.id == idNoto }
+            Spesa.daCorpo(corpo, op.idLocale, op.idRemoto, prima, ana, s.statoPrevisto, conFoto = foto.any { it.idLocale == op.idLocale })
+                .let { x -> if (prima == null) x.copy(idUtente = s.utente.id, utente = s.utente.nome) else x }
+                .copy(errore = op.errore)
+        } + foto.filter { f -> salvate.none { it.idLocale == f.idLocale } }.mapNotNull { f ->
+            // Solo lo scontrino di una spesa già sul server.
+            val id = f.idRemoto.ifBlank { f.idLocale.removePrefix("spesa:") }
+            e?.spese?.firstOrNull { it.id == id }?.copy(inCoda = true, fotoInCoda = true, idLocale = f.idLocale, errore = f.errore)
+        }
+        if (e == null) {
+            if (inCoda.isEmpty()) return null
+            val m = YearMonth.now()
+            return FilaOreSpese.speseConCoda(ElencoSpese(m.atDay(1), m.atEndOfMonth()), inCoda)
+        }
+        return FilaOreSpese.speseConCoda(e, inCoda)
+    }
+
+    override fun aggiornaSpese(mese: YearMonth) {
+        meseSpese = mese
+        if (!ponte.configurato) return
+        leggiInSottofondo { leggiSpese(mese) }
+    }
+
+    private suspend fun leggiSpese(mese: YearMonth) {
+        if (!_sessione.value.permessi.vede(Moduli.SPESE)) return
+        val s = ponte.spese(mese.atDay(1), mese.atEndOfMonth())
+        _speseLette.value = s
+        s.grezzo?.let { copia.scriviFase3("spese", it) }
+        val t = ponte.trasferte(mese.atDay(1), mese.atEndOfMonth())
+        _trasferteLette.value = t
+        t.grezzo?.let { copia.scriviFase3("trasferte", it) }
+    }
+
+    private fun mettiSpesa(x: Spesa) {
+        _speseLette.update { e ->
+            if (e == null || x.data.isBefore(e.da) || x.data.isAfter(e.a)) e
+            else e.copy(spese = if (x.tolta.isNotBlank()) e.spese.filterNot { it.id == x.id } else sostituisci(e.spese, x) { it.id == x.id })
+        }
+    }
+
+    override fun salvaSpesa(spesa: Spesa, foto: File?) {
+        val chiave = spesa.chiave.ifBlank { Spesa.nuovoIdLocale() }
+        coda.spesa(chiave, spesa.perSalvare(), idRemoto = spesa.id)
+        if (foto != null) coda.fotoSpesa(chiave, foto.nameWithoutExtension, foto.path, idRemoto = spesa.id)
+        dopoModifica()
+    }
+
+    override fun aggiungiScontrino(spesa: Spesa, foto: File) {
+        coda.fotoSpesa(spesa.chiave.ifBlank { Spesa.nuovoIdLocale() }, foto.nameWithoutExtension, foto.path, idRemoto = spesa.id)
+        dopoModifica()
+    }
+
+    override suspend fun togliSpesa(spesa: Spesa, annulla: Boolean): Result<Unit> {
+        if (spesa.id.isBlank()) {
+            if (annulla) {
+                val foto = scontriniTolti.remove(spesa.idLocale)?.let(::File)?.takeIf { it.exists() }
+                salvaSpesa(spesa, foto)
+            } else {
+                coda.tutte().filter { (it.tipo == CodaInvii.Tipo.SPESA || it.tipo == CodaInvii.Tipo.FOTO_SPESA) && it.idLocale == spesa.idLocale }.forEach { op ->
+                    if (op.tipo == CodaInvii.Tipo.FOTO_SPESA) scontriniTolti[spesa.idLocale] = op.percorso
+                    coda.togli(op.idOp)
+                }
+                dopoModifica()
+            }
+            return Result.success(Unit)
+        }
+        return inDiretta {
+            if (!annulla) coda.tutte().filter { it.tipo == CodaInvii.Tipo.SPESA && it.idLocale == spesa.chiave && !it.rifiutata }.forEach { coda.togli(it.idOp) }
+            val s = ponte.togliSpesa(spesa.id, annulla)
+            mettiSpesa(s)
+            if (annulla) meseSpese?.let { provaONull { leggiSpese(it) } }
+            _coda.value = coda.tutte()
+        }
+    }
+
+    private fun mettiTrasferta(t: Trasferta) {
+        _trasferteLette.update { e ->
+            if (e == null || t.dal.isBefore(e.da) || t.dal.isAfter(e.a)) e
+            else e.copy(trasferte = if (t.tolta.isNotBlank()) e.trasferte.filterNot { it.id == t.id } else sostituisci(e.trasferte, t) { it.id == t.id })
+        }
+    }
+
+    override suspend fun salvaTrasferta(t: Trasferta): Result<Trasferta> = inDiretta {
+        if (t.destinazione.isBlank()) throw PonteServer.Rifiutato("Destinazione: scrivi dove sei andato")
+        ponte.salvaTrasferta(t.perSalvare()).also { mettiTrasferta(it) }
+    }
+
+    override suspend fun togliTrasferta(id: String, annulla: Boolean): Result<Trasferta> = inDiretta {
+        ponte.togliTrasferta(id, annulla).also {
+            mettiTrasferta(it)
+            if (annulla) meseSpese?.let { m -> provaONull { leggiSpese(m) } }
+        }
+    }
+
+    override suspend fun rimborsi(): Result<Rimborsi> = inDiretta { ponte.rimborsi() }
+
+    override suspend fun segnaRimborsato(voci: List<VoceRimborso>, annulla: Boolean): Result<Pair<Int, Double>> = inDiretta {
+        ponte.segnaRimborsato(voci, annulla).also { meseSpese?.let { m -> provaONull { leggiSpese(m) } } }
+    }.also { aggiornaDashboard() }
+
+    override suspend fun veicoli(tutti: Boolean): Result<ElencoVeicoli> = inDiretta { ponte.veicoli(tutti) }
+
+    override suspend fun salvaVeicolo(v: Veicolo): Result<Veicolo> = inDiretta {
+        if (v.nome.isBlank()) throw PonteServer.Rifiutato("Nome: scrivi il nome del veicolo")
+        ponte.salvaVeicolo(v)
+    }.also { aggiornaDashboard() }
+
+    override suspend fun riepilogoSpese(mese: YearMonth, per: String): Result<RiepilogoSpese> =
+        inDiretta { ponte.riepilogoSpese(mese.atDay(1), mese.atEndOfMonth(), per) }
+
+    override suspend fun togliFotoSpesa(idFile: String): Result<Spesa> = inDiretta { ponte.togliFotoSpesa(idFile).also(::mettiSpesa) }
+
+    override suspend fun statisticheOre(mese: YearMonth, per: String): Result<StatisticheOre> =
+        inDiretta { ponte.statisticheOre(mese.atDay(1), mese.atEndOfMonth(), per) }
+
+    override suspend fun esportaPeriodo(cosa: String, da: LocalDate?, a: LocalDate?, utente: String): Result<File> = inDiretta {
+        val altri = buildList {
+            da?.let { add("da" to it.toString()) }
+            a?.let { add("a" to it.toString()) }
+            if (utente.isNotBlank()) add("utente" to utente)
+        }
+        val (nome, _, byte) = ponte.esporta(cosa, null, altri)
+        val cartella = File(ctx.cacheDir, "pdf").apply { mkdirs() }
+        val sicuro = nome.replace(Regex("""[^A-Za-z0-9._ -]"""), "_").ifBlank { "wisper-$cosa.csv" }
+        File(cartella, sicuro).apply { writeBytes(byte) }
+    }
+
+    /** Una lettura in sottofondo: senza rete resta l'ultima, l'errore va in [aggiornamento]. */
+    private fun leggiInSottofondo(lavoro: suspend () -> Unit) {
+        scope.launch {
+            try {
+                lavoro()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: PonteServer.AccessoScaduto) {
+                segnaUscito()
+            } catch (e: Exception) {
+                _aggiornamento.update { it.copy(inCorso = false, errore = spiega(e)) }
+            }
+        }
+    }
+
+    /** Dopo che la coda ha mandato ore o spese: si rileggono, per avere gli stati e i numeri del server. */
+    private suspend fun rileggiFase3() {
+        periodoOre?.let { (da, a) -> provaONull { leggiOre(da, a) } }
+        meseSpese?.let { provaONull { leggiSpese(it) } }
+        provaONull { leggiDashboard() }
+    }
+
     // ------------------------------------------------------------- invio
 
     /** ACCESSO: l'accesso è scaduto, la coda aspetta che si rientri (niente è scartato). */
@@ -1259,6 +1590,7 @@ class Archivio(private val ctx: Context) : Dati {
      */
     suspend fun mandaCoda(): Esito = invio.withLock {
         var salvati = false
+        var fase3 = false
         var unoAllaVolta = false
         try {
             while (true) {
@@ -1278,7 +1610,9 @@ class Archivio(private val ctx: Context) : Dati {
                     } else {
                         esegui(op)
                     }
-                    gruppo.forEach { coda.togli(it.idOp) }
+                    // Ore e spese escono da sole (CodaInvii.completa): se intanto sono state
+                    // cambiate di nuovo restano, e ripartono come modifica.
+                    if (op.fase3) fase3 = true else gruppo.forEach { coda.togli(it.idOp) }
                     if (op.tipo == CodaInvii.Tipo.SALVA) salvati = true
                     _coda.value = coda.tutte()
                 } catch (e: CancellationException) {
@@ -1292,17 +1626,20 @@ class Archivio(private val ctx: Context) : Dati {
                         unoAllaVolta = true
                         continue
                     }
-                    coda.aggiorna(op.copy(errore = e.message ?: "rifiutato"))
+                    // Quella di adesso: l'invio puo' averla cambiata (l'id imparato dal server).
+                    val attuale = coda.tutte().firstOrNull { it.idOp == op.idOp } ?: op
+                    coda.aggiorna(attuale.copy(errore = e.message ?: "rifiutato"))
                     _coda.value = coda.tutte()
-                    avvisa(ID_RIFIUTATO, "Il server ha rifiutato un rapportino", e.message.orEmpty(), importante = true)
+                    avvisa(ID_RIFIUTATO, TestiCoda.rifiutata(op.tipo), e.message.orEmpty(), importante = true)
                     return@withLock Esito.RIFIUTATO
                 } catch (e: Exception) {
-                    val tentativi = op.tentativi + 1
-                    coda.aggiorna(op.copy(tentativi = tentativi))
+                    val attuale = coda.tutte().firstOrNull { it.idOp == op.idOp } ?: op
+                    val tentativi = attuale.tentativi + 1
+                    coda.aggiorna(attuale.copy(tentativi = tentativi))
                     _coda.value = coda.tutte()
                     if (tentativi == AVVISO_DOPO_TENTATIVI) {
                         avvisa(
-                            ID_NON_ANCORA, "Rapportini non ancora partiti",
+                            ID_NON_ANCORA, TestiCoda.titoloNonPartite(coda.tutte()),
                             "Sono al sicuro sul telefono. Partono da soli appena c'è rete.", importante = false,
                         )
                     }
@@ -1316,6 +1653,7 @@ class Archivio(private val ctx: Context) : Dati {
             // Un rapportino puo' aver creato un cliente o una commessa nuovi:
             // si rilegge l'anagrafica perche' abbiano il loro codice.
             if (salvati) scope.launch { aggiornaOra() }
+            else if (fase3) scope.launch { rileggiFase3() }
         }
     }
 
@@ -1352,6 +1690,14 @@ class Archivio(private val ctx: Context) : Dati {
             CodaInvii.Tipo.STATO -> sostituisciRemoto(ponte.stato(chiaveFoglio(op.idLocale), op.stato!!))
 
             CodaInvii.Tipo.TOGLI_FOTO -> sostituisciRemoto(ponte.togliFile(chiaveFoglio(op.idLocale), op.fileId))
+
+            CodaInvii.Tipo.ORE, CodaInvii.Tipo.SPESA, CodaInvii.Tipo.FOTO_SPESA -> when (val a = invio3.esegui(op)) {
+                is InvioFase3.Arrivato.Ore -> mettiOre(a.riga)
+                is InvioFase3.Arrivato.UnaSpesa -> mettiSpesa(a.spesa)
+                is InvioFase3.Arrivato.Scontrino -> _speseLette.update { e ->
+                    e?.copy(spese = e.spese.map { if (it.id == a.idSpesa) it.copy(foto = (it.foto + a.file).distinctBy { f -> f.id }) else it })
+                }
+            }
         }
     }
 
@@ -1424,6 +1770,7 @@ class Archivio(private val ctx: Context) : Dati {
                             firmatario = b.firmatario, firmatoIl = b.firmatoIl, stato = b.stato,
                             modificato = b.modificato, inviatoIl = b.inviatoIl, fatturatoIl = b.fatturatoIl,
                             creato = b.creato, costoOrario = b.costoOrario,
+                            statoApprovazione = b.statoApprovazione, motivoRifiuto = b.motivoRifiuto,
                         )
                     } ?: scritto.copy(conto = null)
                     (attuale ?: Vista(unito)).copy(rapportino = unito, cambiatoQui = true)
@@ -1451,6 +1798,8 @@ class Archivio(private val ctx: Context) : Dati {
                 CodaInvii.Tipo.TOGLI_FOTO -> attuale?.copy(
                     rapportino = attuale.rapportino.copy(foto = attuale.rapportino.foto.filterNot { it.id == op.fileId }),
                 )
+                // Ore e spese della fase 3: non sono rapportini (le mostrano [ore] e [spese]).
+                CodaInvii.Tipo.ORE, CodaInvii.Tipo.SPESA, CodaInvii.Tipo.FOTO_SPESA -> null
             }
             if (nuova != null) {
                 viste[op.idLocale] = nuova.copy(

@@ -20,7 +20,7 @@ const siVuole = v => v === true || v === '1' || v === 'true';
 
 /**
  * Tutte le azioni: quelle di oggi (stessi nomi, stesse risposte di Code.gs) e
- * quelle nuove delle fasi 1 e 2. "scrive": tutto in una transazione, o niente.
+ * quelle nuove delle fasi 1, 2 e 3. "scrive": tutto in una transazione, o niente.
  */
 const AZIONI = {
   // --- accesso
@@ -33,7 +33,7 @@ const AZIONI = {
   anagrafiche: { fn: (w, d) => w.rispostaAnagrafiche(d) },
   rapportini: legge('rapportini', 'vedere i rapportini', (w, d) => ({
     ok: true,
-    rapportini: w.leggiRapportini(d.da, d.a, siVuole(d.tutti), { idCliente: d.idCliente, idCommessa: d.idCommessa }),
+    rapportini: w.leggiRapportini(d.da, d.a, siVuole(d.tutti), { idCliente: d.idCliente, idCommessa: d.idCommessa, statoApprovazione: d.statoApprovazione }),
   })),
   file: { fn: (w, d) => ({ ok: true, file: w.leggiFile(d.id) }) },
   documenti: legge('documenti', 'vedere i documenti', (w, d) => w.documentiCommessa(d.idCommessa)),
@@ -44,7 +44,8 @@ const AZIONI = {
     controllo: d => (d.tipo === 'documento' ? ['documenti', 2, 'caricare documenti']
       : d.tipo === 'firmaTecnico' ? ['amministrazione', 2, 'cambiare la firma del tecnico']
         : d.tipo === 'attivita' ? ['attivita', 2, 'caricare allegati sulle attività']
-          : ['rapportini', 2, 'caricare foto e firme dei rapportini']),
+          : d.tipo === 'spesa' && testo(d.idSpesa) ? ['spese', 2, 'caricare le foto delle spese']
+            : ['rapportini', 2, 'caricare foto e firme dei rapportini']),
     fn: (w, d) => ({ ok: true, file: w.caricaFile(d) }),
   },
   togliFile: scrive('rapportini', 'togliere le foto dei rapportini', (w, d) => ({ ok: true, rapportino: w.togliFile(d.id, d.fileId) })),
@@ -127,6 +128,35 @@ const AZIONI = {
   togliAttivita: scrive('attivita', 'togliere le attività', (w, d) => w.togliAttivita(d)),
   spuntaChecklist: scrive('attivita', 'scrivere le attività', (w, d) => w.spuntaChecklist(d)),
   togliAllegato: scrive('attivita', 'togliere gli allegati delle attività', (w, d) => w.togliAllegato(d)),
+
+  // --- ore, timer, approvazioni (fase 3): le ore sono del modulo rapportini (voce 6, Ore e rapportini)
+  ore: legge('rapportini', 'vedere le ore', (w, d) => w.leggiOre(d)),
+  salvaOre: scrive('rapportini', 'registrare le ore', (w, d) => w.salvaOre(d)),
+  togliOre: scrive('rapportini', 'togliere le ore', (w, d) => w.togliOre(d)),
+  timer: legge('rapportini', 'usare il timer', w => w.statoTimer()),
+  avviaTimer: scrive('rapportini', 'usare il timer', (w, d) => w.avviaTimer(d)),
+  fermaTimer: scrive('rapportini', 'usare il timer', w => w.fermaTimer()),
+  statisticheOre: legge('rapportini', 'vedere le statistiche delle ore', (w, d) => w.statisticheOre(d)),
+  costoCommessa: legge('commesse', 'vedere le commesse', (w, d) => w.costoDellaCommessa(d)),
+  // Chi approva lo decide il server voce per voce (titolare e amministrazione, col modulo in scrittura).
+  daApprovare: { fn: w => w.daApprovare() },
+  approva: { scrive: true, fn: (w, d) => w.decidi(d, 'approva') },
+  respingi: { scrive: true, fn: (w, d) => w.decidi(d, 'respingi') },
+  annullaApprovazione: { scrive: true, fn: (w, d) => w.decidi(d, 'annulla') },
+
+  // --- spese, trasferte, rimborsi, veicoli (fase 3)
+  spese: legge('spese', 'vedere le spese', (w, d) => w.leggiSpese(d)),
+  salvaSpesa: scrive('spese', 'scrivere le spese', (w, d) => ({ ok: true, spesa: w.salvaSpesa(d.spesa || {}) })),
+  togliSpesa: scrive('spese', 'togliere le spese', (w, d) => ({ ok: true, spesa: w.togliSpesa(d) })),
+  togliFotoSpesa: scrive('spese', 'togliere le foto delle spese', (w, d) => ({ ok: true, spesa: w.togliFotoSpesa(d) })),
+  trasferte: legge('spese', 'vedere le trasferte', (w, d) => w.leggiTrasferte(d)),
+  salvaTrasferta: scrive('spese', 'scrivere le trasferte', (w, d) => ({ ok: true, trasferta: w.salvaTrasferta(d.trasferta || {}) })),
+  togliTrasferta: scrive('spese', 'togliere le trasferte', (w, d) => ({ ok: true, trasferta: w.togliTrasferta(d) })),
+  rimborsi: legge('spese', 'vedere i rimborsi', (w, d) => w.rimborsi(d)),
+  segnaRimborsato: scrive('spese', 'segnare i rimborsi', (w, d) => w.segnaRimborsato(d)),
+  riepilogoSpese: legge('spese', 'vedere i riepiloghi delle spese', (w, d) => w.riepilogoSpese(d)),
+  veicoli: legge('spese', 'vedere i veicoli', (w, d) => w.leggiVeicoli(d)),
+  salvaVeicolo: scrive('amministrazione', 'cambiare i veicoli', (w, d) => ({ ok: true, veicolo: w.salvaVeicolo(d.veicolo || {}) })),
 };
 
 /**

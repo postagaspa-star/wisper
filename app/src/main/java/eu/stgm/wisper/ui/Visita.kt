@@ -80,7 +80,7 @@ class Visita {
     )
 
     val passi = listOf(
-        Passo("menu", "Il menu", "Clienti, commesse, preventivi, attività e rapportini: tocca Menu, o scorri dal bordo sinistro.", false, "dashboard"),
+        Passo("menu", "Il menu", "Clienti, commesse, preventivi, attività, ore, spese e rapportini: tocca Menu, o scorri dal bordo sinistro.", false, "dashboard"),
         Passo("cosa-fare", "La Dashboard", "Qui vedi cosa fare adesso: ogni riga porta dove si sistema.", false, "dashboard"),
         Passo("settimana", "Questa settimana", "Appuntamenti di oggi, attività e preventivi in scadenza: tocca una riga per aprirla.", false, "dashboard"),
         Passo("giorno", "Il tuo giorno", "Qui vedi subito se il rapportino di oggi è scritto.", false, "dashboard"),
@@ -94,6 +94,11 @@ class Visita {
         Passo("avanti", "Il riepilogo", "Tocca Avanti per vedere tutto prima di salvare.", true, "rapportino"),
         Passo("firma", "La firma", "Il cliente firma col dito sul tuo telefono.", false, "rapportino"),
         Passo("manca", "I giorni che mancano", "Un giorno senza rapportino si vede subito: toccalo per scriverlo.", false, "dashboard"),
+        // Fase 3, come i passi nuovi del computer (pc/ui/visita.js): spese, il timer, i rapportini.
+        Passo("nuova-spesa", "Spese e trasferte", "Scontrini, trasferte e rimborsi da fare stanno qui: una spesa comincia dalla foto dello scontrino.", false, "spese"),
+        Passo("timer", "Il timer", "Un tocco per partire, uno per fermare: poi correggi le ore e le salvi.", false, "ore"),
+        Passo("segmento-rapportini", "I rapportini", "Tutti i rapportini, divisi per chi paga. Tocca Rapportini.", true, "ore"),
+        Passo("azione-gialla", "La cosa da fare", "Il pulsante giallo è sempre la cosa da fare adesso.", false, "ore"),
         Passo(null, "Ecco fatto", "Adesso Wisper lavora con i tuoi dati veri.", false, "dashboard"),
     )
 

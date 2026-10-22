@@ -87,6 +87,21 @@
     persone: '<path d="M4 6h16M4 12h16M4 18h16M9 3v18"/>',
     libro: '<path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3zM5 17a3 3 0 0 1 3-3h11"/>',
     contratto: '<path d="M7 3h10v18H7zM10 8h4M10 12h4M10 16h2"/>',
+    // fase 3: timer, spese, trasferte (dal prototipo Gestionale-fase3.html; le categorie nello stesso tratto)
+    play: '<path d="M8 5l11 7-11 7z"/>',
+    stop: '<path d="M7 7h10v10H7z"/>',
+    scontrino: '<path d="M6 3h12v18l-2-1.4-2 1.4-2-1.4-2 1.4-2-1.4L6 21zM9 8h6M9 12h6M9 16h3"/>',
+    foto: '<path d="M4 8h3l2-3h6l2 3h3v11H4zM12 17a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z"/>',
+    auto: '<path d="M5 13l2-5h10l2 5M4 13h16v5H4zM7 18v2M17 18v2M7.5 15.5h.01M16.5 15.5h.01"/>',
+    carburante: '<path d="M5 21V5a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v16M3 21h14M7 8h6M15 10h2a2 2 0 0 1 2 2v4a1.5 1.5 0 0 0 3 0V9l-3-3"/>',
+    pedaggio: '<path d="M4 20L8 4M20 20L16 4M12 6v2M12 11v2M12 16v2"/>',
+    parcheggio: '<path d="M5 4h14v16H5zM10 16V8h3a2.5 2.5 0 0 1 0 5h-3"/>',
+    vitto: '<path d="M7 3v8M5 3v5a2 2 0 0 0 4 0V3M7 11v10M16 3c-1.7 1-3 3.2-3 6v3h3v9"/>',
+    alloggio: '<path d="M3 18V7M3 14h18v4M21 18v-4a3 3 0 0 0-3-3h-7v3M7 11.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z"/>',
+    treno: '<path d="M7 3h10a2 2 0 0 1 2 2v9a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3V5a2 2 0 0 1 2-2zM5 10h14M8 21l2-4M16 21l-2-4M9 13.5h.01M15 13.5h.01"/>',
+    aereo: '<path d="M10.5 20.5l1.5-1 1.5 1V17l6.5-2.5V12l-6.5 1V6a1.5 1.5 0 0 0-3 0v7L4 12v2.5L10.5 17z"/>',
+    taxi: '<path d="M5 13l2-5h10l2 5M4 13h16v5H4zM7 18v2M17 18v2M10 5h4M7.5 15.5h.01M16.5 15.5h.01"/>',
+    materiale: '<path d="M4 7.5L12 3l8 4.5v9L12 21l-8-4.5zM4 7.5l8 4.5 8-4.5M12 12v9"/>',
   };
 
   function icona(nome, dim, spessore) {

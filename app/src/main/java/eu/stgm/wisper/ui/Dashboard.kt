@@ -21,6 +21,11 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -71,8 +76,12 @@ fun SchermataDashboard(
     val oggi = LocalDate.now()
     val nome = sessione.utente.nome.substringBefore(' ').trim()
     val scrive = perm.modifica(Moduli.RAPPORTINI)
+    val timer by dati.timer.collectAsStateWithLifecycle()
+    val avvisi = LocalAvvisi.current
+    val scope = rememberCoroutineScope()
+    var fermoInCorso by remember { mutableStateOf(false) }
 
-    LaunchedEffect(Unit) { dati.aggiornaDashboard() }
+    LaunchedEffect(Unit) { dati.aggiornaDashboard(); if (perm.vede(Moduli.RAPPORTINI)) dati.aggiornaTimer() }
 
     fun apri(col: Collegamento?) = apriCollegamento(col, nav, viste.map { it.rapportino })
 
@@ -87,6 +96,31 @@ fun SchermataDashboard(
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(oggi.format(DateTimeFormatter.ofPattern("EEEE d MMMM", IT)).replaceFirstChar { it.uppercase() }, style = Testi.secondarioGrande, color = c.tenue)
                 Text(Riepiloghi.saluto() + if (nome.isNotBlank()) ", $nome" else "", style = Testi.titoloPagina, color = c.testo)
+            }
+
+            // Fase 3: il timer acceso si vede in cima (fase3.md §2, punto 2); Ferma apre la bozza da correggere.
+            val t = timer
+            if (t?.acceso == true && perm.vede(Moduli.RAPPORTINI)) {
+                SchedaTimerAcceso(
+                    t,
+                    onFerma = {
+                        if (!fermoInCorso) {
+                            fermoInCorso = true
+                            scope.launch {
+                                dati.fermaTimer()
+                                    .onSuccess { f ->
+                                        RicordoOre.riga = f.riga
+                                        avvisi.mostra(f.avviso.ifBlank { "Bozza di ${Numeri.ore(f.riga.ore)}: correggila e salva" })
+                                        nav.vai("ore-registra/" + f.riga.chiave)
+                                    }
+                                    .onFailure { avvisi.mostra(spiegaErrore2(it, "Il timer non si è fermato: riprova")) }
+                                fermoInCorso = false
+                            }
+                        }
+                    },
+                    onApri = { RicordoOre.segmento = SegmentoOre.ORE; nav.sezione(Sezione.RAPPORTINI) },
+                    inCorso = fermoInCorso,
+                )
             }
 
             if (scrive) {
@@ -152,6 +186,16 @@ fun apriCollegamento(col: Collegamento?, nav: Navigatore, rapportini: List<Rappo
         "cliente", "fornitore", "soggetto" -> if (col.id.isNotBlank()) nav.vai("cliente/${col.id}") else nav.sezione(Sezione.CLIENTI)
         "clienti", "fornitori", "soggetti" -> nav.sezione(Sezione.CLIENTI)
         "rapportini" -> {
+            // Fase 3 (§14.13): {segmento: ore | rapportini | daApprovare, giorno}.
+            when (p["segmento"]) {
+                "daApprovare" -> { RicordoOre.segmento = SegmentoOre.APPROVARE; nav.sezione(Sezione.RAPPORTINI); return }
+                "ore" -> {
+                    RicordoOre.segmento = SegmentoOre.ORE
+                    RicordoOre.giorno = p["giorno"]?.let { runCatching { LocalDate.parse(it.take(10)) }.getOrNull() }
+                    nav.sezione(Sezione.RAPPORTINI)
+                    return
+                }
+            }
             val f = col.filtro.lowercase()
             val stato = p["stato"]?.uppercase().orEmpty()
             val mese = p["mese"]?.let { runCatching { YearMonth.parse(it.take(7)) }.getOrNull() }
@@ -187,7 +231,16 @@ fun apriCollegamento(col: Collegamento?, nav: Navigatore, rapportini: List<Rappo
         }
         "calendario" -> nav.vai("calendario/" + (p["giorno"] ?: col.id).orEmpty())
         "fatturazione" -> nav.sezione(Sezione.FATTURAZIONE)
-        "amministrazione" -> nav.sezione(Sezione.AMMINISTRAZIONE)
+        // Fase 3: Spese e trasferte col segmento; Amministrazione › Veicoli.
+        "spese" -> {
+            RicordoSpese.segmento = when (p["segmento"]) {
+                "trasferte" -> SegmentoSpese.TRASFERTE
+                "rimborsi" -> SegmentoSpese.RIMBORSI
+                else -> SegmentoSpese.SPESE
+            }
+            nav.sezione(Sezione.SPESE)
+        }
+        "amministrazione" -> if (p["sezione"] == "veicoli") nav.vai("amm/veicoli") else nav.sezione(Sezione.AMMINISTRAZIONE)
         "copie" -> nav.vai("amm/copie")
         "utenti" -> nav.vai("amm/utenti")
         "registro" -> nav.vai("amm/registro")
@@ -219,7 +272,13 @@ private fun azioneDi(col: Collegamento?): String = when (col?.pagina?.lowercase(
     "commessa" -> "Apri la commessa"
     "commesse" -> "Vedi le commesse"
     "cliente", "fornitore", "soggetto" -> "Apri la scheda"
-    "rapportini" -> "Vedi i rapportini"
+    "rapportini" -> when (col.parametri["segmento"]) {
+        "daApprovare" -> "Vedi cosa approvare"
+        "ore" -> "Apri le ore"
+        else -> "Vedi i rapportini"
+    }
+    "spese" -> if (col.parametri["segmento"] == "rimborsi") "Vedi i rimborsi" else "Vedi le spese"
+    "amministrazione" -> if (col.parametri["sezione"] == "veicoli") "Aggiorna i veicoli" else "Apri"
     "rapportino" -> "Apri il rapportino"
     "nuovorapportino", "rapportino-nuovo", "giorno" -> "Scrivi il rapportino"
     "copie" -> "Vedi le copie"
@@ -300,6 +359,12 @@ private fun iconaDi(v: VoceDashboard): ImageVector = when (v.tipo.lowercase()) {
     "preventivo", "preventivi" -> Icone.preventivo
     "appuntamento", "sopralluogo", "agenda" -> Icone.calendario
     "attivita" -> if (v.gravita == "urgente") Icone.allarme else Icone.lista
+    // Fase 3 (§14.13)
+    "approvare" -> Icone.spunta
+    "respinta" -> Icone.allarme
+    "timer" -> Icone.orologio
+    "rimborsi" -> Icone.fatturazione
+    "veicoli" -> Icone.auto
     else -> when (v.gravita.lowercase()) {
         "urgente" -> Icone.allarme
         "attenzione" -> Icone.avviso

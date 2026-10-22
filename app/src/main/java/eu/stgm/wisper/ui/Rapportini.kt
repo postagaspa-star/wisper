@@ -69,7 +69,14 @@ private var storicoLettoDa: Dati? = null
  * rapportino si ritrova l'elenco com'era. La selezione no: è di un momento.
  */
 @Composable
-fun SchermataRapportini(dati: Dati, nav: Navigatore, filtro: FiltroRapportini, onFiltro: (FiltroRapportini) -> Unit) {
+fun SchermataRapportini(
+    dati: Dati,
+    nav: Navigatore,
+    filtro: FiltroRapportini,
+    onFiltro: (FiltroRapportini) -> Unit,
+    /** Dalla fase 3: il titolo "Ore e rapportini" e i segmenti, sopra l'elenco. Il mese diventa più piccolo. */
+    sopra: (@Composable () -> Unit)? = null,
+) {
     val c = W.colori
     val avvisi = LocalAvvisi.current
     val perm = LocalPermessi.current
@@ -136,6 +143,7 @@ fun SchermataRapportini(dati: Dati, nav: Navigatore, filtro: FiltroRapportini, o
             Testata(onIndietro = { nav.indietro() }) {
                 if (fattura) PulsanteTesto(if (scelti != null) "Fine" else "Seleziona", { scelti = if (scelti == null) emptyList() else null }, colore = c.testo)
             }
+            sopra?.invoke()
 
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Row(
@@ -144,7 +152,7 @@ fun SchermataRapportini(dati: Dati, nav: Navigatore, filtro: FiltroRapportini, o
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    Text(filtro.mese?.let { nomeMese(it) } ?: "Tutti i mesi", style = Testi.titoloPagina, color = c.testo)
+                    Text(filtro.mese?.let { nomeMese(it) } ?: "Tutti i mesi", style = if (sopra != null) Testi.titoloScheda else Testi.titoloPagina, color = c.testo)
                     Icon(Icone.giu, null, tint = c.testo, modifier = Modifier.size(22.dp))
                 }
                 Spacer(Modifier.weight(1f))
@@ -222,7 +230,7 @@ fun SchermataRapportini(dati: Dati, nav: Navigatore, filtro: FiltroRapportini, o
             BarraScelti(selezionati, { foglioAzioni = true }, Modifier.align(Alignment.BottomCenter))
         } else if (scrive) {
             FondoConPulsante(Modifier.align(Alignment.BottomCenter)) {
-                PulsantePrincipale("Nuovo rapportino", { nav.nuovoRapportino() }, icona = Icone.piu)
+                PulsantePrincipale("Nuovo rapportino", { nav.nuovoRapportino() }, Modifier.bersaglio("azione-gialla"), icona = Icone.piu)
             }
         }
     }
@@ -392,6 +400,11 @@ private fun RigaElencoRapportini(v: Vista, perLavoro: Boolean, conMese: Boolean,
                 }
             }
             Text(sotto, style = Testi.secondario.copy(fontWeight = FontWeight.Medium), color = c.tenue, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            // Fase 3 (§14.7): "Da approvare" o "Respinto: motivo", dove serve.
+            r.pillolaApprovazione?.let { p ->
+                val respinto = r.statoApprovazione == "respinto"
+                PillolaParola(p, if (respinto) c.rossoTesto else c.gialloTesto, if (respinto) c.rossoTenue else c.gialloTenue, Modifier.padding(top = 4.dp), righe = 2)
+            }
         }
         Spacer(Modifier.width(8.dp))
         Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {

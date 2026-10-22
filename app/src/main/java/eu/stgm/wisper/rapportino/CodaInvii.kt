@@ -30,7 +30,12 @@ class CodaInvii(private val file: File) {
 
     constructor(ctx: Context) : this(File(ctx.filesDir, "coda-invii.json"))
 
-    enum class Tipo { SALVA, FOTO, FIRMA, STATO, TOGLI_FOTO }
+    /**
+     * SALVA, FOTO, FIRMA, STATO e TOGLI_FOTO sono dei rapportini. Dalla fase 3 del
+     * gestionale anche ORE (salvaOre), SPESA (salvaSpesa) e FOTO_SPESA (lo
+     * scontrino di una spesa): si scrivono spesso in cantiere senza rete.
+     */
+    enum class Tipo { SALVA, FOTO, FIRMA, STATO, TOGLI_FOTO, ORE, SPESA, FOTO_SPESA }
 
     /**
      * @param errore il motivo per cui il foglio ha detto di no. Un'operazione
@@ -52,8 +57,21 @@ class CodaInvii(private val file: File) {
         val fileId: String = "",
         val tentativi: Int = 0,
         val errore: String = "",
+        /** ORE e SPESA: il corpo di salvaOre / salvaSpesa (JSON come testo). */
+        val corpo: String = "",
+        /**
+         * L'id che il server ha dato alla riga nata qui (per le modifiche e lo
+         * scontrino dopo). Finche' non c'e', la riga parte col suo idLocale, lo
+         * stesso a ogni tentativo: il server non la crea due volte (InvioFase3).
+         */
+        val idRemoto: String = "",
     ) {
         val rifiutata: Boolean get() = errore.isNotBlank()
+
+        /** Le cose della fase 3 (ore, spese, scontrini): non sono di un rapportino. */
+        val fase3: Boolean get() = tipo == Tipo.ORE || tipo == Tipo.SPESA || tipo == Tipo.FOTO_SPESA
+
+        fun corpoJson(): JSONObject = runCatching { JSONObject(corpo) }.getOrDefault(JSONObject())
     }
 
     private val lucchetto = Any()
@@ -65,11 +83,11 @@ class CodaInvii(private val file: File) {
      */
     fun aggiungi(op: Operazione): Operazione = synchronized(lucchetto) {
         val attuali = leggi()
-        val doppione = if (op.tipo == Tipo.SALVA) {
-            attuali.firstOrNull { it.tipo == Tipo.SALVA && it.idLocale == op.idLocale && !it.rifiutata }
+        val doppione = if (op.tipo == Tipo.SALVA || op.tipo == Tipo.ORE || op.tipo == Tipo.SPESA) {
+            attuali.firstOrNull { it.tipo == op.tipo && it.idLocale == op.idLocale && !it.rifiutata }
         } else null
         if (doppione != null) {
-            val aggiornata = doppione.copy(rapportino = op.rapportino)
+            val aggiornata = doppione.copy(rapportino = op.rapportino, corpo = op.corpo)
             scrivi(attuali.map { if (it.idOp == doppione.idOp) aggiornata else it })
             aggiornata
         } else {
@@ -96,6 +114,47 @@ class CodaInvii(private val file: File) {
 
     fun togliFoto(idLocale: String, fileId: String) =
         aggiungi(Operazione(nuovoId(), Tipo.TOGLI_FOTO, idLocale, fileId = fileId))
+
+    /** Le ore (salvaOre {riga}) della riga [chiave]: "ore:<id>" se il server la conosce, "O-..." se e' nata qui. */
+    fun ore(chiave: String, corpo: JSONObject, idRemoto: String = "") =
+        aggiungi(Operazione(nuovoId(), Tipo.ORE, chiave, corpo = corpo.toString(), idRemoto = idRemoto))
+
+    /** Una spesa (salvaSpesa {spesa}): "spesa:<id>" o "S-...". */
+    fun spesa(chiave: String, corpo: JSONObject, idRemoto: String = "") =
+        aggiungi(Operazione(nuovoId(), Tipo.SPESA, chiave, corpo = corpo.toString(), idRemoto = idRemoto))
+
+    /** Lo scontrino della spesa [chiave], gia' ridotto in [percorso]. [idFile] e' lo stesso a ogni tentativo. */
+    fun fotoSpesa(chiave: String, idFile: String, percorso: String, idRemoto: String = "") =
+        aggiungi(Operazione(nuovoId(), Tipo.FOTO_SPESA, chiave, idFile = idFile, percorso = percorso, idRemoto = idRemoto))
+
+    /**
+     * Il server ha risposto per [idOp], col contenuto [corpoInviato]: l'operazione
+     * esce dalla coda, e tutte quelle della stessa riga ([chiave]) imparano il suo
+     * id ([idRemoto]), in una scrittura sola. Se nel frattempo la riga e' stata
+     * cambiata di nuovo (corpo diverso), l'operazione resta: ripartira' come
+     * modifica, con l'id.
+     */
+    fun completa(idOp: String, corpoInviato: String, chiave: String, idRemoto: String) = synchronized(lucchetto) {
+        val attuali = leggi()
+        val op = attuali.firstOrNull { it.idOp == idOp }
+        val cambiata = op != null && op.corpo != corpoInviato
+        scrivi(attuali.mapNotNull { o ->
+            when {
+                o.idOp == idOp -> if (cambiata) o.copy(idRemoto = idRemoto.ifBlank { o.idRemoto }, tentativi = 0) else null
+                idRemoto.isNotBlank() && o.idLocale == chiave && o.fase3 -> o.copy(idRemoto = idRemoto)
+                else -> o
+            }
+        })
+    }
+
+    /**
+     * La riga [chiave] era gia' sul server col suo id [idRemoto], ma qui e' stata
+     * cambiata: l'operazione [idOp] resta in coda e, come tutte quelle della
+     * stessa riga, impara l'id. Ripartira' come modifica.
+     */
+    fun impara(idOp: String, chiave: String, idRemoto: String) = synchronized(lucchetto) {
+        scrivi(leggi().map { o -> if (o.idOp == idOp || (o.idLocale == chiave && o.fase3)) o.copy(idRemoto = idRemoto, tentativi = 0) else o })
+    }
 
     /** In ordine di arrivo. */
     fun tutte(): List<Operazione> = synchronized(lucchetto) { leggi() }
@@ -156,6 +215,8 @@ class CodaInvii(private val file: File) {
         .put("fileId", op.fileId)
         .put("tentativi", op.tentativi)
         .put("errore", op.errore)
+        .put("corpo", op.corpo)
+        .put("idRemoto", op.idRemoto)
 
     private fun daJson(o: JSONObject): Operazione? {
         val idOp = o.testo("idOp").takeIf { it.isNotBlank() } ?: return null
@@ -173,6 +234,9 @@ class CodaInvii(private val file: File) {
             fileId = o.testo("fileId"),
             tentativi = o.optInt("tentativi"),
             errore = o.testo("errore"),
+            // Il corpo e' un JSON scritto come testo: si legge com'e'.
+            corpo = if (o.has("corpo") && !o.isNull("corpo")) o.optString("corpo") else "",
+            idRemoto = o.testo("idRemoto"),
         )
     }
 }

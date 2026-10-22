@@ -119,18 +119,27 @@ class Database {
    * quelle non ancora fatte, in ordine, ognuna in una transazione. Prima di
    * ognuna, se il database ha gia' dei dati, una copia wisper.db.prima-<n>:
    * se una migrazione andasse storta, si torna indietro copiando quel file.
+   * Una migrazione puo' avere accanto un file .js con lo stesso numero
+   * (003-ore-spese.js): gira dopo l'SQL, nella stessa transazione, per i dati
+   * che vanno trasformati con le regole del server (numero(), dataIso()...).
    */
   migra(cartella) {
-    const file = fs.readdirSync(cartella).filter(f => /^\d{3}-.*\.sql$/.test(f)).sort();
+    const tutti = fs.readdirSync(cartella);
+    const file = tutti.filter(f => /^\d{3}-.*\.sql$/.test(f)).sort();
     let fatte = 0;
     for (const f of file) {
       const n = parseInt(f.slice(0, 3), 10);
       if (n <= this.versione()) continue;
       if (!this.inMemoria && this.versione() > 0) this.copiaIn(this.percorso + '.prima-' + n);
       const sql = fs.readFileSync(path.join(cartella, f), 'utf8');
+      const js = tutti.filter(x => x.slice(0, 4) === f.slice(0, 4) && /\.js$/.test(x))[0];
       this.db.exec('BEGIN IMMEDIATE');
       try {
         this.db.exec(sql);
+        if (js) {
+          this.preparate.clear();
+          require(path.join(cartella, js))(this);
+        }
         this.db.exec('PRAGMA user_version = ' + n);
         this.db.exec('COMMIT');
       } catch (err) {

@@ -27,6 +27,8 @@
       { k: 'tariffe', titolo: 'Tariffe e rimborsi', icona: 'fatturazione', soldi: true },
       // fase 2: IVA, contributo EPPI, validità e condizioni dei preventivi
       { k: 'fisco', titolo: 'Fisco e preventivi', icona: 'preventivo', soldi: true },
+      // fase 3: il veicolo, il suo euro al km (tabelle ACI dell'anno), l'indennità di trasferta
+      { k: 'veicoli', titolo: 'Veicoli e rimborso km', icona: 'auto', modulo: 'spese' },
       { k: 'registro', titolo: 'Registro attività', icona: 'lista' },
       { k: 'copie', titolo: 'Copie ed esportazioni', icona: 'scarica' },
       { k: 'cestino', titolo: 'Cestino', icona: 'cestino', scrive: true },
@@ -36,10 +38,10 @@
     function vista(pagina, sotto, id) {
       // Cambiando pagina si rilegge: utenti, copie e cestino possono essere cambiati da un altro computer.
       const dove = sotto + '/' + (id || '');
-      if (M.dove !== dove) { M.utenti = null; M.permessi = null; M.copie = null; M.cestino = null; M.sessioni = {}; M.dove = dove; }
+      if (M.dove !== dove) { M.utenti = null; M.permessi = null; M.copie = null; M.cestino = null; M.veicoli = null; M.sessioni = {}; M.dove = dove; }
       if (sotto && sotto !== 'app' && !puo('amministrazione')) { aggiungi(pagina, [h('div', { class: 'calmo grande' }, icona('scudo', 22, 2.2), 'Non hai il permesso per vedere questa pagina. Chiedi a ' + W.titolare() + '.')]); return; }
-      if (((sotto === 'tariffe' || sotto === 'fisco') && !soldi()) || (sotto === 'cestino' && !scrive())) { aggiungi(pagina, [h('div', { class: 'calmo grande' }, icona('scudo', 22, 2.2), 'Non hai il permesso per vedere questa pagina. Chiedi a ' + W.titolare() + '.')]); return; }
-      const fn = { studio, utenti: id ? paginaUtente : elencoUtenti, permessi, numerazioni, tariffe, fisco, registro, copie, cestino, app }[sotto];
+      if (((sotto === 'tariffe' || sotto === 'fisco') && !soldi()) || (sotto === 'cestino' && !scrive()) || (sotto === 'veicoli' && !puo('spese'))) { aggiungi(pagina, [h('div', { class: 'calmo grande' }, icona('scudo', 22, 2.2), 'Non hai il permesso per vedere questa pagina. Chiedi a ' + W.titolare() + '.')]); return; }
+      const fn = { studio, utenti: id ? paginaUtente : elencoUtenti, permessi, numerazioni, tariffe, fisco, veicoli, registro, copie, cestino, app }[sotto];
       if (!fn) { elenco(pagina); return; }
       if (sotto !== 'app' || puo('amministrazione')) {
         aggiungi(pagina, [h('div', { class: 'indietro-riga' },
@@ -83,12 +85,13 @@
         fisco: 'IVA ' + (imp.IVA !== undefined && imp.IVA !== '' ? C.numero(imp.IVA) + '%' : 'da scrivere') + ' · contributo EPPI ' + (imp.EPPI_INTEGRATIVO !== undefined && imp.EPPI_INTEGRATIVO !== '' ? C.numero(imp.EPPI_INTEGRATIVO) + '%' : 'da scrivere') +
           ' · preventivi validi ' + (imp.PREVENTIVO_VALIDITA_GIORNI || 30) + ' giorni',
         tariffe: 'Rimborso km ' + (imp.EURO_KM !== undefined && imp.EURO_KM !== '' ? C.numero(imp.EURO_KM) + ' €' : 'da scrivere') + ' · costo orario ' + (imp.COSTO_ORARIO ? C.numero(imp.COSTO_ORARIO) + ' €' : 'da scrivere'),
+        veicoli: 'Rimborso km delle trasferte · tabelle ACI ' + (imp.ACI_ANNO || new Date().getFullYear()),
         registro: 'Chi ha cambiato cosa',
         copie: ultimaCopia(M.copie) ? descriviCopia(ultimaCopia(M.copie)) : 'Copie di ogni notte, file per Excel',
         cestino: M.cestino ? (M.cestino.file || []).length ? (M.cestino.file.length === 1 ? '1 file tolto' : M.cestino.file.length + ' file tolti') + ', recuperabili' : 'Vuoto' : 'File tolti, recuperabili',
         app: 'Tema, visita guidata, versione' + (S.versione ? ' ' + S.versione : ''),
       };
-      const lista = h('div', { class: 'scheda righe' }, PAGINE.filter(p => (!p.soldi || soldi()) && (!p.scrive || scrive()) && (p.k === 'app' || puo('amministrazione'))).map(p => riga({
+      const lista = h('div', { class: 'scheda righe' }, PAGINE.filter(p => (!p.soldi || soldi()) && (!p.scrive || scrive()) && (!p.modulo || puo(p.modulo)) && (p.k === 'app' || puo('amministrazione'))).map(p => riga({
         sinistra: quadrato(p.icona), titolo: p.titolo, sotto: stato[p.k], onclick: () => W.vai('#amministrazione/' + p.k),
         attr: { 'data-pagina': p.k },
       })));
@@ -151,7 +154,7 @@
       const valori = {};
       chiavi.forEach(k => {
         let x = campi[k].type === 'checkbox' ? (campi[k].checked ? 'SI' : 'NO') : campi[k].value.trim();
-        if (['EURO_KM', 'COSTO_ORARIO', 'IVA', 'EPPI_INTEGRATIVO', 'RITENUTA', 'PREVENTIVO_VALIDITA_GIORNI'].indexOf(k) >= 0 && x !== '') x = C.num(x);
+        if (['EURO_KM', 'COSTO_ORARIO', 'IVA', 'EPPI_INTEGRATIVO', 'RITENUTA', 'PREVENTIVO_VALIDITA_GIORNI', 'ACI_ANNO', 'INDENNITA_TRASFERTA', 'ORE_GIORNALIERE'].indexOf(k) >= 0 && x !== '') x = C.num(x);
         valori[k] = x;
       });
       const ris = await lavora('Salvo', () => Rete.post('/server/salvaImpostazioni', { valori }));
@@ -211,6 +214,82 @@
               campo('Condizioni che si propongono', campi.PREVENTIVO_CONDIZIONI),
               sola ? null : h('div', null, h('button', { type: 'button', class: 'btn', onclick: () => salvaImpostazioni(campi, ['PREVENTIVO_VALIDITA_GIORNI', 'PREVENTIVO_CONDIZIONI'],
                 'Salvato: vale per i preventivi nuovi') }, 'Salva')))))]);
+    }
+
+    // ===================================================================== veicoli e rimborso km (fase 3)
+
+    /** L'euro al km con tutti i decimali (fino a 4, come le tabelle ACI): 0,5432 e non 0,54. */
+    const euroKmCampo = n => (n === null || n === undefined || n === '' ? '' : String(Math.round(Number(n) * 10000) / 10000).replace('.', ','));
+
+    /**
+     * I veicoli con cui si fanno le trasferte: il nome, l'alimentazione, l'euro al km
+     * delle tabelle ACI e il loro anno. Le trasferte tengono l'euro al km con cui sono
+     * nate: cambiarlo qui vale per quelle nuove. In cima l'anno delle tabelle, il sito
+     * dell'ACI e l'indennità di trasferta per ogni giorno.
+     */
+    function veicoli(pagina) {
+      const imp = S.ana.impostazioni;
+      const area = h('div', { class: 'stretta-820 sezione' });
+      aggiungi(pagina, [h('div', { class: 'testata' }, h('h1', { class: 'spazio' }, 'Veicoli e rimborso km'),
+        scrive() ? h('button', { type: 'button', class: 'btn giallo', onclick: () => moduloVeicolo(null) }, icona('piu', 18, 2.6), 'Nuovo veicolo') : null), area]);
+      leggi(area, 'veicoli', '/server/veicoli?tutti=1', ris => {
+        const campi = {
+          ACI_ANNO: h('input', { type: 'text', inputmode: 'numeric', value: String(imp.ACI_ANNO || ris.aciAnno || ''), disabled: !scrive() }),
+          INDENNITA_TRASFERTA: h('input', { type: 'text', inputmode: 'decimal', value: imp.INDENNITA_TRASFERTA === '' || imp.INDENNITA_TRASFERTA === null || imp.INDENNITA_TRASFERTA === undefined ? '' : R.numeroCampo(imp.INDENNITA_TRASFERTA), disabled: !scrive() }),
+        };
+        const lista = ris.veicoli || [];
+        aggiungi(area, [
+          h('div', { class: 'scheda' }, h('h2', null, 'Tabelle ACI e trasferte'),
+            h('div', { class: 'fila' },
+              h('div', { class: 'riga-campi' }, campo('Anno delle tabelle ACI', campi.ACI_ANNO), campo('Indennità di trasferta al giorno', conSuffisso(campi.INDENNITA_TRASFERTA, '€'))),
+              h('div', { class: 'pillole' },
+                ris.paginaAci ? h('a', { class: 'btn', href: ris.paginaAci, target: '_blank', rel: 'noopener' }, 'Apri le tabelle ACI') : null,
+                scrive() ? h('button', { type: 'button', class: 'btn', onclick: () => salvaImpostazioni(campi, ['ACI_ANNO', 'INDENNITA_TRASFERTA'], 'Salvato: vale per le trasferte nuove') }, 'Salva') : null))),
+          lista.length ? h('div', { class: 'scheda righe' }, lista.map(v => riga({
+            sinistra: quadrato('auto'), titolo: v.nome,
+            sotto: [v.alimentazione, 'tabelle ACI ' + (v.annoAci || '—'), v.trasferte ? (v.trasferte === 1 ? '1 trasferta' : v.trasferte + ' trasferte') : 'nessuna trasferta'].filter(Boolean).join(' · '),
+            destra: h('span', { class: 'pillole-destra' }, h('span', { class: 'quanto' }, euroKmCampo(v.euroKm) + ' €/km'), v.attivo === false ? pillola('Non più in uso', 'grigio') : null),
+            onclick: scrive() ? () => moduloVeicolo(v) : null,
+          }))) : h('div', { class: 'calmo' }, icona('auto', 20, 2.2), 'Nessun veicolo: le trasferte con i km ne chiedono uno.')]);
+      });
+    }
+
+    function moduloVeicolo(v0) {
+      const v = v0 || { nome: '', alimentazione: '', euroKm: '', annoAci: S.ana.impostazioni.ACI_ANNO || new Date().getFullYear(), attivo: true };
+      const c = {
+        nome: h('input', { type: 'text', value: v.nome || '', autocomplete: 'off' }),
+        alimentazione: h('input', { type: 'text', value: v.alimentazione || '', autocomplete: 'off', placeholder: 'benzina, gasolio, ibrida, elettrica' }),
+        euroKm: h('input', { type: 'text', inputmode: 'decimal', value: euroKmCampo(v.euroKm), autocomplete: 'off' }),
+        annoAci: h('input', { type: 'text', inputmode: 'numeric', value: String(v.annoAci || ''), autocomplete: 'off' }),
+        attivo: h('input', { type: 'checkbox', checked: v.attivo !== false }),
+      };
+      let errori = {};
+      const zona = h('div', { class: 'fila' });
+      const disegna = () => aggiungi(svuota(zona), [campo('Nome', c.nome, errori.nome), campo('Alimentazione', c.alimentazione),
+        h('div', { class: 'riga-campi' }, campo('Euro al km', conSuffisso(c.euroKm, '€/km'), errori.euroKm), campo('Anno delle tabelle ACI', c.annoAci, errori.annoAci)),
+        v0 ? h('label', { class: 'spunta-campo' }, c.attivo, 'In uso') : null]);
+      disegna();
+      let chiudi;
+      const salva = async () => {
+        errori = {};
+        const euro = C.numONull(c.euroKm.value);
+        if (!c.nome.value.trim()) errori.nome = 'Nome: scrivi il nome del veicolo';
+        if (euro === null) errori.euroKm = 'Euro al km: scrivi quanto, per esempio 0,76';
+        if (c.annoAci.value.trim() && !/^\d{4}$/.test(c.annoAci.value.trim())) errori.annoAci = 'Anno ACI: scrivi l\'anno delle tabelle, per esempio 2026';
+        if (Object.keys(errori).length) { disegna(); return; }
+        const corpo = { nome: c.nome.value.trim(), alimentazione: c.alimentazione.value.trim(), euroKm: euro, annoAci: c.annoAci.value.trim() ? Number(c.annoAci.value.trim()) : undefined, attivo: c.attivo.checked };
+        if (v0) corpo.id = v0.id;
+        const ris = await lavora('Salvo il veicolo', () => Rete.post('/server/salvaVeicolo', { veicolo: corpo }));
+        if (!ris) return;
+        chiudi();
+        M.veicoli = null;
+        await W.ricaricaAnagrafiche().catch(() => null);
+        avviso(v0 && C.num(v0.euroKm) !== euro ? 'Salvato. Vale per le trasferte nuove: quelle già scritte tengono il rimborso con cui sono nate' : 'Veicolo salvato');
+        W.disegnaPagina();
+      };
+      chiudi = finestra({ titolo: v0 ? v0.nome : 'Nuovo veicolo', corpo: zona,
+        pulsanti: ['spazio', h('button', { type: 'button', class: 'btn testo grande', onclick: () => chiudi() }, 'Annulla'),
+          h('button', { type: 'button', class: 'btn giallo grande', onclick: salva }, 'Salva')] });
     }
 
     // ===================================================================== utenti
@@ -516,6 +595,7 @@
     // ===================================================================== registro attività
 
     const TABELLE = [['', 'Tutto'], ['soggetti', 'Clienti e fornitori'], ['commesse', 'Commesse'], ['prestazioni', 'Prestazioni'], ['rapportini', 'Rapportini'],
+      ['ore', 'Ore'], ['spese', 'Spese'], ['trasferte', 'Trasferte'], ['veicoli', 'Veicoli'],
       ['utenti', 'Utenti'], ['permessi', 'Permessi'], ['impostazioni', 'Impostazioni']];
     const PERIODI = [['oggi', 'Oggi'], ['7', 'Ultimi 7 giorni'], ['30', 'Ultimi 30 giorni'], ['', 'Da sempre']];
 
@@ -698,11 +778,15 @@
             [puo('rapportini') ? ['rapportini', 'Rapportini', W.nRapportini(W.attivi().length)] : null,
               puo('clienti') ? ['clienti', 'Clienti', S.ana.clienti.filter(c => !c.archiviato).length + ' clienti'] : null,
               puo('clienti') ? ['fornitori', 'Fornitori', S.ana.fornitori.filter(c => !c.archiviato).length + ' fornitori'] : null,
-              puo('commesse') ? ['commesse', 'Commesse', S.ana.commesse.filter(m => !m.modello).length + ' commesse'] : null].filter(Boolean).map(x => riga({
-              sinistra: quadrato('scarica'), titolo: x[1], sotto: x[2], onclick: async () => {
-                const r = await lavora('Preparo il file', () => Rete.post('/server/esporta', { cosa: x[0] }));
-                if (r) salvaEsportazione(r, x[0]);
-              }, freccia: false,
+              puo('commesse') ? ['commesse', 'Commesse', S.ana.commesse.filter(m => !m.modello).length + ' commesse'] : null,
+              // fase 2 e 3: lo stesso CSV, coi periodi di base degli elenchi
+              puo('preventivi') ? ['preventivi', 'Preventivi', 'Tutti i preventivi'] : null,
+              puo('attivita') ? ['attivita', 'Attività', 'Le attività aperte'] : null,
+              puo('rapportini') ? ['ore', 'Ore', 'Le ore di questa settimana'] : null,
+              puo('spese') ? ['spese', 'Spese', 'Le spese di questo mese'] : null,
+              puo('spese') ? ['trasferte', 'Trasferte', 'Le trasferte di questo mese'] : null,
+              puo('spese') ? ['rimborsi', 'Rimborsi', 'I rimborsi da fare'] : null].filter(Boolean).map(x => riga({
+              sinistra: quadrato('scarica'), titolo: x[1], sotto: x[2], onclick: () => W.esporta(x[0]), freccia: false,
             }))))]);
       });
     }

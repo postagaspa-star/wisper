@@ -27,6 +27,8 @@ function fileDaRiga(f) {
     // Fase 2
     idAttivita: f.attivita_id === null || f.attivita_id === undefined ? null : f.attivita_id,
     idPreventivo: f.preventivo_id === null || f.preventivo_id === undefined ? null : f.preventivo_id,
+    // Fase 3
+    idSpesa: f.spesa_id === null || f.spesa_id === undefined ? null : f.spesa_id,
   };
 }
 
@@ -40,7 +42,7 @@ module.exports = {
    * file a meta' non c'e' mai) e la riga nella tabella. Il contenuto non va mai
    * nel registro: solo nome, tipo e grandezza.
    */
-  salvaFile({ dati, nome, mime, tipo, rapportinoId, commessaId, idClient, attivitaId, preventivoId }) {
+  salvaFile({ dati, nome, mime, tipo, rapportinoId, commessaId, idClient, attivitaId, preventivoId, spesaId }) {
     const id = idCasuale();
     const finale = this.percorsoFile(id);
     const temporaneo = finale + '.scrivendo';
@@ -50,7 +52,7 @@ module.exports = {
       id, nome: nome || id, mime: mime || 'application/octet-stream', byte: dati.length, sha256: sha256(dati),
       percorso: id, tipo, rapportino_id: rapportinoId || null, commessa_id: commessaId || null,
       id_client: idClient || null, creato: adesso(),
-      attivita_id: attivitaId || null, preventivo_id: preventivoId || null,
+      attivita_id: attivitaId || null, preventivo_id: preventivoId || null, spesa_id: spesaId || null,
     });
     return this.db.riga('SELECT * FROM file WHERE id = ?', id);
   },
@@ -72,6 +74,9 @@ module.exports = {
    *  - 'firmaTecnico' la firma del compilatore, una volta per tutte
    *  - 'documento'    un documento della commessa d.idCommessa
    *  - 'attivita'     un allegato dell'attivita' d.idAttivita (fase 2)
+   *  - 'spesa' con d.idSpesa: lo scontrino di una spesa (fase 3); senza, come
+   *                   oggi, la foto del rapportino, che va anche alla riga di
+   *                   spese del suo passo 3
    * d.idFile nasce sul telefono ed e' lo stesso a ogni tentativo: se il file
    * c'e' gia' non se ne crea un secondo.
    */
@@ -110,6 +115,8 @@ module.exports = {
       return { id: f.id, url: urlFile(f.id), nome: f.nome };
     }
 
+    if (tipo === 'spesa' && testo(d.idSpesa)) return this.caricaFotoSpesa(d, dati, mime, estensione);
+
     if (tipo !== 'spesa' && tipo !== 'firma') throw new Rifiuto('Tipo di file sconosciuto: ' + tipo);
 
     const riga = this.trovaRiga(d.id, d.idLocale);
@@ -121,7 +128,9 @@ module.exports = {
     if (tipo === 'spesa') {
       let f = this.fileGiaArrivato('spesa', d.idFile, riga.id, '');
       if (!f) {
-        f = this.salvaFile({ dati, nome: sigla + ' spesa ' + unico + estensione, mime, tipo, rapportinoId: riga.id, idClient: testo(d.idFile) });
+        // Fase 3: la foto va anche alla riga di spese del passo 3, se c'e'.
+        const passo3 = this.db.riga("SELECT id FROM spese WHERE rapportino_id = ? AND dal_rapportino = 1 AND destinazione = 'cliente' AND tolta IS NULL ORDER BY id LIMIT 1", riga.id);
+        f = this.salvaFile({ dati, nome: sigla + ' spesa ' + unico + estensione, mime, tipo, rapportinoId: riga.id, idClient: testo(d.idFile), spesaId: passo3 ? passo3.id : null });
         this.aggiorna('rapportini', riga.id, { modificato: adesso() });
       }
       return { id: f.id, url: urlFile(f.id) };
@@ -164,6 +173,11 @@ module.exports = {
    * documenti; la firma del tecnico chi fa i PDF.
    */
   puoLeggereFile(f) {
+    // Fase 3: lo scontrino di una spesa lo vede chi vede la spesa (un collaboratore solo le sue), o il suo rapportino.
+    if (f.tipo === 'spesa' && f.spesa_id !== null && f.spesa_id !== undefined && this.livello('spese') >= 1) {
+      const s = this.db.riga('SELECT utente_id FROM spese WHERE id = ?', f.spesa_id);
+      if (s && this.vedeDi(s.utente_id)) return true;
+    }
     if (f.rapportino_id && (f.tipo === 'spesa' || f.tipo === 'firma')) {
       if (this.livello('rapportini') < 1) return false;
       if (this.soloSuoi()) {
@@ -179,6 +193,7 @@ module.exports = {
       return !!a && this.vedeAttivita(a);
     }
     if (f.tipo === 'preventivo') return this.livello('preventivi') >= 1;
+    if (f.tipo === 'spesa' && f.spesa_id !== null && f.spesa_id !== undefined) return false;
     return this.livello('rapportini') >= 1 || this.livello('documenti') >= 1;
   },
 

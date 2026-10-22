@@ -1047,3 +1047,111 @@ body.fuori .pagina { max-width: none; width: 100%; }
 .apri-gruppo { display: inline-flex; align-items: center; gap: 6px; border: none; background: none; padding: 4px 0; cursor: pointer; align-self: flex-start; }
 .apri-gruppo:hover { color: var(--testo); }
 .apri-gruppo svg { stroke: currentColor; }
+
+/* ============================================================ fase 3: ore, timer, approvazioni, spese e trasferte */
+/* Misure e colori dal prototipo docs/prototipo/Gestionale-fase3.html (vista Computer). */
+
+.p-viola { background: var(--viola-f); color: var(--viola-t); }
+.pill { max-width: 360px; overflow: hidden; text-overflow: ellipsis; }
+.pill.piccola { height: 22px; font-size: 12px; padding: 0 8px; max-width: 100%; }
+.stato-doppio { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; min-width: 0; }
+.codice.studio { background: var(--superficie); color: var(--testo2); box-shadow: none !important; }
+.titolo-sezione { font-size: 18px; margin-top: 6px; }
+.azioni-testa .btn svg { stroke: currentColor; }
+
+/* il timer nella testata: acceso = bordo giallo, il tempo con le cifre ferme */
+.zona-timer { display: inline-flex; }
+.btn.timer-acceso { border: 2px solid var(--giallo); background: var(--giallo-scelto); gap: 6px; }
+.btn.timer-acceso:hover { border-color: var(--giallo-premuto); }
+.btn.timer-acceso .tempo, .tempo-grande { font-variant-numeric: tabular-nums; }
+.btn.timer-acceso .tempo { font-weight: 800; }
+.timer-scheda { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; border: 2px solid var(--giallo); background: var(--giallo-scelto); padding: 16px 20px; }
+.timer-scheda .testi { flex: 1; min-width: 220px; display: flex; flex-direction: column; gap: 2px; }
+.timer-scheda .etichetta { color: var(--giallo-testo); letter-spacing: .08em; }
+.tempo-grande { font-size: 34px; font-weight: 800; letter-spacing: -0.8px; line-height: 1.1; }
+
+/* il timesheet della settimana */
+.timesheet .r { min-height: 56px; }
+.timesheet .r.testa .oggi { color: var(--giallo-testo); }
+.timesheet .r.tenue-riga { color: var(--tenue); font-weight: 600; min-height: 46px; }
+.cella-ore {
+  width: 64px; height: 40px; border-radius: 10px; border: 1.5px solid var(--bordo-campo); background: var(--scheda); text-align: right; padding: 0 9px;
+  font: inherit; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--testo); outline: none;
+}
+.cella-ore:focus { border-color: var(--testo2); box-shadow: 0 0 0 3px var(--giallo-tenue); }
+input.cella-ore.respinta { text-decoration: line-through; color: var(--tenue); }
+button.cella-ore.apri { border-style: dashed; background: var(--superficie-tenue); cursor: pointer; }
+button.cella-ore.apri:hover { border-color: var(--testo2); }
+.aggiungi-riga { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.aggiungi-riga .etichetta { margin-right: 4px; }
+.sezione-dash.evidenziato .scheda { box-shadow: 0 0 0 3px var(--giallo); transition: box-shadow .3s; }
+
+/* registra ore */
+.anteprima-ore { font-size: 15px; font-weight: 600; color: var(--testo2); min-height: 22px; }
+.anteprima-ore b { font-size: 20px; font-weight: 800; color: var(--testo); font-variant-numeric: tabular-nums; }
+.anteprima-ore.errore { color: var(--rosso-testo); font-weight: 700; }
+.riga-scelte { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+.fila > .segmenti, .campo > .segmenti { align-self: flex-start; }
+.motivo-rifiuto { display: block; color: var(--rosso-testo); font-weight: 700; margin-top: 2px; }
+
+/* da approvare */
+.testa-approvare { display: flex; align-items: center; gap: 10px; }
+.voce-app { cursor: pointer; }
+.voce-app:hover .t1 { text-decoration: underline; text-underline-offset: 3px; }
+.casella-app {
+  width: 28px; height: 28px; border-radius: 8px; flex: none; border: 2px solid var(--bordo-campo); background: transparent; color: var(--scheda);
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.casella-app.scelta { background: var(--testo); border-color: var(--testo); }
+.casella-app svg { stroke: currentColor; }
+.t2.anomalia { color: var(--giallo-testo); font-weight: 800; display: inline-flex; align-items: center; gap: 5px; }
+.t2.anomalia svg { stroke: currentColor; flex: none; }
+.azioni-approva { display: flex; gap: 10px; position: sticky; bottom: 0; padding: 8px 0 4px; background: linear-gradient(to bottom, transparent, var(--fondo) 30%); }
+.azioni-approva .btn { flex: 1; }
+.azioni-approva .btn.giallo { flex: 2; }
+
+/* statistiche */
+.griglia-stat { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr); gap: 18px; align-items: start; }
+@media (max-width: 1100px) { .griglia-stat { grid-template-columns: minmax(0, 1fr); } }
+.stat-persone { display: flex; flex-direction: column; gap: 16px; }
+.barra-stat { display: flex; flex-direction: column; gap: 6px; }
+.barra-stat .alto { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.barra-stat .alto b { font-size: 16px; font-weight: 800; }
+.barra-stat .alto span { font-size: 14px; font-weight: 700; color: var(--testo2); font-variant-numeric: tabular-nums; }
+.barra.doppia { height: 12px; border-radius: 6px; }
+.barra.doppia > i { border-radius: 0; }
+.barra.doppia > i:first-child { border-radius: 6px 0 0 6px; }
+.barra.doppia > i.resto { background: var(--bordo-campo); }
+.totale-stat { display: flex; gap: 10px; flex-wrap: wrap; align-items: baseline; border-top: 1px solid var(--riga); padding-top: 12px; font-weight: 600; color: var(--testo2); }
+.totale-stat b { color: var(--testo); font-size: 16px; }
+
+/* spese e trasferte */
+.titolo-mese { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.titolo-mese h1 { margin-right: 6px; }
+.titolo-periodo { font-size: 20px; min-width: 150px; text-align: center; }
+.modulo-spesa { display: grid; grid-template-columns: minmax(240px, 0.8fr) minmax(0, 1.2fr); gap: 26px; }
+.modulo-spesa .col-foto, .modulo-spesa .col-campi { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.foto-spesa { display: flex; flex-direction: column; gap: 10px; position: sticky; top: 0; }
+.zona-scontrino {
+  min-height: 340px; border: 2px dashed var(--bordo-campo); border-radius: 20px; background: var(--giallo-scelto); display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 10px; text-align: center; padding: 20px; cursor: pointer; color: var(--testo2); transition: border-color .15s, background .15s;
+}
+.zona-scontrino b { font-size: 16px; font-weight: 800; color: var(--testo); }
+.zona-scontrino svg { stroke: currentColor; }
+.zona-scontrino:hover, .zona-scontrino.accoglie { border-color: var(--giallo-premuto); }
+.zona-scontrino.accoglie { background: var(--giallo-tenue); }
+.zona-scontrino.spenta { cursor: default; background: var(--superficie-tenue); }
+.zona-scontrino .btn { pointer-events: none; }
+.foto-grande { border-radius: 18px; overflow: hidden; border: 1px solid var(--bordo-scheda); background: var(--fondo); min-height: 200px; max-height: 420px; display: flex; align-items: center; justify-content: center; }
+.foto-grande img { width: 100%; max-height: 420px; object-fit: contain; display: block; }
+.pdf-spesa { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 40px; font-weight: 700; color: var(--testo2); }
+.pdf-spesa svg { stroke: currentColor; }
+input.importo-grande { height: 60px; font-size: 28px; font-weight: 800; letter-spacing: -0.4px; }
+.rimborso { display: flex; flex-direction: column; gap: 10px; }
+.rimborso .alto { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.rimborso .alto b { font-size: 18px; font-weight: 800; }
+.rimborso .alto .quanto { font-size: 26px; font-weight: 800; letter-spacing: -0.4px; font-variant-numeric: tabular-nums; }
+.voci-rimborso { display: flex; flex-direction: column; gap: 6px; border-top: 1px solid var(--riga); padding-top: 10px; }
+.voci-rimborso .rc { display: flex; justify-content: space-between; gap: 12px; font-size: 14px; font-weight: 600; color: var(--testo2); }
+.voci-rimborso .rc span:last-child { font-weight: 800; color: var(--testo); font-variant-numeric: tabular-nums; white-space: nowrap; }
+@media (max-width: 900px) { .modulo-spesa { grid-template-columns: minmax(0, 1fr); } .foto-spesa { position: static; } }

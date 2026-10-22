@@ -137,7 +137,7 @@ fun <T> Segmenti(opzioni: List<Pair<T, String>>, scelto: T, onScelta: (T) -> Uni
  * ("Dati | Referenti · 2 | Sedi e impianti · 3 | Commesse · 3").
  */
 @Composable
-fun <T> SegmentiScorrevoli(opzioni: List<Pair<T, String>>, scelto: T, onScelta: (T) -> Unit, modifier: Modifier = Modifier) {
+fun <T> SegmentiScorrevoli(opzioni: List<Pair<T, String>>, scelto: T, onScelta: (T) -> Unit, modifier: Modifier = Modifier, bersagli: (T) -> String? = { null }) {
     val c = W.colori
     BoxWithConstraints(modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(c.superficie2)) {
         val minimo = ((maxWidth - 8.dp - 4.dp * (opzioni.size - 1).coerceAtLeast(0)) / opzioni.size.coerceAtLeast(1))
@@ -148,7 +148,8 @@ fun <T> SegmentiScorrevoli(opzioni: List<Pair<T, String>>, scelto: T, onScelta: 
             opzioni.forEach { (valore, nome) ->
                 val su = valore == scelto
                 Box(
-                    Modifier.widthIn(min = minimo).height(44.dp).clip(RoundedCornerShape(10.dp))
+                    Modifier.let { m -> bersagli(valore)?.let { m.bersaglio(it) } ?: m }
+                        .widthIn(min = minimo).height(44.dp).clip(RoundedCornerShape(10.dp))
                         .background(if (su) c.scheda else Color.Transparent)
                         .clickable { onScelta(valore) }
                         .semantics { role = Role.Tab; selected = su }

@@ -7,6 +7,11 @@
  *
  * In piu' della fase 1: ogni rapportino sa chi l'ha scritto (utente_id), un
  * collaboratore vede e scrive solo i suoi, e un annullato si ripristina com'era.
+ *
+ * Fase 3: le spese del passo 3 sono righe di spese legate al rapportino (la
+ * colonna "spese" resta il totale di quelle al cliente: sincronizzaSpeseRapportino
+ * in spese.js), e un rapportino di chi deve farlo approvare non si manda al
+ * cliente e non si fattura finche' non e' approvato.
  */
 'use strict';
 
@@ -15,6 +20,7 @@ const {
   dataOraIso, oggi,
 } = require('../utili');
 const { ELETTRODINAMICA, STATI, STATI_BLOCCATI, regoleDi, calcola, tariffaProposta } = require('../conti');
+const { diverso } = require('./ore');
 
 const urlFile = id => '/file/' + id;
 
@@ -162,16 +168,23 @@ module.exports = {
       modificato: ora,
     };
 
+    // Fase 3: chi deve far approvare le sue cose manda il rapportino in approvazione (a ogni cambio vero).
+    const cambiato = !esistente || Object.keys(valori).some(k => k !== 'modificato' && diverso(esistente[k], valori[k]));
+    const noteCambiate = !esistente || diverso(esistente.note_spese, valori.note_spese);
     let id;
     if (esistente) {
       id = esistente.id;
-      this.aggiorna('rapportini', id, valori);
+      this.aggiorna('rapportini', id, Object.assign(valori, this.approvazioneRapportinoDopo(esistente, esistente.utente_id, cambiato)));
     } else {
       const numeroNuovo = this.prossimoNumeroRapportino(Number(data.slice(0, 4)));
       id = numeroNuovo.codice;
-      this.inserisci('rapportini', Object.assign({ id, stato: 'BOZZA', creato: ora, utente_id: c.utente ? c.utente.id : null }, valori));
+      const autore = c.utente ? c.utente.id : null;
+      this.inserisci('rapportini', Object.assign({ id, stato: 'BOZZA', creato: ora, utente_id: autore }, valori,
+        this.serveApprovazione(autore) ? { stato_approvazione: 'da_approvare' } : {}));
       this.segnaNumero('rapportino', numeroNuovo.numero);
     }
+    // Le spese del passo 3 diventano (o restano) righe di spese al cliente che sommano alla colonna.
+    this.sincronizzaSpeseRapportino(id, { noteCambiate });
 
     // La tariffa libera si ricorda: al prossimo rapportino per questo cliente
     // il telefono la propone gia' scritta.
@@ -185,6 +198,30 @@ module.exports = {
     }
 
     return this.rapportinoPerId(id);
+  },
+
+  /**
+   * L'approvazione dopo un cambio: se lo cambia chi l'ha scritto, e per lui
+   * serve l'approvazione, torna da approvare (anche un respinto rimandato cosi'
+   * com'e'). Se lo cambia chi approva, resta com'era.
+   */
+  approvazioneRapportinoDopo(r, autore, cambiato) {
+    const io = this.chi().utente ? this.chi().utente.id : null;
+    if (autore === null || autore === undefined || autore !== io || !this.serveApprovazione(autore)) return {};
+    if (r.stato_approvazione === 'da_approvare' || (!cambiato && r.stato_approvazione !== 'respinto')) return {};
+    return { stato_approvazione: 'da_approvare', approvato_da: null, approvato_il: '', motivo: '' };
+  },
+
+  /** Un rapportino che aspetta l'approvazione (o respinto) non si manda al cliente e non si fattura. */
+  controllaApprovato(riga) {
+    const s = riga.stato_approvazione || '';
+    if (s === 'da_approvare') {
+      throw new Rifiuto('Il rapportino ' + riga.id + ' aspetta l\'approvazione: si manda al cliente e si fattura solo dopo');
+    }
+    if (s === 'respinto') {
+      throw new Rifiuto('Il rapportino ' + riga.id + ' è stato respinto' + (testo(riga.motivo) ? ' (' + testo(riga.motivo) + ')' : '') +
+        ': correggilo e rimandalo in approvazione');
+    }
   },
 
   /** Le tariffe gia' usate per un cliente (per proporle a chi non vede i prezzi). */
@@ -208,7 +245,16 @@ module.exports = {
     for (const f of righe) (foto[f.rapportino_id] = foto[f.rapportino_id] || []).push({ id: f.id, url: urlFile(f.id) });
     const descrizioni = {};
     for (const m of this.db.righe('SELECT id, descrizione FROM commesse')) descrizioni[m.id.toUpperCase()] = m.descrizione;
-    return { foto, descrizioni };
+    // Fase 3: le righe di spese del rapportino (anche quelle spostate allo studio o "Mia").
+    const spese = {};
+    const righeSpese = id
+      ? this.db.righe('SELECT * FROM spese WHERE rapportino_id = ? AND tolta IS NULL ORDER BY id', id)
+      : this.db.righe('SELECT * FROM spese WHERE rapportino_id IS NOT NULL AND tolta IS NULL ORDER BY id');
+    if (righeSpese.length) {
+      const a = this.aiutiSpese(righeSpese);
+      for (const s of righeSpese) (spese[s.rapportino_id] = spese[s.rapportino_id] || []).push(this.spesaDaRiga(s, a));
+    }
+    return { foto, descrizioni, spese };
   },
 
   /** La riga come la mandava rapportinoDaRiga() dello script, piu' chi l'ha scritto. */
@@ -258,6 +304,12 @@ module.exports = {
       // Fase 1
       idUtente: r.utente_id === null ? null : r.utente_id,
       statoPrima: testo(r.stato_prima),
+      // Fase 3
+      statoApprovazione: testo(r.stato_approvazione),
+      approvatoDa: r.approvato_da === null || r.approvato_da === undefined ? null : r.approvato_da,
+      approvatoIl: dataOraIso(r.approvato_il),
+      motivoRifiuto: testo(r.motivo),
+      righeSpese: (aiuti.spese || {})[r.id] || [],
     };
   },
 
@@ -280,6 +332,7 @@ module.exports = {
     if (testo(a)) { condizioni.push("(data IS NULL OR data = '' OR data <= ?)"); parametri.push(testo(a)); }
     if (testo(f.idCliente)) { condizioni.push('id_cliente = ?'); parametri.push(testo(f.idCliente)); }
     if (testo(f.idCommessa)) { condizioni.push('id_commessa = ?'); parametri.push(testo(f.idCommessa)); }
+    if (testo(f.statoApprovazione)) { condizioni.push('stato_approvazione = ?'); parametri.push(testo(f.statoApprovazione) === 'nessuno' ? '' : testo(f.statoApprovazione)); }
     const sql = 'SELECT * FROM rapportini' + (condizioni.length ? ' WHERE ' + condizioni.join(' AND ') : '');
     const aiuti = this.aiutiRapportini();
     return this.db.righe(sql, ...parametri)
@@ -303,6 +356,7 @@ module.exports = {
       const riga = this.trovaRiga(id, id);
       if (!riga) throw new Rifiuto('Rapportino ' + id + ' non trovato');
       this.controllaSuo(riga, 'cambiare lo stato dei rapportini degli altri');
+      if ((nuovo === 'INVIATO' || nuovo === 'FATTURATO') && testo(riga.stato).toUpperCase() !== nuovo) this.controllaApprovato(riga);
       const valori = { stato: nuovo, modificato: ora };
       if (nuovo === 'BOZZA') {
         valori.firma = '';
@@ -319,6 +373,7 @@ module.exports = {
       const attuale = testo(riga.stato).toUpperCase() || 'BOZZA';
       if (nuovo === 'ANNULLATO' && attuale !== 'ANNULLATO') valori.stato_prima = attuale;
       this.aggiorna('rapportini', riga.id, valori);
+      this.allineaSpeseRapportino(riga.id);
       return this.rapportinoPerId(riga.id);
     });
   },
@@ -333,6 +388,7 @@ module.exports = {
     // Un rapportino che era firmato torna firmato solo se la firma c'e' ancora.
     const stato = STATI.indexOf(prima) >= 0 && prima !== 'ANNULLATO' && (prima !== 'FIRMATO' || testo(riga.firma)) ? prima : 'BOZZA';
     this.aggiorna('rapportini', riga.id, { stato, stato_prima: '', modificato: adesso() });
+    this.allineaSpeseRapportino(riga.id);
     return this.rapportinoPerId(riga.id);
   },
 };

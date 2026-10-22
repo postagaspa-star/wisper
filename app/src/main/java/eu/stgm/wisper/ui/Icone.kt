@@ -142,4 +142,11 @@ object Icone {
     val graffetta = tratto("graffetta", 2.2f, "M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48")
     val bandiera = tratto("bandiera", 2.2f, "M5 21V4", "M5 4h11l-2 4 2 4H5")
     val orologio = tratto("orologio", 2.2f, "M12 7v5l3 2", "M12 3a9 9 0 1 1 0 18a9 9 0 1 1 0-18z")
+
+    // Il gestionale, fase 3 (docs/prototipo/Gestionale-fase3.html)
+    val auto = tratto("auto", 2.2f, "M5 13l2-5h10l2 5", "M4 13h16v5H4z", "M7 18v2M17 18v2M7.5 15.5h.01M16.5 15.5h.01")
+    val avvia = tratto("avvia", 2.2f, "M8 5l11 7-11 7z")
+    val ferma = tratto("ferma", 2.2f, "M7 7h10v10H7z")
+    /** Le statistiche delle ore: barre orizzontali, come la pagina. */
+    val barre = tratto("barre", 2.2f, "M4 4v16h16", "M8 8h9M8 12h6M8 16h11")
 }

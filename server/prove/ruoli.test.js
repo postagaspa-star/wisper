@@ -145,8 +145,10 @@ test('collaboratore: scrive i suoi, col suo nome e la tariffa decisa dal server'
   const visto = (await manuel('rapportini', { tutti: true })).rapportini.find(x => x.id === r.rapportino.id);
   assert.equal(visto.tariffa, 42, 'il prezzo della commessa, non quello che ha mandato');
   assert.equal(visto.totale, 84);
-  // Un rapportino suo si firma e si manda.
+  // Un rapportino suo si firma e si manda. Dalla fase 3 (APPROVAZIONE = collaboratori) si manda dopo l'approvazione.
   await marco('caricaFile', { tipo: 'firma', idLocale: 'marco-nuovo', idFile: 'fm', mime: 'image/png', base64, firmatario: 'Paolo Rossi' });
+  assert.match((await marco('stato', { ids: [r.rapportino.id], stato: 'INVIATO' })).errore, /aspetta l'approvazione/);
+  assert.equal((await manuel('approva', { voci: [{ tipo: 'rapportino', id: r.rapportino.id }] })).ok, true);
   assert.equal((await marco('stato', { ids: [r.rapportino.id], stato: 'INVIATO' })).ok, true);
   const fatt = await marco('stato', { ids: [r.rapportino.id], stato: 'FATTURATO' });
   assert.equal(fatt.permesso, false, 'segnare fatturato e\' della fatturazione');

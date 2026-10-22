@@ -351,6 +351,28 @@
     return (p.length > 1 ? p[0][0] + p[1][0] : (p[0] || '?').slice(0, 2)).toUpperCase();
   }
 
+  /**
+   * Le parole lunghe con i punti dove possono andare a capo (trattino morbido), per i riquadri stretti della
+   * pianificazione: Edge su Windows non sa sillabare l'italiano e spezzava "Elettrodinamic-a". Solo tagli sicuri:
+   * fra due consonanti uguali (Elet-tro) e prima di una consonante sola fra due vocali (di-na-mi-ca), mai lasciando
+   * meno di tre lettere da una parte.
+   */
+  function aCapoMorbido(testo) {
+    const VOCALE = /[aeiouàèéìíòóùú]/i, CONSONANTE = /[bcdfglmnprstvz]/i;
+    return String(testo || '').replace(/[A-Za-zÀ-ÿ]{9,}/g, p => {
+      let r = '';
+      for (let i = 0; i < p.length; i++) {
+        r += p[i];
+        const dopo = p.length - 1 - i;
+        if (i < 2 || dopo < 3) continue;
+        const doppia = CONSONANTE.test(p[i]) && p[i].toLowerCase() === p[i + 1].toLowerCase();
+        const sola = VOCALE.test(p[i]) && CONSONANTE.test(p[i + 1]) && VOCALE.test(p[i + 2]);
+        if (doppia || sola) r += '\u00AD';
+      }
+      return r;
+    });
+  }
+
   // ------------------------------------------------------------------ dalle risposte del server
 
   const DA_COLONNE = { assegnata_a: 'assegnataA', creata_da: 'creataDa', cliente_id: 'idCliente', commessa_id: 'idCommessa', clienteId: 'idCliente',
@@ -381,7 +403,7 @@
     TIPI, PRIORITA, PROMEMORIA, RIPETI, PER_RICORRENZA, GRUPPI, GIORNI_PROSSIMI, GIORNI, GIORNI_BREVI, MESI,
     oggiIso, piuGiorni, giorniFra, giornoDi, ora, oreDecimali, gruppoDi, filtraAttivita, ordina, raggruppa, quandoBreve, dettaglio,
     settimanaDi, numeroSettimana, grigliaMese, nomeGiorno, nomeMese, blocchiDelGiorno, sovrapposti,
-    ricorrenzaAParole, prossimeDate, ricorrenzaDa, giorniDellaRicorrenza, giornoIso, pianificazione, momentoPromemoria, promemoriaDaDare, iniziali, normalizzaAttivita, conOrario,
+    ricorrenzaAParole, prossimeDate, ricorrenzaDa, giorniDellaRicorrenza, giornoIso, pianificazione, momentoPromemoria, promemoriaDaDare, iniziali, aCapoMorbido, normalizzaAttivita, conOrario,
   };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = RegoleAttivita;

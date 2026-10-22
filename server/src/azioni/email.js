@@ -33,6 +33,8 @@ module.exports = {
       for (const id of ids) {
         const r = this.trovaRiga(id, id);
         if (r) this.controllaSuo(r, 'mandare i rapportini degli altri');
+        // Fase 3: uno che aspetta l'approvazione non parte (prima di spedire, non dopo).
+        if (r && testo(r.stato).toUpperCase() !== 'FATTURATO') this.controllaApprovato(r);
       }
     }
     if (!this.postino || !this.postino.configurato()) {

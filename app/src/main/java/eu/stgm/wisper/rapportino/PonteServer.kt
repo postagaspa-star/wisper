@@ -80,6 +80,8 @@ class PonteServer(
         val tecnico: String = "",
         /** Vero per il collaboratore: vede e scrive solo i suoi rapportini. */
         val soloSuoi: Boolean = false,
+        /** Fase 3 (§14.1): il segmento Da approvare, Segna rimborsato, la regola delle approvazioni. */
+        val interfaccia: Interfaccia = Interfaccia(),
     )
 
     // ------------------------------------------------------------- accesso
@@ -104,6 +106,7 @@ class PonteServer(
             ragioneSociale = r.testo("ragioneSociale"),
             tecnico = i?.testo("tecnico").orEmpty(),
             soloSuoi = i?.vero("soloSuoi") == true,
+            interfaccia = Interfaccia.daJson(i),
         )
     }
 
@@ -182,6 +185,7 @@ class PonteServer(
         nome: String = "",
         idAttivita: String = "",
         idPreventivo: String = "",
+        idSpesa: String = "",
     ): FileRemoto = withContext(Dispatchers.IO) {
         if (dati.isEmpty()) throw Rifiutato("Il file è vuoto")
         val corpo = JSONObject()
@@ -197,6 +201,7 @@ class PonteServer(
         if (idCommessa.isNotBlank()) corpo.put("idCommessa", idCommessa)
         if (idAttivita.isNotBlank()) corpo.put("idAttivita", idJson(idAttivita))
         if (idPreventivo.isNotBlank()) corpo.put("idPreventivo", idJson(idPreventivo))
+        if (idSpesa.isNotBlank()) corpo.put("idSpesa", idJson(idSpesa))
         if (nome.isNotBlank()) corpo.put("nome", nome)
         val f = scrivi(corpo).optJSONObject("file") ?: throw Rifiutato("Il server non ha salvato il file")
         FileRemoto.daJson(f)
@@ -562,9 +567,10 @@ class PonteServer(
      * Un file per Excel: [cosa] = rapportini, clienti, fornitori, commesse,
      * registro (col filtro del registro). Torna nome, tipo e byte, come li dà il server.
      */
-    suspend fun esporta(cosa: String, filtro: FiltroRegistro? = null): Triple<String, String, ByteArray> = withContext(Dispatchers.IO) {
+    suspend fun esporta(cosa: String, filtro: FiltroRegistro? = null, altri: List<Pair<String, String>> = emptyList()): Triple<String, String, ByteArray> = withContext(Dispatchers.IO) {
         val parametri = buildList {
             add("cosa" to cosa)
+            addAll(altri)
             if (cosa == "registro" && filtro != null) addAll(parametriRegistro(filtro))
             if (cosa == "rapportini") add("tutti" to "1")
         }
@@ -790,6 +796,154 @@ class PonteServer(
 
     private fun conAttivita(r: JSONObject): Attivita =
         Attivita.daJson(r.optJSONObject("attivita") ?: throw Rifiutato("Il server non ha restituito l'attività"))
+
+    // ------------------------------------------------------------- fase 3: ore, timer, approvazioni (architettura.md §14)
+
+    /** Le righe di ore del periodo (di base la settimana di oggi); [utente] = di chi (il collaboratore vede sempre e solo le sue). */
+    suspend fun ore(da: LocalDate? = null, a: LocalDate? = null, utente: String = "", commessa: String = "", stato: String = ""): ElencoOre =
+        withContext(Dispatchers.IO) {
+            val p = buildList {
+                da?.let { add("da" to it.toString()) }
+                a?.let { add("a" to it.toString()) }
+                if (utente.isNotBlank()) add("utente" to utente)
+                if (commessa.isNotBlank()) add("commessa" to commessa)
+                if (stato.isNotBlank()) add("stato" to stato)
+            }
+            ElencoOre.daJson(leggi("ore", *p.toTypedArray()))
+        }
+
+    /** salvaOre {riga}: senza id crea, con id cambia solo i campi mandati. Torna la riga come l'ha scritta il server. */
+    suspend fun salvaOre(riga: JSONObject): RigaOre = withContext(Dispatchers.IO) {
+        RigaOre.daJson(scrivi(JSONObject().put("azione", "salvaOre").put("riga", riga)).optJSONObject("riga") ?: throw Rifiutato("Il server non ha restituito le ore"))
+    }
+
+    /**
+     * salvaOre dalla coda: con l'idLocale nel corpo il server non crea doppioni.
+     * giaEsisteva = la riga c'era gia' (`giaArrivata`): torna quella, senza le modifiche mandate.
+     */
+    suspend fun salvaOreDallaCoda(riga: JSONObject): Salvataggio<RigaOre> = withContext(Dispatchers.IO) {
+        val r = scrivi(JSONObject().put("azione", "salvaOre").put("riga", riga))
+        Salvataggio(RigaOre.daJson(r.optJSONObject("riga") ?: throw Rifiutato("Il server non ha restituito le ore")), r.vero("giaArrivata"))
+    }
+
+    /** Toglie (o, con [annulla], rimette) una riga di ore: non si cancella niente. */
+    suspend fun togliOre(id: String, annulla: Boolean = false): RigaOre = withContext(Dispatchers.IO) {
+        val corpo = JSONObject().put("azione", "togliOre").put("id", idJson(id))
+        if (annulla) corpo.put("annulla", true)
+        RigaOre.daJson(scrivi(corpo).optJSONObject("riga") ?: throw Rifiutato("Il server non ha restituito le ore"))
+    }
+
+    /** Il proprio timer; [oraMs] è il contatore del telefono, per far scorrere i secondi da lì. */
+    suspend fun timer(oraMs: Long = System.currentTimeMillis()): TimerLetto = withContext(Dispatchers.IO) { TimerLetto.daJson(leggi("timer"), oraMs) }
+
+    suspend fun avviaTimer(idCommessa: String, descrizione: String = "", fatturabile: Boolean? = null, oraMs: Long = System.currentTimeMillis()): TimerLetto =
+        withContext(Dispatchers.IO) {
+            val corpo = JSONObject().put("azione", "avviaTimer").put("idCommessa", idCommessa).put("descrizione", descrizione.trim())
+            if (fatturabile != null) corpo.put("fatturabile", fatturabile)
+            TimerLetto.daJson(scrivi(corpo), oraMs)
+        }
+
+    /** La riga di ore in bozza, dal momento in cui il timer è partito ad adesso, da correggere. */
+    suspend fun fermaTimer(): TimerFermato = withContext(Dispatchers.IO) {
+        val r = scrivi(JSONObject().put("azione", "fermaTimer"))
+        TimerFermato(RigaOre.daJson(r.optJSONObject("riga") ?: throw Rifiutato("Il server non ha restituito la bozza delle ore")), r.testo("avviso"))
+    }
+
+    /** Chi approva: ore, rapportini, spese e trasferte in attesa, per persona, con le anomalie. */
+    suspend fun daApprovare(): DaApprovare = withContext(Dispatchers.IO) { DaApprovare.daJson(leggi("daApprovare")) }
+
+    suspend fun approva(voci: List<VoceDaApprovare>): EsitoApprovazione = decidi("approva", voci, "")
+    suspend fun respingi(voci: List<VoceDaApprovare>, motivo: String): EsitoApprovazione = decidi("respingi", voci, motivo)
+    suspend fun annullaApprovazione(voci: List<VoceDaApprovare>): EsitoApprovazione = decidi("annullaApprovazione", voci, "")
+
+    private suspend fun decidi(azione: String, voci: List<VoceDaApprovare>, motivo: String): EsitoApprovazione = withContext(Dispatchers.IO) {
+        val corpo = JSONObject().put("azione", azione).put("voci", JSONArray().apply { voci.forEach { put(it.perServer()) } })
+        if (azione == "respingi") corpo.put("motivo", motivo.trim())
+        EsitoApprovazione.daJson(scrivi(corpo))
+    }
+
+    // ------------------------------------------------------------- fase 3: spese, trasferte, rimborsi, veicoli
+
+    /** Le spese del periodo (di base il mese di oggi), le più recenti prima. */
+    suspend fun spese(da: LocalDate? = null, a: LocalDate? = null, utente: String = "", idTrasferta: String = ""): ElencoSpese = withContext(Dispatchers.IO) {
+        val p = buildList {
+            da?.let { add("da" to it.toString()) }
+            a?.let { add("a" to it.toString()) }
+            if (utente.isNotBlank()) add("utente" to utente)
+            if (idTrasferta.isNotBlank()) add("idTrasferta" to idTrasferta)
+        }
+        ElencoSpese.daJson(leggi("spese", *p.toTypedArray()))
+    }
+
+    suspend fun salvaSpesa(spesa: JSONObject): Spesa = withContext(Dispatchers.IO) {
+        Spesa.daJson(scrivi(JSONObject().put("azione", "salvaSpesa").put("spesa", spesa)).optJSONObject("spesa") ?: throw Rifiutato("Il server non ha restituito la spesa"))
+    }
+
+    /** Lo scontrino della spesa [idSpesa]. [idFile] uguale a ogni tentativo: il server non crea doppioni. */
+    suspend fun caricaFotoSpesa(idSpesa: String, idFile: String, file: File, mime: String = "image/jpeg"): FileRemoto = withContext(Dispatchers.IO) {
+        caricaFile("spesa", file.readBytes(), mime, idFile = idFile, idSpesa = idSpesa)
+    }
+
+    suspend fun togliSpesa(id: String, annulla: Boolean = false): Spesa = withContext(Dispatchers.IO) {
+        val corpo = JSONObject().put("azione", "togliSpesa").put("id", idJson(id))
+        if (annulla) corpo.put("annulla", true)
+        Spesa.daJson(scrivi(corpo).optJSONObject("spesa") ?: throw Rifiutato("Il server non ha restituito la spesa"))
+    }
+
+    suspend fun trasferte(da: LocalDate? = null, a: LocalDate? = null, utente: String = ""): ElencoTrasferte = withContext(Dispatchers.IO) {
+        val p = buildList {
+            da?.let { add("da" to it.toString()) }
+            a?.let { add("a" to it.toString()) }
+            if (utente.isNotBlank()) add("utente" to utente)
+        }
+        ElencoTrasferte.daJson(leggi("trasferte", *p.toTypedArray()))
+    }
+
+    suspend fun salvaTrasferta(t: JSONObject): Trasferta = withContext(Dispatchers.IO) {
+        Trasferta.daJson(scrivi(JSONObject().put("azione", "salvaTrasferta").put("trasferta", t)).optJSONObject("trasferta") ?: throw Rifiutato("Il server non ha restituito la trasferta"))
+    }
+
+    suspend fun togliTrasferta(id: String, annulla: Boolean = false): Trasferta = withContext(Dispatchers.IO) {
+        val corpo = JSONObject().put("azione", "togliTrasferta").put("id", idJson(id))
+        if (annulla) corpo.put("annulla", true)
+        Trasferta.daJson(scrivi(corpo).optJSONObject("trasferta") ?: throw Rifiutato("Il server non ha restituito la trasferta"))
+    }
+
+    /** Cosa va restituito a chi (il collaboratore riceve solo la sua scheda). */
+    suspend fun rimborsi(utente: String = ""): Rimborsi = withContext(Dispatchers.IO) {
+        Rimborsi.daJson(if (utente.isNotBlank()) leggi("rimborsi", "utente" to utente) else leggi("rimborsi"))
+    }
+
+    /** Segna rimborsate (o, con [annulla], toglie il "rimborsato") le voci date. Torna quante e quanto. */
+    suspend fun segnaRimborsato(voci: List<VoceRimborso>, annulla: Boolean = false): Pair<Int, Double> = withContext(Dispatchers.IO) {
+        val corpo = JSONObject().put("azione", "segnaRimborsato").put("voci", JSONArray().apply { voci.forEach { put(it.perServer()) } })
+        if (annulla) corpo.put("annulla", true)
+        val r = scrivi(corpo)
+        r.optInt("fatte") to (r.numero("totale") ?: 0.0)
+    }
+
+    suspend fun veicoli(tutti: Boolean = false): ElencoVeicoli = withContext(Dispatchers.IO) {
+        ElencoVeicoli.daJson(if (tutti) leggi("veicoli", "tutti" to "1") else leggi("veicoli"))
+    }
+
+    suspend fun salvaVeicolo(v: Veicolo): Veicolo = withContext(Dispatchers.IO) {
+        Veicolo.daJson(scrivi(JSONObject().put("azione", "salvaVeicolo").put("veicolo", v.perSalvare())).optJSONObject("veicolo") ?: throw Rifiutato("Il server non ha restituito il veicolo"))
+    }
+
+    /** Lo scontrino [idFile] della spesa va nel cestino (da cui si recupera). Torna la spesa senza. */
+    suspend fun togliFotoSpesa(idFile: String): Spesa = withContext(Dispatchers.IO) {
+        Spesa.daJson(scrivi(JSONObject().put("azione", "togliFotoSpesa").put("id", idFile)).optJSONObject("spesa") ?: throw Rifiutato("Il server non ha restituito la spesa"))
+    }
+
+    /** Le ore per persona o per commessa (§14.11): ore, fatturabili, percentuale, costo (solo coi soldi). */
+    suspend fun statisticheOre(da: LocalDate, a: LocalDate, per: String): StatisticheOre = withContext(Dispatchers.IO) {
+        StatisticheOre.daJson(leggi("statisticheOre", "da" to da.toString(), "a" to a.toString(), "per" to per))
+    }
+
+    /** [per]: "persona", "commessa" o "categoria". */
+    suspend fun riepilogoSpese(da: LocalDate, a: LocalDate, per: String): RiepilogoSpese = withContext(Dispatchers.IO) {
+        RiepilogoSpese.daJson(leggi("riepilogoSpese", "da" to da.toString(), "a" to a.toString(), "per" to per))
+    }
 
     // ------------------------------------------------------------- interno
 
