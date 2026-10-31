@@ -96,6 +96,8 @@ import java.time.format.DateTimeFormatter
  */
 class DatiEsempio(oggi: LocalDate = LocalDate.now(), private val cartella: File? = null) : Dati {
 
+    /** Il giorno su cui sono costruiti gli esempi: anche la Dashboard conta "scaduto" e "oggi" da qui. */
+    private val giornoEsempi = oggi
     private val lunedi = oggi.with(DayOfWeek.MONDAY)
 
     private val utentiEsempio = listOf(
@@ -271,10 +273,39 @@ class DatiEsempio(oggi: LocalDate = LocalDate.now(), private val cartella: File?
         },
     )
 
+    /** Fase 6: persone, mezzi e collaboratori di esempio, in memoria (EsempioFase6). Niente va in coda né resta sul telefono. */
+    override val fase6: eu.stgm.wisper.rapportino.ServizioFase6 = eu.stgm.wisper.rapportino.ServizioFase6(
+        EsempioFase6(oggi), eu.stgm.wisper.rapportino.Scaffale(null, "f6-"),
+        object : eu.stgm.wisper.rapportino.EsecutoreFase4 {
+            override suspend fun <T> esegui(lavoro: suspend () -> T): Result<T> = try {
+                Result.success(lavoro())
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Result.failure(Exception(e.message ?: "È un esempio", e))
+            }
+        },
+        object : eu.stgm.wisper.rapportino.CodaFase6 {
+            override fun assenza(chiave: String, corpo: org.json.JSONObject) = Unit
+            override fun annullaAssenza(id: String, corpo: org.json.JSONObject) = Unit
+            override fun togliAssenzaInCoda(chiave: String) = false
+            override fun km(chiave: String, corpo: org.json.JSONObject) = Unit
+            override fun fotoKm(chiave: String, file: File) = Unit
+            override fun guasto(chiave: String, corpo: org.json.JSONObject) = Unit
+            override fun fotoGuasto(chiave: String, file: File) = Unit
+            override fun prestito(chiave: String, corpo: org.json.JSONObject) = Unit
+            override fun restituisci(chiave: String, corpo: org.json.JSONObject) = Unit
+            override fun firmaDpi(id: String, file: File) = Unit
+        },
+        idPersonaMia = { "1" },
+        cartellaFile = null,
+    )
+
     private val permessiPerRuolo = Ruoli.ELENCO.associateWith { Permessi.iniziali(it) }.toMutableMap()
 
+    // Fase 6: chi fa la visita è Manuel, persona 1 (ha il Doblò e il multimetro scaduto: "Il mio" si vede).
     override val sessione: StateFlow<Sessione> =
-        MutableStateFlow(Sessione(utentiEsempio.first(), Permessi.iniziali(Ruoli.TITOLARE))).asStateFlow()
+        MutableStateFlow(Sessione(utentiEsempio.first(), Permessi.iniziali(Ruoli.TITOLARE), interfaccia = eu.stgm.wisper.rapportino.Interfaccia(idPersona = "1", puoApprovareAssenze = true, vedeRiservati = true))).asStateFlow()
 
     private val _dashboard = MutableStateFlow<Dashboard?>(null)
     override val dashboard: StateFlow<Dashboard?> = _dashboard.asStateFlow()
@@ -440,7 +471,7 @@ class DatiEsempio(oggi: LocalDate = LocalDate.now(), private val cartella: File?
     override fun aggiornaDashboard() {
         val base = CosaFare.calcola(ana, _viste.value.conConti())
         // Le voci della fase 2 (preventivi, attività, appuntamenti), come le manda il server (§13.8).
-        val fase2 = CosaFareFase2.calcola(_preventivi.value, _attivita.value, ana, conti = { it.conto(ContiPreventivo.iva(ana.impostazioni), ContiPreventivo.eppi(ana.impostazioni)).totale })
+        val fase2 = CosaFareFase2.calcola(_preventivi.value, _attivita.value, ana, oggi = giornoEsempi, conti = { it.conto(ContiPreventivo.iva(ana.impostazioni), ContiPreventivo.eppi(ana.impostazioni)).totale })
         val unita = CosaFareFase2.unisci(base, fase2)
         // Le voci della fase 3 (cose da approvare, timer, rimborsi), come le manda il server (§14.13).
         val (urgenti3, settimana3) = fase3OppureNiente()?.vociDashboard() ?: (emptyList<VoceDashboard>() to emptyList())

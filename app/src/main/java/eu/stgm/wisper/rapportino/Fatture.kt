@@ -831,6 +831,11 @@ data class Ricevuta(
     val origine: String = "",
     val note: String = "",
     val puoScrivere: Boolean = false,
+    /** Fase 6 (§17.2): l'incarico del collaboratore esterno, il mezzo, lo strumento dei costi. */
+    val idIncarico: String = "",
+    val incarico: String = "",
+    val idVeicolo: String = "",
+    val idAttrezzatura: String = "",
 ) {
     val scadenza: String get() = (scadenze.firstOrNull { it.coperta + 0.005 < it.importo } ?: scadenze.firstOrNull())?.data.orEmpty()
 
@@ -866,6 +871,10 @@ data class Ricevuta(
             origine = o.testo("origine"),
             note = o.testo("note"),
             puoScrivere = o.vero("puoScrivere"),
+            idIncarico = o.testo("idIncarico"),
+            incarico = o.testo("incarico"),
+            idVeicolo = o.testo("idVeicolo"),
+            idAttrezzatura = o.testo("idAttrezzatura"),
         )
     }
 }

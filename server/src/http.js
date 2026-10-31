@@ -6,21 +6,35 @@
  *   GET  /salute                {"ok":true,"versione":"x.y.z","database":"ok"}, senza accesso (il controllo del NAS)
  *   POST /ponte                 le versioni vecchie, inoltrate dallo script (X-Wisper-Segreto)
  *   POST /carica?nome=&mime=&idFile=&per=documento|ticket   un file in byte (fase 5), col Bearer come /exec
+ * Le stesse strade arrivano anche dalla porta Google (porta.js): il server sul
+ * NAS va a prendere le richieste dallo script del foglio e le passa qui con
+ * richiestaInterna(), senza nessuna porta aperta (docs/gestionale/porta-google.md).
  * Tutto il resto risponde sempre HTTP 200 con ok true/false; solo /file, /salute
  * e /ponte usano i codici HTTP.
  *
  * Su una seconda porta (--porta-condivisione, fase 5) un altro server risponde
  * SOLO a GET /condiviso/<token>: i link per i clienti, finche' non sono
  * collegati (CONDIVISIONE_INDIRIZZO vuoto) nessun link vale.
+ *
+ * La porta dell'ingresso da internet (--porta-ingresso, sul NAS 8402, README
+ * "Internet entrance") e' lo stesso server con due differenze: l'indirizzo di
+ * chi chiama si legge da X-Forwarded-For (lo scrive il contenitore
+ * wisper-ingresso, l'unico che raggiunge quella porta), e passano solo
+ * /exec (GET e POST), /carica (POST), /file/<id> (GET), /salute (GET, senza
+ * versione) e /ponte (POST) solo con WISPER_PONTE_DA_FUORI=si: tutto il resto
+ * 404, anche se l'ingresso lo lasciasse passare.
  */
 'use strict';
 
 const fs = require('node:fs');
 const http = require('node:http');
 const crypto = require('node:crypto');
-const { esegui } = require('./richieste');
+const { Readable, Writable } = require('node:stream');
+const { esegui, AZIONI } = require('./richieste');
+const { conRicordo } = require('./ricordo');
 const { testo, idCasuale, adesso, Rifiuto, senzaPermesso, messaggio } = require('./utili');
 const { riconosciTipo, tipoDaSalvare } = require('./documenti');
+const { conProvenienza, provenienzaDi } = require('./provenienza');
 
 /** Una foto o un PDF in base64 arrivano a qualche MB; un documento grande a qualche decina. */
 const MASSIMO_CORPO = 60 * 1024 * 1024;
@@ -61,12 +75,19 @@ function stessoSegreto(a, b) {
 
 /**
  * @param w        il server (wisper.js)
- * @param opzioni  {segretoPonte}: SEGRETO_SERVER, lo stesso delle proprieta' dello script
+ * @param opzioni  {segretoPonte}: SEGRETO_SERVER, lo stesso delle proprieta' dello script;
+ *                 {ingresso: {ponte}}: la porta dell'ingresso da internet (creaServerIngresso)
  */
 function creaServer(w, opzioni) {
   opzioni = opzioni || {};
   const server = http.createServer((req, res) => {
-    gestisci(w, req, res, opzioni).catch(err => {
+    // Da dove arriva: lo leggono il registro degli accessi e i tentativi di accesso (provenienza.js).
+    conProvenienza(provenienzaDi(req, !!opzioni.ingresso), () => gestisci(w, req, res, opzioni)).catch(err => {
+      // Chi mandava ha chiuso a meta' (o l'ingresso ha fermato un corpo troppo grande): non c'e' piu' nessuno a cui rispondere.
+      if (err && (err.code === 'ECONNRESET' || err.message === 'aborted')) {
+        console.log('[http] richiesta interrotta da chi la mandava: ' + req.method + ' ' + String(req.url || '').split('?')[0]);
+        return res.destroy();
+      }
       console.error('[http] ' + (err && err.stack ? err.stack : err));
       if (!res.headersSent) rispondiJson(res, 500, { ok: false, errore: 'Errore del server: riprova' });
       else res.destroy();
@@ -77,16 +98,49 @@ function creaServer(w, opzioni) {
   return server;
 }
 
+/**
+ * Il server della porta dell'ingresso da internet. Va ascoltato solo dove lo
+ * raggiunge il contenitore d'ingresso (docker-compose: expose, mai ports).
+ * @param opzioni  {segretoPonte, ponteDaFuori}: ponteDaFuori = WISPER_PONTE_DA_FUORI=si (le settimane del cambio)
+ */
+function creaServerIngresso(w, opzioni) {
+  opzioni = opzioni || {};
+  return creaServer(w, { segretoPonte: opzioni.segretoPonte, ingresso: { ponte: !!opzioni.ponteDaFuori } });
+}
+
+/** Le strade che da internet passano: metodo e percorso esatti (il percorso senza le barre in fondo). */
+function stradaDaFuori(metodo, percorso, ingresso) {
+  if (percorso === '/exec') return metodo === 'GET' || metodo === 'POST';
+  if (percorso === '/carica') return metodo === 'POST';
+  if (percorso === '/salute') return metodo === 'GET';
+  if (/^\/file\/[A-Za-z0-9_-]{1,64}$/.test(percorso)) return metodo === 'GET';
+  if (percorso === '/ponte') return metodo === 'POST' && !!(ingresso && ingresso.ponte);
+  return false;
+}
+
 async function gestisci(w, req, res, opzioni) {
   const url = new URL(req.url, 'http://localhost');
   const percorso = url.pathname.replace(/\/+$/, '') || '/';
 
+  // Da internet: solo le strade di telefono e computer, prima di leggere qualunque cosa. 404 uguale per tutto il resto.
+  if (opzioni.ingresso && !stradaDaFuori(req.method, percorso, opzioni.ingresso)) {
+    res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
+    return res.end('Non trovato');
+  }
+
   if (percorso === '/salute') {
+    // Da internet senza la versione e senza il messaggio d'errore del database.
+    const fuori = !!opzioni.ingresso;
     try {
       w.db.riga('SELECT 1 AS uno');
-      return rispondiJson(res, 200, { ok: true, versione: w.versione, database: 'ok' });
+      if (fuori) return rispondiJson(res, 200, { ok: true, database: 'ok' });
+      // Da casa anche il collegamento a Google e, se l'app la chiede, la firma che dice "sono proprio il server di Wisper".
+      const o = { ok: true, versione: w.versione, database: 'ok', google: w.porta ? w.porta.stato() : { stato: 'non collegato', ultimoContatto: '' } };
+      const firma = firmaDiCasa(w, url.searchParams.get('prova'), url.searchParams.get('chi'));
+      if (firma) o.firma = firma;
+      return rispondiJson(res, 200, o);
     } catch (err) {
-      return rispondiJson(res, 503, { ok: false, versione: w.versione, database: 'errore: ' + err.message });
+      return rispondiJson(res, 503, fuori ? { ok: false, database: 'errore' } : { ok: false, versione: w.versione, database: 'errore: ' + err.message });
     }
   }
 
@@ -127,10 +181,64 @@ async function gestisci(w, req, res, opzioni) {
     }
     // Il codice di prima non serve piu' e non deve finire da nessuna parte.
     delete d.codice;
-    return rispondiJson(res, 200, await esegui(w, d, { token: tokenDa(req), get: req.method === 'GET' }));
+    // idRichiesta: una scrittura ripetuta con lo stesso id (risposta persa per strada) non si rifa' (ricordo.js).
+    const idRichiesta = req.method === 'POST' ? testo(d.idRichiesta) : '';
+    delete d.idRichiesta;
+    const token = tokenDa(req);
+    const azione = testo(d.azione) || 'anagrafiche';
+    const voce = Object.prototype.hasOwnProperty.call(AZIONI, azione) ? AZIONI[azione] : null;
+    return rispondiJson(res, 200, await conRicordo(w, idRichiesta, token, azione, voce, () => esegui(w, d, { token, get: req.method === 'GET' })));
   }
 
   return rispondiJson(res, 404, { ok: false, errore: 'Indirizzo sconosciuto: ' + percorso });
+}
+
+/**
+ * La firma di casa (porta-google.md §8): l'app, prima di mandare il suo token in
+ * chiaro sulla rete di casa, chiede /salute?prova=<testo a caso>&chi=<i primi 16
+ * caratteri dello SHA-256 del suo token>. Solo il server vero conosce lo SHA-256
+ * intero del token (lo tiene nella tabella sessioni) e puo' rispondere
+ * firma = HMAC-SHA256(chiave: lo SHA-256 del token in esadecimale, messaggio: prova).
+ * Un altro apparecchio che avesse lo stesso indirizzo su un'altra rete non sa farla.
+ */
+function firmaDiCasa(w, prova, chi) {
+  prova = testo(prova);
+  chi = testo(chi).toLowerCase();
+  if (!/^[A-Za-z0-9_-]{16,128}$/.test(prova) || !/^[0-9a-f]{16}$/.test(chi)) return '';
+  const s = w.db.riga(
+    'SELECT s.token_hash FROM sessioni s JOIN utenti u ON u.id = s.utente_id WHERE substr(s.token_hash, 1, 16) = ? AND s.revocata IS NULL AND u.attivo = 1 LIMIT 1', chi);
+  return s ? crypto.createHmac('sha256', s.token_hash).update(prova).digest('hex') : '';
+}
+
+/**
+ * Una richiesta fatta da dentro il server, senza rete: la porta Google (porta.js)
+ * passa cosi' le richieste delle app allo stesso gestore di /exec, /carica,
+ * /file/<id> e /ponte, con gli stessi permessi e lo stesso registro.
+ * @param r  {metodo, percorso, query?: {..}, intestazioni?: {..}, corpo?: Buffer|string}
+ * @param provenienza  {ip, daFuori}: per la porta Google {ip: 'google', daFuori: true}
+ * @returns {stato, intestazioni, corpo: Buffer}
+ */
+async function richiestaInterna(w, opzioni, r, provenienza) {
+  const corpo = r.corpo === undefined || r.corpo === null ? Buffer.alloc(0) : Buffer.isBuffer(r.corpo) ? r.corpo : Buffer.from(String(r.corpo), 'utf8');
+  const req = Readable.from(corpo.length ? [corpo] : [], { objectMode: false });
+  const query = r.query && Object.keys(r.query).length ? '?' + new URLSearchParams(r.query).toString() : '';
+  req.method = r.metodo;
+  req.url = r.percorso + query;
+  req.headers = { 'content-length': String(corpo.length) };
+  for (const k of Object.keys(r.intestazioni || {})) req.headers[k.toLowerCase()] = String(r.intestazioni[k]);
+  req.socket = { remoteAddress: '' };
+  const pezzi = [];
+  let stato = 200;
+  let intestazioni = {};
+  const res = new Writable({
+    write(pezzo, codifica, fatto) { pezzi.push(Buffer.isBuffer(pezzo) ? pezzo : Buffer.from(pezzo, codifica)); fatto(); },
+  });
+  res.headersSent = false;
+  res.writeHead = (s, h) => { stato = s; intestazioni = h || {}; res.headersSent = true; return res; };
+  const finita = new Promise(fatto => { res.on('finish', fatto); res.on('close', fatto); });
+  await conProvenienza(provenienza || { ip: '', daFuori: false }, () => gestisci(w, req, res, opzioni || {}));
+  await finita;
+  return { stato, intestazioni, corpo: Buffer.concat(pezzi) };
 }
 
 function analizza(corpo) {
@@ -167,6 +275,8 @@ async function mandaFile(w, req, res, id) {
     return rispondiJson(res, 404, { ok: false, errore: 'Il file non è ancora stato copiato da Drive' });
   }
   w.registraAccesso(perRegistro, 'ok', s.utente);
+  // Fase 6: chi scarica un documento riservato di un'altra persona lascia una riga in accessi_riservati.
+  try { w.come({ utente: s.utente, permessi, sessione: s.sessione, azione: 'file', disp: perRegistro.disp, dispNome: perRegistro.dispNome }, () => w.notaScaricoRiservato(f)); } catch (e) { /* non ferma il file */ }
   const st = fs.statSync(percorso);
   // Fase 5: una revisione superata si scarica col nome che lo dice ("... (rev. 1, superata).pdf").
   const nome = w.nomeDaScaricare(f);
@@ -229,11 +339,17 @@ async function carica(w, req, res, url) {
   const permessi = w.permessiDi(s.utente.ruolo);
   const chi = { utente: s.utente, permessi, sessione: s.sessione, azione: 'carica', disp: testo(perRegistro.disp), dispNome: testo(perRegistro.dispNome), app: testo(perRegistro.app) };
   const per = testo(q.per) || 'documento';
-  const modulo = per === 'ticket' ? 'ticket' : per === 'documento' ? 'documenti' : '';
-  if (!modulo) return rifiuta({ ok: false, errore: 'Per: documento o ticket' }, 'errore', s.utente);
-  if ((permessi[modulo] || 0) < 2) {
-    return rifiuta({ ok: false, errore: 'Non hai il permesso per ' + (per === 'ticket' ? 'caricare le foto dei ticket' : 'caricare documenti') + ': chiedi al titolare', permesso: false },
-      'permesso negato', s.utente);
+  // Fase 6: per=persona (documenti personali e riservati), mezzo, attrezzatura (certificati di taratura), collaboratore.
+  const MODULI_PER = { ticket: 'ticket', documento: 'documenti', persona: 'persone', mezzo: 'mezzi', attrezzatura: 'mezzi', collaboratore: 'collaboratori' };
+  const COSA_PER = { ticket: 'caricare le foto dei ticket', documento: 'caricare documenti', persona: 'caricare i documenti delle persone', mezzo: 'caricare i documenti dei mezzi',
+    attrezzatura: 'caricare i certificati degli strumenti', collaboratore: 'caricare i documenti dei collaboratori' };
+  const modulo = MODULI_PER[per] || '';
+  if (!modulo) return rifiuta({ ok: false, errore: 'Per: documento, ticket, persona, mezzo, attrezzatura o collaboratore' }, 'errore', s.utente);
+  // L'esterno carica solo i suoi documenti (per=collaboratore, anche con collaboratori 1) e le foto dei suoi ticket.
+  const esterno = s.utente.ruolo === 'esterno';
+  const puo = esterno ? (per === 'collaboratore' || (per === 'ticket' && (permessi.ticket || 0) >= 2)) : (permessi[modulo] || 0) >= 2;
+  if (!puo) {
+    return rifiuta({ ok: false, errore: 'Non hai il permesso per ' + COSA_PER[per] + ': chiedi al titolare', permesso: false }, 'permesso negato', s.utente);
   }
   // La coda del telefono che ripete: lo stesso idFile restituisce lo stesso file, senza riscriverlo.
   const gia = w.come(chi, () => w.fileCaricatoGia(q.idFile, s.utente.id));
@@ -300,10 +416,13 @@ async function carica(w, req, res, url) {
   try {
     fs.renameSync(temporaneo, finale);
     const risposta = await w.come(chi, async () => w.db.transazione(() => {
-      w.inserisci('file', {
+      const riga = {
         id, nome: testo(q.nome).slice(0, 200) || id, mime, byte, sha256: hash.digest('hex'), percorso: id, tipo: 'caricato',
         id_client: testo(q.idFile) || null, caricato_da: s.utente.id, creato: adesso(),
-      }, 'id', 'caricato con /carica');
+      };
+      // Fase 6: il nome di un documento personale non va nel registro (dice gia' molto: "cedolino settembre").
+      if (per === 'persona') w.inserisciFileRiservato(riga, 'caricato con /carica (documento di una persona)');
+      else w.inserisci('file', riga, 'id', 'caricato con /carica');
       return w.rispostaCarica(w.db.riga('SELECT * FROM file WHERE id = ?', id));
     }));
     w.registraAccesso(perRegistro, 'ok', s.utente);
@@ -367,4 +486,4 @@ function creaServerCondivisione(w) {
   });
 }
 
-module.exports = { creaServer, creaServerCondivisione, stessoSegreto };
+module.exports = { creaServer, creaServerIngresso, creaServerCondivisione, stessoSegreto, stradaDaFuori, richiestaInterna, firmaDiCasa };

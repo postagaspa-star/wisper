@@ -11,23 +11,21 @@ import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
-import java.time.LocalDate
-import java.time.LocalDateTime
 
 /**
- * La fase 5 contro il server di prova vero (architettura.md §16), come
- * ServerDiProvaFase4Test:
+ * La fase 5 contro il server di prova vero (architettura.md §16). Si lanciano in un modo solo, con un server
+ * nuovo fermo al 22/10/2026 (ServerDiProva.kt):
  *
- *     node server/src/avvio.js --prova --porta 8431 --dati <cartella temporanea nuova>
- *     WISPER_SERVER_PROVA=http://localhost:8431 ./gradlew :app:testDebugUnitTest
+ *     node server/prove/telefono.js            (--giri 2: due giri di fila sullo stesso server)
  *
- * Senza la variabile si saltano. Il giro del ticket passa dalla coda del telefono
+ * Senza WISPER_SERVER_PROVA si saltano. Il giro del ticket passa dalla coda del telefono
  * (InvioFase5, come quando torna la rete), ripetendo apposta gli invii: il server
- * deve riconoscerli (idLocale, idFile, azioni ripetute uguali).
+ * deve riconoscerli (idLocale, idFile, azioni ripetute uguali). Ticket, documenti e scadenze
+ * nuovi a ogni giro, sul giorno e l'ora del server.
  */
 class ServerDiProvaFase5Test {
     @get:Rule val cartella = TemporaryFolder()
-    private val indirizzo = System.getenv("WISPER_SERVER_PROVA").orEmpty()
+    private val indirizzo = ServerDiProva.indirizzo
 
     @Before
     fun soloColServer() = assumeTrue("Server di prova spento: prove saltate", indirizzo.isNotBlank())
@@ -69,8 +67,9 @@ class ServerDiProvaFase5Test {
         assertEquals("1", t.responsabileId)
         assertEquals("pianifica", t.giallo)
 
-        // 3. Pianifica l'intervento (adesso meno un'ora: è "di oggi o passato", il giallo diventa Scrivi il rapportino).
-        val inizio = LocalDateTime.now().withNano(0).withSecond(0).minusHours(1)
+        // 3. Pianifica l'intervento (adesso del server meno un'ora: è "di oggi o passato", il giallo diventa Scrivi il rapportino).
+        val oggi = ServerDiProva.oggi
+        val inizio = ServerDiProva.adesso().withSecond(0).minusHours(1)
         val (_, attivita) = try {
             f5.pianificaTicket(t.id, inizio, inizio.plusHours(1), "", "", "", false)
         } catch (e: PonteServer.DaConfermare) {
@@ -84,21 +83,21 @@ class ServerDiProvaFase5Test {
         assertEquals("rapportino", t.giallo)
 
         // 4. Ore e spesa del ticket (i moduli della fase 3, col ticket).
-        val ore = p.salvaOre(RigaOre(data = LocalDate.now(), ore = 0.5, descrizione = "Assistenza al telefono $unico", fatturabile = true, idTicket = t.id).perSalvare())
+        val ore = p.salvaOre(RigaOre(data = oggi, ore = 0.5, descrizione = "Assistenza al telefono $unico", fatturabile = true, idTicket = t.id).perSalvare())
         assertEquals(t.id, ore.idTicket)
-        val spesa = p.salvaSpesa(Spesa(idLocale = "", data = LocalDate.now(), importo = 12.4, categoria = "materiale", descrizione = "Presa industriale $unico",
+        val spesa = p.salvaSpesa(Spesa(idLocale = "", data = oggi, importo = 12.4, categoria = "materiale", descrizione = "Presa industriale $unico",
             destinazione = Destinazione.CLIENTE, idCliente = "C002", idTicket = t.id).perSalvare())
         assertEquals(t.id, spesa.idTicket)
 
         // 5. Il rapportino del ticket nato senza rete (idLocaleTicket): il campo Ticket lo scrive il server.
-        val r = p.salva(Rapportino.nuovo("Manuel Gasparotto").copy(idCliente = "C002", cliente = "Rossi Impianti Srl", idLocaleTicket = idLocale,
+        val r = p.salva(Rapportino.nuovo("Manuel Gasparotto", oggi).copy(idCliente = "C002", cliente = "Rossi Impianti Srl", idLocaleTicket = idLocale,
             descrizione = "Sostituita la presa $unico", oreLavoro = 1.5, km = 12.0, tariffa = 45.0))
         assertEquals(t.id, r.idTicket)
         assertEquals(t.numero, r.numeroTicket)
         assertEquals(t.numero, r.ticket)
         // La firma (dalla coda, come sempre): il rapportino è firmato e il giallo diventa Segna risolto.
         val firma = cartella.newFile("firma.png").apply { writeBytes(PNG) }
-        p.caricaFile("firma", r.idLocale, r.id, "F-firma$unico", firma, "image/png", "Sig. Rossi", LocalDateTime.now().withNano(0).toString())
+        p.caricaFile("firma", r.idLocale, r.id, "F-firma$unico", firma, "image/png", "Sig. Rossi", ServerDiProva.adesso().toString())
         t = f5.ticket(t.id)
         assertEquals("risolvi", t.giallo)
         assertTrue(t.rapportini.single().firmato)
@@ -173,9 +172,10 @@ class ServerDiProvaFase5Test {
         assertTrue(f5.documenti(FiltroArchivio(testo = "relazione $unico")).documenti.any { it.id == d.id })
 
         // Una scadenza segnata fatta dalla coda, ripetuta: una sola prossima.
-        val scadenza = Scadenza.daJson(JSONObject().put("id", f5.salvaScadenza(JSONObject().put("tipo", "altro").put("titolo", "Polizza $unico").put("data", LocalDate.now().plusDays(10).toString()).put("ogniMesi", 12)).id).put("titolo", "x"))
+        val oggi = ServerDiProva.oggi
+        val scadenza = Scadenza.daJson(JSONObject().put("id", f5.salvaScadenza(JSONObject().put("tipo", "altro").put("titolo", "Polizza $unico").put("data", oggi.plusDays(10).toString()).put("ogniMesi", 12)).id).put("titolo", "x"))
         val coda = CodaInvii(cartella.newFile("coda.json").apply { delete() })
-        val op = coda.faiScadenza(scadenza.id, JSONObject().put("data", LocalDate.now().toString()))
+        val op = coda.faiScadenza(scadenza.id, JSONObject().put("data", oggi.toString()))
         val invio = InvioFase5(f5)
         invio.esegui(op); invio.esegui(op)
         val aperte = f5.scadenze(listOf("stato" to "tutte")).tutte.filter { it.titolo == "Polizza $unico" }

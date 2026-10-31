@@ -15,12 +15,11 @@ const { Database } = require('../src/db');
 const { Postino } = require('../src/postino');
 const { semina } = require('../src/prova');
 const { controllaCopia } = require('../strumenti/ripristina');
+const { oggi, piuGiorni } = require('../src/utili');
 
 const RIPRISTINA = path.join(__dirname, '..', 'strumenti', 'ripristina.js');
-const oggiCompatto = () => {
-  const d = new Date();
-  return d.getFullYear() + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0');
-};
+// Oggi per il server (anche con l'orologio di prova, WISPER_OGGI_PROVA).
+const oggiCompatto = () => oggi().replace(/-/g, '');
 
 let postino;
 let s;
@@ -35,7 +34,11 @@ test.after(async () => { await s.ferma(); await postino.ferma(); });
 test('/salute risponde senza accesso', async () => {
   const r = await fetch(s.url + '/salute');
   assert.equal(r.status, 200);
-  assert.deepEqual(await r.json(), { ok: true, versione: require('../package.json').version, database: 'ok' });
+  const j = await r.json();
+  assert.deepEqual({ ok: j.ok, versione: j.versione, database: j.database }, { ok: true, versione: require('../package.json').version, database: 'ok' });
+  // Il collegamento a Google (porta.js): l'indirizzo dello script c'e', ma nelle prove non parte da solo.
+  assert.equal(j.google.stato, 'fermo');
+  assert.equal(j.firma, undefined, 'la firma solo a chi la chiede');
 });
 
 test('copia adesso: il database sul NAS, compresso fuori casa, i file nuovi, e il foglio riscritto', async () => {
@@ -117,11 +120,7 @@ test('si tengono 30 giorni di copie, piu\' la prima di ogni mese per 12 mesi', (
   const w = new Wisper({ dati: cartellaNuova('pulizia'), memoria: true });
   try {
     fs.mkdirSync(w.cartellaCopie, { recursive: true });
-    const giorno = n => {
-      const d = new Date();
-      d.setDate(d.getDate() - n);
-      return 'wisper-' + d.getFullYear() + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0') + '.db';
-    };
+    const giorno = n => 'wisper-' + piuGiorni(oggi(), -n).replace(/-/g, '') + '.db';
     const nomi = [];
     for (let n = 0; n <= 400; n += 1) nomi.push(giorno(n));
     for (const f of nomi) fs.writeFileSync(path.join(w.cartellaCopie, f), 'x');
@@ -184,13 +183,15 @@ test('ripristino: da una copia (anche compressa), il database di prima resta da 
   const altrove = cartellaNuova('ripristino-gz');
   const r2 = spawnSync(process.execPath, [RIPRISTINA, gz, '--dati', altrove], { encoding: 'utf8' });
   assert.equal(r2.status, 0, r2.stderr);
-  assert.equal(controllaCopia(path.join(altrove, 'wisper.db')).utenti, 4);
+  // Fase 6: cinque utenti di prova (in piu' l'esterno Luca Sartori).
+  assert.equal(controllaCopia(path.join(altrove, 'wisper.db')).utenti, 5);
   // Una copia rovinata non si ripristina, e non si tocca niente.
   const rotta = path.join(dati, 'rotta.db');
   fs.writeFileSync(rotta, 'non sono un database');
   const r3 = spawnSync(process.execPath, [RIPRISTINA, rotta, '--dati', altrove], { encoding: 'utf8' });
   assert.notEqual(r3.status, 0);
-  assert.equal(controllaCopia(path.join(altrove, 'wisper.db')).utenti, 4);
+  // Fase 6: cinque utenti di prova (in piu' l'esterno Luca Sartori).
+  assert.equal(controllaCopia(path.join(altrove, 'wisper.db')).utenti, 5);
 });
 
 test('migrazioni: ognuna in ordine, con la copia wisper.db.prima-<n> prima', () => {

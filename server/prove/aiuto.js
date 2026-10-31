@@ -14,6 +14,26 @@ const http = require('node:http');
 const { avvia } = require('../src/avvio');
 const { scriviSuDisco } = require('../src/postino');
 
+// L'orologio di prova anche per le prove che non seminano (WISPER_OGGI_PROVA=AAAA-MM-GG; prove/giorni.js le fa
+// girare su tanti giorni diversi). Senza la variabile resta il giorno vero.
+const { accendiOrologioDiProva } = require('../src/utili');
+accendiOrologioDiProva(process.env.WISPER_OGGI_PROVA);
+
+/**
+ * Il giorno dei prototipi delle fasi 4 e 5 (giovedi' 22/10/2026). Le fatture 38, 39 e 45/2026, i movimenti di ottobre, i
+ * ticket chiusi, i contratti del 2026 e i loro XML hanno date fisse (sono storia: fiscale, dei ticket); le prove che
+ * controllano quella storia (una fattura "Emessa" e non "Scaduta", il saldo previsto sotto i 3.000 euro il 30/11, la
+ * disdetta entro il 1/11) fermano l'orologio di prova qui, qualunque giorno sia (anche con WISPER_OGGI_PROVA). Anche
+ * quelle che leggono la Dashboard intera del titolare: dal 2027 la storia del 2026 invecchia e riempie le sezioni (20
+ * voci al massimo) prima delle voci cercate. Va chiamata in cima al file, prima di oggi() e del server.
+ */
+const GIORNO_DEI_PROTOTIPI = '2026-10-22';
+function giornoDeiPrototipi() {
+  process.env.WISPER_OGGI_PROVA = GIORNO_DEI_PROTOTIPI;
+  accendiOrologioDiProva(GIORNO_DEI_PROTOTIPI);
+  return GIORNO_DEI_PROTOTIPI;
+}
+
 const SEGRETO = 'segreto-di-prova';
 
 function cartellaNuova(nome) {
@@ -33,14 +53,22 @@ function chiudi(server) {
 
 /**
  * Un server di prova. opzioni.prova (di base vero): coi dati di semina();
- * opzioni.env: le variabili del .env (di base SEGRETO_SERVER = SEGRETO).
+ * opzioni.env: le variabili del .env (di base SEGRETO_SERVER = SEGRETO);
+ * opzioni.ingresso: apre anche la porta dell'ingresso da internet (urlIngresso);
+ * opzioni.portaGoogle: accende il collegamento a Google (porta.js), se l'env lo configura.
  */
 async function serverDiProva(opzioni) {
   opzioni = opzioni || {};
   const dati = opzioni.dati || cartellaNuova('server');
   const env = Object.assign({ SEGRETO_SERVER: SEGRETO }, opzioni.env || {});
-  const { wisper, server } = avvia({ dati, prova: opzioni.prova !== false, env, pianifica: false });
+  const { wisper, server, ingresso } = avvia({ dati, prova: opzioni.prova !== false, env, pianifica: false, portaIngresso: opzioni.ingresso ? 1 : 0, portaGoogle: opzioni.portaGoogle === true });
+  // Le prove che fermano il filo per qualche secondo (semina() di un secondo server, scrypt) non devono trovare la
+  // connessione tenuta aperta chiusa dal server proprio mentre fetch la riusa (ECONNRESET a caso, sotto carico): il
+  // server delle prove la tiene aperta piu' a lungo dei 5 secondi di Node. ferma() chiude comunque tutto.
+  server.keepAliveTimeout = 10 * 60 * 1000;
+  if (ingresso) ingresso.keepAliveTimeout = 10 * 60 * 1000;
   const url = await ascolta(server);
+  const urlIngresso = ingresso ? await ascolta(ingresso) : '';
 
   async function chiama(token, corpo) {
     const r = await fetch(url + '/exec', {
@@ -78,8 +106,8 @@ async function serverDiProva(opzioni) {
     return { stato: r.status, json: await r.json() };
   }
   return {
-    url, wisper, server, dati, chiama, leggi, accedi, come, ponte,
-    ferma: async () => { await chiudi(server); wisper.chiudi(); },
+    url, urlIngresso, wisper, server, dati, chiama, leggi, accedi, come, ponte,
+    ferma: async () => { await chiudi(server); if (ingresso) await chiudi(ingresso); wisper.chiudi(); },
   };
 }
 
@@ -138,4 +166,4 @@ async function viesFinto() {
 /** Un PNG piccolissimo (1x1), per le foto e le firme di prova. */
 const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64');
 
-module.exports = { serverDiProva, postinoFinto, viesFinto, cartellaNuova, ascolta, chiudi, SEGRETO, PNG };
+module.exports = { serverDiProva, postinoFinto, viesFinto, cartellaNuova, ascolta, chiudi, SEGRETO, PNG, giornoDeiPrototipi, GIORNO_DEI_PROTOTIPI };

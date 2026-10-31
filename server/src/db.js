@@ -152,6 +152,23 @@ class Database {
     return fatte;
   }
 
+  /**
+   * Le colonne che mancano a una tabella, aggiunte con il loro valore di base
+   * ({nome: "TEXT NOT NULL DEFAULT ''"}). Si puo' rifare a ogni avvio: quelle
+   * che ci sono gia' non si toccano. Torna quante ne ha aggiunte.
+   */
+  aggiungiColonne(tabella, colonne) {
+    const ci = new Set(this.righe('PRAGMA table_info(' + tabella + ')').map(c => c.name));
+    let n = 0;
+    for (const [nome, definizione] of Object.entries(colonne)) {
+      if (ci.has(nome)) continue;
+      this.db.exec('ALTER TABLE ' + tabella + ' ADD COLUMN ' + nome + ' ' + definizione);
+      n++;
+    }
+    if (n) this.preparate.clear();
+    return n;
+  }
+
   chiudi() {
     this.preparate.clear();
     this.db.close();

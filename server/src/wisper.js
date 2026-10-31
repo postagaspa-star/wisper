@@ -17,6 +17,7 @@ const { Database } = require('./db');
 const P = require('./permessi');
 const { testo, adesso, partitaIvaDalFoglio, telefonoDalFoglio, senzaApostrofo, Rifiuto } = require('./utili');
 const { schemaFormato, formatta, controllaFormato } = require('./formati');
+const { preparaRicordo } = require('./ricordo');
 
 const VERSIONE = require('../package.json').version;
 
@@ -44,6 +45,25 @@ const IMPOSTAZIONI_INIZIALI = [
   ['FIRMA_TECNICO', '', 'La firma del compilatore: si mette da sola su ogni rapportino. La carica il programma.'],
   ['EMAIL_AVVISI', '', 'Chi riceve gli avvisi di sicurezza oltre al titolare. Piu\' indirizzi separati da virgola.'],
 ];
+
+/**
+ * Fase 6: le colonne personali e riservate delle tabelle delle persone. Nel registro delle modifiche il loro valore
+ * diventa "(riservato)", come le password: il registro non e' una seconda copia dei dati, e rendere anonima una
+ * scheda non deve toccarlo (fase6.md §3.2).
+ */
+const REGISTRO_RISERVATI = {
+  persone: ['codice_fiscale', 'nascita_data', 'nascita_luogo', 'indirizzo', 'cap', 'citta', 'provincia', 'telefono_personale', 'email_personale',
+    'iban', 'emergenza_nome', 'emergenza_telefono', 'contratto_tipo', 'contratto_scade', 'motivo_uscita', 'ccnl', 'livello', 'note_riservate',
+    'ferie_annue_ore', 'permessi_annui_ore'],
+  persona_costi: ['costo_anno', 'ore_anno', 'nota'],
+  visite_mediche: ['giudizio', 'prescrizioni', 'valido_fino', 'prossima', 'medico', 'tipo'],
+  assenze: ['tipo', 'causale', 'nota', 'protocollo', 'motivo_rifiuto', 'motivo_annullo'],
+  assenze_saldi: ['ore', 'nota'],
+  dpi_consegne: ['cosa', 'taglia', 'quantita', 'nota', 'scade'],
+  // I documenti legati a una persona: il titolo dice gia' molto ("Cedolino settembre 2026").
+  documenti: ['titolo', 'descrizione', 'parole', 'riferimento'],
+  documento_versioni: ['nome_file', 'nota'],
+};
 
 /** Le colonne che sono sempre testo, anche quando dentro ci sono solo cifre. */
 const SEMPRE_TESTO = ['partitaIva', 'telefono', 'PARTITA_IVA', 'TELEFONO',
@@ -90,7 +110,24 @@ class Wisper {
     this.percorsoDb = opzioni.memoria ? ':memory:' : path.join(this.dati, 'wisper.db');
     this.db = new Database(this.percorsoDb);
     this.db.migra(path.join(__dirname, 'migrazioni'));
+    this.colonneIndirizzo();
+    // Le scritture gia' fatte, per non rifarle quando la risposta si perde (ricordo.js, la porta Google).
+    preparaRicordo(this);
     this.prepara();
+  }
+
+  /**
+   * L'ingresso da internet (README, "Internet entrance"): l'indirizzo di chi
+   * chiama negli accessi e nei tentativi di accesso, e se la richiesta e'
+   * passata dall'ingresso. Colonne aggiunte qui, a ogni avvio se mancano, e non
+   * con una migrazione numerata: la 007 e' gia' promessa alla fase 7
+   * (docs/gestionale/fase7.md §5) e il server salta il secondo di due file con
+   * lo stesso numero. Una migrazione futura non deve aggiungerle di nuovo.
+   */
+  colonneIndirizzo() {
+    this.db.aggiungiColonne('accessi', { ip: "TEXT NOT NULL DEFAULT ''", da_fuori: 'INTEGER NOT NULL DEFAULT 0' });
+    this.db.aggiungiColonne('tentativi_accesso', { ip: "TEXT NOT NULL DEFAULT ''" });
+    this.db.db.exec('CREATE INDEX IF NOT EXISTS tentativi_ip ON tentativi_accesso(ip, quando)');
   }
 
   /**
@@ -119,6 +156,8 @@ class Wisper {
 
   chiudi() {
     if (this.pianificazione) clearInterval(this.pianificazione);
+    // La porta Google (porta.js): la chiamata aperta verso lo script si chiude subito.
+    if (this.porta) this.porta.ferma();
     this.db.chiudi();
   }
 
@@ -147,7 +186,14 @@ class Wisper {
   /** Un collaboratore vede e scrive solo i suoi rapportini (e, dalla fase 3, le sue ore, spese e trasferte). */
   soloSuoi() {
     const c = this.chi();
-    return !!(c.utente && c.utente.ruolo === 'collaboratore');
+    // Fase 6: anche l'esterno (un collaboratore esterno con l'accesso), che in piu' vede solo le cose dei suoi incarichi.
+    return !!(c.utente && (c.utente.ruolo === 'collaboratore' || c.utente.ruolo === 'esterno'));
+  }
+
+  /** Fase 6: chi lavora e' un esterno (vede solo le commesse dei suoi incarichi, i suoi documenti, la sua scheda). */
+  eEsterno() {
+    const c = this.chi();
+    return !!(c.utente && c.utente.ruolo === 'esterno');
   }
 
   /** I permessi di un ruolo. Il titolare ha sempre tutto, qualunque cosa ci sia scritto. */
@@ -177,10 +223,19 @@ class Wisper {
    */
   annota(tabella, idRiga, prima, dopo, nota) {
     const c = this.chi();
+    // Fase 6: i valori personali e riservati diventano "(riservato)" (quelli dei documenti solo se sono di una persona).
+    let riservati = REGISTRO_RISERVATI[tabella] || null;
+    if (riservati && (tabella === 'documenti' || tabella === 'documento_versioni')) {
+      const doc = tabella === 'documenti'
+        ? this.db.riga('SELECT persona_id FROM documenti WHERE id = ?', Number(idRiga) || 0)
+        : this.db.riga('SELECT d.persona_id FROM documento_versioni v JOIN documenti d ON d.id = v.documento_id WHERE v.id = ?', Number(idRiga) || 0);
+      if (!(doc && doc.persona_id) && !(dopo && dopo.persona_id) && !(prima && prima.persona_id)) riservati = null;
+    }
     const pulisci = o => {
       if (!o) return null;
       const x = Object.assign({}, o);
       for (const k of CAMPI_SEGRETI) if (k in x) x[k] = x[k] ? '(cambiata)' : '';
+      if (riservati) for (const k of riservati) if (k in x && x[k] !== null && x[k] !== '') x[k] = '(riservato)';
       return JSON.stringify(x);
     };
     const note = [nota, c.ponte ? 'dalla versione vecchia (ponte)' : ''].filter(Boolean).join('; ');
@@ -365,12 +420,14 @@ function comeLaCella(chiave, v) {
 }
 
 module.exports = {
-  Wisper, contesto, SISTEMA, IMPOSTAZIONI_INIZIALI, SEMPRE_TESTO, VERSIONE, uguali, comeLaCella, REGOLE_FISCALI,
+  Wisper, contesto, SISTEMA, IMPOSTAZIONI_INIZIALI, SEMPRE_TESTO, VERSIONE, uguali, comeLaCella, REGOLE_FISCALI, REGISTRO_RISERVATI,
   schemaFormato, formatta, controllaFormato,
 };
 
 // Le azioni, divise per argomento: ognuna aggiunge i suoi metodi al server.
 for (const parte of ['anagrafiche', 'rapportini', 'file', 'accesso', 'amministrazione', 'dashboard', 'esporta', 'copie', 'email', 'vies',
-  'preventivi', 'attivita', 'ore', 'spese', 'fatture', 'ritorno', 'banche', 'documenti', 'scadenze', 'ticket', 'contratti']) {
+  'preventivi', 'attivita', 'ore', 'spese', 'fatture', 'ritorno', 'banche', 'documenti', 'scadenze', 'ticket', 'contratti',
+  // Fase 6: persone e risorse umane, ferie e presenze, mezzi e attrezzature, collaboratori esterni.
+  'persone', 'assenze', 'mezzi', 'collaboratori', 'dashboard6']) {
   Object.assign(Wisper.prototype, require('./azioni/' + parte));
 }

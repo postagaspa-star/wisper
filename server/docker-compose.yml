@@ -3,27 +3,82 @@
 #   docker compose up -d --build
 #   docker compose exec wisper node strumenti/utente.js --titolare "Nome Cognome" email
 #
-# Due contenitori, come Sol e Pactum:
-#  - wisper: il server (porta 8400 in casa, dati in ./dati);
-#  - wisper-tailscale: lo raggiunge da fuori in HTTPS (https://wisper.<tailnet>.ts.net),
-#    senza aprire porte sul router.
+# I contenitori:
+#  - wisper: il server (porta 8400 in casa, dati in ./dati); da fuori casa telefoni e computer passano dalla
+#    porta Google: il server va a prendere le loro richieste dallo script del foglio (WISPER_POSTINO_URL e
+#    SEGRETO_SERVER nel .env, docs/gestionale/porta-google.md), senza niente di aperto a casa;
+#  - wisper-ingresso (profilo "fuori"): lo raggiunge da internet in HTTPS sull'indirizzo IP pubblico di
+#    casa (https://<IP>), gratis e senza dominio; il router inoltra la TCP 443 alla 8444 del NAS
+#    (README, "Internet entrance");
+#  - wisper-tailscale (profilo "fuori"): l'altra strada, dal tailnet (https://wisper.<tailnet>.ts.net).
 name: wisper
 
 services:
   wisper:
     build: .
-    image: wisper-server:0.8.0
+    image: wisper-server:0.9.0
     container_name: wisper
     restart: unless-stopped
     env_file: .env
     environment:
       TZ: Europe/Rome
+      # La porta per l'ingresso da internet (wisper-ingresso): li' il server prende l'indirizzo vero di chi
+      # chiama da X-Forwarded-For e lascia passare solo /exec, /carica, /file e /salute. Sta solo in
+      # "expose": la raggiunge soltanto la rete Docker del progetto, MAI in "ports" (chi la raggiungesse
+      # potrebbe scrivere l'indirizzo che vuole).
+      WISPER_PORTA_INGRESSO: "8402"
     ports:
       # In casa sulla porta 8400 per le prove; quando c'e' Tailscale si puo' chiudere
       # a "127.0.0.1:8400:8400" (come Sol), cosi' le password non girano in chiaro sul Wi-Fi.
       - "8400:8400"
+    expose:
+      - "8402"
     volumes:
       - ./dati:/data
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
+
+  # L'ingresso da internet: Caddy prende da solo (e rinnova ogni pochi giorni) il certificato di
+  # Let's Encrypt per l'IP pubblico di casa (profilo "shortlived", sfida tls-alpn-01 sulla 443) e passa
+  # al server solo le strade di telefono e computer (ingresso/regole.caddy). Prima di accenderlo:
+  # WISPER_IP_PUBBLICO nel .env e la TCP 443 del router inoltrata a 192.168.1.51:8444. Poi:
+  #   docker compose up -d wisper-ingresso
+  # Spegnerlo: docker compose stop wisper-ingresso (e togliere l'inoltro dal router).
+  wisper-ingresso:
+    image: caddy:2.11.7-alpine
+    container_name: wisper-ingresso
+    restart: unless-stopped
+    environment:
+      # Dal .env accanto a questo file; l'IP non va mai scritto qui (il repository e' pubblico).
+      WISPER_IP_PUBBLICO: ${WISPER_IP_PUBBLICO:-}
+      # "si" solo nelle settimane del cambio: /ponte passa anche da internet (lo legge anche il server).
+      WISPER_PONTE_DA_FUORI: ${WISPER_PONTE_DA_FUORI:-no}
+    # Senza l'indirizzo pubblico non parte (invece di chiedere un certificato per niente).
+    command:
+      - sh
+      - -c
+      - >-
+        case "$$WISPER_IP_PUBBLICO" in ''|*[!0-9.]*)
+        echo "wisper-ingresso: manca WISPER_IP_PUBBLICO (l'IPv4 pubblico di casa) nel .env accanto a docker-compose.yml";
+        exit 1;; esac;
+        exec caddy run --config /etc/caddy/Caddyfile --adapter caddyfile
+    ports:
+      # Il router inoltra la TCP 443 esterna qui (la 80 e la 443 del NAS sono gia' occupate).
+      - "8444:443"
+    volumes:
+      - ./ingresso:/etc/caddy:ro
+      # Il certificato e l'account ACME: se si perde, Caddy ne chiede uno nuovo e basta.
+      - ingresso-dati:/data
+      - ingresso-config:/config
+    depends_on:
+      - wisper
+    cap_drop: ["ALL"]
+    cap_add: ["NET_BIND_SERVICE", "DAC_OVERRIDE"]
+    security_opt: ["no-new-privileges:true"]
+    profiles: ["fuori"]
     logging:
       driver: json-file
       options:
@@ -58,3 +113,5 @@ services:
 
 volumes:
   tailscale-stato:
+  ingresso-dati:
+  ingresso-config:

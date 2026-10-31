@@ -12,7 +12,7 @@
 
   radice.WisperCommesse = function (W) {
     const { S, C, R, B, Rete } = W;
-    const { h, aggiungi, svuota, icona, tondo, iniziali, stato, pillola, avviso, lavora, finestra, conferma, apriMenu, campo, conSuffisso, segmenti, cerca, riga } = B;
+    const { h, aggiungi, svuota, icona, tondo, iniziali, stato, pillola, avviso, lavora, finestra, conferma, apriMenu, campo, conSuffisso, segmenti, cerca, riga, quadrato, segnaposto } = B;
     const puo = W.puo;
     const soldi = W.soldi;
     const RO = radice.WisperRegoleOreSpese;
@@ -118,7 +118,9 @@
           scrive ? h('button', { type: 'button', class: 'btn giallo', onclick: () => modulo(m) }, 'Modifica') : null),
         schedaPersone(m),
         segmenti([['panoramica', 'Panoramica'], ['prestazioni', 'Prestazioni · ' + prestazioni.length], ['rapportini', 'Rapportini']].concat(puoDocumenti(1) ? [['documenti', 'Documenti']] : [])
-          .concat(soldi() ? [['costi', 'Costi'], ['dafatturare', 'Da fatturare']] : []),
+          .concat(soldi() ? [['costi', 'Costi'], ['dafatturare', 'Da fatturare']] : [])
+          // Fase 6 (§12.8): gli incarichi ai collaboratori esterni sulla commessa (con collaboratori 1).
+          .concat(puo('collaboratori') && !(W.eEsterno && W.eEsterno()) ? [['incarichi', 'Incarichi' + (S.conteIncarichi && typeof S.conteIncarichi[m.id] === 'number' ? ' · ' + S.conteIncarichi[m.id] : ''), { 'data-conta': 'incarichi' }]] : []),
         schedaDi(m), x => { S.schedaCommessa[m.id] = x; W.disegnaPagina(); }),
         area]);
 
@@ -134,7 +136,47 @@
       else if (scheda === 'dafatturare' && soldi()) { if (puo('fatturazione') && W.Fatture) W.Fatture.incorporaDaFatturare(area, m.id); else daFatturare(area, k); }
       // Fase 5: la scheda Documenti è l'archivio filtrato (cartella in cima, documenti, "Da Wisper"); con un server vecchio quella di prima.
       else if (scheda === 'documenti' && puoDocumenti(1)) { if (W.Archivio && W.perm().documenti !== undefined) W.Archivio.schedaDocumenti(area, { idCommessa: m.id }); else documentiCommessa(area, m); }
-      else panoramica(area, m, k, soldi() ? RO.costiConFase3(k, costoDi(m)) : null);
+      else if (scheda === 'incarichi' && puo('collaboratori')) incarichiCommessa(area, m);
+      else { panoramica(area, m, k, soldi() ? RO.costiConFase3(k, costoDi(m)) : null); inPrestito(area, m); }
+      // Il numero degli incarichi arriva dal server mentre la scheda è aperta.
+      if (puo('collaboratori') && !(W.eEsterno && W.eEsterno()) && !(S.conteIncarichi && typeof S.conteIncarichi[m.id] === 'number')) {
+        Rete.get('/server/incarichi?stato=tutti&idCommessa=' + encodeURIComponent(m.id)).then(r => {
+          S.conteIncarichi = S.conteIncarichi || {};
+          S.conteIncarichi[m.id] = (r.incarichi || []).filter(i => i.stato !== 'annullato').length;
+          const b = document.querySelector('[data-conta="incarichi"]');
+          if (b) b.textContent = 'Incarichi · ' + S.conteIncarichi[m.id];
+        }).catch(() => null);
+      }
+    }
+
+    /** Fase 6: gli incarichi della commessa (collaboratore, cosa, stato, avanzamento; i soldi con costi), ognuno apre la sua scheda. */
+    async function incarichiCommessa(area, m) {
+      aggiungi(area, [segnaposto(2, 64)]);
+      let r;
+      try { r = await Rete.get('/server/incarichi?stato=tutti&idCommessa=' + encodeURIComponent(m.id)); } catch (e) { svuota(area); if (e.accesso !== false) aggiungi(area, [h('div', { class: 'banda calma' }, icona('avviso', 20), h('span', { class: 'spazio' }, e.message))]); return; }
+      svuota(area);
+      const P6 = radice.WisperRegolePersone;
+      const lista = r.incarichi || [];
+      if (puo('collaboratori', 2) && soldi() && W.Collaboratori) aggiungi(area, [h('div', { class: 'testata' }, h('span', { class: 'spazio' }), h('button', { type: 'button', class: 'btn', onclick: () => W.Collaboratori.nuovoIncarico(null) }, icona('piu', 18, 2.6), 'Nuovo incarico'))]);
+      aggiungi(area, [lista.length ? h('div', { class: 'scheda righe' }, lista.map(i => riga({
+        sinistra: quadrato('collaboratori', i.stato === 'affidato' ? 'ico-blu' : i.stato === 'bozza' ? 'ico-giallo' : 'ico-grigio'),
+        titolo: i.numero + ' · ' + i.titolo, sotto: [i.collaboratore, i.modo === 'corpo' ? 'a corpo · ' + (Number(i.avanzamento) || 0) + '%' : 'a ore', i.conti ? 'maturato ' + C.euro(i.conti.maturato) + ' · fatturato ' + C.euro(i.conti.fatturato) : ''].filter(Boolean).join(' · '),
+        destra: pillola(i.statoVisto || P6.STATI_INCARICO[i.stato], P6.coloreIncarico(i.stato)), onclick: () => W.vai('#collaboratori/in/' + i.id),
+      }))) : h('p', { class: 'vuoto' }, 'Nessun incarico su questa commessa.')]);
+    }
+
+    /** Fase 6: gli strumenti e i mezzi in prestito alla commessa (lasciati in cantiere), in fondo alla panoramica. */
+    function inPrestito(area, m) {
+      if (!puo('mezzi')) return;
+      const zona = h('div');
+      aggiungi(area, [zona]);
+      Rete.get('/server/assegnazioni?inCorso=1&idCommessa=' + encodeURIComponent(m.id)).then(r => {
+        const l = r.assegnazioni || [];
+        if (!l.length) return;
+        aggiungi(zona, [h('div', { class: 'sezione' }, h('h2', null, 'In prestito alla commessa'), h('div', { class: 'scheda righe' }, l.map(a => riga({ sinistra: quadrato(a.idVeicolo ? 'furgone' : 'misura', a.inRitardo ? 'ico-rosso' : 'ico-grigio'), titolo: a.oggetto,
+          sotto: 'dal ' + C.data(a.dal) + (a.rientro ? ' · rientro il ' + C.data(a.rientro) : ''), destra: a.inRitardo ? pillola('Oltre il rientro', 'rosso') : null,
+          onclick: () => W.vai(a.idVeicolo ? '#mezzi/mezzo/' + a.idVeicolo : '#mezzi/at/' + a.idAttrezzatura) }))))]);
+      }).catch(() => null);
     }
 
     /** Si apre su Prestazioni se ce ne sono, altrimenti su Panoramica. */
@@ -514,7 +556,10 @@
           rc('Auto · ' + C.numero(k.totali.km) + ' km al costo ACI', C.euro(cc ? cc.auto : k.costo.auto)),
           rc('Spese dei rapportini · ' + W.nRapportini(conSpese.length), C.euro(cc ? cc.speseRapportini : k.costo.spese)),
           cc && C.num(cc.speseFuoriRapportini) ? rc('Le altre spese, al cliente e allo studio', C.euro(cc.speseFuoriRapportini)) : null,
-          cc && C.num(cc.trasferte) ? rc('Trasferte · ' + C.numero(cc.kmTrasferte) + ' km e indennità', C.euro(cc.trasferte)) : null))]);
+          cc && C.num(cc.trasferte) ? rc('Trasferte · ' + C.numero(cc.kmTrasferte) + ' km e indennità', C.euro(cc.trasferte)) : null,
+          // Fase 6 (§17.15): i collaboratori esterni (le loro fatture, col previsto dell'incarico) e le altre fatture ricevute della commessa.
+          cc && (C.num(cc.collaboratori) || C.num(cc.collaboratoriPrevisto)) ? rc('Collaboratori esterni · previsto ' + C.euro(cc.collaboratoriPrevisto || 0), C.euro(cc.collaboratori || 0)) : null,
+          cc && C.num(cc.altreRicevute) ? rc('Altre fatture ricevute', C.euro(cc.altreRicevute)) : null))]);
       if (conSpese.length) {
         const tab = h('div', { class: 'tab' }, h('div', { class: 'r testa', style: { gridTemplateColumns: '70px 130px minmax(0,1fr) 240px 110px' } },
           h('span', null, 'Data'), h('span', null, 'N°'), h('span', null, 'Di cosa'), h('span', null, 'Scontrini'), h('span', { class: 'n' }, 'Importo')));

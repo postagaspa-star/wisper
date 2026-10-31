@@ -337,6 +337,25 @@ fun SchermataDettaglioTicket(dati: Dati, nav: Navigatore, chiave: String) {
                 }
             }
 
+            // ---- fase 6 (§3.9): gli strumenti usati negli interventi, con lo stato di quel giorno
+            if (t.strumenti.isNotEmpty()) Sezione5("Strumenti usati", t.strumenti.size) {
+                if (t.tarataScaduta) Parola5("Taratura scaduta", colore = eu.stgm.wisper.rapportino.ColoreFase5.ROSSO)
+                SchedaElenco {
+                    t.strumenti.forEachIndexed { i, s ->
+                        if (i > 0) LineaElenco()
+                        RigaVoce(s.nome, sotto = listOf(s.codice, if (s.matricola.isNotBlank()) "matr. ${s.matricola}" else "").filter { it.isNotBlank() }.joinToString(" · "), icona = Icone.misura,
+                            fine = {
+                                when (s.statoAllora) {
+                                    eu.stgm.wisper.rapportino.ContiMezzi.SCADUTA -> Parola6("Taratura scaduta" + if (s.confermato) " · confermato" else "")
+                                    eu.stgm.wisper.rapportino.ContiMezzi.NON_CONFORME -> Parola6("Non conforme")
+                                    eu.stgm.wisper.rapportino.ContiMezzi.VALIDA -> Parola6("Tarato quel giorno", colore = eu.stgm.wisper.rapportino.ColoreFase5.VERDE)
+                                    else -> {}
+                                }
+                            })
+                    }
+                }
+            }
+
             // ---- foto
             Sezione5("Foto", t.foto.size.takeIf { it > 0 }) {
                 Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(10.dp)) {

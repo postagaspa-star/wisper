@@ -13,11 +13,21 @@
 const { Rifiuto, senzaPermesso, testo, numero, adesso, oggi, dataIso, dataDaIso, dataOraIso, piuGiorni } = require('../utili');
 const C = require('../conti');
 
-const TIPI = ['verifica_terra', 'verifica_scariche', 'verifica_protezioni', 'manutenzione', 'documento', 'polizza', 'contratto', 'altro'];
+const TIPI = ['verifica_terra', 'verifica_scariche', 'verifica_protezioni', 'manutenzione', 'documento', 'polizza', 'contratto',
+  // Fase 6: le scadenze di persone, mezzi, strumenti e collaboratori (lo scadenziario e' uno).
+  'formazione', 'abilitazione', 'visita_medica', 'contratto_lavoro', 'assicurazione', 'bollo', 'revisione', 'tagliando', 'taratura', 'verifica_dpi',
+  'durc', 'visura', 'idoneita', 'albo', 'altro'];
 const NOMI_TIPI = {
   verifica_terra: 'Verifica impianto di terra', verifica_scariche: 'Verifica protezione dalle scariche', verifica_protezioni: 'Verifica protezioni SPG e SPI',
   manutenzione: 'Manutenzione', documento: 'Documento', polizza: 'Polizza', contratto: 'Contratto', altro: 'Altro',
+  formazione: 'Formazione', abilitazione: 'Abilitazione', visita_medica: 'Visita medica', contratto_lavoro: 'Contratto di lavoro', assicurazione: 'Assicurazione',
+  bollo: 'Bollo', revisione: 'Revisione', tagliando: 'Tagliando', taratura: 'Taratura', verifica_dpi: 'Verifica del DPI', durc: 'DURC', visura: 'Visura camerale',
+  idoneita: 'Autocertificazione di idoneità', albo: 'Iscrizione all\'albo',
 };
+/** Fase 6: i tipi dei documenti dei collaboratori esterni (la loro idoneita'). */
+const TIPI_COLLABORATORE = ['durc', 'visura', 'idoneita', 'albo'];
+const TIPI_PERSONA = ['formazione', 'abilitazione', 'visita_medica', 'contratto_lavoro'];
+const TIPI_MEZZO = ['assicurazione', 'bollo', 'revisione', 'tagliando', 'taratura', 'verifica_dpi'];
 /** Gli ambienti a maggior rischio: le verifiche DPR 462 ogni 2 anni invece di 5. */
 const AMBIENTI_RISCHIO = ['cantiere', 'medico', 'incendio', 'esplosione'];
 const TITOLI_PROPOSTI = {
@@ -36,7 +46,26 @@ const delContratto = s => s.tipo === 'manutenzione' || s.tipo === 'contratto' ||
 module.exports = {
   // ------------------------------------------------------------------ chi vede, chi scrive
 
+  /** Fase 6: di chi e' una scadenza: persone, mezzi (anche gli strumenti), collaboratori, o '' (quelle della fase 5). */
+  gruppoDiScadenza(s) {
+    if (s.persona_id) return 'persone';
+    if (s.veicolo_id || s.attrezzatura_id) return 'mezzi';
+    if (TIPI_COLLABORATORE.indexOf(s.tipo) >= 0) return 'collaboratori';
+    if (s.documento_id && s.cliente_id) {
+      const d = this.db.riga('SELECT c.nome FROM documenti d JOIN documento_categorie c ON c.id = d.categoria_id WHERE d.id = ?', s.documento_id);
+      if (d && d.nome === 'Documenti dei collaboratori') return 'collaboratori';
+    }
+    return '';
+  },
+
   vedeScadenza(s) {
+    // Fase 6: quelle con una persona come i dati personali (persone 2 e la persona), di mezzi e strumenti chi ha mezzi,
+    // dei collaboratori chi ha collaboratori (l'esterno solo le sue). Un esterno non vede le altre.
+    const gruppo = this.gruppoDiScadenza(s);
+    if (this.eEsterno()) return gruppo === 'collaboratori' && s.cliente_id === this.mioSoggetto();
+    if (gruppo === 'persone') return this.livello('persone') >= 1 && this.vedePersonaliDi(s.persona_id);
+    if (gruppo === 'mezzi') return this.livello('mezzi') >= 1;
+    if (gruppo === 'collaboratori') return this.livello('collaboratori') >= 1;
     const modulo = delContratto(s) ? 'ticket' : 'documenti';
     if (this.livello(modulo) < 1) return false;
     if (s.documento_id) {
@@ -47,6 +76,9 @@ module.exports = {
   },
 
   puoScrivereScadenza(s) {
+    const gruppo = this.gruppoDiScadenza(s);
+    if (this.eEsterno()) return false;
+    if (gruppo) return this.livello(gruppo) >= 2 && this.vedeScadenza(s);
     return this.livello(delContratto(s) ? 'ticket' : 'documenti') >= 2 && this.vedeScadenza(s);
   },
 
@@ -82,6 +114,13 @@ module.exports = {
     this.db.righe('SELECT id, numero FROM ticket').forEach(t => { a.ticket[t.id] = t.numero; });
     this.db.righe('SELECT id, numero FROM contratti').forEach(c => { a.contratti[c.id] = c.numero; });
     this.db.righe('SELECT id, nome FROM utenti').forEach(u => { a.utenti[u.id] = u.nome; });
+    // Fase 6
+    a.persone = {};
+    a.veicoli = {};
+    a.attrezzature = {};
+    this.db.righe('SELECT id, nome FROM persone').forEach(p => { a.persone[p.id] = p.nome; });
+    this.db.righe('SELECT id, nome, targa FROM veicoli').forEach(v => { a.veicoli[v.id] = (v.nome + ' ' + (v.targa || '')).trim(); });
+    this.db.righe('SELECT id, nome, codice FROM attrezzature').forEach(x => { a.attrezzature[x.id] = x.nome; });
     return a;
   },
 
@@ -104,6 +143,16 @@ module.exports = {
       assegnataA: s.assegnata_a === null ? null : s.assegnata_a, assegnata: s.assegnata_a ? a.utenti[s.assegnata_a] || '' : '',
       note: s.note, puoScrivere: this.puoScrivereScadenza(s) && s.stato === 'aperta',
       creato: dataOraIso(s.creato), modificato: dataOraIso(s.modificato),
+      // Fase 6: di chi e' (persona, mezzo, strumento, collaboratore) e se la prossima va a fine mese (la revisione).
+      gruppo: this.gruppoDiScadenza(s),
+      idPersona: s.persona_id === null || s.persona_id === undefined ? null : s.persona_id, persona: s.persona_id ? (a.persone || {})[s.persona_id] || '' : '',
+      idVeicolo: s.veicolo_id === null || s.veicolo_id === undefined ? null : s.veicolo_id, mezzo: s.veicolo_id ? (a.veicoli || {})[s.veicolo_id] || '' : '',
+      idAttrezzatura: s.attrezzatura_id === null || s.attrezzatura_id === undefined ? null : s.attrezzatura_id,
+      attrezzatura: s.attrezzatura_id ? (a.attrezzature || {})[s.attrezzatura_id] || '' : '',
+      idQualifica: s.qualifica_id === null || s.qualifica_id === undefined ? null : s.qualifica_id,
+      idVisita: s.visita_id === null || s.visita_id === undefined ? null : s.visita_id,
+      idSoggetto: this.gruppoDiScadenza(s) === 'collaboratori' ? s.cliente_id : null,
+      fineMese: s.fine_mese === 1,
     };
   },
 
@@ -128,8 +177,15 @@ module.exports = {
     if (testo(d.idSede)) { cond.push('sede_id = ?'); par.push(Number(d.idSede)); }
     if (testo(d.idContratto)) { cond.push('contratto_id = ?'); par.push(Number(d.idContratto)); }
     if (testo(d.idDocumento)) { cond.push('documento_id = ?'); par.push(Number(d.idDocumento)); }
+    // Fase 6: i filtri di persone, mezzi, strumenti e collaboratori.
+    if (testo(d.idPersona)) { cond.push('persona_id = ?'); par.push(Number(d.idPersona)); }
+    if (testo(d.idVeicolo)) { cond.push('veicolo_id = ?'); par.push(Number(d.idVeicolo)); }
+    if (testo(d.idAttrezzatura)) { cond.push('attrezzatura_id = ?'); par.push(Number(d.idAttrezzatura)); }
+    if (testo(d.idSoggetto)) { cond.push('cliente_id = ?'); par.push(testo(d.idSoggetto).toUpperCase()); }
+    const gruppo = testo(d.gruppo);
+    if (gruppo && ['persone', 'mezzi', 'collaboratori'].indexOf(gruppo) < 0) throw new Rifiuto('Gruppo: persone, mezzi o collaboratori');
     const righe = this.db.righe('SELECT * FROM scadenze' + (cond.length ? ' WHERE ' + cond.join(' AND ') : '') + ' ORDER BY data, id', ...par)
-      .filter(s => this.vedeScadenza(s));
+      .filter(s => this.vedeScadenza(s) && (!gruppo || this.gruppoDiScadenza(s) === gruppo));
     const aiuti = this.aiutiScadenze();
     const lista = righe.map(s => this.scadenzaDaRiga(s, aiuti));
     if (!da && !a && stato === 'aperte') {
@@ -179,7 +235,7 @@ module.exports = {
     if (prima && prima.stato !== 'aperta') throw new Rifiuto('La scadenza è già ' + (prima.stato === 'fatta' ? 'fatta' : 'tolta') + ': non si cambia');
     const p = prima || {};
     const tipo = x.tipo !== undefined ? testo(x.tipo) || 'altro' : prima ? prima.tipo : 'altro';
-    if (TIPI.indexOf(tipo) < 0) throw new Rifiuto('Tipo: ' + TIPI.slice(0, -1).join(', ') + ' o altro');
+    if (TIPI.indexOf(tipo) < 0) throw new Rifiuto('Tipo: ' + TIPI.slice(0, 7).join(', ') + ' o altro');
     // Cliente, impianto, documento, contratto.
     const idSede = x.idSede !== undefined ? (vuoto(x.idSede) ? null : Number(x.idSede)) : prima ? prima.sede_id : null;
     const sede = idSede !== null ? this.db.riga('SELECT * FROM sedi WHERE id = ?', idSede) : null;
@@ -197,9 +253,23 @@ module.exports = {
       const nome = (this.db.riga('SELECT nome FROM soggetti WHERE id = ?', idCliente) || {}).nome || idCliente;
       throw new Rifiuto('Impianto ' + sede.id + ' non trovato tra quelli di ' + nome);
     }
-    // Il permesso: le visite e le disdette dei contratti col modulo ticket, le altre coi documenti.
-    const modulo = delContratto({ tipo, contratto_id: idContratto }) ? 'ticket' : 'documenti';
-    if (this.livello(modulo) < 2) throw senzaPermesso(modulo === 'ticket' ? 'scrivere le scadenze dei contratti' : 'scrivere le scadenze');
+    // Fase 6: la persona, il mezzo, lo strumento.
+    const idPersona = x.idPersona !== undefined ? (vuoto(x.idPersona) ? null : Number(x.idPersona)) : prima ? prima.persona_id : null;
+    if (idPersona !== null && !this.db.riga('SELECT id FROM persone WHERE id = ?', idPersona)) throw new Rifiuto('Persona ' + idPersona + ' non trovata');
+    const idVeicolo = x.idVeicolo !== undefined ? (vuoto(x.idVeicolo) ? null : Number(x.idVeicolo)) : prima ? prima.veicolo_id : null;
+    if (idVeicolo !== null && !this.db.riga('SELECT id FROM veicoli WHERE id = ?', idVeicolo)) throw new Rifiuto('Mezzo ' + idVeicolo + ' non trovato');
+    const idAttrezzatura = x.idAttrezzatura !== undefined ? (vuoto(x.idAttrezzatura) ? null : Number(x.idAttrezzatura)) : prima ? prima.attrezzatura_id : null;
+    if (idAttrezzatura !== null && !this.db.riga('SELECT id FROM attrezzature WHERE id = ?', idAttrezzatura)) throw new Rifiuto('Attrezzatura ' + idAttrezzatura + ' non trovata');
+    if (!idCliente && testo(x.idSoggetto)) idCliente = testo(x.idSoggetto).toUpperCase();
+    // Il permesso: le visite e le disdette dei contratti col modulo ticket, quelle di persone, mezzi e collaboratori col loro
+    // modulo, le altre coi documenti.
+    const gruppo = this.gruppoDiScadenza({ tipo, persona_id: idPersona, veicolo_id: idVeicolo, attrezzatura_id: idAttrezzatura, documento_id: idDocumento, cliente_id: idCliente });
+    const modulo = gruppo || (delContratto({ tipo, contratto_id: idContratto }) ? 'ticket' : 'documenti');
+    // L'esterno scrive solo la scadenza di un suo documento (il DURC nuovo che carica: §8.4), mai le altre.
+    const suaDiDocumento = this.eEsterno() && gruppo === 'collaboratori' && idDocumento !== null && idCliente === this.mioSoggetto() && !idPersona && !idVeicolo && !idAttrezzatura;
+    if (this.eEsterno() && !suaDiDocumento) throw senzaPermesso('scrivere le scadenze');
+    if (!suaDiDocumento && this.livello(modulo) < 2) throw senzaPermesso(modulo === 'ticket' ? 'scrivere le scadenze dei contratti' : 'scrivere le scadenze');
+    if (gruppo === 'persone' && !this.vedePersonaliDi(idPersona)) throw senzaPermesso('scrivere le scadenze delle persone');
     const proposta = this.propostaScadenza(tipo, sede, contratto);
     const titolo = x.titolo !== undefined ? testo(x.titolo) || proposta.titolo : prima ? prima.titolo : proposta.titolo;
     if (!titolo) throw new Rifiuto('Titolo: scrivi cosa scade');
@@ -224,6 +294,8 @@ module.exports = {
       dalla_fatta: x.dallaFatta !== undefined ? (si(x.dallaFatta) ? 1 : 0) : prima ? prima.dalla_fatta : (proposta.dallaFatta ? 1 : 0),
       azione, anticipo_giorni: azione === 'ticket' ? anticipo : null, assegnata_a: assegnataA,
       note: x.note !== undefined ? testo(x.note) : p.note || '',
+      persona_id: idPersona, veicolo_id: idVeicolo, attrezzatura_id: idAttrezzatura,
+      fine_mese: x.fineMese !== undefined ? (si(x.fineMese) ? 1 : 0) : prima ? prima.fine_mese : (tipo === 'revisione' ? 1 : 0),
     };
     const ora = adesso();
     let id;
@@ -244,13 +316,15 @@ module.exports = {
    */
   prossimaScadenza(s, base, idDocumento) {
     if (!s.ogni_mesi) return null;
-    const data = C.piuMesi(base, s.ogni_mesi);
+    // Fase 6: la revisione va all'ultimo giorno del mese (fine_mese).
+    const data = s.fine_mese ? C.fineMese(C.piuMesi(base, s.ogni_mesi)) : C.piuMesi(base, s.ogni_mesi);
     if (s.contratto_id && !this.contrattoCopre(s.contratto_id, data)) return null;
     const ora = adesso();
     const id = this.inserisci('scadenze', {
       titolo: s.titolo, tipo: s.tipo, cliente_id: s.cliente_id, sede_id: s.sede_id, documento_id: idDocumento || s.documento_id, contratto_id: s.contratto_id,
       data, preavviso_giorni: s.preavviso_giorni, ogni_mesi: s.ogni_mesi, dalla_fatta: s.dalla_fatta, azione: s.azione, anticipo_giorni: s.anticipo_giorni,
       assegnata_a: s.assegnata_a, stato: 'aperta', note: s.note, creata_da: this.chi().utente ? this.chi().utente.id : null, creato: ora, modificato: ora,
+      persona_id: s.persona_id, veicolo_id: s.veicolo_id, attrezzatura_id: s.attrezzatura_id, qualifica_id: s.qualifica_id, visita_id: s.visita_id, fine_mese: s.fine_mese,
     }, 'id', 'scadenza fatta: nasce la prossima del ' + dataIt(data));
     this.aggiorna('scadenze', s.id, { prossima_id: id });
     // Chi la citava (l'impianto del contratto, il documento) ora cita la prossima.
@@ -339,4 +413,7 @@ Object.defineProperties(module.exports, {
   NOMI_TIPI_SCADENZA: { value: NOMI_TIPI },
   AMBIENTI_RISCHIO: { value: AMBIENTI_RISCHIO },
   delContratto: { value: delContratto },
+  TIPI_COLLABORATORE: { value: TIPI_COLLABORATORE },
+  TIPI_PERSONA: { value: TIPI_PERSONA },
+  TIPI_MEZZO_SCADENZA: { value: TIPI_MEZZO },
 });

@@ -386,7 +386,9 @@
     const lavoroNoto = cc.lavoroNoto !== false;
     const previsto = k && k.previsto && k.previsto.costoPrevisto !== null && k.previsto.costoPrevisto !== undefined ? numero(k.previsto.costoPrevisto) : null;
     const lavoroAtteso = previsto !== null && lavoroNoto ? Math.max(lavoro, previsto) : lavoro;
-    const altro = numero(cc.auto) + numero(cc.speseRapportini) + numero(cc.speseFuoriRapportini) + numero(cc.trasferte);
+    // Fase 6 (§17.15): il costo atteso sa dei collaboratori esterni dal giorno dell'incarico (il più grande fra pattuito e
+    // fatturato) e delle altre fatture ricevute della commessa; il sostenuto (cc.totale) li ha già dentro.
+    const altro = numero(cc.auto) + numero(cc.speseRapportini) + numero(cc.speseFuoriRapportini) + numero(cc.trasferte) + numero(cc.collaboratoriPrevisto) + numero(cc.altreRicevute);
     const costoAtteso = centesimi(lavoroAtteso + altro);
     const valoreAtteso = k ? numero(k.valoreAtteso) : 0;
     const margine = centesimi(valoreAtteso - costoAtteso);
@@ -395,7 +397,7 @@
       percMargine: valoreAtteso > 0 ? margine / valoreAtteso : null,
       margineDaBudget: lavoroAtteso > lavoro,
       // Le parti nuove della fase 3: se non ce ne sono, è il numero della fase 1.
-      conFase3: numero(cc.costoOreRegistrate) > 0 || numero(cc.speseFuoriRapportini) > 0 || numero(cc.trasferte) > 0,
+      conFase3: numero(cc.costoOreRegistrate) > 0 || numero(cc.speseFuoriRapportini) > 0 || numero(cc.trasferte) > 0 || numero(cc.collaboratoriPrevisto) > 0 || numero(cc.altreRicevute) > 0,
     };
   }
 

@@ -87,7 +87,7 @@ test('una sessione senza uso da piu\' di 180 giorni scade', async () => {
 
 test('io: chi sono, i permessi, il titolare e la ragione sociale', async () => {
   const r = await marco('io');
-  assert.equal(r.utente.nome, 'Marco Collaboratore');
+  assert.equal(r.utente.nome, 'Marco Rossato');
   assert.equal(r.utente.ruolo, 'collaboratore');
   assert.equal(r.permessi.rapportini, 2);
   assert.equal(r.permessi.costi, 0);
@@ -139,7 +139,7 @@ test('collaboratore: non tocca i rapportini degli altri, in nessun modo', async 
 test('collaboratore: scrive i suoi, col suo nome e la tariffa decisa dal server', async () => {
   const r = await marco('salvaRapportino', { rapportino: { idLocale: 'marco-nuovo', data: '2026-10-21', idCliente: 'C002', idCommessa: '26ST002', tecnico: 'Manuel Gasparotto', tariffa: 999, oreLavoro: 2 } });
   assert.equal(r.ok, true, r.errore);
-  assert.equal(r.rapportino.tecnico, 'Marco Collaboratore');
+  assert.equal(r.rapportino.tecnico, 'Marco Rossato');
   assert.equal(r.rapportino.idUtente, 3);
   assert.equal('tariffa' in r.rapportino, false);
   const visto = (await manuel('rapportini', { tutti: true })).rapportini.find(x => x.id === r.rapportino.id);

@@ -49,7 +49,7 @@
     }
     const serveAperte = () => (M.aperte ? Promise.resolve() : leggiAperte());
     /** Dopo un cambio che tocca più righe (una ricorrenza, gli allegati): si rilegge tutto alla prossima pagina. */
-    function daRileggere() { M.aperte = null; M.periodo = null; M.scadenze = null; }
+    function daRileggere() { M.aperte = null; M.periodo = null; M.scadenze = null; M.assenze = null; }
     /** Fase 5: le scadenze (verifiche, documenti, visite) si vedono nel loro giorno, lette da scadenze {da, a}: non sono attività. */
     async function serveScadenze(da, a) {
       if (!(puo('documenti') || puo('ticket'))) { M.scadenze = []; return; }
@@ -57,6 +57,26 @@
       try { const r = await Rete.get('/server/scadenze?da=' + da + '&a=' + a); M.scadenze = (r.scadenze || []).filter(x => x.stato === 'aperta'); M.scDa = da; M.scA = a; } catch (e) { M.scadenze = []; }
     }
     const scadenzeDel = g => (M.scadenze || []).filter(x => x.data === g);
+    /**
+     * Fase 6 (§6.5): le assenze approvate (e quelle da approvare, tratteggiate) e le chiusure dello studio si vedono
+     * come fasce nel calendario e nella pianificazione; si leggono da assenze {da, a}. Il tipo è quello che il server
+     * manda ("Assente" per chi non lo vede).
+     */
+    async function serveAssenze(da, a) {
+      if (!puo('persone')) { M.assenze = { assenze: [], chiusure: [] }; return; }
+      if (M.assenze && M.asDa <= da && M.asA >= a) return;
+      try { const r = await Rete.get('/server/assenze?da=' + da + '&a=' + a); M.assenze = { assenze: (r.assenze || []).filter(x => x.stato === 'approvata' || x.stato === 'da_approvare'), chiusure: r.chiusure || [] }; M.asDa = da; M.asA = a; } catch (e) { M.assenze = { assenze: [], chiusure: [] }; }
+    }
+    const idPersonaDi = idUtente => { const u = utenteDi(idUtente); return u ? u.idPersona : null; };
+    const assenzeDel = (g, idPersona) => ((M.assenze && M.assenze.assenze) || []).filter(x => x.dal <= g && (x.al || x.dal) >= g && (idPersona === undefined || String(x.idPersona) === String(idPersona)));
+    const chiusureDel = g => ((M.assenze && M.assenze.chiusure) || []).filter(c => c.dal <= g && (c.al || c.dal) >= g);
+    function fasciaAssenza(x, conNome) {
+      const P6 = window.WisperRegolePersone;
+      const tv = P6.tipoVisto(x);
+      const testo = (conNome ? (x.persona || '').split(' ')[0] + ': ' : '') + tv + (x.dalle && x.alle ? ' ' + x.dalle + '-' + x.alle : '') + (x.stato === 'da_approvare' ? ' · da approvare' : '');
+      return h('span', { class: 'fascia-ass' + (x.stato === 'da_approvare' ? ' attesa-f6' : tv === 'Ferie' ? '' : tv === 'Permesso' ? ' perm' : ' altra'), title: testo }, testo);
+    }
+    const fasciaChiusura = c => h('span', { class: 'fascia-ass chiuso', title: 'Studio chiuso: ' + c.nome }, 'Studio chiuso: ' + c.nome);
     /** Un intervento (fase 5) si apre nel suo ticket; il resto col modulo dell'attività. */
     function apriAttivita(a) { if (a.tipo === 'intervento' && a.idTicket) W.vai('#ticket/tk/' + a.idTicket); else modulo(a); }
     function chipScadenza(x) {
@@ -93,11 +113,11 @@
       if (a1 === 'calendario') {
         const g = M.giorno || oggi();
         const [da, a] = periodoCalendario(g);
-        return conDati(pagina, () => Promise.all([servePeriodo(da, a), serveScadenze(da, a)]), () => calendario(pagina));
+        return conDati(pagina, () => Promise.all([servePeriodo(da, a), serveScadenze(da, a), serveAssenze(da, a)]), () => calendario(pagina));
       }
       if (a1 === 'pianificazione') {
         const giorni = RA.settimanaDi(M.settimanaPian || oggi());
-        return conDati(pagina, () => Promise.all([servePeriodo(giorni[0], giorni[6]), serveAperte()]), () => pianificazione(pagina));
+        return conDati(pagina, () => Promise.all([servePeriodo(giorni[0], giorni[6]), serveAperte(), serveAssenze(giorni[0], giorni[6])]), () => pianificazione(pagina));
       }
       return conDati(pagina, serveAperte, () => {
         elenco(pagina);
@@ -491,7 +511,7 @@
         giorni.map(gi => h('button', { type: 'button', class: 'cal-giorno' + (gi === oggi() ? ' oggi' : ''), onclick: () => { M.giorno = gi; M.vistaCal = 'giorno'; W.disegnaPagina(); } }, RA.nomeGiorno(gi, true))));
       const blocchi = giorni.map(gi => RA.blocchiDelGiorno(lista, gi));
       const tuttoIlGiorno = h('div', { class: 'cal-tutto', style: { gridTemplateColumns: col } }, h('span', { class: 'piccolo' }, 'giorno'),
-        blocchi.map((b, i) => h('div', { class: 'cal-cella-tutto', 'data-giorno': giorni[i] }, scadenzeDel(giorni[i]).map(chipScadenza), b.tuttoIlGiorno.map(a => chip(a)))));
+        blocchi.map((b, i) => h('div', { class: 'cal-cella-tutto', 'data-giorno': giorni[i] }, chiusureDel(giorni[i]).map(fasciaChiusura), assenzeDel(giorni[i]).map(x => fasciaAssenza(x, true)), scadenzeDel(giorni[i]).map(chipScadenza), b.tuttoIlGiorno.map(a => chip(a)))));
       const corpo = h('div', { class: 'cal-corpo', style: { gridTemplateColumns: col } });
       aggiungi(corpo, [h('div', { class: 'cal-ore' }, ore.map(o => h('div', { class: 'cal-ora', style: { height: ORE.alta + 'px' } }, o + ':00')))]);
       giorni.forEach((gi, i) => {
@@ -532,6 +552,7 @@
           return h('div', { class: 'mese-cella' + (gi.slice(0, 7) !== g.slice(0, 7) ? ' fuori' : '') + (gi === oggi() ? ' oggi' : ''), role: 'button', tabindex: '0',
             onclick: () => { M.giorno = gi; M.vistaCal = 'giorno'; W.disegnaPagina(); }, onkeydown: e => { if (e.key === 'Enter') { M.giorno = gi; M.vistaCal = 'giorno'; W.disegnaPagina(); } } },
           h('span', { class: 'num-giorno' }, String(Number(gi.slice(8)))),
+          chiusureDel(gi).slice(0, 1).map(fasciaChiusura), assenzeDel(gi).slice(0, 2).map(x => fasciaAssenza(x, true)),
           scadenzeDel(gi).slice(0, 2).map(x => h('span', { class: 'cal-chip c-scadenza' }, icona('bandiera', 12, 2.6), x.titolo)),
           del.slice(0, 3).map(a => h('span', { class: 'cal-chip ' + colorePersona(a.assegnataA) + (a.stato === 'fatta' ? ' fatta' : '') }, (RA.conOrario(a) && a.inizio && !a.tuttoIlGiorno ? RA.ora(a.inizio) + ' ' : '') + a.titolo)),
           del.length > 3 ? h('span', { class: 'piccolo' }, 'e altre ' + (del.length - 3)) : null);
@@ -556,7 +577,9 @@
         'data-attivita': a.id, onclick: () => modulo(a), ondragstart: e => { e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', String(a.id)); } catch (x) { /* niente */ } trascinata = a; } },
       h('b', null, RA.aCapoMorbido(a.titolo)), h('span', null, [RA.conOrario(a) && a.inizio && !a.tuttoIlGiorno ? RA.ora(a.inizio) : '', a.idCommessa, !a.assegnataA && RA.giornoDi(a) ? RA.quandoBreve(RA.giornoDi(a), oggi()) : ''].filter(Boolean).join(' · ')));
       const cella = (u, gi, lista) => {
-        const c = h('div', { class: 'cella-pian' + (gi === oggi() ? ' oggi' : ''), 'data-giorno': gi, 'data-utente': u.id }, lista.map(scheda));
+        // Fase 6: in cima alla cella la fascia dell'assenza di quella persona quel giorno, o della chiusura dello studio.
+        const c = h('div', { class: 'cella-pian' + (gi === oggi() ? ' oggi' : ''), 'data-giorno': gi, 'data-utente': u.id },
+          chiusureDel(gi).map(fasciaChiusura), u.idPersona ? assenzeDel(gi, u.idPersona).map(x => fasciaAssenza(x, false)) : null, lista.map(scheda));
         if (scrive() && (!collaboratore || String(u.id) === String(io()))) {
           c.addEventListener('dragover', e => { if (trascinata) { e.preventDefault(); c.classList.add('accoglie'); } });
           c.addEventListener('dragleave', () => c.classList.remove('accoglie'));
@@ -603,6 +626,18 @@
 
     /** La domanda quando il server dice che un appuntamento si sovrappone a un altro della stessa persona. */
     function domandaSovrapposte(d) {
+      // Fase 6 (§12.8): per una persona assente quel giorno, "Marco Rossato è in ferie quel giorno" con Salvala lo stesso e Cambia giorno (giallo).
+      if (d.assenti && d.assenti.length) {
+        return new Promise(risolvi => {
+          let detto = false;
+          const rispondi = x => { if (!detto) { detto = true; risolvi(x); } };
+          let chiudiA;
+          chiudiA = finestra({ titolo: d.errore || (d.assenti[0].nome + ' è assente quel giorno'), fuoco: false, allaChiusura: () => rispondi(false),
+            corpo: h('div', { class: 'righe-calme' }, d.assenti.map(x => h('span', null, x.nome + ' · ' + (x.tipoVisto || 'Assente') + ' · ' + window.WisperRegolePersone.quandoAssenza(x).replace(/^([A-Z])/, m => m.toLowerCase())))),
+            pulsanti: [h('button', { type: 'button', class: 'btn testo grande', onclick: () => { rispondi(true); chiudiA(); } }, 'Salvala lo stesso'), 'spazio',
+              h('button', { type: 'button', class: 'btn giallo grande', onclick: () => { rispondi(false); chiudiA(); } }, 'Cambia giorno')] });
+        });
+      }
       const chi = d.sovrapposte && d.sovrapposte[0] ? (d.sovrapposte[0].assegnata || nomeUtente(d.sovrapposte[0].assegnataA)).split(' ')[0] + ' ha già ' : 'C\'è già ';
       const quali = (d.sovrapposte || []).map(y => y.titolo + ' (' + RA.ora(y.inizio) + (y.fine ? '-' + RA.ora(y.fine) : '') + ')').join(', ');
       return conferma('Si sovrappone a un altro appuntamento', quali ? chi + quali + '. Salvarlo lo stesso?' : (d.errore || 'Si sovrappone a un altro appuntamento') + '. Salvarlo lo stesso?', 'Salva lo stesso');

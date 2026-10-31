@@ -98,7 +98,7 @@ import kotlin.math.roundToInt
 private val IT = Locale.ITALY
 
 /** Le schede della pagina di una commessa. */
-internal enum class SchedaDiCommessa { PANORAMICA, PRESTAZIONI, RAPPORTINI, DOCUMENTI, COSTI, FATTURARE }
+internal enum class SchedaDiCommessa { PANORAMICA, PRESTAZIONI, RAPPORTINI, DOCUMENTI, INCARICHI, COSTI, FATTURARE }
 
 /**
  * Quello che resta scelto mentre si va e si torna, come sul computer: il segmento,
@@ -284,12 +284,17 @@ fun SchermataCommessa(dati: Dati, nav: Navigatore, id: String) {
     var daConfermare by remember { mutableStateOf<String?>(null) }
     var inCorso by remember { mutableStateOf(false) }
 
+    // Fase 6 (§12.8): gli incarichi ai collaboratori esterni sulla commessa (con collaboratori 1, non per l'esterno).
+    val vedeIncarichi = perm.vede(Moduli.COLLABORATORI) && !dati.sessione.value.esterno && !dati.esempio
+    val incarichi = if (vedeIncarichi) rememberLettura("incarichi-commessa-${m.id}", Giri6.collaboratori) { dati.fase6.incarichiCommessa(m.id) } else null
+
     // Si apre su Prestazioni se ce ne sono, altrimenti su Panoramica; Costi e Da fatturare solo con i soldi.
     val schede = buildList {
         add(SchedaDiCommessa.PANORAMICA to "Panoramica")
         add(SchedaDiCommessa.PRESTAZIONI to "Prestazioni · ${prestazioni.size}")
         add(SchedaDiCommessa.RAPPORTINI to "Rapportini · ${k.rapportini.size}")
         add(SchedaDiCommessa.DOCUMENTI to "Documenti")
+        if (vedeIncarichi) add(SchedaDiCommessa.INCARICHI to "Incarichi" + ((incarichi as? Lettura.Pronta)?.dato?.count { it.stato != "annullato" }?.let { " · $it" } ?: ""))
         if (costi) {
             add(SchedaDiCommessa.COSTI to "Costi")
             add(SchedaDiCommessa.FATTURARE to "Da fatturare")
@@ -379,10 +384,19 @@ fun SchermataCommessa(dati: Dati, nav: Navigatore, id: String) {
             SchedaPersone(m, ana)
             SegmentiScorrevoli(schede, scheda, { RicordoCommesse.schede[m.id] = it })
             when (scheda) {
-                SchedaDiCommessa.PANORAMICA -> PanoramicaCommessa(m, k, costi)
+                SchedaDiCommessa.PANORAMICA -> {
+                    PanoramicaCommessa(m, k, costi)
+                    // Fase 6 (§12.8): i mezzi e gli strumenti in prestito alla commessa.
+                    InPrestitoAllaCommessa(dati, m.id, nav)
+                }
+                SchedaDiCommessa.INCARICHI -> IncarichiDellaCommessa(incarichi, nav)
                 SchedaDiCommessa.PRESTAZIONI -> PrestazioniCommessa(dati, m, prestazioni, costi, puo)
                 SchedaDiCommessa.RAPPORTINI -> RapportiniCommessa(k, viste, nav, costi)
-                SchedaDiCommessa.COSTI -> CostiCommessa(m, k, cliente, ana, nav)
+                SchedaDiCommessa.COSTI -> {
+                    CostiCommessa(m, k, cliente, ana, nav)
+                    // Fase 6 (§8.6, §17.15): collaboratori esterni (col previsto) e altre fatture ricevute.
+                    CollaboratoriDellaCommessa(dati, m.id)
+                }
                 SchedaDiCommessa.FATTURARE -> {
                     // Fase 4 (§15.12): contratto, fatturato, incassato, le scadenze di pagamento col loro stato.
                     if (perm.vede(Moduli.FATTURAZIONE)) FatturazioneDellaCommessa(dati, m.id, nav)

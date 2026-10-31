@@ -21,6 +21,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.material3.Icon
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -56,6 +57,7 @@ import eu.stgm.wisper.rapportino.dataIt
 import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
+import eu.stgm.wisper.rapportino.Moduli
 import java.time.LocalDate
 
 /*
@@ -718,6 +720,9 @@ private fun euroCorto(n: Double?): String {
 
 // ---------------------------------------------------------------------------------- una fattura ricevuta
 
+/** Quattro valori insieme, per scegliere cosa mostra il foglio di scelta della ricevuta. */
+private data class Quattro(val titolo: String, val campo: String, val voci: List<Pair<String, String>>, val attuale: String)
+
 /** Una fattura ricevuta (§13.2): conti, scadenze, pagamenti, categoria e commessa; giallo Segna pagata. */
 @Composable
 fun SchermataRicevuta(dati: Dati, nav: Navigatore, id: String) {
@@ -733,6 +738,17 @@ fun SchermataRicevuta(dati: Dati, nav: Navigatore, id: String) {
     var annulla by remember { mutableStateOf(false) }
     var motivo by remember { mutableStateOf("") }
     val r = (lettura as? Lettura.Pronta)?.dato
+    // Fase 6 (§17.2): l'incarico del collaboratore (gli incarichi di questo fornitore), il mezzo dello studio, lo strumento.
+    val perm = LocalPermessi.current
+    var scelta6 by remember { mutableStateOf("") }
+    var incarichi by remember { mutableStateOf<List<eu.stgm.wisper.rapportino.Incarico>>(emptyList()) }
+    var strumenti by remember { mutableStateOf<List<eu.stgm.wisper.rapportino.Attrezzatura>>(emptyList()) }
+    val mezziStudio = remember(ana) { ana.mezzi.filter { it.proprieta == "studio" } }
+    LaunchedEffect(r?.idFornitore) {
+        val f = r?.idFornitore.orEmpty()
+        if (f.isNotBlank() && perm.vede(Moduli.COLLABORATORI)) dati.fase6.incarichi("tutti").onSuccess { l -> incarichi = l.filter { it.idSoggetto == f && it.stato != "annullato" } }
+        if (f.isNotBlank() && perm.vede(Moduli.MEZZI)) dati.fase6.attrezzature().onSuccess { strumenti = it }
+    }
     fun salva(campi: JSONObject) {
         val x = r ?: return
         scope.launch {
@@ -770,6 +786,18 @@ fun SchermataRicevuta(dati: Dati, nav: Navigatore, id: String) {
                         Ricevuta.CATEGORIE.forEach { (k, n) -> Pillola(n, r.categoria == k, { if (scrive && r.categoria != k) salva(JSONObject().put("categoria", k)) }, altezza = 44.dp) }
                     }
                     RigaVoce("Commessa", sotto = if (r.idCommessa.isNotBlank()) r.idCommessa + " · " + r.commessa else "Nessuna", icona = Icone.commesse, onClick = if (scrive) ({ commessa = true }) else null)
+                    if (incarichi.isNotEmpty() || r.idIncarico.isNotBlank()) {
+                        val scelto = incarichi.firstOrNull { it.id == r.idIncarico }
+                        RigaVoce("Incarico", sotto = scelto?.let { it.numero + " · " + it.titolo } ?: r.incarico.ifBlank { if (r.idIncarico.isNotBlank()) "Incarico " + r.idIncarico else "Nessuno" },
+                            icona = Icone.collab, onClick = if (scrive) ({ scelta6 = "incarico" }) else null)
+                    }
+                    if (mezziStudio.isNotEmpty()) {
+                        RigaVoce("Mezzo", sotto = mezziStudio.firstOrNull { it.id == r.idVeicolo }?.titolo ?: "Nessuno", icona = Icone.mezzo, onClick = if (scrive) ({ scelta6 = "mezzo" }) else null)
+                    }
+                    if (strumenti.isNotEmpty()) {
+                        RigaVoce("Strumento", sotto = strumenti.firstOrNull { it.id == r.idAttrezzatura }?.let { it.codice + " · " + it.nome } ?: "Nessuno", icona = Icone.misura,
+                            onClick = if (scrive) ({ scelta6 = "strumento" }) else null)
+                    }
                 }
             }
         }
@@ -779,6 +807,25 @@ fun SchermataRicevuta(dati: Dati, nav: Navigatore, id: String) {
     }
     if (paga && r != null) FoglioSegnaSoldi(dati, "Segna pagata", r.fornitore + " · fattura " + r.numero, r.daPagare ?: 0.0, false, { paga = false },
         onSegna = { imp, data, conto, ver -> dati.fase4.segnaPagamento("ricevuta", r.id, imp, data, conto, ver).map { it.id } }, onFatto = { giro++; RicordoFatture.giro++ })
+    if (r != null && scelta6.isNotBlank()) {
+        val (titolo, campo, voci, attuale) = when (scelta6) {
+            "incarico" -> Quattro("Incarico", "idIncarico", incarichi.map { it.id to (it.numero + " · " + it.titolo) }, r.idIncarico)
+            "mezzo" -> Quattro("Mezzo", "idVeicolo", mezziStudio.map { it.id to it.titolo }, r.idVeicolo)
+            else -> Quattro("Strumento", "idAttrezzatura", strumenti.map { it.id to (it.codice + " · " + it.nome) }, r.idAttrezzatura)
+        }
+        FoglioDalBasso({ scelta6 = "" }) {
+            Text(titolo, style = Testi.titoloScheda, color = c.testo)
+            SchedaElenco {
+                (listOf("" to "Nessuno") + voci).forEachIndexed { n, (k, nome) ->
+                    if (n > 0) LineaElenco()
+                    RigaVoce(nome, fine = if (k == attuale) ({ Icon(Icone.spunta, null, tint = c.testo) }) else null, onClick = {
+                        scelta6 = ""
+                        if (k != attuale) salva(JSONObject().put(campo, if (k.isBlank()) JSONObject.NULL else PonteServer.idJson(k)))
+                    })
+                }
+            }
+        }
+    }
     if (commessa && r != null) FoglioSceltaCommessa(ana, r.idCommessa, { idC -> commessa = false; salva(JSONObject().put("idCommessa", idC.ifBlank { JSONObject.NULL })) }, { commessa = false })
     if (annulla && r != null) FoglioDalBasso({ annulla = false }) {
         Text("Annullare la fattura ricevuta?", style = Testi.titoloScheda, color = c.testo)

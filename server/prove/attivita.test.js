@@ -74,7 +74,7 @@ test('elenco: scadute, oggi, prossimi giorni, senza data; il calendario con da/a
   assert.equal(sop.inizio, T + 'T14:30:00');
   assert.equal(sop.fine, T + 'T16:00:00');
   assert.equal(sop.giorno, T);
-  assert.equal(sop.assegnata, 'Marco Collaboratore');
+  assert.equal(sop.assegnata, 'Marco Rossato');
   assert.equal(sop.commessa, 'Nuovo magazzino automatico Batokyo');
   assert.equal(sop.cliente, 'Elettrodinamica', 'il cliente dalla commessa');
   const schema = r.attivita.find(a => /schema unifilare/.test(a.titolo));

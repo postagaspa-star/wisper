@@ -11,12 +11,13 @@
 
 const { hashPasswordSync } = require('./azioni/accesso');
 const { ELETTRODINAMICA } = require('./conti');
-const { adesso, oggi, piuGiorni, istante } = require('./utili');
+const { adesso, adessoMs, oggi, piuGiorni, istante } = require('./utili');
 
 const UTENTI_DI_PROVA = [
   { nome: 'Manuel Gasparotto', email: 'manuel@esempio.it', ruolo: 'titolare' },
-  { nome: 'Laura Amministrazione', email: 'laura@esempio.it', ruolo: 'amministrazione' },
-  { nome: 'Marco Collaboratore', email: 'marco@esempio.it', ruolo: 'collaboratore' },
+  // Fase 6: le persone di prova hanno nome e cognome (di esempio), come nell'accordo della fase 6.
+  { nome: 'Laura Bianchi', email: 'laura@esempio.it', ruolo: 'amministrazione' },
+  { nome: 'Marco Rossato', email: 'marco@esempio.it', ruolo: 'collaboratore' },
   { nome: 'Lettura', email: 'lettura@esempio.it', ruolo: 'lettura' },
 ];
 
@@ -35,7 +36,24 @@ function partitaIvaDiProva(dieci) {
   return null;
 }
 
+/**
+ * Le commesse dei dati di esempio sono lavori del 2026 (26ST001 ... 26ST006, come i rapportini e i contratti a date
+ * fisse), anche quando i dati nascono in un altro anno: senza, il 1 gennaio 2027 la prima diventava 27ST001 e i dati di
+ * esempio si fermavano a "Commessa 26ST002 non trovata". Le commesse nuove, dopo, prendono l'anno di oggi come sempre.
+ */
+const ANNO_DELLE_COMMESSE = 2026;
+
 function semina(w) {
+  const codice = w.prossimoCodiceCommessa;
+  w.prossimoCodiceCommessa = function (anno) { return codice.call(this, anno || ANNO_DELLE_COMMESSE); };
+  try {
+    return seminaTutto(w);
+  } finally {
+    delete w.prossimoCodiceCommessa;
+  }
+}
+
+function seminaTutto(w) {
   const ora = adesso();
   const utenti = {};
   w.db.transazione(() => {
@@ -43,6 +61,8 @@ function semina(w) {
       const id = w.inserisci('utenti', { nome: u.nome, email: u.email, ruolo: u.ruolo, password_hash: hashPasswordSync('prova'), attivo: 1, creato: ora });
       utenti[u.ruolo] = { id, nome: u.nome, email: u.email, ruolo: u.ruolo };
     }
+    // Fase 6: ogni utente ha la sua persona (come fa la migrazione 006 coi database di prima).
+    for (const u of Object.values(utenti)) w.creaPersonaPerUtente(u);
   });
   const come = (ruolo, fn) => w.come({ utente: utenti[ruolo], permessi: w.permessiDi(ruolo), app: 'prova', dispNome: 'dati di esempio' },
     () => w.db.transazione(fn));
@@ -104,8 +124,195 @@ function semina(w) {
   seminaFase3(w, utenti, come);
   seminaFase4(w, utenti, come);
   seminaFase5(w, utenti, come);
+  seminaFase6(w, utenti, come);
   return utenti;
 }
+
+/**
+ * Persone, mezzi e attrezzature, collaboratori esterni come nel prototipo della fase 6
+ * (docs/prototipo/Gestionale-fase6.html). Solo nomi e numeri di esempio:
+ *  - le schede di Manuel (titolare, senza costo: il suo e' una convenzione), Laura Bianchi (amministrazione, 30 ore,
+ *    costo dal costo dell'anno, saldo dal cedolino, in ferie oggi e domani, una malattia col certificato), Marco Rossato
+ *    (tecnico, costo 28,50 dal 1 gennaio, saldo dal cedolino, la richiesta di ferie della settimana dopo la prossima, PES,
+ *    primo soccorso scaduto, la visita col giudizio e la prossima fra 13 giorni, i guanti isolanti firmati, il cedolino
+ *    riservato) ed Elena Costa (tirocinante, senza accesso);
+ *  - il Volvo XC40 diventa l'auto di Manuel; il Fiat Doblò GA123BC dello studio assegnato a Marco (km, tagliando,
+ *    assicurazione fra 14 giorni, il guasto della spia delle gomme);
+ *  - il Laboratorio Tarature Nord Srl; il Misuratore di terra MT-500 (taratura fra 24 giorni), l'Analizzatore di rete
+ *    AR-6 al laboratorio, la pinza senza taratura, il Multimetro 87V scaduto (usato da Marco nel rapportino del 16/10
+ *    confermando), i guanti isolanti e l'imbracatura (in prestito agli Impianti Veneti, doveva rientrare ieri);
+ *  - Impianti Veneti di Sartori Luca: impresa, DURC che scade fra 7 giorni, visura, idoneita', polizza (in regola),
+ *    l'incarico IN/{anno}/001 su 26ST001 a corpo (3.200,00, al 60%) con la fattura ricevuta da 1.200,00, e l'utente
+ *    esterno Luca Sartori (luca@esempio.it, password "prova").
+ * Le date sono contate da oggi, tranne la taratura scaduta del multimetro (12/10/2026, come i rapportini di ottobre).
+ */
+function seminaFase6(w, utenti, come) {
+  const C = require('./conti');
+  const T = oggi();
+  const anno = T.slice(0, 4);
+  const persona = u => w.personaDiUtente(u.id);
+  const lavorativo = (g, passo) => {
+    let x = g;
+    for (let i = 0; i < 10 && C.giorniLavorativi(x, x, [1, 2, 3, 4, 5], C.festivi(Number(x.slice(0, 4)), '')) === 0; i++) x = piuGiorni(x, passo || 1);
+    return x;
+  };
+  const pdf = nome => Buffer.from('%PDF-1.4\n% Documento di esempio: ' + nome + '\n%%EOF\n', 'utf8');
+  const carica = (nome, dati, chi) => {
+    const f = w.salvaFile({ dati, nome, mime: 'application/pdf', tipo: 'caricato' });
+    w.db.esegui('UPDATE file SET caricato_da = ? WHERE id = ?', (chi || utenti.titolare).id, f.id);
+    return f.id;
+  };
+  const ids = {};
+  come('titolare', () => {
+    // ------------------------------------------------ le persone
+    const manuel = persona(utenti.titolare);
+    const laura = persona(utenti.amministrazione);
+    const marco = persona(utenti.collaboratore);
+    w.salvaPersona({ persona: { id: manuel.id, rapporto: 'titolare', ruoloStudio: 'Titolare', mansione: 'Progettazione elettrica e direzione lavori',
+      emailLavoro: 'manuel@esempio.it', telefonoLavoro: '0445 000300', entrataIl: '2008-01-01' } });
+    w.salvaPersona({ persona: { id: laura.id, rapporto: 'dipendente', ruoloStudio: 'Amministrazione', mansione: 'Lavoro d\'ufficio', emailLavoro: 'laura@esempio.it',
+      telefonoLavoro: '0445 000302', entrataIl: '2024-03-01', oreSettimana: 30, partTime: true, contrattoTipo: 'indeterminato', codiceFiscale: 'BNCLRA85M41L157Z',
+      telefonoPersonale: '333 0000201', indirizzo: 'Via delle Prove 7', cap: '36016', citta: 'Thiene', provincia: 'VI', emergenzaNome: 'Paolo Bianchi',
+      emergenzaTelefono: '333 0000202', ccnl: 'Studi professionali', livello: '4', ferieAnnueOre: 156, permessiAnnuiOre: 54 } });
+    w.salvaPersona({ persona: { id: marco.id, rapporto: 'dipendente', ruoloStudio: 'Tecnico elettrico', mansione: 'Lavori elettrici fuori tensione e in prossimità; verifiche',
+      emailLavoro: 'marco@esempio.it', telefonoLavoro: '0445 000301', entrataIl: '2023-05-02', oreSettimana: 40, contrattoTipo: 'indeterminato',
+      codiceFiscale: 'RSSMRC90A01L157X', telefonoPersonale: '333 0000301', iban: 'IT60X0542811101000000123456', indirizzo: 'Via dell\'Esempio 22', cap: '36016',
+      citta: 'Thiene', provincia: 'VI', emergenzaNome: 'Giulia Rossato', emergenzaTelefono: '333 0000302', ccnl: 'Studi professionali', livello: '3',
+      ferieAnnueOre: 208, permessiAnnuiOre: 72 } });
+    const elena = w.salvaPersona({ persona: { nome: 'Elena Costa', rapporto: 'tirocinante', ruoloStudio: 'Tirocinio tecnico', entrataIl: piuGiorni(T, -40),
+      oreSettimana: 20, contrattoTipo: 'stage', contrattoScade: piuGiorni(T, 50) } }).persona;
+    ids.persone = { manuel: manuel.id, laura: laura.id, marco: marco.id, elena: elena.id };
+    // Il costo orario: Laura dal costo dell'anno (26.880 su 1.200 ore = 22,40), Marco 28,50 dal 1 gennaio (47.025 su 1.650 ore).
+    // Dal 1 gennaio dell'anno di ieri: il 1 gennaio e' quello dell'anno prima, cosi' un costo nuovo "da oggi" non trova gia' quel giorno.
+    const dalCosti = piuGiorni(T, -1).slice(0, 4) + '-01-01';
+    w.salvaCostoPersona({ idPersona: laura.id, dal: dalCosti, costoAnno: 26880, oreAnno: 1200, nota: 'Dal prospetto del consulente di febbraio' });
+    w.salvaCostoPersona({ idPersona: marco.id, dal: dalCosti, costoAnno: 47025, oreAnno: 1650, nota: 'Dal prospetto del consulente di febbraio' });
+    // Il saldo dal cedolino della fine del mese scorso.
+    const fineMesePrima = piuGiorni(T.slice(0, 7) + '-01', -1);
+    w.salvaSaldo({ idPersona: laura.id, tipo: 'ferie', data: fineMesePrima, ore: 78, nota: 'Cedolino del mese scorso' });
+    w.salvaSaldo({ idPersona: marco.id, tipo: 'ferie', data: fineMesePrima, ore: 104, nota: 'Cedolino del mese scorso' });
+    w.salvaSaldo({ idPersona: marco.id, tipo: 'permessi', data: fineMesePrima, ore: 24, nota: 'Cedolino del mese scorso' });
+
+    // ------------------------------------------------ competenze, visite, DPI, documenti
+    w.salvaQualifica({ qualifica: { idPersona: marco.id, tipo: 'pes', titolo: 'Livelli 1A e 1B, 16 ore', data: '2024-02-12', ente: 'Ente di formazione di esempio' } });
+    const scadutoIl = piuGiorni(T, -32);
+    w.salvaQualifica({ qualifica: { idPersona: marco.id, tipo: 'primo_soccorso', titolo: 'Gruppo B, 12 ore', data: C.piuMesi(scadutoIl, -36), scade: scadutoIl } });
+    w.salvaQualifica({ qualifica: { idPersona: laura.id, tipo: 'formazione_generale', titolo: '4 ore', data: '2024-03-04' } });
+    w.salvaVisita({ visita: { idPersona: marco.id, data: C.piuMesi(piuGiorni(T, 13), -12), tipo: 'periodica', giudizio: 'idoneo_prescrizioni',
+      prescrizioni: 'Niente sollevamento di carichi oltre 15 kg', prossima: piuGiorni(T, 13), medico: 'Medico competente di esempio' } });
+    w.salvaVisita({ visita: { idPersona: laura.id, data: '2024-03-04', tipo: 'preventiva', giudizio: 'idoneo' } });
+    ids.cedolino = w.documentoDaCarica({ idFile: carica('cedolino-esempio.pdf', pdf('cedolino')), titolo: 'Cedolino del mese scorso', categoria: 'Cedolini',
+      personaId: marco.id, dataDocumento: fineMesePrima });
+
+    // ------------------------------------------------ fornitori: il laboratorio e il collaboratore esterno
+    const lab = w.salvaSoggetto({ nome: 'Laboratorio Tarature Nord Srl', cliente: false, fornitore: true, partitaIva: partitaIvaDiProva('0333444555'),
+      email: 'tarature@laboratorio.example', telefono: '0445 000500', cap: '36100', citta: 'Vicenza', provincia: 'VI' });
+    ids.laboratorio = lab.id;
+    const iv = w.salvaCollaboratore({ collaboratore: { soggetto: { nome: 'Impianti Veneti di Sartori Luca', partitaIva: partitaIvaDiProva('0555666777'),
+      telefono: '0445 000401', email: 'info@impiantiveneti.example', indirizzo: 'Via degli Impianti 4', cap: '36016', citta: 'Thiene', provincia: 'VI' },
+    tipo: 'impresa', mestiere: 'Impianti elettrici civili e industriali', abilitazioni: 'DM 37/2008, lettere A e B', tariffa: 32, referenteId: manuel.id } }).collaboratore;
+    ids.collaboratore = iv.idSoggetto;
+    const catColl = w.categoriaDiSistema('Documenti dei collaboratori');
+    const docColl = (titolo, tipo, data) => w.salvaDocumento({ documento: { titolo, idCategoria: catColl.id, idSoggetto: iv.idSoggetto, dataDocumento: data,
+      idFile: carica(titolo + '.pdf', pdf(titolo)), scadenza: { tipo } } });
+    docColl('DURC', 'durc', piuGiorni(T, -113));
+    docColl('Visura camerale', 'visura', piuGiorni(T, -30));
+    docColl('Autocertificazione di idoneità', 'idoneita', piuGiorni(T, -60));
+    docColl('Polizza RC', 'polizza', piuGiorni(T, -100));
+
+    // ------------------------------------------------ mezzi
+    w.salvaMezzo({ mezzo: { id: 1, proprieta: 'persona', idPersona: manuel.id } });
+    // Immatricolato 3 anni e 7 mesi fa (il 22/10/2026: marzo 2023): la prima revisione e' fra 4 o 5 mesi, mai scaduta (un mezzo
+    // con la revisione scaduta e' fermo e non si assegna: con la data fissa i dati di esempio si fermavano da aprile 2027).
+    const doblo = w.salvaMezzo({ mezzo: { nome: 'Fiat Doblò', targa: 'GA123BC', tipo: 'furgone', proprieta: 'studio', immatricolazione: C.piuMesi(T, -43), alimentazione: 'gasolio',
+      tagliandoKm: 15000, tagliandoUltimoKm: 75000, tagliandoOgniMesi: 12, note: 'Le chiavi di scorta sono nell\'armadio dell\'ufficio',
+      scadenze: { assicurazione: piuGiorni(T, 14), bollo: piuGiorni(T, 120) } } }).mezzo;
+    ids.doblo = doblo.id;
+    // I km a fine anno: l'anno prima di un mese fa (nei primi giorni di gennaio quello prima ancora, se no 18.400 km in pochi
+    // giorni sono troppi e segnaKm chiede conferma).
+    const fineAnno = (Number(piuGiorni(T, -30).slice(0, 4)) - 1) + '-12-31';
+    w.db.esegui("INSERT INTO mezzo_letture (veicolo_id, data, km, utente_id, origine, creato) VALUES (?, ?, 65920, ?, 'mano', ?)", doblo.id, fineAnno, utenti.titolare.id, adesso());
+    w.segnaKm({ idVeicolo: doblo.id, km: 84320, data: piuGiorni(T, -4) });
+    w.assegna({ idVeicolo: doblo.id, tipo: 'assegnato', idPersona: marco.id });
+
+    // ------------------------------------------------ attrezzature e strumenti
+    const strumento = (x, taratura) => w.salvaAttrezzatura({ attrezzatura: Object.assign({ categoria: 'strumento', idLaboratorio: lab.id }, x, taratura ? { ultimaTaratura: taratura } : {}) }).attrezzatura;
+    const scadeMt = piuGiorni(T, 24);
+    // Il certificato della fase 5 ("Certificato di taratura del misuratore di terra") si sceglie come certificato dello
+    // strumento: la sua scadenza diventa quella della taratura (una cosa, una voce: fase6.md §4.6).
+    const certMt = w.db.riga("SELECT id FROM documenti WHERE titolo = 'Certificato di taratura del misuratore di terra'");
+    const mt = strumento({ nome: 'Misuratore di terra MT-500', marca: 'Esempio Strumenti', modello: 'MT-500', matricola: '22-0451', posizione: 'Armadio dell\'ufficio' },
+      Object.assign({ data: C.piuMesi(scadeMt, -12), scade: scadeMt, certificato: 'LAT 1234/25' }, certMt ? { idDocumento: certMt.id } : {}));
+    const ar = strumento({ nome: 'Analizzatore di rete AR-6', marca: 'Esempio Strumenti', modello: 'AR-6', matricola: 'AR6-0099' },
+      { data: C.piuMesi(piuGiorni(T, 3), -12), scade: piuGiorni(T, 3), certificato: 'LAT 0981/25' });
+    const pinza = strumento({ nome: 'Pinza amperometrica', marca: 'Esempio Strumenti', modello: 'PA-10', matricola: 'PA-7781' });
+    const multi = strumento({ nome: 'Multimetro 87V', marca: 'Esempio Strumenti', modello: '87V', matricola: '6011-2381' },
+      { data: '2025-10-12', scade: '2026-10-12', certificato: 'LAT 0777/24' });
+    const guanti = strumento({ nome: 'Guanti isolanti classe 0', categoria: 'dpi', marca: 'Esempio DPI', matricola: 'G0-112', controllo: 'verifica', controlloOgniMesi: 6 },
+      { data: C.piuMesi(piuGiorni(T, 70), -6), scade: piuGiorni(T, 70) });
+    const imbracatura = strumento({ nome: 'Imbracatura anticaduta', categoria: 'dpi', marca: 'Esempio DPI', matricola: 'IMB-44', controllo: 'verifica', controlloOgniMesi: 12 },
+      { data: C.piuMesi(piuGiorni(T, 200), -12), scade: piuGiorni(T, 200) });
+    ids.attrezzature = { mt: mt.id, ar: ar.id, pinza: pinza.id, multi: multi.id, guanti: guanti.id, imbracatura: imbracatura.id };
+    w.assegna({ idAttrezzatura: mt.id, tipo: 'assegnato', idPersona: marco.id });
+    w.assegna({ idAttrezzatura: multi.id, tipo: 'assegnato', idPersona: marco.id });
+    w.assegna({ idAttrezzatura: ar.id, tipo: 'laboratorio', idSoggetto: lab.id, rientro: piuGiorni(T, 7) });
+    w.salvaConsegnaDpi({ consegna: { idPersona: marco.id, cosa: 'Guanti isolanti classe 0', taglia: '9', data: piuGiorni(T, -60), idAttrezzatura: guanti.id },
+      firma: { base64: PNG_FIRMA, mime: 'image/png' } });
+    w.salvaConsegnaDpi({ consegna: { idPersona: marco.id, cosa: 'Elmetto con visiera', taglia: 'unica', data: piuGiorni(T, -2) } });
+    // L'imbracatura in prestito agli Impianti Veneti: doveva rientrare ieri (il prestito si scrive com'era quel giorno).
+    w.assegna({ idAttrezzatura: imbracatura.id, tipo: 'prestito', idSoggetto: iv.idSoggetto, rientro: T });
+    w.db.esegui('UPDATE assegnazioni SET rientro = ?, dal = ? WHERE attrezzatura_id = ? AND al IS NULL', piuGiorni(T, -1), istante(new Date(piuGiorni(T, -8) + 'T09:00:00')), imbracatura.id);
+
+    // ------------------------------------------------ l'incarico agli Impianti Veneti e la sua fattura
+    const inc = w.salvaIncarico({ incarico: { idSoggetto: iv.idSoggetto, idCommessa: '26ST001', titolo: 'Cablaggio quadri di linea 4 e 5',
+      descrizione: 'Posa e cablaggio dei quadri di linea 4 e 5 secondo gli schemi dello studio', modo: 'corpo', compenso: 3200, dal: piuGiorni(T, -20), al: piuGiorni(T, 30) } }).incarico;
+    w.affidaIncarico({ id: inc.id });
+    w.aggiornaAvanzamento({ id: inc.id, avanzamento: 60 });
+    ids.incarico = inc.id;
+    w.salvaRicevuta({ ricevuta: { idFornitore: iv.idSoggetto, numero: '18/' + anno, data: piuGiorni(T, -5), imponibile: 1200, iva: 264, totale: 1464, categoria: 'servizi',
+      descrizione: 'Acconto cablaggio quadri di linea 4 e 5', idIncarico: inc.id, scadenze: [{ data: piuGiorni(T, 100), importo: 1464 }] } });
+  });
+
+  // L'esterno di prova: Luca Sartori degli Impianti Veneti (password "prova").
+  w.db.transazione(() => {
+    const id = w.inserisci('utenti', { nome: 'Luca Sartori', email: 'luca@esempio.it', ruolo: 'esterno', soggetto_id: ids.collaboratore,
+      password_hash: hashPasswordSync('prova'), attivo: 1, creato: adesso() }, 'id', 'utente esterno di prova');
+    utenti.esterno = { id, nome: 'Luca Sartori', email: 'luca@esempio.it', ruolo: 'esterno' };
+  });
+
+  // Marco: il guasto del Doblò, gli strumenti nel rapportino del 16/10 (il multimetro scaduto, confermando), la richiesta di ferie.
+  come('collaboratore', () => {
+    w.segnalaGuasto({ guasto: { idVeicolo: ids.doblo, titolo: 'Spia della pressione delle gomme accesa', descrizione: 'Si accende dopo qualche km, le gomme sembrano a posto', km: 84350 } });
+    w.db.esegui("UPDATE manutenzioni SET data = ? WHERE veicolo_id = ? AND tipo = 'guasto'", piuGiorni(T, -2), ids.doblo);
+    const rap = w.db.riga("SELECT * FROM rapportini WHERE id_locale = 'marco-2'");
+    if (rap) w.scriviStrumentiRapportino(rap, [{ idAttrezzatura: ids.attrezzature.mt }, { idAttrezzatura: ids.attrezzature.multi, confermato: true }]);
+    // La settimana dopo la prossima (il primo lunedi' da oggi + 8: mai fra i 7 giorni delle urgenti), cinque giorni
+    // tutti da lavorare (una settimana con un festivo, come quella dell'8 dicembre, passa alla dopo): 40 ore sempre.
+    const settimanaPiena = l => C.giorniLavorativi(l, piuGiorni(l, 4), [1, 2, 3, 4, 5], C.festiviTra(l, piuGiorni(l, 4), '')) === 5;
+    let lunedi = piuGiorni(T, 8);
+    while (new Date(lunedi + 'T12:00:00').getDay() !== 1 || !settimanaPiena(lunedi)) lunedi = piuGiorni(lunedi, 1);
+    w.salvaAssenza({ assenza: { tipo: 'ferie', dal: lunedi, al: piuGiorni(lunedi, 4), nota: 'Matrimonio di mio fratello' } });
+  });
+
+  // Laura: in ferie oggi e domani (approvate da Manuel), una malattia di un giorno la settimana scorsa (col certificato).
+  // Le ferie cominciano sempre oggi, anche di sabato o in un giorno di festa (la Dashboard e l'organico la danno assente
+  // qualunque giorno), e durano due giorni da lavorare: oggi e domani, o i primi due dopo la festa.
+  come('amministrazione', () => {
+    const primo = lavorativo(T, 1);
+    const secondo = lavorativo(piuGiorni(primo, 1), 1);
+    w.salvaAssenza({ assenza: { tipo: 'ferie', dal: T, al: secondo } });
+    const m1 = lavorativo(piuGiorni(T, -9), -1);
+    w.salvaAssenza({ assenza: { tipo: 'malattia', dal: m1, al: m1, protocollo: '123456789' } });
+  });
+  come('titolare', () => {
+    const voci = w.db.righe("SELECT id FROM assenze WHERE stato = 'da_approvare' AND persona_id = ?", w.personaDiUtente(utenti.amministrazione.id).id).map(a => ({ tipo: 'assenza', id: a.id }));
+    if (voci.length) w.decidi({ voci }, 'approva');
+  });
+}
+
+/** Una firma di esempio (un PNG 1x1). */
+const PNG_FIRMA = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+
 
 /**
  * Documenti, ticket e assistenza come nel prototipo della fase 5
@@ -224,7 +431,7 @@ function seminaFase5(w, utenti, come) {
     ids.tk13 = tk({ idCliente: 'C004', idSede: ids.magazzino, titolo: 'Navetta 2 si ferma in errore',
       descrizione: 'La navetta 2 va in errore di posizione due o tre volte al giorno. La linea va avanti con la navetta 1.', tipo: 'guasto', origine: 'email',
       impatto: 'ridotto', urgenza: 'subito', apertoIl: ieri + 'T16:10:00', richiedente: 'Ufficio tecnico Batokyo', idReferente: ufficio, rifCliente: 'Richiesta 4471' }, 'TK/2026/0013').id;
-    const apertoTk14 = new Date(Date.now() - 85 * 60000);
+    const apertoTk14 = new Date(adessoMs() - 85 * 60000);
     orologio = istante(apertoTk14);
     ids.tk14 = tk({ idCliente: 'C002', idSede: ids.cabina, titolo: 'Scatta il generale MT',
       descrizione: 'Il generale della cabina scatta appena lo riarmano. Lo stabilimento è fermo.', tipo: 'guasto', origine: 'telefono', impatto: 'fermo', urgenza: 'subito',
@@ -320,8 +527,10 @@ function seminaFase5(w, utenti, come) {
     const firmato = doc({ titolo: 'Contratto CA/2026/002 firmato', idCategoria: cat('Contratti'), idSede: ids.cabina, idContratto: ids.c2, idCommessa: comm2,
       dataDocumento: '2025-12-18' }, carica('Contratto CA-2026-002 firmato.pdf', 'application/pdf', pdf('Contratto CA/2026/002')));
     w.salvaContratto({ contratto: { id: ids.c2, idDocumento: firmato.id } });
-    doc({ titolo: 'Certificato di taratura del misuratore di terra', idCategoria: cat('Certificati'), dataDocumento: '2025-11-15', riferimento: 'LAT 0000/25',
-      scadenza: { data: '2026-11-15', ogniMesi: 12, preavvisoGiorni: 60 } }, carica('Certificato taratura misuratore.pdf', 'application/pdf', pdf('Certificato di taratura')));
+    // Scade fra 24 giorni (il 15/11 del prototipo, visto dal 22/10): la fase 6 lo sceglie come certificato del MT-500.
+    const scadeCert = piuGiorni(T, 24);
+    doc({ titolo: 'Certificato di taratura del misuratore di terra', idCategoria: cat('Certificati'), dataDocumento: require('./conti').piuMesi(scadeCert, -12), riferimento: 'LAT 0000/25',
+      scadenza: { data: scadeCert, ogniMesi: 12, preavvisoGiorni: 60 } }, carica('Certificato taratura misuratore.pdf', 'application/pdf', pdf('Certificato di taratura')));
     doc({ titolo: 'Manuale dell\'inverter', idCategoria: cat('Manuali e schede tecniche'), idSede: ids.fotovoltaico, origine: 'collegamento',
       url: 'https://www.esempio-inverter.example/manuali/6k.pdf', dataDocumento: '2021-06-30' });
     doc({ titolo: 'Schemi elettrici archivio 2019', idCategoria: cat('Documenti dello studio'), origine: 'collegamento', url: '\\\\SERVER-STUDIO\\Archivio\\2019\\Schemi',
@@ -562,7 +771,7 @@ function seminaFase3(w, utenti, come) {
     w.avviaTimer({ idCommessa: '26ST001', descrizione: 'Cablaggio quadro di linea 3' });
   });
   // Il timer di Marco e' partito un'ora e mezza fa.
-  w.db.esegui('UPDATE timer SET partito_il = ? WHERE utente_id = ?', istante(new Date(Date.now() - 90 * 60000)), utenti.collaboratore.id);
+  w.db.esegui('UPDATE timer SET partito_il = ? WHERE utente_id = ?', istante(new Date(adessoMs() - 90 * 60000)), utenti.collaboratore.id);
 
   come('titolare', () => {
     w.decidi({ voci: [{ tipo: 'rapportino', id: 'RAP/2026/0005' }, { tipo: 'ore', id: ids.oreApprovate }, { tipo: 'spesa', id: ids.parcheggio }] }, 'approva');

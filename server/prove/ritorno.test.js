@@ -10,7 +10,11 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { serverDiProva } = require('./aiuto');
+const { serverDiProva, giornoDeiPrototipi } = require('./aiuto');
+// Le fatture del 2026 e gli XML di ritorno (scadenze di novembre) hanno date fisse (la storia del prototipo): queste
+// prove le guardano dal giorno del prototipo, giovedi' 22/10/2026, qualunque giorno sia (anche con
+// WISPER_OGGI_PROVA). Le altre prove girano sul giorno vero.
+giornoDeiPrototipi();
 const { scriviFatturaPA } = require('../src/fatturapa');
 const { oggi } = require('../src/utili');
 

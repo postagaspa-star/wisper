@@ -18,9 +18,10 @@
 
 const fs = require('node:fs');
 const crypto = require('node:crypto');
-const { Rifiuto, senzaPermesso, testo, numero, adesso, oggi, dataIso, dataDaIso, dataOraIso, idCasuale, piuGiorni, istante } = require('../utili');
+const { Rifiuto, senzaPermesso, testo, numero, adesso, oggi, dataIso, dataDaIso, dataOraIso, idCasuale, piuGiorni, istante, adessoMs } = require('../utili');
 const D = require('../documenti');
 const C = require('../conti');
+const { datiPersona } = require('../permessi');
 
 const urlFile = id => '/file/' + id;
 const si = v => v === true || v === 1 || v === '1' || v === 'true';
@@ -45,6 +46,8 @@ const MODELLI = [
   { chiave: 'avviso', nome: 'Avviso di parcella', testi: [] },
   { chiave: 'lettera', nome: 'Lettera', testi: ['LETTERA_VERIFICA_TERRA', 'LETTERA_LIBERA', 'EMAIL_DOCUMENTO_OGGETTO', 'EMAIL_DOCUMENTO_MESSAGGIO'] },
   { chiave: 'contratto', nome: 'Contratto di assistenza', testi: ['CONTRATTO_CONDIZIONI'] },
+  // Fase 6: la lettera d'incarico a un collaboratore esterno.
+  { chiave: 'incarico', nome: 'Lettera d\'incarico', testi: ['LETTERA_INCARICO'] },
 ];
 const NOMI_TESTI = {
   EMAIL_RAPPORTINO_OGGETTO: 'Oggetto dell\'email del rapportino', EMAIL_RAPPORTINO_MESSAGGIO: 'Messaggio dell\'email del rapportino',
@@ -53,8 +56,9 @@ const NOMI_TESTI = {
   EMAIL_DOCUMENTO_OGGETTO: 'Oggetto dell\'email di un documento', EMAIL_DOCUMENTO_MESSAGGIO: 'Messaggio dell\'email di un documento',
   PREVENTIVO_INTRODUZIONE: 'Introduzione del preventivo', PREVENTIVO_CONDIZIONI: 'Condizioni del preventivo',
   LETTERA_VERIFICA_TERRA: 'Lettera "Verifica impianto di terra"', LETTERA_LIBERA: 'Lettera libera', CONTRATTO_CONDIZIONI: 'Condizioni del contratto di assistenza',
+  LETTERA_INCARICO: 'Lettera d\'incarico',
 };
-const TITOLI_LETTERE = { LETTERA_VERIFICA_TERRA: 'Verifica periodica dell\'impianto di terra', LETTERA_LIBERA: 'Lettera' };
+const TITOLI_LETTERE = { LETTERA_VERIFICA_TERRA: 'Verifica periodica dell\'impianto di terra', LETTERA_LIBERA: 'Lettera', LETTERA_INCARICO: 'Lettera d\'incarico' };
 
 module.exports = {
   // ------------------------------------------------------------------ chi vede, chi scrive, chi approva
@@ -76,13 +80,41 @@ module.exports = {
 
   vedeDocumento(d) {
     if (!d) return false;
+    if (this.chi().sistema) return true;
+    // Fase 6: un documento di una persona lo vedono solo chi ha persone 2 e la persona stessa, qualunque sia "vede"; se
+    // e' riservato, solo chi ha "riservati" e la persona stessa (fase6.md §4.5). Gli altri non sanno che c'e'.
+    if (d.persona_id) {
+      if (d.persona_id === this.miaPersonaId()) return true;
+      if (this.livello('persone') < 2) return false;
+      if (d.vede === 'riservati' && this.livello('riservati') < 1) return false;
+      if (d.vede === 'costi' && !this.vedeCosti()) return false;
+      return true;
+    }
+    // Fase 6: l'esterno vede i suoi documenti (DURC, polizza...), quelli dei suoi incarichi e quelli "tutti" delle sue commesse.
+    if (this.eEsterno()) return this.esternoVedeDocumento(d);
     if (this.livello('documenti') < 1) return false;
     return this.vedeLivello(d.vede);
   },
 
+  esternoVedeDocumento(d) {
+    if (d.vede === 'riservati') return false;
+    const mio = this.mioSoggetto();
+    if (!mio) return false;
+    if (d.cliente_id === mio && !d.commessa_id) return true;
+    if (d.incarico_id) {
+      const i = this.db.riga('SELECT soggetto_id, stato FROM incarichi WHERE id = ?', d.incarico_id);
+      if (i && i.soggetto_id === mio && (i.stato === 'affidato' || i.stato === 'concluso')) return true;
+    }
+    if (d.vede !== 'tutti') return false;
+    return !!d.commessa_id && this.commesseEsterno().has(String(d.commessa_id).toUpperCase());
+  },
+
   /** Un collaboratore con documenti 2 cambia solo i documenti creati da lui. */
   puoScrivereDocumento(d) {
+    if (this.eEsterno()) return !!d && d.cliente_id === this.mioSoggetto() && !d.commessa_id && d.creato_da === this.chi().utente.id;
     if (this.livello('documenti') < 2 || !this.vedeDocumento(d)) return false;
+    // Fase 6: quelli di una persona li cambia chi ha persone 2.
+    if (d.persona_id && this.livello('persone') < 2) return false;
     if (this.soloSuoi()) return d.creato_da === this.chi().utente.id;
     return true;
   },
@@ -179,7 +211,7 @@ module.exports = {
 
   /** I file di /carica mai legati vanno nel cestino dopo 24 ore (fase5.md §5.9). Torna quanti. */
   pulisciCaricati() {
-    const limite = Date.now() - 24 * 3600 * 1000;
+    const limite = adessoMs() - 24 * 3600 * 1000;
     const vecchi = this.db.righe("SELECT id, creato FROM file WHERE tipo = 'caricato' AND cestinato IS NULL").filter(f => Date.parse(f.creato) < limite);
     if (!vecchi.length) return 0;
     this.db.transazione(() => {
@@ -254,7 +286,18 @@ module.exports = {
       vede: d.vede, archiviato: !!d.archiviato,
       puoScrivere: this.puoScrivereDocumento(d) && !d.archiviato,
       creato: dataOraIso(d.creato), modificato: dataOraIso(d.modificato),
+      // Fase 6: la persona, il mezzo, lo strumento, l'incarico; idSoggetto (= idCliente) per i documenti dei collaboratori.
+      idPersona: d.persona_id === null || d.persona_id === undefined ? null : d.persona_id,
+      idVeicolo: d.veicolo_id === null || d.veicolo_id === undefined ? null : d.veicolo_id,
+      idAttrezzatura: d.attrezzatura_id === null || d.attrezzatura_id === undefined ? null : d.attrezzatura_id,
+      idIncarico: d.incarico_id === null || d.incarico_id === undefined ? null : d.incarico_id,
+      idSoggetto: d.cliente_id || '',
     };
+    // Fase 6: chi vede un documento riservato di un'altra persona lascia traccia (togliPersonali lo segna nel registro).
+    if (d.persona_id) {
+      if (d.vede === 'riservati') o.documentoRiservato = true;
+      datiPersona(o, d.persona_id, 'documento');
+    }
     return o;
   },
 
@@ -283,6 +326,12 @@ module.exports = {
     if (testo(d.idSede)) { cond.push('sede_id = ?'); par.push(Number(d.idSede)); }
     if (testo(d.idTicket)) { cond.push('ticket_id = ?'); par.push(this.idTicketDa(d.idTicket)); }
     if (testo(d.idContratto)) { cond.push('contratto_id = ?'); par.push(Number(d.idContratto)); }
+    // Fase 6: i documenti di una persona, di un mezzo, di uno strumento, di un incarico, di un collaboratore (§10.5).
+    if (testo(d.idPersona)) { cond.push('persona_id = ?'); par.push(Number(d.idPersona)); }
+    if (testo(d.idVeicolo)) { cond.push('veicolo_id = ?'); par.push(Number(d.idVeicolo)); }
+    if (testo(d.idAttrezzatura)) { cond.push('attrezzatura_id = ?'); par.push(Number(d.idAttrezzatura)); }
+    if (testo(d.idIncarico)) { cond.push('incarico_id = ?'); par.push(Number(d.idIncarico)); }
+    if (testo(d.idSoggetto) && !testo(d.idCliente)) { cond.push('cliente_id = ?'); par.push(testo(d.idSoggetto).toUpperCase()); }
     if (testo(d.origine)) {
       if (['file', 'collegamento', 'inviato'].indexOf(testo(d.origine)) < 0) throw new Rifiuto('Origine: file, collegamento o inviato');
       cond.push('origine = ?');
@@ -508,6 +557,8 @@ module.exports = {
   legamiDocumento(x, prima) {
     const p = prima || {};
     const v = {};
+    // Fase 6: un documento di un collaboratore esterno usa cliente_id col suo F... (idSoggetto).
+    if (x.idSoggetto !== undefined && x.idCliente === undefined) x = Object.assign({}, x, { idCliente: x.idSoggetto });
     let idCommessa = x.idCommessa !== undefined ? testo(x.idCommessa) : testo(p.commessa_id);
     let commessa = null;
     if (idCommessa) {
@@ -544,6 +595,16 @@ module.exports = {
       if (!idCliente) idCliente = c.cliente_id;
     }
     Object.assign(v, { cliente_id: idCliente || '', commessa_id: idCommessa || '', sede_id: idSede, ticket_id: idTicket, contratto_id: idContratto });
+    // Fase 6: la persona, il mezzo, lo strumento, l'incarico.
+    const num = (k, col) => (x[k] !== undefined ? (vuoto(x[k]) ? null : Number(x[k])) : (p[col] === undefined ? null : p[col]));
+    v.persona_id = num('idPersona', 'persona_id');
+    if (v.persona_id !== null && !this.db.riga('SELECT id FROM persone WHERE id = ?', v.persona_id)) throw new Rifiuto('Persona ' + v.persona_id + ' non trovata');
+    v.veicolo_id = num('idVeicolo', 'veicolo_id');
+    if (v.veicolo_id !== null && !this.db.riga('SELECT id FROM veicoli WHERE id = ?', v.veicolo_id)) throw new Rifiuto('Mezzo ' + v.veicolo_id + ' non trovato');
+    v.attrezzatura_id = num('idAttrezzatura', 'attrezzatura_id');
+    if (v.attrezzatura_id !== null && !this.db.riga('SELECT id FROM attrezzature WHERE id = ?', v.attrezzatura_id)) throw new Rifiuto('Attrezzatura ' + v.attrezzatura_id + ' non trovata');
+    v.incarico_id = num('idIncarico', 'incarico_id');
+    if (v.incarico_id !== null && !this.db.riga('SELECT id FROM incarichi WHERE id = ?', v.incarico_id)) throw new Rifiuto('Incarico ' + v.incarico_id + ' non trovato');
     return v;
   },
 
@@ -615,6 +676,17 @@ module.exports = {
     const categoria = this.categoriaDocumento(x.idCategoria !== undefined ? x.idCategoria : prima.categoria_id);
     if (!categoria.attiva && (!prima || prima.categoria_id !== categoria.id)) throw new Rifiuto('Categoria: «' + categoria.nome + '» non si usa più');
     const legami = this.legamiDocumento(x, prima);
+    // Fase 6: i documenti di una persona li carica chi ha persone 2 (quelli riservati con riservati 2); l'esterno solo i suoi.
+    if (legami.persona_id && (!prima || prima.persona_id !== legami.persona_id)) {
+      if (this.livello('persone') < 2) throw senzaPermesso('caricare i documenti delle persone');
+      if (categoria.vede === 'riservati' && this.livello('riservati') < 2) throw senzaPermesso('caricare documenti riservati');
+    }
+    if (this.eEsterno()) {
+      const mio = this.mioSoggetto();
+      const catColl = this.categoriaDiSistema('Documenti dei collaboratori');
+      const suo = legami.cliente_id === mio && !legami.commessa_id && !legami.persona_id && !legami.veicolo_id && !legami.attrezzatura_id && !legami.sede_id && !legami.ticket_id;
+      if (!suo || !catColl || categoria.id !== catColl.id) throw senzaPermesso('caricare questo documento: carica i tuoi documenti dalla tua scheda');
+    }
     const v = Object.assign({
       titolo, categoria_id: categoria.id,
       descrizione: x.descrizione !== undefined ? testo(x.descrizione) : prima ? prima.descrizione : '',
@@ -663,6 +735,8 @@ module.exports = {
       x.id = id;
     }
     const idDoc = prima ? prima.id : Number(x.id);
+    // Fase 6: un documento di un collaboratore col suo tipo (DURC, visura...) prende la scadenza proposta (§4.5).
+    if (x.scadenza === undefined && testo(x.tipoScadenza)) x.scadenza = { tipo: testo(x.tipoScadenza) };
     if (x.scadenza !== undefined) this.scadenzaDelDocumento(idDoc, x.scadenza);
     const doc = this.db.riga('SELECT * FROM documenti WHERE id = ?', idDoc);
     return { ok: true, documento: this.documentoCompleto(doc), chiudeScadenza: prima ? null : this.scadenzaDaChiudere(doc) };
@@ -715,10 +789,26 @@ module.exports = {
     const dati = {
       titolo: doc.titolo + ' scade', tipo, idCliente: doc.cliente_id, idSede: doc.sede_id, idDocumento: doc.id, data: s.data,
       ogniMesi: s.ogniMesi, preavvisoGiorni: s.preavvisoGiorni,
+      // Fase 6: la scadenza di un documento di una persona, di un mezzo o di uno strumento e' loro.
+      idPersona: doc.persona_id, idVeicolo: doc.veicolo_id, idAttrezzatura: doc.attrezzatura_id,
     };
+    // Fase 6: i documenti dei collaboratori (DURC 120 giorni, visura 6 mesi, polizza, idoneita', albo 12 mesi).
+    const coll = cat.nome === 'Documenti dei collaboratori' && ['durc', 'visura', 'idoneita', 'polizza', 'albo'].indexOf(tipo) >= 0;
+    if (coll) {
+      const p = this.propostaScadenzaCollaboratore(tipo, doc.data_documento, doc.cliente_id);
+      dati.titolo = p.titolo;
+      if (!testo(s.data)) dati.data = p.data;
+      if (s.preavvisoGiorni === undefined) dati.preavvisoGiorni = p.preavvisoGiorni;
+    }
     if (attuale && attuale.stato === 'aperta') dati.id = attuale.id;
-    const r = this.salvaScadenza({ scadenza: dati });
+    const r = this.chi().sistema || !this.eEsterno() ? this.salvaScadenza({ scadenza: dati }) : this.come(Object.assign({}, this.chi(), { sistema: true }), () => this.salvaScadenza({ scadenza: dati }));
     this.aggiorna('documenti', idDoc, { scadenza_id: r.scadenza.id });
+    // Il documento nuovo dello stesso tipo sostituisce quello di prima: la sua scadenza e' fatta.
+    if (coll && !attuale) {
+      for (const vecchia of this.db.righe("SELECT * FROM scadenze WHERE cliente_id = ? AND tipo = ? AND stato = 'aperta' AND id <> ?", doc.cliente_id, tipo, r.scadenza.id)) {
+        this.aggiorna('scadenze', vecchia.id, { stato: 'fatta', fatta_il: doc.data_documento || oggi(), documento_fatto_id: doc.id, modificato: adesso() });
+      }
+    }
   },
 
   /** "È la verifica che chiude la scadenza del 12/01/2027?" (§6.1): la scadenza aperta di una verifica dello stesso impianto. */
@@ -1053,6 +1143,20 @@ module.exports = {
     let idCliente = testo(d.idCliente);
     let idSede = vuoto(d.idSede) ? null : Number(d.idSede);
     let idCommessa = testo(d.idCommessa);
+    // Fase 6: la lettera d'incarico (collaboratore, incarico, compenso solo con "costi", descrizione, dal, al, commessa).
+    if (!vuoto(d.idIncarico)) {
+      const i = this.rigaIncarico(d.idIncarico);
+      v.collaboratore = (this.db.riga('SELECT nome FROM soggetti WHERE id = ?', i.soggetto_id) || {}).nome || '';
+      v.incarico = i.numero + ' · ' + i.titolo;
+      v.descrizione = i.descrizione || i.titolo;
+      if (i.dal) v.dal = dataIt(i.dal);
+      if (i.al) v.al = dataIt(i.al);
+      if (this.vedeCosti()) {
+        v.compenso = i.modo === 'ore' ? C.euroIt(i.tariffa) + ' euro l\'ora' + (i.ore_previste ? ' per ' + String(i.ore_previste).replace('.', ',') + ' ore previste' : '') + (i.tetto ? ', al massimo ' + C.euroIt(i.tetto) + ' euro' : '')
+          : C.euroIt(i.compenso) + ' euro a corpo';
+      }
+      if (!idCommessa) idCommessa = i.commessa_id;
+    }
     let idContratto = vuoto(d.idContratto) ? null : Number(d.idContratto);
     let scad = null;
     if (!vuoto(d.idScadenza)) {

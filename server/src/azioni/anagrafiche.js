@@ -311,19 +311,62 @@ module.exports = {
     const modelli = d.modelli === true || d.modelli === '1' || archiviati;
     const vedeClienti = this.livello('clienti') > 0;
     const vedeCommesse = this.livello('commesse') > 0;
-    return {
+    // Fase 6: l'esterno ha solo le commesse dei suoi incarichi, i loro clienti (il nome) e le loro sedi.
+    if (this.eEsterno()) return this.anagraficheEsterno();
+    const persone = {};
+    this.db.righe('SELECT id, utente_id FROM persone WHERE utente_id IS NOT NULL').forEach(p => { persone[p.utente_id] = p.id; });
+    const collaboratori = new Set(this.db.righe('SELECT soggetto_id FROM collaboratori').map(c => c.soggetto_id));
+    const r = {
       ok: true,
       clienti: vedeClienti || this.livello('rapportini') > 0 ? this.leggiClienti({ archiviati }) : [],
       commesse: vedeCommesse || this.livello('rapportini') > 0 ? this.leggiCommesse({ archiviati, modelli }) : [],
       gruppi: this.leggiGruppi(),
       impostazioni: this.leggiImpostazioni(),
-      fornitori: vedeClienti ? this.leggiFornitori({ archiviati }) : [],
+      fornitori: vedeClienti ? this.leggiFornitori({ archiviati }).map(f => Object.assign(f, { collaboratore: collaboratori.has(f.id) })) : [],
       referenti: vedeClienti ? this.leggiReferenti() : [],
       sedi: vedeClienti || vedeCommesse ? this.leggiSedi({ archiviati }) : [],
       prestazioni: vedeCommesse ? this.leggiPrestazioni() : [],
-      utenti: this.db.righe('SELECT id, nome, ruolo, attivo FROM utenti ORDER BY nome')
-        .map(u => ({ id: u.id, nome: u.nome, ruolo: u.ruolo, attivo: u.attivo === 1 })),
+      utenti: this.db.righe('SELECT id, nome, ruolo, attivo, soggetto_id FROM utenti ORDER BY nome')
+        .map(u => Object.assign({ id: u.id, nome: u.nome, ruolo: u.ruolo, attivo: u.attivo === 1, idPersona: persone[u.id] || null },
+          u.ruolo === 'esterno' ? { idSoggetto: u.soggetto_id } : {})),
       numerazioni: this.leggiNumerazioni(),
+    };
+    // Fase 6: i mezzi e i miei strumenti, per il telefono senza rete.
+    if (this.livello('mezzi') >= 1) {
+      r.mezzi = this.mezziPerAnagrafiche();
+      r.mieiStrumenti = this.mieiStrumenti();
+    }
+    return r;
+  },
+
+  /**
+   * Le anagrafiche di un esterno (fase6.md §8.4 e §10.5): solo le commesse dei suoi incarichi (senza soldi), i loro
+   * clienti col solo nome, le loro sedi e impianti; niente fornitori, referenti, altri utenti, impostazioni dei soldi.
+   */
+  anagraficheEsterno() {
+    const mie = this.commesseEsterno();
+    const commesse = this.leggiCommesse({ archiviati: true }).filter(m => mie.has(m.id.toUpperCase()))
+      // Niente budget (nemmeno le ore previste), note interne, cartella, contratto, persone dello studio (§8.4: codice, nome,
+      // cliente, sede con l'indirizzo). Le chiavi restano, vuote, per le app che le leggono.
+      .map(m => Object.assign({}, m, { persone: [], responsabileId: null, budgetOre: null, note: '', cartella: '', codicePrecedente: '', idContratto: null }));
+    const idClienti = new Set(commesse.map(m => m.idCliente));
+    const idSedi = new Set(commesse.map(m => m.sedeId).filter(x => x !== null && x !== undefined));
+    const imp = this.leggiImpostazioni();
+    const impostazioni = {};
+    for (const k of ['RAGIONE_SOCIALE', 'INDIRIZZO', 'PARTITA_IVA', 'EMAIL', 'TELEFONO', 'PEC', 'TICKET_ATTIVO', 'APPROVAZIONE', 'ORE_GIORNALIERE']) impostazioni[k] = imp[k];
+    const c = this.chi();
+    return {
+      ok: true,
+      clienti: this.leggiClienti({ archiviati: true }).filter(s => idClienti.has(s.id)).map(s => ({ id: s.id, nome: s.nome, alias: [], gruppo: '', cliente: true, fornitore: false })),
+      commesse,
+      gruppi: [],
+      impostazioni,
+      fornitori: [],
+      referenti: [],
+      sedi: this.leggiSedi({ archiviati: true }).filter(s => idSedi.has(s.id) || (idClienti.has(s.idSoggetto) && s.tipo === 'impianto' && commesse.some(m => m.sedeId === s.id))),
+      prestazioni: this.leggiPrestazioni().filter(p => mie.has(String(p.idCommessa).toUpperCase())),
+      utenti: c.utente ? [{ id: c.utente.id, nome: c.utente.nome, ruolo: 'esterno', attivo: true, idPersona: null }] : [],
+      numerazioni: this.leggiNumerazioni().filter(n => n.tipo === 'rapportino'),
     };
   },
 
@@ -545,7 +588,7 @@ module.exports = {
   /** Il codice di una commessa nuova: il numero dopo il piu' alto usato, anno di oggi. */
   prossimoCodiceCommessa(anno) {
     const codici = this.db.righe('SELECT id FROM commesse').map(r => r.id);
-    return this.prossimoNumero('commessa', codici, anno || new Date().getFullYear());
+    return this.prossimoNumero('commessa', codici, anno || Number(oggi().slice(0, 4)));
   },
 
   creaCommessa(d) {

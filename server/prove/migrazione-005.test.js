@@ -24,6 +24,15 @@ const COLONNE_NUOVE = {
   rapportini: ['ticket_id'], ore: ['ticket_id'], spese: ['ticket_id'], attivita: ['ticket_id'], scadenze_pagamento: ['contratto_id'], commesse: ['contratto_id'],
   file: ['documento_id', 'versione_id', 'ticket_id', 'fuori_il', 'fuori_no', 'caricato_da', 'svuotato'],
 };
+// Fase 6: dopo la 005 parte anche la 006, che aggiunge le sue colonne (vuote) a tabelle che c'erano gia'.
+const COLONNE_006 = {
+  rapportini: ['incarico_id'], ore: ['incarico_id', 'creata_da'], spese: ['veicolo_id', 'attrezzatura_id', 'incarico_id'],
+  fatture_ricevute: ['incarico_id', 'veicolo_id', 'attrezzatura_id'], impegni: ['veicolo_id'], utenti: ['soggetto_id'],
+  file: ['manutenzione_id', 'lettura_id', 'consegna_id', 'assegnazione_id'],
+  veicoli: ['targa', 'tipo', 'proprieta', 'persona_id', 'immatricolazione', 'km', 'km_il', 'tagliando_km', 'tagliando_ultimo_km',
+    'tagliando_ogni_mesi', 'note', 'dismesso_il', 'dismesso_motivo'],
+};
+for (const [t, c] of Object.entries(COLONNE_006)) COLONNE_NUOVE[t] = (COLONNE_NUOVE[t] || []).concat(c);
 
 let cartella;
 let w;
@@ -78,13 +87,21 @@ function contiene(nuovo, vecchio, dove) {
 const comeTitolare = fn => w.come({ utente: w.titolare(), permessi: w.permessiDi('titolare') }, fn);
 
 test('migrazione 005: versione 5, la copia wisper.db.prima-5 com\'era, le tabelle di prima riga per riga uguali', () => {
-  assert.equal(w.db.versione(), 5);
+  // Fase 6: il server apre il database fino alla versione 6 (la 006 parte dopo la 005); la copia della 005 resta.
+  assert.equal(w.db.versione(), 6);
   const copia = new Database(path.join(cartella, 'wisper.db.prima-5'));
   assert.equal(copia.versione(), 4, 'la copia e\' com\'era prima');
   copia.chiudi();
   // Il registro no: la migrazione ci scrive cosa ha fatto (e prima del dump era vuoto).
   for (const t of tabellePrima.filter(x => x !== 'registro')) {
-    const dopo = w.db.righe('SELECT * FROM ' + t + ' ORDER BY rowid').map(r => Object.assign({}, r));
+    let dopo = w.db.righe('SELECT * FROM ' + t + ' ORDER BY rowid').map(r => Object.assign({}, r));
+    // Fase 6: la 006 aggiunge le righe del ruolo esterno e da' al collaboratore l'organico come rubrica (persone 0 -> 1,
+    // scritto nel registro); il resto dei permessi resta com'era.
+    if (t === 'permessi') {
+      dopo = dopo.filter(r => r.ruolo !== 'esterno');
+      const prima = righePrima.permessi.find(r => r.ruolo === 'collaboratore' && r.modulo === 'persone');
+      if (prima) dopo.filter(r => r.ruolo === 'collaboratore' && r.modulo === 'persone').forEach(r => { assert.equal(r.livello, Math.max(prima.livello, 1)); r.livello = prima.livello; });
+    }
     // Impostazioni e numerazioni: la migrazione aggiunge le sue in fondo, quelle di prima restano uguali.
     if (['impostazioni', 'numerazioni'].includes(t)) assert.ok(dopo.length > righePrima[t].length, t);
     else assert.equal(dopo.length, righePrima[t].length, t + ': quante righe');
@@ -122,6 +139,16 @@ test('i rapportini, i conti e i PDF di oggi sono identici a quelli del server 0.
   }
   assert.deepEqual(Object.keys(ora.pdf).sort(), Object.keys(PRIMA.pdf).sort());
   for (const k of Object.keys(PRIMA.pdf)) assert.deepEqual(ora.pdf[k], PRIMA.pdf[k], 'il PDF ' + k);
+  // Fase 6 (fase6.md §8.6): il costo della commessa ha tre voci in piu' (collaboratori, collaboratoriPrevisto,
+  // altreRicevute) e il totale (costo sostenuto) somma anche le fatture ricevute della commessa senza spesa; le parti di
+  // prima restano uguali al centesimo. Il resto dei conti e' identico.
+  for (const id of Object.keys(PRIMA.conti.commesse)) {
+    const nuovo = ora.conti.commesse[id].costoCommessa;
+    const vecchio = PRIMA.conti.commesse[id].costoCommessa;
+    assert.equal(nuovo.totale, Math.round((vecchio.totale + nuovo.collaboratori + nuovo.altreRicevute) * 100) / 100, id);
+    for (const k of ['collaboratori', 'collaboratoriPrevisto', 'altreRicevute']) delete nuovo[k];
+    nuovo.totale = vecchio.totale;
+  }
   assert.deepEqual(ora.conti, PRIMA.conti);
 });
 
@@ -163,11 +190,13 @@ test('la cartella Drive delle commesse diventa la loro cartella principale; quel
 });
 
 test('le categorie, i testi dei modelli, le numerazioni e le impostazioni nuove; i file gia\' copiati fuori casa non si rimandano', () => {
-  const categorie = w.db.righe('SELECT nome, approvazione, vede, scadenza_mesi, sistema FROM documento_categorie ORDER BY ordine');
-  assert.equal(categorie.length, 16);
+  // Fase 6: la 006 aggiunge in fondo le sue 9 categorie; le 16 della 005 restano com'erano, nello stesso ordine.
+  assert.equal(w.db.riga('SELECT COUNT(*) n FROM documento_categorie').n, 25);
+  const categorie = w.db.righe('SELECT nome, approvazione, vede, scadenza_mesi, sistema FROM documento_categorie ORDER BY ordine').slice(0, 16);
   assert.deepEqual(categorie.filter(c => c.sistema).map(c => c.nome), ['Mandati ai clienti', 'Da classificare', 'Documenti personali']);
   assert.deepEqual(Object.assign({}, categorie.find(c => c.nome === 'Contratti')), { nome: 'Contratti', approvazione: 0, vede: 'costi', scadenza_mesi: null, sistema: 0 });
-  assert.equal(w.db.riga("SELECT COUNT(*) n FROM modelli_testi").n, 12);
+  // Fase 6: in piu' la lettera d'incarico (LETTERA_INCARICO) della 006.
+  assert.equal(w.db.riga("SELECT COUNT(*) n FROM modelli_testi").n, 13);
   const imp = w.leggiImpostazioni();
   assert.deepEqual([imp.FILE_MAX_MB, imp.SPAZIO_AVVISO_MB, imp.SPAZIO_MINIMO_MB, imp.COPIA_FUORI_MAX_MB, imp.EMAIL_ALLEGATI_MAX_MB, imp.COPIA_INVIATI,
     imp.CONDIVISIONE_INDIRIZZO, imp.CONDIVISIONE_GIORNI, imp.PREAVVISO_GIORNI, imp.ANTICIPO_TICKET_GIORNI], [50, 10240, 2048, 25, 15, true, '', 14, 60, 30]);
@@ -187,7 +216,7 @@ test('riaperto il server: la migrazione non si rifa\'', () => {
   const documenti = w.db.riga('SELECT COUNT(*) n FROM documenti').n;
   w.chiudi();
   w = new Wisper({ dati: cartella });
-  assert.equal(w.db.versione(), 5);
+  assert.equal(w.db.versione(), 6);
   assert.equal(w.db.riga('SELECT COUNT(*) n FROM documenti').n, documenti);
-  assert.equal(w.db.riga('SELECT COUNT(*) n FROM documento_categorie').n, 16);
+  assert.equal(w.db.riga('SELECT COUNT(*) n FROM documento_categorie').n, 25);
 });

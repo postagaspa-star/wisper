@@ -124,6 +124,14 @@
     lucchetto: '<path d="M6 11h12v10H6zM8 11V7a4 4 0 0 1 8 0v4"/>',
     persona: '<path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21a8 8 0 0 1 16 0"/>',
     carica: '<path d="M12 21V9M7 14l5-5 5 5M5 3h14"/>',
+    // fase 6: persone, mezzi e attrezzature, collaboratori esterni (dal prototipo Gestionale-fase6.html)
+    furgone: '<path d="M3 7h11v9H3zM14 10h4l3 3v3h-7M7 19.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zM17 19.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z"/>',
+    collaboratori: '<path d="M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM2.5 20a6.5 6.5 0 0 1 13 0M16 4.3a3.5 3.5 0 0 1 0 6.4M18.5 20a6.5 6.5 0 0 0-3-5.5"/>',
+    valigia: '<path d="M4 8h16v11H4zM9 8V5h6v3M4 13h16"/>',
+    misura: '<path d="M4 17a8 8 0 0 1 16 0M12 17l4-5M7 13l1 1M12 10v1.5M17 13l-1 1"/>',
+    laptop: '<path d="M5 6h14v9H5zM3 18h18"/>',
+    attrezzo: '<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.8-3.8a6 6 0 0 1-7.9 7.9l-6.9 6.9a2.1 2.1 0 0 1-3-3l6.9-6.9a6 6 0 0 1 7.9-7.9z"/>',
+    km: '<path d="M12 20a8 8 0 1 1 8-8M12 12l3-3M20 20l-3-3"/>',
   };
 
   function icona(nome, dim, spessore) {

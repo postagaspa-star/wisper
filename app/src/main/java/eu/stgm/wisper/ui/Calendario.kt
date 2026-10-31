@@ -92,6 +92,12 @@ fun SchermataCalendario(dati: Dati, nav: Navigatore, giorno: String) {
     val scadenzeDelGiorno = scadenzeAperte.filter { it.data.take(10) == scelto.toString() }
     // Anche le scadenze fanno il loro pallino nel giorno.
     val scadenzePerGiorno: Map<String, Int> = scadenzeAperte.groupingBy { it.data.take(10) }.eachCount()
+    // Fase 6 (fase6.md §6.5): le assenze sono una fascia sul giorno della persona ("Assente" per chi non vede il tipo),
+    // quelle da approvare con "da approvare"; le chiusure dello studio su tutti. Lette da `assenze {da, a}`.
+    val assenzeL = if (perm.vede(Moduli.PERSONE) && !dati.esempio) rememberLettura("assenze-$meseVisto", 0) { dati.fase6.assenzePeriodo(meseVisto.atDay(1).minusDays(7), meseVisto.atEndOfMonth().plusDays(7)) } else null
+    val elencoAssenze = (assenzeL as? Lettura.Pronta)?.dato
+    val assenzeDelGiorno = elencoAssenze?.assenze.orEmpty().filter { it.copre(scelto) }
+    val chiusureDelGiorno = elencoAssenze?.chiusure.orEmpty().filter { it.copre(scelto) }
 
     Box(Modifier.fillMaxSize().background(c.fondo)) {
         Column(
@@ -143,6 +149,18 @@ fun SchermataCalendario(dati: Dati, nav: Navigatore, giorno: String) {
                     else -> giornoEsteso(scelto)
                 },
             )
+            if (chiusureDelGiorno.isNotEmpty() || assenzeDelGiorno.isNotEmpty()) SchedaElenco {
+                chiusureDelGiorno.forEachIndexed { i, k -> if (i > 0) LineaElenco(); RigaVoce(k.frase, icona = Icone.calendario) }
+                assenzeDelGiorno.forEachIndexed { i, a ->
+                    if (i > 0 || chiusureDelGiorno.isNotEmpty()) LineaElenco()
+                    RigaVoce(
+                        a.persona + " · " + a.tipoVisto + if (a.dalle.isNotBlank()) " ${a.dalle}-${a.alle}" else "",
+                        sotto = if (a.stato == "da_approvare") "da approvare" else if (a.dalle.isNotBlank()) "Permesso" else "Tutto il giorno",
+                        inizio = { CerchioPersona(eu.stgm.wisper.rapportino.Utente("", a.persona).iniziali, 36.dp) },
+                        fine = { Parola6(if (a.stato == "da_approvare") "Da approvare" else a.tipoVisto) },
+                    )
+                }
+            }
             SchedaElenco {
                 if (delGiorno.isEmpty() && scadenzeDelGiorno.isEmpty()) RigaCalma("Niente in calendario. Giornata libera.")
                 scadenzeDelGiorno.forEachIndexed { i, s ->

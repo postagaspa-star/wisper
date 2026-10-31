@@ -67,7 +67,9 @@ function pulisciRicerca(s) {
  */
 const SEGNAPOSTI = ['cliente', 'indirizzo_cliente', 'referente', 'impianto', 'indirizzo_impianto', 'commessa', 'ticket', 'contratto',
   'canone', 'dal', 'al', 'scadenza', 'ultima_verifica', 'oggi', 'studio', 'tecnico',
-  'rapportino', 'data', 'periodo', 'preventivo', 'oggetto', 'documento'];
+  'rapportino', 'data', 'periodo', 'preventivo', 'oggetto', 'documento',
+  // Fase 6: la lettera d'incarico.
+  'collaboratore', 'incarico', 'compenso', 'descrizione'];
 
 /** I segnaposti scritti in un testo, nell'ordine in cui compaiono. */
 function segnapostiIn(t) {

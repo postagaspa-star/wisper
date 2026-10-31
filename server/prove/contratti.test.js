@@ -8,7 +8,11 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { serverDiProva } = require('./aiuto');
+const { serverDiProva, giornoDeiPrototipi } = require('./aiuto');
+// I contratti CA/2026/001, CA/2026/002 (disdetta entro il 01/11/2026) e CA/2025/004 hanno date fisse (la storia del
+// prototipo): queste prove le guardano dal giorno del prototipo, giovedi' 22/10/2026, qualunque giorno sia (anche con
+// WISPER_OGGI_PROVA). Le altre prove girano sul giorno vero.
+giornoDeiPrototipi();
 const { oggi, piuGiorni } = require('../src/utili');
 const C = require('../src/conti');
 
@@ -56,7 +60,7 @@ test('i contratti dei dati di esempio: CA/2026/002 in scadenza (la disdetta entr
   assert.deepEqual(c.impianti.map(i => [i.idSede, i.nome, i.ogniMesi, i.prossimaVisita]), [[4, 'Cabina MT Acme', 6, '2026-11-20']]);
   assert.deepEqual(c.documento, { id: c.documento.id, titolo: 'Contratto CA/2026/002 firmato' });
   for (const k of ['costoTicket', 'rende']) assert.ok(k in c, k);
-  if (T >= '2026-10-02' && T <= '2026-11-01') assert.deepEqual([c.statoVisto, c.statoDettaglio.slice(0, 15)], ['In scadenza', 'disdetta entro ']);
+  assert.deepEqual([c.statoVisto, c.statoDettaglio.slice(0, 15)], ['In scadenza', 'disdetta entro ']);
   const commessa = ok(await manuel('anagrafiche')).commesse.find(m => m.id === c.idCommessa);
   assert.deepEqual([commessa.modoFatturazione, commessa.note], ['corpo', 'Dal contratto CA/2026/002']);
   // Il collaboratore li legge senza canone, tariffa, importi delle rate, costi; lettura senza pulsanti.
@@ -208,7 +212,9 @@ test('scadenze: divise in scadute, nel preavviso, più avanti; il calendario con
   // Il collaboratore (documenti 1, ticket 2) le legge; scrive solo quelle dei contratti.
   assert.ok(ok(await marco('scadenze', {})).scadute.length >= 1);
   assert.equal((await marco('salvaScadenza', { scadenza: { titolo: 'X', tipo: 'altro', idCliente: 'C001', data: T } })).permesso, false);
-  assert.equal((await lettura('faiScadenza', { id: r.scadute[0].id })).permesso, false);
+  // Fase 6: la prima scaduta ora puo' essere di una persona (Primo soccorso di Marco), che lettura non vede proprio
+  // (risponde "non trovata"); qui si prova il permesso su una scadenza che vede.
+  assert.equal((await lettura('faiScadenza', { id: r.scadute.find(x => x.titolo === 'Verifica protezioni SPG e SPI').id })).permesso, false);
   const csv = Buffer.from(ok(await manuel('esporta', { cosa: 'scadenze' })).base64, 'base64').toString('utf8');
   assert.equal(csv.split('\r\n')[0], '﻿Data;Titolo;Tipo;Cliente;Impianto;Ogni (mesi);Stato;Fatta il;Documento;Ticket');
   const contratti = Buffer.from(ok(await manuel('esporta', { cosa: 'contratti' })).base64, 'base64').toString('utf8');

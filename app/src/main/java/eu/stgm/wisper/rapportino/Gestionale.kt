@@ -33,15 +33,22 @@ object Moduli {
     const val TICKET = "ticket"
     const val AMMINISTRAZIONE = "amministrazione"
 
+    /** Fase 6 (fase6.md §11.2): persone e risorse umane (voce 10), mezzi e attrezzature (13), collaboratori esterni (16). */
+    const val PERSONE = "persone"
+    const val MEZZI = "mezzi"
+    const val COLLABORATORI = "collaboratori"
+
     /** Tariffe, totali, costi orari, budget in euro, margini. */
     const val COSTI = "costi"
+
+    /** Fase 6: i dati riservati delle persone (costo dell'anno, giudizi, cedolini, tipo delle malattie). */
     const val RISERVATI = "riservati"
 
     /** Quelli che funzionano nella fase 1, nell'ordine del menu. */
     val FASE1 = listOf(DASHBOARD, CLIENTI, COMMESSE, RAPPORTINI, FATTURAZIONE, AMMINISTRAZIONE)
 
-    /** Quelli che funzionano dalla fase 3 (spese e trasferte), nell'ordine del menu. */
-    val FUNZIONANTI = listOf(DASHBOARD, CLIENTI, COMMESSE, PREVENTIVI, ATTIVITA, RAPPORTINI, SPESE, FATTURAZIONE, BANCHE, DOCUMENTI, TICKET, AMMINISTRAZIONE)
+    /** Quelli che funzionano dalla fase 6, nell'ordine del menu (Persone dopo Banche, Mezzi dopo Ticket, Collaboratori dopo Mezzi). */
+    val FUNZIONANTI = listOf(DASHBOARD, CLIENTI, COMMESSE, PREVENTIVI, ATTIVITA, RAPPORTINI, SPESE, FATTURAZIONE, BANCHE, PERSONE, DOCUMENTI, TICKET, MEZZI, COLLABORATORI, AMMINISTRAZIONE)
 
     /** Fatturazione e Banche si vedono solo col modulo e col permesso dei soldi (§15.1). */
     val CON_SOLDI = setOf(FATTURAZIONE, BANCHE)
@@ -54,6 +61,10 @@ object Ruoli {
     const val COLLABORATORE = "collaboratore"
     const val LETTURA = "lettura"
 
+    /** Fase 6 (fase6.md §8.4): un collaboratore esterno che vede solo le sue cose. */
+    const val ESTERNO = "esterno"
+
+    /** I quattro ruoli dello studio (l'esterno si invita dal collaboratore, non da qui). */
     val ELENCO = listOf(TITOLARE, AMMINISTRAZIONE, COLLABORATORE, LETTURA)
 
     fun nome(ruolo: String): String = when (ruolo) {
@@ -61,6 +72,7 @@ object Ruoli {
         AMMINISTRAZIONE -> "Amministrazione"
         COLLABORATORE -> "Collaboratore"
         LETTURA -> "Lettura"
+        ESTERNO -> "Esterno"
         else -> ruolo.replaceFirstChar { it.uppercase() }
     }
 
@@ -69,6 +81,7 @@ object Ruoli {
         AMMINISTRAZIONE -> "Clienti, commesse, fatture e soldi. Non cambia utenti e permessi."
         COLLABORATORE -> "Scrive i suoi rapportini e vede le commesse, senza importi."
         LETTURA -> "Vede tutto, non cambia niente. Per il commercialista."
+        ESTERNO -> "Un collaboratore esterno: vede solo le commesse dei suoi incarichi e le sue cose."
         else -> ""
     }
 }
@@ -82,6 +95,9 @@ data class Utente(
     val attivo: Boolean = true,
     /** Istante ISO dell'ultimo accesso, vuoto se mai. */
     val ultimoAccesso: String = "",
+    /** Fase 6 (§5.2): la scheda della persona; per un esterno il collaboratore di cui fa parte. */
+    val idPersona: String = "",
+    val idSoggetto: String = "",
 ) {
     /** "MG" per Manuel Gasparotto. */
     val iniziali: String
@@ -90,6 +106,7 @@ data class Utente(
 
     fun aJson(): JSONObject = JSONObject().put("id", id).put("nome", nome).put("email", email)
         .put("ruolo", ruolo).put("attivo", attivo).put("ultimoAccesso", ultimoAccesso)
+        .apply { if (idPersona.isNotBlank()) put("idPersona", idPersona); if (idSoggetto.isNotBlank()) put("idSoggetto", idSoggetto) }
 
     companion object {
         fun daJson(o: JSONObject) = Utente(
@@ -99,6 +116,8 @@ data class Utente(
             ruolo = o.testo("ruolo").ifBlank { Ruoli.COLLABORATORE },
             attivo = o.booleanoONull("attivo") ?: (o.numero("attivo")?.let { it != 0.0 } ?: true),
             ultimoAccesso = o.testo("ultimoAccesso").ifBlank { o.testo("ultimo_accesso") },
+            idPersona = o.testo("idPersona"),
+            idSoggetto = o.testo("idSoggetto"),
         )
     }
 }
@@ -139,11 +158,18 @@ data class Permessi(val livelli: Map<String, Int>) {
                     p[Moduli.ATTIVITA] = 2; p[Moduli.SPESE] = 2
                     // Fase 5 (architettura.md §16.1): i documenti in lettura, i ticket in scrittura.
                     p[Moduli.DOCUMENTI] = 1; p[Moduli.TICKET] = 2
+                    // Fase 6 (§17.18): la rubrica e la sua scheda, i mezzi e gli strumenti che ha.
+                    p[Moduli.PERSONE] = 1; p[Moduli.MEZZI] = 1
                 }
                 Ruoli.LETTURA -> {
                     Moduli.FUNZIONANTI.forEach { p[it] = 1 }
                     p[Moduli.AMMINISTRAZIONE] = 0
                     p[Moduli.COSTI] = 1
+                }
+                // Fase 6 (§17.18): solo le sue cose; mai persone, mezzi, clienti, soldi, amministrazione.
+                Ruoli.ESTERNO -> {
+                    p[Moduli.DASHBOARD] = 1; p[Moduli.COMMESSE] = 1; p[Moduli.RAPPORTINI] = 2; p[Moduli.ATTIVITA] = 2
+                    p[Moduli.SPESE] = 2; p[Moduli.TICKET] = 2; p[Moduli.DOCUMENTI] = 1; p[Moduli.COLLABORATORI] = 1
                 }
             }
             return Permessi(p)
@@ -168,6 +194,15 @@ data class Interfaccia(
     val puoChiudereTicket: Boolean? = null,
     val condivisioneCollegata: Boolean = false,
     val fileMaxMb: Int = 50,
+    /** Fase 6 (§17.2): la persona di chi è entrato ("" per l'esterno), chi approva le assenze, chi vede i riservati. */
+    val idPersona: String = "",
+    val puoApprovareAssenze: Boolean? = null,
+    val vedeRiservati: Boolean = false,
+    /** Per l'esterno: il collaboratore di cui fa parte (idSoggetto, nome). */
+    val esternoId: String = "",
+    val esternoNome: String = "",
+    /** "avviso" (lo strumento scaduto si usa confermando) o "blocco" (non si sceglie). */
+    val taraturaBlocco: String = "avviso",
 ) {
     fun aJson(): JSONObject = JSONObject()
         .put("puoApprovare", puoApprovare ?: JSONObject.NULL)
@@ -178,6 +213,11 @@ data class Interfaccia(
         .put("puoChiudereTicket", puoChiudereTicket ?: JSONObject.NULL)
         .put("condivisioneCollegata", condivisioneCollegata)
         .put("fileMaxMb", fileMaxMb)
+        .put("idPersona", idPersona.ifBlank { null } ?: JSONObject.NULL)
+        .put("puoApprovareAssenze", puoApprovareAssenze ?: JSONObject.NULL)
+        .put("vedeRiservati", vedeRiservati)
+        .put("esterno", if (esternoId.isBlank()) JSONObject.NULL else JSONObject().put("idSoggetto", esternoId).put("nome", esternoNome))
+        .put("taraturaBlocco", taraturaBlocco)
 
     companion object {
         fun daJson(o: JSONObject?) = Interfaccia(
@@ -189,6 +229,12 @@ data class Interfaccia(
             puoChiudereTicket = o?.booleanoONull("puoChiudereTicket"),
             condivisioneCollegata = o?.vero("condivisioneCollegata") == true,
             fileMaxMb = o?.numero("fileMaxMb")?.toInt() ?: 50,
+            idPersona = o?.testo("idPersona").orEmpty(),
+            puoApprovareAssenze = o?.booleanoONull("puoApprovareAssenze"),
+            vedeRiservati = o?.vero("vedeRiservati") == true,
+            esternoId = o?.optJSONObject("esterno")?.testo("idSoggetto").orEmpty(),
+            esternoNome = o?.optJSONObject("esterno")?.testo("nome").orEmpty(),
+            taraturaBlocco = o?.testo("taraturaBlocco")?.ifBlank { null } ?: "avviso",
         )
     }
 }
@@ -222,6 +268,19 @@ data class Sessione(
 
     /** Il collaboratore vede e cambia solo i suoi ticket (§16.19). */
     val collaboratore: Boolean get() = utente.ruolo == Ruoli.COLLABORATORE
+
+    /** Fase 6: un collaboratore esterno (vede solo le sue cose: menu ridotto, "La tua scheda"). */
+    val esterno: Boolean get() = utente.ruolo == Ruoli.ESTERNO
+
+    /** Fase 6: la persona di chi è entrato (vuota per l'esterno e per i server di prima). */
+    val idPersona: String get() = interfaccia.idPersona
+
+    /** Fase 6 (§6.4): approvare le assenze, titolare e amministrazione con le persone in scrittura. */
+    val puoApprovareAssenze: Boolean
+        get() = interfaccia.puoApprovareAssenze ?: (approvaPerRuolo && permessi.modifica(Moduli.PERSONE))
+
+    /** Fase 6: chi vede i dati riservati (di base solo il titolare). */
+    val vedeRiservati: Boolean get() = interfaccia.vedeRiservati || permessi.livello(Moduli.RISERVATI) >= 1
 
     /** Lo stato che avra' una riga scritta adesso da chi e' entrato, per mostrarla subito senza rete. */
     val statoPrevisto: String get() = FilaOreSpese.statoPrevisto(interfaccia.approvazione, utente.ruolo)
@@ -496,6 +555,10 @@ data class Dashboard(
     val fase4: NumeriFase4? = null,
     /** Dalla fase 5 (§16.18): ticket, documenti, scadenze, contratti, spazio. */
     val fase5: NumeriFase5 = NumeriFase5(),
+    /** Dalla fase 6 (§17.17): persone, mezzi, collaboratori; chi è assente oggi; gli incarichi dell'esterno. */
+    val fase6: NumeriFase6 = NumeriFase6(),
+    val assentiOggi: List<AssenteDashboard> = emptyList(),
+    val incarichiEsterno: List<Incarico> = emptyList(),
 ) {
     val vuota: Boolean get() = urgenti.isEmpty() && settimana.isEmpty() && pianificare.isEmpty()
 
@@ -508,7 +571,58 @@ data class Dashboard(
             fase3 = NumeriFase3.daJson(o.optJSONObject("numeri")),
             fase4 = NumeriFase4.daJson(o.optJSONObject("numeri")?.optJSONObject("soldi")),
             fase5 = NumeriFase5.daJson(o.optJSONObject("numeri")),
+            fase6 = NumeriFase6.daJson(o.optJSONObject("numeri")),
+            assentiOggi = o.optJSONArray("assentiOggi").oggetti().map { AssenteDashboard(it.testo("idPersona"), it.testo("nome"), it.testo("tipoVisto").ifBlank { "Assente" }, it.testo("fino")) },
+            incarichiEsterno = if (o.testo("per") == "esterno") o.optJSONArray("incarichi").oggetti().map(Incarico::daJson) else emptyList(),
         )
+    }
+}
+
+/** Chi è assente oggi (§17.17): il tipo come lo si può vedere ("Ferie", o "Assente"). */
+data class AssenteDashboard(val idPersona: String, val nome: String, val tipoVisto: String, val fino: String)
+
+/** I numeri della fase 6 (§17.17): null quelli che il ruolo non vede. */
+data class NumeriFase6(
+    val personeAttive: Int? = null,
+    val assentiOggi: Int = 0,
+    val ferieDaApprovare: Int = 0,
+    val scadenzePersone: Int = 0,
+    val scadutePersone: Int = 0,
+    val mezzi: Boolean = false,
+    val fermi: Int = 0,
+    val guastiAperti: Int = 0,
+    val tarateScadute: Int = 0,
+    val tarateInScadenza: Int = 0,
+    val prestitiInRitardo: Int = 0,
+    val scadenzeMezzi: Int = 0,
+    val collaboratori: Boolean = false,
+    val incarichiInCorso: Int = 0,
+    val nonInRegola: Int = 0,
+    val documentiInScadenza: Int = 0,
+    val daValutare: Int = 0,
+    val compensiDaFatturare: Double? = null,
+) {
+    /** Il numerino giallo di Mezzi e attrezzature (§11.1): tarature scadute, mezzi fermi, prestiti in ritardo. */
+    val numerinoMezzi: Int get() = tarateScadute + fermi + prestitiInRitardo
+
+    /** Scadenze vicine di persone, mezzi, strumenti e collaboratori (il riquadro della Dashboard). */
+    val scadenzeVicine: Int get() = scadenzePersone + scadutePersone + scadenzeMezzi + documentiInScadenza
+
+    companion object {
+        fun daJson(n: JSONObject?): NumeriFase6 {
+            val p = n?.optJSONObject("persone")
+            val m = n?.optJSONObject("mezzi")
+            val c = n?.optJSONObject("collaboratori")
+            return NumeriFase6(
+                personeAttive = p?.optInt("attive"), assentiOggi = p?.optInt("assentiOggi") ?: 0, ferieDaApprovare = p?.optInt("daApprovare") ?: 0,
+                scadenzePersone = p?.optInt("scadenzeVicine") ?: 0, scadutePersone = p?.optInt("scadute") ?: 0,
+                mezzi = m != null, fermi = m?.optInt("fermi") ?: 0, guastiAperti = m?.optInt("guastiAperti") ?: 0, tarateScadute = m?.optInt("tarateScadute") ?: 0,
+                tarateInScadenza = m?.optInt("tarateInScadenza") ?: 0, prestitiInRitardo = m?.optInt("prestitiInRitardo") ?: 0, scadenzeMezzi = m?.optInt("scadenzeVicine") ?: 0,
+                collaboratori = c != null, incarichiInCorso = c?.optInt("incarichiInCorso") ?: 0, nonInRegola = c?.optInt("nonInRegola") ?: 0,
+                documentiInScadenza = c?.optInt("documentiInScadenza") ?: 0, daValutare = c?.optInt("daValutare") ?: 0,
+                compensiDaFatturare = n?.optJSONObject("soldi")?.numero("compensiDaFatturare"),
+            )
+        }
     }
 }
 

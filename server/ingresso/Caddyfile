@@ -1,0 +1,41 @@
+# L'ingresso da internet di Wisper: il servizio wisper-ingresso del docker-compose.yml (README, "Internet entrance").
+#
+#   internet TCP 443 -> router di casa -> NAS 192.168.1.51:8444 -> questo contenitore :443 -> wisper:8402
+#
+# - L'indirizzo IP pubblico di casa arriva da WISPER_IP_PUBBLICO (il .env del NAS). Non va mai scritto in
+#   questo file: il repository e' pubblico.
+# - Il certificato e' di Let's Encrypt per l'indirizzo IP: profilo "shortlived" (circa 6 giorni, l'unico
+#   che Let's Encrypt da' agli IP), rinnovato da Caddy da solo; lo stato sta nel volume /data.
+#   Sfida tls-alpn-01 sulla 443; la http-01 e' spenta perche' la 80 non e' inoltrata dal router.
+#   Nessuna email: l'account ACME resta anonimo.
+# - La catena e' quella di base di Let's Encrypt (fino a ISRG Root X1, che i telefoni conoscono): non
+#   mettere "preferred_chains smallest", finirebbe su Root YE, che i telefoni non conoscono ancora.
+# - Le strade che passano, i limiti e le intestazioni sono in regole.caddy: le stesse della prova in
+#   locale (Caddyfile.prova).
+{
+	# Niente pannello di controllo di Caddy (porta 2019): la configurazione e' solo questa.
+	admin off
+	# Telefoni e computer chiamano https://<IP>: con un indirizzo IP non mandano il nome (SNI), quindi
+	# Caddy deve sapere quale certificato dare.
+	default_sni {$WISPER_IP_PUBBLICO}
+	# Nessun rimando da http a https: la 80 non arriva.
+	auto_https disable_redirects
+	import opzioni.caddy
+}
+
+import regole.caddy
+
+https://{$WISPER_IP_PUBBLICO} {
+	tls {
+		issuer acme {
+			dir https://acme-v02.api.letsencrypt.org/directory
+			profile shortlived
+			disable_http_challenge
+		}
+	}
+	import regole
+}
+
+:443 {
+	import altri-nomi
+}

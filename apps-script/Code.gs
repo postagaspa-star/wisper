@@ -224,6 +224,8 @@ function doPost(e) {
   }
   // Il server sul NAS che chiede di mandare un'email o salvare una copia (Ponte.gs).
   if (eRichiestaPostino(d)) return postino(d);
+  // La porta Google (Porta.gs): le app nuove, e il server sul NAS che viene a prendere il lavoro.
+  if (eRichiestaPorta(d)) return porta(d);
   return rispondi(d, function () {
     if (d.azione === 'anagrafiche') return rispostaAnagrafiche();
     if (d.azione === 'rapportini') return { ok: true, rapportini: leggiRapportini(d.da, d.a, d.tutti === true) };

@@ -28,7 +28,9 @@ const BASE = 'http://localhost:' + PORTA;
 
 // Fase 5: chiude finestre e pannelli dopo la schermata; clicca il giallo della pagina col testo dato.
 const CHIUDI = "document.querySelectorAll('.velo, .pannello, .pannello-doc, .pannello-ticket, .pannello-contratto').forEach(v => v.remove())";
-const GIALLO = testo => "[...document.querySelectorAll('.btn.giallo')].find(b => b.textContent.indexOf(" + JSON.stringify(testo) + ") >= 0).click()";
+const GIALLO = testo => "[...document.querySelectorAll('.btn.giallo, [data-giallo-pagina]')].find(b => b.textContent.indexOf(" + JSON.stringify(testo) + ") >= 0).click()";
+// Fase 6: aspetta che la pagina abbia letto dal server (i pannelli si aprono dopo la lettura).
+const ATTENDI = ms => 'await new Promise(r => setTimeout(r, ' + ms + '))';
 
 // Le pagine: nome del file, indirizzo, e cosa fare prima della schermata (JavaScript nella pagina).
 const PAGINE = [
@@ -162,6 +164,55 @@ const PAGINE = [
   { nome: 'cliente-documenti', hash: '#clienti/C002', fai: "await new Promise(r => setTimeout(r, 500)); [...document.querySelectorAll('.segmenti button')].find(b => /^Documenti/.test(b.textContent)).click(); await new Promise(r => setTimeout(r, 800))" },
   { nome: 'cliente-sedi-impianti', hash: '#clienti/C002', fai: "[...document.querySelectorAll('.segmenti button')].find(b => /^Sedi/.test(b.textContent)).click()" },
   { nome: 'commessa-documenti', hash: '#commesse/' + new Date().getFullYear() % 100 + 'ST005', fai: "[...document.querySelectorAll('.segmenti button')].find(b => b.textContent === 'Documenti').click(); await new Promise(r => setTimeout(r, 800))" },
+  // fase 6: persone, mezzi e attrezzature, collaboratori esterni (col server di prova: i dati di esempio della fase 6 sono lì).
+  // Con --chi marco le pagine di Persone si aprono su "Io"; con --chi luca (esterno) solo la sua scheda e la Dashboard.
+  { nome: 'f6-organico', hash: '#persone/organico' },
+  { nome: 'f6-persona', hash: '#persone/p/3', fai: ATTENDI(1200) },
+  { nome: 'f6-persona-giu', hash: '#persone/p/3', fai: ATTENDI(1200) + "; const c = document.querySelector('.pannello-f6 .corpo'); if (c) c.scrollTop = 900", dopo: CHIUDI },
+  { nome: 'f6-persona-laura', hash: '#persone/p/2', fai: ATTENDI(1200), dopo: CHIUDI },
+  { nome: 'f6-io', hash: '#persone/io', fai: ATTENDI(900) },
+  { nome: 'f6-aggiungi-persona', hash: '#persone/organico', fai: GIALLO('Aggiungi una persona'), dopo: CHIUDI },
+  { nome: 'f6-ferie', hash: '#persone/ferie', fai: ATTENDI(900) },
+  { nome: 'f6-chiedi', hash: '#persone/ferie', fai: ATTENDI(900) + "; [...document.querySelectorAll('.btn.giallo')].find(b => /richiesta|Chiedi/.test(b.textContent)).click(); await new Promise(r => setTimeout(r, 1200))", dopo: CHIUDI },
+  { nome: 'f6-approva', hash: '#persone/ferie', fai: ATTENDI(900) + "; const r = [...document.querySelectorAll('.colonna-f6 .riga')].find(x => /Da approvare/.test(x.textContent)); if (r) r.click(); await new Promise(r => setTimeout(r, 1200))", dopo: CHIUDI },
+  { nome: 'f6-presenze', hash: '#persone/presenze', fai: ATTENDI(900) },
+  { nome: 'f6-scadenze-persone', hash: '#persone/scadenze', fai: ATTENDI(900) },
+  { nome: 'f6-costi', hash: '#persone/costi', fai: ATTENDI(900) },
+  { nome: 'f6-nuovo-costo', hash: '#persone/costi', fai: ATTENDI(900) + ';' + GIALLO('Nuovo costo'), dopo: CHIUDI },
+  { nome: 'f6-accessi', hash: '#persone/accessi/3', fai: ATTENDI(900) },
+  { nome: 'f6-mezzi', hash: '#mezzi/mezzi', fai: ATTENDI(900) },
+  { nome: 'f6-miei', hash: '#mezzi/miei', fai: ATTENDI(900) },
+  { nome: 'f6-mezzo', hash: '#mezzi/mezzo/2', fai: ATTENDI(1200), dopo: CHIUDI },
+  { nome: 'f6-aggiungi-mezzo', hash: '#mezzi/mezzi', fai: ATTENDI(600) + ';' + GIALLO('Aggiungi un mezzo'), dopo: CHIUDI },
+  { nome: 'f6-strumenti', hash: '#mezzi/strumenti', fai: ATTENDI(900) },
+  { nome: 'f6-strumento', hash: '#mezzi/at/4', fai: ATTENDI(1500), dopo: CHIUDI },
+  { nome: 'f6-aggiungi-strumento', hash: '#mezzi/strumenti', fai: ATTENDI(600) + ';' + GIALLO('Aggiungi uno strumento'), dopo: CHIUDI },
+  { nome: 'f6-taratura', hash: '#mezzi/at/4', fai: ATTENDI(1500) + "; [...document.querySelectorAll('.pannello-f6 .btn.giallo')].pop().click(); await new Promise(r => setTimeout(r, 500))", dopo: CHIUDI },
+  { nome: 'f6-attrezzature', hash: '#mezzi/attrezzature', fai: ATTENDI(900) },
+  { nome: 'f6-dpi', hash: '#mezzi/dpi', fai: ATTENDI(900) },
+  { nome: 'f6-assegnazioni', hash: '#mezzi/assegnazioni', fai: ATTENDI(900) },
+  { nome: 'f6-manutenzioni', hash: '#mezzi/manutenzioni', fai: ATTENDI(900) },
+  { nome: 'f6-scadenze-mezzi', hash: '#mezzi/scadenze', fai: ATTENDI(900) },
+  { nome: 'f6-guasto', hash: '#mezzi/mezzo/2', fai: ATTENDI(1200) + "; [...document.querySelectorAll('.pannello-f6 .btn')].find(b => /Segnala un guasto/.test(b.textContent)).click(); await new Promise(r => setTimeout(r, 400))", dopo: CHIUDI },
+  { nome: 'f6-collaboratori', hash: '#collaboratori/elenco', fai: ATTENDI(900) },
+  { nome: 'f6-collaboratore', hash: '#collaboratori/c/F006', fai: ATTENDI(1200), dopo: CHIUDI },
+  { nome: 'f6-nuovo-collaboratore', hash: '#collaboratori/elenco', fai: ATTENDI(600) + ';' + GIALLO('Nuovo collaboratore'), dopo: CHIUDI },
+  { nome: 'f6-incarichi', hash: '#collaboratori/incarichi', fai: ATTENDI(900) },
+  { nome: 'f6-incarico', hash: '#collaboratori/in/1', fai: ATTENDI(1200), dopo: CHIUDI },
+  { nome: 'f6-nuovo-incarico', hash: '#collaboratori/incarichi', fai: ATTENDI(900) + ';' + GIALLO('Nuovo incarico'), dopo: CHIUDI },
+  { nome: 'f6-compensi', hash: '#collaboratori/compensi', fai: ATTENDI(900) },
+  { nome: 'f6-documenti-coll', hash: '#collaboratori/documenti', fai: ATTENDI(900) },
+  { nome: 'f6-la-tua-scheda', hash: '#collaboratori', fai: ATTENDI(1200) },
+  { nome: 'f6-rapportino-strumenti', hash: '#rapportini/elenco', fai: "[...document.querySelectorAll('.btn.giallo')].find(b => /Nuovo rapportino|Scrivi il rapportino/.test(b.textContent)).click(); await new Promise(r => setTimeout(r, 500)); const p = [...document.querySelectorAll('.finestra .pillola')].find(b => /Strumenti usati/.test(b.textContent)); if (p) p.click(); await new Promise(r => setTimeout(r, 800)); const c = document.querySelector('.finestra .corpo-f'); if (c) c.scrollTop = c.scrollHeight", dopo: CHIUDI },
+  { nome: 'f6-rapportino-pannello', hash: '#rapportini/elenco', fai: "await new Promise(r => setTimeout(r, 600)); const r = document.querySelector('.tab .r[data-chiave=\"RAP/' + new Date().getFullYear() + '/0006\"]') || document.querySelector('.tab .r.cliccabile'); r.click(); await new Promise(r => setTimeout(r, 400)); const c = document.querySelector('.pannello .corpo'); if (c) c.scrollTop = 400", dopo: CHIUDI },
+  { nome: 'f6-pianificazione', hash: '#attivita/pianificazione', fai: ATTENDI(1200) },
+  { nome: 'f6-commessa-costi', hash: '#commesse/' + new Date().getFullYear() % 100 + 'ST001', fai: "await new Promise(r => setTimeout(r, 600)); [...document.querySelectorAll('.segmenti button')].find(b => /Costi/.test(b.textContent)).click(); await new Promise(r => setTimeout(r, 1200))" },
+  { nome: 'f6-commessa-incarichi', hash: '#commesse/' + new Date().getFullYear() % 100 + 'ST001', fai: "await new Promise(r => setTimeout(r, 600)); const b = [...document.querySelectorAll('.segmenti button')].find(b => /Incarichi/.test(b.textContent)); if (b) b.click(); await new Promise(r => setTimeout(r, 1200))" },
+  { nome: 'f6-ricevuta', hash: '#fatturazione/ricevute', fai: "await new Promise(r => setTimeout(r, 900)); const r = [...document.querySelectorAll('.tab .r.cliccabile')].find(x => /Impianti Veneti/.test(x.textContent)); if (r) r.click(); await new Promise(r => setTimeout(r, 1200))", dopo: CHIUDI },
+  { nome: 'f6-ticket-strumenti', hash: '#ticket/tk/12', fai: "await new Promise(r => setTimeout(r, 1200)); const c = document.querySelector('.pannello-ticket .corpo'); if (c) c.scrollTop = 600", dopo: CHIUDI },
+  { nome: 'f6-permessi-esterno', hash: '#amministrazione/permessi', fai: "await new Promise(r => setTimeout(r, 900)); const b = [...document.querySelectorAll('.segmenti button')].find(b => b.textContent === 'Esterno'); if (b) b.click(); await new Promise(r => setTimeout(r, 600))" },
+  { nome: 'f6-impostazioni', hash: '#amministrazione/persone', fai: ATTENDI(900) },
+  { nome: 'f6-dashboard', hash: '#dashboard', fai: ATTENDI(900) },
 ];
 
 const aspetta = ms => new Promise(r => setTimeout(r, ms));

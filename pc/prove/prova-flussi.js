@@ -3,6 +3,7 @@
 //
 //   node server/src/avvio.js --prova --porta 8400 --dati <cartella temporanea>
 //   node pc/prove/finto-ponte.js 8791 --server http://localhost:8400
+//   (con il server su un'altra porta: --server http://localhost:<porta>)
 //   node pc/prove/prova-flussi.js --porta 8791 [--uscita <schermate>]
 //
 // Ogni passo clicca come una persona e poi controlla col server che sia successo davvero.
@@ -17,6 +18,7 @@ const assert = require('node:assert/strict');
 const arg = process.argv.slice(2);
 const opz = (n, d) => { const i = arg.indexOf(n); return i >= 0 ? arg[i + 1] : d; };
 const PORTA = Number(opz('--porta', 8791));
+const SERVER = opz('--server', 'http://localhost:8400');
 const USCITA = opz('--uscita', '');
 const EDGE = 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';
 const BASE = 'http://localhost:' + PORTA;
@@ -269,7 +271,7 @@ async function main() {
     await clicca('Modifica');
     await valuta(`(() => { const s = [...document.querySelectorAll('.finestra .campo')].find(c => c.querySelector('label').textContent === 'Responsabile').querySelector('select'); s.value = s.options[1].value; s.dispatchEvent(new Event('change')); return s.value; })()`);
     // Marco fra le persone (la pillola si accende e si spegne: si tocca solo se è spenta).
-    await valuta("(() => { const b = [...document.querySelectorAll('.finestra .pillola')].find(x => x.textContent === 'Marco Collaboratore'); if (b.getAttribute('aria-pressed') !== 'true') b.click(); return true; })()");
+    await valuta("(() => { const b = [...document.querySelectorAll('.finestra .pillola')].find(x => x.textContent === 'Marco Rossato'); if (b.getAttribute('aria-pressed') !== 'true') b.click(); return true; })()");
     await clicca('Salva', '.finestra');
     await aspetta(800);
     const m2 = (await server('anagrafiche')).commesse.find(m => m.id === '26ST002');
@@ -293,23 +295,23 @@ async function main() {
     assert.equal(giorgio.ruolo, 'lettura');
     passo('Nuovo utente con la password iniziale del server (' + pw.replace(/./g, '•') + ')');
     // La password iniziale funziona davvero.
-    const prova = await fetch('http://localhost:8400/exec', { method: 'POST', body: JSON.stringify({ azione: 'accedi', email: EMAIL, password: pw }) }).then(r => r.json());
+    const prova = await fetch(SERVER + '/exec', { method: 'POST', body: JSON.stringify({ azione: 'accedi', email: EMAIL, password: pw }) }).then(r => r.json());
     assert.equal(prova.ok, true, 'Giorgio entra con la password iniziale');
     passo('la password iniziale vale per entrare');
     await vai('#amministrazione/utenti/' + giorgio.id);
     await clicca('Collaboratore');
-    assert.match(await valuta("document.querySelector('.finestra').innerText"), /Non vedrà: Preventivi e contratti, Fatturazione, Amministrazione/);
+    assert.match(await valuta("document.querySelector('.finestra').innerText"), /Non vedrà: Preventivi e contratti, Fatturazione, Banche e scadenze, Collaboratori esterni, Amministrazione/);
     await clicca('Cambia il ruolo', '.finestra');
     await aspetta(800);
     assert.equal((await server('utenti')).utenti.find(u => u.id === giorgio.id).ruolo, 'collaboratore');
     passo('cambio ruolo con la conferma che dice cosa vedrà');
-    await clicca('Nuova password', '.scheda.righe');
+    await clicca('Nuova password', '#principale');
     await clicca('Fai la password', '.finestra');
     await aspetta(800);
     assert.match(await valuta("document.querySelector('.scatola-password code').textContent"), /^[A-Z2-9]{4}-/);
     await clicca('Fatto', '.finestra');
     passo('Nuova password');
-    await clicca('Disattiva', '.scheda.righe');
+    await clicca('Disattiva', '#principale');
     await clicca('Disattiva', '.finestra');
     await aspetta(800);
     assert.equal((await server('utenti')).utenti.find(u => u.id === giorgio.id).attivo, false);
@@ -330,7 +332,9 @@ async function main() {
     passo('permesso cambiato (vale da subito) e Annulla');
 
     await vai('#amministrazione/numerazioni');
-    await clicca('Modifica');
+    // Quella delle commesse (dalla fase 6 ci sono anche strumenti, incarichi e le altre).
+    await valuta("[...document.querySelectorAll('.scheda.numerazione')].find(x => x.querySelector('.etichetta').textContent === 'Commesse').querySelector('button').click(); true");
+    await aspetta(900);
     await valuta(`(() => { const p = [...document.querySelectorAll('.finestra .pezzo')].find(x => x.textContent.includes('Numero')); p.querySelector('button[aria-label="Una cifra in più"]').click(); return true; })()`);
     await aspetta(300);
     assert.match(await valuta("document.querySelector('.anteprima-numero .codice').textContent"), /^\d{2}ST\d{4}$/);

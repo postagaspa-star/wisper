@@ -12,9 +12,16 @@ const { serverDiProva, cartellaNuova } = require('./aiuto');
 const C = require('../src/conti');
 const { CAMPI_COSTI } = require('../src/permessi');
 const { Wisper } = require('../src/wisper');
-const { oggi, piuGiorni, istante, dataOraIso } = require('../src/utili');
+const { oggi, piuGiorni, istante, dataOraIso, adessoMs } = require('../src/utili');
 
 const CASI = require('./casi-ore-spese.json');
+
+// Le date delle prove sono quelle del giorno in cui sono state scritte (22/10/2026), spostate di quanti giorni oggi e' dopo:
+// restano nei giorni che vengono, lontane dalle righe dei dati di esempio (gli ultimi giorni feriali), qualunque giorno sia
+// oggi (anche con l'orologio di prova, WISPER_OGGI_PROVA). Il 22/10/2026 sono proprio quelle scritte.
+const SPOSTA = Math.round((Date.parse(oggi() + 'T12:00:00') - Date.parse('2026-10-22T12:00:00')) / 86400000);
+const giorno = iso => piuGiorni(iso, SPOSTA);
+const ggmm = iso => iso.slice(8, 10) + '/' + iso.slice(5, 7);
 const MANUEL = 1;
 const MARCO = 3;
 
@@ -57,36 +64,36 @@ test('ore da inizio, fine e pausa: tutti i casi di casi-ore-spese.json (anche a 
 // ------------------------------------------------------------------ registrare le ore
 
 test('salvaOre: da inizio/fine/pausa o a mano; il titolare e\' gia\' approvato, il collaboratore va in approvazione', async () => {
-  const n = await manuel('salvaOre', { riga: { data: '2026-11-02', idCommessa: '26ST002', inizio: '22:00', fine: '06:00', pausaMinuti: 30, descrizione: 'Prova notturna' } });
+  const n = await manuel('salvaOre', { riga: { data: giorno('2026-11-02'), idCommessa: '26ST002', inizio: '22:00', fine: '06:00', pausaMinuti: 30, descrizione: 'Prova notturna' } });
   assert.equal(n.ok, true, n.errore);
   const r = n.riga;
-  assert.deepEqual([r.ore, r.giornoDopo, r.data, r.inizio, r.fine, r.pausaMinuti], [7.5, true, '2026-11-02', '22:00', '06:00', 30]);
+  assert.deepEqual([r.ore, r.giornoDopo, r.data, r.inizio, r.fine, r.pausaMinuti], [7.5, true, giorno('2026-11-02'), '22:00', '06:00', 30]);
   assert.deepEqual([r.stato, r.idUtente, r.utente, r.fatturabile, r.tipo, r.dalTimer], ['approvata', MANUEL, 'Manuel Gasparotto', true, 'ordinaria', false]);
   assert.deepEqual([r.idCommessa, r.commessa, r.idCliente, r.cliente], ['26ST002', 'Quadro elettrico capannone', 'C002', 'Rossi Impianti Srl']);
   assert.deepEqual([r.costoOrario, r.costo], [25, 187.5], 'il costo orario della commessa, congelato');
   assert.equal(r.puoScrivere, true);
-  const m = await marco('salvaOre', { riga: { data: '2026-11-02', idCommessa: '26ST001', ore: 2.5, descrizione: 'Disegni' } });
+  const m = await marco('salvaOre', { riga: { data: giorno('2026-11-02'), idCommessa: '26ST001', ore: 2.5, descrizione: 'Disegni' } });
   assert.equal(m.ok, true, m.errore);
   assert.deepEqual([m.riga.stato, m.riga.ore, m.riga.inizio, m.riga.fine], ['da_approvare', 2.5, '', '']);
   assert.equal('costoOrario' in m.riga, false, 'senza costi niente costo orario');
   assert.equal('costo' in m.riga, false);
   // Studio (senza commessa): di base non fatturabile, costo orario delle impostazioni.
-  const studio = (await manuel('salvaOre', { riga: { data: '2026-11-02', ore: 1 } })).riga;
+  const studio = (await manuel('salvaOre', { riga: { data: giorno('2026-11-02'), ore: 1 } })).riga;
   assert.deepEqual([studio.idCommessa, studio.fatturabile, studio.costoOrario], ['', false, 15]);
   // Errori.
-  assert.equal((await manuel('salvaOre', { riga: { data: '2026-11-02', ore: 0 } })).errore, 'Ore: scrivi quante ore hai lavorato');
-  assert.equal((await manuel('salvaOre', { riga: { data: '2026-11-02', inizio: '08:00' } })).errore, 'Scrivi l\'inizio e la fine, oppure solo le ore');
-  assert.equal((await manuel('salvaOre', { riga: { data: '2026-11-02', ore: 25 } })).errore, 'Ore: da 0 a 24');
+  assert.equal((await manuel('salvaOre', { riga: { data: giorno('2026-11-02'), ore: 0 } })).errore, 'Ore: scrivi quante ore hai lavorato');
+  assert.equal((await manuel('salvaOre', { riga: { data: giorno('2026-11-02'), inizio: '08:00' } })).errore, 'Scrivi l\'inizio e la fine, oppure solo le ore');
+  assert.equal((await manuel('salvaOre', { riga: { data: giorno('2026-11-02'), ore: 25 } })).errore, 'Ore: da 0 a 24');
   assert.equal((await manuel('salvaOre', { riga: { ore: 1, idCommessa: '26ST999' } })).errore, 'Commessa 26ST999 non trovata');
   assert.equal((await manuel('salvaOre', { riga: { ore: 1, tipo: 'notturna' } })).errore, 'Tipo: ordinaria o straordinaria');
   assert.equal((await manuel('salvaOre', { riga: { inizio: '08:00', fine: '08:00' } })).errore, 'Fine: deve essere diversa dall\'inizio');
   // Una bozza puo' avere zero ore (il timer appena fermato).
-  const bozza = await manuel('salvaOre', { riga: { data: '2026-11-03', ore: 0, bozza: true } });
+  const bozza = await manuel('salvaOre', { riga: { data: giorno('2026-11-03'), ore: 0, bozza: true } });
   assert.equal(bozza.riga.stato, 'bozza');
 });
 
 test('il costo orario resta quello del giorno in cui la riga nasce; si rifa\' solo se cambia la commessa', async () => {
-  const r = (await manuel('salvaOre', { riga: { data: '2026-11-04', idCommessa: '26ST002', ore: 2 } })).riga;
+  const r = (await manuel('salvaOre', { riga: { data: giorno('2026-11-04'), idCommessa: '26ST002', ore: 2 } })).riga;
   assert.equal(r.costoOrario, 25);
   await manuel('aggiornaCommessa', { id: '26ST002', campi: { costoOrario: 40 } });
   const stessa = (await manuel('salvaOre', { riga: { id: r.id, ore: 3, descrizione: 'cambiata' } })).riga;
@@ -97,16 +104,16 @@ test('il costo orario resta quello del giorno in cui la riga nasce; si rifa\' so
 });
 
 test('ore: il collaboratore vede e scrive solo le sue; si tolgono e si rimettono', async () => {
-  const sue = await marco('ore', { da: '2026-01-01', a: '2027-12-31', utente: MANUEL });
+  const sue = await marco('ore', { da: '2026-01-01', a: piuGiorni(oggi(), 400), utente: MANUEL });
   assert.ok(sue.ore.length >= 5);
   assert.ok(sue.ore.every(o => o.idUtente === MARCO), 'anche chiedendo quelle di Manuel');
   assert.deepEqual(soldiIn(sue), []);
-  const diManuel = (await manuel('ore', { da: '2026-11-02', a: '2026-11-02', utente: MANUEL })).ore[0];
+  const diManuel = (await manuel('ore', { da: giorno('2026-11-02'), a: giorno('2026-11-02'), utente: MANUEL })).ore[0];
   assert.equal((await marco('salvaOre', { riga: { id: diManuel.id, ore: 1 } })).errore, 'Ore ' + diManuel.id + ' non trovate');
   assert.equal((await marco('togliOre', { id: diManuel.id })).errore, 'Ore ' + diManuel.id + ' non trovate');
   assert.equal((await marco('salvaOre', { riga: { idUtente: MANUEL, ore: 1 } })).permesso, false);
   // Laura (amministrazione) scrive anche per gli altri; lettura no.
-  const perMarco = await laura('salvaOre', { riga: { idUtente: MARCO, data: '2026-11-05', ore: 1, idCommessa: '26ST001' } });
+  const perMarco = await laura('salvaOre', { riga: { idUtente: MARCO, data: giorno('2026-11-05'), ore: 1, idCommessa: '26ST001' } });
   assert.equal(perMarco.riga.idUtente, MARCO);
   assert.equal(perMarco.riga.stato, 'da_approvare', 'sono ore di un collaboratore');
   assert.equal((await lettura('salvaOre', { riga: { ore: 1 } })).permesso, false);
@@ -114,7 +121,7 @@ test('ore: il collaboratore vede e scrive solo le sue; si tolgono e si rimettono
   // Togliere e Annulla.
   const tolta = await marco('togliOre', { id: perMarco.riga.id });
   assert.ok(tolta.riga.tolta);
-  assert.equal((await marco('ore', { da: '2026-11-05', a: '2026-11-05' })).ore.length, 0);
+  assert.equal((await marco('ore', { da: giorno('2026-11-05'), a: giorno('2026-11-05') })).ore.length, 0);
   const rimessa = await marco('togliOre', { id: perMarco.riga.id, annulla: true });
   assert.equal(rimessa.riga.tolta, '');
   // La settimana: i giorni uno per uno, con le ore dei rapportini.
@@ -125,12 +132,12 @@ test('ore: il collaboratore vede e scrive solo le sue; si tolgono e si rimettono
 });
 
 test('ore approvate: il collaboratore non le cambia piu\', chi approva si\'', async () => {
-  const r = (await marco('salvaOre', { riga: { data: '2026-11-06', ore: 4, idCommessa: '26ST001' } })).riga;
+  const r = (await marco('salvaOre', { riga: { data: giorno('2026-11-06'), ore: 4, idCommessa: '26ST001' } })).riga;
   await manuel('approva', { voci: [{ tipo: 'ore', id: r.id }] });
   const no = await marco('salvaOre', { riga: { id: r.id, ore: 5 } });
   assert.equal(no.errore, 'Sono già approvate: per cambiarle chiedi a chi approva');
   assert.equal((await marco('togliOre', { id: r.id })).errore, 'Sono già approvate: per toglierle chiedi a chi approva');
-  const lista = (await marco('ore', { da: '2026-11-06', a: '2026-11-06' })).ore[0];
+  const lista = (await marco('ore', { da: giorno('2026-11-06'), a: giorno('2026-11-06') })).ore[0];
   assert.deepEqual([lista.puoScrivere, lista.bloccata], [false, 'Sono già approvate: per cambiarle chiedi a chi approva']);
   const si = await manuel('salvaOre', { riga: { id: r.id, ore: 5 } });
   assert.deepEqual([si.riga.ore, si.riga.stato], [5, 'approvata'], 'chi approva corregge e lo stato resta');
@@ -182,13 +189,13 @@ test('il timer sopravvive al riavvio del server; acceso da piu\' di un giorno no
   const dopo = w.come(chi, () => w.statoTimer());
   assert.equal(dopo.timer.descrizione, 'Ufficio', 'dopo il riavvio il timer e\' ancora li\'');
   // Due ore fa: la bozza ha due ore.
-  w.db.esegui('UPDATE timer SET partito_il = ? WHERE utente_id = 7', istante(new Date(Date.now() - 2 * 3600000)));
+  w.db.esegui('UPDATE timer SET partito_il = ? WHERE utente_id = 7', istante(new Date(adessoMs() - 2 * 3600000)));
   const due = w.come(chi, () => w.db.transazione(() => w.fermaTimer()));
   assert.ok(due.riga.ore >= 1.98 && due.riga.ore <= 2.02, String(due.riga.ore));
   assert.equal(due.riga.stato, 'bozza');
   // Dimenticato acceso tre giorni: solo l'inizio, zero ore e un avviso.
   w.come(chi, () => w.db.transazione(() => w.avviaTimer({})));
-  const fa = new Date(Date.now() - 3 * 86400000);
+  const fa = new Date(adessoMs() - 3 * 86400000);
   w.db.esegui('UPDATE timer SET partito_il = ? WHERE utente_id = 7', istante(fa));
   const lungo = w.come(chi, () => w.db.transazione(() => w.fermaTimer()));
   assert.deepEqual([lungo.riga.ore, lungo.riga.fine, lungo.riga.data, lungo.riga.inizio], [0, '', dataOraIso(istante(fa)).slice(0, 10), dataOraIso(istante(fa)).slice(11, 16)]);
@@ -210,7 +217,8 @@ test('da approvare: per persona, con le anomalie (troppe ore, senza scontrino, s
   assert.equal(tredici.length, 2, 'le due righe di quel giorno');
   assert.ok(voci.some(v => v.tipo === 'rapportino' && v.id === 'RAP/2026/0006'));
   assert.ok(voci.some(v => v.tipo === 'trasferta' && v.anomalie.some(a => /^Km diversi dal solito: 180 invece di circa 96$/.test(a.testo))));
-  assert.ok(voci.every(v => ['ore', 'rapportino', 'spesa', 'trasferta'].includes(v.tipo) && typeof v.dettaglio === 'string' && typeof v.quanto === 'number'));
+  // Fase 6: anche le richieste di ferie e permessi (tipo "assenza").
+  assert.ok(voci.every(v => ['ore', 'rapportino', 'spesa', 'trasferta', 'assenza'].includes(v.tipo) && typeof v.dettaglio === 'string' && typeof v.quanto === 'number'));
   assert.equal(d.conAnomalie, voci.filter(v => v.anomalie.length).length);
   // Chi non approva.
   assert.equal((await marco('daApprovare')).permesso, false);
@@ -228,7 +236,7 @@ test('respingi vuole il motivo, che arriva a chi ha scritto (registro e Dashboar
   assert.equal(senza.errore, 'Scrivi il motivo: arriva a chi l\'ha scritta');
   const no = await manuel('respingi', { voci: [{ tipo: 'spesa', id: pranzo.id }], motivo: 'Manca lo scontrino: fotografalo e rimandala' });
   assert.deepEqual(no, { ok: true, fatte: 1, voci: [{ tipo: 'spesa', id: pranzo.id, stato: 'respinta' }] });
-  const vista = (await marco('spese', { da: '2026-01-01', a: '2027-12-31' })).spese.find(x => x.id === pranzo.id);
+  const vista = (await marco('spese', { da: '2026-01-01', a: piuGiorni(oggi(), 400) })).spese.find(x => x.id === pranzo.id);
   assert.deepEqual([vista.stato, vista.motivoRifiuto, vista.approvataDaNome], ['respinta', 'Manca lo scontrino: fotografalo e rimandala', 'Manuel Gasparotto']);
   const dash = await marco('dashboard');
   const voce = dash.urgenti.find(v => v.tipo === 'respinta' && /^Spesa del .* respinta$/.test(v.titolo));
@@ -257,16 +265,16 @@ test('approva: tutto in una volta, ripetuto non fa danni; una bozza no; le spese
   assert.equal((await manuel('daApprovare')).quante, 0);
   const ancora = await manuel('approva', { voci });
   assert.equal(ancora.fatte, 0, 'la coda del telefono che ripete');
-  const bozza = (await marco('salvaOre', { riga: { data: '2026-11-07', ore: 1, bozza: true } })).riga;
-  assert.equal((await manuel('approva', { voci: [{ tipo: 'ore', id: bozza.id }] })).errore, 'Le ore del 07/11 sono ancora in bozza: chi le ha scritte deve prima mandarle');
+  const bozza = (await marco('salvaOre', { riga: { data: giorno('2026-11-07'), ore: 1, bozza: true } })).riga;
+  assert.equal((await manuel('approva', { voci: [{ tipo: 'ore', id: bozza.id }] })).errore, 'Le ore del ' + ggmm(giorno('2026-11-07')) + ' sono ancora in bozza: chi le ha scritte deve prima mandarle');
   const rap = s.wisper.db.riga("SELECT id FROM spese WHERE rapportino_id IS NOT NULL LIMIT 1");
   assert.match((await manuel('approva', { voci: [{ tipo: 'spesa', id: rap.id }] })).errore, /si approva insieme al rapportino$/);
   assert.equal((await manuel('approva', { voci: [] })).errore, 'Scegli cosa approvare');
-  assert.equal((await manuel('approva', { voci: [{ tipo: 'fattura', id: 1 }] })).errore, 'Tipo: ore, rapportino, spesa o trasferta');
+  assert.equal((await manuel('approva', { voci: [{ tipo: 'fattura', id: 1 }] })).errore, 'Tipo: ore, rapportino, spesa, trasferta o assenza');
 });
 
 test('un rapportino da approvare non si manda e non si fattura; approvato si\'; respinto mostra il motivo', async () => {
-  const r = (await marco('salvaRapportino', { rapportino: { idLocale: 'marco-f3-1', data: '2026-11-09', idCliente: 'C002', idCommessa: '26ST002', oreLavoro: 3, km: 22, spese: 6.5 } })).rapportino;
+  const r = (await marco('salvaRapportino', { rapportino: { idLocale: 'marco-f3-1', data: giorno('2026-11-09'), idCliente: 'C002', idCommessa: '26ST002', oreLavoro: 3, km: 22, spese: 6.5 } })).rapportino;
   assert.equal(r.statoApprovazione, 'da_approvare');
   assert.deepEqual(r.righeSpese.map(x => [x.importo, x.stato, x.destinazione]), [[6.5, 'da_approvare', 'cliente']], 'le sue spese lo seguono');
   const manda = await manuel('stato', { ids: [r.id], stato: 'INVIATO' });
@@ -282,27 +290,27 @@ test('un rapportino da approvare non si manda e non si fattura; approvato si\'; 
   assert.equal(respinto.righeSpese[0].stato, 'respinta');
   assert.match((await manuel('stato', { ids: [r.id], stato: 'INVIATO' })).errore, /è stato respinto \(Le ore di viaggio mancano\): correggilo e rimandalo in approvazione$/);
   // Marco lo corregge: torna da approvare.
-  const corretto = (await marco('salvaRapportino', { rapportino: { idLocale: 'marco-f3-1', data: '2026-11-09', idCliente: 'C002', idCommessa: '26ST002', oreLavoro: 3, oreViaggio: 0.5, km: 22, spese: 6.5 } })).rapportino;
+  const corretto = (await marco('salvaRapportino', { rapportino: { idLocale: 'marco-f3-1', data: giorno('2026-11-09'), idCliente: 'C002', idCommessa: '26ST002', oreLavoro: 3, oreViaggio: 0.5, km: 22, spese: 6.5 } })).rapportino;
   assert.deepEqual([corretto.statoApprovazione, corretto.motivoRifiuto], ['da_approvare', '']);
   await manuel('approva', { voci: [{ tipo: 'rapportino', id: r.id }] });
   const approvato = (await manuel('rapportini', { tutti: true })).rapportini.find(x => x.id === r.id);
   assert.deepEqual([approvato.statoApprovazione, approvato.approvatoDa, approvato.righeSpese[0].stato], ['approvato', MANUEL, 'approvata']);
   // Una ripetizione uguale dalla coda non lo rimanda in approvazione; un cambio vero si'.
-  const uguale = (await marco('salvaRapportino', { rapportino: { idLocale: 'marco-f3-1', data: '2026-11-09', idCliente: 'C002', idCommessa: '26ST002', oreLavoro: 3, oreViaggio: 0.5, km: 22, spese: 6.5 } })).rapportino;
+  const uguale = (await marco('salvaRapportino', { rapportino: { idLocale: 'marco-f3-1', data: giorno('2026-11-09'), idCliente: 'C002', idCommessa: '26ST002', oreLavoro: 3, oreViaggio: 0.5, km: 22, spese: 6.5 } })).rapportino;
   assert.equal(uguale.statoApprovazione, 'approvato');
   assert.equal((await manuel('stato', { ids: [r.id], stato: 'INVIATO' })).ok, true);
   // Quelli del titolare non cambiano: niente approvazione.
-  const suo = (await manuel('salvaRapportino', { rapportino: { idLocale: 'manuel-f3-1', data: '2026-11-09', idCliente: 'C002', tariffa: 42, oreLavoro: 1 } })).rapportino;
+  const suo = (await manuel('salvaRapportino', { rapportino: { idLocale: 'manuel-f3-1', data: giorno('2026-11-09'), idCliente: 'C002', tariffa: 42, oreLavoro: 1 } })).rapportino;
   assert.equal(suo.statoApprovazione, '');
 });
 
 test('APPROVAZIONE: "nessuno" non chiede niente, "tutti" anche al titolare', async () => {
   await manuel('salvaImpostazioni', { valori: { APPROVAZIONE: 'nessuno' } });
   try {
-    assert.equal((await marco('salvaOre', { riga: { data: '2026-11-10', ore: 1 } })).riga.stato, 'approvata');
-    assert.equal((await marco('salvaRapportino', { rapportino: { idLocale: 'marco-f3-nessuno', data: '2026-11-10', idCliente: 'C002', idCommessa: '26ST002', oreLavoro: 1 } })).rapportino.statoApprovazione, '');
+    assert.equal((await marco('salvaOre', { riga: { data: giorno('2026-11-10'), ore: 1 } })).riga.stato, 'approvata');
+    assert.equal((await marco('salvaRapportino', { rapportino: { idLocale: 'marco-f3-nessuno', data: giorno('2026-11-10'), idCliente: 'C002', idCommessa: '26ST002', oreLavoro: 1 } })).rapportino.statoApprovazione, '');
     await manuel('salvaImpostazioni', { valori: { APPROVAZIONE: 'tutti' } });
-    assert.equal((await manuel('salvaOre', { riga: { data: '2026-11-10', ore: 1 } })).riga.stato, 'da_approvare');
+    assert.equal((await manuel('salvaOre', { riga: { data: giorno('2026-11-10'), ore: 1 } })).riga.stato, 'da_approvare');
     assert.equal((await manuel('io')).interfaccia.approvazione, 'tutti');
   } finally {
     await manuel('salvaImpostazioni', { valori: { APPROVAZIONE: 'collaboratori' } });
@@ -314,19 +322,20 @@ test('APPROVAZIONE: "nessuno" non chiede niente, "tutti" anche al titolare', asy
 // ------------------------------------------------------------------ statistiche e costo della commessa
 
 test('statistiche delle ore per persona e per commessa: ore, fatturabili, percentuale, costo (solo con costi)', async () => {
-  const p = { da: '2027-01-11', a: '2027-01-17' };
-  await manuel('salvaOre', { riga: { data: '2027-01-11', idCommessa: '26ST002', ore: 4 } });
-  await manuel('salvaOre', { riga: { data: '2027-01-12', ore: 2 } });
-  await marco('salvaOre', { riga: { data: '2027-01-12', idCommessa: '26ST001', ore: 3 } });
-  await marco('salvaOre', { riga: { data: '2027-01-13', ore: 9, bozza: true } });
-  await manuel('salvaRapportino', { rapportino: { idLocale: 'stat-1', data: '2027-01-13', idCliente: 'C002', idCommessa: '26ST002', tariffa: 42, oreLavoro: 2, oreViaggio: 1 } });
+  const p = { da: giorno('2027-01-11'), a: giorno('2027-01-17') };
+  await manuel('salvaOre', { riga: { data: giorno('2027-01-11'), idCommessa: '26ST002', ore: 4 } });
+  await manuel('salvaOre', { riga: { data: giorno('2027-01-12'), ore: 2 } });
+  await marco('salvaOre', { riga: { data: giorno('2027-01-12'), idCommessa: '26ST001', ore: 3 } });
+  await marco('salvaOre', { riga: { data: giorno('2027-01-13'), ore: 9, bozza: true } });
+  await manuel('salvaRapportino', { rapportino: { idLocale: 'stat-1', data: giorno('2027-01-13'), idCliente: 'C002', idCommessa: '26ST002', tariffa: 42, oreLavoro: 2, oreViaggio: 1 } });
   const per = await manuel('statisticheOre', Object.assign({ per: 'persona' }, p));
   assert.equal(per.ok, true, per.errore);
   const riga = id => per.righe.find(x => x.chiave === id);
   assert.deepEqual(['ore', 'fatturabili', 'percentuale', 'oreRapportini', 'oreRegistrate', 'costo', 'costoNoto'].map(k => riga(MANUEL)[k]), [9, 6, 67, 3, 6, 180, true],
     '4 h a 25 + 2 h a 15 + 2 h di rapportino a 25 (il viaggio e\' nel costo orario)');
-  assert.deepEqual(['ore', 'fatturabili', 'percentuale', 'costo'].map(k => riga(MARCO)[k]), [3, 3, 100, 66], 'la bozza non conta; 3 h a 22');
-  assert.deepEqual([per.totale.ore, per.totale.fatturabili, per.totale.percentuale, per.totale.costo], [12, 9, 75, 246]);
+  // Fase 6: Marco ha il costo orario della persona (28,50 dal 1 gennaio), che vale prima del costo fisso del cliente (22).
+  assert.deepEqual(['ore', 'fatturabili', 'percentuale', 'costo'].map(k => riga(MARCO)[k]), [3, 3, 100, 85.5], 'la bozza non conta; 3 h a 28,50');
+  assert.deepEqual([per.totale.ore, per.totale.fatturabili, per.totale.percentuale, per.totale.costo], [12, 9, 75, 265.5]);
   const com = await manuel('statisticheOre', Object.assign({ per: 'commessa' }, p));
   const c = id => com.righe.find(x => x.chiave === id);
   assert.deepEqual([c('26ST002').ore, c('26ST002').fatturabili, c('26ST002').costo, c('26ST002').cliente], [7, 6, 150, 'Rossi Impianti Srl']);
@@ -370,16 +379,16 @@ test('costo della commessa: la parte dei rapportini e\' quella della fase 1; poi
 });
 
 test('esporta ore: le colonne, il costo solo con costi; il collaboratore solo le sue', async () => {
-  const r = await manuel('esporta', { cosa: 'ore', da: '2026-11-01', a: '2026-11-30' });
+  const r = await manuel('esporta', { cosa: 'ore', da: giorno('2026-11-01'), a: giorno('2026-11-30') });
   assert.equal(r.ok, true, r.errore);
-  assert.equal(r.nome, 'wisper-ore-2026-11-01-2026-11-30.csv');
+  assert.equal(r.nome, 'wisper-ore-' + giorno('2026-11-01') + '-' + giorno('2026-11-30') + '.csv');
   const csv = Buffer.from(r.base64, 'base64').toString('utf8');
   const righe = csv.slice(1).trim().split('\r\n');
   assert.deepEqual(righe[0].split(';').slice(0, 6), ['Data', 'Persona', 'Inizio', 'Fine', 'Pausa (minuti)', 'Ore']);
   assert.ok(righe[0].includes('Costo orario'));
-  assert.ok(csv.includes('02/11/2026;Manuel Gasparotto;22:00;06:00;30;7,5;26ST002'));
-  const suo = Buffer.from((await marco('esporta', { cosa: 'ore', da: '2026-11-01', a: '2026-11-30' })).base64, 'base64').toString('utf8');
-  assert.ok(suo.slice(1).trim().split('\r\n').slice(1).every(r => r.split(';')[1] === 'Marco Collaboratore'), 'solo le sue righe');
+  assert.ok(csv.includes(giorno('2026-11-02').split('-').reverse().join('/') + ';Manuel Gasparotto;22:00;06:00;30;7,5;26ST002'));
+  const suo = Buffer.from((await marco('esporta', { cosa: 'ore', da: giorno('2026-11-01'), a: giorno('2026-11-30') })).base64, 'base64').toString('utf8');
+  assert.ok(suo.slice(1).trim().split('\r\n').slice(1).every(r => r.split(';')[1] === 'Marco Rossato'), 'solo le sue righe');
   assert.equal(suo.split('\r\n')[0].includes('Costo'), false, suo);
 });
 

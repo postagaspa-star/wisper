@@ -14,7 +14,7 @@
  */
 'use strict';
 
-const { testo, numero, centesimi, oggi, piuGiorni, dataOraIso, dataIso } = require('../utili');
+const { testo, numero, centesimi, oggi, piuGiorni, dataOraIso, dataIso, adessoMs } = require('../utili');
 const { budgetDi } = require('../conti');
 const { giornoAttivita } = require('./attivita');
 const { etichettaPreventivo, statoVistoPreventivo } = require('./preventivi');
@@ -43,6 +43,8 @@ function plurale(n, uno, tanti) {
 module.exports = {
   dashboard(d) {
     const c = this.chi();
+    // Fase 6: l'esterno ha la sua Dashboard (i suoi incarichi, i suoi documenti, i suoi rapportini).
+    if (this.eEsterno()) return this.dashboardEsterno();
     const soloSuoi = this.soloSuoi();
     // Il ruolo decide; chi vede tutto puo' guardare anche "come un collaboratore" (per provare).
     const per = soloSuoi ? 'collaboratore' : (d.per === 'collaboratore' ? 'collaboratore' : 'titolare');
@@ -146,10 +148,13 @@ module.exports = {
     // collaboratore, quelli dello studio per chi vede tutto. Oggi non conta: la giornata non e' finita.
     const giorniConRapportino = new Set(rapportini.map(r => r.data).filter(Boolean));
     const giorniSenza = [];
+    // Fase 6: un festivo, una chiusura dello studio o (per il collaboratore) un suo giorno di assenza non e' un giorno che manca.
+    const miaPersona = mie ? this.miaPersonaId() : null;
     for (let i = 14; i >= 1; i--) {
       const g = piuGiorni(adesso, -i);
       const dow = new Date(g + 'T12:00:00').getDay();
       if (dow === 0 || dow === 6) continue;
+      if (this.giornoNonLavorato(miaPersona, g)) continue;
       if (!giorniConRapportino.has(g)) giorniSenza.push(g);
     }
     const recentiSenza = giorniSenza.filter(g => g >= settimanaFa);
@@ -232,8 +237,15 @@ module.exports = {
     if (fase3.ore) risposta.numeri.ore = fase3.ore;
     if (fase3.approvare) risposta.numeri.approvare = fase3.approvare;
     if (fase3.rimborsi) risposta.numeri.rimborsi = fase3.rimborsi;
+    // Fase 6: persone e assenze, mezzi e strumenti, collaboratori esterni. Le scadenze che diventano una voce qui (gia)
+    // non si ripetono nella parte delle scadenze della fase 5: una cosa, una voce sola.
+    const gia = new Set();
+    const fase6 = this.dashboardFase6({ mie, costi, io, adesso, voce, urgenti, settimana, pianificare, gia });
+    for (const k of ['persone', 'mezzi', 'collaboratori']) if (fase6[k]) risposta.numeri[k] = fase6[k];
+    if (fase6.oggiAssenti) risposta.assentiOggi = fase6.oggiAssenti;
+    if (soldi && fase6.compensiDaFatturare !== undefined) soldi.compensiDaFatturare = fase6.compensiDaFatturare;
     // Fase 5: ticket, documenti, scadenze, contratti, spazio sul NAS (le voci entrano nelle tre sezioni prima di ordinarle).
-    const fase5 = this.dashboardFase5({ mie, costi, io, adesso, voce, urgenti, settimana, pianificare });
+    const fase5 = this.dashboardFase5({ mie, costi, io, adesso, voce, urgenti, settimana, pianificare, gia });
     risposta.urgenti = ordina(urgenti);
     // Un ticket, una voce sola: se e' gia' tra le urgenti (in ritardo, non preso), non si ripete in settimana o da
     // pianificare (per esempio "Intervento di oggi" dello stesso ticket). Il resto delle voci resta com'e'.
@@ -258,7 +270,8 @@ module.exports = {
    * Il collaboratore: i suoi ticket e quelli da prendere, i suoi interventi, le
    * sue revisioni; niente contratti, niente spazio, niente soldi.
    */
-  dashboardFase5({ mie, costi, io, adesso, voce, urgenti, settimana, pianificare }) {
+  dashboardFase5({ mie, costi, io, adesso, voce, urgenti, settimana, pianificare, gia }) {
+    const giaVoce = gia || new Set();
     const out = {};
     const nomiCli = {};
     this.db.righe('SELECT id, nome FROM soggetti').forEach(s => { nomiCli[s.id] = s.nome; });
@@ -387,13 +400,18 @@ module.exports = {
       out.scadenze = { scadute: scadute.length, entro: entro.length, vicine: scadute.length + entro.length };
       if (!mie) {
         const base = s => s.titolo.replace(/ scade$/, '');
-        const dove = s => [nomiCli[s.cliente_id], s.sede_id && nomiSedi[s.sede_id] ? nomiSedi[s.sede_id].nome : ''].filter(Boolean).join(' · ');
-        const proprie = l => l.filter(s => s.tipo !== 'contratto' && !(s.azione === 'ticket' && s.ticket_id));
+        const dove = s => (this.gruppoDiScadenza(s) === 'collaboratori' || s.persona_id || s.veicolo_id || s.attrezzatura_id ? ''
+          : [nomiCli[s.cliente_id], s.sede_id && nomiSedi[s.sede_id] ? nomiSedi[s.sede_id].nome : ''].filter(Boolean).join(' · '));
+        // Fase 6: quelle gia' diventate una voce (gia) non si ripetono; quelle di persone, mezzi, strumenti e collaboratori
+        // hanno le frasi dell'accordo e portano alla loro pagina.
+        const proprie = l => l.filter(s => s.tipo !== 'contratto' && !(s.azione === 'ticket' && s.ticket_id) && !giaVoce.has(s.id));
+        const titolo6 = (s, g) => this.titoloScadenza6(s, g);
+        const dove6 = s => (titolo6(s, 0) !== null ? this.collegamentoScadenza6(s) : { pagina: 'scadenza', id: s.id });
         const sc = proprie(scadute);
         for (const s of sc.length <= 3 ? sc : []) {
           const g = Math.round((Date.parse(adesso + 'T12:00:00') - Date.parse(s.data + 'T12:00:00')) / 86400000);
-          voce(urgenti, { tipo: 'scadenza', gravita: 'urgente', titolo: base(s) + ' scaduta da ' + plurale(g, 'giorno', 'giorni'), dettaglio: dove(s),
-            quanto: g, unita: 'giorni', collegamento: { pagina: 'scadenza', id: s.id } });
+          voce(urgenti, { tipo: 'scadenza', gravita: 'urgente', titolo: titolo6(s, -g) || base(s) + ' scaduta da ' + plurale(g, 'giorno', 'giorni'), dettaglio: dove(s),
+            quanto: g, unita: 'giorni', collegamento: dove6(s) });
         }
         if (sc.length > 3) {
           voce(urgenti, { tipo: 'scadenza', gravita: 'urgente', titolo: sc.length + ' scadenze scadute', dettaglio: sc.slice(0, 3).map(base).join(', '), quanto: sc.length, unita: 'scadenze',
@@ -402,13 +420,13 @@ module.exports = {
         for (const s of proprie(entro).filter(x => x.data <= t30)) {
           const g = Math.round((Date.parse(s.data + 'T12:00:00') - Date.parse(adesso + 'T12:00:00')) / 86400000);
           const quando = g === 0 ? ' oggi' : g === 1 ? ' domani' : ' fra ' + g + ' giorni';
-          voce(settimana, { tipo: 'scadenza', gravita: 'attenzione', titolo: base(s) + ' scade' + quando, dettaglio: dove(s), quanto: g, unita: 'giorni',
-            collegamento: { pagina: 'scadenza', id: s.id } });
+          voce(settimana, { tipo: 'scadenza', gravita: 'attenzione', titolo: titolo6(s, g) || base(s) + ' scade' + quando, dettaglio: dove(s), quanto: g, unita: 'giorni',
+            collegamento: dove6(s) });
         }
         const lontane = proprie(aperte).filter(s => s.data > piuGiorni(adesso, 30) && s.data <= piuGiorni(adesso, 120));
         for (const s of lontane.slice(0, 5)) {
           voce(pianificare, { tipo: 'scadenza', gravita: 'info', titolo: base(s) + ': ' + dataBreve(s.data) + '/' + s.data.slice(0, 4), dettaglio: dove(s),
-            collegamento: { pagina: 'scadenza', id: s.id } });
+            collegamento: dove6(s) });
         }
       }
     }
@@ -712,7 +730,7 @@ module.exports = {
       const altri = !mie && this.puoApprovare('rapportini');
       for (const t of this.db.righe('SELECT * FROM timer ORDER BY partito_il')) {
         if (t.utente_id !== io && !altri) continue;
-        const ore = (Date.now() - Date.parse(t.partito_il)) / 3600000;
+        const ore = (adessoMs() - Date.parse(t.partito_il)) / 3600000;
         if (ore <= 10) continue;
         const da = dataOraIso(t.partito_il);
         const quando = 'dalle ' + Number(da.slice(11, 13)) + ':' + da.slice(14, 16) + (da.slice(0, 10) === adesso ? '' : ' del ' + dataBreve(da.slice(0, 10)));

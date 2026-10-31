@@ -17,11 +17,18 @@ const ruolo = r => E.permessiDi(r);
 
 test('permessi: le voci del menu nell\'ordine delle specifiche, solo quelle del ruolo', () => {
   assert.deepEqual(R.vociMenu(ruolo('titolare')).map(v => v.nome),
-    ['Dashboard', 'Clienti e fornitori', 'Progetti e commesse', 'Preventivi e contratti', 'Attività e calendario', 'Ore e rapportini', 'Spese e trasferte', 'Fatturazione', 'Banche e scadenze', 'Documenti', 'Ticket e assistenza', 'Amministrazione']);
+    ['Dashboard', 'Clienti e fornitori', 'Progetti e commesse', 'Preventivi e contratti', 'Attività e calendario', 'Ore e rapportini', 'Spese e trasferte', 'Fatturazione', 'Banche e scadenze',
+      'Persone e risorse umane', 'Documenti', 'Ticket e assistenza', 'Mezzi e attrezzature', 'Collaboratori esterni', 'Amministrazione']);
   // Fase 2: il collaboratore vede Attività e calendario, non i preventivi. Fase 3: Spese e trasferte, voce 7.
-  // Fase 5: Documenti (in lettura) e Ticket e assistenza.
-  assert.deepEqual(R.vociMenu(ruolo('collaboratore')).map(v => v.modulo), ['dashboard', 'clienti', 'commesse', 'attivita', 'rapportini', 'spese', 'documenti', 'ticket']);
-  assert.deepEqual(R.vociMenu(ruolo('lettura')).map(v => v.modulo), ['dashboard', 'clienti', 'commesse', 'preventivi', 'attivita', 'rapportini', 'spese', 'fatturazione', 'banche', 'documenti', 'ticket']);
+  // Fase 5: Documenti (in lettura) e Ticket e assistenza. Fase 6: Persone (l'organico e la sua scheda) e Mezzi, non i collaboratori esterni.
+  assert.deepEqual(R.vociMenu(ruolo('collaboratore')).map(v => v.modulo), ['dashboard', 'clienti', 'commesse', 'attivita', 'rapportini', 'spese', 'persone', 'documenti', 'ticket', 'mezzi']);
+  assert.deepEqual(R.vociMenu(ruolo('lettura')).map(v => v.modulo), ['dashboard', 'clienti', 'commesse', 'preventivi', 'attivita', 'rapportini', 'spese', 'fatturazione', 'banche', 'persone', 'documenti', 'ticket', 'mezzi', 'collaboratori']);
+  // Fase 6: l'esterno ha il menu ridotto nel suo ordine (fase6.md §12.7), con Ore e rapportini prima di Attività.
+  const esterno = { dashboard: 1, clienti: 0, commesse: 1, preventivi: 0, attivita: 2, rapportini: 2, spese: 2, fatturazione: 0, banche: 0, persone: 0, documenti: 1, ticket: 2, mezzi: 0, collaboratori: 1, amministrazione: 0, costi: 0, riservati: 0 };
+  assert.deepEqual(R.vociMenu(esterno, true).map(v => v.modulo), ['dashboard', 'commesse', 'rapportini', 'attivita', 'spese', 'documenti', 'ticket', 'collaboratori']);
+  assert.ok(!R.paginaPermessa(esterno, '#persone'));
+  assert.ok(!R.paginaPermessa(esterno, '#mezzi/at/4'));
+  assert.ok(R.paginaPermessa(esterno, '#collaboratori'));
   // Fase 4: Fatturazione e Banche vogliono anche il permesso dei soldi.
   assert.deepEqual(R.vociMenu({ dashboard: 1, fatturazione: 2, banche: 2, costi: 0 }).map(v => v.modulo), ['dashboard']);
   assert.ok(!R.paginaPermessa({ fatturazione: 2, costi: 0 }, '#fatturazione/fatture'));
@@ -47,7 +54,8 @@ test('permessi: livelli, pagine permesse, l\'app è di tutti', () => {
   assert.equal(R.moduloDi(''), 'dashboard');
   assert.equal(R.primaPagina(c), 'dashboard');
   assert.equal(R.primaPagina({}), 'amministrazione/app');
-  assert.deepEqual(Object.keys(R.permessiTutti()).sort(), ['amministrazione', 'attivita', 'commesse', 'costi', 'clienti', 'dashboard', 'fatturazione', 'banche', 'documenti', 'preventivi', 'rapportini', 'riservati', 'spese', 'ticket'].sort());
+  assert.deepEqual(Object.keys(R.permessiTutti()).sort(), ['amministrazione', 'attivita', 'commesse', 'costi', 'clienti', 'dashboard', 'fatturazione', 'banche', 'documenti', 'preventivi', 'rapportini', 'riservati', 'spese', 'ticket',
+    'persone', 'mezzi', 'collaboratori'].sort());
 });
 
 test('permessi: il titolare da chiamare e l\'ultimo titolare che non si toglie', () => {
@@ -67,8 +75,9 @@ test('permessi: cosa vedrà chi cambia ruolo, a parole', () => {
   const f = R.descriviRuolo(ruolo('collaboratore'));
   // Fase 5: il collaboratore lavora i ticket e legge i documenti.
   assert.match(f, /Potrà cambiare: Attività e calendario, Ore e rapportini, Spese e trasferte, Ticket e assistenza\./);
-  assert.match(f, /Solo da leggere: Dashboard, Clienti e fornitori, Progetti e commesse, Documenti\./);
-  assert.match(f, /Non vedrà: Preventivi e contratti, Fatturazione, Banche e scadenze, Amministrazione\./);
+  // Fase 6: l'organico e i mezzi in lettura, niente collaboratori esterni.
+  assert.match(f, /Solo da leggere: Dashboard, Clienti e fornitori, Progetti e commesse, Persone e risorse umane, Documenti, Mezzi e attrezzature\./);
+  assert.match(f, /Non vedrà: Preventivi e contratti, Fatturazione, Banche e scadenze, Collaboratori esterni, Amministrazione\./);
   assert.match(f, /Senza importi\.$/);
   assert.match(R.descriviRuolo(ruolo('titolare')), /Vede gli importi\.$/);
 });

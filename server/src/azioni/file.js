@@ -102,6 +102,8 @@ module.exports = {
     const mime = tipoDaSalvare(d.mime || 'image/jpeg', dati.subarray(0, 512));
     const estensione = estensioneDi(mime);
     if (tipo === 'ticket') return this.caricaFotoTicket(d, dati, mime);
+    // Fase 6: la foto del contachilometri e le foto di un guasto (anche dalla coda del telefono, con l'idLocale).
+    if (tipo === 'km' || tipo === 'guasto') return this.caricaFotoMezzo(d, dati, mime, estensione);
 
     if (tipo === 'firmaTecnico') {
       const f = this.fileGiaArrivato('firmaTecnico', d.idFile, '', '') || (this.controllaSpazio('lavoro'), null) ||
@@ -182,6 +184,30 @@ module.exports = {
     return { id: f.id, url: urlFile(f.id) };
   },
 
+  /**
+   * Fase 6: caricaFile {tipo: "km", idLettura | idLocaleLettura, ...} (la foto del contachilometri) e {tipo: "guasto",
+   * idManutenzione | idLocaleManutenzione, ...} (le foto di un guasto, anche piu' di una). Chi ha mezzi 2, o chi ha
+   * scritto la lettura o segnalato il guasto. Lo stesso idFile non crea doppioni.
+   */
+  caricaFotoMezzo(d, dati, mime, estensione) {
+    const km = d.tipo === 'km';
+    const riga = km
+      ? (testo(d.idLettura) ? this.db.riga('SELECT * FROM mezzo_letture WHERE id = ?', Number(d.idLettura) || 0) : this.db.riga('SELECT * FROM mezzo_letture WHERE id_locale = ?', testo(d.idLocaleLettura)))
+      : (testo(d.idManutenzione) ? this.db.riga('SELECT * FROM manutenzioni WHERE id = ?', Number(d.idManutenzione) || 0) : this.db.riga('SELECT * FROM manutenzioni WHERE id_locale = ?', testo(d.idLocaleManutenzione)));
+    if (!riga) throw new Rifiuto(km ? 'Lettura dei km non trovata: va salvata prima della foto' : 'Guasto non trovato: va segnalato prima della foto');
+    const io = this.chi().utente ? this.chi().utente.id : null;
+    const suo = km ? riga.utente_id === io : riga.segnalata_da === io;
+    if (this.livello('mezzi') < 2 && !suo) throw senzaPermesso('caricare le foto delle cose degli altri');
+    const colonna = km ? 'lettura_id' : 'manutenzione_id';
+    const gia = testo(d.idFile) ? this.db.riga('SELECT * FROM file WHERE tipo = ? AND ' + colonna + ' = ? AND id_client = ? AND cestinato IS NULL', d.tipo, riga.id, testo(d.idFile)) : null;
+    if (gia) return { id: gia.id, url: urlFile(gia.id) };
+    this.controllaSpazio('lavoro');
+    const f = this.salvaFile({ dati, nome: (km ? 'km ' : 'guasto ') + riga.id + ' ' + (testo(d.idFile) || idCasuale().slice(0, 8)) + estensione, mime, tipo: d.tipo, idClient: testo(d.idFile) });
+    this.aggiorna('file', f.id, { [colonna]: riga.id });
+    if (km) this.aggiorna('mezzo_letture', riga.id, { foto_file_id: f.id });
+    return { id: f.id, url: urlFile(f.id) };
+  },
+
   /** Toglie una foto dal rapportino. Il file va nel cestino, da cui si recupera. */
   togliFile(id, fileId) {
     const riga = this.trovaRiga(id, id);
@@ -202,6 +228,15 @@ module.exports = {
   puoLeggereFile(f) {
     // Fase 5: un file arrivato con /carica e non ancora legato lo vede solo chi l'ha caricato.
     if (f.tipo === 'caricato') return !!this.chi().utente && f.caricato_da === this.chi().utente.id;
+    // Fase 6: le foto dei km e dei guasti chi vede i mezzi; la firma di una consegna chi vede i dati personali della persona.
+    if (f.tipo === 'km' || f.tipo === 'guasto') return this.livello('mezzi') >= 1;
+    if (f.tipo === 'firma_consegna') {
+      if (f.consegna_id) {
+        const c = this.db.riga('SELECT persona_id FROM dpi_consegne WHERE id = ?', f.consegna_id);
+        return !!c && (this.vedePersonaliDi(c.persona_id) || this.livello('mezzi') >= 2);
+      }
+      return this.livello('mezzi') >= 1;
+    }
     // La revisione di un documento: chi vede il documento (vede tutti / costi / riservati). Chi non lo vede: 403.
     if (f.documento_id !== null && f.documento_id !== undefined) {
       const doc = this.db.riga('SELECT * FROM documenti WHERE id = ?', f.documento_id);
@@ -226,7 +261,8 @@ module.exports = {
       }
       return true;
     }
-    if (f.tipo === 'documento') return this.livello('documenti') >= 1;
+    // Fase 6: l'esterno vede i documenti di prima solo delle sue commesse.
+    if (f.tipo === 'documento') return this.livello('documenti') >= 1 && (!this.eEsterno() || this.commesseEsterno().has(String(f.commessa_id || '').toUpperCase()));
     if (f.tipo === 'attivita') {
       if (this.livello('attivita') < 1) return false;
       const a = this.db.riga('SELECT * FROM attivita WHERE id = ?', f.attivita_id || 0);
@@ -235,6 +271,8 @@ module.exports = {
     if (f.tipo === 'preventivo') return this.livello('preventivi') >= 1;
     if (f.tipo === 'fattura' || f.tipo === 'ricevuta') return this.livello('fatturazione') >= 1 && this.vedeCosti();
     if (f.tipo === 'spesa' && f.spesa_id !== null && f.spesa_id !== undefined) return false;
+    // Fase 6: un esterno non apre altro (la firma del tecnico dello studio, i file senza legame).
+    if (this.eEsterno()) return false;
     return this.livello('rapportini') >= 1 || this.livello('documenti') >= 1;
   },
 
@@ -244,6 +282,8 @@ module.exports = {
     const f = this.db.riga('SELECT * FROM file WHERE id = ?', testo(id));
     if (!f || f.cestinato) throw new Rifiuto('File ' + id + ' non trovato');
     if (!this.puoLeggereFile(f)) throw senzaPermesso('vedere questo file');
+    // Fase 6: chi scarica un documento riservato di un'altra persona lascia traccia.
+    this.notaScaricoRiservato(f);
     if (!f.percorso || !fs.existsSync(this.percorsoFile(f.percorso))) {
       throw new Rifiuto('Il file ' + id + ' non è ancora stato copiato da Drive: lancia server/strumenti/copia-drive.js');
     }

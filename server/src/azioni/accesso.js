@@ -7,14 +7,29 @@
  *  - "accedi" da' un token (32 byte casuali) che il dispositivo conserva; nel
  *    database ne resta solo lo SHA-256. Vale finche' non si esce o non viene
  *    revocato, e scade dopo 180 giorni senza uso: un telefono resta collegato;
- *  - 10 tentativi sbagliati in 15 minuti per la stessa email = 15 minuti di
- *    attesa, anche con la password giusta: chi prova a indovinarla si ferma li'.
+ *  - 10 tentativi sbagliati in 15 minuti per la stessa email **dallo stesso indirizzo** = 15 minuti di
+ *    attesa da li', anche con la password giusta: chi prova a indovinarla si ferma, ma chi conosce
+ *    l'email di Manuel non gli blocca l'accesso dagli altri posti (22/10/2026, con l'ingresso da
+ *    internet); in piu' 50 tentativi sbagliati in 15 minuti per la stessa email da tutti gli indirizzi
+ *    insieme fermano quell'email per tutti (chi prova da tanti indirizzi);
+ *  - da internet (l'ingresso, README "Internet entrance") conta anche
+ *    l'indirizzo: 20 tentativi sbagliati in 15 minuti dallo stesso indirizzo,
+ *    su qualunque email, = 15 minuti di attesa per quell'indirizzo (chi prova
+ *    tante email con poche password). L'indirizzo e' quello che passa
+ *    l'ingresso, mai quello che scrive chi chiama (provenienza.js);
+ *  - dalla porta Google (porta.js, 31/10/2026) l'indirizzo vero non si sa:
+ *    Apps Script non lo dice. Tutte le richieste da Google hanno l'indirizzo
+ *    "google" e contano come da fuori: 10 sbagliati per la stessa email da
+ *    Google fermano quell'email da Google (da casa si entra lo stesso), e 30
+ *    sbagliati in 15 minuti da Google su qualunque email fermano per 15 minuti
+ *    gli accessi nuovi da Google (chi e' gia' entrato continua a lavorare).
  */
 'use strict';
 
 const crypto = require('node:crypto');
 const { promisify } = require('node:util');
-const { Rifiuto, testo, adesso, istante, sha256 } = require('../utili');
+const { Rifiuto, testo, adesso, adessoMs, istante, sha256, oggi } = require('../utili');
+const { provenienza, pubblico } = require('../provenienza');
 
 const scrypt = promisify(crypto.scrypt);
 const SCRYPT = { N: 16384, r: 8, p: 1 };
@@ -22,6 +37,9 @@ const LUNGHEZZA = 64;
 
 const GIORNI_SESSIONE = 180;
 const TENTATIVI_MASSIMI = 10;
+const TENTATIVI_MASSIMI_INDIRIZZO = 20;
+const TENTATIVI_MASSIMI_EMAIL_TUTTI = 50;
+const TENTATIVI_MASSIMI_GOOGLE = 30;
 const MINUTI_BLOCCO = 15;
 
 async function hashPassword(password) {
@@ -94,21 +112,38 @@ module.exports = {
     const password = d.password === undefined || d.password === null ? '' : String(d.password);
     if (!email || !password) throw new Rifiuto('Scrivi email e password');
 
-    const da = istante(new Date(Date.now() - MINUTI_BLOCCO * 60000));
+    const da = istante(new Date(adessoMs() - MINUTI_BLOCCO * 60000));
     const sbagliati = this.db.riga('SELECT COUNT(*) n FROM tentativi_accesso WHERE email = ? AND quando > ?', email, da).n;
-    if (sbagliati >= TENTATIVI_MASSIMI) {
+    // L'indirizzo conta solo da internet e se e' un indirizzo di internet: in casa (o se l'ingresso passasse
+    // l'indirizzo della rete Docker) un limite per indirizzo fermerebbe tutti insieme.
+    const { ip, daFuori } = provenienza();
+    // La porta Google conta come un indirizzo solo, "google", con una soglia piu' alta (ci passano tutti).
+    const google = daFuori && ip === 'google';
+    const perIndirizzo = daFuori && (pubblico(ip) || google);
+    const sogliaIndirizzo = google ? TENTATIVI_MASSIMI_GOOGLE : TENTATIVI_MASSIMI_INDIRIZZO;
+    const dallIndirizzo = perIndirizzo ? this.db.riga('SELECT COUNT(*) n FROM tentativi_accesso WHERE ip = ? AND quando > ?', ip, da).n : 0;
+    // Per l'email contano i tentativi da questo stesso indirizzo (ip uguale; vuoto se l'indirizzo non si sa).
+    const sbagliatiQui = this.db.riga('SELECT COUNT(*) n FROM tentativi_accesso WHERE email = ? AND ip = ? AND quando > ?', email, ip || '', da).n;
+    const segna = () => this.db.esegui('INSERT INTO tentativi_accesso (email, quando, ip) VALUES (?, ?, ?)', email, adesso(), ip || '');
+    // Prima di scrypt: chi e' fermo non fa lavorare il server.
+    if (sbagliatiQui >= TENTATIVI_MASSIMI || sbagliati >= TENTATIVI_MASSIMI_EMAIL_TUTTI || dallIndirizzo >= sogliaIndirizzo) {
       // Anche il tentativo durante l'attesa conta: chi continua a provare resta fermo.
-      this.db.esegui('INSERT INTO tentativi_accesso (email, quando) VALUES (?, ?)', email, adesso());
+      segna();
       throw conEsito(new Rifiuto('Troppi tentativi: riprova fra ' + MINUTI_BLOCCO + ' minuti'), 'bloccato');
     }
 
     const u = this.db.riga('SELECT * FROM utenti WHERE email = ?', email);
     const giusta = await passwordGiusta(password, u ? u.password_hash : finto());
     if (!u || !giusta) {
-      this.db.esegui('INSERT INTO tentativi_accesso (email, quando) VALUES (?, ?)', email, adesso());
-      if (sbagliati + 1 === TENTATIVI_MASSIMI) {
+      segna();
+      if (sbagliatiQui + 1 === TENTATIVI_MASSIMI || sbagliati + 1 === TENTATIVI_MASSIMI_EMAIL_TUTTI) {
         this.annota('tentativi_accesso', email, null, { tentativi: TENTATIVI_MASSIMI },
           'accesso fermato per ' + MINUTI_BLOCCO + ' minuti: troppe password sbagliate');
+      }
+      if (perIndirizzo && dallIndirizzo + 1 === sogliaIndirizzo) {
+        this.annota('tentativi_accesso', ip, null, { tentativi: sogliaIndirizzo }, google
+          ? 'accessi nuovi attraverso Google fermati per ' + MINUTI_BLOCCO + ' minuti: troppe password sbagliate'
+          : 'accesso da internet fermato per ' + MINUTI_BLOCCO + ' minuti all\'indirizzo ' + ip + ': troppe password sbagliate');
       }
       throw conEsito(new Rifiuto('Email o password sbagliate'), 'password sbagliata');
     }
@@ -137,13 +172,19 @@ module.exports = {
       'SELECT s.id AS sessione, s.ultimo_uso, s.revocata, s.disp AS s_disp, s.disp_nome AS s_disp_nome, s.app AS s_app, u.* FROM sessioni s JOIN utenti u ON u.id = s.utente_id WHERE s.token_hash = ?',
       sha256(testo(token)));
     if (!s || s.revocata || s.attivo !== 1) return null;
+    // Fase 6: l'accesso di una persona uscita si chiude dalla fine del suo ultimo giorno (anche se la notte non e' ancora passata).
+    const p = this.db.riga("SELECT uscita_il FROM persone WHERE utente_id = ? AND uscita_il <> ''", s.id);
+    if (p && p.uscita_il < oggi()) {
+      this.applicaUscite();
+      return null;
+    }
     const ultimo = Date.parse(s.ultimo_uso);
-    if (Date.now() - ultimo > GIORNI_SESSIONE * 86400000) {
+    if (adessoMs() - ultimo > GIORNI_SESSIONE * 86400000) {
       this.db.esegui('UPDATE sessioni SET revocata = ? WHERE id = ?', adesso(), s.sessione);
       return null;
     }
     // L'ultimo uso si riscrive al massimo una volta al minuto: non serve di piu'.
-    if (Date.now() - ultimo > 60000) this.db.esegui('UPDATE sessioni SET ultimo_uso = ? WHERE id = ?', adesso(), s.sessione);
+    if (adessoMs() - ultimo > 60000) this.db.esegui('UPDATE sessioni SET ultimo_uso = ? WHERE id = ?', adesso(), s.sessione);
     return { utente: utentePubblico(s), sessione: s.sessione, disp: s.s_disp, dispNome: s.s_disp_nome, app: s.s_app };
   },
 
@@ -173,6 +214,16 @@ module.exports = {
     const c = this.chi();
     const imp = this.leggiImpostazioni();
     const t = this.titolare();
+    const r = this.ioBase(c, imp, t);
+    // Fase 6: l'esterno sa di quale collaboratore fa parte (la pillola "Esterno · ..." accanto al nome).
+    if (this.eEsterno()) {
+      const sog = this.mioSoggetto();
+      r.interfaccia.esterno = { idSoggetto: sog, nome: sog ? (this.db.riga('SELECT nome FROM soggetti WHERE id = ?', sog) || {}).nome || '' : '' };
+    }
+    return r;
+  },
+
+  ioBase(c, imp, t) {
     return {
       ok: true,
       utente: c.utente,
@@ -195,6 +246,11 @@ module.exports = {
         puoChiudereTicket: this.puoChiudereTicket(),
         condivisioneCollegata: !!testo(imp.CONDIVISIONE_INDIRIZZO),
         fileMaxMb: Number(imp.FILE_MAX_MB) || 50,
+        // Fase 6: la persona di chi entra, chi approva le assenze, chi vede i dati riservati, come si usa uno strumento scaduto.
+        idPersona: this.miaPersonaId(),
+        puoApprovareAssenze: this.puoApprovareAssenze(),
+        vedeRiservati: this.livello('riservati') >= 1,
+        taraturaBlocco: testo(imp.TARATURA_BLOCCO) === 'blocco' ? 'blocco' : 'avviso',
       },
     };
   },

@@ -12,6 +12,7 @@ const path = require('node:path');
 const http = require('node:http');
 const { spawnSync } = require('node:child_process');
 const { serverDiProva, cartellaNuova, ascolta, chiudi, PNG } = require('./aiuto');
+const { oggi } = require('../src/utili');
 const { scriviXlsx } = require('../strumenti/xlsx');
 const { importa } = require('../strumenti/importa');
 const { copiaDrive } = require('../strumenti/copia-drive');
@@ -150,7 +151,7 @@ test('importa: clienti, commesse e impostazioni come li dava lo script', async (
     else assert.deepEqual(mia.impostazioni[k], sua.impostazioni[k], k);
   }
   // Il prossimo codice continua dal foglio.
-  assert.equal(mia.numerazioni.find(n => n.tipo === 'commessa').prossimo, '26ST004');
+  assert.equal(mia.numerazioni.find(n => n.tipo === 'commessa').prossimo, oggi().slice(2, 4) + 'ST004', 'con l\'anno di oggi');
   // Il registro sa che i dati vengono dal foglio, e gli accessi di prima ci sono.
   assert.equal((await manuel('registro', { tabella: 'importazione' })).righe.length, 1);
   assert.ok((await manuel('accessi', { esito: 'ok' })).quante > 0);

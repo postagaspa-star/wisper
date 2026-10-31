@@ -105,6 +105,9 @@ class Visita {
         // Fase 5 (fase5.md §12.5): le richieste d'intervento e il pulsante giallo del ticket.
         Passo("ticket-urgente", "Le richieste", "In cima c'è quello che va fatto prima.", false, "ticket"),
         Passo("ticket-giallo", "Il pulsante giallo", "Ti dice cosa fare adesso: prendere, pianificare, scrivere il rapportino.", false, "ticket-pagina"),
+        // Fase 6 (fase6.md §12.8): i tuoi strumenti (la taratura col colore e la parola) e le ferie.
+        Passo("strumento-scaduto", "I tuoi strumenti", "Il colore e la parola ti dicono se la taratura vale.", false, "mezzi"),
+        Passo("chiedi-ferie", "Le ferie", "Chiedile da qui: vedi subito quanti giorni ti restano.", false, "persone"),
         Passo(null, "Ecco fatto", "Adesso Wisper lavora con i tuoi dati veri.", false, "dashboard"),
     )
 

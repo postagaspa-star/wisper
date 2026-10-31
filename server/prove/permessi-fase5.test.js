@@ -7,8 +7,11 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { serverDiProva } = require('./aiuto');
-const { oggi } = require('../src/utili');
+const { serverDiProva, giornoDeiPrototipi } = require('./aiuto');
+// I ticket, i contratti e le scadenze della Dashboard della fase 5 hanno date fisse (la storia del prototipo): queste
+// prove le guardano dal giorno del prototipo, giovedi' 22/10/2026, qualunque giorno sia (anche con
+// WISPER_OGGI_PROVA). Le altre prove girano sul giorno vero.
+giornoDeiPrototipi();
 
 let s;
 const chi = {};
@@ -129,17 +132,15 @@ test('Dashboard del titolare: le voci nuove con le frasi dell\'accordo e i numer
   if (tk13InRitardo) assert.equal(intervento, undefined, 'il ticket in ritardo non si ripete come intervento di oggi');
   else {
     assert.deepEqual([intervento.titolo, intervento.dettaglio, intervento.collegamento], ['Intervento di oggi alle 14:30: TK/2026/0013 Navetta 2 si ferma in errore',
-      'Marco Collaboratore · Batokyo Srl · Schio', { pagina: 'ticket', id: 13 }]);
+      'Marco Rossato · Batokyo Srl · Schio', { pagina: 'ticket', id: 13 }]);
   }
   assert.ok(d.settimana.some(v => v.titolo === 'TK/2026/0012 risolto: da chiudere' && v.dettaglio === 'Mario Bianchi · rapportino firmato il 21/10'));
-  assert.ok(d.settimana.some(v => v.tipo === 'documento' && v.titolo === '1 documento da approvare' && v.dettaglio === 'Schema unifilare cabina MT rev. 3 · Marco Collaboratore'));
-  if (oggi() >= '2026-10-02' && oggi() <= '2026-11-01') {
-    const c = d.settimana.find(v => v.tipo === 'contratto');
-    assert.deepEqual([c.titolo, c.dettaglio], ['CA/2026/002: la disdetta va mandata entro domenica 1 novembre', 'Rossi Impianti Srl · si rinnova da solo il 01/01/2027']);
-  }
+  assert.ok(d.settimana.some(v => v.tipo === 'documento' && v.titolo === '1 documento da approvare' && v.dettaglio === 'Schema unifilare cabina MT rev. 3 · Marco Rossato'));
+  const c = d.settimana.find(v => v.tipo === 'contratto');
+  assert.deepEqual([c.titolo, c.dettaglio], ['CA/2026/002: la disdetta va mandata entro domenica 1 novembre', 'Rossi Impianti Srl · si rinnova da solo il 01/01/2027']);
   assert.ok(d.pianificare.some(v => v.titolo === 'Manutenzione cabina MT Acme del 20/11 da pianificare' && v.dettaglio === 'TK/2026/0015 · Rossi Impianti Srl'));
   assert.ok(d.pianificare.some(v => v.titolo === '3 documenti da classificare'));
-  if (oggi() >= '2026-09-14' && oggi() <= '2026-11-12') assert.ok(d.pianificare.some(v => v.titolo === 'Verifica impianto di terra (DPR 462): 12/01/2027'));
+  assert.ok(d.pianificare.some(v => v.titolo === 'Verifica impianto di terra (DPR 462): 12/01/2027'));
   assert.equal(tutte.some(v => v.tipo === 'sopralluogo' && /TK\/2026/.test(v.titolo)), false);
   assert.equal(tutte.filter(v => /Navetta 2/.test(v.titolo)).length, 1, 'l\'intervento una volta sola (non anche tra gli appuntamenti)');
   assert.deepEqual(Object.keys(d.numeri.ticket).sort(), ['aperti', 'inRitardo', 'interventiOggi', 'nonAssegnati', 'programmatiDaPianificare', 'risoltiDaChiudere', 'urgenti']);
@@ -149,7 +150,9 @@ test('Dashboard del titolare: le voci nuove con le frasi dell\'accordo e i numer
   assert.deepEqual(Object.keys(d.numeri.scadenze).sort(), ['entro', 'scadute', 'vicine']);
   assert.equal(typeof d.numeri.spazio.liberoMb, 'number');
   // I collegamenti delle voci nuove sono pagine dell'accordo.
-  const pagine = ['ticket', 'tickets', 'contratto', 'contratti', 'documenti', 'documento', 'scadenza', 'impianto', 'amministrazione'];
+  // Fase 6: le scadenze di persone, mezzi, strumenti e collaboratori portano alla loro scheda (fase6.md §11.1).
+  const pagine = ['ticket', 'tickets', 'contratto', 'contratti', 'documenti', 'documento', 'scadenza', 'impianto', 'amministrazione',
+    'persona', 'mezzo', 'attrezzatura', 'collaboratore'];
   for (const v of tutte.filter(x => ['ticket', 'intervento', 'scadenza', 'documento', 'contratto', 'spazio', 'copia'].includes(x.tipo))) assert.ok(pagine.includes(v.collegamento.pagina), JSON.stringify(v));
 });
 
@@ -169,9 +172,9 @@ test('Dashboard del collaboratore e di lettura: i suoi ticket e quelli da prende
   assert.ok(l.numeri.contratti, 'lettura vede i contratti (costi 1)');
 });
 
-test('io.interfaccia: approvare, chiudere, i link per i clienti, la grandezza massima; versione 0.8.0', async () => {
+test('io.interfaccia: approvare, chiudere, i link per i clienti, la grandezza massima; la versione del server', async () => {
   const io = (await chi.titolare('io')).interfaccia;
-  assert.deepEqual([io.puoApprovareDocumenti, io.puoChiudereTicket, io.condivisioneCollegata, io.fileMaxMb, io.versioneServer], [true, true, false, 50, '0.8.0']);
+  assert.deepEqual([io.puoApprovareDocumenti, io.puoChiudereTicket, io.condivisioneCollegata, io.fileMaxMb, io.versioneServer], [true, true, false, 50, require('../package.json').version]);
   const m = (await chi.collaboratore('io')).interfaccia;
   assert.deepEqual([m.puoApprovareDocumenti, m.puoChiudereTicket], [false, false]);
   const l = (await chi.amministrazione('io')).interfaccia;

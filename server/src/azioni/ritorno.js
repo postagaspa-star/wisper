@@ -24,7 +24,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
-const { Rifiuto, testo, numero, centesimi, adesso, oggi, dataIso, dataDaIso, dataOraIso, istante } = require('../utili');
+const { Rifiuto, testo, numero, centesimi, adesso, oggi, dataIso, dataDaIso, dataOraIso, istante, adessoMs } = require('../utili');
 
 /** Un numero che non può essere quello dato dal programma di fatturazione (vuoto, o il BOZZA dell'XML da completare). */
 const numeroNonFiscale = n => /^(BOZZA)?$/i.test(String(n === undefined || n === null ? '' : n).replace(/\s+/g, ''));
@@ -56,7 +56,7 @@ module.exports = {
 
   /** Le letture scadute (piu' di un'ora) si tolgono, coi loro file. Non vanno nel registro. */
   pulisciLetture() {
-    const ora = istante(new Date());
+    const ora = adesso();
     for (const l of this.db.righe('SELECT * FROM letture_xml WHERE scade < ?', ora)) {
       this.db.esegui('DELETE FROM letture_xml WHERE id = ?', l.id);
       if (l.cartella) fs.rmSync(path.join(this.cartellaLetture(), path.basename(l.cartella)), { recursive: true, force: true });
@@ -167,7 +167,7 @@ module.exports = {
       doc.fileLettura = scritti.get(buf);
     }
     const c = this.chi();
-    const ora = new Date();
+    const ora = new Date(adessoMs());
     this.db.esegui('INSERT INTO letture_xml (id, utente_id, creato, scade, documenti, cartella) VALUES (?, ?, ?, ?, ?, ?)',
       id, c.utente ? c.utente.id : null, istante(ora), istante(new Date(ora.getTime() + ORA)), JSON.stringify(tenuti.map((doc, i) => ({ doc, proposta: proposte.find(p => p.chiave === doc.chiave) || null, i }))), id);
     // Nella risposta i documenti nell'ordine dei file caricati.
@@ -401,6 +401,16 @@ module.exports = {
       out.avvisi.push('Potrebbe essere la spesa del ' + dataBreve(simile.data) + ' di ' + C.euroIt(simile.importo) + ' €: collegala per non contarla due volte nei costi');
     }
     out.proposta.categoria = doc.casse.some(x => x.tipo === 'TC04' || x.tipo === 'TC17') || doc.ritenute.length ? 'consulenze' : 'altro';
+    // Fase 6 (§8.5): "È dell'incarico IN/2026/004? Restano da fatturare 720,00" (uno solo: gia' scelto; piu' di uno: si sceglie).
+    const incarichi = fornitore ? this.propostaIncarico(fornitore.id) : [];
+    if (incarichi.length) {
+      out.incarichi = incarichi;
+      if (incarichi.length === 1) {
+        out.proposta.idIncarico = incarichi[0].idIncarico;
+        out.proposta.idCommessa = incarichi[0].idCommessa;
+      }
+      out.avvisi.push(incarichi.length === 1 ? incarichi[0].frase : 'Ha ' + incarichi.length + ' incarichi da fatturare: scegli quello giusto');
+    }
     return out;
   },
 
@@ -778,6 +788,10 @@ module.exports = {
       if (!sp) throw new Rifiuto('Spesa ' + testo(s.idSpesa) + ' non trovata');
       idSpesa = sp.id;
     }
+    // Fase 6: l'incarico del collaboratore (la ricevuta prende la sua commessa), il mezzo, lo strumento.
+    const legami6 = this.legamiRicevuta6(s, fornitore.id);
+    if (legami6.incarico_id && !idCommessa) idCommessa = legami6.commessa;
+    delete legami6.commessa;
     const collegata = doc.tipoDocumento === 'TD04' ? this.ricevutaCollegataDaXml(doc, fornitore) : null;
     const ora = adesso();
     const c = this.chi();
@@ -787,6 +801,7 @@ module.exports = {
       imponibile: centesimi(k.compenso + k.altre), iva: k.iva, contributo: k.contributo, bollo: k.bollo, totale: k.totale, ritenuta: k.ritenuta, netto: k.netto,
       ricevuta_collegata_id: collegata ? collegata.id : null, stato: 'attiva', origine: 'xml', nome_file_sdi: doc.nomeFile,
       scadenza_stimata: doc.scadenze.length ? 0 : 1, note: testo(s.note), utente_id: c.utente ? c.utente.id : null, creato: ora, modificato: ora,
+      incarico_id: legami6.incarico_id || null, veicolo_id: legami6.veicolo_id || null, attrezzatura_id: legami6.attrezzatura_id || null,
     }, 'id', 'dall\'XML ' + doc.nomeFile);
     const fileId = this.salvaFileXml(doc, dati, 'ricevuta', null, id);
     if (fileId) this.aggiorna('fatture_ricevute', id, { file_id: fileId });
@@ -795,6 +810,31 @@ module.exports = {
       ricevuta_id: id, ordine: i + 1, data: x.data, importo: centesimi(numero(x.importo)), modalita: testo(x.modalita), iban: testo(x.iban),
     }));
     return this.db.riga('SELECT * FROM fatture_ricevute WHERE id = ?', id);
+  },
+
+  /**
+   * Fase 6: idIncarico (dello stesso fornitore, non annullato: la ricevuta prende la sua commessa), idVeicolo,
+   * idAttrezzatura di una fattura ricevuta. Torna le colonne (e "commessa", la commessa dell'incarico).
+   */
+  legamiRicevuta6(x, idFornitore) {
+    const v = {};
+    if (x.idIncarico !== undefined) {
+      if (!testo(x.idIncarico)) v.incarico_id = null;
+      else {
+        const i = this.incaricoPerRicevuta(x.idIncarico, idFornitore);
+        v.incarico_id = i.id;
+        v.commessa = i.commessa_id;
+      }
+    }
+    if (x.idVeicolo !== undefined) {
+      v.veicolo_id = testo(x.idVeicolo) ? Number(x.idVeicolo) : null;
+      if (v.veicolo_id !== null && !this.db.riga('SELECT id FROM veicoli WHERE id = ?', v.veicolo_id)) throw new Rifiuto('Mezzo ' + v.veicolo_id + ' non trovato');
+    }
+    if (x.idAttrezzatura !== undefined) {
+      v.attrezzatura_id = testo(x.idAttrezzatura) ? Number(x.idAttrezzatura) : null;
+      if (v.attrezzatura_id !== null && !this.db.riga('SELECT id FROM attrezzature WHERE id = ?', v.attrezzatura_id)) throw new Rifiuto('Attrezzatura ' + v.attrezzatura_id + ' non trovata');
+    }
+    return v;
   },
 
   rigaRicevuta(id) {
@@ -864,6 +904,11 @@ module.exports = {
       pagamenti: st.pagamenti, idRicevutaCollegata: r.ricevuta_collegata_id === null ? null : r.ricevuta_collegata_id, origine: r.origine,
       file: file ? { id: file.id, url: '/file/' + file.id, nome: file.nome } : null, nomeFileSdi: r.nome_file_sdi, note: r.note, motivo: r.motivo,
       puoScrivere: this.livello('fatturazione') >= 2, creato: dataOraIso(r.creato), modificato: dataOraIso(r.modificato),
+      // Fase 6: l'incarico del collaboratore esterno, il mezzo, lo strumento.
+      idIncarico: r.incarico_id === null || r.incarico_id === undefined ? null : r.incarico_id,
+      incarico: r.incarico_id ? (this.db.riga('SELECT numero FROM incarichi WHERE id = ?', r.incarico_id) || {}).numero || '' : '',
+      idVeicolo: r.veicolo_id === null || r.veicolo_id === undefined ? null : r.veicolo_id,
+      idAttrezzatura: r.attrezzatura_id === null || r.attrezzatura_id === undefined ? null : r.attrezzatura_id,
     };
   },
 
@@ -875,6 +920,9 @@ module.exports = {
     if (testo(d.idFornitore)) { cond.push('fornitore_id = ?'); par.push(testo(d.idFornitore)); }
     if (testo(d.idCommessa)) { cond.push('commessa_id = ? COLLATE NOCASE'); par.push(testo(d.idCommessa)); }
     if (testo(d.anno)) { cond.push('substr(data, 1, 4) = ?'); par.push(testo(d.anno)); }
+    // Fase 6
+    if (testo(d.idIncarico)) { cond.push('incarico_id = ?'); par.push(Number(d.idIncarico)); }
+    if (testo(d.idVeicolo)) { cond.push('veicolo_id = ?'); par.push(Number(d.idVeicolo)); }
     const righe = this.db.righe('SELECT * FROM fatture_ricevute' + (cond.length ? ' WHERE ' + cond.join(' AND ') : '') + ' ORDER BY data DESC, id DESC', ...par);
     const a = this.aiutiRicevute(righe);
     let lista = righe.map(r => this.ricevutaCompleta(r, a));
@@ -919,6 +967,12 @@ module.exports = {
     }
     if (x.note !== undefined) v.note = testo(x.note);
     const daXml = prima && prima.origine === 'xml';
+    // Fase 6: l'incarico (dello stesso fornitore: la ricevuta prende la sua commessa), il mezzo, lo strumento.
+    const fornitoreDi = x.idFornitore !== undefined ? testo(x.idFornitore) : prima ? prima.fornitore_id : '';
+    const legami6 = this.legamiRicevuta6(x, fornitoreDi);
+    if (legami6.commessa && x.idCommessa === undefined) v.commessa_id = legami6.commessa;
+    delete legami6.commessa;
+    Object.assign(v, legami6);
     if (!daXml) {
       if (x.descrizione !== undefined) v.descrizione = testo(x.descrizione);
       const fornitoreId = x.idFornitore !== undefined ? testo(x.idFornitore) : prima ? prima.fornitore_id : '';
@@ -938,8 +992,14 @@ module.exports = {
       v.netto = centesimi(totale - ritenuta);
       v.iva = x.iva !== undefined ? centesimi(numero(x.iva)) : prima ? prima.iva : 0;
       v.imponibile = x.imponibile !== undefined ? centesimi(numero(x.imponibile)) : prima ? prima.imponibile : centesimi(totale - v.iva);
-      v.tipo_documento = 'TD01';
-      v.chiave = this.chiaveRicevuta(fornitore.partita_iva || fornitore.codice_fiscale || fornitore.id, 'TD01', v.data, n);
+      // Fase 6: la prestazione occasionale si registra a mano come ricevuta (con la ritenuta proposta del 20%).
+      const occasionale = testo(x.tipoDocumento) === 'occasionale' || (prima && prima.tipo_documento === 'occasionale');
+      v.tipo_documento = occasionale ? 'occasionale' : 'TD01';
+      if (occasionale && x.ritenuta === undefined && !prima) {
+        v.ritenuta = centesimi(numero(v.imponibile) * 0.2);
+        v.netto = centesimi(totale - v.ritenuta);
+      }
+      v.chiave = this.chiaveRicevuta(fornitore.partita_iva || fornitore.codice_fiscale || fornitore.id, v.tipo_documento === 'occasionale' ? 'OCC' : 'TD01', v.data, n);
       const doppia = this.db.riga('SELECT id FROM fatture_ricevute WHERE chiave = ? AND id <> ?', v.chiave, prima ? prima.id : 0);
       if (doppia) throw new Rifiuto('C\'è già la fattura ' + n + ' di ' + fornitore.nome);
     }

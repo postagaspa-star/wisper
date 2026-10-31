@@ -55,6 +55,8 @@ const AZIONI = {
       : d.tipo === 'firmaTecnico' ? ['amministrazione', 2, 'cambiare la firma del tecnico']
         : d.tipo === 'attivita' ? ['attivita', 2, 'caricare allegati sulle attività']
           : d.tipo === 'ticket' ? ['ticket', 2, 'caricare le foto dei ticket']
+          // Fase 6: la foto dei km e le foto dei guasti (chi ha la cosa, con mezzi 1: lo controlla caricaFotoMezzo).
+          : d.tipo === 'km' || d.tipo === 'guasto' ? ['mezzi', 1, 'caricare le foto dei mezzi']
           : d.tipo === 'spesa' && testo(d.idSpesa) ? ['spese', 2, 'caricare le foto delle spese']
             : ['rapportini', 2, 'caricare foto e firme dei rapportini']),
     fn: (w, d) => ({ ok: true, file: w.caricaFile(d) }),
@@ -215,7 +217,8 @@ const AZIONI = {
 
   // --- documenti (fase 5): archivio, revisioni, collegamenti, modelli, spazio
   documento: legge('documenti', 'vedere i documenti', (w, d) => ({ ok: true, documento: w.documentoCompleto(w.rigaDocumento(d.id)) })),
-  salvaDocumento: scrive('documenti', 'scrivere i documenti', (w, d) => w.salvaDocumento(d)),
+  // Fase 6: l'esterno (documenti 1) carica i suoi documenti (DURC, polizza): lo controlla salvaDocumento.
+  salvaDocumento: { scrive: true, controllo: (d, u) => ['documenti', u && u.ruolo === 'esterno' ? 1 : 2, 'scrivere i documenti'], fn: (w, d) => w.salvaDocumento(d) },
   caricaVersione: scrive('documenti', 'caricare le revisioni dei documenti', (w, d) => w.caricaVersione(d)),
   // Chi approva lo decide il server (titolare e amministrazione con documenti 2).
   approvaVersione: { scrive: true, modulo: 'documenti', livello: 1, cosa: 'vedere i documenti', fn: (w, d) => w.decidiVersione(d, 'approva') },
@@ -235,10 +238,11 @@ const AZIONI = {
   svuotaCestino: scrive('amministrazione', 'svuotare il cestino', (w, d) => w.svuotaCestino(d)),
 
   // --- scadenze (fase 5): documenti 1 o ticket 1 per leggere; per scrivere lo decide la scadenza (documenti 2, o ticket 2 per i contratti)
-  scadenze: { vede: ['documenti', 'ticket'], cosa: 'vedere le scadenze', fn: (w, d) => w.leggiScadenze(d) },
-  salvaScadenza: { scrive: true, vede: ['documenti', 'ticket'], cosa: 'scrivere le scadenze', fn: (w, d) => w.salvaScadenza(d) },
-  faiScadenza: { scrive: true, vede: ['documenti', 'ticket'], cosa: 'scrivere le scadenze', fn: (w, d) => w.faiScadenza(d) },
-  togliScadenza: { scrive: true, vede: ['documenti', 'ticket'], cosa: 'scrivere le scadenze', fn: (w, d) => w.togliScadenza(d) },
+  // Fase 6: anche quelle di persone, mezzi e collaboratori (chi vede cosa lo decide vedeScadenza).
+  scadenze: { vede: ['documenti', 'ticket', 'persone', 'mezzi', 'collaboratori'], cosa: 'vedere le scadenze', fn: (w, d) => w.leggiScadenze(d) },
+  salvaScadenza: { scrive: true, vede: ['documenti', 'ticket', 'persone', 'mezzi', 'collaboratori'], cosa: 'scrivere le scadenze', fn: (w, d) => w.salvaScadenza(d) },
+  faiScadenza: { scrive: true, vede: ['documenti', 'ticket', 'persone', 'mezzi', 'collaboratori'], cosa: 'scrivere le scadenze', fn: (w, d) => w.faiScadenza(d) },
+  togliScadenza: { scrive: true, vede: ['documenti', 'ticket', 'persone', 'mezzi', 'collaboratori'], cosa: 'scrivere le scadenze', fn: (w, d) => w.togliScadenza(d) },
 
   // --- ticket e assistenza (fase 5)
   tickets: legge('ticket', 'vedere i ticket', (w, d) => w.leggiTicket(d)),
@@ -267,7 +271,91 @@ const AZIONI = {
   rinnovaContratto: scrive('ticket', 'scrivere i contratti di assistenza', (w, d) => w.rinnovaContratto(d)),
   disdiciContratto: scrive('ticket', 'scrivere i contratti di assistenza', (w, d) => w.disdiciContratto(d)),
   chiudiContratto: scrive('ticket', 'scrivere i contratti di assistenza', (w, d) => w.chiudiContratto(d)),
+
+  // --- persone e risorse umane (fase 6): i tre livelli di dati li toglie togliDatiPersona su ogni risposta
+  persone: legge('persone', 'vedere l\'organico', (w, d) => w.leggiPersone(d)),
+  persona: legge('persone', 'vedere l\'organico', (w, d) => ({ ok: true, persona: w.personaCompleta(w.rigaPersona(testo(d.id) ? d.id : w.miaPersonaId())) })),
+  // La persona stessa cambia i suoi contatti anche con persone 1: il resto lo decide salvaPersona.
+  salvaPersona: { scrive: true, modulo: 'persone', livello: 1, cosa: 'cambiare le schede delle persone', fn: (w, d) => w.salvaPersona(d) },
+  salvaCostoPersona: scrive('persone', 'scrivere i costi delle persone', (w, d) => w.salvaCostoPersona(d)),
+  togliCostoPersona: scrive('persone', 'scrivere i costi delle persone', (w, d) => w.togliCostoPersona(d)),
+  daiAccesso: { modulo: 'amministrazione', livello: 2, cosa: 'dare l\'accesso a Wisper', asincrona: true, soloPost: true, fn: (w, d) => w.daiAccesso(d) },
+  qualificheTipi: legge('persone', 'vedere i tipi di formazione', w => w.qualificheTipi()),
+  salvaQualificaTipo: scrive('amministrazione', 'cambiare i tipi di formazione', (w, d) => w.salvaQualificaTipo(d)),
+  salvaQualifica: scrive('persone', 'scrivere la formazione delle persone', (w, d) => w.salvaQualifica(d)),
+  togliQualifica: scrive('persone', 'scrivere la formazione delle persone', (w, d) => w.togliQualifica(d)),
+  salvaVisita: scrive('persone', 'scrivere le visite mediche', (w, d) => w.salvaVisita(d)),
+  togliVisita: scrive('persone', 'scrivere le visite mediche', (w, d) => w.togliVisita(d)),
+  dpi: { vede: ['persone', 'mezzi'], cosa: 'vedere i DPI consegnati', fn: (w, d) => w.leggiDpi(d) },
+  salvaConsegnaDpi: { scrive: true, vede: ['persone', 'mezzi'], cosa: 'consegnare i DPI', fn: (w, d) => w.salvaConsegnaDpi(d) },
+  firmaConsegna: { scrive: true, vede: ['persone', 'mezzi'], cosa: 'firmare le consegne', fn: (w, d) => w.firmaConsegna(d) },
+  restituisciDpi: { scrive: true, vede: ['persone', 'mezzi'], cosa: 'segnare i DPI restituiti', fn: (w, d) => w.restituisciDpi(d) },
+  segnaUscita: scrive('persone', 'segnare l\'uscita delle persone', (w, d) => w.segnaUscita(d)),
+  annullaUscita: scrive('persone', 'segnare l\'uscita delle persone', (w, d) => w.annullaUscita(d)),
+  anonimizzaPersona: scrive('persone', 'rendere anonima una scheda (lo fa solo il titolare)', (w, d) => w.anonimizzaPersona(d)),
+  accessiRiservati: legge('persone', 'vedere chi ha aperto i dati riservati', (w, d) => w.leggiAccessiRiservati(d)),
+  // --- ferie, permessi, assenze, chiusure, presenze (fase 6)
+  assenze: legge('persone', 'vedere le assenze', (w, d) => w.leggiAssenze(d)),
+  salvaAssenza: { scrive: true, modulo: 'persone', livello: 1, cosa: 'chiedere ferie e permessi', fn: (w, d) => w.salvaAssenza(d) },
+  annullaAssenza: { scrive: true, modulo: 'persone', livello: 1, cosa: 'annullare ferie e permessi', fn: (w, d) => w.annullaAssenza(d) },
+  saldi: legge('persone', 'vedere il saldo delle ferie', (w, d) => w.leggiSaldi(d)),
+  salvaSaldo: scrive('persone', 'aggiornare il saldo delle ferie', (w, d) => w.salvaSaldo(d)),
+  chiusure: legge('persone', 'vedere le chiusure dello studio', (w, d) => w.leggiChiusure(d)),
+  salvaChiusura: scrive('persone', 'scrivere le chiusure dello studio', (w, d) => w.salvaChiusura(d)),
+  togliChiusura: scrive('persone', 'scrivere le chiusure dello studio', (w, d) => w.togliChiusura(d)),
+  presenze: legge('persone', 'vedere le presenze', (w, d) => w.presenze(d)),
+  // --- mezzi e attrezzature (fase 6): km, guasti, Lo prendo io e Restituisci anche con mezzi 1 (le cose che ho io)
+  mezzi: legge('mezzi', 'vedere i mezzi', (w, d) => w.leggiMezzi(d)),
+  mezzo: legge('mezzi', 'vedere i mezzi', (w, d) => ({ ok: true, mezzo: w.mezzoCompleto(w.rigaMezzo(d.id)) })),
+  salvaMezzo: scrive('mezzi', 'cambiare i mezzi', (w, d) => w.salvaMezzo(d)),
+  dismettiMezzo: scrive('mezzi', 'dismettere i mezzi', (w, d) => w.dismettiMezzo(d)),
+  segnaKm: { scrive: true, modulo: 'mezzi', livello: 1, cosa: 'segnare i km', fn: (w, d) => w.segnaKm(d) },
+  segnalaGuasto: { scrive: true, modulo: 'mezzi', livello: 1, cosa: 'segnalare i guasti', fn: (w, d) => w.segnalaGuasto(d) },
+  salvaManutenzione: scrive('mezzi', 'scrivere le manutenzioni', (w, d) => w.salvaManutenzione(d)),
+  chiudiManutenzione: { scrive: true, modulo: 'mezzi', livello: 1, cosa: 'chiudere le manutenzioni', fn: (w, d) => w.chiudiManutenzione(d) },
+  manutenzioni: legge('mezzi', 'vedere guasti e manutenzioni', (w, d) => w.leggiManutenzioni(d)),
+  costiMezzo: legge('mezzi', 'vedere i costi dei mezzi', (w, d) => w.costiMezzo(d)),
+  attrezzature: legge('mezzi', 'vedere le attrezzature', (w, d) => w.leggiAttrezzature(d)),
+  attrezzatura: legge('mezzi', 'vedere le attrezzature', (w, d) => ({ ok: true, attrezzatura: w.attrezzaturaCompleta(w.rigaAttrezzatura(d.id)) })),
+  salvaAttrezzatura: scrive('mezzi', 'cambiare le attrezzature', (w, d) => w.salvaAttrezzatura(d)),
+  dismettiAttrezzatura: scrive('mezzi', 'dismettere le attrezzature', (w, d) => w.dismettiAttrezzatura(d)),
+  registraTaratura: scrive('mezzi', 'registrare le tarature', (w, d) => w.registraTaratura(d)),
+  assegna: { scrive: true, modulo: 'mezzi', livello: 1, cosa: 'assegnare mezzi e attrezzature', fn: (w, d) => w.assegna(d) },
+  restituisci: { scrive: true, modulo: 'mezzi', livello: 1, cosa: 'restituire mezzi e attrezzature', fn: (w, d) => w.restituisci(d) },
+  assegnazioni: legge('mezzi', 'vedere assegnazioni e prestiti', (w, d) => w.leggiAssegnazioni(d)),
+  usiStrumento: legge('mezzi', 'vedere gli usi degli strumenti', (w, d) => w.usiStrumento(d)),
+  // --- collaboratori esterni (fase 6): i soldi con "costi"; l'esterno solo la sua scheda e i suoi incarichi
+  collaboratori: legge('collaboratori', 'vedere i collaboratori esterni', (w, d) => w.leggiCollaboratori(d)),
+  collaboratore: legge('collaboratori', 'vedere i collaboratori esterni', (w, d) => ({ ok: true, collaboratore: w.collaboratoreCompleto(w.rigaCollaboratore(testo(d.id || d.idSoggetto) || w.mioSoggetto())) })),
+  salvaCollaboratore: scrive('collaboratori', 'scrivere i collaboratori esterni', (w, d) => w.salvaCollaboratore(d)),
+  invitaEsterno: { modulo: 'amministrazione', livello: 2, cosa: 'dare l\'accesso agli esterni', asincrona: true, soloPost: true, fn: (w, d) => w.invitaEsterno(d) },
+  incarichi: legge('collaboratori', 'vedere gli incarichi', (w, d) => w.leggiIncarichi(d)),
+  incarico: legge('collaboratori', 'vedere gli incarichi', (w, d) => ({ ok: true, incarico: w.incaricoCompleto(w.rigaIncarico(d.id)) })),
+  salvaIncarico: scrive('collaboratori', 'scrivere gli incarichi', (w, d) => w.salvaIncarico(d)),
+  affidaIncarico: scrive('collaboratori', 'affidare gli incarichi', (w, d) => w.affidaIncarico(d)),
+  aggiornaAvanzamento: scrive('collaboratori', 'scrivere gli incarichi', (w, d) => w.aggiornaAvanzamento(d)),
+  concludiIncarico: scrive('collaboratori', 'scrivere gli incarichi', (w, d) => w.concludiIncarico(d)),
+  riapriIncarico: scrive('collaboratori', 'scrivere gli incarichi', (w, d) => w.riapriIncarico(d)),
+  annullaIncarico: scrive('collaboratori', 'scrivere gli incarichi', (w, d) => w.annullaIncarico(d)),
+  valutaIncarico: scrive('collaboratori', 'valutare gli incarichi', (w, d) => w.valutaIncarico(d)),
+  compensi: legge('collaboratori', 'vedere i compensi', (w, d) => w.compensi(d)),
 };
+
+/**
+ * Fase 6: le sole azioni che un esterno puo' chiamare (fase6.md §8.4). Tutto il resto risponde permesso:false prima di
+ * cercare qualunque cosa: clienti, fornitori, preventivi, fatture, banche, persone, mezzi, amministrazione, costi. Le
+ * azioni qui filtrano a loro volta: solo le commesse dei suoi incarichi, le sue cose, la sua scheda.
+ */
+const AZIONI_ESTERNO = new Set([
+  'io', 'esci', 'cambiaPassword', 'anagrafiche', 'dashboard', 'esporta',
+  'rapportini', 'file', 'documenti', 'salvaRapportino', 'caricaFile', 'togliFile', 'stato', 'inviaEmail', 'legaRapportino',
+  'ore', 'salvaOre', 'togliOre', 'timer', 'avviaTimer', 'fermaTimer', 'statisticheOre',
+  'spese', 'salvaSpesa', 'togliSpesa', 'togliFotoSpesa', 'trasferte', 'rimborsi', 'riepilogoSpese', 'veicoli',
+  'attivita', 'salvaAttivita', 'faiAttivita', 'togliAttivita', 'spuntaChecklist', 'togliAllegato',
+  'documento', 'salvaDocumento', 'caricaVersione', 'togliVersione', 'categorieDocumenti', 'scadenze',
+  'tickets', 'ticket', 'sospendiTicket', 'riprendiTicket', 'risolviTicket', 'altroIntervento', 'pianificaTicket', 'togliFotoTicket',
+  'collaboratori', 'collaboratore', 'incarichi', 'incarico', 'compensi',
+]);
 
 /**
  * Le URL dei file per le versioni vecchie (ponte): telefono e computer di
@@ -345,7 +433,9 @@ async function esegui(w, d, opzioni) {
     let risposta;
     let esito = 'ok';
     try {
-      const serve = voce.modulo ? [voce.modulo, voce.livello, voce.cosa] : voce.controllo ? voce.controllo(d) : null;
+      // Fase 6: l'esterno chiama solo le sue azioni (le altre non sa nemmeno che ci sono).
+      if (utente && utente.ruolo === 'esterno' && !AZIONI_ESTERNO.has(azione)) throw senzaPermesso(voce.cosa || 'usare questa parte di Wisper');
+      const serve = voce.modulo ? [voce.modulo, voce.livello, voce.cosa] : voce.controllo ? voce.controllo(d, utente) : null;
       if (serve && permessi && (permessi[serve[0]] || 0) < serve[1]) throw senzaPermesso(serve[2]);
       // Fase 5: basta uno di questi moduli in lettura (scadenze: documenti o ticket; storico dell'impianto: clienti o ticket).
       if (voce.vede && permessi && !voce.vede.some(m => (permessi[m] || 0) >= 1)) throw senzaPermesso(voce.cosa);
@@ -363,6 +453,16 @@ async function esegui(w, d, opzioni) {
         esito = 'errore';
       }
     }
+    // Fase 6: i dati personali e riservati delle persone che chi chiede non vede (prima dei soldi: togliCosti ricopia
+    // gli oggetti e non porta con se' i segni di chi sono i dati).
+    if (permessi) {
+      try {
+        risposta = w.togliDatiPersona(risposta);
+      } catch (err) {
+        console.error('[errore] dati della persona: ' + (err && err.stack ? err.stack : err));
+        risposta = { ok: false, errore: 'Errore del server: ' + messaggio(err) };
+      }
+    }
     if (permessi && !permessi.costi) risposta = togliCosti(risposta);
     if (opzioni.ponte) risposta = perIlPonte(risposta);
     const chiE = utente || (azione === 'accedi' && risposta.ok ? risposta.utente : null);
@@ -371,4 +471,4 @@ async function esegui(w, d, opzioni) {
   });
 }
 
-module.exports = { esegui, AZIONI, perIlPonte };
+module.exports = { esegui, AZIONI, AZIONI_ESTERNO, perIlPonte };

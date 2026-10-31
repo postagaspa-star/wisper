@@ -89,6 +89,14 @@ module.exports = {
       // Anche col codice di prima dei 26ST: un rapportino rimasto in coda su un telefono.
       m.id.toUpperCase() === codiceScelto || m.codicePrecedente.toUpperCase() === codiceScelto)[0] || null;
     this.serveCrearePerRapportino(cliente, commessa, r);
+    // Fase 6: il rapportino di un esterno e' sulla commessa di un suo incarico affidato (si lega da solo).
+    let incarico = null;
+    if (this.eEsterno()) {
+      incarico = this.incaricoDellEsterno(commessa ? commessa.id : codiceScelto || testo(r.commessa));
+      if (cliente && commessa && commessa.idCliente && cliente.id !== commessa.idCliente) throw new Rifiuto('Commessa ' + commessa.id + ' non trovata');
+    } else if (esistente && esistente.incarico_id) {
+      incarico = this.db.riga('SELECT * FROM incarichi WHERE id = ?', esistente.incarico_id);
+    }
 
     let regole = regoleDi(cliente, this.leggiGruppi(), impostazioni, commessa);
 
@@ -139,7 +147,15 @@ module.exports = {
     // impostazioni: aggiornare l'ACI a gennaio non deve riscrivere luglio.
     // Si ricalcola con le regole di oggi solo se sono cambiati il cliente o la commessa.
     const stessaCommessa = testo(esistente && esistente.id_commessa).toUpperCase() === (commessa ? commessa.id.toUpperCase() : '');
-    if (esistente && testo(esistente.id_cliente) === cliente.id && stessaCommessa && esistente.euro_km !== null) {
+    const congelato = !!(esistente && testo(esistente.id_cliente) === cliente.id && stessaCommessa && esistente.euro_km !== null);
+    // Fase 6: il costo orario di un rapportino che nasce (o cambia commessa) viene dalla persona che l'ha scritto, alla
+    // data del lavoro; senza un costo della persona resta la regola di prima (cliente, commessa, COSTO_ORARIO); un
+    // esterno 0. Quelli gia' scritti tengono il loro (sotto).
+    if (!congelato) {
+      const autore = esistente ? esistente.utente_id : (this.chi().utente ? this.chi().utente.id : null);
+      regole.costoOrario = this.costoOrarioLavoro({ idUtente: autore, data, commessa, cliente });
+    }
+    if (congelato) {
       regole.euroKm = numero(esistente.euro_km);
       regole.maggExtra = numero(esistente.magg_extra);
       regole.pagaViaggio = siNoONull(esistente.paga_viaggio) === true;
@@ -185,6 +201,8 @@ module.exports = {
       costo_orario: regole.costoOrario === null || regole.costoOrario === undefined ? null : numero(regole.costoOrario),
       note_interne: testo(r.noteInterne),
       ticket_id: ticketRiga ? ticketRiga.id : null,
+      // Fase 6: l'incarico del collaboratore esterno.
+      incarico_id: incarico ? incarico.id : (esistente ? esistente.incarico_id : null),
       modificato: ora,
     };
 
@@ -205,6 +223,8 @@ module.exports = {
     }
     // Le spese del passo 3 diventano (o restano) righe di spese al cliente che sommano alla colonna.
     this.sincronizzaSpeseRapportino(id, { noteCambiate });
+    // Fase 6: gli strumenti usati (l'elenco intero; le versioni vecchie e il ponte non li mandano: niente cambia).
+    if (Array.isArray(r.strumenti)) this.scriviStrumentiRapportino(this.db.riga('SELECT * FROM rapportini WHERE id = ?', id), r.strumenti);
     // Fase 5: un rapportino nuovo (o appena legato) porta il ticket in carico e ne rifa' i tempi.
     if (ticketRiga) this.dopoRapportinoDelTicket(ticketRiga.id, this.db.riga('SELECT * FROM rapportini WHERE id = ?', id), !esistente || esistente.ticket_id !== ticketRiga.id);
 
@@ -290,7 +310,9 @@ module.exports = {
     // Fase 5: il ticket di ogni rapportino (numero, stato, come si fattura).
     const ticket = {};
     for (const t of this.db.righe('SELECT t.id, t.numero, t.stato, t.fatturazione, c.numero contratto FROM ticket t LEFT JOIN contratti c ON c.id = t.contratto_id')) ticket[t.id] = t;
-    return { foto, descrizioni, spese, fatture, ticket };
+    // Fase 6: gli strumenti usati (stato della taratura di quel giorno).
+    const strumenti = this.strumentiDeiRapportini(id ? [id] : this.db.righe('SELECT DISTINCT rapportino_id r FROM strumenti_usati WHERE rapportino_id IS NOT NULL').map(x => x.r));
+    return { foto, descrizioni, spese, fatture, ticket, strumenti };
   },
 
   /** La riga come la mandava rapportinoDaRiga() dello script, piu' chi l'ha scritto. */
@@ -355,6 +377,11 @@ module.exports = {
     o.nonSiFattura = tk && tk.stato === 'chiuso' ? (tk.fatturazione === 'contratto' ? 'Nel contratto' + (tk.contratto ? ' ' + tk.contratto : '') : tk.fatturazione === 'no' ? 'Non si fattura' : '') : '';
     // Fase 4: {id, riferimento, stato, etichetta} o null; la chiave c'e' solo per chi vede le fatture.
     if (aiuti.fatture) o.fattura = aiuti.fatture[r.id] || null;
+    // Fase 6: gli strumenti usati e l'incarico del collaboratore esterno.
+    o.strumenti = (aiuti.strumenti || {})[r.id] || [];
+    const daGuardare = o.strumenti.length ? this.strumentiDaGuardare(o.strumenti) : [];
+    if (daGuardare.length) o.strumentiDaGuardare = daGuardare;
+    o.idIncarico = r.incarico_id === null || r.incarico_id === undefined ? null : r.incarico_id;
     return o;
   },
 

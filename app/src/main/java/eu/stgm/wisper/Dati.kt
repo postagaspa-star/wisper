@@ -488,6 +488,17 @@ interface Dati {
      * Il lavoro è finito, scadenza fatta), che va nella coda come i rapportini.
      */
     val fase5: eu.stgm.wisper.rapportino.ServizioFase5
+
+    // ------------------------------------------------------------- fase 6: persone, mezzi, collaboratori (docs/gestionale/fase6.md)
+
+    /**
+     * Persone, assenze, presenze, mezzi, strumenti, tarature, collaboratori, incarichi.
+     * In diretta, tranne quello che si fa anche senza rete (chiedere ferie, i km, un
+     * guasto con le foto, Lo prendo io, Restituisci, la firma di un DPI), che va nella
+     * coda. Sul telefono restano solo le copie proprie (§3.13), mai i dati personali
+     * dei colleghi, e si tolgono all'uscita dall'account.
+     */
+    val fase6: eu.stgm.wisper.rapportino.ServizioFase6
 }
 
 /**

@@ -7,13 +7,26 @@
  * --porta  di base 8400
  * --porta-condivisione  (fase 5) una seconda porta che risponde solo ai link per i clienti
  *          (/condiviso/<token>); senza, i link non si aprono da nessuna parte
+ * --porta-ingresso  la porta per l'ingresso da internet (contenitore wisper-ingresso, sul NAS 8402,
+ *          anche da WISPER_PORTA_INGRESSO): l'indirizzo di chi chiama arriva in X-Forwarded-For e
+ *          passano solo le strade di telefono e computer. Va raggiunta SOLO dall'ingresso (expose, mai ports)
  * --prova  database in memoria coi dati di esempio di semina() e quattro utenti
  *          di prova (manuel@, laura@, marco@, lettura@esempio.it, password "prova");
  *          le email e le copie finiscono in <dati>/posta-finta. Ogni avvio riparte da capo.
+ *          Solo qui conta WISPER_OGGI_PROVA=AAAA-MM-GG (l'orologio di prova: per il server oggi e' quel
+ *          giorno, le ore restano quelle vere); senza --prova la variabile non fa niente.
  *
  * Dal .env (docker-compose): SEGRETO_SERVER (il ponte), WISPER_POSTINO_URL e
  * WISPER_POSTINO_SEGRETO (il postino), WISPER_ORA_COPIA (di base 02:30),
- * WISPER_VIES_URL e WISPER_SPAZIO_FINTO_MB (lo spazio libero finto in MB: solo per le prove).
+ * WISPER_VIES_URL e WISPER_SPAZIO_FINTO_MB (lo spazio libero finto in MB: solo per le prove),
+ * WISPER_PORTA_INGRESSO e WISPER_PONTE_DA_FUORI ("si": /ponte passa anche dall'ingresso, solo nelle
+ * settimane del cambio).
+ *
+ * La porta Google (porta.js, docs/gestionale/porta-google.md): con WISPER_POSTINO_URL e il segreto il
+ * server va a prendere da solo, dallo script del foglio, le richieste di telefoni e computer fuori casa.
+ * WISPER_PORTA_ATTESA: quanti secondi lo script tiene aperta ogni chiamata (di base 45);
+ * WISPER_PORTA_PAUSA: secondi di pausa fra una chiamata senza lavoro e l'altra (di base 0);
+ * WISPER_PORTA_GOOGLE=no la spegne.
  */
 'use strict';
 
@@ -24,18 +37,21 @@ const os = require('node:os');
 const path = require('node:path');
 const { Wisper } = require('./wisper');
 const { Postino } = require('./postino');
-const { creaServer, creaServerCondivisione } = require('./http');
+const { PortaGoogle } = require('./porta');
+const { creaServer, creaServerIngresso, creaServerCondivisione } = require('./http');
 const { semina } = require('./prova');
+const { accendiOrologioDiProva, orologioDiProva } = require('./utili');
 
 function argomenti(argv) {
-  const a = { porta: 8400, prova: false, dati: '', portaCondivisione: 0 };
+  const a = { porta: 8400, prova: false, dati: '', portaCondivisione: 0, portaIngresso: 0 };
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--dati') a.dati = argv[++i];
     else if (argv[i] === '--porta') a.porta = Number(argv[++i]);
     else if (argv[i] === '--porta-condivisione') a.portaCondivisione = Number(argv[++i]);
+    else if (argv[i] === '--porta-ingresso') a.portaIngresso = Number(argv[++i]);
     else if (argv[i] === '--prova') a.prova = true;
     else if (argv[i] === '--aiuto' || argv[i] === '--help') a.aiuto = true;
-    else throw new Error('Non conosco "' + argv[i] + '". Si usa: node server/src/avvio.js --dati <cartella> [--porta 8400] [--porta-condivisione 8401] [--prova]');
+    else throw new Error('Non conosco "' + argv[i] + '". Si usa: node server/src/avvio.js --dati <cartella> [--porta 8400] [--porta-condivisione 8401] [--porta-ingresso 8402] [--prova]');
   }
   return a;
 }
@@ -45,6 +61,9 @@ function avvia(o) {
   const dati = path.resolve(o.dati || fs.mkdtempSync(path.join(os.tmpdir(), 'wisper-prova-')));
   fs.mkdirSync(dati, { recursive: true });
   const env = o.env || process.env;
+  // L'orologio di prova (WISPER_OGGI_PROVA=AAAA-MM-GG) solo con --prova: database in memoria coi dati di
+  // esempio. Il server vero non lo accende mai, qualunque cosa ci sia nel .env (utili.js, prove/orologio.test.js).
+  if (o.prova) accendiOrologioDiProva(env.WISPER_OGGI_PROVA || process.env.WISPER_OGGI_PROVA);
   const postino = new Postino({
     url: env.WISPER_POSTINO_URL || '',
     segreto: env.WISPER_POSTINO_SEGRETO || env.SEGRETO_SERVER || '',
@@ -54,12 +73,26 @@ function avvia(o) {
   const wisper = new Wisper({ dati, memoria: !!o.prova, postino, prova: !!o.prova });
   if (env.WISPER_SPAZIO_FINTO_MB) wisper.spazioFintoMb = Number(env.WISPER_SPAZIO_FINTO_MB);
   if (o.prova) semina(wisper);
+  // La porta Google: parte da sola se c'e' l'indirizzo dello script col segreto (le prove la accendono loro).
+  wisper.porta = new PortaGoogle(wisper, {
+    url: env.WISPER_POSTINO_URL || '',
+    segreto: env.WISPER_POSTINO_SEGRETO || env.SEGRETO_SERVER || '',
+    segretoPonte: env.SEGRETO_SERVER || '',
+    attesaS: env.WISPER_PORTA_ATTESA === undefined || env.WISPER_PORTA_ATTESA === '' ? undefined : Number(env.WISPER_PORTA_ATTESA),
+    pausaS: Number(env.WISPER_PORTA_PAUSA) || 0,
+    spenta: String(env.WISPER_PORTA_GOOGLE || '').trim().toLowerCase() === 'no',
+  });
+  if (o.portaGoogle !== false) wisper.porta.avvia();
   // In prova il database e' in memoria e riparte da capo: la copia notturna non serve.
   if (o.pianifica !== false && !o.prova) wisper.pianifica(env.WISPER_ORA_COPIA);
   const server = creaServer(wisper, { segretoPonte: env.SEGRETO_SERVER || '' });
   // Fase 5: la seconda porta, solo per i link per i clienti (Non collegato finche' CONDIVISIONE_INDIRIZZO e' vuoto).
   const condivisione = o.portaCondivisione ? creaServerCondivisione(wisper) : null;
-  return { wisper, server, dati, condivisione };
+  // L'ingresso da internet: la sua porta, dove l'indirizzo vero arriva in X-Forwarded-For (README, "Internet entrance").
+  const portaIngresso = Number(o.portaIngresso || env.WISPER_PORTA_INGRESSO || 0);
+  const ponteDaFuori = String(env.WISPER_PONTE_DA_FUORI || '').trim().toLowerCase() === 'si';
+  const ingresso = portaIngresso ? creaServerIngresso(wisper, { segretoPonte: env.SEGRETO_SERVER || '', ponteDaFuori }) : null;
+  return { wisper, server, dati, condivisione, ingresso, portaIngresso, ponteDaFuori };
 }
 
 if (require.main === module) {
@@ -71,15 +104,21 @@ if (require.main === module) {
     process.exit(2);
   }
   if (a.aiuto || (!a.dati && !a.prova)) {
-    console.log('Si usa: node server/src/avvio.js --dati <cartella> [--porta 8400] [--porta-condivisione 8401] [--prova]');
+    console.log('Si usa: node server/src/avvio.js --dati <cartella> [--porta 8400] [--porta-condivisione 8401] [--porta-ingresso 8402] [--prova]');
     process.exit(a.aiuto ? 0 : 2);
   }
-  const { wisper, server, dati, condivisione } = avvia(a);
+  const { wisper, server, dati, condivisione, ingresso, portaIngresso, ponteDaFuori } = avvia(a);
   if (condivisione) condivisione.listen(a.portaCondivisione, () => console.log('Link per i clienti sulla porta ' + a.portaCondivisione + ' (solo /condiviso/<token>)'));
+  if (ingresso) {
+    ingresso.listen(portaIngresso, () => console.log('Ingresso da internet sulla porta ' + portaIngresso + ' (solo /exec, /carica, /file, /salute' +
+      (ponteDaFuori ? ' e /ponte: WISPER_PONTE_DA_FUORI=si' : '') + '; deve raggiungerla solo il contenitore wisper-ingresso)'));
+  }
   server.listen(a.porta, () => {
     console.log('Wisper server ' + wisper.versione + ' su http://localhost:' + a.porta + ' (dati: ' + dati + (a.prova ? ', PROVA: dati di esempio, password "prova"' : '') + ')');
     console.log('Postino: ' + wisper.postino.descrizione() + ' · ponte: ' + (process.env.SEGRETO_SERVER ? 'acceso' : 'spento (manca SEGRETO_SERVER)') +
       (a.prova ? ' · copia notturna spenta in prova' : ' · copia ogni notte alle ' + wisper.oraCopia));
+    console.log('Porta Google: ' + (wisper.porta.acceso ? 'il server va a prendere il lavoro dallo script del foglio' : wisper.porta.stato().frase));
+    if (orologioDiProva()) console.log('Orologio di prova: per il server oggi e\' ' + orologioDiProva() + ' (WISPER_OGGI_PROVA; le ore sono quelle vere)');
     // Il postino risponde? Lo si dice subito, invece di scoprirlo alla prima email o stanotte.
     if (wisper.postino.configurato() && !wisper.postino.cartella) {
       wisper.postino.prova()
@@ -93,6 +132,7 @@ if (require.main === module) {
   const ferma = () => {
     server.close();
     if (condivisione) condivisione.close();
+    if (ingresso) ingresso.close();
     wisper.chiudi();
     process.exit(0);
   };

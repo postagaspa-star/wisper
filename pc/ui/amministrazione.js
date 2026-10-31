@@ -31,6 +31,9 @@
       { k: 'fisco', titolo: 'Fisco e preventivi', icona: 'preventivo', soldi: true },
       // fase 3: il veicolo, il suo euro al km (tabelle ACI dell'anno), l'indennità di trasferta
       { k: 'veicoli', titolo: 'Veicoli e rimborso km', icona: 'auto', modulo: 'spese' },
+      // fase 6: patrono, conservazione, tarature, DURC e visura, documenti dei collaboratori, esterni; i tipi di formazione
+      { k: 'persone', titolo: 'Persone, mezzi e collaboratori', icona: 'persona', modulo: 'persone' },
+      { k: 'formazione', titolo: 'Tipi di formazione', icona: 'libro', modulo: 'persone' },
       { k: 'registro', titolo: 'Registro attività', icona: 'lista' },
       { k: 'copie', titolo: 'Copie ed esportazioni', icona: 'scarica' },
       { k: 'cestino', titolo: 'Cestino', icona: 'cestino', scrive: true },
@@ -43,10 +46,11 @@
     function vista(pagina, sotto, id) {
       // Cambiando pagina si rilegge: utenti, copie e cestino possono essere cambiati da un altro computer.
       const dove = sotto + '/' + (id || '');
-      if (M.dove !== dove) { M.utenti = null; M.permessi = null; M.copie = null; M.cestino = null; M.veicoli = null; M.sessioni = {}; M.dove = dove; }
+      if (M.dove !== dove) { M.utenti = null; M.permessi = null; M.copie = null; M.cestino = null; M.veicoli = null; M.tipi = null; M.sessioni = {}; M.dove = dove; }
       if (sotto && sotto !== 'app' && !puo('amministrazione')) { aggiungi(pagina, [h('div', { class: 'calmo grande' }, icona('scudo', 22, 2.2), 'Non hai il permesso per vedere questa pagina. Chiedi a ' + W.titolare() + '.')]); return; }
       if (((sotto === 'tariffe' || sotto === 'fisco' || sotto === 'fiscale') && !soldi()) || (sotto === 'cestino' && !scrive()) || (sotto === 'veicoli' && !puo('spese')) || (sotto === 'categorie' && !puo('documenti'))) { aggiungi(pagina, [h('div', { class: 'calmo grande' }, icona('scudo', 22, 2.2), 'Non hai il permesso per vedere questa pagina. Chiedi a ' + W.titolare() + '.')]); return; }
-      const fn = { studio, fiscale, utenti: id ? paginaUtente : elencoUtenti, permessi, numerazioni, tariffe, fisco, veicoli, registro, copie, cestino, app,
+      if ((sotto === 'persone' || sotto === 'formazione') && !puo('persone')) { aggiungi(pagina, [h('div', { class: 'calmo grande' }, icona('scudo', 22, 2.2), 'Non hai il permesso per vedere questa pagina. Chiedi a ' + W.titolare() + '.')]); return; }
+      const fn = { studio, fiscale, utenti: id ? paginaUtente : elencoUtenti, permessi, numerazioni, tariffe, fisco, veicoli, registro, copie, cestino, app, persone: impostazioniFase6, formazione: tipiFormazione,
         categorie: p => W.Archivio.paginaCategorie(p), spazio: p => W.Archivio.paginaSpazio(p) }[sotto];
       if (!fn) { elenco(pagina); return; }
       if (sotto !== 'app' || puo('amministrazione')) {
@@ -96,6 +100,8 @@
         copie: ultimaCopia(M.copie) ? descriviCopia(ultimaCopia(M.copie)) : 'Copie di ogni notte, file per Excel',
         cestino: M.cestino ? (M.cestino.file || []).length ? (M.cestino.file.length === 1 ? '1 file tolto' : M.cestino.file.length + ' file tolti') + ', recuperabili' : 'Vuoto' : 'File tolti, recuperabili',
         categorie: 'Approvazione, chi vede, scadenza proposta',
+        persone: 'Santo patrono, conservazione, tarature, DURC e visura',
+        formazione: 'PES, PAV, PEI, primo soccorso: ogni quanto e il preavviso',
         spazio: 'Dove va lo spazio, copia fuori casa, cestino vecchio',
         app: 'Tema, visita guidata, versione' + (S.versione ? ' ' + S.versione : ''),
         fiscale: regoleConfermate() ? 'Confermate dal commercialista il ' + C.data(regoleConfermate().data) : 'Regole delle fatture da confermare col commercialista',
@@ -254,6 +260,9 @@
         };
         const lista = ris.veicoli || [];
         aggiungi(area, [
+          // Fase 6: i veicoli sono diventati i mezzi, con la loro scheda completa (scadenze, km, guasti, costi).
+          puo('mezzi') ? h('div', { class: 'scheda riga-non-collegata' }, h('span', { class: 'corpo' }, h('b', null, 'I mezzi hanno la loro pagina'), h('span', { class: 't2' }, 'Scadenze, km, guasti e costi in Mezzi e attrezzature')),
+            h('button', { type: 'button', class: 'btn', onclick: () => W.vai('#mezzi/mezzi') }, 'Apri i mezzi')) : null,
           h('div', { class: 'scheda' }, h('h2', null, 'Tabelle ACI e trasferte'),
             h('div', { class: 'fila' },
               h('div', { class: 'riga-campi' }, campo('Anno delle tabelle ACI', campi.ACI_ANNO), campo('Indennità di trasferta al giorno', conSuffisso(campi.INDENNITA_TRASFERTA, '€'))),
@@ -307,6 +316,95 @@
           h('button', { type: 'button', class: 'btn giallo grande', onclick: salva }, 'Salva')] });
     }
 
+    // ===================================================================== fase 6: persone, mezzi e collaboratori
+
+    /**
+     * Le impostazioni della fase 6 (fase6.md §4.1, §12.8), ognuna col suo Salva col bordo: santo patrono, conservazione,
+     * saldo, taratura (preavviso, ogni quanto, "Con la taratura scaduta: Avviso e conferma · Non si usa"), DURC e
+     * visura, documenti che servono ai collaboratori, giorni senza incarichi degli esterni, tagliando.
+     */
+    function impostazioniFase6(pagina) {
+      const imp = S.ana.impostazioni;
+      const sola = !scrive();
+      const inp = (k, extra) => h('input', Object.assign({ type: 'text', value: imp[k] === undefined || imp[k] === null ? '' : String(imp[k]), disabled: sola }, extra || {}));
+      const salvaValori = async (valori, frase) => {
+        const ris = await lavora('Salvo', () => Rete.post('/server/salvaImpostazioni', { valori }));
+        if (ris) { S.ana.impostazioni = Object.assign({}, S.ana.impostazioni, ris.impostazioni || valori); avviso(frase || 'Salvato'); W.disegnaPagina(); }
+      };
+      const num = i => (i.value.trim() === '' ? '' : C.num(i.value));
+      const c = { patrono: inp('FESTA_PATRONO', { placeholder: 'mm-gg, per esempio 07-01' }), conserva: inp('PERSONE_CONSERVA_ANNI', { inputmode: 'numeric' }), saldo: inp('SALDO_AVVISO_GIORNI', { inputmode: 'numeric' }),
+        ogni: inp('TARATURA_OGNI_MESI', { inputmode: 'numeric' }), preavviso: inp('TARATURA_PREAVVISO_GIORNI', { inputmode: 'numeric' }), durc: inp('DURC_GIORNI', { inputmode: 'numeric' }),
+        visura: inp('VISURA_MESI', { inputmode: 'numeric' }), esterni: inp('ACCESSO_ESTERNI_GIORNI', { inputmode: 'numeric' }), tagliando: inp('KM_TAGLIANDO_AVVISO', { inputmode: 'numeric' }) };
+      let blocco = imp.TARATURA_BLOCCO === 'blocco' ? 'blocco' : 'avviso';
+      let docs = {};
+      try { docs = typeof imp.COLLAB_DOCUMENTI === 'string' ? JSON.parse(imp.COLLAB_DOCUMENTI) : (imp.COLLAB_DOCUMENTI || {}); } catch (e) { docs = {}; }
+      docs = { impresa: (docs.impresa || []).slice(), professionista: (docs.professionista || []).slice(), occasionale: (docs.occasionale || []).slice() };
+      const zonaBlocco = h('div');
+      const disegnaBlocco = () => aggiungi(svuota(zonaBlocco), [segmenti([['avviso', 'Avviso e conferma'], ['blocco', 'Non si usa']], blocco, k => { if (!sola) { blocco = k; disegnaBlocco(); } })]);
+      disegnaBlocco();
+      const zonaDocs = h('div', { class: 'fila' });
+      const disegnaDocs = () => aggiungi(svuota(zonaDocs), [['impresa', 'Impresa'], ['professionista', 'Professionista'], ['occasionale', 'Occasionale']].map(([t, nome]) => h('div', { class: 'campo' }, h('label', null, nome),
+        h('div', { class: 'pillole' }, [['durc', 'DURC'], ['visura', 'Visura'], ['idoneita', 'Autocertificazione di idoneità'], ['polizza', 'Polizza'], ['albo', 'Iscrizione all\'albo']].map(([k, n]) => h('button', { type: 'button', class: 'pillola piccola' + (docs[t].indexOf(k) >= 0 ? ' scelta' : ''), disabled: sola,
+          onclick: () => { const i = docs[t].indexOf(k); if (i >= 0) docs[t].splice(i, 1); else docs[t].push(k); disegnaDocs(); } }, n))))));
+      disegnaDocs();
+      const salvaBtn = fn => (sola ? null : h('div', null, h('button', { type: 'button', class: 'btn', onclick: fn }, 'Salva')));
+      aggiungi(pagina, [h('div', { class: 'testata' }, h('h1', null, 'Persone, mezzi e collaboratori')),
+        h('div', { class: 'stretta-820 sezione imp-f6' },
+          h('div', { class: 'scheda' }, h('h2', null, 'Persone'), h('div', { class: 'fila' },
+            h('div', { class: 'riga-campi' }, campo('Santo patrono', c.patrono), campo('Conservazione dopo l\'uscita', conSuffisso(c.conserva, 'anni')), campo('Saldo da aggiornare dopo', conSuffisso(c.saldo, 'giorni'))),
+            salvaBtn(() => { if (c.patrono.value.trim() && !/^\d{2}-\d{2}$/.test(c.patrono.value.trim())) { avviso('Santo patrono: scrivi mese e giorno, per esempio 07-01', true); return; } salvaValori({ FESTA_PATRONO: c.patrono.value.trim(), PERSONE_CONSERVA_ANNI: num(c.conserva), SALDO_AVVISO_GIORNI: num(c.saldo) }, 'Salvato: vale per i conti di ferie e presenze'); }))),
+          h('div', { class: 'scheda' }, h('h2', null, 'Tarature e verifiche'), h('div', { class: 'fila' },
+            h('div', { class: 'riga-campi' }, campo('Ogni, per gli strumenti nuovi', conSuffisso(c.ogni, 'mesi')), campo('Preavviso', conSuffisso(c.preavviso, 'giorni'))),
+            h('div', { class: 'campo' }, h('label', null, 'Con la taratura scaduta'), zonaBlocco),
+            salvaBtn(() => salvaValori({ TARATURA_OGNI_MESI: num(c.ogni), TARATURA_PREAVVISO_GIORNI: num(c.preavviso), TARATURA_BLOCCO: blocco }, blocco === 'blocco' ? 'Salvato: uno strumento scaduto non si sceglie più nei rapportini' : 'Salvato: uno strumento scaduto si usa solo confermando')))),
+          h('div', { class: 'scheda' }, h('h2', null, 'Collaboratori esterni'), h('div', { class: 'fila' },
+            h('div', { class: 'riga-campi' }, campo('Un DURC vale', conSuffisso(c.durc, 'giorni')), campo('La visura al massimo di', conSuffisso(c.visura, 'mesi')), campo('Accesso degli esterni senza incarichi', conSuffisso(c.esterni, 'giorni'))),
+            h('h3', null, 'I documenti che servono per l\'idoneità'), zonaDocs,
+            salvaBtn(() => salvaValori({ DURC_GIORNI: num(c.durc), VISURA_MESI: num(c.visura), ACCESSO_ESTERNI_GIORNI: num(c.esterni), COLLAB_DOCUMENTI: JSON.stringify(docs) }, 'Salvato: l\'idoneità si rifà coi documenti nuovi')))),
+          h('div', { class: 'scheda' }, h('h2', null, 'Mezzi'), h('div', { class: 'fila' },
+            campo('Avviso del tagliando a km', conSuffisso(c.tagliando, 'km prima')),
+            salvaBtn(() => salvaValori({ KM_TAGLIANDO_AVVISO: num(c.tagliando) }, 'Salvato'))))) ]);
+    }
+
+    /** I tipi di formazione e abilitazione (§5.3): ogni quanto e il preavviso; Nuovo tipo col bordo. */
+    function tipiFormazione(pagina) {
+      const area = h('div', { class: 'stretta-820 sezione' });
+      aggiungi(pagina, [h('div', { class: 'testata' }, h('h1', { class: 'spazio' }, 'Tipi di formazione'), scrive() ? h('button', { type: 'button', class: 'btn', onclick: () => moduloTipo(null) }, icona('piu', 18, 2.6), 'Nuovo tipo') : null), area]);
+      leggi(area, 'tipi', '/server/qualificheTipi', ris => {
+        const gruppi = { elettrico: 'Lavori elettrici', sicurezza: 'Sicurezza', emergenza: 'Emergenza', altro: 'Altro' };
+        aggiungi(area, [h('div', { class: 'scheda righe' }, (ris.tipi || []).map(t => riga({
+          sinistra: quadrato(t.gruppo === 'elettrico' ? 'fulmine' : t.gruppo === 'emergenza' ? 'scudo' : 'libro'), titolo: t.nome,
+          sotto: [gruppi[t.gruppo] || t.gruppo, t.ogniMesi ? 'ogni ' + t.ogniMesi + ' mesi' : 'non scade', t.preavvisoGiorni ? 'preavviso ' + t.preavvisoGiorni + ' giorni' : ''].filter(Boolean).join(' · '),
+          destra: t.attivo === false ? pillola('Non in uso', 'grigio') : null, onclick: scrive() ? () => moduloTipo(t) : null })))]);
+      });
+    }
+
+    function moduloTipo(t0) {
+      const t = t0 || { nome: '', gruppo: 'sicurezza', ogniMesi: '', preavvisoGiorni: 60, attivo: true };
+      const v = { nome: h('input', { type: 'text', value: t.nome || '' }), ogni: h('input', { type: 'text', inputmode: 'numeric', value: t.ogniMesi || '' }), preavviso: h('input', { type: 'text', inputmode: 'numeric', value: t.preavvisoGiorni || '' }) };
+      let gruppo = t.gruppo || 'sicurezza';
+      let attivo = t.attivo !== false;
+      const zona = h('div', { class: 'fila' });
+      const disegna = () => aggiungi(svuota(zona), [campo('Nome', v.nome), h('div', { class: 'campo' }, h('label', null, 'Gruppo'), segmenti([['elettrico', 'Lavori elettrici'], ['sicurezza', 'Sicurezza'], ['emergenza', 'Emergenza'], ['altro', 'Altro']], gruppo, k => { gruppo = k; disegna(); })),
+        h('div', { class: 'riga-campi' }, campo('Ogni', conSuffisso(v.ogni, 'mesi')), campo('Preavviso', conSuffisso(v.preavviso, 'giorni'))),
+        t0 ? h('label', { class: 'spunta-campo' }, h('input', { type: 'checkbox', checked: attivo, onchange: e => { attivo = e.target.checked; } }), 'In uso') : null]);
+      disegna();
+      let chiudi;
+      const salva = async () => {
+        if (!v.nome.value.trim()) { v.nome.focus(); avviso('Nome: scrivi il nome della formazione o abilitazione', true); return; }
+        const tipo = { nome: v.nome.value.trim(), gruppo, ogniMesi: v.ogni.value.trim() ? Number(v.ogni.value) : null, preavvisoGiorni: v.preavviso.value.trim() ? Number(v.preavviso.value) : null, attivo };
+        if (t0) tipo.chiave = t0.chiave;
+        const r = await lavora('Salvo', () => Rete.post('/server/salvaQualificaTipo', { tipo }));
+        if (!r) return;
+        chiudi();
+        M.tipi = null;
+        avviso('Salvato: vale per la formazione nuova');
+        W.disegnaPagina();
+      };
+      chiudi = finestra({ titolo: t0 ? t0.nome : 'Nuovo tipo', corpo: zona, fuoco: false,
+        pulsanti: ['spazio', h('button', { type: 'button', class: 'btn testo grande', onclick: () => chiudi() }, 'Annulla'), h('button', { type: 'button', class: 'btn giallo grande', onclick: salva }, 'Salva')] });
+    }
+
     // ===================================================================== utenti
 
     function nomeRuolo(r) { return (R.RUOLI[r] || { nome: r || '' }).nome; }
@@ -316,7 +414,7 @@
       aggiungi(pagina, [h('div', { class: 'testata' }, h('h1', { class: 'spazio' }, 'Utenti'),
         scrive() ? h('button', { type: 'button', class: 'btn giallo', onclick: nuovoUtente }, icona('piu', 18, 2.6), 'Nuovo utente') : null), area]);
       leggi(area, 'utenti', '/server/utenti', ris => {
-        const lista = (ris.utenti || []).slice().sort((a, b) => R.ORDINE_RUOLI.indexOf(a.ruolo) - R.ORDINE_RUOLI.indexOf(b.ruolo) || String(a.nome).localeCompare(String(b.nome), 'it'));
+        const lista = (ris.utenti || []).slice().sort((a, b) => R.ORDINE_RUOLI_PERMESSI.indexOf(a.ruolo) - R.ORDINE_RUOLI_PERMESSI.indexOf(b.ruolo) || String(a.nome).localeCompare(String(b.nome), 'it'));
         aggiungi(area, [h('div', { class: 'scheda righe' }, lista.map(u => riga({
           sinistra: iniziali(u.nome, true),
           titolo: u.nome,
@@ -396,8 +494,11 @@
             h('div', { class: 'titoli' }, h('h1', { class: 'titolo-scheda' }, u.nome),
               h('div', { class: 'pillole-testa' }, pillola(nomeRuolo(u.ruolo), 'grigio'), u.attivo === false ? pillola('Disattivato', 'grigio') : null,
                 h('span', { class: 'sotto-titolo' }, [u.email, u.ultimoAccesso ? 'ultimo accesso ' + R.quando(u.ultimoAccesso) : 'mai entrato'].filter(Boolean).join(' · '))))),
+          // Fase 6 (§5.2): la scheda della persona (o del collaboratore, per un esterno).
+          schedaLegata(u),
           h('div', { class: 'scheda' }, h('h2', null, 'Ruolo'),
-            h('div', { class: 'fila' }, scelteRuolo(u.ruolo, k => cambiaRuolo(u, k), !puoCambiare),
+            h('div', { class: 'fila' }, u.ruolo === 'esterno' ? h('div', { class: 'scelta-ruolo scelto' }, h('span', { class: 'pallino-scelta' }), h('span', { class: 'testi' }, h('b', null, R.RUOLI.esterno.nome), h('span', null, R.RUOLI.esterno.frase)))
+              : scelteRuolo(u.ruolo, k => cambiaRuolo(u, k), !puoCambiare),
               ultimo ? h('div', { class: 'secondario' }, 'È l\'ultimo titolare: non si può disattivare né cambiare ruolo.') : null)),
           scrive() ? h('div', { class: 'scheda righe' },
             riga({ sinistra: quadrato('chiave'), titolo: 'Password', destra: h('button', { type: 'button', class: 'btn', onclick: () => nuovaPassword(u) }, 'Nuova password') }),
@@ -406,6 +507,16 @@
               destra: h('button', { type: 'button', class: 'btn', onclick: () => attiva(u, u.attivo === false) }, u.attivo === false ? 'Riattiva' : 'Disattiva') })) : null,
           scrive() ? h('div', { class: 'sezione' }, h('h2', null, 'Dispositivi collegati'), dispositivi(u)) : null]);
       });
+    }
+
+    /** La riga "Scheda della persona" (o "Scheda del collaboratore" per un esterno), se l'utente l'ha e la si può aprire. */
+    function schedaLegata(u) {
+      const a = S.ana.utenti.find(x => String(x.id) === String(u.id)) || {};
+      const idPersona = u.idPersona || a.idPersona;
+      const idSoggetto = u.idSoggetto || a.idSoggetto;
+      if (u.ruolo === 'esterno' && idSoggetto && puo('collaboratori')) return h('div', { class: 'scheda righe' }, riga({ sinistra: quadrato('collaboratori'), titolo: 'Scheda del collaboratore', sotto: (W.cliente(idSoggetto) || {}).nome || idSoggetto, onclick: () => W.vai('#collaboratori/c/' + encodeURIComponent(idSoggetto)) }));
+      if (idPersona && puo('persone')) return h('div', { class: 'scheda righe' }, riga({ sinistra: quadrato('persona'), titolo: 'Scheda della persona', sotto: 'Lavoro, ferie, formazione, costo', onclick: () => W.vai('#persone/p/' + encodeURIComponent(idPersona)) }));
+      return null;
     }
 
     function dispositivi(u) {
@@ -500,15 +611,18 @@
         const tabella = ris.permessi || {};
         const r = M.ruoloPerm;
         const bloccato = r === 'titolare' || !scrive();
+        // Fase 6 (§12.8): la colonna dell'esterno, con le righe bloccate dove a un esterno non si può dare niente.
+        const ruoli = (ris.ruoli || R.ORDINE_RUOLI).indexOf('esterno') >= 0 ? R.ORDINE_RUOLI_PERMESSI : R.ORDINE_RUOLI;
         aggiungi(area, [
-          segmenti(R.ORDINE_RUOLI.map(k => [k, R.RUOLI[k].nome]), r, k => { M.ruoloPerm = k; W.disegnaPagina(); }),
+          segmenti(ruoli.map(k => [k, R.RUOLI[k].nome]), r, k => { M.ruoloPerm = k; W.disegnaPagina(); }),
           h('div', { class: 'scheda intro-ruolo' }, h('b', null, R.RUOLI[r].nome), h('span', { class: 'sotto-titolo' }, R.RUOLI[r].frase + (r === 'titolare' ? ' Il titolare ha sempre tutto.' : ''))),
           h('div', { class: 'scheda righe-permessi' }, R.RIGHE_PERMESSI.map(m => {
             const l = R.livello(tabella[r], m.modulo);
+            const vietato = r === 'esterno' && R.VIETATI_ESTERNO.indexOf(m.modulo) >= 0;
             return h('div', { class: 'riga-perm' },
-              h('div', { class: 'testi' }, h('div', { class: 'nome-m' }, m.nome), h('div', { class: 'spiega' }, m.spiega)),
-              h('div', { class: 'liv' + (bloccato ? ' bloccato' : ''), role: 'group', 'aria-label': m.nome },
-                R.LIVELLI.map((t, i) => h('button', { type: 'button', class: 'l' + i, 'aria-pressed': l === i ? 'true' : 'false', disabled: bloccato,
+              h('div', { class: 'testi' }, h('div', { class: 'nome-m' }, m.nome), h('div', { class: 'spiega' }, vietato ? 'A un esterno non si dà' : m.spiega)),
+              h('div', { class: 'liv' + (bloccato || vietato ? ' bloccato' : ''), role: 'group', 'aria-label': m.nome },
+                R.LIVELLI.map((t, i) => h('button', { type: 'button', class: 'l' + i, 'aria-pressed': l === i ? 'true' : 'false', disabled: bloccato || vietato,
                   onclick: () => cambiaPermesso(r, m.modulo, i, l) }, t))));
           }))]);
       });
@@ -729,9 +843,12 @@
       ['utenti', 'Utenti'], ['permessi', 'Permessi'], ['impostazioni', 'Impostazioni']];
     const PERIODI = [['oggi', 'Oggi'], ['7', 'Ultimi 7 giorni'], ['30', 'Ultimi 30 giorni'], ['', 'Da sempre']];
 
+    /** Fase 6 (§5.7): il filtro "Dati riservati" del registro, solo per il titolare: chi ha visto, scaricato, cambiato o esportato dati riservati. */
+    const vedeRegistroRiservati = () => !!(S.io && S.io.utente && S.io.utente.ruolo === 'titolare' && S.io.interfaccia && S.io.interfaccia.vedeRiservati);
     function domandaRegistro(pagina) {
       const f = M.filtri;
       const p = R.periodo(f.periodo);
+      if (f.tabella === 'riservati') return '/server/accessiRiservati?' + ['da=' + p.da, 'a=' + p.a, 'utente=' + encodeURIComponent(f.utente), 'pagina=' + pagina].join('&');
       const q = ['da=' + p.da, 'a=' + p.a, 'utente=' + encodeURIComponent(f.utente), 'tabella=' + encodeURIComponent(f.tabella), 'pagina=' + pagina];
       return '/server/registro?' + q.join('&');
     }
@@ -755,7 +872,7 @@
         h('div', { class: 'stretta-820 sezione' },
           h('div', { class: 'filtri' },
             filtro(f.utente ? nomeUtente(f.utente) : 'Tutte le persone', [['', 'Tutte le persone']].concat(utenti.map(u => [u.id, u.nome])), f.utente, x => { f.utente = x; W.disegnaPagina(); }),
-            filtro((TABELLE.find(t => t[0] === f.tabella) || TABELLE[0])[1], TABELLE, f.tabella, x => { f.tabella = x; W.disegnaPagina(); }),
+            filtro((TABELLE.concat([['riservati', 'Dati riservati']]).find(t => t[0] === f.tabella) || TABELLE[0])[1], vedeRegistroRiservati() ? TABELLE.concat([['riservati', 'Dati riservati']]) : TABELLE, f.tabella, x => { f.tabella = x; W.disegnaPagina(); }),
             filtro((PERIODI.find(t => t[0] === f.periodo) || PERIODI[1])[1], PERIODI, f.periodo, x => { f.periodo = x; W.disegnaPagina(); })),
           area)]);
       const voci = [];
@@ -773,7 +890,10 @@
             h('button', { type: 'button', class: 'btn piccolo', onclick: () => { numero = 0; voci.length = 0; svuota(area); altri(); } }, 'Riprova'))]);
           return;
         }
-        voci.push.apply(voci, ris.righe || ris.voci || []);
+        // Le righe degli accessi ai dati riservati hanno già la frase: "Manuel ha visto i dati riservati della scheda di Marco Rossato".
+        const righe = f.tabella === 'riservati' ? (ris.righe || []).map(x => ({ quando: x.quando, utente: x.utente, frase: String(x.frase || '').replace(/^./, c => c.toLowerCase()) + (x.persona ? ' di ' + x.persona : '') + (x.disp ? ' · ' + x.disp : ''), riservato: true }))
+          : (ris.righe || ris.voci || []);
+        voci.push.apply(voci, righe);
         numero += 1;
         disegnaRegistro(area, voci, ris.altre !== undefined ? !!ris.altre : (ris.pagina || 1) < (ris.pagine || 1), altri);
       };
@@ -966,6 +1086,11 @@
       disegnaTema();
       const a = S.aggiornamento;
       const loc = S.locale || {};
+      // "Da fuori: Google · In casa: 192.168.1.51 · ultimo contatto alle 10:42 in ufficio" (porta-google.md §8.6). La
+      // strada cambia mentre si lavora: si richiede al programma aprendo la pagina.
+      const Coll = window.WisperCollegamento;
+      const fraseCollegamento = h('span', { class: 'frase-collegamento' }, Coll.frase(loc));
+      if (!S.esempio) Api.get('/locale/stato').then(st => { S.locale = st; fraseCollegamento.textContent = Coll.frase(st); }).catch(() => null);
       aggiungi(pagina, [h('div', { class: 'testata' }, h('h1', null, 'L\'app')),
         h('div', { class: 'stretta-820' }, h('div', { class: 'scheda' },
           h('div', { class: 'voce-imp' }, h('span', { class: 'testi' }, h('b', null, 'Tema')), zonaTema),
@@ -973,7 +1098,7 @@
             h('button', { type: 'button', class: 'btn', onclick: () => W.iniziaVisita() }, 'Rifai la visita guidata')),
           loc.cartellaPdf ? h('div', { class: 'voce-imp' }, h('span', { class: 'testi' }, h('b', null, 'I PDF'), h('span', null, loc.cartellaPdf)),
             h('button', { type: 'button', class: 'btn', onclick: () => Api.post('/locale/cartella-pdf').catch(() => null) }, 'Apri la cartella')) : null,
-          loc.server ? h('div', { class: 'voce-imp' }, h('span', { class: 'testi' }, h('b', null, 'Server'), h('span', null, loc.server.replace(/^https?:\/\//, ''))),
+          loc.server || loc.google ? h('div', { class: 'voce-imp' }, h('span', { class: 'testi' }, h('b', null, 'Collegamento'), fraseCollegamento),
             h('button', { type: 'button', class: 'btn', onclick: () => W.esci() }, 'Esci')) : null,
           h('div', { class: 'voce-imp' }, h('span', { class: 'testi' }, h('b', null, 'Licenze'), h('span', null, 'Carattere Figtree, SIL OFL 1.1')),
             h('button', { type: 'button', class: 'btn', onclick: W.mostraLicenza }, 'Leggi')),

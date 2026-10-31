@@ -198,6 +198,68 @@ private fun Firma(
     }
 }
 
+/** Lo stato del riquadro della firma riusabile (fase 6: la consegna dei DPI). */
+class StatoFirma {
+    val tratti = mutableStateListOf<List<Offset>>()
+    var tratto by mutableStateOf<List<Offset>>(emptyList())
+    var dimensione by mutableStateOf(IntSize.Zero)
+    var spessore = 6f
+    val pronta: Boolean get() = tratti.isNotEmpty() && dimensione != IntSize.Zero
+
+    /** La firma in PNG, ritagliata attorno ai tratti. */
+    fun png(): ByteArray = java.io.ByteArrayOutputStream().use { out ->
+        disegna(tratti, dimensione, spessore).compress(Bitmap.CompressFormat.PNG, 100, out); out.toByteArray()
+    }
+}
+
+/**
+ * Il riquadro bianco della firma col dito (come quella del cliente: sempre su
+ * bianco), con la linea e sotto la frase ("Ricevuto da Marco Rossato · …").
+ */
+@Composable
+internal fun RiquadroFirma(stato: StatoFirma, frase: String, modifier: Modifier = Modifier) {
+    val c = W.colori
+    stato.spessore = with(LocalDensity.current) { 3.dp.toPx() }
+    Box(
+        modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(22.dp))
+            .background(Color.White)
+            .border(1.5.dp, c.bordoCampo, RoundedCornerShape(22.dp))
+            .onSizeChanged { stato.dimensione = it }
+            .pointerInput(Unit) {
+                awaitEachGesture {
+                    val giu = awaitFirstDown()
+                    var punti = listOf(giu.position)
+                    stato.tratto = punti
+                    giu.consume()
+                    while (true) {
+                        val dito = awaitPointerEvent().changes.firstOrNull { it.id == giu.id } ?: break
+                        if (!dito.pressed) break
+                        punti = punti + dito.position
+                        stato.tratto = punti
+                        dito.consume()
+                    }
+                    stato.tratti.add(if (punti.size == 1) listOf(punti[0], punti[0] + Offset(0.5f, 0.5f)) else punti)
+                    stato.tratto = emptyList()
+                }
+            },
+    ) {
+        Canvas(Modifier.fillMaxSize()) {
+            (stato.tratti + listOf(stato.tratto)).forEach { punti ->
+                if (punti.size < 2) return@forEach
+                val p = Path().apply {
+                    moveTo(punti.first().x, punti.first().y)
+                    punti.drop(1).forEach { lineTo(it.x, it.y) }
+                }
+                drawPath(p, Color(0xFF1B1B1F), style = Stroke(stato.spessore, cap = StrokeCap.Round, join = StrokeJoin.Round))
+            }
+        }
+        Box(Modifier.align(Alignment.BottomCenter).padding(start = 24.dp, end = 24.dp, bottom = 46.dp).fillMaxWidth().height(1.5.dp).background(Color(0xFFE7E6E2)))
+        Text(frase, style = Testi.secondario, color = Color(0xFF5F5F67), modifier = Modifier.align(Alignment.BottomStart).padding(start = 24.dp, end = 24.dp, bottom = 14.dp), maxLines = 2)
+    }
+}
+
 /**
  * La firma come immagine: tratti scuri su bianco, ritagliata attorno ai tratti.
  *

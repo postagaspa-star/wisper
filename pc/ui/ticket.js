@@ -253,6 +253,13 @@
           destra: B.stato(r.stato), onclick: r.apribile ? () => { chiudiPannello(true); W.vaiA({ pagina: 'rapportino', id: r.id }); } : null, freccia: !!r.apribile,
         }))) : h('p', { class: 'vuoto sinistra piccolo' }, 'Ancora nessun rapportino.'),
         t.daFirmare ? h('div', { class: 'banda giallina' }, icona('firma', 20, 2.2), h('span', { class: 'spazio' }, t.daFirmare)) : null);
+      // Fase 6 (§17.13): gli strumenti dei suoi rapportini, con lo stato di quel giorno; la pillola rossa se uno era scaduto.
+      const P6 = window.WisperRegolePersone;
+      const strumenti = (t.strumenti || []).length ? sezione('Strumenti usati', h('div', { class: 'scheda righe' }, t.strumenti.map(x => {
+        const st = P6.statoAllora(x);
+        return riga({ sinistra: quadrato(x.verifica ? 'scudo' : 'misura', x.statoAllora === 'scaduta' || x.statoAllora === 'non_conforme' ? 'ico-rosso' : 'ico-grigio'), titolo: (x.codice ? x.codice + ' · ' : '') + x.nome,
+          sotto: [x.idRapportino, x.data ? C.data(x.data).slice(0, 5) : '', x.matricola ? 'matr. ' + x.matricola : ''].filter(Boolean).join(' · '), destra: st.parola ? pill(st.parola, st.colore) : null });
+      })), t.tarataScaduta ? h('div', { class: 'banda' }, icona('avviso', 18), h('span', { class: 'spazio' }, 'Taratura scaduta: in uno dei suoi interventi è stato usato uno strumento con la taratura scaduta')) : null) : null;
       const s = t.somma || {};
       const righeOS = (t.ore || []).map(o => riga({ sinistra: quadrato('orologio'), titolo: C.ore(o.ore) + (o.descrizione ? ' · ' + o.descrizione : ''), sotto: [C.data(o.data).slice(0, 5), o.utente].filter(Boolean).join(' · '),
         onclick: W.Ore ? () => W.Ore.moduloOre(o, { dopo: () => aggiorna() }) : null }))
@@ -289,7 +296,7 @@
         tempi.length ? h('div', { class: 'banda-tempi' + (t.inRitardo ? ' rossa' : '') }, tempi.map(x => h('div', null, T.maiuscola(x)))) : null,
         h('div', { class: 'scheda righe' }, cliRiga, impRiga, contrRiga, comRiga),
         t.descrizione ? sezione('Cosa dice il cliente', h('div', { class: 'scheda testo-cliente' }, t.descrizione)) : null,
-        interventi, rapportini, oreSpese, foto, documenti, storico, cronologia);
+        interventi, rapportini, strumenti, oreSpese, foto, documenti, storico, cronologia);
 
       const piede = piedeTicket(t);
       const p = h('aside', { class: 'pannello pannello-ticket', 'aria-label': 'Il ticket ' + t.numero }, corpo, piede.length ? h('div', { class: 'piede' }, piede) : null);

@@ -94,7 +94,7 @@ import java.util.Locale
 private val IT = Locale.ITALY
 
 /** Le scritture che devono finire anche se si cambia pagina (l'Annulla di un avviso). */
-private val ambitoAmm = MainScope()
+internal val ambitoAmm = MainScope()
 
 // ---------------------------------------------------------------------------------- l'elenco
 
@@ -139,6 +139,9 @@ fun SchermataAmministrazione(dati: Dati, archivio: Archivio, nav: Navigatore) {
         ).takeIf { vedeSpese },
         // Fase 5 (fase5.md §12.4): le categorie dei documenti e lo spazio sul NAS, anche sul telefono.
         VoceAmm("Categorie dei documenti", "Approvazione, chi le vede, scadenza proposta", Icone.documento, "categorie").takeIf { LocalPermessi.current.vede(Moduli.DOCUMENTI) },
+        // Fase 6 (§12.8): le impostazioni di persone, mezzi e collaboratori; i tipi di formazione.
+        VoceAmm("Persone, mezzi e collaboratori", "Santo patrono, conservazione, tarature, DURC e visura", Icone.persona, "persone").takeIf { LocalPermessi.current.vede(Moduli.PERSONE) },
+        VoceAmm("Tipi di formazione", "PES, PAV, PEI, primo soccorso: ogni quanto e il preavviso", Icone.formazione, "formazione").takeIf { LocalPermessi.current.vede(Moduli.PERSONE) },
         VoceAmm("Spazio sul NAS", "Dove va lo spazio, copia fuori casa, cestino", Icone.disco, "spazio"),
         VoceAmm("Registro attività", "Chi ha cambiato cosa", Icone.lista, "registro"),
         VoceAmm(
@@ -186,7 +189,7 @@ fun PaginaAmministrazione(
         quale == "tariffe" -> PaginaTariffe(dati, puo, indietro)
         quale == "app" -> PaginaApp(archivio, tema, onTema, onVisita, indietro)
         quale == "utenti" -> PaginaUtenti(dati, nav, puo)
-        quale.startsWith("utente/") -> PaginaUtente(dati, quale.removePrefix("utente/"), puo, indietro)
+        quale.startsWith("utente/") -> PaginaUtente(dati, nav, quale.removePrefix("utente/"), puo, indietro)
         quale == "permessi" -> PaginaPermessi(dati, puo, indietro)
         quale == "numerazioni" -> PaginaNumerazioni(dati, puo, indietro)
         quale == "registro" -> PaginaRegistro(dati, indietro)
@@ -194,6 +197,8 @@ fun PaginaAmministrazione(
         quale == "cestino" -> PaginaCestino(dati, puo, indietro)
         quale == "categorie" -> PaginaCategorie(dati, puo, indietro)
         quale == "spazio" -> PaginaSpazio(dati, puo, indietro)
+        quale == "persone" -> PaginaImpostazioniFase6(dati, puo, indietro)
+        quale == "formazione" -> PaginaTipiFormazione(dati, puo, indietro)
         quale == "veicoli" -> PaginaVeicoli(dati, nav, puo)
         quale == "veicolo-nuovo" -> PaginaVeicolo(dati, nav, "", puo)
         quale.startsWith("veicolo/") -> PaginaVeicolo(dati, nav, quale.removePrefix("veicolo/"), puo)
@@ -222,7 +227,7 @@ internal fun <T> rememberLettura(chiave: Any?, giro: Int, leggi: suspend () -> R
 
 /** Il posto di una lettura che non è pronta: i segnaposto, o l'errore con Riprova. */
 @Composable
-private fun StatoLettura(l: Lettura<*>, onRiprova: () -> Unit) {
+internal fun StatoLettura(l: Lettura<*>, onRiprova: () -> Unit) {
     when (l) {
         Lettura.InCorso -> { Segnaposto(72.dp); Segnaposto(72.dp) }
         is Lettura.Errore -> Scheda(orizzontale = 20.dp, verticale = 18.dp) {
@@ -369,7 +374,7 @@ private fun SceltaRuolo(ruolo: String, scelto: Boolean, onClick: () -> Unit) {
 
 /** La pagina di un utente: ruolo, nuova password, disattiva, dispositivi collegati. */
 @Composable
-private fun PaginaUtente(dati: Dati, id: String, puo: Boolean, onIndietro: () -> Unit) {
+private fun PaginaUtente(dati: Dati, nav: Navigatore, id: String, puo: Boolean, onIndietro: () -> Unit) {
     val c = W.colori
     val avvisi = LocalAvvisi.current
     var giro by remember { mutableIntStateOf(0) }
@@ -384,6 +389,7 @@ private fun PaginaUtente(dati: Dati, id: String, puo: Boolean, onIndietro: () ->
 
     val tutti = (lettura as? Lettura.Pronta)?.dato
     val u = tutti?.firstOrNull { it.id == id }
+    val ana by dati.anagrafiche.collectAsStateWithLifecycle()
     Column(
         Modifier.fillMaxSize().background(c.fondo).verticalScroll(rememberScrollState()).padding(MarginePagina).padding(bottom = 40.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
@@ -410,6 +416,16 @@ private fun PaginaUtente(dati: Dati, id: String, puo: Boolean, onIndietro: () ->
             )
             LineaElenco()
             RigaVoce("Ultimo accesso", valore = quandoBreve(u.ultimoAccesso))
+        }
+        // Fase 6 (§5.2): la scheda della persona, o del collaboratore per un esterno.
+        val legato = ana.utenti.firstOrNull { it.id == u.id }
+        val idPersona = u.idPersona.ifBlank { legato?.idPersona.orEmpty() }
+        val idSoggetto = u.idSoggetto.ifBlank { legato?.idSoggetto.orEmpty() }
+        val perm = LocalPermessi.current
+        if (u.ruolo == Ruoli.ESTERNO && idSoggetto.isNotBlank() && perm.vede(Moduli.COLLABORATORI)) SchedaElenco {
+            RigaVoce("Scheda del collaboratore", sotto = ana.soggetto(idSoggetto)?.nome ?: idSoggetto, icona = Icone.collab, onClick = { nav.vai("collaboratore/$idSoggetto") })
+        } else if (idPersona.isNotBlank() && perm.vede(Moduli.PERSONE)) SchedaElenco {
+            RigaVoce("Scheda della persona", sotto = "Lavoro, ferie, formazione, costo", icona = Icone.persona, onClick = { nav.vai("persona/$idPersona") })
         }
         if (ultimoTitolare) {
             Text("È l'unico titolare: non si può disattivare né cambiare di ruolo.", style = Testi.secondario, color = c.tenue)
@@ -524,9 +540,18 @@ private val SPIEGA_MODULI = mapOf(
     Moduli.PREVENTIVI to "Preventivi, listino, incarichi",
     Moduli.ATTIVITA to "Le attività di tutti o solo le sue",
     Moduli.RAPPORTINI to "I rapportini di tutti o solo i suoi",
+    // Le stesse frasi di Ruoli e permessi sul computer (pc/ui/regole.js VOCI_MENU).
+    Moduli.SPESE to "Spese, trasferte, rimborsi",
     Moduli.FATTURAZIONE to "Da fatturare, riepiloghi",
+    Moduli.BANCHE to "Scadenziario, movimenti, tributi, conti",
+    Moduli.PERSONE to "Organico, ferie e permessi, presenze, formazione",
+    Moduli.DOCUMENTI to "Archivio, revisioni, scadenze, modelli",
+    Moduli.TICKET to "Richieste d'intervento, contratti, statistiche",
+    Moduli.MEZZI to "Mezzi, strumenti e tarature, DPI, prestiti, guasti",
+    Moduli.COLLABORATORI to "Imprese e professionisti, incarichi, compensi",
     Moduli.AMMINISTRAZIONE to "Studio, utenti, permessi, copie",
     Moduli.COSTI to "Tariffe, totali, costi e margini",
+    Moduli.RISERVATI to "Costo dell'anno, contratti e cedolini, giudizi del medico, malattie",
 )
 
 @Composable
@@ -545,7 +570,9 @@ private fun PaginaPermessi(dati: Dati, puo: Boolean, onIndietro: () -> Unit) {
     ) {
         Testata(onIndietro = onIndietro)
         TitoloPagina("Ruoli e permessi")
-        SegmentiScorrevoli(Ruoli.ELENCO.map { it to Ruoli.nome(it) }, ruolo, { ruolo = it })
+        // Fase 6 (§12.8): la colonna dell'esterno, quando il server la manda.
+        val ruoli = if ((lettura as? Lettura.Pronta)?.dato?.containsKey(Ruoli.ESTERNO) == true) Ruoli.ELENCO + Ruoli.ESTERNO else Ruoli.ELENCO
+        SegmentiScorrevoli(ruoli.map { it to Ruoli.nome(it) }, ruolo, { ruolo = it })
         val bloccato = ruolo == Ruoli.TITOLARE
         Scheda(orizzontale = 18.dp, verticale = 16.dp, raggio = 22.dp, spazio = 4.dp) {
             Text(Ruoli.nome(ruolo), style = Testi.forteGrande, color = c.testo)
@@ -555,7 +582,8 @@ private fun PaginaPermessi(dati: Dati, puo: Boolean, onIndietro: () -> Unit) {
             is Lettura.Pronta -> {
                 val p = cambiati[ruolo] ?: lettura.dato[ruolo] ?: Permessi.iniziali(ruolo)
                 Scheda(orizzontale = 18.dp, verticale = 4.dp, raggio = 22.dp, spazio = 0.dp) {
-                    (Moduli.FUNZIONANTI + Moduli.COSTI).forEachIndexed { i, m ->
+                    (Moduli.FUNZIONANTI + Moduli.COSTI + Moduli.RISERVATI).forEachIndexed { i, m ->
+                        val vietato = ruolo == Ruoli.ESTERNO && m in VIETATI_ESTERNO
                         if (i > 0) LineaElenco()
                         Row(
                             Modifier.fillMaxWidth().heightIn(min = 60.dp).padding(vertical = 8.dp),
@@ -564,9 +592,9 @@ private fun PaginaPermessi(dati: Dati, puo: Boolean, onIndietro: () -> Unit) {
                         ) {
                             Column(Modifier.weight(1f)) {
                                 Text(nomeModulo(m), style = Testi.secondarioGrande.copy(fontWeight = FontWeight.ExtraBold), color = c.testo)
-                                Text(SPIEGA_MODULI[m].orEmpty(), style = Testi.piccolo, color = c.tenue)
+                                Text(if (vietato) "A un esterno non si dà" else SPIEGA_MODULI[m].orEmpty(), style = Testi.piccolo, color = c.tenue)
                             }
-                            Livelli(nomeModulo(m), if (bloccato) 2 else p.livello(m), attivo = puo && !bloccato) { nuovo ->
+                            Livelli(nomeModulo(m), if (bloccato) 2 else p.livello(m), attivo = puo && !bloccato && !vietato) { nuovo ->
                                 val prima = p.livello(m)
                                 if (nuovo == prima) return@Livelli
                                 val r = ruolo
@@ -744,6 +772,10 @@ private fun PaginaRegistro(dati: Dati, onIndietro: () -> Unit) {
     val ana by dati.anagrafiche.collectAsStateWithLifecycle()
     var filtro by remember { mutableStateOf(FiltroRegistro()) }
     var giro by remember { mutableIntStateOf(0) }
+    // Fase 6 (§5.7): "Dati riservati" fra i filtri, solo per il titolare: chi ha visto, scaricato, cambiato o esportato dati riservati.
+    val sessione by dati.sessione.collectAsStateWithLifecycle()
+    val vedeRiservati = sessione.utente.ruolo == Ruoli.TITOLARE && sessione.interfaccia.vedeRiservati
+    val riservati = filtro.tabella == TABELLA_RISERVATI
     var altrePagine by remember(filtro) { mutableStateOf<List<VoceRegistro>>(emptyList()) }
     var pagina by remember(filtro) { mutableIntStateOf(0) }
     var ancora by remember(filtro) { mutableStateOf<Boolean?>(null) }
@@ -763,10 +795,11 @@ private fun PaginaRegistro(dati: Dati, onIndietro: () -> Unit) {
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             val stileFiltro = Testi.secondario.copy(fontWeight = FontWeight.Bold)
             PulsanteBordo(ana.utente(filtro.utente)?.nome ?: "Tutte le persone", { foglio = "persone" }, altezza = 44.dp, stile = stileFiltro)
-            PulsanteBordo(TABELLE.firstOrNull { it.first == filtro.tabella }?.second ?: "Tutto", { foglio = "cosa" }, altezza = 44.dp, stile = stileFiltro)
+            PulsanteBordo((TABELLE + (TABELLA_RISERVATI to "Dati riservati")).firstOrNull { it.first == filtro.tabella }?.second ?: "Tutto", { foglio = "cosa" }, altezza = 44.dp, stile = stileFiltro)
             PulsanteBordo(PERIODI.firstOrNull { it.first == filtro.giorni }?.second ?: "Ultimi 7 giorni", { foglio = "quando" }, altezza = 44.dp, stile = stileFiltro)
         }
-        when (lettura) {
+        if (riservati) RegistroRiservati(dati, filtro, giro) { giro++ }
+        else when (lettura) {
             is Lettura.Pronta -> {
                 val voci = lettura.dato.voci + altrePagine
                 if (voci.isEmpty()) {
@@ -817,7 +850,7 @@ private fun PaginaRegistro(dati: Dati, onIndietro: () -> Unit) {
             Column(Modifier.heightIn(max = 440.dp).verticalScroll(rememberScrollState())) {
                 val voci: List<Pair<String, String>> = when (quale) {
                     "persone" -> listOf("" to "Tutte le persone") + ana.utenti.map { it.id to it.nome }
-                    "cosa" -> TABELLE
+                    "cosa" -> TABELLE + listOfNotNull((TABELLA_RISERVATI to "Dati riservati").takeIf { vedeRiservati })
                     else -> PERIODI.map { it.first.toString() to it.second }
                 }
                 voci.forEachIndexed { i, (valore, nome) ->
@@ -854,6 +887,30 @@ private fun PaginaRegistro(dati: Dati, onIndietro: () -> Unit) {
             }
             PulsanteTesto("Chiudi", { voceAperta = null }, Modifier.fillMaxWidth(), colore = c.testo)
         }
+    }
+}
+
+private const val TABELLA_RISERVATI = "riservati"
+
+/** Il registro dei dati riservati (il titolare): la frase già fatta dal server, chi, quando, da dove. */
+@Composable
+private fun RegistroRiservati(dati: Dati, filtro: FiltroRegistro, giro: Int, onRiprova: () -> Unit) {
+    val oggi = LocalDate.now()
+    val da = if (filtro.giorni > 0) oggi.minusDays(filtro.giorni.toLong() - 1).toString() else ""
+    val lettura = rememberLettura("riservati-${filtro.utente}-$da", giro) { dati.fase6.accessiRiservati("", filtro.utente, da, if (da.isBlank()) "" else oggi.toString()) }
+    when (lettura) {
+        is Lettura.Pronta -> SchedaElenco {
+            if (lettura.dato.isEmpty()) RigaCalma("Nessuno ha aperto dati riservati in questo periodo.")
+            lettura.dato.forEachIndexed { i, r ->
+                if (i > 0) LineaElenco()
+                RigaVoce(
+                    r.utente + " · " + r.frase.replaceFirstChar { it.lowercase() } + if (r.persona.isNotBlank()) " di " + r.persona else "",
+                    sotto = quandoBreve(r.quando) + if (r.disp.isNotBlank()) " · " + r.disp else "",
+                    icona = Icone.lucchetto,
+                )
+            }
+        }
+        else -> StatoLettura(lettura, onRiprova)
     }
 }
 

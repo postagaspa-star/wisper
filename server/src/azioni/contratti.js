@@ -39,7 +39,7 @@ module.exports = {
   },
 
   prossimoNumeroContratto(anno) {
-    return this.prossimoNumero('contratto', this.db.righe('SELECT numero FROM contratti').map(r => r.numero), anno || new Date().getFullYear());
+    return this.prossimoNumero('contratto', this.db.righe('SELECT numero FROM contratti').map(r => r.numero), anno || Number(oggi().slice(0, 4)));
   },
 
   /** L'ultimo giorno per mandare la disdetta: al - giorni di preavviso. */

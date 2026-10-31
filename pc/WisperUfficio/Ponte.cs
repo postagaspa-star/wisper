@@ -50,6 +50,9 @@ public sealed class Ponte
     /// <summary>La prima apertura dopo l'installazione: la pagina dice dove trovarlo.</summary>
     public bool AppenaInstallato { get; set; }
 
+    /// <summary>Aperto col doppio clic sul file .wisper: la pagina dice che adesso sa la strada da fuori.</summary>
+    public bool AppenaCollegato { get; set; }
+
     /// <summary>Le opzioni con cui è partito il programma: il riavvio dopo un aggiornamento le ripete.</summary>
     public IReadOnlyList<string> ArgomentiDiAvvio { get; set; } = Array.Empty<string>();
 
@@ -171,12 +174,15 @@ public sealed class Ponte
         switch (nome)
         {
             case "stato":
+            {
                 config.RileggiSeCambiato();
-                return Json(200, new JsonObject
+                // L'indirizzo del server di casa si vede (è scritto anche sotto la pagina di accesso); il token
+                // e l'indirizzo dello script Google no: della porta Google la pagina sa solo se c'è.
+                var collegamento = server.Stato();
+                var risposta = new JsonObject
                 {
                     ["ok"] = true,
                     ["entrato"] = config.Entrato,
-                    // L'indirizzo del server si vede (è scritto anche sotto la pagina di accesso); il token no.
                     ["server"] = config.Server,
                     ["email"] = config.Email,
                     ["studio"] = config.Studio,
@@ -184,10 +190,26 @@ public sealed class Ponte
                     ["versione"] = typeof(Ponte).Assembly.GetName().Version?.ToString(3),
                     ["aggiornamento"] = Aggiornamenti?.ComeJson(),
                     ["appenaInstallato"] = AppenaInstallato,
-                });
+                    ["appenaCollegato"] = AppenaCollegato,
+                };
+                foreach (var (k, v) in collegamento) risposta[k] = v?.DeepClone();
+                AppenaCollegato = false;
+                return Json(200, risposta);
+            }
 
             case "accedi":
                 return await AccediAsync(o).ConfigureAwait(false);
+
+            case "collega-file":
+            {
+                // Il file .wisper dell'email, scelto a mano: dentro c'è l'indirizzo della porta Google.
+                var scelto = Finestra?.ScegliPercorso("collegamento");
+                if (scelto == null) return Json(200, new JsonObject { ["ok"] = false, ["annullato"] = true });
+                var errore = FileCollegamento.Importa(scelto, config);
+                if (errore != null) return Json(200, Errore(errore));
+                server.Dimentica();
+                return Json(200, new JsonObject { ["ok"] = true, ["google"] = config.Google.Length > 0, ["casa"] = config.Server });
+            }
 
             case "esci":
                 await server.EsciAsync().ConfigureAwait(false);
@@ -359,23 +381,41 @@ public sealed class Ponte
     {
         var email = Testo(o?["email"]);
         var password = o?["password"] is JsonNode p ? (p.GetValueKind() == System.Text.Json.JsonValueKind.String ? p.GetValue<string>() : "") : "";
-        var scritto = Testo(o?["server"]);
-        var indirizzo = scritto.Length > 0 ? IndirizzoServer.Pulito(scritto) : config.Server;
-        if (string.IsNullOrEmpty(indirizzo))
-            return Json(200, Errore(scritto.Length > 0
-                ? "L'indirizzo del server non va bene: deve cominciare con https:// (http:// solo nella rete di casa)"
-                : "Scrivi l'indirizzo del server"));
+        // Gli indirizzi scritti nella pagina (Cambia): vuoti = quelli di adesso. "server" è il nome di prima di casa.
+        var scrittaCasa = Testo(o?["casa"]);
+        if (scrittaCasa.Length == 0) scrittaCasa = Testo(o?["server"]);
+        var scrittoGoogle = Testo(o?["google"]);
+        var togliGoogle = o?["togliGoogle"] is JsonNode tg && tg.GetValueKind() == System.Text.Json.JsonValueKind.True;
+        string? casaNuova = null, googleNuovo = null;
+        if (scrittaCasa.Length > 0)
+        {
+            casaNuova = IndirizzoServer.Pulito(scrittaCasa);
+            if (casaNuova == null) return Json(200, Errore("L'indirizzo di casa non va bene: deve cominciare con http:// nella rete di casa, altrimenti con https://"));
+        }
+        if (scrittoGoogle.Length > 0)
+        {
+            googleNuovo = IndirizzoGoogle.Pulito(scrittoGoogle);
+            if (googleNuovo == null) return Json(200, Errore("L'indirizzo Google non va bene: è quello dello script del foglio, che finisce con /exec"));
+        }
+        else if (togliGoogle)
+        {
+            googleNuovo = "";
+        }
+        var casa = casaNuova ?? config.Server;
+        var google = googleNuovo ?? config.Google;
+        if (casa.Length == 0 && google.Length == 0) return Json(200, Errore("Scrivi l'indirizzo del server"));
         if (email.Length == 0 || password.Length == 0) return Json(200, Errore("Scrivi email e password"));
 
-        var r = await server.AccediAsync(indirizzo, email, password).ConfigureAwait(false);
-        if (r["ok"]?.GetValue<bool>() != true)
+        var r = await server.AccediAsync(casa, google, email, password).ConfigureAwait(false);
+        if (r["ok"]?.GetValueKind() != System.Text.Json.JsonValueKind.True)
         {
             // Senza "rete" l'errore è del server (password sbagliata, troppi tentativi): si mostra com'è.
             return Json(200, r);
         }
         var token = Testo(r["token"]);
         if (token.Length == 0) return Json(200, Errore("Il server non ha dato la chiave d'accesso"));
-        config.SalvaAccesso(indirizzo, token, email);
+        config.SalvaAccesso(casaNuova, googleNuovo, token, email);
+        server.Dimentica();
         Log.Info("entrato come " + (r["utente"]?["ruolo"]?.ToString() ?? "?"));
         return Json(200, new JsonObject
         {
@@ -433,10 +473,13 @@ public sealed class Ponte
         if (id.Length < 10 || !id.All(c => char.IsLetterOrDigit(c) || c is '-' or '_')) return Json(404, Errore("Documento non trovato"));
         var nome = NomeFilePulito(Testo(o?["nome"]));
         if (nome.Length == 0) nome = id;
-        var (stato, _, dati) = await server.FileAsync(id).ConfigureAwait(false);
+        var (stato, _, dati, errore) = await server.FileAsync(id).ConfigureAwait(false);
         if (stato == 401) return Json(200, new JsonObject { ["ok"] = false, ["errore"] = "Accesso scaduto: entra di nuovo", ["accesso"] = false });
         if (stato == 403) return Json(200, new JsonObject { ["ok"] = false, ["errore"] = "Non hai il permesso per vedere questo documento: chiedi al titolare", ["permesso"] = false });
-        if (stato != 200) return Json(200, Errore(stato == 502 ? "Il server non risponde: controlla la rete e riprova" : "Il documento non c'è più"));
+        // Da Google un file oltre 25 MB non passa: si apre dall'ufficio.
+        if (stato == 413) return Json(200, Errore(errore.Length > 0 ? errore : "Il documento è troppo grande per passare da Google: aprilo quando sei in ufficio"));
+        if (stato == 502) return Json(200, new JsonObject { ["ok"] = false, ["errore"] = errore.Length > 0 ? errore : "Il server non risponde: controlla la rete e riprova", ["rete"] = true });
+        if (stato != 200) return Json(200, Errore("Il documento non c'è più"));
         // Fase 5: "Scarica" (salva: true) chiede sempre dove salvarlo, col nome che dice la revisione.
         var salva = o?["salva"] is JsonNode s && s.GetValueKind() == System.Text.Json.JsonValueKind.True;
         if (salva || !Apribili.Contains(Path.GetExtension(nome)))

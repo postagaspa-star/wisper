@@ -4,6 +4,10 @@
 //   Col server di prova (come il programma vero):
 //     node server/src/avvio.js --prova --porta 8400 --dati <cartella temporanea>
 //     node pc/prove/finto-ponte.js [porta] [--server http://localhost:8400]
+//   Fuori casa, dalla porta Google (finto Google + server di prova: node pc/prove/porta-di-prova.js):
+//     node pc/prove/finto-ponte.js [porta] --google http://127.0.0.1:8766/exec [--casa http://127.0.0.1:8767]
+//     con le stesse regole del programma (porta-ufficio.js = Server.cs): senza --casa solo Google;
+//     con --casa prima la prova di casa con la firma, poi Google.
 //   Senza server, coi dati di esempio in memoria (quelli della visita guidata):
 //     node pc/prove/finto-ponte.js [porta] --esempio
 //   poi http://localhost:8790/ ed entra con manuel@esempio.it, laura@esempio.it,
@@ -27,6 +31,8 @@ const opzione = nome => { const i = argomenti.indexOf(nome); return i >= 0 ? arg
 const PORTA = Number(argomenti.find(a => /^\d+$/.test(a)) || 8790);
 const ESEMPIO = argomenti.includes('--esempio');
 const SERVER = (opzione('--server') || process.env.SERVER || 'http://localhost:8400').replace(/\/+$/, '');
+const GOOGLE = opzione('--google') || '';
+const CASA = (opzione('--casa') || '').replace(/\/+$/, '');
 const UI = path.join(__dirname, '..', 'ui');
 const STAMPE = path.join(__dirname, 'stampe');
 const EDGE = 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';
@@ -50,6 +56,10 @@ const scelti = new Map();
 // Chi è entrato. Come nel programma, la chiave resta qui: la pagina non la vede mai.
 const sessione = { token: '', email: '', studio: '', esempio: null };
 const DISPOSITIVO = { disp: 'finto-ponte-' + os.hostname(), dispNome: os.hostname() + ' (finto ponte)', app: 'ufficio prova' };
+// La porta Google (--google): il collegamento con le regole di Server.cs, che tiene la chiave per sé.
+const { Collegamento } = require('./porta-ufficio.js');
+const COLL = GOOGLE ? new Collegamento(Object.assign({ casa: CASA, google: GOOGLE, log: x => console.log('[collegamento] ' + x) }, DISPOSITIVO)) : null;
+const entrato = () => (COLL ? !!COLL.token : !!sessione.token);
 
 // ----------------------------------------------------------------------------- dati di esempio
 let Esempio = null;
@@ -62,6 +72,7 @@ const UTENTI_ESEMPIO = { 'manuel@esempio.it': 'manuel', 'laura@esempio.it': 'lau
 
 // ----------------------------------------------------------------------------- server vero
 async function alServer(metodo, azione, parametri, corpo) {
+  if (COLL) return metodo === 'GET' ? COLL.leggi(azione, Array.from(parametri)) : COLL.scrivi(azione, corpo ? JSON.parse(corpo) : {});
   const testa = { Accept: 'application/json' };
   if (sessione.token) testa.Authorization = 'Bearer ' + sessione.token;
   try {
@@ -89,6 +100,7 @@ async function alServer(metodo, azione, parametri, corpo) {
 
 /** Fase 5: un file in byte al server (POST /carica), con la chiave come il programma. */
 async function alServerCarica(dati, q) {
+  if (COLL) return COLL.token ? COLL.carica(dati, q) : { ok: false, errore: 'Accesso scaduto: entra di nuovo', accesso: false };
   if (!sessione.token) return { ok: false, errore: 'Accesso scaduto: entra di nuovo', accesso: false };
   const u = new URL(SERVER + '/carica');
   for (const [k, v] of Object.entries(q)) if (v) u.searchParams.set(k, v);
@@ -137,6 +149,7 @@ function stampa(html, nome) {
 async function locale(nome, o) {
   switch (nome) {
     case 'stato':
+      if (COLL) return Object.assign({ ok: true, entrato: entrato(), server: CASA, studio: sessione.studio, email: sessione.email, cartellaPdf: STAMPE, versione: '0.5.0', aggiornamento: aggiornamento() }, COLL.stato());
       return { ok: true, entrato: !!(sessione.token || sessione.esempio), server: ESEMPIO ? 'esempio (in memoria)' : SERVER, studio: sessione.studio, email: sessione.email,
         cartellaPdf: STAMPE, versione: '0.5.0', aggiornamento: aggiornamento() };
     case 'accedi': {
@@ -149,6 +162,12 @@ async function locale(nome, o) {
         sessione.studio = sessione.esempio.ana.impostazioni.RAGIONE_SOCIALE;
         return { ok: true, utente: sessione.esempio.io, permessi: sessione.esempio.permessiIo };
       }
+      if (COLL) {
+        const r = await COLL.accedi(o.email, o.password);
+        if (!r.ok) return r;
+        sessione.email = email;
+        return { ok: true, utente: r.utente, permessi: r.permessi };
+      }
       const ris = await alServer('POST', 'accedi', null, JSON.stringify({ email: o.email, password: o.password }));
       if (!ris.ok) return ris;
       sessione.token = ris.token;
@@ -157,11 +176,14 @@ async function locale(nome, o) {
       return { ok: true, utente: ris.utente, permessi: ris.permessi };
     }
     case 'esci':
+      if (COLL) { if (COLL.token) await COLL.scrivi('esci', {}); COLL.token = ''; return { ok: true }; }
       if (!ESEMPIO && sessione.token) await alServer('POST', 'esci', null, '{}');
       sessione.token = '';
       sessione.esempio = null;
       return { ok: true };
     case 'aggiorna': return { ok: true, aggiornamento: aggiornamento() };
+    // Il file .wisper dell'email: qui la finestra di Windows non c'è.
+    case 'collega-file': return { ok: false, annullato: true };
     case 'riavvia': console.log('[riavvia]'); return { ok: true };
     case 'cartella-pdf': return { ok: true };
     case 'apri': return { ok: true };
@@ -225,11 +247,17 @@ http.createServer(async (rq, rs) => {
         if (!sessione.esempio) return json({ ok: false, errore: 'Accesso scaduto: entra di nuovo', accesso: false });
         return json(Esempio.gestisci(sessione.esempio, rq.method, u.pathname + u.search, corpo ? JSON.parse(corpo) : {}));
       }
-      if (!sessione.token) return json({ ok: false, errore: 'Accesso scaduto: entra di nuovo', accesso: false });
-      return json(await alServer(rq.method, azione, u.searchParams, corpo));
+      if (!entrato()) return json({ ok: false, errore: 'Accesso scaduto: entra di nuovo', accesso: false });
+      const r = await alServer(rq.method, azione, u.searchParams, corpo);
+      return json(r, COLL && r && r.rete ? 502 : 200);
     }
     if (u.pathname.startsWith('/file/')) {
       if (ESEMPIO) { rs.writeHead(200, { 'Content-Type': 'image/png' }); return rs.end(IMMAGINE); }
+      if (COLL) {
+        const f = COLL.token ? await COLL.file(u.pathname.slice(6)) : { stato: 401, mime: 'text/plain', dati: Buffer.alloc(0) };
+        rs.writeHead(f.stato, { 'Content-Type': f.mime });
+        return rs.end(f.dati);
+      }
       const r = await fetch(SERVER + u.pathname, { headers: { Authorization: 'Bearer ' + sessione.token } }).catch(() => null);
       if (!r || !r.ok) { rs.writeHead(r ? r.status : 502); return rs.end(); }
       rs.writeHead(200, { 'Content-Type': r.headers.get('content-type') || 'application/octet-stream' });
@@ -257,4 +285,4 @@ http.createServer(async (rq, rs) => {
     console.error(e);
     json({ ok: false, errore: 'finto ponte: ' + e.message }, 500);
   }
-}).listen(PORTA, () => console.log('Finto ponte su http://localhost:' + PORTA + '/ -> ' + (ESEMPIO ? 'dati di esempio in memoria' : SERVER)));
+}).listen(PORTA, () => console.log('Finto ponte su http://localhost:' + PORTA + '/ -> ' + (ESEMPIO ? 'dati di esempio in memoria' : COLL ? 'porta Google' + (CASA ? ' (prima la prova di casa)' : ' (fuori casa)') : SERVER)));

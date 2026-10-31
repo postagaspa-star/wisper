@@ -58,6 +58,8 @@ data class Cliente(
      * cancella un "sì" scritto dal computer.
      */
     val fatturazioneLetta: Boolean = false,
+    /** Fase 6 (§12.8): il fornitore ha la scheda del collaboratore esterno. */
+    val collaboratore: Boolean = false,
 ) {
     /** "C001 · Thiene": la citta', o l'indirizzo se la citta' non c'e' ancora (i clienti del foglio). */
     val luogo: String get() = citta.ifBlank { indirizzo }
@@ -83,6 +85,7 @@ data class Cliente(
         .put("codiceFiscale", codiceFiscale).put("codiceSdi", codiceSdi).put("cap", cap)
         .put("citta", citta).put("provincia", provincia).put("nazione", nazione).put("archiviato", archiviato)
         .apply {
+            if (collaboratore) put("collaboratore", true)
             if (fatturazioneLetta) {
                 put("sostitutoImposta", sostitutoImposta ?: JSONObject.NULL)
                 put("pagamentoGiorni", pagamentoGiorni ?: JSONObject.NULL)
@@ -124,6 +127,7 @@ data class Cliente(
             pagamentoGiorni = c.numero("pagamentoGiorni")?.toInt(),
             pagamentoFineMese = c.booleanoONull("pagamentoFineMese"),
             fatturazioneLetta = c.has("sostitutoImposta") || c.has("pagamentoGiorni") || c.has("pagamentoFineMese"),
+            collaboratore = c.vero("collaboratore"),
         )
     }
 }
@@ -277,6 +281,9 @@ data class Anagrafiche(
     /** Solo nome e ruolo: per responsabili, persone e la frase "Chiedi a". */
     val utenti: List<Utente> = emptyList(),
     val numerazioni: List<Numerazione> = emptyList(),
+    /** Fase 6 (§17.2): con mezzi >= 1 i mezzi e i miei strumenti, per il telefono senza rete. */
+    val mezzi: List<MezzoBreve> = emptyList(),
+    val mieiStrumenti: List<StrumentoMio> = emptyList(),
 ) {
     val euroKm: Double get() = Numeri.leggi(impostazioni[EURO_KM]) ?: 0.0
     val ticketAttivo: Boolean get() = impostazioni[TICKET_ATTIVO].equals("SI", ignoreCase = true)
@@ -453,6 +460,8 @@ data class Anagrafiche(
                 )
             }.filter { it.nome.isNotBlank() },
             impostazioni = impostazioniDaJson(o.optJSONObject("impostazioni")),
+            mezzi = o.optJSONArray("mezzi").oggetti().map(MezzoBreve::daJson).filter { it.id.isNotBlank() },
+            mieiStrumenti = o.optJSONArray("mieiStrumenti").oggetti().map(StrumentoMio::daJson).filter { it.id.isNotBlank() },
         )
 
         /** { EURO_KM: 0.76, AUTO: "Volvo XC40" } -> mappa di testi. Un numero intero resta senza ",0". */
@@ -487,4 +496,6 @@ data class Anagrafiche(
         .put("prestazioni", JSONArray().apply { prestazioni.forEach { put(it.aJson()) } })
         .put("utenti", JSONArray().apply { utenti.forEach { put(it.aJson()) } })
         .put("numerazioni", JSONArray().apply { numerazioni.forEach { put(it.aJson()) } })
+        .put("mezzi", JSONArray().apply { mezzi.forEach { put(it.aJson()) } })
+        .put("mieiStrumenti", JSONArray().apply { mieiStrumenti.forEach { put(it.aJson()) } })
 }

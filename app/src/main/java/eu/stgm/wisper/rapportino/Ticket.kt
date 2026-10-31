@@ -248,6 +248,9 @@ data class Ticket(
     val errore: String = "",
     /** Letto dalla copia sul telefono (senza rete): "letto alle 16:52". */
     val lettoAl: String = "",
+    /** Fase 6 (§17.13): gli strumenti dei suoi rapportini con lo stato di quel giorno, e se uno era scaduto. */
+    val strumenti: List<StrumentoUsato> = emptyList(),
+    val tarataScaduta: Boolean = false,
 ) {
     /** La chiave per le azioni del server: l'id interno, o l'idLocale di uno nato qui. */
     val chiave: String get() = id.ifBlank { idLocale }
@@ -341,6 +344,8 @@ data class Ticket(
                 puoChiudere = o.vero("puoChiudere"),
                 giallo = o.testo("giallo"),
                 lettoAl = o.testo("_lettoAl"),
+                strumenti = StrumentoUsato.lista(o.optJSONArray("strumenti")),
+                tarataScaduta = o.vero("tarataScaduta"),
             )
         }
     }

@@ -43,6 +43,9 @@ object StatoVoce {
 object CategoriaSpesa {
     val ELENCO = listOf("pedaggio", "parcheggio", "carburante", "vitto", "alloggio", "treno", "aereo", "taxi", "materiale", "altro")
 
+    /** Fase 6 (§7.4): le categorie che chiedono "Per quale mezzo". */
+    val CON_MEZZO = setOf("carburante", "pedaggio", "parcheggio")
+
     fun nome(c: String): String = when (c) {
         "carburante" -> "Carburante"
         "pedaggio" -> "Pedaggio"
@@ -604,10 +607,15 @@ data class Spesa(
     /** Fase 5 (§16.2): il ticket della spesa (quelle di un rapportino hanno quello del rapportino). */
     val idTicket: String = "",
     val ticket: String = "",
+    /** Fase 6 (§7.4): il mezzo di carburante, pedaggio e parcheggio, e i km del contachilometri del rifornimento. */
+    val idVeicolo: String = "",
+    val km: Long? = null,
     // ---- del telefono
     val idLocale: String = "",
     val inCoda: Boolean = false,
     val fotoInCoda: Boolean = false,
+    /** Il mezzo si è chiesto (c'erano mezzi e la categoria lo vuole): si manda, anche vuoto. */
+    val mezzoChiesto: Boolean = false,
     val errore: String = "",
 ) {
     val chiave: String get() = if (id.isNotBlank()) "spesa:$id" else idLocale
@@ -637,6 +645,10 @@ data class Spesa(
         if (idCliente.isNotBlank() && idCommessa.isBlank()) o.put("idCliente", idCliente)
         if (idTrasferta.isNotBlank()) o.put("idTrasferta", PonteServer.idJson(idTrasferta))
         if (idTicket.isNotBlank() && idRapportino.isBlank()) o.put("idTicket", PonteServer.idJson(idTicket))
+        if (mezzoChiesto && categoria in CategoriaSpesa.CON_MEZZO) {
+            o.put("idVeicolo", if (idVeicolo.isBlank()) JSONObject.NULL else PonteServer.idJson(idVeicolo))
+            if (categoria == "carburante" && idVeicolo.isNotBlank() && km != null) o.put("km", km)
+        }
         if (bozza) o.put("bozza", true)
         return o
     }
@@ -678,6 +690,8 @@ data class Spesa(
             modificato = o.testo("modificato"),
             idTicket = o.testo("idTicket"),
             ticket = o.testo("ticket"),
+            idVeicolo = o.testo("idVeicolo"),
+            km = o.numero("km")?.toLong(),
         )
 
         /** Una spesa ancora in coda, dal corpo di salvaSpesa: quello che si vede finché il server non risponde. */
@@ -699,6 +713,8 @@ data class Spesa(
                 idCliente = idCliente,
                 cliente = ana.cliente(idCliente)?.nome ?: p.cliente,
                 idTrasferta = t("idTrasferta", p.idTrasferta),
+                idVeicolo = t("idVeicolo", p.idVeicolo),
+                km = if (corpo.has("km")) corpo.numero("km")?.toLong() else p.km,
                 destinazione = t("destinazione", p.destinazione).let { if (it == "mia") Destinazione.PERSONALE else it }.ifBlank { Destinazione.STUDIO },
                 anticipazione = if (corpo.has("anticipazione")) corpo.vero("anticipazione") else p.anticipazione,
                 pagataDaMe = if (corpo.has("pagataDaMe")) corpo.vero("pagataDaMe") else p.pagataDaMe,
@@ -781,6 +797,8 @@ data class Trasferta(
     val idVeicolo: String = "",
     val veicolo: String = "",
     val euroKm: Double? = null,
+    /** Fase 6 (§3.7): fatta con un mezzo dello studio, niente rimborso km. */
+    val mezzoDelloStudio: Boolean = false,
     val rimborsoKm: Double = 0.0,
     val indennita: Double = 0.0,
     val totale: Double = 0.0,
@@ -833,6 +851,7 @@ data class Trasferta(
                 idVeicolo = o.testo("idVeicolo"),
                 veicolo = o.testo("veicolo"),
                 euroKm = o.numero("euroKm"),
+                mezzoDelloStudio = o.vero("mezzoDelloStudio"),
                 rimborsoKm = o.numero("rimborsoKm") ?: 0.0,
                 indennita = o.numero("indennita") ?: 0.0,
                 totale = o.numero("totale") ?: 0.0,
@@ -887,7 +906,13 @@ data class Veicolo(
     val annoAci: Int? = null,
     val attivo: Boolean = true,
     val trasferte: Int = 0,
+    /** Fase 6: "Fiat Doblò GA123BC", di chi è ("studio" o "persona"), fermo per un guasto. */
+    val titolo: String = "",
+    val proprieta: String = "persona",
+    val fermo: Boolean = false,
 ) {
+    val delloStudio: Boolean get() = proprieta == "studio"
+
     fun perSalvare(): JSONObject {
         val o = JSONObject().put("nome", nome.trim()).put("alimentazione", alimentazione.trim())
             .put("euroKm", euroKm ?: JSONObject.NULL).put("attivo", attivo)
@@ -909,6 +934,9 @@ data class Veicolo(
             annoAci = o.numero("annoAci")?.toInt(),
             attivo = o.booleanoONull("attivo") ?: true,
             trasferte = o.optInt("trasferte"),
+            titolo = o.testo("titolo"),
+            proprieta = o.testo("proprieta").ifBlank { "persona" },
+            fermo = o.vero("fermo"),
         )
     }
 }
@@ -1155,11 +1183,17 @@ object TestiCoda {
         CodaInvii.Tipo.SPESA, CodaInvii.Tipo.FOTO_SPESA -> "Il server non ha accettato una spesa"
         CodaInvii.Tipo.TICKET, CodaInvii.Tipo.AZIONE_TICKET, CodaInvii.Tipo.FOTO_TICKET -> "Il server non ha accettato un ticket"
         CodaInvii.Tipo.FAI_SCADENZA -> "Il server non ha accettato una scadenza"
+        // Fase 6: mai il tipo dell'assenza (potrebbe essere una malattia), nemmeno nel titolo.
+        CodaInvii.Tipo.ASSENZA, CodaInvii.Tipo.ANNULLA_ASSENZA -> "Il server non ha accettato una richiesta"
+        CodaInvii.Tipo.KM, CodaInvii.Tipo.FOTO_KM -> "Il server non ha accettato una lettura dei km"
+        CodaInvii.Tipo.GUASTO, CodaInvii.Tipo.FOTO_GUASTO -> "Il server non ha accettato un guasto"
+        CodaInvii.Tipo.PRESTITO, CodaInvii.Tipo.RESTITUISCI -> "Il server non ha accettato un prestito"
+        CodaInvii.Tipo.FIRMA_DPI -> "Il server non ha accettato una firma"
         else -> "Il server non ha accettato un rapportino"
     }
 
     fun titoloNonPartite(ops: List<CodaInvii.Operazione>): String = when {
-        ops.all { !it.fase3 && !it.fase5 } -> "Rapportini non ancora partiti"
+        ops.all { !it.fase3 && !it.fase5 && !it.fase6 } -> "Rapportini non ancora partiti"
         ops.all { it.fase3 } -> "Ore e spese non ancora partite"
         ops.all { it.fase5 } -> "Ticket non ancora partiti"
         else -> "Modifiche non ancora partite"
@@ -1176,16 +1210,19 @@ object TestiCoda {
         // Fase 5 (fase5.md §3.9): "1 ticket e 1 rapportino partono appena c'è rete".
         val ticket = vive.filter { it.tipo == CodaInvii.Tipo.TICKET || it.tipo == CodaInvii.Tipo.AZIONE_TICKET || it.tipo == CodaInvii.Tipo.FOTO_TICKET }.map { it.idLocale }.distinct().size
         val scadenze = vive.count { it.tipo == CodaInvii.Tipo.FAI_SCADENZA }
-        if (ticket > 0 || scadenze > 0) {
-            val rap = vive.filter { !it.fase3 && !it.fase5 }.map { it.idLocale }.distinct().size
+        // Fase 6 (fase6.md §3.13): "1 richiesta di ferie e 2 letture dei km partono appena c'è rete".
+        val sei = vive.filter { it.fase6 }
+        if (ticket > 0 || scadenze > 0 || sei.isNotEmpty()) {
+            val rap = vive.filter { !it.fase3 && !it.fase5 && !it.fase6 }.map { it.idLocale }.distinct().size
             val altre = vive.count { it.fase3 }
+            val pezzi6 = pezziFase6(sei)
             val pezzi = listOfNotNull(
                 ticket.takeIf { it > 0 }?.let { "$it ticket" },
                 rap.takeIf { it > 0 }?.let { if (it == 1) "1 rapportino" else "$it rapportini" },
                 scadenze.takeIf { it > 0 }?.let { if (it == 1) "1 scadenza" else "$it scadenze" },
                 altre.takeIf { it > 0 }?.let { if (it == 1) "1 riga di ore o spese" else "$it righe di ore o spese" },
-            )
-            val tante = ticket + rap + scadenze + altre > 1
+            ) + pezzi6.map { it.second }
+            val tante = ticket + rap + scadenze + altre + pezzi6.sumOf { it.first } > 1
             return pezzi.joinToString(", ").replace(Regex(", ([^,]+)$"), " e $1") + if (tante) " partono appena c'è rete" else " parte appena c'è rete"
         }
         val rapportini = vive.count { !it.fase3 }
@@ -1200,6 +1237,37 @@ object TestiCoda {
             ore > 0 -> frase(ore, "riga di ore", "righe di ore")
             else -> frase(spese, "spesa", "spese")
         }
+    }
+
+    /**
+     * I pezzi della fase 6, ognuno col suo numero: le richieste (il tipo solo per ferie
+     * e permessi: una malattia è "una richiesta", senza dirlo), le letture dei km (la
+     * foto va con la sua lettura), i guasti (con le foto), i prestiti, le restituzioni,
+     * le firme dei DPI.
+     */
+    fun pezziFase6(ops: List<CodaInvii.Operazione>): List<Pair<Int, String>> {
+        fun quanti(n: Int, uno: String, tanti: String) = n to (if (n == 1) "1 $uno" else "$n $tanti")
+        val out = mutableListOf<Pair<Int, String>>()
+        val richieste = ops.filter { it.tipo == CodaInvii.Tipo.ASSENZA || it.tipo == CodaInvii.Tipo.ANNULLA_ASSENZA }
+        if (richieste.isNotEmpty()) {
+            val tipi = richieste.map { if (it.tipo == CodaInvii.Tipo.ASSENZA) it.corpoJson().testo("tipo") else "" }.toSet()
+            out += when (tipi.singleOrNull()) {
+                "ferie" -> quanti(richieste.size, "richiesta di ferie", "richieste di ferie")
+                "permesso" -> quanti(richieste.size, "richiesta di permesso", "richieste di permesso")
+                else -> quanti(richieste.size, "richiesta", "richieste")
+            }
+        }
+        val km = ops.filter { it.tipo == CodaInvii.Tipo.KM || it.tipo == CodaInvii.Tipo.FOTO_KM }.map { it.idLocale }.distinct().size
+        if (km > 0) out += quanti(km, "lettura dei km", "letture dei km")
+        val guasti = ops.filter { it.tipo == CodaInvii.Tipo.GUASTO || it.tipo == CodaInvii.Tipo.FOTO_GUASTO }.map { it.idLocale }.distinct().size
+        if (guasti > 0) out += quanti(guasti, "guasto", "guasti")
+        val prestiti = ops.count { it.tipo == CodaInvii.Tipo.PRESTITO }
+        if (prestiti > 0) out += quanti(prestiti, "prestito", "prestiti")
+        val rientri = ops.count { it.tipo == CodaInvii.Tipo.RESTITUISCI }
+        if (rientri > 0) out += quanti(rientri, "restituzione", "restituzioni")
+        val firme = ops.count { it.tipo == CodaInvii.Tipo.FIRMA_DPI }
+        if (firme > 0) out += quanti(firme, "firma", "firme")
+        return out
     }
 }
 

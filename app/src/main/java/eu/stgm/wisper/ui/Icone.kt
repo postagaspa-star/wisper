@@ -160,4 +160,14 @@ object Icone {
     val triangolo = tratto("triangolo", 2.2f, "M12 4L21 19H3z")
     val disco = tratto("disco", 2.2f, "M4 6h16v5H4z", "M4 13h16v5H4z", "M7 8.5h.01M7 15.5h.01")
     val importa = tratto("importa", 2.2f, "M12 21V9M7 14l5-5 5 5M5 3h14")
+
+    // Fase 6 (docs/prototipo/Gestionale-fase6.html): persone, mezzi, strumenti, collaboratori.
+    val persona = tratto("persona", 2.2f, "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8z", "M4 21a8 8 0 0 1 16 0")
+    val mezzo = tratto("mezzo", 2.2f, "M2 7h12v9H2z", "M14 10h4l3 3v3h-7", "M6 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4z", "M17 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4z")
+    val collab = tratto("collab", 2.2f, "M8 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6z", "M16 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6z", "M2 20a6 6 0 0 1 12 0", "M10 20a6 6 0 0 1 12 0")
+    val misura = tratto("misura", 2.2f, "M12 15l3.5-4.5", "M4 18a8 8 0 1 1 16 0z")
+    val valigia = tratto("valigia", 2.2f, "M4 8h16v11H4z", "M9 8V5h6v3", "M4 13h16")
+    val attrezzo = tratto("attrezzo", 2.2f, "M14 4l6 6-3 3-6-6z", "M11 7l-8 8 3 3 8-8")
+    val storia = tratto("storia", 2.2f, "M3 12a9 9 0 1 0 3-6.7L3 8", "M3 3v5h5", "M12 7v5l3 2")
+    val formazione = tratto("formazione", 2.2f, "M5 4h14v16H5z", "M12 8v8", "M8 12h8")
 }

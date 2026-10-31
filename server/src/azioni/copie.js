@@ -14,7 +14,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const zlib = require('node:zlib');
-const { Rifiuto, testo, numero, adesso, oggi, dataOraIso, istante, messaggio } = require('../utili');
+const { Rifiuto, testo, numero, adesso, adessoMs, oggi, dataOraIso, istante, messaggio } = require('../utili');
 
 const GIORNI_TENUTE = 30;
 const MESI_TENUTE = 12;
@@ -161,7 +161,9 @@ module.exports = {
     let tolte = 0;
     for (const f of copie) {
       const m = f.match(RE_COPIA);
-      const giorni = (ora - new Date(m[1] + '-' + m[2] + '-' + m[3] + 'T12:00:00').getTime()) / 86400000;
+      // Giorni interi di calendario: fra due mezzogiorni a cavallo del cambio dell'ora ci sono 30 giorni e un'ora, e
+      // senza arrotondare la copia di 30 giorni fa spariva un giorno prima (da fine ottobre a fine novembre).
+      const giorni = Math.round((ora - new Date(m[1] + '-' + m[2] + '-' + m[3] + 'T12:00:00').getTime()) / 86400000);
       const tieni = giorni <= GIORNI_TENUTE || (primaDelMese[m[1] + m[2]] === f && giorni <= MESI_TENUTE * 31);
       if (!tieni) {
         fs.rmSync(path.join(this.cartellaCopie, f));
@@ -232,6 +234,8 @@ module.exports = {
       oraCopia: this.oraCopia || '02:30',
       prossima: this.prossimaCopia ? dataOraIso(this.prossimaCopia) : '',
       postino: this.postino ? this.postino.descrizione() : 'non configurato',
+      // La porta Google (porta.js): "Collegamento a Google: attivo, ultimo contatto alle 10:42" in Amministrazione.
+      google: this.porta ? this.porta.stato() : { stato: 'non collegato', frase: 'Non collegato', ultimoContatto: '' },
     };
   },
 
@@ -245,7 +249,7 @@ module.exports = {
     const fatta = this.db.riga("SELECT MAX(substr(quando, 1, 10)) giorno FROM copie WHERE nota = 'notturna'");
     this.ultimaNotturna = fatta && fatta.giorno ? fatta.giorno : '';
     const controlla = () => {
-      const adesso = new Date();
+      const adesso = new Date(adessoMs());
       const [h, m] = this.oraCopia.split(':').map(Number);
       const soglia = new Date(adesso.getFullYear(), adesso.getMonth(), adesso.getDate(), h, m);
       this.prossimaCopia = this.ultimaNotturna === oggi() || adesso < soglia
@@ -264,6 +268,9 @@ module.exports = {
           if (r) console.log('[contratti] ' + r + ' rinnovati da soli');
           const t = this.db.transazione(() => this.generaTicketDaScadenze());
           if (t) console.log('[ticket] ' + t + ' ticket programmati nuovi');
+          // Fase 6: l'accesso delle persone uscite si chiude dalla fine del loro ultimo giorno.
+          const u = this.db.transazione(() => this.applicaUscite());
+          if (u) console.log('[persone] ' + u + ' accessi chiusi: uscita');
         } catch (err) {
           console.error('[ricorrenze] non riuscito: ' + messaggio(err));
         }

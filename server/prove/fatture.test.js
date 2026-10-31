@@ -10,7 +10,11 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { serverDiProva, cartellaNuova, PNG } = require('./aiuto');
+const { serverDiProva, cartellaNuova, PNG, giornoDeiPrototipi } = require('./aiuto');
+// Le fatture 38, 39 e 45/2026, la W-14 da emettere entro il 1/11 e i rapportini di settembre hanno date fisse (la
+// storia del prototipo): queste prove le guardano dal giorno del prototipo, giovedi' 22/10/2026, qualunque giorno sia
+// (anche con WISPER_OGGI_PROVA). Le altre prove girano sul giorno vero.
+giornoDeiPrototipi();
 const { Wisper } = require('../src/wisper');
 const { semina } = require('../src/prova');
 const { leggiFatturePA } = require('../src/fatturapa');

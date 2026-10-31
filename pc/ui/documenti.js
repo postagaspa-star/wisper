@@ -151,6 +151,24 @@
   }
 
   /**
+   * Fase 6: la riga "Strumenti" del rapportino, dagli strumenti congelati quel giorno (nome, matricola, scadenza
+   * della taratura di allora, anche se passata): "Misuratore di terra MT-500 matr. 22-0451, tarato fino al
+   * 15/11/2026 · Multimetro 87V matr. 6011-2381, tarato fino al 16/10/2026". Vuota senza strumenti.
+   */
+  function rigaStrumenti(strumenti) {
+    return (Array.isArray(strumenti) ? strumenti : []).map(s => {
+      const verifica = !!s.verifica;
+      const nome = String(s.nome || '') + (s.matricola ? ' matr. ' + s.matricola : '');
+      let stato;
+      if (s.statoAllora === 'non_conforme') stato = 'non conforme';
+      else if (s.scadeAllora) stato = (verifica ? 'verificato' : 'tarato') + ' fino al ' + C.data(s.scadeAllora);
+      else if (s.statoAllora === 'senza') stato = (verifica ? 'verifica' : 'taratura') + ' non scritta';
+      else stato = '';
+      return nome + (stato ? ', ' + stato : '');
+    }).filter(Boolean).join(' · ');
+  }
+
+  /**
    * Il rapportino singolo.
    * opzioni: conImporti (il conto, di solito no: al cliente serve il lavoro), conFoto (gli scontrini in fondo).
    */
@@ -179,6 +197,9 @@
       cella('Chilometri', C.numero(r.km) + ' km') +
       '</div>';
     corpo += '<div class="blocco"><div class="etichetta">Attività svolte</div><div class="testo">' + esc(r.descrizione || '') + '</div></div>';
+    // Fase 6 (fase6.md §3.9): la riga Strumenti solo quando ce ne sono; i rapportini senza strumenti restano identici.
+    const strumenti = rigaStrumenti(r.strumenti);
+    if (strumenti) corpo += '<div class="blocco"><div class="etichetta">Strumenti</div><div class="testo">' + esc(strumenti) + '</div></div>';
     if (C.num(r.spese) > 0 || r.noteSpese) {
       corpo += '<div class="blocco"><div class="etichetta">Spese</div><div class="testo">' +
         esc(C.euro(r.spese) + (r.noteSpese ? ' · ' + r.noteSpese : '')) +
@@ -681,7 +702,7 @@
     return pagina(imp, 'Contratto di assistenza ' + (k.numero || ''), corpo);
   }
 
-  const Documenti = { rapportino, riepilogo, preventivo, incarico, numeroPreventivo, esc, idDaUrl, sezioniProspetto, prospettoFattura, avvisoParcella, lettera, contrattoAssistenza };
+  const Documenti = { rapportino, rigaStrumenti, riepilogo, preventivo, incarico, numeroPreventivo, esc, idDaUrl, sezioniProspetto, prospettoFattura, avvisoParcella, lettera, contrattoAssistenza };
   if (typeof module !== 'undefined' && module.exports) module.exports = Documenti;
   else radice.WisperDocumenti = Documenti;
 })(typeof window !== 'undefined' ? window : globalThis);

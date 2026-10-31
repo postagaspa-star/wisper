@@ -339,6 +339,17 @@ private fun Wisper(archivio: Archivio, attivita: ComponentActivity) {
                     sezioneNome = Sezione.TICKET.name
                     pagina = "sezioni"
                 }
+                // Fase 6 (fase6.md §12.8): Mezzi › Il mio (lo strumento scaduto) e Persone › Ferie e permessi (il giallo).
+                "mezzi", "persone" -> {
+                    modulo = null
+                    scope.launch { cassetto.close() }
+                    val s = if (p == "mezzi") Sezione.MEZZI else Sezione.PERSONE
+                    if (p == "mezzi") eu.stgm.wisper.ui.RicordoMezzi.segmento = eu.stgm.wisper.ui.SegmentoMezzi.MIO
+                    else eu.stgm.wisper.ui.RicordoPersone.segmento = eu.stgm.wisper.ui.SegmentoPersone.FERIE
+                    mettiPila(s, emptyList())
+                    sezioneNome = s.name
+                    pagina = "sezioni"
+                }
                 else -> pagina = p
             }
         }
@@ -488,7 +499,13 @@ private fun Wisper(archivio: Archivio, attivita: ComponentActivity) {
                                                 // Fase 5 (§16.18): i ticket che nessuno ha preso; i documenti da approvare, solo per chi approva.
                                                 Sezione.TICKET to (dashboardLetta?.fase5?.ticketNonAssegnati ?: 0),
                                                 Sezione.DOCUMENTI to if (sessione.puoApprovareDocumenti) (dashboardLetta?.fase5?.documentiDaApprovare ?: 0) else 0,
+                                                // Fase 6 (§11.1): le richieste da approvare (chi approva); tarature scadute, mezzi fermi e
+                                                // prestiti in ritardo; i collaboratori con un incarico affidato e documenti scaduti.
+                                                Sezione.PERSONE to if (sessione.puoApprovareAssenze) (dashboardLetta?.fase6?.ferieDaApprovare ?: 0) else 0,
+                                                Sezione.MEZZI to (dashboardLetta?.fase6?.numerinoMezzi ?: 0),
+                                                Sezione.COLLABORATORI to if (sessione.esterno) 0 else (dashboardLetta?.fase6?.nonInRegola ?: 0),
                                             ),
+                                            esterno = if (sessione.esterno) sessione.interfaccia.esternoNome.ifBlank { "collaboratore" } else "",
                                             collegato = aggiornamento.errore.isBlank() && aggiornamento.ultimo != null,
                                             statoCollegamento = when {
                                                 aggiornamento.inCorso && aggiornamento.ultimo == null -> "Mi collego…"
@@ -657,8 +674,29 @@ private fun PaginaSezione(
             Sezione.BANCHE -> eu.stgm.wisper.ui.SchermataBanche(dati, nav)
             Sezione.DOCUMENTI -> eu.stgm.wisper.ui.SchermataDocumenti(dati, nav)
             Sezione.TICKET -> eu.stgm.wisper.ui.SchermataTicket(dati, nav)
+            Sezione.PERSONE -> eu.stgm.wisper.ui.SchermataPersone(dati, nav)
+            Sezione.MEZZI -> eu.stgm.wisper.ui.SchermataMezzi(dati, nav)
+            Sezione.COLLABORATORI -> eu.stgm.wisper.ui.SchermataCollaboratori(dati, nav)
             Sezione.AMMINISTRAZIONE -> SchermataAmministrazione(dati, archivio, nav)
         }
+        // Fase 6: persone, mezzi e attrezzature, collaboratori esterni (docs/gestionale/fase6.md §12)
+        rotta == "persona-nuova" -> eu.stgm.wisper.ui.SchermataModificaPersona(dati, nav, null)
+        rotta.startsWith("persona-modifica/") -> eu.stgm.wisper.ui.SchermataModificaPersona(dati, nav, rotta.removePrefix("persona-modifica/"))
+        rotta.startsWith("persona/") -> eu.stgm.wisper.ui.SchermataPersona(dati, nav, rotta.removePrefix("persona/"))
+        rotta == "assenza-nuova" -> eu.stgm.wisper.ui.SchermataChiedi(dati, nav)
+        rotta.startsWith("accessi-riservati/") -> eu.stgm.wisper.ui.SchermataAccessiRiservati(dati, nav, rotta.removePrefix("accessi-riservati/"))
+        rotta.startsWith("dpi-consegna/") -> eu.stgm.wisper.ui.SchermataConsegnaDpi(dati, nav, rotta.removePrefix("dpi-consegna/"))
+        rotta == "mezzo-nuovo" -> eu.stgm.wisper.ui.SchermataNuovoMezzo(dati, nav)
+        rotta.startsWith("mezzo/") -> eu.stgm.wisper.ui.SchermataMezzo(dati, nav, rotta.removePrefix("mezzo/"))
+        rotta.startsWith("mezzi-altro/") -> eu.stgm.wisper.ui.SchermataAltroMezzi(dati, nav, rotta.removePrefix("mezzi-altro/"))
+        rotta == "strumento-nuovo" -> eu.stgm.wisper.ui.SchermataNuovoStrumento(dati, nav)
+        rotta.startsWith("strumento/") -> eu.stgm.wisper.ui.SchermataStrumento(dati, nav, rotta.removePrefix("strumento/"))
+        rotta.startsWith("guasto-nuovo/") -> rotta.removePrefix("guasto-nuovo/").split('/').let { p -> eu.stgm.wisper.ui.SchermataGuasto(dati, nav, p.first(), p.getOrElse(1) { "" }) }
+        rotta == "collaboratore-nuovo" -> eu.stgm.wisper.ui.SchermataNuovoCollaboratore(dati, nav)
+        rotta.startsWith("collaboratore/") -> eu.stgm.wisper.ui.SchermataCollaboratore(dati, nav, rotta.removePrefix("collaboratore/"))
+        rotta.startsWith("incarico-nuovo/") -> eu.stgm.wisper.ui.SchermataNuovoIncarico(dati, nav, rotta.removePrefix("incarico-nuovo/"))
+        rotta.startsWith("incarico-lettera/") -> eu.stgm.wisper.ui.SchermataLetteraIncarico(dati, nav, rotta.removePrefix("incarico-lettera/"))
+        rotta.startsWith("incarico/") -> eu.stgm.wisper.ui.SchermataIncarico(dati, nav, rotta.removePrefix("incarico/"))
         // Fase 5: ticket e assistenza (docs/gestionale/fase5.md §12.1)
         rotta == "ticket" -> eu.stgm.wisper.ui.SchermataTicket(dati, nav)
         rotta.startsWith("ticket-nuovo") -> eu.stgm.wisper.ui.SchermataNuovoTicket(dati, nav, rotta.removePrefix("ticket-nuovo").removePrefix("/"))

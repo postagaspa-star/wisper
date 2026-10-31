@@ -18,14 +18,15 @@
 'use strict';
 
 const {
-  Rifiuto, senzaPermesso, testo, numero, numeroONull, centesimi, adesso, oggi, piuGiorni, dataIso, dataDaIso, dataOraIso,
+  Rifiuto, senzaPermesso, testo, numero, numeroONull, centesimi, adesso, adessoMs, oggi, piuGiorni, dataIso, dataDaIso, dataOraIso,
 } = require('../utili');
 const { oreDaOrari, minutiDa, oraDaMinuti, costoOrarioDi, oreDelRapportino, contaNeiConti, rimborsoTrasferta, costoCommessa } = require('../conti');
 
 const STATI = ['bozza', 'da_approvare', 'approvata', 'respinta'];
 const TIPI_ORE = ['ordinaria', 'straordinaria'];
 const APPROVAZIONI = ['collaboratori', 'tutti', 'nessuno'];
-const TIPI_VOCE = ['ore', 'rapportino', 'spesa', 'trasferta'];
+const TIPI_VOCE = ['ore', 'rapportino', 'spesa', 'trasferta', 'assenza'];
+const vuotoIncarico = v => v === undefined || v === null || v === '';
 
 const si = v => v === true || v === 1 || v === '1' || v === 'true';
 const dataBreve = iso => (iso ? iso.slice(8, 10) + '/' + iso.slice(5, 7) : '');
@@ -101,7 +102,8 @@ module.exports = {
     if (regola === 'nessuno' || utenteId === null || utenteId === undefined) return false;
     if (regola === 'tutti') return true;
     const u = this.db.riga('SELECT ruolo FROM utenti WHERE id = ?', utenteId);
-    return !!u && u.ruolo === 'collaboratore';
+    // Fase 6: le cose degli esterni vanno in approvazione come quelle dei collaboratori.
+    return !!u && (u.ruolo === 'collaboratore' || u.ruolo === 'esterno');
   },
 
   /**
@@ -127,6 +129,9 @@ module.exports = {
     // Fase 5: i numeri dei ticket.
     a.ticket = {};
     this.db.righe('SELECT id, numero FROM ticket').forEach(t => { a.ticket[t.id] = t.numero; });
+    // Fase 6: gli incarichi (numero e collaboratore).
+    a.incarichi = {};
+    this.db.righe('SELECT i.id, i.numero, s.nome FROM incarichi i LEFT JOIN soggetti s ON s.id = i.soggetto_id').forEach(i => { a.incarichi[i.id] = { numero: i.numero, collaboratore: i.nome || '' }; });
     return a;
   },
 
@@ -162,9 +167,9 @@ module.exports = {
 
   // ------------------------------------------------------------------ ore: lettura
 
-  /** Un collaboratore vede solo le sue ore. */
+  /** Un collaboratore vede solo le sue ore (le righe senza persona, dei collaboratori esterni senza accesso, no). */
   vedeDi(utenteId) {
-    return !this.soloSuoi() || utenteId === this.chi().utente.id;
+    return !this.soloSuoi() || (utenteId !== null && utenteId !== undefined && utenteId === this.chi().utente.id);
   },
 
   rigaOre(id) {
@@ -190,8 +195,11 @@ module.exports = {
     const extra = a.prestazioni || {};
     const attivita = a.attivita || {};
     const bloccata = this.oreBloccate(r);
+    // Fase 6: le ore di un collaboratore esterno senza accesso non hanno persona: il nome e' quello del collaboratore.
+    const inc = r.incarico_id ? (a.incarichi || {})[r.incarico_id] || null : null;
     return {
-      id: r.id, idUtente: r.utente_id, utente: a.utenti[r.utente_id] || '', data: r.data,
+      id: r.id, idUtente: r.utente_id, utente: r.utente_id ? a.utenti[r.utente_id] || '' : (inc ? inc.collaboratore : ''), data: r.data,
+      idIncarico: r.incarico_id === null || r.incarico_id === undefined ? null : r.incarico_id, incarico: inc ? inc.numero : '',
       inizio: r.inizio, fine: r.fine, pausaMinuti: r.pausa_minuti, ore: numero(r.ore),
       giornoDopo: !!(r.inizio && r.fine && r.fine < r.inizio),
       idCommessa: m ? m.id : r.commessa_id, commessa: m ? m.descrizione : '', idCliente: m ? m.idCliente : '',
@@ -288,7 +296,16 @@ module.exports = {
       const h = numero(r.ore_totali) || numero(r.ore_lavoro) + numero(r.ore_extra) + numero(r.ore_viaggio);
       oreRap[g] = Math.round(((oreRap[g] || 0) + h) * 100) / 100;
     }
-    const giorni = da && a ? giorniTra(da, a).map(g => ({ data: g, ore: perGiorno[g] || 0, oreRapportini: oreRap[g] || 0 })) : [];
+    // Fase 6: il giorno di assenza della persona ("Ferie", "Assente", o ""), quando le ore sono di una persona sola.
+    const persona = utente !== null ? this.personaDiUtente(utente) : null;
+    const giorni = da && a ? giorniTra(da, a).map(g => {
+      const o = { data: g, ore: perGiorno[g] || 0, oreRapportini: oreRap[g] || 0, assenza: '' };
+      if (persona) {
+        const as = this.assenzeDelGiorno(persona.id, g)[0];
+        if (as) o.assenza = this.tipoVistoAssenza(as);
+      }
+      return o;
+    }) : [];
     const valide = ore.filter(o => o.stato !== 'respinta');
     const somma = l => Math.round(l.reduce((s, o) => s + o.ore, 0) * 100) / 100;
     return {
@@ -332,13 +349,22 @@ module.exports = {
       if (b) throw new Rifiuto(b);
     }
     let utente = prima ? prima.utente_id : io;
-    if (x.idUtente !== undefined && testo(x.idUtente) !== '' && Number(x.idUtente) !== utente) {
+    // Fase 6: le ore di un collaboratore esterno senza accesso (+ Ore del collaboratore): senza persona, con l'incarico.
+    let incarico = prima && prima.incarico_id ? this.db.riga('SELECT * FROM incarichi WHERE id = ?', prima.incarico_id) : null;
+    const senzaUtente = prima ? prima.utente_id === null : (!testo(x.idUtente) && !vuotoIncarico(x.idIncarico) && !this.eEsterno());
+    if (senzaUtente) {
+      if (this.livello('collaboratori') < 2) throw senzaPermesso('scrivere le ore dei collaboratori esterni');
+      if (!prima) incarico = this.incaricoPerRicevuta(x.idIncarico, null);
+      if (!incarico || ['affidato', 'concluso'].indexOf(incarico.stato) < 0) throw new Rifiuto('L\'incarico non è affidato: affidalo prima di scrivere le ore');
+      utente = null;
+    }
+    if (!senzaUtente && x.idUtente !== undefined && testo(x.idUtente) !== '' && Number(x.idUtente) !== utente) {
       if (this.soloSuoi()) throw senzaPermesso('registrare le ore degli altri');
       if (prima) throw new Rifiuto('Le ore non cambiano persona: toglile e scrivile per l\'altra persona');
       utente = Number(x.idUtente);
       if (!this.db.riga('SELECT id FROM utenti WHERE id = ?', utente)) throw new Rifiuto('Persona ' + utente + ' non trovata');
     }
-    if (utente === null) throw new Rifiuto('Di chi sono queste ore? Manca la persona');
+    if (utente === null && !senzaUtente) throw new Rifiuto('Di chi sono queste ore? Manca la persona');
 
     const bozza = si(x.bozza);
     const data = x.data !== undefined && testo(x.data) ? dataDaIso(x.data) : prima ? prima.data : oggi();
@@ -353,7 +379,17 @@ module.exports = {
       const vecchio = this.db.riga('SELECT * FROM ticket WHERE id = ?', prima.ticket_id);
       if (vecchio) this.controllaTicketLibero(vecchio, false);
     }
-    const codiceCommessa = x.idCommessa !== undefined ? x.idCommessa : prima ? prima.commessa_id : (tk ? tk.commessa_id : '');
+    let codiceCommessa = x.idCommessa !== undefined ? x.idCommessa : prima ? prima.commessa_id : (tk ? tk.commessa_id : '');
+    if (senzaUtente) codiceCommessa = incarico.commessa_id;
+    // Fase 6: l'esterno scrive solo sulle commesse dei suoi incarichi (l'incarico si mette da solo).
+    if (this.eEsterno()) incarico = this.incaricoDellEsterno(codiceCommessa);
+    else if (!senzaUtente && utente !== null) {
+      const u = this.db.riga('SELECT ruolo, soggetto_id FROM utenti WHERE id = ?', utente);
+      if (u && u.ruolo === 'esterno') {
+        incarico = this.db.riga("SELECT * FROM incarichi WHERE soggetto_id = ? AND commessa_id = ? COLLATE NOCASE AND stato = 'affidato' ORDER BY id DESC LIMIT 1", u.soggetto_id, testo(codiceCommessa));
+        if (!incarico) throw new Rifiuto('Non ha un incarico su ' + testo(codiceCommessa).toUpperCase() + ': affidaglielo prima');
+      }
+    }
     let commessa = this.commessaPerCodice(codiceCommessa);
     const pa = this.prestazioneEAttivita(x, prima, commessa);
     commessa = pa.commessa;
@@ -392,13 +428,15 @@ module.exports = {
     const fatturabile = x.fatturabile !== undefined ? si(x.fatturabile) : prima ? prima.fatturabile === 1 : !!commessa;
     const descrizione = x.descrizione !== undefined ? testo(x.descrizione) : prima ? prima.descrizione : '';
     const idCommessa = commessa ? commessa.id : '';
-    // Il costo orario si congela alla nascita; si rifa' solo se cambia la commessa (come i rapportini).
+    // Il costo orario si congela alla nascita; si rifa' solo se cambia la commessa (come i rapportini). Dalla fase 6 viene
+    // dalla persona alla data del lavoro (senza un suo costo, la regola di prima); esterni e ore senza persona 0.
     const stessaCommessa = prima && String(prima.commessa_id).toUpperCase() === idCommessa.toUpperCase();
-    const costoOrario = stessaCommessa ? prima.costo_orario : this.costoOrarioPer(commessa);
+    const costoOrario = stessaCommessa ? prima.costo_orario : this.costoOrarioLavoro({ idUtente: utente, senzaUtente, data, commessa });
 
     const v = {
       utente_id: utente, data, inizio, fine, pausa_minuti: pausa, ore, commessa_id: idCommessa, prestazione_id: pa.idPrest,
       attivita_id: pa.idAtt, descrizione, fatturabile: fatturabile ? 1 : 0, tipo, costo_orario: costoOrario, ticket_id: tk ? tk.id : null,
+      incarico_id: incarico ? incarico.id : null,
     };
     const cambiato = !prima || Object.keys(v).some(k => diverso(prima[k], v[k]));
     Object.assign(v, this.statoDopoSalvataggio(prima, utente, bozza, cambiato));
@@ -408,7 +446,7 @@ module.exports = {
       id = prima.id;
       this.aggiorna('ore', id, Object.assign(v, { modificato: ora }));
     } else {
-      id = this.inserisci('ore', Object.assign(v, { id_locale: testo(x.idLocale) || null, creato: ora, modificato: ora }));
+      id = this.inserisci('ore', Object.assign(v, { id_locale: testo(x.idLocale) || null, creata_da: io, creato: ora, modificato: ora }));
     }
     for (const t of new Set([prima && prima.ticket_id, tk && tk.id].filter(Boolean))) this.ricalcolaIntervento(t);
     return { ok: true, riga: this.orePerId(id) };
@@ -466,7 +504,7 @@ module.exports = {
       partitoIl: dataOraIso(t.partito_il), idCommessa: m ? m.id : t.commessa_id, commessa: m ? m.descrizione : '',
       idPrestazione: t.prestazione_id === null ? null : t.prestazione_id, idAttivita: t.attivita_id === null ? null : t.attivita_id,
       descrizione: t.descrizione, fatturabile: t.fatturabile === 1,
-      secondi: Math.max(0, Math.floor((Date.now() - Date.parse(t.partito_il)) / 1000)),
+      secondi: Math.max(0, Math.floor((adessoMs() - Date.parse(t.partito_il)) / 1000)),
     };
   },
 
@@ -491,6 +529,8 @@ module.exports = {
         ': fermalo prima di avviarne un altro', { timer: t });
     }
     let commessa = this.commessaPerCodice(d.idCommessa);
+    // Fase 6: l'esterno solo sulle commesse dei suoi incarichi.
+    if (this.eEsterno()) this.incaricoDellEsterno(d.idCommessa);
     const pa = this.prestazioneEAttivita(d, null, commessa);
     commessa = pa.commessa;
     this.inserisci('timer', {
@@ -510,7 +550,7 @@ module.exports = {
     const t = this.mioTimer();
     if (!t) throw new Rifiuto('Il timer non è acceso');
     const partito = new Date(t.partito_il);
-    const ms = Date.now() - partito.getTime();
+    const ms = adessoMs() - partito.getTime();
     const data = dataIso(partito);
     const inizio = dataOraIso(t.partito_il).slice(11, 16);
     const fineOra = dataOraIso(adesso()).slice(11, 16);
@@ -525,10 +565,15 @@ module.exports = {
     }
     const commessa = t.commessa_id ? this.commessa(t.commessa_id) : null;
     const ora = adesso();
+    let incarico = null;
+    if (this.eEsterno() && commessa) {
+      try { incarico = this.incaricoDellEsterno(commessa.id); } catch (e) { incarico = null; }
+    }
     const id = this.inserisci('ore', {
       utente_id: t.utente_id, data, inizio, fine, pausa_minuti: 0, ore, commessa_id: commessa ? commessa.id : '',
       prestazione_id: t.prestazione_id, attivita_id: t.attivita_id, descrizione: t.descrizione, fatturabile: t.fatturabile,
-      tipo: 'ordinaria', costo_orario: this.costoOrarioPer(commessa), stato: 'bozza', dal_timer: 1, creato: ora, modificato: ora,
+      tipo: 'ordinaria', costo_orario: this.costoOrarioLavoro({ idUtente: t.utente_id, data, commessa }), stato: 'bozza', dal_timer: 1,
+      incarico_id: incarico ? incarico.id : null, creata_da: t.utente_id, creato: ora, modificato: ora,
     });
     this.db.esegui('DELETE FROM timer WHERE utente_id = ?', t.utente_id);
     this.annota('timer', t.utente_id, { partito_il: t.partito_il, commessa_id: t.commessa_id }, null, 'fermato: ore ' + id + ' in bozza');
@@ -541,7 +586,7 @@ module.exports = {
 
   /** Una cosa da approvare: la riga, il modulo, chi l'ha scritta, lo stato con le parole delle ore. */
   voceApprovabile(tipo, id) {
-    if (TIPI_VOCE.indexOf(tipo) < 0) throw new Rifiuto('Tipo: ore, rapportino, spesa o trasferta');
+    if (TIPI_VOCE.indexOf(tipo) < 0) throw new Rifiuto('Tipo: ore, rapportino, spesa, trasferta o assenza');
     if (tipo === 'ore') {
       const r = this.db.riga('SELECT * FROM ore WHERE id = ?', Number(id) || 0);
       if (!r || r.tolta) throw new Rifiuto('Ore ' + testo(id) + ' non trovate');
@@ -600,7 +645,17 @@ module.exports = {
     const fatte = [];
     for (const x of voci) {
       const tipo = testo(x && x.tipo);
-      if (TIPI_VOCE.indexOf(tipo) < 0) throw new Rifiuto('Tipo: ore, rapportino, spesa o trasferta');
+      if (TIPI_VOCE.indexOf(tipo) < 0) throw new Rifiuto('Tipo: ore, rapportino, spesa, trasferta o assenza');
+      // Fase 6: le assenze (ferie, permessi) hanno la loro strada (assenze.js), con lo stesso schema e lo stesso Annulla.
+      if (tipo === 'assenza') {
+        if (!this.puoApprovareAssenze()) throw senzaPermesso('approvare le assenze');
+        const va = this.voceAssenza(x.id);
+        const nuovo = this.decisioneAssenza(va, decisione, motivo, io, ora);
+        if (!nuovo) { fatte.push({ tipo: 'assenza', id: va.id, stato: va.stato, saltata: true }); continue; }
+        this.aggiorna('assenze', va.id, Object.assign(nuovo, { modificato: ora }), 'id', this.notaDecisioneAssenza(va.r, decisione, motivo));
+        fatte.push({ tipo: 'assenza', id: va.id, stato: nuovo.stato });
+        continue;
+      }
       // Prima il permesso (dal tipo), poi la riga: chi non approva non scopre nemmeno se c'e'.
       const modulo = tipo === 'ore' || tipo === 'rapportino' ? 'rapportini' : 'spese';
       if (!this.puoApprovare(modulo)) throw senzaPermesso(modulo === 'spese' ? 'approvare spese e trasferte' : 'approvare ore e rapportini');
@@ -646,7 +701,8 @@ module.exports = {
   daApprovare() {
     const ore = this.puoApprovare('rapportini');
     const spese = this.puoApprovare('spese');
-    if (!ore && !spese) throw senzaPermesso('approvare ore, rapportini e spese');
+    const assenze = this.puoApprovareAssenze();
+    if (!ore && !spese && !assenze) throw senzaPermesso('approvare ore, rapportini e spese');
     const imp = this.leggiImpostazioni();
     const soglia = (numero(imp.ORE_GIORNALIERE) || 8) + 4;
     const a = this.nomiFase3();
@@ -671,9 +727,15 @@ module.exports = {
         if (giorni.has(k)) oreDelGiorno[k] = (oreDelGiorno[k] || 0) + (numero(r.ore_totali) || numero(r.ore_lavoro) + numero(r.ore_extra) + numero(r.ore_viaggio));
       }
     }
+    // Fase 6: ore in un giorno di assenza (ferie, festa, chiusura) sono un'anomalia: "Ore in un giorno di ferie".
+    const personeU = {};
+    this.db.righe('SELECT id, utente_id FROM persone WHERE utente_id IS NOT NULL').forEach(p => { personeU[p.utente_id] = p.id; });
     const troppe = (u, g) => {
       const h = Math.round((oreDelGiorno[chiave(u, g)] || 0) * 100) / 100;
-      return h > soglia ? [{ tipo: 'troppeOre', testo: virgola(h) + ' ore in un giorno' }] : [];
+      const out = h > soglia ? [{ tipo: 'troppeOre', testo: virgola(h) + ' ore in un giorno' }] : [];
+      const giorno = personeU[u] ? this.giornoNonLavorato(personeU[u], g) : '';
+      if (giorno) out.push({ tipo: 'inAssenza', testo: giorno === 'ferie' ? 'Ore in un giorno di ferie' : giorno === 'festa' ? 'Ore in un giorno di festa' : giorno === 'chiuso' ? 'Ore in un giorno di chiusura dello studio' : 'Ore in un giorno di assenza' });
+      return out;
     };
     // I km soliti di ogni commessa: rapportini e trasferte (tranne la voce stessa), almeno due.
     const kmPerCommessa = {};
@@ -738,16 +800,21 @@ module.exports = {
         quanto: conto.totale, unita: 'euro', km: conto.kmTotali, anomalie: kmDiversi(t.commessa_id, 't' + t.id, conto.kmTotali),
       });
     }
+    // Fase 6: le richieste di ferie e permessi (anche delle persone senza accesso: idUtente null, idPersona).
+    for (const v of this.vociAssenzeDaApprovare()) voci.push(v);
     const persone = {};
     for (const v of voci) {
-      const k = v.idUtente === null ? 'nessuno' : v.idUtente;
-      const p = persone[k] || (persone[k] = { idUtente: v.idUtente, nome: v.idUtente ? a.utenti[v.idUtente] || '' : 'Senza persona', quante: 0, conAnomalie: 0, voci: [] });
+      const k = v.idUtente === null || v.idUtente === undefined ? (v.idPersona ? 'p' + v.idPersona : 'nessuno') : v.idUtente;
+      const nome = v.idUtente ? a.utenti[v.idUtente] || v.nome || '' : v.nome || 'Senza persona';
+      const p = persone[k] || (persone[k] = Object.assign({ idUtente: v.idUtente === undefined ? null : v.idUtente, nome, quante: 0, conAnomalie: 0, voci: [] },
+        v.idPersona && !v.idUtente ? { idPersona: v.idPersona } : {}));
+      delete v.nome;
       p.quante++;
       if (v.anomalie.length) p.conAnomalie++;
       p.voci.push(v);
     }
     const elenco = Object.values(persone).sort((x, y) => (x.nome < y.nome ? -1 : 1));
-    const ordine = { ore: 0, rapportino: 1, spesa: 2, trasferta: 3 };
+    const ordine = { ore: 0, rapportino: 1, spesa: 2, trasferta: 3, assenza: 4 };
     elenco.forEach(p => p.voci.sort((x, y) => (x.data < y.data ? -1 : x.data > y.data ? 1 : ordine[x.tipo] - ordine[y.tipo])));
     return { ok: true, oggi: oggi(), quante: voci.length, conAnomalie: voci.filter(v => v.anomalie.length).length, persone: elenco };
   },
@@ -846,10 +913,11 @@ module.exports = {
     const trasferte = this.db.righe('SELECT * FROM trasferte WHERE commessa_id = ? COLLATE NOCASE', id)
       .map(t => ({ idCommessa: t.commessa_id, km: t.km, andataRitorno: t.andata_ritorno === 1, euroKm: t.euro_km, indennita: t.indennita, stato: t.stato, tolta: t.tolta }));
     const cliente = m.idCliente ? this.soggetto(m.idCliente) : null;
-    return {
-      ok: true, idCommessa: id,
-      costoCommessa: costoCommessa({ commessa: m, cliente, impostazioni: this.leggiImpostazioni(), rapportini, ore, spese, trasferte }),
-    };
+    const conto = costoCommessa({ commessa: m, cliente, impostazioni: this.leggiImpostazioni(), rapportini, ore, spese, trasferte });
+    // Fase 6 (§8.6): le fatture ricevute dei collaboratori esterni e le altre fatture ricevute della commessa.
+    const coll = this.costoCollaboratoriCommessa(id);
+    Object.assign(conto, coll, { totale: centesimi(conto.totale + coll.collaboratori + coll.altreRicevute) });
+    return { ok: true, idCommessa: id, costoCommessa: conto };
   },
 };
 

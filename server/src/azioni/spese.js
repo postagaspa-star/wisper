@@ -124,6 +124,11 @@ module.exports = {
       dalRapportino: r.dal_rapportino === 1, foto: a.foto[r.id] || [], tolta: dataOraIso(r.tolta),
       // Fase 5
       idTicket: r.ticket_id === null || r.ticket_id === undefined ? null : r.ticket_id, ticket: r.ticket_id ? (a.ticket || {})[r.ticket_id] || '' : '',
+      // Fase 6: il mezzo, lo strumento, l'incarico; i km del contachilometri (la lettura nata dal rifornimento).
+      idVeicolo: r.veicolo_id === null || r.veicolo_id === undefined ? null : r.veicolo_id,
+      idAttrezzatura: r.attrezzatura_id === null || r.attrezzatura_id === undefined ? null : r.attrezzatura_id,
+      idIncarico: r.incarico_id === null || r.incarico_id === undefined ? null : r.incarico_id,
+      km: r.veicolo_id ? ((this.db.riga('SELECT km FROM mezzo_letture WHERE spesa_id = ? ORDER BY id DESC LIMIT 1', r.id) || {}).km || null) : null,
       puoScrivere: this.livello('spese') >= 2 && this.vedeDi(r.utente_id) && (!b.bloccata || !!b.soloCampi),
       bloccata: b.bloccata, soloCampi: b.soloCampi,
       creato: dataOraIso(r.creato), modificato: dataOraIso(r.modificato),
@@ -279,6 +284,12 @@ module.exports = {
     else if (x.idCommessa !== undefined) idCommessa = testo(x.idCommessa);
     else if (prima) idCommessa = prima.commessa_id;
     else idCommessa = tk ? tk.commessa_id : tr ? tr.commessa_id : '';
+    // Fase 6: l'esterno scrive le sue spese solo sulle commesse dei suoi incarichi (l'incarico si mette da solo).
+    let incarico = prima && prima.incarico_id ? this.db.riga('SELECT * FROM incarichi WHERE id = ?', prima.incarico_id) : null;
+    if (this.eEsterno() && !rap) incarico = this.incaricoDellEsterno(idCommessa);
+    else if (rap && rap.incarico_id) incarico = this.db.riga('SELECT * FROM incarichi WHERE id = ?', rap.incarico_id);
+    else if (x.idIncarico !== undefined) incarico = testo(x.idIncarico) ? this.incaricoPerRicevuta(x.idIncarico, null) : null;
+    if (incarico && !idCommessa) idCommessa = incarico.commessa_id;
     const commessa = rap ? (idCommessa ? this.commessa(idCommessa) : null) : this.commessaPerCodice(idCommessa);
     let idCliente;
     if (rap) idCliente = testo(rap.id_cliente);
@@ -306,10 +317,16 @@ module.exports = {
     if (importo === null || !(importo > 0 || (bozza && importo === 0))) throw new Rifiuto('Importo: scrivi quanto hai speso');
     const descrizione = x.descrizione !== undefined ? testo(x.descrizione) : prima ? prima.descrizione : '';
 
+    // Fase 6: il mezzo e lo strumento della spesa (il costo del mezzo, §7.4).
+    const idVeicolo = x.idVeicolo !== undefined ? (testo(x.idVeicolo) ? Number(x.idVeicolo) : null) : prima ? prima.veicolo_id : null;
+    if (idVeicolo !== null && !this.db.riga('SELECT id FROM veicoli WHERE id = ?', idVeicolo)) throw new Rifiuto('Mezzo ' + idVeicolo + ' non trovato');
+    const idAttrezzatura = x.idAttrezzatura !== undefined ? (testo(x.idAttrezzatura) ? Number(x.idAttrezzatura) : null) : prima ? prima.attrezzatura_id : null;
+    if (idAttrezzatura !== null && !this.db.riga('SELECT id FROM attrezzature WHERE id = ?', idAttrezzatura)) throw new Rifiuto('Attrezzatura ' + idAttrezzatura + ' non trovata');
     const v = {
       utente_id: utente, data, importo, categoria, descrizione, commessa_id: commessa ? commessa.id : idCommessa, cliente_id: idCliente,
       rapportino_id: rap ? rap.id : null, trasferta_id: tr ? tr.id : null, destinazione, anticipazione: anticipazione ? 1 : 0,
       pagata_da_me: pagataDaMe ? 1 : 0, ticket_id: tk ? tk.id : null,
+      veicolo_id: idVeicolo, attrezzatura_id: idAttrezzatura, incarico_id: incarico ? incarico.id : null,
     };
     if (prima && blocco.soloCampi) {
       // Rapportino gia' firmato: importo, destinazione, rapportino e il resto non si toccano.
@@ -335,6 +352,13 @@ module.exports = {
       id = this.inserisci('spese', Object.assign(v, { dal_rapportino: 0, id_locale: testo(x.idLocale) || null, creato: ora, modificato: ora }));
     }
     this.dopoCambioSpesa(prima, id);
+    // Fase 6: un rifornimento col mezzo e i km del contachilometri fa nascere una lettura (se non va indietro).
+    if (idVeicolo !== null && x.km !== undefined && testo(x.km) !== '' && !this.db.riga('SELECT id FROM mezzo_letture WHERE spesa_id = ?', id)) {
+      const veic = this.db.riga('SELECT * FROM veicoli WHERE id = ?', idVeicolo);
+      const ultima = this.db.riga('SELECT km, data FROM mezzo_letture WHERE veicolo_id = ? AND data <= ? ORDER BY data DESC, km DESC LIMIT 1', idVeicolo, data);
+      if (ultima && Math.round(numero(x.km)) < ultima.km) throw new Rifiuto('Km: l\'ultima lettura era ' + String(ultima.km).replace(/\B(?=(\d{3})+(?!\d))/g, '.') + ' il ' + ultima.data.slice(8, 10) + '/' + ultima.data.slice(5, 7));
+      this.scriviLettura({ v: veic, km: x.km, data, origine: 'rifornimento', spesaId: id, conferma: true });
+    }
     return this.spesaPerId(id);
   },
 
@@ -534,6 +558,8 @@ module.exports = {
       stato: r.stato, approvataDa: r.approvata_da === null ? null : r.approvata_da,
       approvataDaNome: r.approvata_da ? a.utenti[r.approvata_da] || '' : '', approvataIl: dataOraIso(r.approvata_il),
       motivoRifiuto: r.motivo_rifiuto, rimborsataIl: dataOraIso(r.rimborsata_il),
+      // Fase 6: col mezzo dello studio niente rimborso km ("Mezzo dello studio: niente rimborso km").
+      mezzoDelloStudio: !!(a.studio && a.studio.has(r.veicolo_id)) && numero(r.euro_km) === 0,
       spese, speseTotale: centesimi(spese.filter(s => s.stato !== 'respinta').reduce((t, s) => t + s.importo, 0)),
       tolta: dataOraIso(r.tolta),
       puoScrivere: this.livello('spese') >= 2 && this.vedeDi(r.utente_id) && !bloccata, bloccata,
@@ -545,6 +571,7 @@ module.exports = {
   /** Nomi e spese (non tolte) delle trasferte. */
   aiutiTrasferte(righe) {
     const a = this.nomiFase3();
+    a.studio = new Set(this.db.righe("SELECT id FROM veicoli WHERE proprieta = 'studio'").map(v => v.id));
     a.spese = {};
     const ids = righe.map(r => Number(r.id));
     if (ids.length) {
@@ -572,6 +599,11 @@ module.exports = {
 
   /** trasferte {da, a, utente, commessa, stato}: di base il mese di oggi. */
   leggiTrasferte(d) {
+    // Fase 6: un collaboratore esterno non ha trasferte (i suoi viaggi sono nel suo compenso): l'elenco e' vuoto.
+    if (this.eEsterno()) {
+      const p = periodoDa(d || {}, 'mese');
+      return { ok: true, da: p.da, a: p.a, trasferte: [], totali: soldiPropri({ quante: 0, km: 0, rimborsoKm: 0, indennita: 0, totale: 0, daRimborsare: 0 }, ['rimborsoKm', 'totale']) };
+    }
     const { righe, da, a } = this.righeTrasferte(d);
     const aiuti = this.aiutiTrasferte(righe);
     const trasferte = righe.map(r => this.trasfertaDaRiga(r, aiuti));
@@ -594,6 +626,7 @@ module.exports = {
    */
   salvaTrasferta(x) {
     x = x || {};
+    if (this.eEsterno()) throw new Rifiuto('Le trasferte di un collaboratore esterno sono nel suo compenso: se una spesa va riconosciuta, segnala come spesa');
     const c = this.chi();
     const io = c.utente ? c.utente.id : null;
     const prima = testo(x.id) ? this.rigaTrasferta(x.id) : null;
@@ -635,7 +668,9 @@ module.exports = {
     }
     if (km > 0 && !veicolo) throw new Rifiuto('Veicolo: scegli con quale veicolo, per il rimborso al km');
     const stessoVeicolo = prima && prima.veicolo_id === (veicolo ? veicolo.id : null);
-    const euroKm = stessoVeicolo ? prima.euro_km : veicolo ? veicolo.euro_km : null;
+    // Fase 6: con un mezzo dello studio niente rimborso km a chi guida (l'euro al km congelato e' 0): carburante e
+    // manutenzione li paga lo studio e sono costi del mezzo. L'auto di una persona: come sempre, la tabella ACI.
+    const euroKm = stessoVeicolo ? prima.euro_km : veicolo ? (veicolo.proprieta === 'studio' ? 0 : veicolo.euro_km) : null;
     const nomeVeicolo = stessoVeicolo ? prima.veicolo : veicolo ? veicolo.nome : '';
     let indennita;
     if (x.indennita !== undefined && x.indennita !== null && testo(x.indennita) !== '') indennita = centesimi(numero(x.indennita));
@@ -688,8 +723,10 @@ module.exports = {
   rimborsi(d) {
     d = d || {};
     const filtro = { utente: this.filtroUtente(d) === null ? undefined : this.filtroUtente(d) };
-    const sp = this.righeSpese(Object.assign({}, filtro), false).righe.filter(s => s.pagata_da_me === 1);
-    const tr = this.righeTrasferte(Object.assign({}, filtro), false).righe;
+    // Fase 6: le spese pagate da un esterno non si rimborsano (vanno nel maturato del suo incarico, o nella sua fattura).
+    const esterni = new Set(this.db.righe("SELECT id FROM utenti WHERE ruolo = 'esterno'").map(u => u.id));
+    const sp = this.righeSpese(Object.assign({}, filtro), false).righe.filter(s => s.pagata_da_me === 1 && !esterni.has(s.utente_id));
+    const tr = this.righeTrasferte(Object.assign({}, filtro), false).righe.filter(t => !esterni.has(t.utente_id));
     const as = this.aiutiSpese(sp);
     const at = this.aiutiTrasferte(tr);
     const nomi = this.nomiFase3();
@@ -760,15 +797,21 @@ module.exports = {
   // ------------------------------------------------------------------ veicoli
 
   veicoloDaRiga(r, trasferte) {
+    const st = this.statoMezzo(r);
     return soldiPropri({
       id: r.id, nome: r.nome, alimentazione: r.alimentazione, euroKm: numeroONull(r.euro_km), annoAci: r.anno_aci === null ? null : r.anno_aci,
       attivo: r.attivo === 1, trasferte: trasferte || 0, creato: dataOraIso(r.creato), modificato: dataOraIso(r.modificato),
+      // Fase 6: di chi e' (con "studio" niente rimborso km) e la pillola Fermo.
+      targa: r.targa || '', titolo: (testo(r.nome) + ' ' + testo(r.targa)).trim(), proprieta: r.proprieta || 'persona', idPersona: r.persona_id === undefined ? null : r.persona_id,
+      fermo: st.fermo, motivoFermo: st.motivo || '',
     }, ['euroKm']);
   },
 
   /** veicoli {tutti?}: gli attivi (tutti = anche quelli non piu' in uso), con l'anno ACI e la pagina delle tabelle. */
   leggiVeicoli(d) {
     d = d || {};
+    // Fase 6: l'esterno non vede i mezzi dello studio.
+    if (this.eEsterno()) return { ok: true, veicoli: [], aciAnno: Number(this.leggiImpostazioni().ACI_ANNO) || null, paginaAci: PAGINA_ACI };
     const n = {};
     this.db.righe('SELECT veicolo_id, COUNT(*) n FROM trasferte WHERE tolta IS NULL GROUP BY veicolo_id').forEach(r => { n[r.veicolo_id] = r.n; });
     const veicoli = this.db.righe('SELECT * FROM veicoli' + (si(d.tutti) ? '' : ' WHERE attivo = 1') + ' ORDER BY id').map(r => this.veicoloDaRiga(r, n[r.id]));
@@ -796,12 +839,16 @@ module.exports = {
       euro_km: euroKm === null ? null : Math.round(euroKm * 10000) / 10000, anno_aci: anno,
       attivo: x.attivo !== undefined ? (si(x.attivo) ? 1 : 0) : prima ? prima.attivo : 1,
     };
+    // Fase 6: salvaVeicolo accetta anche i campi del mezzo (targa, tipo, di chi e', tagliando, scadenze...).
+    Object.assign(v, this.campiMezzo(x, prima));
+    if ((v.proprieta || (prima && prima.proprieta)) === 'studio') v.euro_km = null;
     const ora = adesso();
     let id;
     if (prima) {
       id = prima.id;
       this.aggiorna('veicoli', id, Object.assign(v, { modificato: ora }));
     } else id = this.inserisci('veicoli', Object.assign(v, { creato: ora, modificato: ora }));
+    if (x.scadenze !== undefined || x.immatricolazione !== undefined) this.scadenzeDaMezzo(id, x);
     if (anno !== null && anno > (Number(imp.ACI_ANNO) || 0)) this.salvaImpostazioni({ ACI_ANNO: anno });
     const n = this.db.riga('SELECT COUNT(*) n FROM trasferte WHERE veicolo_id = ? AND tolta IS NULL', id).n;
     return this.veicoloDaRiga(this.db.riga('SELECT * FROM veicoli WHERE id = ?', id), n);

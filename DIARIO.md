@@ -11,6 +11,7 @@ mai dati veri di clienti.
 
 | Data | Versione | In breve |
 |------|----------|----------|
+| 31/10/2026 | gestionale, fase 6 (non pubblicata) | [Persone, mezzi e attrezzature, collaboratori esterni](#gestionale-fase-6) |
 | 22/10/2026 | gestionale, fase 5 (non pubblicata) | [Documenti, ticket e assistenza](#gestionale-fase-5) |
 | 22/10/2026 | gestionale, fase 4 (non pubblicata) | [Fatture, banche e scadenze](#gestionale-fase-4) |
 | 22/10/2026 | gestionale, fase 3 (non pubblicata) | [Ore, timer, spese e trasferte](#gestionale-fase-3) |
@@ -29,6 +30,62 @@ mai dati veri di clienti.
 | 26/09–14/10/2026 | 0.1 | [Un rapportino confermato non si perde più](#coda) |
 | 7–9/08/2026 | 0.1.0 | [Hackathon NGN Hacks: la versione a voce, senza mani](#v0-1-0) |
 | marzo–giugno 2026 | prima del repository | [Le prime versioni](#prima) |
+
+---
+
+<a id="gestionale-fase-6"></a>
+## 31 ottobre 2026 · gestionale, fase 6 · Persone, mezzi e attrezzature, collaboratori esterni
+
+**Perché.** Sesta fase del gestionale (`docs/specifiche-stgm.md`, moduli 10, 13 e 16). Lo studio deve sapere chi c'è
+e chi è in ferie, quanto costa davvero un'ora di lavoro, che mezzo e che strumenti ha ognuno e se la taratura vale, e
+cosa ha affidato alle imprese e ai professionisti esterni. Prima la ricerca (`docs/gestionale/ricerca-fase6.md`) e il
+prototipo (`docs/prototipo/Gestionale-fase6.html`), poi il codice, sempre uguale su telefono e computer.
+
+**Cosa cambia.**
+
+- **Persone e risorse umane**: l'organico (anche chi non entra in Wisper), la scheda con tre livelli di dati (di
+  lavoro, personali, riservati: questi solo col permesso apposta, e chi li apre resta scritto in un registro che non
+  si cancella), competenze e formazione con le scadenze, visite mediche (solo il giudizio e le date), DPI consegnati
+  con la firma, documenti personali. **Ferie e permessi** si chiedono anche dal telefono senza rete, col saldo dal
+  cedolino e quanti giorni restano; chi approva vede le anomalie e può annullare. Le presenze del mese si ricavano da
+  ore, rapportini e assenze, senza timbrature. Wisper non fa le buste paga: il programma del consulente è "Non
+  collegato".
+- **Il costo orario** viene dalla persona, con la sua storia: le ore e i rapportini nuovi prendono il costo del giorno
+  in cui si lavora, quelli vecchi non cambiano. Oggi non cambia nessun conto, perché il costo del titolare resta vuoto.
+- **Mezzi e attrezzature**: i veicoli diventano mezzi (dello studio o auto di una persona) con scadenze, km, guasti con
+  la foto e costi; con un mezzo dello studio la trasferta non dà rimborso km, e il carburante segna i km del
+  contachilometri. Strumenti di misura e DPI hanno la **taratura** sempre in vista: uno scaduto nel rapportino si usa
+  solo confermando (e resta scritto), uno non conforme non si sceglie mai. Prestiti e restituzioni anche senza rete.
+- **Collaboratori esterni**: un collaboratore è un fornitore con la scheda in più; i documenti (DURC, visura) dicono se
+  è in regola. **Incarichi** per commessa a corpo o a ore, con avanzamento, lettera d'incarico dal modello, fatture
+  ricevute collegate e quanto resta da fatturare e da pagare; il loro costo entra nella commessa. Chi vuole può entrare
+  in Wisper col ruolo "Esterno": vede solo le sue commesse e i suoi compensi.
+- Dashboard, permessi (con la colonna Esterno) e Amministrazione (impostazioni di persone, mezzi e collaboratori, tipi
+  di formazione) sanno delle cose nuove. Server 0.9.0 sul NAS, ancora vuoto.
+
+**Anche in questo giro.** La **porta Google**: telefono e computer possono arrivare al server del NAS passando dallo
+script Google, senza aprire niente sul router (in casa vanno diretti al NAS); è costruita e provata solo sul Google
+finto, non è accesa. Le prove ora passano in qualunque giorno, anche di sabato o a cavallo del cambio d'ora: rifacendole
+così sono venuti fuori e sono stati sistemati tre difetti del server (le copie cancellate un giorno prima col cambio
+d'ora, il saldo del cedolino con due righe nello stesso giorno, i dati di esempio che nel 2027 non tornavano) e uno
+delle prove.
+
+Prove: server 485, script del foglio 78, computer 230, telefono 290 (anche contro il server di prova), tutte verdi; i
+sette giri cliccati su Wisper Ufficio (dalla fase 1 alla 6 e la porta Google) passano tutti. Sul telefono, contro il
+server di prova: la spesa di carburante col Doblò segna i km sulla scheda del mezzo, la lettera d'incarico finisce
+nell'archivio legata all'incarico, le impostazioni della taratura si salvano. Non provati: le foto vere della fotocamera
+nel guasto, la firma del DPI su un telefono vero, la porta Google su quello vero.
+
+<p>
+<img src="docs/diario/2026-10-31-gest6-tel-incarico.png" width="220" alt="Telefono: la pagina dell'incarico">
+<img src="docs/diario/2026-10-31-gest6-tel-strumenti-scuro.png" width="220" alt="Telefono: gli strumenti con lo stato della taratura, tema scuro">
+</p>
+
+<img src="docs/diario/2026-10-31-gest6-pc-strumento.png" width="720" alt="Wisper Ufficio: lo strumento con la taratura scaduta">
+
+<img src="docs/diario/2026-10-31-gest6-pc-ferie-scuro.png" width="720" alt="Wisper Ufficio: ferie e permessi, tema scuro">
+
+Versione: non ancora pubblicata (ramo `gestionale`).
 
 ---
 

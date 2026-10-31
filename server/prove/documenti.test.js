@@ -15,7 +15,7 @@ const path = require('node:path');
 const { serverDiProva, postinoFinto, ascolta, chiudi, SEGRETO, PNG } = require('./aiuto');
 const { creaServerCondivisione } = require('../src/http');
 const { tipoCollegamento } = require('../src/documenti');
-const { oggi } = require('../src/utili');
+const { oggi, adesso, piuGiorni, istante } = require('../src/utili');
 const CASI = require('./casi-collegamenti.json');
 
 let s;
@@ -159,7 +159,7 @@ test('revisioni: rev. 0 -> 1 -> 2; approvata da chi approva, da approvare da chi
     assert.deepEqual([appr.revisione, appr.statoVisto], [1, 'Valida']);
     assert.equal((await manuel('approvaVersione', { id: versione })).errore, 'La rev. 1 è già approvata');
     assert.equal((await marco('togliVersione', { id: versione })).errore, 'Una revisione approvata non si toglie: carica una revisione nuova');
-    assert.ok(appr.cronologia.some(e => e.testo === 'rev. 1 caricata da Marco Collaboratore'));
+    assert.ok(appr.cronologia.some(e => e.testo === 'rev. 1 caricata da Marco Rossato'));
     assert.ok(appr.cronologia.some(e => e.testo === 'rev. 1 respinta da Manuel Gasparotto: Manca il cartiglio'));
     assert.ok(appr.cronologia.some(e => e.testo === 'rev. 1 approvata da Manuel Gasparotto'));
   } finally {
@@ -186,7 +186,8 @@ test('chi vede: un documento "costi" il collaboratore non lo trova (nemmeno con 
   // Il collaboratore legge l'archivio e scarica, non carica.
   const d = ok(await marco('documenti', { archivio: true }));
   assert.ok(d.documenti.length > 5);
-  assert.ok(d.documenti.every(x => x.vede === 'tutti'));
+  // Fase 6: in piu' il suo cedolino (riservato, ma suo: la persona vede i suoi documenti, fase6.md §5.6).
+  assert.ok(d.documenti.every(x => x.vede === 'tutti' || x.idPersona === 3));
   assert.equal((await marco('salvaDocumento', { documento: { titolo: 'X', idCategoria: 1, url: 'https://www.esempio.example' } })).permesso, false);
 });
 
@@ -258,7 +259,7 @@ test('scadenza del documento, verbale che chiude la scadenza, archiviare con la 
   // Archiviare un documento con la scadenza aperta: prima chiede, poi la toglie o la tiene.
   const cert = ok(await manuel('documenti', { archivio: true, testo: 'taratura' })).documenti[0];
   const chiede = await manuel('archiviaDocumento', { id: cert.id });
-  assert.deepEqual([chiede.ok, chiede.serveConferma, chiede.errore], [false, true, 'Ha una scadenza aperta il 15/11/2026: la tolgo?']);
+  assert.deepEqual([chiede.ok, chiede.serveConferma, chiede.errore], [false, true, 'Ha una scadenza aperta il ' + piuGiorni(oggi(), 24).split('-').reverse().join('/') + ': la tolgo?']);
   ok(await manuel('archiviaDocumento', { id: cert.id, togliScadenza: false }));
   assert.equal(ok(await manuel('documenti', { archivio: true, testo: 'taratura' })).quanti, 0);
   assert.equal(ok(await manuel('documenti', { archivio: true, archiviati: true, testo: 'taratura' })).documenti[0].statoVisto, 'Archiviato');
@@ -269,7 +270,9 @@ test('scadenza del documento, verbale che chiude la scadenza, archiviare con la 
 
 test('modelli: i modelli di Wisper coi loro testi, i segnaposti, comporre una lettera, il segnaposto sconosciuto', async () => {
   const m = ok(await manuel('modelli'));
-  assert.deepEqual(m.wisper.map(x => x.nome), ['Rapportino', 'Riepilogo del mese', 'Preventivo', 'Prospetto per il programma delle fatture', 'Avviso di parcella', 'Lettera', 'Contratto di assistenza']);
+  assert.deepEqual(m.wisper.map(x => x.nome), ['Rapportino', 'Riepilogo del mese', 'Preventivo', 'Prospetto per il programma delle fatture', 'Avviso di parcella', 'Lettera', 'Contratto di assistenza',
+    // Fase 6: la lettera d'incarico ai collaboratori esterni.
+    "Lettera d'incarico"]);
   assert.ok(m.wisper.every(x => x.impaginazione === 'fissa'));
   assert.ok(m.studio.some(d => d.titolo === 'Modulo della dichiarazione di conformità'));
   assert.ok(m.segnaposti.includes('ultima_verifica'));
@@ -361,8 +364,9 @@ test('il link che scade: Non collegato; collegato sulla seconda porta (aperture,
 test('categorie: le 16 dell\'accordo; una nuova; quelle di sistema si rinominano, non si tolgono', async () => {
   const c = ok(await manuel('categorieDocumenti')).categorie;
   assert.deepEqual(c.slice(0, 3).map(x => [x.nome, x.approvazione, x.vede]), [['Progetti e schemi', true, 'tutti'], ['Dichiarazioni di conformità', true, 'tutti'], ['Dichiarazioni di rispondenza', true, 'tutti']]);
-  assert.equal(c.length, 16, 'il titolare vede anche Documenti personali');
-  assert.equal(ok(await marco('categorieDocumenti')).categorie.length, 12, 'senza costi e riservati: non Contratti, Polizze e assicurazioni, Mandati ai clienti, Documenti personali');
+  // Fase 6: 9 categorie in piu' (contratti di lavoro, cedolini, idoneita' sanitarie riservati; lettere d'incarico "costi").
+  assert.equal(c.length, 25, 'il titolare vede anche Documenti personali');
+  assert.equal(ok(await marco('categorieDocumenti')).categorie.length, 17, "senza costi e riservati: non Contratti, Polizze e assicurazioni, Mandati ai clienti, Documenti personali, Contratti di lavoro, Cedolini, Idoneità sanitarie, Lettere d'incarico");
   const n = ok(await manuel('salvaCategoria', { categoria: { nome: 'Verbali di collaudo', approvazione: true, vede: 'tutti' } })).categoria;
   assert.deepEqual([n.nome, n.approvazione, n.sistema, n.attiva], ['Verbali di collaudo', true, false, true]);
   const dc = c.find(x => x.nome === 'Da classificare');
@@ -401,9 +405,9 @@ test('spazio sul NAS: disco quasi pieno (finto) = niente documenti nuovi, foto d
 test('svuota il cestino: solo il titolare, solo i file nel cestino da più di 90 giorni, con la conferma', async () => {
   const w = s.wisper;
   const f = (await carica(manuel, PDF('vecchio cestino'), { nome: 'Vecchio.pdf' })).file;
-  w.db.esegui("UPDATE file SET cestinato = '2026-01-10T10:00:00+01:00' WHERE id = ?", f.id);
+  w.db.esegui('UPDATE file SET cestinato = ? WHERE id = ?', istante(new Date(piuGiorni(oggi(), -200) + 'T10:00:00')), f.id);
   const g = (await carica(manuel, PDF('cestino recente'), { nome: 'Recente.pdf' })).file;
-  w.db.esegui('UPDATE file SET cestinato = ? WHERE id = ?', new Date().toISOString(), g.id);
+  w.db.esegui('UPDATE file SET cestinato = ? WHERE id = ?', adesso(), g.id);
   assert.equal((await laura('svuotaCestino', { conferma: true })).permesso, false, 'amministrazione no');
   const chiede = await manuel('svuotaCestino', {});
   assert.equal(chiede.serveConferma, true);

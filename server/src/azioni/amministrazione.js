@@ -12,7 +12,8 @@
 'use strict';
 
 const P = require('../permessi');
-const { Rifiuto, senzaPermesso, testo, adesso, dataOraIso, numero } = require('../utili');
+const { Rifiuto, senzaPermesso, testo, adesso, adessoMs, oggi, istante, dataOraIso, numero } = require('../utili');
+const { provenienza } = require('../provenienza');
 const { hashPassword, controllaPasswordNuova, generaPassword } = require('./accesso');
 const { controllaFormato } = require('../formati');
 
@@ -20,10 +21,12 @@ const PER_PAGINA = 100;
 const MASSIMO_ACCESSI = 60000;
 const ACCESSI_DOPO_LA_PULIZIA = 50000;
 
-function utenteDaRiga(u, sessioni) {
+function utenteDaRiga(u, sessioni, idPersona) {
   return {
     id: u.id, nome: u.nome, email: u.email, ruolo: u.ruolo, attivo: u.attivo === 1,
     creato: dataOraIso(u.creato), ultimoAccesso: dataOraIso(u.ultimo_accesso), dispositivi: sessioni || 0,
+    // Fase 6: la scheda della persona (o, per un esterno, il collaboratore di cui fa parte).
+    idPersona: idPersona === undefined ? null : idPersona, idSoggetto: u.soggetto_id || null,
   };
 }
 
@@ -38,7 +41,9 @@ module.exports = {
   leggiUtenti() {
     const attive = {};
     for (const s of this.db.righe('SELECT utente_id, COUNT(*) n FROM sessioni WHERE revocata IS NULL GROUP BY utente_id')) attive[s.utente_id] = s.n;
-    return this.db.righe('SELECT * FROM utenti ORDER BY attivo DESC, nome').map(u => utenteDaRiga(u, attive[u.id]));
+    const persone = {};
+    this.db.righe('SELECT id, utente_id FROM persone WHERE utente_id IS NOT NULL').forEach(p => { persone[p.utente_id] = p.id; });
+    return this.db.righe('SELECT * FROM utenti ORDER BY attivo DESC, nome').map(u => utenteDaRiga(u, attive[u.id], persone[u.id] || null));
   },
 
   titolariAttivi() {
@@ -75,7 +80,23 @@ module.exports = {
     if (x.ruolo !== undefined || nuovo) {
       // I nuovi partono dal ruolo piu' basso che scrive: collaboratore.
       v.ruolo = testo(x.ruolo).toLowerCase() || 'collaboratore';
-      if (P.RUOLI.indexOf(v.ruolo) < 0) throw new Rifiuto('Ruolo: titolare, amministrazione, collaboratore o lettura');
+      if (P.RUOLI.indexOf(v.ruolo) < 0) throw new Rifiuto('Ruolo: titolare, amministrazione, collaboratore, lettura o esterno');
+    }
+    // Fase 6: un esterno fa parte di un collaboratore esterno (soggetto_id); un utente non passa da esterno a interno o viceversa.
+    if (prima && v.ruolo && (v.ruolo === 'esterno') !== (prima.ruolo === 'esterno')) {
+      throw new Rifiuto('Un utente esterno resta esterno (e un interno resta interno): crea un utente nuovo');
+    }
+    const ruoloFinale = v.ruolo || (prima ? prima.ruolo : 'collaboratore');
+    if (ruoloFinale === 'esterno') {
+      const sog = testo(x.idSoggetto !== undefined ? x.idSoggetto : prima ? prima.soggetto_id : '').toUpperCase();
+      if (!sog) throw new Rifiuto('Esterno: scegli il collaboratore');
+      if (!this.db.riga('SELECT soggetto_id FROM collaboratori WHERE soggetto_id = ?', sog)) throw new Rifiuto('Collaboratore ' + sog + ' non trovato');
+      v.soggetto_id = sog;
+    }
+    if (x.perPersona !== undefined) {
+      const p = this.db.riga('SELECT * FROM persone WHERE id = ?', Number(x.perPersona) || 0);
+      if (!p) throw new Rifiuto('Persona ' + x.perPersona + ' non trovata');
+      if (p.utente_id) throw new Rifiuto(p.nome + ' ha già l\'accesso');
     }
     if (x.attivo !== undefined) v.attivo = x.attivo ? 1 : 0;
 
@@ -98,17 +119,27 @@ module.exports = {
 
     const id = this.db.transazione(() => {
       if (nuovo) {
-        return this.inserisci('utenti', Object.assign({ attivo: 1 }, v, { password_hash: hash, creato: adesso() }));
+        const idNuovo = this.inserisci('utenti', Object.assign({ attivo: 1 }, v, { password_hash: hash, creato: adesso() }));
+        // Fase 6: "Dai l'accesso a Wisper" dalla scheda lega la persona che c'e'; un utente nuovo (non esterno) fa nascere la sua.
+        if (x.perPersona !== undefined) this.aggiorna('persone', Number(x.perPersona), { utente_id: idNuovo, modificato: adesso() }, 'id', 'accesso dato a Wisper');
+        else this.creaPersonaPerUtente(this.db.riga('SELECT * FROM utenti WHERE id = ?', idNuovo));
+        return idNuovo;
       }
       if (hash) v.password_hash = hash;
       this.aggiorna('utenti', prima.id, v);
+      // Fase 6: il nome sta nell'utente e nella persona, e il server li tiene uguali.
+      if (v.nome !== undefined) {
+        const p = this.personaDiUtente(prima.id);
+        if (p && p.nome !== v.nome) this.aggiorna('persone', p.id, { nome: v.nome, modificato: adesso() }, 'id', 'il nome dell\'utente');
+      }
       // Password nuova o utente disattivato: i suoi dispositivi escono.
       if (hash || v.attivo === 0) {
         this.db.esegui('UPDATE sessioni SET revocata = ? WHERE utente_id = ? AND revocata IS NULL', adesso(), prima.id);
       }
       return prima.id;
     });
-    const risposta = { ok: true, utente: utenteDaRiga(this.db.riga('SELECT * FROM utenti WHERE id = ?', id)) };
+    const pers = this.personaDiUtente(id);
+    const risposta = { ok: true, utente: utenteDaRiga(this.db.riga('SELECT * FROM utenti WHERE id = ?', id), 0, pers ? pers.id : null) };
     if (passwordIniziale) risposta.passwordIniziale = passwordIniziale;
     return risposta;
   },
@@ -170,6 +201,10 @@ module.exports = {
         if (P.TUTTE.indexOf(modulo) < 0) throw new Rifiuto('Modulo sconosciuto: ' + modulo);
         const livello = Number(nuovi[ruolo][modulo]);
         if ([0, 1, 2].indexOf(livello) < 0) throw new Rifiuto('Livello non valido per ' + modulo + ': 0 niente, 1 vede, 2 modifica');
+        // Fase 6: a un esterno mai i soldi, le persone e l'amministrazione dello studio.
+        if (ruolo === 'esterno' && livello > 0 && P.VIETATI_ESTERNO.indexOf(modulo) >= 0) {
+          throw new Rifiuto('Un esterno non può vedere i soldi, le persone e l\'amministrazione dello studio');
+        }
         if (!this.eTitolare() && mie && livello > (mie[modulo] || 0)) {
           throw senzaPermesso('dare a un ruolo più di quello che hai tu (' + modulo + ')');
         }
@@ -221,13 +256,17 @@ module.exports = {
       .map(r => ({
         id: r.id, quando: dataOraIso(r.quando), esito: r.esito, azione: r.azione, idUtente: r.utente_id,
         utente: r.nome || '', disp: r.disp, dispNome: r.disp_nome, app: r.app,
+        // L'indirizzo di chi ha chiamato: da casa quello della connessione, da internet quello che passa l'ingresso.
+        ip: r.ip || '', daFuori: r.da_fuori === 1,
       }));
     return { ok: true, righe, pagina, pagine: Math.max(1, Math.ceil(quante / PER_PAGINA)), quante };
   },
 
   /**
    * La riga negli accessi, per ogni richiesta, e il dispositivo visto. Non
-   * deve mai fermare una risposta. Mai la password o il token.
+   * deve mai fermare una risposta. Mai la password o il token. L'indirizzo
+   * viene da provenienza() (la connessione, o l'ingresso), mai da d: d e' il
+   * corpo della richiesta e chi chiama ci scrive quello che vuole.
    */
   registraAccesso(d, esito, utente) {
     try {
@@ -236,8 +275,9 @@ module.exports = {
       const disp = testo(d.disp).slice(0, 64);
       const nome = testo(d.dispNome).slice(0, 80);
       const app = testo(d.app).slice(0, 40);
-      this.db.esegui('INSERT INTO accessi (quando, esito, azione, utente_id, disp, disp_nome, app) VALUES (?,?,?,?,?,?,?)',
-        ora, esito, testo(d.azione).slice(0, 40) || 'anagrafiche', utente ? utente.id : null, disp, nome || 'senza nome', app);
+      const da = provenienza();
+      this.db.esegui('INSERT INTO accessi (quando, esito, azione, utente_id, disp, disp_nome, app, ip, da_fuori) VALUES (?,?,?,?,?,?,?,?,?)',
+        ora, esito, testo(d.azione).slice(0, 40) || 'anagrafiche', utente ? utente.id : null, disp, nome || 'senza nome', app, da.ip, da.daFuori ? 1 : 0);
       if (disp && utente) {
         this.db.esegui('INSERT INTO dispositivi (id, nome, app, primo, ultimo, utente_id) VALUES (?,?,?,?,?,?) ' +
           'ON CONFLICT(id) DO UPDATE SET nome = excluded.nome, app = excluded.app, ultimo = excluded.ultimo, utente_id = excluded.utente_id',
@@ -249,11 +289,16 @@ module.exports = {
     }
   },
 
-  /** Una volta al giorno, se le righe sono troppe (circa un anno d'uso), via le piu' vecchie. */
+  /**
+   * Una volta al giorno, se le righe sono troppe (circa un anno d'uso), via le piu' vecchie.
+   * E via i tentativi di accesso sbagliati di piu' di un giorno fa: contano solo gli ultimi 15
+   * minuti, e da internet (l'ingresso) arrivano anche quelli di chi prova a caso.
+   */
   puliziaAccessi() {
-    const ora = Date.now();
+    const ora = adessoMs();
     if (this.ultimaPulizia && ora - this.ultimaPulizia < 24 * 3600 * 1000) return;
     this.ultimaPulizia = ora;
+    this.db.esegui('DELETE FROM tentativi_accesso WHERE quando < ?', istante(new Date(ora - 24 * 3600 * 1000)));
     const n = this.db.riga('SELECT COUNT(*) n FROM accessi').n;
     if (n > MASSIMO_ACCESSI) {
       this.db.esegui('DELETE FROM accessi WHERE id IN (SELECT id FROM accessi ORDER BY id LIMIT ?)', n - ACCESSI_DOPO_LA_PULIZIA);
@@ -264,14 +309,17 @@ module.exports = {
 
   /** Le numerazioni, ognuna col prossimo codice che darebbe adesso. */
   leggiNumerazioni() {
-    const anno = new Date().getFullYear();
+    const anno = Number(oggi().slice(0, 4));
     return this.db.righe('SELECT * FROM numerazioni ORDER BY tipo').map(n => {
       const prossimo = n.tipo === 'commessa' ? this.prossimoCodiceCommessa(anno)
         : n.tipo === 'rapportino' ? this.prossimoNumeroRapportino(anno)
           : n.tipo === 'preventivo' ? this.prossimoNumeroPreventivo(anno)
             // Fase 5
             : n.tipo === 'ticket' ? this.prossimoNumeroTicket(anno)
-              : n.tipo === 'contratto' ? this.prossimoNumeroContratto(anno) : null;
+              : n.tipo === 'contratto' ? this.prossimoNumeroContratto(anno)
+                // Fase 6
+                : n.tipo === 'incarico' ? this.prossimoNumeroIncarico(anno)
+                  : n.tipo === 'attrezzatura' ? this.prossimoCodiceAttrezzatura() : null;
       return {
         tipo: n.tipo, formato: n.formato, annuale: n.annuale === 1, ultimo: n.ultimo,
         prossimo: prossimo ? prossimo.codice : '',

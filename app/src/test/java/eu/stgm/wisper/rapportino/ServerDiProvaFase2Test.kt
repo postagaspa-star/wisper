@@ -8,19 +8,18 @@ import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Test
-import java.time.LocalDate
 
 /**
- * La fase 2 contro il server di prova vero (architettura.md §13), come
- * ServerDiProvaTest:
+ * La fase 2 contro il server di prova vero (architettura.md §13). Si lanciano in un modo solo, con un server
+ * nuovo fermo al 22/10/2026 (ServerDiProva.kt):
  *
- *     node server/src/avvio.js --prova --porta 8401 --dati <cartella temporanea>
- *     WISPER_SERVER_PROVA=http://localhost:8401 ./gradlew :app:testDebugUnitTest
+ *     node server/prove/telefono.js            (--giri 2: due giri di fila sullo stesso server)
  *
- * Senza la variabile si saltano. Scrivono sul database di prova.
+ * Senza WISPER_SERVER_PROVA si saltano. Scrivono sul database di prova; ogni prova fa i suoi preventivi e le
+ * sue attività (in un giorno libero), sul giorno del server.
  */
 class ServerDiProvaFase2Test {
-    private val indirizzo = System.getenv("WISPER_SERVER_PROVA").orEmpty()
+    private val indirizzo = ServerDiProva.indirizzo
 
     @Before
     fun soloColServer() = assumeTrue("Server di prova spento: prove saltate", indirizzo.isNotBlank())
@@ -124,7 +123,16 @@ class ServerDiProvaFase2Test {
     @Test
     fun `una revisione nuova e un rifiuto`() = runBlocking {
         val (_, p) = entra("manuel@esempio.it")
-        val inviato = p.preventivi(stato = StatoPreventivo.INVIATO).firstOrNull() ?: p.preventivi(stato = StatoPreventivo.SCADUTO).first()
+        // Un preventivo inviato di questo giro (quello dei dati di esempio, al giro prima, è già stato sostituito).
+        val bozza = p.salvaPreventivo(
+            Preventivo(
+                idCliente = p.anagrafiche().clienti.first().id, oggetto = "Prova revisione ${System.currentTimeMillis()}",
+                sezioni = listOf(SezionePreventivo(PonteServer.NUOVO + "s", "Progetto", listOf(VocePreventivo(PonteServer.NUOVO + "1", "Progetto esecutivo", prezzo = 800.0)))),
+            ),
+            costi = true,
+        )
+        val inviato = runCatching { p.segnaInviato(bozza.id) }.getOrElse { p.segnaInviato(bozza.id, conferma = true) }
+        assertEquals(StatoPreventivo.INVIATO, inviato.stato)
         val rev = p.nuovaRevisione(inviato.id)
         assertEquals(inviato.revisione + 1, rev.revisione)
         assertTrue(rev.bozza)
@@ -145,12 +153,14 @@ class ServerDiProvaFase2Test {
         val aperte = p.attivita(null, null)
         assertTrue(aperte.isNotEmpty())
         assertTrue(aperte.none { it.fatta || it.annullata })
-        val oggi = LocalDate.now()
+        val oggi = ServerDiProva.oggi
         val periodo = p.attivita(oggi.minusDays(30), oggi.plusDays(30))
         assertTrue(periodo.all { it.giorno != null })
 
-        // Un appuntamento fra cinque settimane, poi uno che lo accavalla: chiede conferma.
-        val giorno = oggi.plusWeeks(5)
+        // Un appuntamento fra cinque settimane (il primo giorno senza le mie attività: un giro fermato a metà ne lascia),
+        // poi uno che lo accavalla: chiede conferma.
+        var giorno = oggi.plusWeeks(5)
+        while (p.attivita(giorno, giorno).any { it.assegnataA == io }) giorno = giorno.plusDays(1)
         val primo = p.salvaAttivita(Attivita("", "Prova app: riunione", tipo = TipoAttivita.APPUNTAMENTO, inizio = giorno.atTime(9, 0), fine = giorno.atTime(10, 0), assegnataA = io,
             checklist = listOf(VoceChecklist("", "Portare lo schema"))))
         assertTrue(primo.conOra)
@@ -198,7 +208,7 @@ class ServerDiProvaFase2Test {
             val e = runCatching { p.salvaAttivita(Attivita("", "Non deve", assegnataA = altro.id)) }.exceptionOrNull()
             assertTrue(e is PonteServer.PermessoNegato)
         }
-        val mia = p.salvaAttivita(Attivita("", "Prova app: mia", assegnataA = accesso.utente.id, scadenza = LocalDate.now().plusDays(3)))
+        val mia = p.salvaAttivita(Attivita("", "Prova app: mia", assegnataA = accesso.utente.id, scadenza = ServerDiProva.oggi.plusDays(3)))
         assertEquals(accesso.utente.id, mia.assegnataA)
         p.togliAttivita(mia.id)
         val d = Dashboard.daJson(p.dashboard())

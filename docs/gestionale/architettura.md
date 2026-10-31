@@ -3584,3 +3584,878 @@ le app le leggono sempre come ora italiana, anche su un telefono con un altro fu
   del NAS (provato su Windows: sul NAS va guardato il numero in Amministrazione › Spazio sul NAS); un caricamento vero da
   50 MB su una rete lenta (provati 49 e 51 MB in locale, anche senza `Content-Length`). Periodicità DPR 462, tempi
   d'intervento, categorie e approvazioni restano da confermare con Manuel (fase5.md §14).
+
+## 17. Fase 6: le risposte, campo per campo
+
+Persone e risorse umane, mezzi e attrezzature, collaboratori esterni (accordo in [`fase6.md`](fase6.md), ricerca in
+[`ricerca-fase6.md`](ricerca-fase6.md), migrazione `006-persone-mezzi-collaboratori`, server 0.9.0). Valgono le regole
+comuni della §12.1 (`ok`, `permesso:false`, date `"2026-10-22"`, istanti `"2026-10-22T18:46:45"` in ora italiana senza
+fuso, le azioni che scrivono vogliono una POST), quelle della §15.1 sui soldi e quelle della §16.1. Gli esempi sono le
+risposte vere del server di prova (`node server/src/avvio.js --prova --porta 8461 --dati <cartella nuova>`, 22/10/2026
+alle 18:46), accorciate dove un elenco si ripete. I dati di esempio della fase 6 nascono attorno a oggi (le ferie di
+Laura sono oggi e il prossimo giorno lavorativo, la richiesta di Marco è la settimana dopo la prossima, il DURC scade fra
+7 giorni): gli esempi mostrano le date del 22/10/2026.
+
+### 17.1 Regole comuni della fase 6
+
+- **Moduli nuovi**: `persone` (organico, assenze, presenze, formazione, visite, uscita), `mezzi` (mezzi, attrezzature,
+  tarature, manutenzioni, assegnazioni), `collaboratori` (collaboratori esterni, incarichi, compensi); la chiave speciale
+  `riservati` (come `costi`). Leggere 1, scrivere 2; le eccezioni sono scritte azione per azione.
+- **Ruolo nuovo `esterno`**: un utente legato a un collaboratore esterno (`utenti.soggetto_id`). Il server ha la lista
+  delle sole azioni che un esterno può chiamare (`AZIONI_ESTERNO` in `richieste.js`): ogni altra risponde
+  `permesso:false` **prima** di cercare qualunque cosa (§17.16).
+- **Tre livelli di dati della persona** (fase6.md §3.2). Ogni oggetto con dati di una persona è segnato dal server
+  (`datiPersona(o, idPersona, cosa)`); l'ultimo passaggio di **ogni** risposta (`togliDatiPersona` in `richieste.js`,
+  prima di `togliCosti`) toglie, a qualunque profondità, chiavi comprese:
+  - i **campi personali** (`CAMPI_PERSONALI` in `permessi.js`: `codiceFiscale`, `nascitaData`, `nascitaLuogo`,
+    `indirizzo`, `cap`, `citta`, `provincia`, `telefonoPersonale`, `emailPersonale`, `iban`, `emergenzaNome`,
+    `emergenzaTelefono`, `contrattoTipo`, `contrattoScade`, `motivoUscita`, `prossimaVisita`, `dpi`, `saldi`,
+    `assenze`, `visite`, `causale`, `nota`, `protocollo`, `ferieAnnueOre`, `permessiAnnuiOre`) a chi non ha `persone` 2,
+    tranne alla persona stessa;
+  - i **campi riservati** (`CAMPI_RISERVATI`: `costoAnno`, `oreAnno`, `notaCosto`, `ccnl`, `livello`, `noteRiservate`,
+    `giudizio`, `giudizioVisto`, `prescrizioni`, `validoFino`, `protocollo`, `tipoSanitario`, `documentoRiservato`) a chi
+    non ha `riservati`, tranne alla persona stessa; **`costoAnno`, `oreAnno`, `notaCosto` nemmeno alla persona**;
+  - `costoOrario` e `costoDal` sono campi dei **costi** (`CAMPI_COSTI`): li vede chi ha `costi`, la persona no.
+  Il tipo delle assenze sanitarie (malattia, infortunio, congedo, Legge 104) arriva vero solo a chi ha `riservati` e alla
+  persona: agli altri `tipoVisto: "Assente"` senza `tipo`, `causale`, `protocollo`. Le ferie e i permessi degli altri
+  arrivano col tipo solo con `persone` 2 (il collaboratore e lettura: "Assente").
+- **Registro di chi apre i dati riservati** (`accessi_riservati`, §17.6): ogni risposta che porta campi riservati di
+  **un'altra** persona scrive una riga `visto` (una per utente, persona e cosa al giorno); scaricare un documento
+  riservato di un'altra persona scrive `scaricato` (sempre); cambiare un campo riservato `cambiato`; esportare dati
+  riservati `esportato`. Chi apre i suoi dati non lascia traccia. La tabella non si cambia e non si cancella (trigger).
+- **Registro delle modifiche**: i campi personali e riservati hanno `"(riservato)"` al posto del valore nel prima/dopo
+  (anche il tipo e la nota delle assenze, e il nome dei file caricati per una persona).
+- **Mai la diagnosi**: nessun campo per malattie, sintomi o certificati medici; della visita del medico competente solo
+  date, giudizio e prescrizioni (riservati); della malattia solo date e numero di protocollo (riservato).
+- **Senza rete** (`idLocale` ripetuto = la stessa riga, con `giaArrivata: true`): `salvaAssenza`, `segnaKm`,
+  `segnalaGuasto`, `assegna`, `restituisci` (l'`idLocale` del rientro), `salvaConsegnaDpi`; le foto con l'`idFile`.
+- **Conferme** (`ok:false, serveConferma:true, errore`): salto di km grande, uscita, anonimizzazione, chiusura con le
+  ferie, affidare con l'idoneità non in regola, attività per un assente.
+- **Non collegato**: il programma paghe del consulente (`programmaPaghe: "non collegato"` nella scheda e nelle presenze,
+  riga "Programma paghe del consulente · Non collegato" nell'esportazione), il servizio DURC online
+  (`programmaDurc: "non collegato"`), la comunicazione all'Ispettorato degli occasionali
+  (`comunicazioneIspettorato: "non collegato"`). Nessuna azione finge di farli.
+- `io` e `/salute` dicono `versioneServer`/`versione` `"0.9.0"`; lo schema del database è 6.
+
+### 17.2 Cosa cambia nelle azioni di prima
+
+- **`io.interfaccia`** ha in più (vero, Marco): `"idPersona": 3, "puoApprovareAssenze": false, "vedeRiservati": false,
+  "taraturaBlocco": "avviso"`. Per l'esterno (vero, Luca): `"idPersona": null, ..., "esterno": {"idSoggetto": "F006",
+  "nome": "Impianti Veneti di Sartori Luca"}`. `puoApprovareAssenze` è vero per titolare e amministrazione (persone 2),
+  `vedeRiservati` solo per chi ha `riservati`.
+- **`anagrafiche`**: `utenti[].idPersona` (null per l'esterno) e `idSoggetto` per gli esterni; `fornitori[].collaboratore`
+  (true/false); `numerazioni` con `{"tipo": "attrezzatura", "formato": "AT{NNN}", "annuale": false, "prossimo":
+  "AT007"}` e `{"tipo": "incarico", "formato": "IN/{AAAA}/{NNN}", "annuale": true, "prossimo": "IN/2026/002"}`; con
+  `mezzi` ≥ 1 anche `mezzi` (`[{"id": 2, "titolo": "Fiat Doblò GA123BC", "proprieta": "studio", "stato": "assegnato",
+  "statoVisto": "Assegnato a Marco Rossato", "fermo": false, "mio": true}]`) e `mieiStrumenti` (le mie attrezzature con
+  l'ultima taratura: `{"id": 4, "codice": "AT004", "nome": "Multimetro 87V", "matricola": "6011-2381", "controllo":
+  "taratura", "fuoriUso": "", "ultimaTaratura": {"data": "2025-10-12", "scade": "2026-10-12", "esito": "conforme"},
+  "taratura": {"stato": "scaduta", "parola": "Taratura scaduta da 10 giorni", "scade": "2026-10-12"}}`: il telefono
+  ricalcola lo stato dalla data anche senza rete). L'esterno riceve solo le commesse dei suoi incarichi affidati o
+  conclusi, i loro clienti col solo nome, le loro sedi; niente fornitori, referenti, altri utenti (§17.16).
+- **`salvaUtente`**: un utente nuovo non esterno fa nascere la sua persona (stesso nome, rapporto vuoto: "Da
+  completare"); il nome cambiato cambia anche la persona; il ruolo `esterno` vuole `idSoggetto` di un collaboratore
+  (`"Esterno: scegli il collaboratore"`, `"Collaboratore F009 non trovato"`); un utente non passa da esterno a interno o
+  viceversa.
+- **`salvaRapportino`**: `strumenti: [{idAttrezzatura, confermato?}]` (l'elenco intero, §17.13); per l'esterno
+  l'incarico si mette da solo (`"Non hai un incarico su 26ST002: chiedi allo studio"` se manca; cliente nuovo:
+  `permesso:false`); **costo orario** come §17.4. `rapportini`/`rapportino`: `strumenti` (sempre un elenco, vuoto se non
+  ce ne sono), `strumentiDaGuardare` (solo se c'è qualcosa da guardare), `idIncarico`.
+- **`salvaOre`**: costo orario come §17.4; `idIncarico`; senza `idUtente` e con `idIncarico`, le ore di un collaboratore
+  esterno senza accesso (collaboratori 2): costo 0. `ore`: `incarico` nelle righe e `assenza` nei giorni (`"Ferie"`,
+  `"Assente"`, `""`). L'esterno scrive solo sulle commesse dei suoi incarichi.
+- **`veicoli`, `salvaVeicolo`, `salvaTrasferta`**: `proprieta` (`persona` | `studio`), `targa`, `titolo`, `idPersona`,
+  `fermo`, `motivoFermo`. Con un mezzo dello studio l'euro al km congelato è **0** e la trasferta ha
+  `mezzoDelloStudio: true` (vero: `"euroKm": 0, "rimborsoKm": 0, "totale": 0, "mezzoDelloStudio": true`). Una trasferta
+  con un mezzo fermo si salva lo stesso (è il racconto di quello che è successo). L'esterno: `veicoli` vuoto, nessuna
+  trasferta.
+- **`salvaSpesa`, `spese`**: `idVeicolo`, `idAttrezzatura`, `idIncarico`, `km` (una spesa `carburante` col mezzo e i km
+  del contachilometri fa nascere una lettura `rifornimento`, se non va indietro). Le spese dell'esterno si legano da sole
+  al suo incarico e **non vanno in `rimborsi`**.
+- **`salvaRicevuta`, `ricevute`, `ricevuta`, `leggiXml`, `confermaXml`**: `idIncarico` (dello stesso fornitore, non
+  annullato: la ricevuta prende la commessa dell'incarico), `idVeicolo`, `idAttrezzatura`. `leggiXml` di un fornitore con
+  incarichi da fatturare propone l'incarico (`proposta.idIncarico`, `proposta.idCommessa` se è uno solo; `incarichi`
+  sempre; l'avviso "È dell'incarico IN/2026/001? Restano da fatturare 720,00").
+- **`scadenze`, `salvaScadenza`, `faiScadenza`, `togliScadenza`**: campi e filtri `idPersona`, `idVeicolo`,
+  `idAttrezzatura`, `idSoggetto`, `gruppo` (`persone` | `mezzi` | `collaboratori`), `fineMese` (la revisione: l'ultimo
+  giorno del mese), `idQualifica`, `idVisita`; i tipi nuovi (`formazione`, `abilitazione`, `visita_medica`,
+  `contratto_lavoro`, `assicurazione`, `bollo`, `revisione`, `tagliando`, `taratura`, `verifica_dpi`, `durc`, `visura`,
+  `idoneita`, `albo`; `polizza` c'era già). Chi le vede: quelle con una persona come i dati personali (persone 2 e la persona; gli altri non le
+  trovano), quelle di mezzi e strumenti chi ha `mezzi` 1, quelle dei collaboratori chi ha `collaboratori` 1 (l'esterno
+  le sue). Per scriverle serve il modulo del gruppo in scrittura; l'esterno scrive solo la scadenza di un suo documento
+  (il DURC nuovo che carica).
+- **`documenti`, `salvaDocumento`, `/carica`**: campi e filtri `idPersona`, `idVeicolo`, `idAttrezzatura`, `idIncarico`,
+  `idSoggetto` (per i documenti dei collaboratori è il loro `F...`, nella colonna del cliente); `tipoScadenza` (`durc`,
+  `visura`, ...) fa nascere la scadenza proposta (DURC 120 giorni, visura 6 mesi, gli altri 12). `/carica?per=persona`
+  (persone 2; il nome del file nel registro è `"(riservato)"`), `per=mezzo` e `per=attrezzatura` (mezzi 2),
+  `per=collaboratore` (collaboratori 2; l'esterno i suoi). Un documento di una persona lo vedono solo chi ha persone 2 e
+  la persona; se è riservato solo chi ha `riservati` e la persona; gli altri non lo trovano (`/file/<id>` → 403).
+- **`salvaAttivita`, `pianificaTicket`**: per una persona assente quel giorno (assenza approvata; un permesso a ore solo
+  se si accavalla con l'orario) rispondono come le sovrapposizioni (vero):
+  ```json
+  {"ok": false, "errore": "Laura Bianchi è in ferie quel giorno (dal 22 al 23 ottobre)",
+   "assenti": [{"idUtente": 2, "idPersona": 2, "nome": "Laura Bianchi", "dal": "2026-10-22", "al": "2026-10-23", "tipoVisto": "Ferie"}],
+   "serveConferma": true}
+  ```
+  con `conferma: true` si salva. Un'attività con la sola scadenza (senza ora) non chiede niente.
+- **`attivita`**: l'esterno vede solo le sue (assegnate a lui o create da lui), non quelle libere dello studio.
+- **`daApprovare`, `approva`, `respingi`, `annullaApprovazione`**: il tipo `assenza` (§17.8); l'anomalia nuova `inAssenza`
+  sulle ore ("Ore in un giorno di ferie", "... di festa", "... di chiusura dello studio").
+- **`costoCommessa`** (§17.15); **`ticket {id}`**: `strumenti` e `tarataScaduta` (§17.13).
+- **`componiModello`**: `idIncarico` e il modello `LETTERA_INCARICO` (collaboratore, incarico, compenso solo con `costi`,
+  descrizione, dal, al, commessa).
+- **`dashboard`** (§17.17), **`esporta`** (§17.19).
+
+### 17.3 Persone: l'organico e la scheda
+
+`persone {stato?: "attive"|"uscite"|"tutte", testo?}` (persone 1; di base le attive) → vero, Manuel (accorciato):
+```json
+{"ok": true, "persone": [
+  {"id": 2, "nome": "Laura Bianchi", "rapporto": "dipendente", "rapportoNome": "Dipendente", "ruoloStudio": "Amministrazione",
+   "telefonoLavoro": "0445 000302", "emailLavoro": "laura@esempio.it", "entrataIl": "2024-03-01", "uscitaIl": "",
+   "idUtente": 2, "ruoloWisper": "amministrazione", "accessoAttivo": true,
+   "assenteOggi": {"dal": "2026-10-22", "al": "2026-10-23", "tipoVisto": "Ferie"},
+   "daCompletare": false, "anonimizzata": false, "scadenzeVicine": 0, "scadute": 0, "costoOrario": 22.4, "costoDal": "2026-01-01"},
+  {"id": 5, "nome": "Elena Costa", "rapporto": "tirocinante", "rapportoNome": "Tirocinante", "idUtente": null, "accessoAttivo": false, "...": "..."}],
+ "conteggi": {"attive": 5, "senzaAccesso": 1, "assentiOggi": 1, "daCompletare": 1}}
+```
+Al collaboratore la rubrica: le attive coi campi di lavoro, `assenteOggi.tipoVisto` "Assente", niente `costoOrario`,
+`scadenzeVicine` e `scadute` solo nella sua riga. Lettura: come il collaboratore più `costoOrario` (costi 1).
+`rapportoNome`: Titolare, Socio, Dipendente, Apprendista, Tirocinante, A partita IVA nello studio, Altro, "Da completare"
+(rapporto vuoto). Errore: `"Stato: attive, uscite o tutte"`.
+
+`persona {id?}` (persone 1; senza id la propria) → la scheda coi tre livelli. Vera per Manuel che guarda Marco
+(accorciata):
+```json
+{"ok": true, "persona": {"id": 3, "nome": "Marco Rossato", "rapporto": "dipendente", "rapportoNome": "Dipendente",
+ "ruoloStudio": "Tecnico elettrico", "mansione": "Lavori elettrici fuori tensione e in prossimità; verifiche",
+ "emailLavoro": "marco@esempio.it", "telefonoLavoro": "0445 000301", "entrataIl": "2023-05-02", "uscitaIl": "",
+ "oreSettimana": 40, "giorniSettimana": [1, 2, 3, 4, 5], "oreGiorno": 8, "partTime": false, "idUtente": 3,
+ "ruoloWisper": "collaboratore", "accessoAttivo": true, "ultimoAccesso": "2026-10-22T18:14:49", "assenteOggi": null,
+ "anonimizzata": false, "anonimizzataIl": "",
+ "codiceFiscale": "RSSMRC90A01L157X", "nascitaData": "", "nascitaLuogo": "", "indirizzo": "Via dell'Esempio 22", "cap": "36016",
+ "citta": "Thiene", "provincia": "VI", "telefonoPersonale": "333 0000301", "emailPersonale": "", "iban": "IT60X0542811101000000123456",
+ "emergenzaNome": "Giulia Rossato", "emergenzaTelefono": "333 0000302", "contrattoTipo": "indeterminato", "contrattoScade": "",
+ "motivoUscita": "", "ferieAnnueOre": 208, "permessiAnnuiOre": 72,
+ "ccnl": "Studi professionali", "livello": "3", "noteRiservate": "",
+ "costoOrario": 28.5, "costoDal": "2026-01-01", "costoAnno": 47025, "oreAnno": 1650, "notaCosto": "Dal prospetto del consulente di febbraio",
+ "costi": [{"id": 2, "dal": "2026-01-01", "costoOrario": 28.5, "costoAnno": 47025, "oreAnno": 1650, "notaCosto": "Dal prospetto del consulente di febbraio"}],
+ "mezzi": [{"tipo": "mezzo", "id": 2, "nome": "Fiat Doblò GA123BC", "come": "assegnato", "dal": "2026-10-22", "rientro": ""}],
+ "attrezzature": [{"id": 4, "codice": "AT004", "nome": "Multimetro 87V", "categoria": "strumento", "come": "assegnato", "dal": "2026-10-22",
+   "rientro": "", "taratura": "Taratura scaduta da 10 giorni"}],
+ "qualifiche": [{"id": 2, "idPersona": 3, "tipo": "primo_soccorso", "nome": "Primo soccorso", "gruppo": "emergenza", "titolo": "Gruppo B, 12 ore",
+   "data": "2023-09-20", "scade": "2026-09-20", "ente": "", "ore": null, "idDocumento": null, "idScadenza": 11, "nota": "",
+   "statoVisto": "Scaduta", "statoDettaglio": "da 32 giorni", "giorni": 32, "rinnovataDa": null}],
+ "visite": [{"id": 1, "idPersona": 3, "data": "2025-11-04", "tipo": "periodica", "giudizio": "idoneo_prescrizioni",
+   "giudizioVisto": "Idoneo con prescrizioni", "prescrizioni": "Niente sollevamento di carichi oltre 15 kg", "validoFino": "",
+   "prossima": "2026-11-04", "medico": "Medico competente di esempio", "idDocumento": null, "riga": "Visita del 04/11/2025 · prossima il 04/11/2026"}],
+ "prossimaVisita": "2026-11-04",
+ "dpi": [{"id": 2, "cosa": "Elmetto con visiera", "taglia": "unica", "quantita": 1, "data": "2026-10-20", "firmata": false, "daFirmare": true, "...": "..."}],
+ "saldi": {"ferie": {"tenuto": true, "scritto": 104, "scrittoIl": "2026-09-30", "maturate": 0, "godute": 0, "oggi": 104, "prenotate": 40,
+   "restano": 64, "oreGiorno": 8, "giorniOggi": 13, "giorniRestano": 8}, "permessi": {"tenuto": true, "scritto": 24, "...": "..."}},
+ "assenze": [{"id": 1, "tipo": "ferie", "tipoVisto": "Ferie", "dal": "2026-11-02", "al": "2026-11-06", "stato": "da_approvare", "...": "..."}],
+ "scadenze": [{"id": 11, "titolo": "Primo soccorso di Marco Rossato", "data": "2026-09-20", "statoVisto": "Scaduta", "gruppo": "persone", "...": "..."}],
+ "documenti": [{"id": 14, "titolo": "Cedolino del mese scorso", "categoria": "Cedolini", "vede": "riservati", "idPersona": 3,
+   "documentoRiservato": true, "riservato": true, "url": "/file/...", "...": "..."}],
+ "puoScrivere": true, "puoCambiareContatti": true, "puoVedereRiservati": true, "puoApprovare": true, "daCompletare": [],
+ "programmaPaghe": "non collegato"}}
+```
+- **Chi vede cosa** (provato campo per campo in `prove/persone.test.js`):
+  - **Laura** (amministrazione: persone 2, costi 2, riservati 0): lavoro, personali, `costoOrario`, `costoDal`, `costi`
+    (senza `costoAnno`, `oreAnno`, `notaCosto`); niente `ccnl`, `livello`, `noteRiservate`, `costoAnno`, `oreAnno`,
+    `notaCosto`; nelle visite niente `giudizio`, `giudizioVisto`, `prescrizioni`, `validoFino`; il cedolino non c'è.
+  - **Marco su di sé**: lavoro, personali, riservati (giudizi, CCNL, il suo cedolino), **non** `costoOrario`,
+    `costoDal`, `costi`, `costoAnno`, `oreAnno`, `notaCosto`; `puoCambiareContatti: true`.
+  - **Marco che apre Laura**: solo lavoro, `assenteOggi.tipoVisto` "Assente", `qualifiche: []` (le competenze degli
+    altri non sono della rubrica), niente `scadenze`, `documenti: []`.
+  - **Lettura**: lavoro (anche le competenze) e `costoOrario`, `costoDal`, `costi`; niente personali e riservati.
+  - **Esterno**: `permesso:false`.
+- `oreGiorno` = `oreSettimana` / giorni (`ORE_GIORNALIERE` × 5 se `oreSettimana` è vuoto). `daCompletare`: le frasi di
+  quello che manca ("Scegli il rapporto con lo studio", "Manca il costo orario: le sue ore usano il costo dello studio"),
+  solo a chi può scriverle (persone 2; il costo con costi 2). Errore: `"Persona 9 non trovata"`.
+
+### 17.4 Scrivere la scheda, l'accesso, il costo orario
+
+- `salvaPersona {persona: {id?, nome, rapporto?, ruoloStudio?, mansione?, telefonoLavoro?, emailLavoro?, entrataIl?,
+  oreSettimana?, giorniSettimana?, codiceFiscale?, ..., ccnl?, livello?, noteRiservate?, ferieAnnueOre?,
+  permessiAnnuiOre?}}` → `{ok, persona}` (la scheda). Persone 2: tutto (i riservati con `riservati` 2:
+  `"Non hai il permesso per scrivere i dati riservati: chiedi al titolare"`). **La persona stessa** (anche il
+  collaboratore con persone 1 e lettura) cambia solo i suoi `telefonoPersonale`, `emailPersonale`, `indirizzo`, `cap`,
+  `citta`, `provincia`, `iban`, `emergenzaNome`, `emergenzaTelefono`; altro: `"Puoi cambiare solo i tuoi contatti,
+  l'indirizzo, l'IBAN e il contatto di emergenza"` (`permesso:false`); la scheda di un altro:
+  `"Non hai il permesso per cambiare le schede degli altri: chiedi al titolare"`. Il nome cambia anche nell'utente.
+  `contrattoScade` crea, sposta o toglie la scadenza `contratto_lavoro`. Errori: `"Nome: scrivi il nome"`, `"Rapporto:
+  titolare, socio, dipendente, apprendista, tirocinante, autonomo o altro"`, `"Contratto: indeterminato, determinato,
+  apprendistato, stage, parasubordinato o partita_iva"`, `"Codice fiscale: deve avere 16 caratteri"`, `"CAP: deve avere 5
+  cifre"`, `"IBAN: non sembra giusto"`, `"Email: manca la @ o c'è uno spazio"`, `"Ore alla settimana: da 1 a 60"`,
+  `"Giorni: scegli in che giorni lavora"`, `"La scheda è stata resa anonima: non si cambia"`.
+- `daiAccesso {idPersona, email, ruolo}` (amministrazione 2) → crea l'utente col nome della persona e lo lega (password
+  iniziale come la fase 1: `{ok, utente, passwordIniziale}`). `"Ruolo: titolare, amministrazione, collaboratore o lettura"` (l'esterno si invita dal
+  collaboratore, §17.14).
+- **Costo orario della persona** (fase6.md §3.3, `costoOrarioDelLavoro` in conti.js): congelato in una riga di **ore** e
+  in un **rapportino** che nasce (o che cambia commessa), alla data del lavoro: (1) esterno, o ore di un collaboratore
+  esterno senza accesso → **0** (`costoNoto` resta vero: il costo è l'incarico); (2) la persona ha un costo valido quel
+  giorno (la riga con `dal` più recente ≤ data) → quello; (3) altrimenti la regola di oggi (costo fisso del cliente →
+  costo orario della commessa → `COSTO_ORARIO`). Il budget e il costo previsto della commessa restano `costoOrarioDi`
+  (non cambiano). Le righe già scritte non si ricalcolano mai.
+- `salvaCostoPersona {idPersona, dal, costoOrario? | costoAnno + oreAnno, nota?}` (persone 2 e costi 2; costo dell'anno e
+  nota con `riservati` 2) → vero:
+  ```json
+  {"ok": true, "costi": [{"id": 3, "dal": "2026-10-22", "costoOrario": 17.05, "costoAnno": 15000, "oreAnno": 880, "notaCosto": ""}],
+   "frase": "Vale per le ore e i rapportini nuovi dal 22/10/2026: quelli già scritti tengono il loro costo"}
+  ```
+  Senza `costoOrario` si usa `costoOrarioDaAnno` (al centesimo). Nel registro `"costo dal {data}: vale per le righe
+  nuove"`; il costo dell'anno cambiato scrive `cambiato` negli accessi riservati. Errori: `"Dal: scrivi da quando vale
+  il costo"`, `"Dal: c'è già un costo da quel giorno"`, `"Costo orario: scrivi il costo o il costo dell'anno e le ore"`.
+- `togliCostoPersona {id}` (persone 2 e costi 2): la riga si toglie; le ore e i rapportini già scritti tengono il costo
+  che avevano.
+
+### 17.5 Formazione, visite mediche, DPI
+
+- `qualificheTipi {}` (persone 1) → `{ok, tipi: [{chiave, nome, gruppo, ogniMesi, preavvisoGiorni, attivo, sistema}]}`
+  (15 di sistema: PES, PAV, PEI, formazione generale e specifica, preposto, datore, RSPP datore, RLS, primo soccorso,
+  antincendio, lavori in quota, PLE, patente, altro). `salvaQualificaTipo {tipo: {chiave?, nome, gruppo, ogniMesi,
+  preavvisoGiorni, attivo}}` (amministrazione 2): `"Nome: scrivi il nome della formazione o abilitazione"`, `"Gruppo:
+  elettrico, sicurezza, emergenza o altro"`, `"Ogni: da 1 a 240 mesi"`, `"C'è già un tipo «PES»"`.
+- `salvaQualifica {qualifica: {id?, idPersona, tipo, titolo?, data, scade?, ente?, ore?, idFile?, nota?}, rinnova?: id}`
+  (persone 2) → `{ok, qualifica}`: con `scade` (o il tipo con `ogniMesi`) nasce la scadenza (`formazione` o
+  `abilitazione`, "Primo soccorso di Marco Rossato"); **Rinnova** fa la qualifica nuova, segna fatta la scadenza della
+  vecchia (che resta nello storico con `rinnovataDa`). `statoVisto`: Valida ("fino al 12/02/2029"), "Scade fra N giorni",
+  Scaduta ("da 32 giorni"), "Non scade". Il documento (attestato) da `/carica`: categoria Attestati e abilitazioni.
+  `togliQualifica {id, annulla?}`: esce dalla scheda (annulla la rimette), la sua scadenza si toglie.
+- `salvaVisita {visita: {id?, idPersona, data, tipo, giudizio?, prescrizioni?, validoFino?, prossima?, medico?, idFile?}}`
+  (persone 2; `giudizio`, `prescrizioni`, `validoFino` e il documento con `riservati` 2) → `{ok, visita}`; `prossima`
+  (di base un anno) fa la scadenza `visita_medica` ("Visita medica di Marco Rossato"). `giudizioVisto`: Idoneo, Idoneo con
+  prescrizioni, Non idoneo per un periodo, Non idoneo. **Non c'è un campo per la diagnosi.** Errori: `"Tipo: preventiva,
+  periodica, richiesta, cambio_mansione, rientro o cessazione"`, `"Giudizio: idoneo, idoneo_prescrizioni,
+  non_idoneo_temporaneo o non_idoneo"`, `"Prossima: deve venire dopo la visita"`. `togliVisita {id}`.
+- `dpi {idPersona?}` → vero (Marco, le sue):
+  ```json
+  {"ok": true, "consegne": [
+    {"id": 2, "idLocale": "", "idPersona": 3, "persona": "Marco Rossato", "cosa": "Elmetto con visiera", "taglia": "unica", "quantita": 1,
+     "data": "2026-10-20", "idAttrezzatura": null, "scade": "", "firmata": false, "firmataIl": "", "firma": null, "restituitoIl": "", "nota": "", "daFirmare": true},
+    {"id": 1, "cosa": "Guanti isolanti classe 0", "taglia": "9", "idAttrezzatura": 5, "firmata": true, "firmataIl": "2026-10-22T18:46:19",
+     "firma": {"id": "YXMF...", "url": "/file/YXMF..."}, "daFirmare": false, "...": "..."}],
+   "proposte": ["Guanti isolanti", "Elmetto con visiera", "Calzature di sicurezza", "Occhiali", "Imbracatura anticaduta", "Tuta", "Otoprotettori", "Altro"]}
+  ```
+  Chi ha persone 2 o mezzi 2 vede tutte; gli altri solo le proprie (`"Non hai il permesso per vedere i DPI degli altri:
+  chiedi al titolare"`).
+- `salvaConsegnaDpi {consegna: {id?, idLocale?, idPersona, cosa, taglia?, quantita?, data?, idAttrezzatura?, scade?,
+  nota?}, firma?: {base64, mime}}` (persone 2 o mezzi 2): un DPI del catalogo (`idAttrezzatura`) consegnato diventa
+  assegnato alla persona. `firmaConsegna {id, base64, mime}`: la persona firma le sue (anche dopo, dal suo telefono), o chi
+  consegna (`"Firma vuota: firma di nuovo"`, `"La firma deve essere un'immagine"`). `restituisciDpi {id, data?}`: un DPI
+  del catalogo torna disponibile.
+
+### 17.6 Il registro di chi apre i dati riservati
+
+`accessiRiservati {idPersona?, da?, a?, utente?, pagina?}` (il titolare tutto; la persona i suoi; 100 per pagina) → vero
+(Marco):
+```json
+{"ok": true, "pagina": 1, "pagine": 1, "quanti": 7, "righe": [
+  {"quando": "2026-10-22T18:46:45", "idUtente": 1, "utente": "Manuel Gasparotto", "idPersona": 3, "persona": "Marco Rossato",
+   "cosa": "scheda", "azione": "visto", "riferimento": "", "frase": "Ha visto i dati riservati della scheda", "disp": "cattura per il contratto"},
+  {"quando": "2026-10-22T18:46:45", "cosa": "visita", "azione": "visto", "frase": "Ha visto il giudizio della visita medica", "...": "..."},
+  {"quando": "2026-10-22T18:46:45", "cosa": "costo", "azione": "visto", "frase": "Ha visto il costo dell'anno", "...": "..."}]}
+```
+`cosa`: `scheda`, `costo`, `visita`, `assenza`, `documento`, `esportazione`; `azione`: `visto`, `scaricato`,
+`cambiato`, `esportato`. Frasi: "Ha scaricato «Cedolino del mese scorso»", "Ha visto i documenti riservati" (l'elenco),
+"Ha visto il tipo delle assenze", "Ha esportato i dati riservati". Un altro che chiede quelli di una persona non sua:
+`"Non hai il permesso per vedere chi ha aperto i dati riservati (lo vede il titolare): chiedi al titolare"`.
+
+### 17.7 Uscita e anonimizzazione
+
+- `segnaUscita {idPersona, data, motivo?, conferma?}` (persone 2). Prima risposta (vera):
+  ```json
+  {"ok": false, "serveConferma": true, "frase": "Marco Rossato esce il 31/01/2027. Ecco cosa succede:",
+   "daFare": {"accesso": "L'accesso a Wisper si disattiva alla fine del 31/01/2027",
+     "daRestituire": [{"tipo": "mezzo", "id": 2, "nome": "Fiat Doblò GA123BC"}, {"tipo": "attrezzatura", "id": 4, "nome": "Multimetro 87V"},
+       {"tipo": "dpi", "id": 2, "nome": "Elmetto con visiera"}],
+     "assenzeFuture": 1, "attivitaFuture": 0, "ticketInCarico": 1, "attivita": [], "ticket": ["TK/2026/0013 · Navetta 2 si ferma in errore"],
+     "scadenzeAperte": 3, "contattiTolti": ["telefono personale", "contatto di emergenza"]},
+   "errore": "Marco Rossato esce il 31/01/2027: conferma per segnare l'uscita"}
+  ```
+  Con `conferma`: `{ok, persona, daRestituire}`; l'accesso si disattiva dalla fine di quel giorno (subito se è passato:
+  `"L'accesso a Wisper si disattiva adesso"`, il token smette di valere), le assenze future si annullano (motivo "Uscita";
+  quelle a cavallo si accorciano), le attività da dopo l'uscita e i ticket in carico restano senza nessuno (i ticket di
+  nuovo aperti), le scadenze della persona si annullano, telefono personale e contatto di emergenza si tolgono subito.
+  Ore, rapportini, spese restano. Nel registro `"uscita: {data}"`. Errori: `"Uscita: scrivi l'ultimo giorno"`,
+  `"Uscita: non può venire prima dell'entrata"`.
+- `annullaUscita {idPersona}` (persone 2): finché la data non è passata o entro 30 giorni (`"L'uscita è di più di 30
+  giorni fa: non si annulla"`); l'accesso non torna da solo (si ridà con `salvaUtente`).
+- `anonimizzaPersona {idPersona, conferma?}` (**solo il titolare**, con `riservati` 2; amministrazione: `permesso:false`).
+  Vuole l'uscita (`"Prima segna l'uscita di Marco Rossato"`), non la propria scheda. Prima risposta: `serveConferma`,
+  `frase: "Non si torna indietro"`, `siToglie` (dati personali e riservati, costi, assenze e saldi, visite, formazione,
+  consegne DPI e firme, "N documenti (anche dal disco del NAS)"), `resta` (ore, rapportini anche col nome sul PDF dei
+  firmati, spese e trasferte, attività, ticket), `nomeNuovo: "Persona uscita nel 2026"`. Con `conferma`: svuota i campi,
+  toglie le righe e **i file dal disco** (documenti con tutte le revisioni, firme delle consegne: non nel cestino), nome
+  della persona e dell'utente "Persona uscita nel {anno}", utente disattivato. Restano `accessi_riservati` (id e date) e
+  il registro (che ha già `"(riservato)"` al posto dei valori). Ripetuta: `ok`. Dashboard (solo titolare): le persone
+  uscite da più di `PERSONE_CONSERVA_ANNI` anni.
+
+### 17.8 Ferie, permessi e assenze
+
+- `assenze {da?, a?, idPersona?, stato?: "aperte"|"da_approvare"|"tutte", tipo?}` (persone 1). Senza date: le future e in
+  corso più le da approvare; con le date quelle del periodo (il calendario), con `chiusure` e `festivi` del periodo. Vera
+  (Marco):
+  ```json
+  {"ok": true, "oggi": "2026-10-22", "assenze": [
+    {"id": 2, "idLocale": "", "idPersona": 2, "persona": "Laura Bianchi", "tipoVisto": "Assente", "dal": "2026-10-22", "al": "2026-10-23",
+     "mezza": "", "dalle": "", "alle": "", "giorni": 2, "ore": 12, "stato": "approvata", "statoVisto": "Approvata", "approvataDa": 1,
+     "approvataDaNome": "Manuel Gasparotto", "approvataIl": "2026-10-22T18:46:19", "motivoRifiuto": "", "motivoAnnullo": "",
+     "chiusura": "", "idChiusura": null, "daApprovare": false, "puoScrivere": false, "puoAnnullare": false},
+    {"id": 1, "idPersona": 3, "persona": "Marco Rossato", "tipo": "ferie", "tipoVisto": "Ferie", "causale": "", "dal": "2026-11-02",
+     "al": "2026-11-06", "giorni": 5, "ore": 40, "stato": "da_approvare", "statoVisto": "Da approvare", "nota": "Matrimonio di mio fratello",
+     "protocollo": "", "daApprovare": true, "puoScrivere": true, "puoAnnullare": true, "...": "..."}]}
+  ```
+  Il collaboratore riceve le sue con tutto e quelle dei colleghi come "Assente" (approvate e da approvare); chi ha
+  `riservati` riceve anche `tipoSanitario: true` sulle sanitarie. `statoVisto`: Bozza, Da approvare, Approvata, Respinta,
+  Annullata.
+- `salvaAssenza {assenza: {id?, idLocale?, idPersona?, tipo, causale?, dal, al?, mezza?, dalle?, alle?, ore?, nota?,
+  protocollo?, bozza?}}` (persone 1 per sé, 2 per gli altri) → vero:
+  ```json
+  {"ok": true, "assenza": {"id": 4, "idLocale": "cattura-ass-1", "idPersona": 3, "tipo": "permesso", "tipoVisto": "Permesso", "dal": "2027-02-03",
+    "al": "2027-02-03", "dalle": "15:00", "alle": "18:00", "giorni": 0, "ore": 3, "stato": "da_approvare", "statoVisto": "Da approvare", "...": "..."},
+   "saldi": {"ferie": {"tenuto": true, "restano": 64, "...": "..."}, "permessi": {"tenuto": true, "scritto": 24, "prenotate": 3, "restano": 21, "oreGiorno": 8}},
+   "anomalie": []}
+  ```
+  Tipi: `ferie`, `permesso`, `altro` (con la causale) si chiedono; `malattia`, `infortunio`, `congedo`, `legge104` si
+  **segnalano**: nascono approvate (non si approvano né si respingono: `"Questa assenza non si approva: è nata
+  approvata"`), si annullano soltanto. Giorni e ore da `oreAssenza` (§17.20). Le altre nascono da approvare, o approvate se
+  per quella persona non serve (`APPROVAZIONE` della fase 3: il titolare solo con "tutti"). `saldi` solo a chi vede i
+  personali. Errori: `"Tipo: ferie, permesso, malattia, infortunio, congedo, legge104 o altro"`, `"Altro: scrivi la
+  causale"`, `"Dal: scrivi il primo giorno"`, `"Al: non può venire prima di Dal"`, `"Mezza giornata: mattina o
+  pomeriggio"`, `"Permesso: scrivi dalle e alle, o le ore"`, `"Alle: deve venire dopo dalle"`, `"Ore: da 0 a 24"`,
+  `"In quei giorni non lavori: niente da chiedere"`, `"Il 03/11 sei già in ferie: cambia quella richiesta"` (per un altro:
+  `"Il 03/11 Marco Rossato è già ..."`; due permessi in ore diverse si possono), `"È già approvata: per cambiarla chiedi a
+  chi approva"`, `"L'assenza è stata annullata: chiedine una nuova"`, `"Il tipo non passa da una richiesta a una
+  segnalazione: annullala e scrivine una nuova"`.
+- **Accorciare** una ferie in corso: `salvaAssenza {assenza: {id, al: ieri}}` (chi approva): le ore si rifanno.
+- `annullaAssenza {id, motivo?}`: la persona le sue finché non cominciano (`"L'assenza è già cominciata: per cambiarla
+  chiedi a chi approva"`); chi approva sempre, col motivo per quelle degli altri (`"Scrivi il motivo: arriva a chi l'ha
+  chiesta"`), **tranne una ferie in corso** (cominciata prima di oggi e non finita): `"Le ferie sono in corso: accorciale
+  fino a ieri, non si annullano"` (§17.22). Nel registro `"assenza annullata: {motivo}"`.
+- **Approvare** (lo schema della fase 3): `daApprovare` ha le voci `assenza` (vera):
+  ```json
+  {"tipo": "assenza", "id": 1, "idUtente": 3, "idPersona": 3, "data": "2026-11-02", "cosa": "Ferie",
+   "dettaglio": "Da lunedì 2 a venerdì 6 novembre · 5 giorni · restano 8 giorni", "quanto": 40, "unita": "ore", "anomalie": []}
+  ```
+  (le persone senza accesso col nome, `idUtente: null`). `approva`, `respingi {motivo}`, `annullaApprovazione` accettano
+  `{tipo: "assenza", id}` (titolare e amministrazione con persone 2). **Nessuno approva le proprie, tranne il titolare**
+  (`"Le tue ferie le approva il titolare"`; nemmeno compaiono tra le sue da approvare). Una ferie approvata e cominciata non
+  torna da approvare né si respinge (`"Le ferie sono già cominciate: annullale dal giorno di oggi"`); una bozza non si
+  decide (`"La richiesta è ancora in bozza: chi l'ha scritta deve prima mandarla"`). Registro: `"ferie approvate"`,
+  `"permesso respinto: {motivo}"`.
+- **Anomalie** (in giallo scuro, nella risposta di `salvaAssenza` e nella voce): `saldoNegativo` ("Dopo questa richiesta
+  restano −56 ore di ferie"), `colleghiAssenti` ("Negli stessi giorni è assente anche Laura Bianchi"), `impegni` ("Ha 1
+  attività in quei giorni: Sopralluogo quadri di prova martedì 4"), `oreRegistrate` ("Ha già ore o rapportini in quei
+  giorni").
+- `saldi {idPersona}` (persone 1 per la propria, 2 per gli altri: `"Non hai il permesso per vedere il saldo delle ferie
+  degli altri: chiedi al titolare"`) → vero:
+  ```json
+  {"ok": true, "idPersona": 3, "saldi": {
+    "ferie": {"tenuto": true, "scritto": 104, "scrittoIl": "2026-09-30", "maturate": 0, "godute": 0, "oggi": 104, "prenotate": 40, "restano": 64,
+              "oreGiorno": 8, "giorniOggi": 13, "giorniRestano": 8},
+    "permessi": {"tenuto": true, "scritto": 24, "scrittoIl": "2026-09-30", "maturate": 0, "godute": 0, "oggi": 24, "prenotate": 0, "restano": 24, "oreGiorno": 8}}}
+  ```
+  Senza ore all'anno né saldo: `{"tenuto": false}`. `salvaSaldo {idPersona, tipo: "ferie"|"permessi", data, ore, nota?}`
+  (persone 2, "Aggiorna dal cedolino") → `{ok, idPersona, saldi}`; nel registro `"saldo dal cedolino del {data}"`. Errori: `"Tipo:
+  ferie o permessi"`, `"Data: scrivi a che giorno è il residuo del cedolino"`, `"Ore: scrivi il residuo del cedolino in
+  ore"`.
+
+### 17.9 Chiusure dello studio e presenze
+
+- `chiusure {anno?}` (persone 1) → `{ok, chiusure: [{id, nome, dal, al, ferie, assenze, frase: "Studio chiuso: Natale"}]}`.
+- `salvaChiusura {chiusura: {id?, nome, dal, al, ferie}, conferma?}` (persone 2). Con `ferie: true`, prima risposta vera:
+  ```json
+  {"ok": false, "serveConferma": true,
+   "errore": "Nascono le ferie di Natale per 2 persone: Laura Bianchi 7 giorni (42 ore), Marco Rossato 7 giorni (56 ore)",
+   "persone": [{"idPersona": 2, "nome": "Laura Bianchi", "giorni": 7, "ore": 42}, {"idPersona": 3, "nome": "Marco Rossato", "giorni": 7, "ore": 56}]}
+  ```
+  Con `conferma`: per ogni persona attiva quei giorni con le ferie tenute (`ferie_annue_ore`) nascono ferie **approvate**
+  con `chiusura_id`, a pezzi contigui, saltando i giorni in cui ha già un'assenza (anche un permesso a ore). Cambiare la
+  chiusura le rifà (non quelle cambiate a mano); `togliChiusura {id, conferma?}` le toglie. Senza `ferie`: solo la fascia
+  "Studio chiuso". Le chiusure non sono festivi: sono assenze. Errori: `"Nome: scrivi il nome della chiusura (per esempio
+  Natale)"`, `"Dal: scrivi il primo giorno"`, `"Al: non può venire prima di Dal"`.
+- `presenze {mese: "2026-10", idPersona?}` (persone 1; il collaboratore solo la sua) → vera (Manuel, Laura, accorciata):
+  ```json
+  {"ok": true, "mese": "2026-10", "festivi": ["2026-10-04"], "chiusure": [], "persone": [
+    {"idPersona": 2, "nome": "Laura Bianchi", "oreGiorno": 6, "giorni": [
+      {"data": "2026-10-13", "previste": 6, "lavorate": 0, "straordinarie": 0, "assenza": {"tipoVisto": "Malattia", "ore": 6}, "manca": 0, "giorno": ""},
+      {"data": "2026-10-20", "previste": 6, "lavorate": 2, "straordinarie": 0, "assenza": null, "manca": 4, "giorno": ""}],
+     "totali": {"giorniLavorati": 2, "oreLavorate": 9.5, "straordinarie": 0, "ferie": 12, "permessi": 0, "malattia": {"giorni": 1, "ore": 6},
+                "altreAssenze": 0, "mancano": 106}}],
+   "programmaPaghe": "non collegato"}
+  ```
+  `giorno`: `festa`, `chiuso` o `""`. Ricavate (niente timbrature, niente posizione): `lavorate` = ore registrate (mandate
+  o approvate) + ore dei rapportini non annullati; `straordinarie` = ore straordinarie + ore extra dei rapportini; `manca`
+  = previste − lavorate − assenza, se positivo. Chi non ha `riservati`: le sanitarie degli altri "Assente", in
+  `altreAssenze`, e `totali` senza `malattia`; chi le vede (titolare) lascia la riga `visto` negli accessi riservati.
+
+### 17.10 Mezzi: scheda, km, guasti, manutenzioni, costi
+
+- `mezzi {tutti?}` (mezzi 1; prima quelli che ho io; `tutti` anche i dismessi) → vero (accorciato):
+  ```json
+  {"ok": true, "mezzi": [
+    {"id": 2, "nome": "Fiat Doblò", "targa": "GA123BC", "titolo": "Fiat Doblò GA123BC", "tipo": "furgone", "proprieta": "studio",
+     "proprietaVista": "Dello studio", "idPersona": null, "statoVisto": "Assegnato a Marco Rossato", "stato": "assegnato", "motivoFermo": "",
+     "chi": {"idAssegnazione": 1, "tipo": "assegnato", "idPersona": 3, "idCommessa": "", "idSoggetto": "", "nome": "Marco Rossato", "dal": "2026-10-22", "rientro": ""},
+     "km": 84350, "kmIl": "2026-10-22", "kmAlTagliando": 5650,
+     "prossimaScadenza": {"id": 17, "tipo": "assicurazione", "data": "2026-11-05", "statoVisto": "Scade fra 14 giorni"},
+     "guastiAperti": 1, "fermo": false, "mio": false, "attivo": true, "euroKm": null},
+    {"id": 1, "titolo": "Volvo XC40", "tipo": "auto", "proprieta": "persona", "proprietaVista": "Auto di Manuel Gasparotto", "idPersona": 1,
+     "statoVisto": "Auto di Manuel Gasparotto", "stato": "persona", "chi": {"idPersona": 1, "nome": "Manuel Gasparotto", "tipo": "sua"}, "euroKm": 0.76, "...": "..."}],
+   "conteggi": {"mezzi": 2, "fermi": 0, "guastiAperti": 1, "scadenzeVicine": 1}}
+  ```
+  `stato`: `fermo` (rosso: assicurazione o revisione scadute, o guasto con fermo: "Fermo: revisione scaduta"),
+  `officina`, `prestito`, `assegnato`, `disponibile`, `persona` (l'auto di una persona), `dismesso`.
+- `mezzo {id}` (mezzi 1) → la scheda: in più `immatricolazione`, `alimentazione`, `annoAci`, `tagliandoKm`,
+  `tagliandoUltimoKm`, `tagliandoOgniMesi`, `note`, `dismessoIl`, `dismessoMotivo`, `scadenze` (assicurazione, bollo,
+  revisione, tagliando: righe di `scadenze` con `idVeicolo`), `letture`, `manutenzioni`, `assegnazioni`, `documenti`,
+  `trasferte` (quante), `mezzoDelloStudio`, `puoScrivere`, `puoPrendere`, `puoSegnareKm`; i costi dell'anno sono a parte
+  (`costiMezzo`, con `costi`).
+- `salvaMezzo {mezzo: {id?, nome, targa?, tipo?, proprieta?, idPersona?, immatricolazione?, alimentazione?, euroKm?,
+  annoAci?, tagliandoKm?, tagliandoUltimoKm?, tagliandoOgniMesi?, note?, scadenze?: {assicurazione, bollo, revisione,
+  tagliando}}}` (mezzi 2) → `{ok, mezzo}`. Con `studio` l'euro al km si ignora (`null`); la **revisione si propone da
+  sola** (`scadenzaRevisione`: immatricolato il 05/11/2021 → 30/11/2025). Anche `salvaVeicolo` (fase 3) accetta questi
+  campi. Errori: `"Nome: scrivi il nome del mezzo"`, `"Targa: lettere e cifre, senza spazi"`, `"Tipo: auto, furgone,
+  moto o altro"`, `"Di chi è: persona o studio"`, `"Di chi è: scegli la persona"`, `"Euro al km: non può essere
+  negativo"`, `"Tagliando: i numeri non possono essere negativi"`, `"Il mezzo è dismesso: non si cambia"`.
+  `dismettiMezzo {id, motivo}` (mezzi 2): esce dagli elenchi, le trasferte restano (`"Motivo: scrivi perché lo dismetti"`).
+- `segnaKm {idVeicolo, km, data?, idLocale?, idFile?, conferma?}` (mezzi 1 per le cose che ho io, 2 sempre) → vero:
+  ```json
+  {"ok": true, "lettura": {"id": 4, "idLocale": "cattura-km-1", "idVeicolo": 2, "data": "2026-10-22", "km": 84600, "origine": "mano",
+    "idUtente": 3, "utente": "Marco Rossato", "foto": null, "nota": ""},
+   "mezzo": {"id": 2, "km": 84600, "kmIl": "2026-10-22", "kmAlTagliando": 5400, "...": "..."}}
+  ```
+  Più basso dell'ultima lettura di un giorno uguale o prima: `"Km: l'ultima lettura era 84.350 il 22/10"`; più di 5.000
+  km in meno di 7 giorni: `{"ok": false, "errore": "Sono 10.650 km in 1 giorno: è giusto?", "serveConferma": true}`. La
+  foto del contachilometri: `caricaFile {tipo: "km", idLettura | idLocaleLettura, base64, mime, idFile}`. Un mezzo che
+  non ho: `"Non hai il permesso per segnare i km dei mezzi che non hai: chiedi al titolare"`.
+- `segnalaGuasto {guasto: {idVeicolo | idAttrezzatura, titolo, descrizione?, fermo?, km?, idLocale?}}` (mezzi 1 per le
+  mie, 2 sempre) → vero: `{"ok": true, "manutenzione": {"id": 2, "idLocale": "cattura-guasto-1", "idVeicolo": 2, "tipo":
+  "guasto", "stato": "aperta", "statoVisto": "Segnalato", "fermo": false, "data": "2026-10-22", "titolo": "Rumore dai
+  freni", "segnalataDa": 3, "segnalataDaNome": "Marco Rossato", "foto": [], "...": "..."}}`. Con `fermo` il mezzo o lo
+  strumento non si propone e non si prende. Le foto: `caricaFile {tipo: "guasto", idManutenzione | idLocaleManutenzione,
+  ...}` (chi l'ha segnalato o mezzi 2; lo stesso `idFile` non fa doppioni). `"Scrivi in poche parole cosa succede"`.
+- `salvaManutenzione {manutenzione: {id?, idVeicolo | idAttrezzatura, tipo, stato?, fermo?, data?, km?, titolo,
+  descrizione?, idFornitore?, idSpesa?, idRicevuta?, esito?}}` (mezzi 2): tipi `guasto`, `manutenzione`, `tagliando`,
+  `revisione`, `riparazione`, `gomme`, `altro`; stati `aperta`, `in_officina` (il mezzo "In officina"), `chiusa`. **Il
+  costo non si scrive qui**: è la spesa (fase 3) o la fattura ricevuta (fase 4), una delle due (`"Il costo è la spesa o
+  la fattura ricevuta: scegline una"`).
+- `chiudiManutenzione {id, esito?, km?, data?, idSpesa?, idRicevuta?}` (mezzi 2; chi ha segnalato il suo guasto con mezzi
+  1): coi km una lettura (`origine: manutenzione`); un **tagliando** aggiorna `tagliandoUltimoKm` e segna fatta la sua
+  scadenza; una **revisione** segna fatta la sua (la prossima: fine mese + 24 mesi); la riparazione (o il guasto) di uno
+  strumento lo porta a "Taratura non scritta" (§17.11).
+- `manutenzioni {aperte?, idVeicolo?, idAttrezzatura?}` (mezzi 1) → `{ok, manutenzioni: [...]}` con `oggetto` ("Fiat
+  Doblò GA123BC").
+- `costiMezzo {id, anno?}` (mezzi 1 e costi 1) → vero: `{"ok": true, "idVeicolo": 2, "anno": 2026, "km": {"primo": 65920,
+  "ultimo": 84600, "anno": 18680}, "voci": [], "totale": 0, "euroKm": 0}`. `voci`: Carburante, Pedaggi e parcheggi,
+  Manutenzioni, Assicurazione, Bollo, Altro (`{chiave, nome, importo, quante}`): spese col mezzo, fatture ricevute col mezzo
+  (imponibile + cassa + bollo, senza IVA; le note di credito sottraggono), spese e ricevute legate alle manutenzioni,
+  impegni pagati col mezzo. **Una ricevuta legata a una spesa (`spesa_id`) si conta una volta.** `euroKm` solo con almeno
+  1.000 km nell'anno. Senza costi: `"Non hai il permesso per vedere i costi dei mezzi (serve il permesso dei soldi): chiedi
+  al titolare"`.
+
+### 17.11 Attrezzature, strumenti e tarature
+
+- `attrezzature {categoria?, stato?: "disponibili"|"assegnate"|"fuori"|"dismesse"|"tutte", mie?, idPersona?, testo?,
+  taratura?: "scadute"|"in_scadenza"}` (mezzi 1) → vero (accorciato):
+  ```json
+  {"ok": true, "attrezzature": [
+    {"id": 1, "codice": "AT001", "nome": "Misuratore di terra MT-500", "categoria": "strumento", "categoriaNome": "Strumenti di misura",
+     "marca": "Esempio Strumenti", "modello": "MT-500", "matricola": "22-0451", "statoVisto": "Assegnato a Marco Rossato", "stato": "assegnato",
+     "motivo": "", "chi": {"idAssegnazione": 2, "tipo": "assegnato", "idPersona": 3, "nome": "Marco Rossato", "...": "..."}, "rientro": "",
+     "posizione": "Armadio dell'ufficio", "controllo": "taratura",
+     "taratura": {"stato": "in_scadenza", "parola": "Taratura fra 24 giorni", "giorni": 24, "scade": "2026-11-15"}, "mio": false, "dismesso": false},
+    {"id": 2, "codice": "AT002", "nome": "Analizzatore di rete AR-6", "statoVisto": "In taratura", "stato": "laboratorio", "rientro": "2026-10-29",
+     "taratura": {"stato": "laboratorio", "parola": "In taratura", "giorni": null, "scade": "2026-10-25"}, "...": "..."}]}
+  ```
+  Categorie: `strumento` (Strumenti di misura), `attrezzo`, `informatica`, `dpi`, `altro`. Lo **stato visto** è uno solo:
+  Fuori uso (non conforme, guasto con fermo, perso) > In taratura / In verifica / In riparazione > Taratura scaduta > In
+  prestito a … > Assegnato a … > Disponibile; Dismesso esce dagli elenchi.
+- `attrezzatura {id}` (mezzi 1) → la scheda: in più `proprieta`, `acquistatoIl`, `idFornitore`, `controlloOgniMesi`,
+  `idLaboratorio`, `laboratorio`, `fuoriUso`, `fuoriUsoIl`, `fuoriUsoMotivo`, `tarature` (ognuna con `esitoVisto` e
+  `frase`: "Tarato il 12/10/2025 da Laboratorio Tarature Nord Srl · certificato LAT 0777/24 · fino al 12/10/2026"),
+  `assegnazioni`, `manutenzioni`, `documenti`, `usi` (gli interventi: `{data, idRapportino, idTicket, ticket, cliente,
+  impianto, chi, statoAllora, scadeAllora, confermato}`), `usiDaControllare`, `fraseUsi`, `puoScrivere`, `puoPrendere`;
+  `costi` (spese, fatture ricevute) solo con `costi`.
+- `salvaAttrezzatura {attrezzatura: {id?, codice?, nome, categoria, marca?, modello?, matricola?, proprieta?,
+  acquistatoIl?, idFornitore?, posizione?, controllo?, controlloOgniMesi?, idLaboratorio?, note?, ultimaTaratura?:
+  {data, scade?, certificato?, idDocumento?}}}` (mezzi 2): il codice si propone (`AT007`). `ultimaTaratura.idDocumento`
+  sceglie un certificato già in archivio (anche della fase 5): il documento e **la sua scadenza** diventano dello
+  strumento (una sola scadenza, non due). Errori: `"Nome: scrivi cos'è"`, `"Categoria: strumento, attrezzo,
+  informatica, dpi o altro"`, `"Controllo periodico: taratura, verifica o niente"`, `"Ogni: da 1 a 120 mesi"`, `"Di chi
+  è: studio, noleggio, persona o cliente"`, `"Codice: AT004 c'è già (Multimetro 87V)"`. `dismettiAttrezzatura {id,
+  motivo}`: chiude l'assegnazione e annulla le sue scadenze.
+- `registraTaratura {taratura: {idAttrezzatura, data, esito, scade?, idLaboratorio?, certificato?, idFile?, idRicevuta?,
+  nota?}, tornaA?}` (mezzi 2). Esiti `conforme`, `regolato`, `non_conforme`. Conforme o regolato: la scadenza aperta si
+  segna fatta (col certificato, se c'è il file: documento categoria Certificati di taratura) e nasce la prossima alla data
+  `scade` (proposta: data + mesi). Un prestito al laboratorio in corso si chiude (con `tornaA` lo strumento torna a chi
+  l'aveva assegnato). **Non conforme** (vera, accorciata):
+  ```json
+  {"ok": true, "attrezzatura": {"statoVisto": "Fuori uso", "motivo": "Non conforme",
+     "taratura": {"stato": "non_conforme", "parola": "Non conforme", "giorni": null, "scade": ""}, "...": "..."},
+   "usiDaControllare": [
+     {"data": "2026-10-16", "idRapportino": "RAP/2026/0006", "idTicket": null, "ticket": "", "cliente": "Rossi Impianti Srl", "impianto": "",
+      "chi": "Marco Rossato", "statoAllora": "valida", "scadeAllora": "2026-11-15", "confermato": false},
+     {"data": "2026-10-22", "idRapportino": "RAP/2026/0016", "...": "..."}],
+   "fraseUsi": "Usato in 2 interventi dal 15/11/2025: controlla se le misure valgono"}
+  ```
+  Gli usi sono quelli dall'ultima taratura buona. Una taratura conforme dopo lo rimette in uso. Errori: `"Esito: conforme,
+  regolato o non conforme"`, `"Scade: deve venire dopo la data della taratura"`, `"È dismesso"`, `"Pinza amperometrica
+  non ha un controllo periodico: scegli taratura o verifica nella scheda"`, `"Laboratorio F009 non trovato"`.
+- **Dopo una riparazione** (o un guasto chiuso) la taratura non vale più (ACCREDIA): "Taratura non scritta" finché non se
+  ne registra una (lo stesso giorno conta l'ora: una riparazione chiusa dopo la taratura la annulla).
+- `usiStrumento {idAttrezzatura, da?, a?}` (mezzi 1) → `{ok, idAttrezzatura, usi}`.
+
+### 17.12 Assegnazioni e prestiti
+
+- `assegna {idVeicolo | idAttrezzatura, tipo, idPersona? | idCommessa? | idSoggetto?, rientro?, nota?, idLocale?, firma?:
+  {base64, mime}}`. Tipi `assegnato`, `prestito`, `laboratorio` (In taratura), `riparazione`. Mezzi 2: tutto; **mezzi 1
+  solo "Lo prendo io"**: un prestito a sé di una cosa disponibile (senza rientro: rientra oggi). Vera (Marco):
+  `{"ok": true, "attrezzatura": {"id": 3, "statoVisto": "In prestito a Marco Rossato", "stato": "prestito", "chi":
+  {"idAssegnazione": 7, "tipo": "prestito", "idPersona": 3, "nome": "Marco Rossato", "dal": "2026-10-22", "rientro":
+  "2026-10-22"}, "...": "..."}}`. **Una sola assegnazione in corso** per cosa (indice unico nel database): la nuova chiude
+  quella di prima (lo storico resta); un prestito che interrompe un'assegnazione, restituito, torna a chi l'aveva.
+  Errori: `"Non conforme: non si usa finché non è tarato di nuovo"`, `"È fuori uso: Guasto: Il display non si accende"`,
+  `"È al laboratorio fino al 29/10"`, `"È fermo: revisione scaduta"`, `"È in officina fino al 30/10"`, `"È l'auto di una
+  persona: non si assegna"`, `"Non è disponibile: Assegnato a Marco Rossato"` (Lo prendo io), `"Rientro: deve venire dopo
+  oggi"`, `"Scegli a chi"`, `"Scegli il laboratorio o l'officina"`, `"Marco Rossato è uscito dallo studio"`, altri:
+  `permesso:false` (`"... assegnare mezzi e attrezzature agli altri ..."`).
+- `restituisci {idAssegnazione | idVeicolo | idAttrezzatura, idLocale?}` (mezzi 1 per le mie, 2 sempre) → la cosa; con lo
+  stesso `idLocale` di nuovo: `giaArrivata: true`.
+- `assegnazioni {inCorso?, inRitardo?, idPersona?, idCommessa?, idSoggetto?}` (mezzi 1) → vera:
+  `{"ok": true, "assegnazioni": [{"id": 6, "idAttrezzatura": 6, "oggetto": "Imbracatura anticaduta AT006", "tipo":
+  "prestito", "tipoVisto": "In prestito", "idSoggetto": "F006", "chi": "Impianti Veneti di Sartori Luca", "dal":
+  "2026-10-14", "rientro": "2026-10-21", "al": "", "inCorso": true, "inRitardo": true, "firmata": false, "firma": null,
+  "nota": "", "frase": ""}]}`.
+
+### 17.13 Gli strumenti nel rapportino e nel ticket
+
+- `salvaRapportino {rapportino: {..., strumenti: [{idAttrezzatura, confermato?}]}}`: l'elenco intero (come la checklist);
+  senza la chiave `strumenti` (le versioni vecchie, il ponte) non cambia niente. **Mai un rifiuto per uno strumento** (la
+  coda del telefono si fermerebbe): uno che non c'è si salta; uno non conforme, al laboratorio o scaduto non confermato si
+  scrive col suo stato vero e il rapportino ha `strumentiDaGuardare`. Lo stato e la scadenza sono **quelli del giorno del
+  rapportino**, congelati in `strumenti_usati` (cambiare la data in bozza li rifà). Vero:
+  ```json
+  {"ok": true, "rapportino": {"id": "RAP/2026/0016", "strumenti": [
+    {"idAttrezzatura": 4, "codice": "AT004", "nome": "Multimetro 87V", "matricola": "6011-2381", "scadeAllora": "2026-10-12",
+     "statoAllora": "scaduta", "confermato": true, "verifica": false},
+    {"idAttrezzatura": 1, "codice": "AT001", "nome": "Misuratore di terra MT-500", "matricola": "22-0451", "scadeAllora": "2026-11-15",
+     "statoAllora": "valida", "confermato": false, "verifica": false}], "idIncarico": null, "...": "..."}}
+  ```
+  `statoAllora`: `valida` (anche in scadenza), `scaduta`, `senza`, `non_conforme`, `laboratorio`. `confermato` vale solo
+  per uno scaduto ("Lo uso lo stesso"). `strumentiDaGuardare`: non conformi, al laboratorio, scaduti senza conferma, e con
+  `TARATURA_BLOCCO = "blocco"` anche gli scaduti confermati (il server salva lo stesso: il blocco lo fanno le app al
+  momento della scelta).
+- Da **firmato** in poi il rapportino non cambia (`"Il rapportino RAP/2026/0016 e' gia' firmato: riportalo in bozza per
+  modificarlo"`), e quindi nemmeno i suoi strumenti.
+- **Il PDF del rapportino** lo fanno telefono e computer (`pc/ui/documenti.js`, fuori dal server): il server manda in
+  `strumenti` nome, matricola e `scadeAllora` per la riga "Strumenti"; i rapportini senza strumenti hanno `strumenti: []` e
+  il loro PDF resta identico (provato da `migrazione-005.test.js` e `migrazione-006.test.js`).
+- `ticket {id}`: `strumenti` (degli interventi del ticket: `{idRapportino, data, idAttrezzatura, codice, nome, matricola,
+  scadeAllora, statoAllora, confermato, verifica}`) e `tarataScaduta` (true se uno era scaduto quel giorno).
+
+### 17.14 Collaboratori esterni e incarichi
+
+- `collaboratori {testo?, stato?: "attivi"|"tutti", tipo?, idoneita?}` (collaboratori 1; l'esterno solo il suo) → vero:
+  `{"ok": true, "collaboratori": [{"idSoggetto": "F006", "nome": "Impianti Veneti di Sartori Luca", "tipo": "impresa",
+  "tipoNome": "Impresa", "mestiere": "Impianti elettrici civili e industriali", "attivo": true, "idoneita": {"stato":
+  "in_regola", "parola": "In regola", "frase": ""}, "incarichiInCorso": 1, "valutazioni": {"bene": 0, "problemi": 0,
+  "male": 0}, "daFatturare": 720}]}`. `daFatturare` solo con `costi` (e all'esterno il suo).
+- `collaboratore {id}` (collaboratori 1; l'esterno senza id il suo) → la scheda: dati del fornitore (partita IVA,
+  telefono, email, PEC, indirizzo), `tipo`, `mestiere`, `abilitazioni`, `referenteId`, `referente`, `note`, `idoneita`
+  (`{stato, parola, frase, mancano, scaduti, prossima: {"tipo": "durc", "nome": "DURC", "data": "2026-10-29", "giorni":
+  7}, servono: ["durc", "visura", "idoneita", "polizza"]}`), `documenti` (con `tipoScadenza`, `scade`, `statoVisto`),
+  `incarichi` (`{inCorso, conclusi, daValutare}`), `valutazioni`, `elencoIncarichi`, `accessi` (gli utenti esterni),
+  `programmaDurc: "non collegato"`, `comunicazioneIspettorato` (`"non collegato"` per gli occasionali), `puoScrivere`,
+  `puoAffidare`, `puoCaricareDocumenti`; `tariffa` e `compensi` (pattuito, maturato, fatturato, daFatturare, daPagare) con
+  `costi` o all'esterno per il suo. **Idoneità**: In regola, Manca qualcosa ("Manca il DURC"), Documenti scaduti ("DURC
+  scaduto il 12/10"); quali documenti servono per tipo è `COLLAB_DOCUMENTI` (impresa: DURC, visura, idoneità, polizza;
+  professionista: polizza, albo; occasionale: niente).
+- `salvaCollaboratore {collaboratore: {idSoggetto?, soggetto?: {...salvaSoggetto}, tipo, mestiere?, abilitazioni?,
+  tariffa?, referenteId?, attivo?, note?}}` (collaboratori 2; la tariffa con costi 2). Senza `idSoggetto` crea il fornitore
+  (fase 1, `salvaSoggetto`): **un doppione per nome o partita IVA torna quello che c'è** (anche un cliente, che diventa
+  anche fornitore). Errori: `"Tipo: impresa, professionista o occasionale"`, `"Tariffa: non può essere negativa"`,
+  `"Fornitore F009 non trovato"`.
+- `invitaEsterno {idSoggetto, nome, email}` (amministrazione 2) → `{ok, utente, passwordIniziale}` (come
+  `salvaUtente`): un utente `esterno` del collaboratore con la password iniziale (come la fase 1); più persone dello stesso collaboratore possono avere l'accesso.
+  Un esterno non è una persona dello studio (niente scheda nell'organico).
+- `incarichi {stato?: "aperti"|"bozze"|"conclusi"|"tutti", idSoggetto?, idCommessa?, daValutare?}` (collaboratori 1;
+  l'esterno i suoi) → vero (Luca):
+  ```json
+  {"ok": true, "incarichi": [{"id": 1, "numero": "IN/2026/001", "idSoggetto": "F006", "collaboratore": "Impianti Veneti di Sartori Luca",
+    "idCommessa": "26ST001", "commessa": "Nuovo magazzino automatico Batokyo", "idCliente": "C001", "cliente": "Elettrodinamica",
+    "idPrestazione": null, "titolo": "Cablaggio quadri di linea 4 e 5", "modo": "corpo", "modoVisto": "A corpo", "stato": "affidato",
+    "statoVisto": "Affidato", "avanzamento": 60, "dal": "2026-10-02", "al": "2026-11-21", "orePreviste": null, "speseComprese": true,
+    "referenteId": 1, "referente": "Manuel Gasparotto", "compenso": 3200, "tariffa": null, "tetto": null,
+    "conti": {"pattuito": 3200, "maturato": 1920, "fatturato": 1200, "costo": 1200, "daFatturare": 720, "daPagare": 1464,
+              "oreApprovate": 0, "speseDaRiconoscere": 0}}]}
+  ```
+  (per lo studio anche `valutazione`, `valutazioneVista`, `daValutare`). `incarico {id}` → in più `descrizione`,
+  `affidatoIl`, `conclusoIl`, `annullatoIl`, `motivo`, `valutazioneNota`, `valutataIl` (non all'esterno), `idDocumento`,
+  `idoneita`, `ore`, `rapportini`, `spese`, `ricevute` (con lo stato del pagamento).
+- `salvaIncarico {incarico: {id?, idSoggetto, idCommessa, idPrestazione?, titolo, descrizione?, modo, compenso?,
+  tariffa?, orePreviste?, tetto?, speseComprese?, dal?, al?, referenteId?, idDocumento?}}` (collaboratori 2; i soldi con
+  costi 2): nasce in **bozza** col numero `IN/{AAAA}/{NNN}`; affidato si cambiano solo titolo, descrizione, date,
+  referente, documento, ore previste (`"L'incarico affidato non cambia collaboratore"`, `"... commessa"`, `"... come si
+  paga"`). Errori: `"Titolo: scrivi cosa deve fare"`, `"Come si paga: corpo o ore"`, `"Compenso: scrivi quanto"`,
+  `"Tariffa: scrivi quanto all'ora"`, `"Commessa: scegli la commessa"`.
+- `affidaIncarico {id, conferma?}` (collaboratori 2 e costi 1): con l'idoneità non in regola chiede conferma (blocco
+  morbido: `"Manca il DURC: lo affido lo stesso?"`, con `idoneita`); con `conferma` nel registro `"incarico affidato con
+  l'idoneità non in regola: Manca il DURC"`. `"Si affida solo un incarico in bozza"`.
+- `aggiornaAvanzamento {id, avanzamento}` (solo a corpo, affidato: `"L'avanzamento è degli incarichi a corpo: a ore
+  contano le ore"`, `"Avanzamento: da 0 a 100"`), `concludiIncarico {id}` (a corpo l'avanzamento va a 100),
+  `riapriIncarico {id, motivo}`, `annullaIncarico {id, motivo}` (non con fatture ricevute collegate: `"L'incarico ha la
+  fattura 18/2026: scollegala prima"`; un concluso: `"Un incarico concluso non si annulla: riaprilo prima"`),
+  `valutaIncarico {id, valutazione: "bene"|"problemi"|"male", nota?}` (concluso; si cambia finché si vuole).
+- `compensi {idSoggetto?, anno?}` (collaboratori 1 e costi 1; l'esterno i suoi) → vero: `{"ok": true, "anno": 2026,
+  "righe": [{"idSoggetto": "F006", "nome": "Impianti Veneti di Sartori Luca", "pattuito": 3200, "maturato": 1920,
+  "fatturato": 1200, "daFatturare": 720, "daPagare": 1464, "incarichi": 1}], "totale": {...}}`.
+- **Le fatture del collaboratore** sono le fatture ricevute della fase 4 (`idIncarico`, §17.2): il fatturato e il pagato
+  dell'incarico vengono da lì; la prestazione occasionale si registra a mano come ricevuta (`tipoDocumento:
+  "occasionale"`, ritenuta proposta del 20%).
+
+### 17.15 Il costo della commessa
+
+`costoCommessa {idCommessa}` ha in più (vero, 26ST001):
+```json
+{"ok": true, "idCommessa": "26ST001", "costoCommessa": {"lavoro": 671, "lavoroNoto": true, "auto": 291.84, "speseRapportini": 14.5,
+  "oreRegistrate": 26, "costoOreRegistrate": 572, "speseFuoriRapportini": 245.9, "trasferte": 209.76, "kmTrasferte": 276,
+  "soloRapportini": 977.34, "totale": 3205, "collaboratori": 1200, "collaboratoriPrevisto": 3200, "altreRicevute": 0}}
+```
+- `collaboratori` = il costo (imponibile + contributo + bollo, senza IVA) delle fatture ricevute degli incarichi non
+  annullati della commessa; `collaboratoriPrevisto` = per gli stessi il più grande fra pattuito e fatturato;
+  `altreRicevute` = imponibile + contributo + bollo delle ricevute attive con la commessa, **senza incarico e senza spesa**
+  (quelle legate a una spesa sono già nelle spese).
+- `totale` (costo sostenuto) = quello della fase 3 + `collaboratori` + `altreRicevute`. Costo atteso nelle app = quello
+  della fase 3 + `collaboratoriPrevisto` + `altreRicevute`. Le ore e i rapportini degli esterni hanno costo 0: niente
+  doppio conto. Tutto l'oggetto è dei soldi: senza `costi` la risposta ha solo `idCommessa`.
+
+### 17.16 L'esterno
+
+- **Lista delle azioni**: `io`, `esci`, `cambiaPassword`, `anagrafiche`, `dashboard`, `esporta`, `rapportini`, `file`,
+  `documenti`, `salvaRapportino`, `caricaFile`, `togliFile`, `stato`, `inviaEmail`, `legaRapportino`, `ore`, `salvaOre`,
+  `togliOre`, `timer`, `avviaTimer`, `fermaTimer`, `statisticheOre`, `spese`, `salvaSpesa`, `togliSpesa`,
+  `togliFotoSpesa`, `trasferte`, `rimborsi`, `riepilogoSpese`, `veicoli`, `attivita`, `salvaAttivita`, `faiAttivita`,
+  `togliAttivita`, `spuntaChecklist`, `togliAllegato`, `documento`, `salvaDocumento`, `caricaVersione`, `togliVersione`,
+  `categorieDocumenti`, `scadenze`, `tickets`, `ticket`, `sospendiTicket`, `riprendiTicket`, `risolviTicket`,
+  `altroIntervento`, `pianificaTicket`, `togliFotoTicket`, `collaboratori`, `collaboratore`, `incarichi`, `incarico`,
+  `compensi`. Ogni altra (provate tutte in `prove/collaboratori.test.js`) risponde `permesso:false` prima di cercare
+  qualunque cosa.
+- **Dentro la lista**, ognuna filtra: le commesse dei suoi incarichi affidati o conclusi (senza budget, ore previste,
+  note, cartella, contratto, persone dello studio: le chiavi restano vuote); il cliente solo col nome; i suoi rapportini,
+  ore, spese (sulle commesse dei suoi incarichi, l'incarico si mette da solo, costo orario 0); le sue attività (assegnate a
+  lui o create da lui); i ticket dove è responsabile o ha un intervento; i documenti suoi (categoria Documenti dei
+  collaboratori col suo `F...`), quelli dei suoi incarichi e quelli `vede = tutti` delle sue commesse; le scadenze dei suoi
+  documenti; la sua scheda **senza le note e le valutazioni dello studio**; i suoi incarichi e compensi (soldi suoi).
+  Le cose degli altri non si trovano (`"Collaboratore F001 non trovato"`, `"Incarico 2 non trovato"`).
+- `esporta`: solo `rapportini`, `ore`, `spese` (le sue). `/carica`: `per=collaboratore` (i suoi documenti) e
+  `per=ticket`. Le sue spese pagate da lui non vanno nei rimborsi dello studio (sono nel maturato dell'incarico, o nella
+  sua fattura). Niente trasferte, niente mezzi.
+- `dashboard` (vera):
+  ```json
+  {"ok": true, "per": "esterno", "oggi": "2026-10-22", "numeri": {"incarichi": {"inCorso": 1}, "rapportini": {"daFirmare": 0}},
+   "incarichi": [{"id": 1, "numero": "IN/2026/001", "idCommessa": "26ST001", "commessa": "Nuovo magazzino automatico Batokyo",
+     "titolo": "Cablaggio quadri di linea 4 e 5", "modo": "corpo", "avanzamento": 60, "dal": "2026-10-02", "al": "2026-11-21"}],
+   "urgenti": [], "settimana": [{"tipo": "collaboratore", "gravita": "attenzione", "titolo": "Il DURC scade fra 7 giorni: carica quello nuovo",
+     "collegamento": {"pagina": "collaboratore", "id": "F006"}, "...": "..."}], "pianificare": [], "giallo": "rapportino"}
+  ```
+- `salvaPermessi` rifiuta di dare a `esterno` più di 0 su `persone`, `mezzi`, `clienti`, `preventivi`, `fatturazione`,
+  `banche`, `comunicazioni`, `portale`, `integrazioni`, `amministrazione`, `costi`, `riservati`: `"Un esterno non può
+  vedere i soldi, le persone e l'amministrazione dello studio"`.
+
+### 17.17 Dashboard: cosa si aggiunge
+
+- `numeri.persone` (persone 1; vero, Manuel): `{"attive": 5, "assentiOggi": 1, "assentiOggiNomi": ["Laura Bianchi"],
+  "daApprovare": 1, "scadenzeVicine": 2, "scadute": 1}` (il collaboratore senza `daApprovare`, con le sue scadenze).
+- `numeri.mezzi` (mezzi 1): `{"fermi": 0, "guastiAperti": 2, "tarateScadute": 1, "tarateInScadenza": 0,
+  "prestitiInRitardo": 1, "scadenzeVicine": 4}` (il collaboratore: le cose sue).
+- `numeri.collaboratori` (collaboratori 1): `{"incarichiInCorso": 1, "nonInRegola": 0, "documentiInScadenza": 1,
+  "daValutare": 0}`; con `costi` anche `numeri.soldi.compensiDaFatturare` (720).
+- **`assentiOggi`** (in cima alla risposta, non dentro `oggi`, che è già la data: §17.22): `[{"idPersona": 2, "nome":
+  "Laura Bianchi", "tipoVisto": "Ferie", "fino": "2026-10-23"}]` ("Assente" per chi non vede il tipo).
+- Voci nuove (tipi `assenza`, `persona`, `qualifica`, `visita`, `mezzo`, `strumento`, `prestito`, `guasto`,
+  `collaboratore`, `incarico`; unità `persone`, `km`), con le frasi dell'accordo (vere):
+  - **urgenti**: "Multimetro 87V: taratura scaduta da 10 giorni" ("Ce l'ha Marco Rossato · usato oggi in
+    RAP/2026/0016"); "RAP/2026/0017 ha usato il Misuratore di terra MT-500, non conforme" ("Il 22/10: controlla se le
+    misure valgono"); "Fiat Doblò GA123BC: assicurazione scaduta, non si usa"; "Imbracatura anticaduta AT006: doveva
+    rientrare ieri" ("In prestito a Impianti Veneti di Sartori Luca dal 14/10"); "Primo soccorso di Marco Rossato scaduto
+    da 32 giorni" (titolare, amministrazione e la persona); "DURC di Impianti Veneti di Sartori Luca scaduto il 12/10"
+    ("Incarico IN/2026/004 in corso"); le ferie da approvare che cominciano entro 7 giorni; le proprie richieste respinte;
+  - **questa settimana**: "Oggi è assente Laura Bianchi" ("Ferie fino a venerdì 23" o "Assente fino a venerdì 23"); "1
+    richiesta di ferie da approvare" ("Marco Rossato · da lunedì 2 a venerdì 6 novembre · 5 giorni · restano 8 giorni");
+    le scadenze nel preavviso entro 30 giorni ("Fiat Doblò GA123BC: assicurazione scade fra 14 giorni", "Misuratore di
+    terra MT-500: taratura fra 24 giorni", "Visita medica di Marco Rossato fra 13 giorni", "DURC di Impianti Veneti di
+    Sartori Luca scade fra 7 giorni"); "Fiat Doblò GA123BC: tagliando fra 700 km"; "Analizzatore di rete AR-6 rientra dal
+    laboratorio giovedì 29"; "Firma la consegna: Elmetto con visiera"; "Le tue ferie dal 2 al 6 novembre aspettano
+    l'approvazione";
+  - **da pianificare**: "Fiat Doblò GA123BC: Spia della pressione delle gomme accesa" ("Segnalato da Marco Rossato il
+    20/10"); "Pinza amperometrica: taratura non scritta"; "Impianti Veneti di Sartori Luca: 720,00 € maturati da
+    fatturare" ("Aspetta la sua fattura"); "Contratto di Elena Costa finisce fra 50 giorni"; le persone senza costo con ore
+    recenti, il saldo non aggiornato, le ferie arretrate, gli incarichi da valutare, gli esterni senza incarichi, le
+    persone da rendere anonime (solo titolare).
+- **Il collaboratore**: "Il tuo Multimetro 87V ha la taratura scaduta da 10 giorni", "Il Fiat Doblò che usi:
+  assicurazione scade fra 14 giorni", "Il tuo Misuratore di terra MT-500: taratura fra 24 giorni", la sua formazione, la
+  sua visita, i DPI da firmare, le sue richieste; niente soldi, niente `numeri.collaboratori`.
+- **Una cosa, una voce**: una scadenza che diventa voce della fase 6 (di una persona, un mezzo, uno strumento, un
+  collaboratore) non torna nella parte delle scadenze della fase 5; la voce porta alla scheda dell'oggetto
+  (`collegamento.pagina`: `persona`, `mezzo`, `attrezzatura`, `collaboratore`). Pagine nuove: `persone` (filtro
+  `segmento`: `organico` | `ferie` | `presenze` | `scadenze` | `costi`, `daApprovare: true`), `persona`, `mezzi`, `mezzo`,
+  `attrezzatura`, `collaboratori`, `collaboratore`, `incarico`. Ogni sezione si ferma al massimo di voci di sempre.
+
+### 17.18 Permessi
+
+| | titolare | amministrazione | collaboratore | lettura | esterno |
+|---|---|---|---|---|---|
+| `persone` | 2 | 2 | 1 (era 0) | 1 | 0 |
+| `mezzi` | 2 | 2 | 1 | 1 | 0 |
+| `collaboratori` | 2 | 2 | 0 | 1 | 1 (solo la sua scheda) |
+| `dashboard`, `commesse` | 2 | 2 | 1 | 1 | 1 (solo con un suo incarico) |
+| `rapportini`, `attivita`, `spese`, `ticket` | 2 | 2 | 2 | 1 | 2 (solo i suoi) |
+| `documenti` | 2 | 2 | 1 | 1 | 1 (più i suoi documenti) |
+| gli altri moduli | come prima | come prima | come prima | come prima | 0 |
+| `costi` | 2 | 2 | 0 | 1 | 0 |
+| `riservati` | 2 | 0 | 0 | 0 | 0 |
+
+Provati su ogni azione nuova (`prove/permessi-fase6.test.js`, letture e scritture per i cinque ruoli):
+- **Titolare**: tutto; solo lui rende anonima una scheda, dà l'accesso (amministrazione 2), invita gli esterni, cambia i
+  tipi di formazione.
+- **Amministrazione** (persone 2, mezzi 2, collaboratori 2, costi 2, riservati 0): scrive schede (non i riservati), costi
+  orari (non il costo dell'anno), formazione, visite (non il giudizio), assenze di tutti, saldi, chiusure, uscite;
+  approva le assenze (non le sue); mezzi, attrezzature, tarature; collaboratori e incarichi.
+- **Collaboratore** (persone 1, mezzi 1): la rubrica e la sua scheda (cambia i suoi contatti), le sue assenze (chiede,
+  annulla le sue non cominciate), le sue presenze e i suoi saldi; vede mezzi e attrezzature senza costi, segna i km e
+  segnala guasti **delle cose che ha**, chiude i guasti che ha segnalato, "Lo prendo io" di una cosa disponibile,
+  restituisce le sue; non assegna ad altri, non registra tarature, non cambia le schede; niente collaboratori esterni.
+- **Lettura** (persone 1, mezzi 1, collaboratori 1, costi 1): vede ed esporta (costi orari, costi dei mezzi, compensi),
+  niente personali e riservati; chiede le sue assenze; nessun'altra scrittura.
+- **Esterno**: §17.16.
+
+### 17.19 Esportazioni
+
+`esporta {cosa, ...}` (CSV della §12.13), cose nuove: `persone`, `qualifiche`, `assenze` (`da`, `a`, `idPersona`),
+`presenze` (`mese`, `idPersona`), `mezzi`, `attrezzature`, `tarature`, `manutenzioni`, `assegnazioni`, `km`
+(`idVeicolo`), `collaboratori`, `incarichi`, `compensi` (questa vuole `costi`). Le colonne dipendono da chi esporta:
+- **persone**: Nome, Rapporto, Ruolo nello studio, Mansione, Telefono di lavoro, Email di lavoro, Entrata, Uscita, Ore
+  alla settimana, Accesso a Wisper, Ruolo; con persone 2 anche Codice fiscale, Nato il, Nato a, Indirizzo, CAP, Città,
+  Provincia, Telefono personale, Email personale, IBAN, Contatto di emergenza, Telefono di emergenza, Contratto,
+  Contratto scade il; con `riservati` CCNL e Livello (riga `esportato` negli accessi riservati); con `costi` Costo orario;
+- **assenze**: Persona, Tipo ("Assente" per le sanitarie a chi non ha `riservati`, e per tutte a chi non ha persone 2),
+  Dal, Al, Giorni, Ore, Stato, Approvata da, Il, Motivo del rifiuto; Nota con persone 2;
+- **presenze**: Data, Persona, Ore previste, Lavorate, Straordinarie, Assenza, Ore di assenza, Mancano, le righe
+  "Totale" e la riga "Programma paghe del consulente;Non collegato";
+- **mezzi**: Mezzo, Targa, Tipo, Di chi è, Chi ce l'ha, Km, Letti il, Tagliando fra km, Prossima scadenza, Stato;
+  **attrezzature**: Codice, Nome, Categoria, Marca, Modello, Matricola, Chi ce l'ha, Posizione, Taratura, Scade, Stato;
+  **tarature**: Codice, Strumento, Data, Esito, Scade, Laboratorio, Certificato; **manutenzioni**, **assegnazioni**,
+  **km** con le loro colonne;
+- **collaboratori**: Codice, Nome, Tipo, Mestiere, Abilitazioni, Idoneità, Incarichi in corso, (Da fatturare con
+  `costi`), Valutazioni; **incarichi**: Numero, Collaboratore, Commessa, Titolo, Come, Stato, Avanzamento, Dal, Al e con
+  `costi` Pattuito, Maturato, Fatturato, Da fatturare, Da pagare; **compensi**: Codice, Collaboratore, Incarichi,
+  Pattuito, Maturato, Fatturato, Da fatturare, Da pagare.
+L'errore di `cosa` ora finisce con `"..., persone, qualifiche, assenze, presenze, mezzi, attrezzature, tarature,
+manutenzioni, assegnazioni, km, collaboratori, incarichi o compensi"`. L'esterno esporta solo `rapportini`, `ore`, `spese`.
+
+### 17.20 Conti e casi condivisi
+
+In `server/src/conti.js`, coi casi in `server/prove/` (telefono e computer li leggono dal loro posto e devono ritrovare
+ogni risultato; prova del server in `prove/conti-fase6.test.js`):
+- **`casi-persone.json`**: `festivi(anno, patrono)` (Pasquetta calcolata, il 4 ottobre dal 2026, il patrono `"mm-gg"`);
+  `giorniLavorativi(dal, al, giorniSettimana, festivi)` (anche a cavallo dell'anno, coi festivi di tutti gli anni:
+  `festiviTra`); `oreAssenza(assenza, persona, festivi)` → `{giorni, ore}` (e `oreAssenzaPerGiorno`, la somma è il totale);
+  `saldoAssenze({annue, saldi, assenze, oggi, entrata, uscita})` → `{tenuto, scritto, scrittoIl, maturate, godute, oggi,
+  prenotate, restano}`; `costoOrarioDaAnno(costoAnno, oreAnno)`. Tutti i casi dell'accordo più quelli del server
+  (part time, patrono, malattia a cavallo del fine settimana, Legge 104 a ore, saldo senza cedolino, a cavallo del saldo,
+  uscita a metà mese).
+- **`casi-ore-spese.json`**, chiave nuova `costoOrario` (le altre restano com'erano: le prove di telefono e computer le
+  leggono per nome): `costoOrarioDelLavoro({esterno, costiPersona, data, cliente, commessa, impostazioni})`.
+- **`casi-mezzi.json`**: `scadenzaRevisione(immatricolazione, ultimaRevisione)`, `kmAlTagliando({tagliandoKm,
+  tagliandoUltimoKm, km})`, `statoTaratura({controllo, ultima, fuoriUso, inLaboratorio}, oggi, preavviso)` → `{stato,
+  parola, giorni, scade}` (o `null` senza controllo).
+- **`casi-incarichi.json`**: `contiIncarico({modo, compenso, tariffa, orePreviste, tetto, avanzamento, oreApprovate,
+  speseComprese, speseDaRiconoscere, ricevute})` → `{pattuito, maturato, fatturato, costo, daFatturare, daPagare}`.
+
+### 17.21 Note per chi legge il database
+
+Migrazione `006-persone-mezzi-collaboratori.sql` + `006-persone-mezzi-collaboratori.js` (schema 6, copia
+`wisper.db.prima-6` prima, una transazione sola):
+- **Tabelle nuove**: `persone`, `persona_costi`, `assenze`, `assenze_saldi`, `chiusure`, `qualifica_tipi`, `qualifiche`,
+  `visite_mediche` (solo giudizio e date: nessun campo clinico), `dpi_consegne`, `accessi_riservati` (trigger: non si
+  cambia, non si cancella), `attrezzature`, `tarature`, `assegnazioni` (indici unici parziali `assegnazioni_una_veicolo` e
+  `assegnazioni_una_attrezzatura` su `al IS NULL`: una sola in corso), `manutenzioni` (nessun importo: `spesa_id` o
+  `ricevuta_id`), `mezzo_letture`, `strumenti_usati` (lo stato della taratura di quel giorno), `collaboratori` (chiave =
+  il fornitore `soggetti.id`), `incarichi`.
+- **Colonne nuove** (vuote nelle righe di prima): `utenti.soggetto_id`; `veicoli` (`targa`, `tipo` di base `auto`,
+  `proprieta` di base `persona`, `persona_id`, `immatricolazione`, `km`, `km_il`, `tagliando_km`,
+  `tagliando_ultimo_km`, `tagliando_ogni_mesi`, `note`, `dismesso_il`, `dismesso_motivo`); `documenti` (`persona_id`,
+  `veicolo_id`, `attrezzatura_id`, `incarico_id`); `spese` (`veicolo_id`, `attrezzatura_id`, `incarico_id`);
+  `fatture_ricevute` (`incarico_id`, `veicolo_id`, `attrezzatura_id`); `impegni.veicolo_id`; `rapportini.incarico_id`.
+- **Tabelle rifatte** con tutte le righe e i contatori AUTOINCREMENT di prima: `ore` (+ `incarico_id`, `creata_da`;
+  CHECK: utente o incarico), `scadenze` (+ persona, mezzo, strumento, qualifica, visita, `fine_mese`, i tipi nuovi),
+  `file` (+ `manutenzione_id`, `lettura_id`, `consegna_id`, `assegnazione_id`, i tipi `km`, `guasto`, `firma_consegna`).
+- **Dati**: una persona per ogni utente non esterno (stesso nome, rapporto `titolare` per il titolare e vuoto per gli
+  altri: "Da completare"); **nessun costo scritto** (le ore e i rapportini tengono il loro costo congelato; il costo del
+  titolare resta vuoto); i veicoli restano "auto di una persona" senza persona (le trasferte non cambiano); i permessi del
+  ruolo `esterno`; il collaboratore passa a `persone` 1 se era 0 (nel registro); 15 tipi di qualifica; le categorie
+  Contratti di lavoro, Cedolini, Idoneità sanitarie (riservati), Attestati e abilitazioni, Consegne DPI, Documenti dei
+  mezzi, Certificati di taratura, Documenti dei collaboratori (tutti), Lettere d'incarico (costi); il testo
+  `LETTERA_INCARICO`; le numerazioni `incarico` e `attrezzatura`; le impostazioni `FESTA_PATRONO` (""),
+  `PERSONE_CONSERVA_ANNI` (10), `SALDO_AVVISO_GIORNI` (60), `TARATURA_OGNI_MESI` (12), `TARATURA_PREAVVISO_GIORNI` (30),
+  `TARATURA_BLOCCO` ("avviso"), `DURC_GIORNI` (120), `VISURA_MESI` (6), `COLLAB_DOCUMENTI`, `ACCESSO_ESTERNI_GIORNI`
+  (90), `KM_TAGLIANDO_AVVISO` (1000). Le scadenze di taratura della fase 5 (scadenze di un documento) restano com'erano:
+  scegliere quel certificato nella scheda dello strumento lega a lui la scadenza.
+- **Prova** (`prove/migrazione-006.test.js`): il database della fase 5 (`migrazione-006/fase5.sql`, coi file) e quello
+  che rispondeva il server 0.8.0 (`migrazione-006/prima.json`, scritto da `genera-prima.js` col codice della fase 5), con
+  l'orologio fermo alle 10:00 del 22/10/2026: le tabelle di prima riga per riga (le colonne nuove vuote), i contatori,
+  rapportini, ore e trasferte campo per campo, le parti del costo delle commesse e i soldi della Dashboard al centesimo,
+  il costo orario di un rapportino nuovo di Manuel per ogni cliente uguale a prima, la migrazione che non si rifà.
+
+### 17.22 Decisioni prese dove l'accordo non diceva (o non reggeva)
+
+- **Il costo sostenuto della commessa e le fatture ricevute di prima.** fase6.md §8.6 aggiunge al totale le fatture
+  ricevute della commessa senza incarico e senza spesa (`altreRicevute`), §4.6 chiede "il costo della commessa uguale al
+  centesimo" dopo la migrazione: le due frasi non stanno insieme per le commesse che hanno già ricevute della fase 4 (nei
+  dati di esempio 26ST002 passa da 713,60 a 1.111,96). Scelto: la regola di §8.6 vale da subito, **le parti di prima
+  restano identiche al centesimo** e la differenza è tutta in `altreRicevute`, mostrata a parte ("Altre fatture
+  ricevute"); la migrazione non scrive niente. Perché: è il costo vero (quelle fatture sono costi della commessa) e niente
+  si perde o si riscrive. Da confermare con Andrea: se preferisce, `altreRicevute` può contare solo le ricevute registrate
+  dopo l'aggiornamento.
+- **Le consegne dei DPI** si leggono con persone 2 o mezzi 2 per tutti, gli altri solo le proprie (§10.1 diceva "mezzi 1
+  per tutti", ma §3.2 le mette tra i dati personali: si sceglie la strada più prudente).
+- **Lettura e collaboratore vedono le ferie degli altri come "Assente"** (il tipo è un dato personale, §3.2: lo vedono
+  persone 2 e la persona).
+- **Annullare una ferie in corso**: "chi approva annulla sempre" (§6.4) ma "una ferie in corso si accorcia, non si
+  annulla" (stessa sezione). Scelto: una ferie (o un permesso, un "altro") approvata, cominciata prima di oggi e non
+  finita non si annulla (`"Le ferie sono in corso: accorciale fino a ieri, non si annullano"`), perché annullarla
+  cancellerebbe i giorni già goduti e il saldo sbaglierebbe; una tutta passata si annulla col motivo (un errore da
+  correggere); le assenze segnalate (malattia...) si annullano sempre.
+- **La chiusura salta anche i giorni con un permesso a ore** (non solo quelli con un'assenza intera): una ferie intera
+  sopra un permesso conterebbe due volte le stesse ore.
+- **`assentiOggi`** sta in cima alla risposta della Dashboard e non in `oggi.assenti` (§11.1): `oggi` è già la data di
+  oggi (un testo) dalla fase 1, e cambiarla romperebbe le app.
+- **Le valutazioni e le note dello studio sul collaboratore** non arrivano all'esterno (§8.4 gli dà "la sua scheda,
+  documenti, incarichi, compensi": il giudizio è dello studio).
+- **L'esterno non vede le attività libere dello studio** (il collaboratore sì, dalla fase 2): solo le sue.
+- **L'esterno scrive la scadenza dei suoi documenti** (il DURC nuovo che carica fa nascere la sua scadenza), nessun'altra.
+- **Le commesse dell'esterno** arrivano con le chiavi di budget, ore previste, note, cartella e contratto vuote (non tolte),
+  perché le app di oggi le leggono.
+- **Lo stato della taratura "al laboratorio"**: oggi conta solo il prestito aperto; per un giorno passato lo strumento era
+  al laboratorio se era uscito entro quel giorno e non era ancora rientrato (il giorno del rientro conta come rientrato).
+- **Riparazione e taratura lo stesso giorno**: conta l'ora (la riparazione chiusa dopo che la taratura è stata scritta la
+  annulla).
+- **Nei dati di esempio** il certificato di taratura della fase 5 è scelto come certificato del misuratore MT-500: una
+  scadenza sola (prima erano due voci per la stessa cosa). Laura Bianchi e Marco Rossato hanno nome e cognome; i fornitori
+  nuovi sono F005 (laboratorio) e F006 (Impianti Veneti), e le prove vecchie che contavano i fornitori o i rapportini sono
+  state portate ai numeri nuovi.
+- **Esportare le assenze** con le sanitarie vere (titolare) scrive `esportato` negli accessi riservati per ogni persona
+  con una sanitaria nel periodo; vedere la malattia di un'altra persona nelle **presenze** scrive `visto`.
+
+### 17.23 Non provato
+
+Le app (telefono e computer) contro queste risposte, e quindi la riga "Strumenti" del PDF del rapportino e i blocchi delle
+tarature al momento della scelta (sono in `pc/ui/` e `app/`, fuori da questa fase lato server); il collegamento a un
+programma paghe e al servizio DURC (dichiarati "non collegato"); la comunicazione all'Ispettorato degli occasionali;
+un'anonimizzazione sul disco del NAS (provata su Windows, coi file nella cartella dei dati). Da confermare: col
+consulente del lavoro i tempi di conservazione (10 anni), il rateo del mese di entrata e di uscita, le colonne del
+riepilogo presenze; col commercialista il costo delle fatture ricevute nella commessa (imponibile + cassa + bollo, senza
+IVA); con Manuel il blocco delle tarature scadute (`TARATURA_BLOCCO`).

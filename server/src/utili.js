@@ -100,7 +100,7 @@ function dataDaIso(s) {
 
 /** Un istante come si salva nel database: ISO col fuso, "2026-10-21T21:30:00+02:00". */
 function istante(d) {
-  d = d === undefined ? new Date() : d;
+  d = d === undefined ? ora() : d;
   if (!eData(d)) d = new Date(d);
   if (!eData(d)) return null;
   const off = -d.getTimezoneOffset();
@@ -110,8 +110,55 @@ function istante(d) {
     (off >= 0 ? '+' : '-') + due(Math.floor(a / 60)) + ':' + due(a % 60);
 }
 
+/*
+ * L'orologio di prova: con WISPER_OGGI_PROVA=AAAA-MM-GG il server crede che oggi sia quel giorno. Le ore
+ * restano quelle vere: l'orologio e' spostato di giorni interi una volta sola, all'accensione, e poi va
+ * avanti da solo (un'ora dopo e' un'ora dopo anche li').
+ * Lo accendono SOLO avvia() con --prova (database in memoria coi dati di esempio, che riparte da capo a
+ * ogni avvio) e prove/aiuto.js. Il server vero (avvio.js senza --prova) non chiama mai
+ * accendiOrologioDiProva(): la variabile, anche se finisse nel .env del NAS, non conta niente
+ * (prove/orologio.test.js lo controlla).
+ */
+let spostamentoMs = 0;
+let giornoDiProva = '';
+
+/** Accende l'orologio di prova su "AAAA-MM-GG" (vuoto: niente). Una data sbagliata ferma tutto, invece di provare sul giorno vero. */
+function accendiOrologioDiProva(valore) {
+  const s = testo(valore);
+  if (!s) return '';
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const g = m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 12) : null;
+  if (!m || !eData(g) || dataIso(g) !== s) throw new Error('WISPER_OGGI_PROVA non e\' una data AAAA-MM-GG: "' + s + '"');
+  const vero = new Date();
+  const finto = new Date(g.getFullYear(), g.getMonth(), g.getDate(), vero.getHours(), vero.getMinutes(), vero.getSeconds(), vero.getMilliseconds());
+  spostamentoMs = finto.getTime() - vero.getTime();
+  giornoDiProva = s;
+  return s;
+}
+
+/** Torna all'orologio vero (per le prove che fermano Date da sole, come migrazione-006.test.js). */
+function spegniOrologioDiProva() {
+  spostamentoMs = 0;
+  giornoDiProva = '';
+}
+
+/** Il giorno dell'orologio di prova acceso ("" = l'orologio e' quello vero). */
+function orologioDiProva() {
+  return giornoDiProva;
+}
+
+/** Adesso, come Date: quello vero, o quello dell'orologio di prova. Al posto di new Date() senza argomenti. */
+function ora() {
+  return new Date(Date.now() + spostamentoMs);
+}
+
+/** Adesso in millisecondi: al posto di Date.now() quando si confronta con le date salvate. */
+function adessoMs() {
+  return Date.now() + spostamentoMs;
+}
+
 function adesso() {
-  return istante(new Date());
+  return istante(ora());
 }
 
 /**
@@ -137,7 +184,7 @@ function locale(d) {
 
 /** Oggi, "2026-10-21", ora italiana. */
 function oggi() {
-  return dataIso(new Date());
+  return dataIso(ora());
 }
 
 /** "2026-10-21" piu' n giorni. */
@@ -188,5 +235,6 @@ function messaggio(err) {
 module.exports = {
   Rifiuto, senzaPermesso, testo, numero, numeroONull, siNoONull, unoZero, normalizza, centesimi,
   eData, dataIso, dataDaIso, istante, adesso, dataOraIso, oggi, piuGiorni, partitaIvaDalFoglio,
+  accendiOrologioDiProva, spegniOrologioDiProva, orologioDiProva, ora, adessoMs,
   telefonoDalFoglio, senzaApostrofo, idCasuale, sha256, messaggio, due,
 };

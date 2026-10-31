@@ -163,9 +163,10 @@ test('filtri dei ticket aperti e storico per anno', () => {
 // ------------------------------------------------------------------ menu e collegamenti della Dashboard
 
 test('menu: Documenti e Ticket e assistenza dopo Banche e scadenze, solo col loro permesso', () => {
-  assert.deepEqual(R.vociMenu(E.permessiDi('titolare')).map(v => v.modulo).slice(-3), ['documenti', 'ticket', 'amministrazione']);
+  // Fase 6: Persone fra Banche e Documenti, Mezzi e Collaboratori esterni dopo Ticket (l'ordine delle specifiche).
+  assert.deepEqual(R.vociMenu(E.permessiDi('titolare')).map(v => v.modulo).slice(-7), ['banche', 'persone', 'documenti', 'ticket', 'mezzi', 'collaboratori', 'amministrazione']);
   const nomi = R.vociMenu(E.permessiDi('titolare')).map(v => v.nome);
-  assert.ok(nomi.indexOf('Documenti') === nomi.indexOf('Banche e scadenze') + 1);
+  assert.ok(nomi.indexOf('Documenti') === nomi.indexOf('Persone e risorse umane') + 1);
   assert.ok(nomi.indexOf('Ticket e assistenza') === nomi.indexOf('Documenti') + 1);
   // Il collaboratore li vede tutti e due (documenti 1, ticket 2); senza permesso niente.
   const coll = R.vociMenu(E.permessiDi('collaboratore')).map(v => v.modulo);

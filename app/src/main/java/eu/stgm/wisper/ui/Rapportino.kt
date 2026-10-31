@@ -635,7 +635,8 @@ private fun ColumnScope.PassoPerChi(
                     stato.sceltaCommessa = true
                 }
             }
-            if (trovati.none { it.nome.equals(testo, ignoreCase = true) }) {
+            // Fase 6 (§8.4): l'esterno scrive solo sulle commesse dei suoi incarichi (cliente o commessa nuovi no).
+            if (!dati.sessione.value.esterno && trovati.none { it.nome.equals(testo, ignoreCase = true) }) {
                 // Un cliente nuovo ha la tariffa libera: Elettrodinamica, l'unica fissa, c'è già.
                 PulsanteBordo("Cliente nuovo «$testo»", {
                     stato.cliente = testo; stato.idCliente = ""
@@ -663,10 +664,11 @@ private fun ColumnScope.PassoPerChi(
                 onScelto("commessa")
             }
         }
-        PulsanteBordo("Senza commessa", { stato.commessa = ""; stato.idCommessa = ""; stato.codiceProposto = ""; onScelto("commessa") }, Modifier.fillMaxWidth())
+        val esterno = dati.sessione.value.esterno
+        if (!esterno) PulsanteBordo("Senza commessa", { stato.commessa = ""; stato.idCommessa = ""; stato.codiceProposto = ""; onScelto("commessa") }, Modifier.fillMaxWidth())
         var nuova by remember { mutableStateOf("") }
-        CampoTesto(nuova, { nuova = it }, "Commessa nuova", segnaposto = "Come la chiami tu")
-        if (nuova.isNotBlank()) {
+        if (!esterno) CampoTesto(nuova, { nuova = it }, "Commessa nuova", segnaposto = "Come la chiami tu")
+        if (nuova.isNotBlank() && !esterno) {
             // Il codice della commessa nuova si sa subito, anche senza rete.
             val codice = ana.prossimoCodiceCommessa(stato.data.year)
             PulsanteBordo("Usa «${nuova.trim()}» · $codice", {
@@ -927,8 +929,12 @@ private fun ColumnScope.PassoLavoro(
         }
     }
 
+    // Fase 6 (§3.9): gli strumenti usati, chiusi in una riga come la nota; aperti se il rapportino ne ha.
+    val conMezzi = LocalPermessi.current.vede(eu.stgm.wisper.rapportino.Moduli.MEZZI)
+    if (conMezzi && stato.strumentiAperti) StrumentiUsati(stato, dati)
     // Le cose che servono ogni tanto: chiuse finché non servono.
     Row(Modifier.padding(top = 4.dp).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (conMezzi && !stato.strumentiAperti) Pillola("+ Strumenti usati", false, { stato.strumentiAperti = true; if (stato.strumenti == null) stato.strumenti = emptyList() }, altezza = 44.dp)
         if (!stato.luogoAperto) Pillola("+ Luogo", false, { stato.luogoAperto = true }, altezza = 44.dp)
         if (!stato.notaAperta) Pillola("+ Una nota per te", false, { stato.notaAperta = true }, altezza = 44.dp)
     }
@@ -1011,6 +1017,16 @@ private fun ColumnScope.PassoRiepilogo(
         if (r.luogo.isNotBlank()) {
             Box(Modifier.fillMaxWidth().height(1.dp).background(c.riga))
             Text("Luogo · ${r.luogo}", style = Testi.secondario.copy(fontWeight = FontWeight.Medium), color = c.tenue, modifier = Modifier.padding(vertical = 12.dp))
+        }
+        // Fase 6 (§3.9): la riga Strumenti coi nomi e lo stato; Cambia riporta al passo 3.
+        val strumenti = r.strumenti.orEmpty()
+        if (strumenti.isNotEmpty()) {
+            Box(Modifier.fillMaxWidth().height(1.dp).background(c.riga))
+            RigaRiepilogo(
+                "Strumenti: " + strumenti.joinToString(", ") { it.riga },
+                if (strumenti.any { it.statoAllora == eu.stgm.wisper.rapportino.ContiMezzi.SCADUTA }) "Uno strumento ha la taratura scaduta" else "Strumenti usati",
+                bloccato,
+            ) { onCambia(3) }
         }
     }
 

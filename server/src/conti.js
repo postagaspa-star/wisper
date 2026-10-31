@@ -919,7 +919,277 @@ function costoTicket({ rapportini, ore, spese, costoOrarioOggi, euroKmOggi }) {
   };
 }
 
+// ------------------------------------------------------------------ fase 6: persone, mezzi, collaboratori
+//
+// I conti condivisi della fase 6 (fase6.md §6.3, §7, §8.3), coi casi in server/prove/casi-persone.json,
+// casi-mezzi.json e casi-incarichi.json: telefono e computer li rifanno per l'anteprima e ritrovano gli stessi numeri.
+
+const ore2 = n => Math.round(numero(n) * 100) / 100;
+const giornoSettimana = iso => { const g = new Date(iso + 'T12:00:00').getDay(); return g === 0 ? 7 : g; };
+
+/**
+ * I giorni festivi di un anno (fase6.md §6.2): 1/1, 6/1, Pasquetta, 25/4, 1/5, 2/6, 15/8, 4/10 (San Francesco, dal
+ * 2026), 1/11, 8/12, 25/12, 26/12 e il santo patrono ("mm-gg", vuoto = nessuno). Le chiusure dello studio non sono
+ * festivi: sono assenze.
+ */
+function festivi(anno, patrono) {
+  const a = Number(anno);
+  const fissi = ['01-01', '01-06', '04-25', '05-01', '06-02', '08-15', '11-01', '12-08', '12-25', '12-26'];
+  if (a >= 2026) fissi.push('10-04');
+  const p = testo(patrono);
+  if (/^\d{2}-\d{2}$/.test(p)) fissi.push(p);
+  const out = new Set(fissi.map(mg => a + '-' + mg));
+  out.add(giorniDopo(pasqua(a), 1));
+  return Array.from(out).sort();
+}
+
+/** I festivi di tutti gli anni fra due date (per i periodi a cavallo dell'anno). */
+function festiviTra(dal, al, patrono) {
+  const out = [];
+  for (let a = Number(String(dal).slice(0, 4)); a <= Number(String(al).slice(0, 4)); a++) out.push(...festivi(a, patrono));
+  return out;
+}
+
+/** I giorni lavorativi di una persona fra due date (compresi): nei suoi giorni (1 = lunedi'), non festivi. */
+function giorniLavorativiElenco(dal, al, giorniSettimana, fest) {
+  const giorni = Array.isArray(giorniSettimana) && giorniSettimana.length ? giorniSettimana.map(Number) : [1, 2, 3, 4, 5];
+  const f = new Set(fest || []);
+  const out = [];
+  for (let g = dal; g && al && g <= al && out.length < 1000; g = giorniDopo(g, 1)) if (giorni.indexOf(giornoSettimana(g)) >= 0 && !f.has(g)) out.push(g);
+  return out;
+}
+
+/** Quanti giorni del periodo (compresi) sono nei giorni lavorativi della persona e non sono festivi. */
+function giorniLavorativi(dal, al, giorniSettimana, fest) {
+  return giorniLavorativiElenco(dal, al, giorniSettimana, fest).length;
+}
+
+/** Le ore del giorno di una persona: ore alla settimana / giorni lavorativi (di base ORE_GIORNALIERE x 5 su 5 giorni). */
+function oreGiornoPersona(persona) {
+  const p = persona || {};
+  const giorni = Array.isArray(p.giorniSettimana) && p.giorniSettimana.length ? p.giorniSettimana.length : 5;
+  const settimana = p.oreSettimana !== null && p.oreSettimana !== undefined && p.oreSettimana !== '' ? numero(p.oreSettimana)
+    : (numero(p.oreGiornaliere) || 8) * giorni;
+  return ore2(settimana / giorni);
+}
+
+/** Le assenze che si segnalano (nascono approvate) e il cui tipo e' riservato. */
+const SANITARIE = ['malattia', 'infortunio', 'congedo', 'legge104'];
+
+/** Un'assenza a ore: il permesso, e "altro" o Legge 104 quando hanno dalle-alle o le ore scritte. */
+function assenzaAOre(a) {
+  const tipo = testo(a.tipo);
+  if (tipo === 'permesso') return true;
+  if (tipo !== 'altro' && tipo !== 'legge104') return false;
+  return !!(testo(a.dalle) || testo(a.alle) || (a.ore !== undefined && a.ore !== null && a.ore !== '' && numero(a.ore) > 0));
+}
+
+/**
+ * Giorni e ore di un'assenza (fase6.md §6.2). Ferie e "altro" a giorni: giorni lavorativi x ore del giorno (mezza
+ * giornata = meta'). Permesso (e altro o Legge 104 con dalle-alle): le ore fra dalle e alle, o quelle scritte, giorni 0.
+ * Malattia, infortunio, congedo, Legge 104 a giorni: giorni di calendario (servono al consulente), ore = giorni
+ * lavorativi x ore del giorno.
+ */
+function oreAssenza(a, persona, fest) {
+  const tipo = testo(a.tipo);
+  const dal = testo(a.dal);
+  const al = testo(a.al) || dal;
+  const oreGiorno = oreGiornoPersona(persona);
+  const lavorativi = giorniLavorativi(dal, al, (persona || {}).giorniSettimana, fest);
+  if (assenzaAOre(a)) {
+    let ore;
+    if (testo(a.dalle) && testo(a.alle)) {
+      const m1 = minutiDa(a.dalle);
+      const m2 = minutiDa(a.alle);
+      ore = m1 === null || m2 === null || m2 <= m1 ? 0 : ore2((m2 - m1) / 60);
+    } else ore = ore2(a.ore);
+    return { giorni: 0, ore: lavorativi ? ore : 0 };
+  }
+  if (SANITARIE.indexOf(tipo) >= 0) {
+    const calendario = dal && al && al >= dal ? Math.round((Date.parse(al + 'T12:00:00') - Date.parse(dal + 'T12:00:00')) / 86400000) + 1 : 0;
+    return { giorni: calendario, ore: ore2(lavorativi * oreGiorno) };
+  }
+  const giorni = testo(a.mezza) && dal === al ? (lavorativi ? 0.5 : 0) : lavorativi;
+  return { giorni, ore: ore2(giorni * oreGiorno) };
+}
+
+/**
+ * Le ore di un'assenza giorno per giorno ([{data, ore}], solo i giorni lavorativi), per il saldo, le presenze e le
+ * assenze a cavallo. L'ultimo giorno prende il resto del centesimo: la somma e' sempre il totale.
+ */
+function oreAssenzaPerGiorno(a, persona, fest) {
+  const tot = oreAssenza(a, persona, fest);
+  const dal = testo(a.dal);
+  const giorni = giorniLavorativiElenco(dal, testo(a.al) || dal, (persona || {}).giorniSettimana, fest);
+  if (!giorni.length) return [];
+  const per = ore2(tot.ore / giorni.length);
+  const out = giorni.map(g => ({ data: g, ore: per }));
+  out[out.length - 1].ore = ore2(tot.ore - per * (giorni.length - 1));
+  return out;
+}
+
+/**
+ * Il saldo di ferie o permessi (fase6.md §3.4 e §6.3): parte dall'ultimo saldo scritto dal cedolino e conta quello che
+ * succede dopo. assenze: [{dal, ore, stato}] gia' in ore, una per giorno quando sono a cavallo del saldo o di oggi (il
+ * server le passa sempre giorno per giorno).
+ *  - maturate = annue x i mesi che finiscono dopo il saldo e entro oggi (dentro entrata-uscita) / 12; senza saldo si
+ *    parte da 0 al primo giorno del mese di entrata o dal 1 gennaio dell'anno di oggi, quello che viene dopo; il rateo
+ *    del mese di entrata e di uscita e' pieno (da confermare col CCNL);
+ *  - godute = le approvate dopo il saldo fino a oggi compreso; prenotate = approvate da domani piu' da approvare;
+ *  - oggi = scritto + maturate - godute; restano = oggi - prenotate (prudente).
+ */
+function saldoAssenze({ annue, saldi, assenze, oggi, entrata, uscita }) {
+  const conAnnue = annue !== null && annue !== undefined && annue !== '';
+  if (!conAnnue && !(saldi || []).length) return { tenuto: false };
+  const fino = testo(oggi);
+  const ultimo = (saldi || []).filter(s => testo(s.data) && testo(s.data) <= fino)
+    .sort((x, y) => (x.data < y.data ? 1 : x.data > y.data ? -1 : 0))[0] || null;
+  const scritto = ultimo ? ore2(ultimo.ore) : 0;
+  const scrittoIl = ultimo ? testo(ultimo.data) : '';
+  let partenza = scrittoIl;
+  if (!partenza) {
+    const gennaio = fino.slice(0, 4) + '-01-01';
+    const meseEntrata = testo(entrata) ? testo(entrata).slice(0, 7) + '-01' : '';
+    partenza = giorniDopo(meseEntrata && meseEntrata > gennaio ? meseEntrata : gennaio, -1);
+  }
+  let mesi = 0;
+  if (conAnnue) {
+    let m = partenza.slice(0, 7) + '-01';
+    for (let i = 0; i < 600; i++) {
+      const fine = fineMese(m);
+      if (fine > fino) break;
+      const dentroEntrata = !testo(entrata) || fine >= testo(entrata);
+      const dentroUscita = !testo(uscita) || m <= testo(uscita);
+      if (fine > partenza && dentroEntrata && dentroUscita) mesi++;
+      m = giorniDopo(fine, 1);
+    }
+  }
+  const maturate = conAnnue ? centesimi(numero(annue) * mesi / 12) : 0;
+  let godute = 0;
+  let prenotate = 0;
+  for (const a of assenze || []) {
+    const dal = testo(a.dal);
+    if (scrittoIl && dal <= scrittoIl) continue;
+    if (a.stato === 'approvata') {
+      if (dal <= fino) godute += numero(a.ore);
+      else prenotate += numero(a.ore);
+    } else if (a.stato === 'da_approvare') prenotate += numero(a.ore);
+  }
+  godute = ore2(godute);
+  prenotate = ore2(prenotate);
+  const oggiSaldo = centesimi(scritto + maturate - godute);
+  return { tenuto: true, scritto, scrittoIl, maturate, godute, oggi: oggiSaldo, prenotate, restano: centesimi(oggiSaldo - prenotate) };
+}
+
+/** Il costo orario proposto dal costo dell'anno (dal prospetto del consulente) e dalle ore lavorate all'anno. */
+function costoOrarioDaAnno(costoAnno, oreAnno) {
+  const o = numero(oreAnno);
+  if (!(o > 0)) return null;
+  return centesimi(numero(costoAnno) / o);
+}
+
+/**
+ * Il costo orario di una riga di ore o di un rapportino che nasce (fase6.md §3.3), congelato li' come sempre:
+ *  1. chi lavora e' un esterno (o la riga e' di un collaboratore esterno senza accesso) -> 0: il suo costo e' l'incarico;
+ *  2. la persona ha un costo valido alla data del lavoro (la riga con dal piu' recente <= data) -> quello;
+ *  3. la regola di oggi: costo fisso del cliente -> costo orario della commessa -> COSTO_ORARIO.
+ * costiPersona: [{dal, costoOrario}]. costoOrarioDi resta la regola del budget della commessa, che non cambia.
+ */
+function costoOrarioDelLavoro({ esterno, costiPersona, data, cliente, commessa, impostazioni }) {
+  if (esterno) return 0;
+  const g = testo(data);
+  const validi = (costiPersona || []).filter(c => testo(c.dal) && (!g || testo(c.dal) <= g))
+    .sort((x, y) => (x.dal < y.dal ? 1 : x.dal > y.dal ? -1 : 0));
+  if (validi.length) return numero(validi[0].costoOrario);
+  return costoOrarioDi(cliente, commessa, impostazioni);
+}
+
+const dataIt6 = iso => (iso ? String(iso).slice(8, 10) + '/' + String(iso).slice(5, 7) + '/' + String(iso).slice(0, 4) : '');
+
+/**
+ * Lo stato della taratura di uno strumento (o della verifica di un DPI), sempre con la parola (fase6.md §7.5):
+ * valida "Tarato fino al 08/04/2027", in_scadenza "Taratura fra 24 giorni", scaduta "Taratura scaduta da 6 giorni",
+ * laboratorio "In taratura", non_conforme "Non conforme", senza "Taratura non scritta" (per i DPI "Verifica" al posto di
+ * "Taratura"). Il giorno "scade" vale ancora: dal giorno dopo e' scaduta. Senza controllo periodico: null.
+ *  x = {controllo: 'taratura'|'verifica'|'', ultima: {data, scade, esito} | null, fuoriUso, inLaboratorio}
+ */
+function statoTaratura(x, oggi, preavviso) {
+  const c = testo(x && x.controllo);
+  if (!c) return null;
+  const dpi = c === 'verifica';
+  const T = dpi ? 'Verifica' : 'Taratura';
+  const ultima = x.ultima || null;
+  const scade = ultima && testo(ultima.scade) ? testo(ultima.scade) : '';
+  if (testo(x.fuoriUso) === 'non_conforme' || (ultima && ultima.esito === 'non_conforme')) {
+    return { stato: 'non_conforme', parola: 'Non conforme', giorni: null, scade };
+  }
+  if (x.inLaboratorio) return { stato: 'laboratorio', parola: dpi ? 'In verifica' : 'In taratura', giorni: null, scade };
+  if (!ultima) return { stato: 'senza', parola: T + ' non scritta', giorni: null, scade: '' };
+  if (!scade) return { stato: 'valida', parola: dpi ? 'Verificato' : 'Tarato', giorni: null, scade: '' };
+  const g = Math.round((Date.parse(scade + 'T12:00:00') - Date.parse(testo(oggi) + 'T12:00:00')) / 86400000);
+  if (g < 0) return { stato: 'scaduta', parola: T + ' scaduta da ' + (-g === 1 ? '1 giorno' : -g + ' giorni'), giorni: -g, scade };
+  if (g <= numero(preavviso)) {
+    return { stato: 'in_scadenza', parola: g === 0 ? T + ' scade oggi' : T + ' fra ' + (g === 1 ? '1 giorno' : g + ' giorni'), giorni: g, scade };
+  }
+  return { stato: 'valida', parola: (dpi ? 'Verificato' : 'Tarato') + ' fino al ' + dataIt6(scade), giorni: g, scade };
+}
+
+/** La prossima revisione di un mezzo: senza revisioni, fine mese dell'immatricolazione + 4 anni; poi fine mese della revisione + 24 mesi. */
+function scadenzaRevisione(immatricolazione, ultimaRevisione) {
+  if (testo(ultimaRevisione)) return fineMese(piuMesi(testo(ultimaRevisione), 24));
+  if (testo(immatricolazione)) return fineMese(piuMesi(testo(immatricolazione), 48));
+  return '';
+}
+
+/** Quanti km mancano al tagliando (negativo: passato), o null se il tagliando non e' a km o mancano i km. */
+function kmAlTagliando({ tagliandoKm, tagliandoUltimoKm, km }) {
+  if (tagliandoKm === null || tagliandoKm === undefined || tagliandoKm === '' || !(numero(tagliandoKm) > 0)) return null;
+  if (km === null || km === undefined || km === '') return null;
+  return Math.round(numero(tagliandoUltimoKm) + numero(tagliandoKm) - numero(km));
+}
+
+/**
+ * I soldi di un incarico a un collaboratore esterno (fase6.md §8.3):
+ *  - pattuito: a corpo il compenso; a ore ore previste x tariffa, o il tetto se c'e' ed e' piu' piccolo;
+ *  - maturato: a corpo compenso x avanzamento / 100; a ore ore approvate x tariffa, al massimo il tetto; piu' le spese
+ *    da riconoscere se le spese non sono comprese;
+ *  - fatturato: l'imponibile delle ricevute collegate, meno le note di credito (TD04);
+ *  - costo: imponibile + contributo + bollo delle stesse (l'IVA no);
+ *  - daFatturare = max(0, maturato - fatturato); daPagare = somma del residuo delle ricevute (daPagare di ognuna).
+ */
+function contiIncarico(x) {
+  const corpo = testo(x.modo) !== 'ore';
+  const tetto = x.tetto !== null && x.tetto !== undefined && x.tetto !== '' && numero(x.tetto) > 0 ? numero(x.tetto) : null;
+  let pattuito;
+  let maturato;
+  if (corpo) {
+    pattuito = centesimi(numero(x.compenso));
+    maturato = centesimi(numero(x.compenso) * numero(x.avanzamento) / 100);
+  } else {
+    pattuito = centesimi(numero(x.orePreviste) * numero(x.tariffa));
+    if (tetto !== null && tetto < pattuito) pattuito = centesimi(tetto);
+    maturato = centesimi(numero(x.oreApprovate) * numero(x.tariffa));
+    if (tetto !== null && maturato > tetto) maturato = centesimi(tetto);
+  }
+  if (x.speseComprese === false || x.speseComprese === 0) maturato = centesimi(maturato + numero(x.speseDaRiconoscere));
+  let fatturato = 0;
+  let costo = 0;
+  let daPagare = 0;
+  for (const r of x.ricevute || []) {
+    const segno = testo(r.tipo) === 'TD04' ? -1 : 1;
+    fatturato += segno * numero(r.imponibile);
+    costo += segno * (numero(r.imponibile) + numero(r.contributo) + numero(r.bollo));
+    if (segno > 0) daPagare += numero(r.daPagare);
+  }
+  fatturato = centesimi(fatturato);
+  costo = centesimi(costo);
+  return { pattuito, maturato, fatturato, costo, daFatturare: centesimi(Math.max(0, maturato - fatturato)), daPagare: centesimi(daPagare) };
+}
+
 module.exports = {
+  // fase 6
+  festivi, festiviTra, giorniLavorativi, giorniLavorativiElenco, oreGiornoPersona, SANITARIE, assenzaAOre, oreAssenza, oreAssenzaPerGiorno,
+  saldoAssenze, costoOrarioDaAnno, costoOrarioDelLavoro, statoTaratura, scadenzaRevisione, kmAlTagliando, contiIncarico,
   ELETTRODINAMICA, STATI, STATI_BLOCCATI, regoleDi, calcola, prossimoCodice, RE_CODICE_COMMESSA,
   // fase 5
   MATRICE_PRIORITA, prioritaDa, piuMesi, righeTicket, rigaCanone, rateCanone, costoTicket,

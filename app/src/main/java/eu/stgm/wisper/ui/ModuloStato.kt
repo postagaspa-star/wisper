@@ -60,6 +60,10 @@ class ModuloStato(
     var tariffaToccata by mutableStateOf(tariffaToccata)
     var noteInterne by mutableStateOf(base.noteInterne)
 
+    /** Fase 6 (§3.9): gli strumenti usati (null = non toccati: non si mandano) e la riga aperta. */
+    var strumenti by mutableStateOf(base.strumenti)
+    var strumentiAperti by mutableStateOf(!base.strumenti.isNullOrEmpty())
+
     /** Foto fatte in questo modulo: partono quando si salva, dopo il rapportino. */
     val fotoNuove = mutableStateListOf<File>()
 
@@ -86,6 +90,7 @@ class ModuloStato(
         noteSpese = noteSpese.trim(),
         tariffa = Numeri.leggi(tariffa),
         noteInterne = noteInterne.trim(),
+        strumenti = strumenti,
     )
 
     /** Vero se c'e' qualcosa da salvare rispetto a com'era all'apertura. */

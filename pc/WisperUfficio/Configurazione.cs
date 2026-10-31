@@ -12,15 +12,35 @@ namespace WisperUfficio;
 /// dell'utente di Windows: lo può leggere solo questo utente su questo computer.
 /// L'interfaccia non lo vede mai: lo aggiunge il ponte a ogni chiamata.
 ///
-/// Dalla 0.5.0 non c'è più il codice del foglio: un file scritto dalle versioni di
-/// prima (url dello script, codice) si legge solo per tenere il nome del dispositivo,
-/// e alla prima scrittura indirizzo e codice del foglio spariscono dal disco.
+/// Gli indirizzi sono due (docs/gestionale/porta-google.md §8): il server di casa
+/// (in ufficio, di base http://192.168.1.51:8400) e la porta Google, cioè lo script del
+/// foglio che tiene le richieste per il server quando si è fuori casa. Anche l'indirizzo
+/// dello script sta cifrato con DPAPI e non arriva mai all'interfaccia né al registro.
+///
+/// Un file della 0.4 (url dello script, codice) si legge per tenere il nome del
+/// dispositivo e l'indirizzo dello script (è la stessa porta Google); il codice no:
+/// alla prima scrittura sparisce dal disco.
 /// </summary>
 public sealed class Configurazione
 {
     private readonly string file;
 
-    public string Server { get; private set; } = IndirizzoPredefinito;
+    /// <summary>Il server di casa come è scritto nel file: vuoto = quello di base (CasaPredefinita).</summary>
+    private string casaSalvata = "";
+
+    /// <summary>La porta Google come è scritta nel file (in chiaro solo qui in memoria).</summary>
+    private string googleSalvato = "";
+
+    /// <summary>Per le prove (--server, --google): valgono per questa volta e non si scrivono.</summary>
+    private string? casaDiProva;
+    private string? googleDiProva;
+
+    /// <summary>L'indirizzo del server di casa (le richieste dirette, in ufficio). Vuoto solo nelle prove con --google da solo.</summary>
+    public string Server => casaDiProva ?? (casaSalvata.Length > 0 ? casaSalvata : CasaPredefinita);
+
+    /// <summary>L'indirizzo della porta Google (lo script del foglio). Vuoto = solo casa, come prima.</summary>
+    public string Google => googleDiProva ?? googleSalvato;
+
     public string Token { get; private set; } = "";
 
     /// <summary>L'ultima email con cui si è entrati: la pagina di accesso la ripropone.</summary>
@@ -29,7 +49,10 @@ public sealed class Configurazione
     /// <summary>La ragione sociale che il server ha detto (io): la pagina di accesso la mostra sotto il titolo.</summary>
     public string Studio { get; private set; } = "";
 
-    public bool Entrato => Server.Length > 0 && Token.Length > 0;
+    public bool Entrato => (Server.Length > 0 || Google.Length > 0) && Token.Length > 0;
+
+    /// <summary>Le prove con --server o --google: gli indirizzi di adesso non sono quelli salvati.</summary>
+    public bool DiProva => casaDiProva != null || googleDiProva != null;
 
     /// <summary>
     /// Come si presenta questo computer al server, che lo scrive negli accessi e nei
@@ -43,9 +66,6 @@ public sealed class Configurazione
     /// <summary>Quando il file è stato letto o scritto l'ultima volta (vedi RileggiSeCambiato).</summary>
     private DateTime letto = DateTime.MinValue;
 
-    /// <summary>Per le prove (--server): l'indirizzo vale per questa volta e non si scrive.</summary>
-    private string? serverDiProva;
-
     public Configurazione(string file)
     {
         this.file = file;
@@ -56,7 +76,9 @@ public sealed class Configurazione
             // Un exe di casa porta l'indirizzo dentro, quelli pubblicati no: si salva subito,
             // così l'aggiornamento dopo non lo perde. Il nome del dispositivo deve restare lo
             // stesso da un'apertura all'altra. E un file della 0.4 si riscrive senza il codice.
-            if ((salvato.Length == 0 && Server.Length > 0) || dispositivo.Length == 0 || vecchio) Scrivi();
+            var daSalvare = salvato.Length == 0 && IndirizzoPredefinito.Length > 0;
+            if (daSalvare) casaSalvata = IndirizzoPredefinito;
+            if (daSalvare || dispositivo.Length == 0 || vecchio) Scrivi();
         }
         catch (Exception e) when (e is IOException or JsonException or InvalidOperationException)
         {
@@ -71,14 +93,17 @@ public sealed class Configurazione
         letto = File.GetLastWriteTimeUtc(file);
         var o = JsonNode.Parse(File.ReadAllText(file)) as JsonObject;
         var salvato = Testo(o?["server"]);
-        if (salvato.Length > 0) Server = salvato;
+        casaSalvata = salvato;
+        googleSalvato = IndirizzoGoogle.Pulito(Dpapi.Svela(Testo(o?["google"]))) ?? "";
         Token = Dpapi.Svela(Testo(o?["token"])) ?? "";
         Email = Testo(o?["email"]);
         Studio = Testo(o?["studio"]);
         var dispositivo = Testo(o?["dispositivo"]);
         if (dispositivo.Length > 0) Dispositivo = dispositivo;
-        if (serverDiProva != null) Server = serverDiProva;
-        // La 0.4 scriveva "url" (lo script del foglio) e "codice": non servono più.
+        // La 0.4 scriveva "url" (lo script del foglio) e "codice". Lo script è la stessa porta
+        // Google di adesso: l'indirizzo si tiene (cifrato); il codice non serve più.
+        var vecchioUrl = IndirizzoGoogle.Pulito(Testo(o?["url"]));
+        if (googleSalvato.Length == 0 && vecchioUrl != null) googleSalvato = vecchioUrl;
         var vecchio = o != null && (o.ContainsKey("codice") || o.ContainsKey("url"));
         return (salvato, dispositivo, vecchio);
     }
@@ -89,7 +114,7 @@ public sealed class Configurazione
         catch (InvalidOperationException) { return ""; }
     }
 
-    /// <summary>Se il file è cambiato da fuori (un'altra copia del programma) si rilegge.</summary>
+    /// <summary>Se il file è cambiato da fuori (un'altra copia del programma, il file .wisper) si rilegge.</summary>
     public void RileggiSeCambiato()
     {
         try
@@ -102,13 +127,30 @@ public sealed class Configurazione
         }
     }
 
-    /// <summary>Si è entrati: server, chiave d'accesso ed email restano per le volte dopo.</summary>
-    public void SalvaAccesso(string server, string token, string email)
+    /// <summary>
+    /// Si è entrati: chiave d'accesso ed email restano per le volte dopo, e con loro gli
+    /// indirizzi scritti nella pagina di accesso (null = non cambiato). Nelle prove gli
+    /// indirizzi non si scrivono.
+    /// </summary>
+    public void SalvaAccesso(string? casa, string? google, string token, string email)
     {
-        Server = server.Trim();
+        if (!DiProva) ImpostaIndirizzi(casa, google);
         Token = token.Trim();
         Email = email.Trim();
         Scrivi();
+    }
+
+    /// <summary>Il file .wisper dell'email: gli indirizzi si salvano subito (null = non cambiato). La chiave resta.</summary>
+    public void SalvaIndirizzi(string? casa, string? google)
+    {
+        ImpostaIndirizzi(casa, google);
+        Scrivi();
+    }
+
+    private void ImpostaIndirizzi(string? casa, string? google)
+    {
+        if (casa != null) casaSalvata = casa.Trim() == CasaPredefinita ? "" : casa.Trim();
+        if (google != null) googleSalvato = google.Trim();
     }
 
     /// <summary>Si è usciti (o il server ha detto che la chiave non vale più): la chiave si butta, il resto resta.</summary>
@@ -132,7 +174,8 @@ public sealed class Configurazione
         Directory.CreateDirectory(Path.GetDirectoryName(file)!);
         var o = new JsonObject
         {
-            ["server"] = serverDiProva != null ? "" : Server,
+            ["server"] = casaSalvata,
+            ["google"] = googleSalvato.Length > 0 ? Dpapi.Proteggi(googleSalvato) : "",
             ["token"] = Token.Length > 0 ? Dpapi.Proteggi(Token) : "",
             ["email"] = Email,
             ["studio"] = Studio,
@@ -147,18 +190,49 @@ public sealed class Configurazione
     /// <summary>
     /// L'indirizzo del server messo nel programma quando lo si costruisce, solo per un exe
     /// da usare in casa (crea-pacchetto.ps1 -ConIndirizzo). Quello che si pubblica su GitHub
-    /// non lo ha: le release sono pubbliche. Senza, la pagina di accesso lo chiede.
+    /// non lo ha: le release sono pubbliche.
     /// </summary>
     public static string IndirizzoPredefinito { get; } =
         typeof(Configurazione).Assembly.GetCustomAttributes(typeof(System.Reflection.AssemblyMetadataAttribute), false)
             .OfType<System.Reflection.AssemblyMetadataAttribute>()
             .FirstOrDefault(a => a.Key == "IndirizzoServer")?.Value ?? "";
 
-    /// <summary>Per le prove: un altro server dalla riga di comando, senza toccare l'indirizzo salvato.</summary>
-    public void ServerDiProva(string server)
+    /// <summary>Il server di casa se non se ne è scritto un altro: il NAS dello studio (porta-google.md §8).</summary>
+    public static string CasaPredefinita { get; } = IndirizzoPredefinito.Length > 0 ? IndirizzoPredefinito : "http://192.168.1.51:8400";
+
+    /// <summary>
+    /// Per le prove: un altro server e/o un'altra porta Google dalla riga di comando, senza
+    /// toccare quelli salvati. Con uno solo dei due, l'altro per questa volta non c'è:
+    /// --server da solo = il server di prova diretto, come prima; --google da solo = solo Google.
+    /// </summary>
+    public void IndirizziDiProva(string? server, string? google)
     {
-        serverDiProva = IndirizzoServer.Pulito(server) ?? server.Trim();
-        Server = serverDiProva;
+        casaDiProva = server == null ? "" : IndirizzoServer.Pulito(server) ?? server.Trim();
+        googleDiProva = google == null ? "" : IndirizzoGoogle.Pulito(google) ?? "";
+        if (google != null && googleDiProva.Length == 0) Log.Errore("--google: l'indirizzo non è quello di uno script");
+    }
+}
+
+/// <summary>
+/// L'indirizzo della porta Google: quello dello script del foglio che finisce con /exec
+/// (porta-google.md §3). Si accetta solo uno script di Google, o il finto Google delle
+/// prove sul computer stesso. Non si scrive mai nel registro né nell'interfaccia.
+/// </summary>
+public static class IndirizzoGoogle
+{
+    private static readonly System.Text.RegularExpressions.Regex Script = new(
+        @"^https://script\.google\.com/(macros|a/macros/[A-Za-z0-9.-]+)/s/[A-Za-z0-9_-]+/exec$", System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+
+    private static readonly System.Text.RegularExpressions.Regex Prova = new(
+        @"^http://(localhost|127\.0\.0\.1)(:\d{1,5})?/exec$", System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+
+    /// <summary>"https://script.google.com/macros/s/AKfy.../exec/" -> senza la barra in fondo. Null se non va bene.</summary>
+    public static string? Pulito(string? indirizzo)
+    {
+        var s = (indirizzo ?? "").Trim().TrimEnd('/');
+        if (s.Length == 0 || s.Length > 300) return null;
+        if (s.StartsWith("https://script.google.com/", StringComparison.Ordinal) && !s.EndsWith("/exec", StringComparison.Ordinal)) s += "/exec";
+        return Script.IsMatch(s) || Prova.IsMatch(s) ? s : null;
     }
 }
 

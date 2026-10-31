@@ -6,10 +6,15 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { serverDiProva, PNG } = require('./aiuto');
+const { serverDiProva, PNG, giornoDeiPrototipi } = require('./aiuto');
+// La Dashboard intera del titolare contiene anche la storia a date fisse delle fasi 4 e 5: dal 2027 quella storia
+// invecchia (fatture scadute da mesi, decine di pagamenti scaduti) e riempie le sezioni prima delle voci cercate qui
+// (20 voci al massimo per sezione, come vuole l'accordo): queste prove la guardano dal giorno del prototipo, giovedi' 22/10/2026,
+// qualunque giorno sia (anche con WISPER_OGGI_PROVA). Le altre prove girano sul giorno vero.
+giornoDeiPrototipi();
 const C = require('../src/conti');
 const { CAMPI_COSTI } = require('../src/permessi');
-const { oggi, istante } = require('../src/utili');
+const { oggi, istante, adessoMs } = require('../src/utili');
 
 const CASI = require('./casi-ore-spese.json');
 const MANUEL = 1;
@@ -258,7 +263,7 @@ test('dashboard: cose da approvare, respinte per chi ha scritto, rimborsi; il co
   const d = await manuel('dashboard');
   const appr = d.urgenti.find(v => v.tipo === 'approvare');
   assert.ok(appr, 'cose da approvare');
-  assert.match(appr.titolo, /^\d+ cose da approvare di Marco Collaboratore$/);
+  assert.match(appr.titolo, /^\d+ cose da approvare di Marco Rossato$/);
   assert.match(appr.dettaglio, /con un'anomalia$/);
   assert.deepEqual([appr.gravita, appr.unita, appr.collegamento], ['attenzione', 'voci', { pagina: 'rapportini', filtro: { segmento: 'daApprovare' } }]);
   assert.equal(d.numeri.approvare.voci, appr.quanto);
@@ -287,13 +292,13 @@ test('dashboard: cose da approvare, respinte per chi ha scritto, rimborsi; il co
 });
 
 test('dashboard: il timer acceso da piu\' di 10 ore (per chi l\'ha acceso e per chi approva); a gennaio le tabelle ACI', async () => {
-  s.wisper.db.esegui('UPDATE timer SET partito_il = ? WHERE utente_id = ?', istante(new Date(Date.now() - 11 * 3600000 - 60000)), MARCO);
+  s.wisper.db.esegui('UPDATE timer SET partito_il = ? WHERE utente_id = ?', istante(new Date(adessoMs() - 11 * 3600000 - 60000)), MARCO);
   const m = await marco('dashboard');
   const suo = m.urgenti.find(v => v.tipo === 'timer');
   assert.ok(suo, 'il suo timer');
   assert.equal(suo.titolo, 'Il timer è acceso da 11 ore');
   assert.match(suo.dettaglio, /^26ST001 · dalle \d{1,2}:\d{2}( del \d{2}\/\d{2})? · fermalo e correggi le ore$/);
-  assert.equal((await manuel('dashboard')).urgenti.find(v => v.tipo === 'timer').titolo, 'Il timer di Marco Collaboratore è acceso da 11 ore');
+  assert.equal((await manuel('dashboard')).urgenti.find(v => v.tipo === 'timer').titolo, 'Il timer di Marco Rossato è acceso da 11 ore');
   assert.equal((await laura('dashboard')).urgenti.some(v => v.tipo === 'timer'), true, 'amministrazione approva: lo vede');
   // L'anno nuovo: le tabelle ACI dei veicoli sono vecchie.
   const anno = Number(oggi().slice(0, 4));

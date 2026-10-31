@@ -1,0 +1,21 @@
+{
+  "nota": "I compensi degli incarichi ai collaboratori esterni (docs/gestionale/fase6.md §8.3, architettura.md §17). Li fa il server (server/src/conti.js: contiIncarico); telefono e computer li rifanno e devono ritrovare gli stessi numeri. pattuito = a corpo il compenso; a ore ore previste x tariffa, o il tetto se c'e' ed e' piu' piccolo. maturato = a corpo centesimi(compenso x avanzamento / 100); a ore centesimi(ore approvate x tariffa), al massimo il tetto; piu' le spese da riconoscere se speseComprese e' falso. fatturato = imponibile delle ricevute collegate, meno le note di credito (TD04). costo = imponibile + contributo + bollo delle stesse (l'IVA no). daFatturare = max(0, maturato - fatturato). daPagare = somma del residuo (daPagare) delle ricevute, note di credito escluse. I valori attesi sono fatti a mano.",
+  "incarichi": [
+    {"nome": "a corpo, 60%", "modo": "corpo", "compenso": 3200, "avanzamento": 60, "ricevute": [{"imponibile": 1200, "contributo": 0, "bollo": 0, "tipo": "TD01"}],
+     "atteso": {"pattuito": 3200, "maturato": 1920, "fatturato": 1200, "costo": 1200, "daFatturare": 720}},
+    {"nome": "a ore, 12 ore approvate", "modo": "ore", "tariffa": 32, "orePreviste": 16, "oreApprovate": 12, "ricevute": [],
+     "atteso": {"pattuito": 512, "maturato": 384, "fatturato": 0, "costo": 0, "daFatturare": 384}},
+    {"nome": "a ore col tetto", "modo": "ore", "tariffa": 32, "orePreviste": 20, "tetto": 500, "oreApprovate": 20, "ricevute": [],
+     "atteso": {"pattuito": 500, "maturato": 500, "fatturato": 0, "costo": 0, "daFatturare": 500}},
+    {"nome": "professionista con cassa 4%", "modo": "corpo", "compenso": 650, "avanzamento": 100, "ricevute": [{"imponibile": 650, "contributo": 26, "bollo": 0, "tipo": "TD01"}],
+     "atteso": {"pattuito": 650, "maturato": 650, "fatturato": 650, "costo": 676, "daFatturare": 0}},
+    {"nome": "nota di credito del fornitore", "modo": "corpo", "compenso": 1000, "avanzamento": 100, "ricevute": [{"imponibile": 1000, "contributo": 0, "bollo": 0, "tipo": "TD01"}, {"imponibile": 200, "contributo": 0, "bollo": 0, "tipo": "TD04"}],
+     "atteso": {"pattuito": 1000, "maturato": 1000, "fatturato": 800, "costo": 800, "daFatturare": 200}},
+    {"nome": "a ore, spese non comprese: si aggiungono al maturato", "modo": "ore", "tariffa": 32, "orePreviste": 10, "oreApprovate": 6.5, "speseComprese": false, "speseDaRiconoscere": 45.8, "ricevute": [],
+     "atteso": {"pattuito": 320, "maturato": 253.8, "fatturato": 0, "costo": 0, "daFatturare": 253.8}},
+    {"nome": "fatturato piu' del maturato: niente da fatturare (non negativo)", "modo": "corpo", "compenso": 2000, "avanzamento": 25, "ricevute": [{"imponibile": 800, "contributo": 0, "bollo": 2, "tipo": "TD01", "daPagare": 800}],
+     "atteso": {"pattuito": 2000, "maturato": 500, "fatturato": 800, "costo": 802, "daFatturare": 0, "daPagare": 800}},
+    {"nome": "ricevuta di prestazione occasionale con bollo, meta' pagata", "modo": "corpo", "compenso": 400, "avanzamento": 100, "ricevute": [{"imponibile": 400, "contributo": 0, "bollo": 2, "tipo": "occasionale", "daPagare": 160}],
+     "atteso": {"pattuito": 400, "maturato": 400, "fatturato": 400, "costo": 402, "daFatturare": 0, "daPagare": 160}}
+  ]
+}

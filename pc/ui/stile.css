@@ -702,7 +702,10 @@ body.fuori .pagina { max-width: none; width: 100%; }
 .avviso-errore, .avviso-calmo { border-radius: 14px; padding: 12px 14px; font-size: 15px; font-weight: 700; }
 .avviso-errore { background: var(--rosso-fondo); color: var(--rosso-testo); }
 .avviso-calmo { background: var(--superficie); color: var(--testo2); }
-.riga-server { display: flex; justify-content: center; align-items: baseline; gap: 10px; font-size: 14px; font-weight: 600; color: var(--tenue); }
+.riga-server { display: flex; justify-content: center; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; text-align: center; font-size: 14px; font-weight: 600; color: var(--tenue); }
+/* I due indirizzi (porta Google): casa, Google, e il file dell'email */
+.indirizzi-accesso { display: flex; flex-direction: column; gap: 18px; }
+.riga-collega { display: flex; flex-wrap: wrap; gap: 8px 22px; font-size: 14px; }
 
 /* ------------------------------------------------------------ clienti e fornitori */
 .testa-soggetto { display: flex; gap: 14px; align-items: center; flex: 1; min-width: 260px; }
@@ -1530,3 +1533,148 @@ input.num-riga.importo-storno { width: 130px; flex: none; }
 @media (max-width: 1100px) { .griglia-archivio, .griglia-impianto, .due-colonne-f { grid-template-columns: minmax(0, 1fr); } .categorie-doc { position: static; flex-direction: row; flex-wrap: wrap; } }
 .sotto-pill { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin-top: 3px; }
 .tab-archivio .t2.taglia { display: block; }
+
+/* ===================================================================== fase 6: persone, mezzi e attrezzature, collaboratori esterni */
+.sez-f6 { display: flex; flex-direction: column; gap: 8px; }
+.sez-f6 .testa-sez { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 38px; }
+.sez-f6 .testa-sez h3 { margin: 0; font-size: 17px; font-weight: 800; }
+.pannello-f6 .corpo .scheda.righe { padding: 0 14px; }
+.pannello-f6 .corpo .scheda { padding: 14px 16px; border-radius: 18px; }
+.pannello-f6 .corpo .scheda.righe .riga { min-height: 58px; }
+.pannello-f6 .corpo .coppie { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px 14px; }
+.pannello-f6 .corpo .coppia .v { font-size: 15px; }
+.pannello-f6 .corpo .riga .t1 { font-size: 15px; }
+.pannello-f6 .corpo .riga .t2 { font-size: 13px; }
+.pannello-f6 .titolo-scheda { margin: 0; font-size: 24px; }
+.pannello-f6 .piede { flex-wrap: wrap; }
+.con-cerchio { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.con-cerchio .iniziali.piccole { width: 34px; height: 34px; font-size: 13px; }
+.testa-persona { display: flex; align-items: center; gap: 14px; }
+.testa-persona .titoli { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.testa-persona .titolo-scheda { margin: 0; }
+.testa-persona.piccola b { font-size: 17px; font-weight: 800; }
+.mancano-f6 { display: flex; align-items: center; gap: 8px; background: var(--giallo-tenue); color: var(--giallo-testo); border-radius: 14px; padding: 10px 14px; font-size: 14px; font-weight: 700; }
+.mancano-f6 svg { flex: none; }
+.saldo-box { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 14px; }
+.saldo-box > div { display: flex; flex-direction: column; gap: 2px; }
+.saldo-box b { font-size: 26px; font-weight: 800; letter-spacing: -0.5px; font-variant-numeric: tabular-nums; }
+.saldo-box span { font-size: 14px; font-weight: 600; color: var(--tenue); }
+.saldo-box .t-saldo { grid-column: 1 / -1; align-items: flex-start; }
+.calmo-f6 { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-weight: 700; color: var(--testo2); }
+.fila-f6 { display: flex; flex-direction: column; gap: 8px; }
+.fila-f6.dentro, .fila.dentro { padding: 4px 0 16px; }
+.visita-f6 { display: flex; flex-direction: column; gap: 6px; }
+.riga-visita { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.riquadro-grigio { background: var(--fondo); border-radius: 12px; padding: 10px 12px; font-size: 14px; font-weight: 600; color: var(--testo2); }
+.lucchetto-r { display: inline-flex; align-items: center; gap: 6px; }
+.lucchetto-r svg { color: var(--viola-t); flex: none; }
+.regola { font-size: 13px; font-weight: 700; color: var(--tenue); border-top: 1px solid var(--riga); padding-top: 8px; }
+.grande-f6 { font-size: 22px; font-weight: 800; letter-spacing: -0.4px; font-variant-numeric: tabular-nums; }
+.riservati-f6 { display: flex; flex-direction: column; gap: 8px; border-top: 1px solid var(--riga); padding-top: 10px; }
+details.chiuso-f6 { background: var(--scheda); border: 1px solid var(--bordo-scheda); border-radius: 18px; padding: 0 16px; }
+details.chiuso-f6 > summary { min-height: 54px; display: flex; align-items: center; justify-content: space-between; font-size: 16px; font-weight: 800; cursor: pointer; list-style: none; }
+details.chiuso-f6 > summary::-webkit-details-marker { display: none; }
+details.chiuso-f6[open] > summary svg { transform: rotate(180deg); }
+details.chiuso-f6 .scheda.coppie { border: none; padding: 0; }
+.finestra details.chiuso-f6 { padding: 0 14px; }
+.righe-f6 { display: flex; flex-direction: column; padding-bottom: 8px; }
+.ico-viola { background: var(--viola-f); color: var(--viola-t); }
+.rc-f6 { display: flex; justify-content: space-between; align-items: center; gap: 10px; min-height: 32px; font-size: 15px; font-weight: 600; color: var(--testo2); }
+.rc-f6 b { color: var(--testo); font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.rc-f6.tot { border-top: 1px solid var(--riga); padding-top: 8px; margin-top: 2px; color: var(--testo); font-weight: 800; }
+.rc-f6.tot b { font-size: 20px; }
+.righe-calme { display: flex; flex-direction: column; gap: 6px; font-size: 14px; font-weight: 600; color: var(--testo2); }
+.righe-calme b { color: var(--testo); }
+.anomalie-f6 { display: flex; flex-direction: column; gap: 6px; font-size: 14px; font-weight: 800; color: var(--giallo-testo); }
+.anomalie-f6 span { display: flex; align-items: center; gap: 6px; }
+.conto-ass { display: flex; flex-direction: column; gap: 6px; }
+.conto-ass b { font-size: 24px; font-weight: 800; letter-spacing: -0.4px; }
+.conto-ass > span { font-size: 15px; font-weight: 700; color: var(--testo2); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.conto-ass .calmo { background: none; border: none; padding: 0; font-size: 14px; font-weight: 600; color: var(--tenue); }
+.rosso-t { color: var(--rosso-testo) !important; }
+.giallo-t { color: var(--giallo-testo); }
+.valore-calmo { height: 48px; display: flex; align-items: center; padding: 0 14px; border-radius: 14px; background: var(--fondo); font-weight: 700; color: var(--testo2); }
+.modulo-chiedi { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 22px; align-items: start; }
+.modulo-chiedi .col { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.pillola.piccola { min-height: 40px; font-size: 14px; padding: 0 12px; }
+.scheda-io { gap: 16px; }
+.pill-esterno { max-width: 170px; }
+
+/* la griglia del mese delle assenze */
+.griglia-ferie { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 18px; align-items: start; }
+@media (max-width: 1180px) { .griglia-ferie { grid-template-columns: minmax(0, 1fr); } }
+.colonna-f6 { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.griglia-assenze { padding: 10px 14px 12px; display: flex; flex-direction: column; gap: 3px; }
+.gr-riga { display: grid; gap: 2px; align-items: center; min-height: 40px; }
+.gr-testa { min-height: 26px; }
+.gr-g { text-align: center; font-size: 11px; font-weight: 700; color: var(--tenue); font-variant-numeric: tabular-nums; }
+.gr-g.we { opacity: .5; }
+.gr-g.oggi { background: var(--giallo); color: #1B1B1F; border-radius: 6px; opacity: 1; }
+.gr-nome { display: flex; align-items: center; gap: 8px; font-size: 14px; min-width: 0; grid-row: 1; grid-column: 1; }
+.gr-nome .iniziali.piccole { width: 30px; height: 30px; font-size: 12px; }
+.gr-c { height: 24px; border-radius: 5px; background: var(--fondo); grid-row: 1; }
+.gr-c.we { background: transparent; }
+.gr-c.chiuso { background: repeating-linear-gradient(135deg, var(--superficie) 0 4px, transparent 4px 8px); }
+.gr-barra { grid-row: 1; height: 24px; border-radius: 6px; border: none; font: inherit; font-size: 11px; font-weight: 800; padding: 0 6px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; cursor: pointer; text-align: left; }
+.gr-barra.ferie { background: var(--firmato); color: var(--scheda); }
+.gr-barra.perm { background: var(--inviato); color: var(--scheda); }
+.gr-barra.altra { background: var(--molto-tenue); color: var(--scheda); }
+.gr-barra.da-approvare { background: transparent; border: 2px dashed #B98300; color: var(--giallo-testo); }
+.legenda-f6 { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; font-size: 13px; font-weight: 700; color: var(--tenue); margin-top: 8px; }
+.legenda-f6 i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+.legenda-f6 i.ferie { background: var(--firmato); } .legenda-f6 i.perm { background: var(--inviato); } .legenda-f6 i.altra { background: var(--molto-tenue); }
+.legenda-f6 i.da-approvare { border: 2px dashed #B98300; } .legenda-f6 i.chiuso { background: repeating-linear-gradient(135deg, var(--superficie) 0 3px, transparent 3px 6px); border: 1px solid var(--bordo-campo); }
+.legenda-f6 i.maturato { background: var(--testo); } .legenda-f6 i.fatturato { background: var(--firmato); }
+
+/* foto, firma, barre */
+.foto-fila-f6 { display: flex; gap: 8px; flex-wrap: wrap; }
+.foto-mini-f6 { width: 84px; height: 84px; border-radius: 14px; overflow: hidden; background: var(--superficie); display: block; flex: none; }
+.foto-mini-f6 img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.foto-nuova-f6 { width: 84px; height: 84px; border-radius: 14px; flex: none; border: 2px dashed #B98300; background: transparent; color: var(--giallo-testo); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; font: inherit; font-size: 12px; font-weight: 800; cursor: pointer; }
+.zona-foto-f6 { min-height: 72px; border-radius: 16px; border: 2px dashed #B98300; background: transparent; color: var(--giallo-testo); display: flex; align-items: center; justify-content: center; gap: 10px; font: inherit; font-size: 15px; font-weight: 800; cursor: pointer; }
+.firma-tavoletta.foglio-bianco { background: #FFFFFF; color: #1B1B1F; border-radius: 18px; padding: 12px; border: 1px solid var(--bordo-scheda); }
+.firma-tavoletta.foglio-bianco .chi-firma { font-size: 15px; font-weight: 800; color: #1B1B1F; }
+.firma-tavoletta.foglio-bianco .btn { background: #FFFFFF; color: #1B1B1F; border-color: #CFCEC9; }
+.fascia-f6 { align-items: flex-start; }
+.barra-incarico { display: inline-flex; align-items: center; gap: 8px; min-width: 120px; }
+.barra-incarico .barra { width: 80px; }
+.barra-incarico b { font-size: 14px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.barra-h-f6 { display: grid; grid-template-columns: 220px minmax(0, 1fr) 180px; gap: 12px; align-items: center; font-size: 14px; font-weight: 700; color: var(--testo2); min-height: 34px; }
+.barra-h-f6 .bin { position: relative; height: 16px; background: var(--barra-vuota); border-radius: 8px; overflow: hidden; }
+.barra-h-f6 .bin i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 8px; }
+.barra-h-f6 .bin i.maturato { background: var(--testo); opacity: .85; }
+.barra-h-f6 .bin i.fatturato { background: var(--firmato); top: 4px; bottom: 4px; }
+.barra-h-f6 .val { text-align: right; font-variant-numeric: tabular-nums; }
+.riga-non-collegata .t2 { font-size: 13px; font-weight: 600; color: var(--tenue); }
+
+/* gli strumenti nel rapportino e nel ticket */
+.strumenti-scelta { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip-str { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; min-height: 64px; border-radius: 16px; border: 1.5px solid var(--bordo-campo); background: var(--scheda); padding: 10px 12px; text-align: left; font: inherit; font-size: 15px; font-weight: 700; color: var(--testo); cursor: pointer; max-width: 100%; }
+.chip-str[aria-pressed="true"] { border: 2px solid var(--testo); background: var(--giallo-scelto); padding: 9.5px 11.5px; }
+.chip-str.spento { opacity: .6; cursor: not-allowed; }
+.chip-str .pill { max-width: 260px; }
+.riga-strumenti { display: flex; flex-direction: column; gap: 6px; }
+.riga-strumento { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 15px; font-weight: 700; }
+
+/* fase 6: con tre voci in più il menu scorre (il piede con lo stato e chi è entrato resta in vista) */
+.lato .voci { flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; scrollbar-width: thin; }
+.lato .voce .lab { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.lato .voce .num-v { flex: none; }
+/* nel pannello stretto le pillole a destra vanno a capo invece di schiacciare il testo */
+.pannello-f6 .riga .pillole-destra, .pannello-f6 .riga > .pill { max-width: 150px; flex-wrap: wrap; justify-content: flex-end; }
+.pannello-f6 .riga .pill { white-space: normal; height: auto; min-height: 26px; padding: 4px 10px; line-height: 1.2; text-align: center; max-width: 150px; }
+.pannello-f6 .riga .corpo { min-width: 120px; }
+.gr-g { font-size: 10px; letter-spacing: -0.3px; }
+
+/* fase 6: le fasce delle assenze e delle chiusure nel calendario e nella pianificazione */
+.fascia-ass { display: block; background: var(--firmato-fondo); color: var(--firmato); border-radius: 8px; padding: 3px 7px; font-size: 12px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 4px; }
+.fascia-ass.perm { background: var(--inviato-fondo); color: var(--inviato); }
+.fascia-ass.altra { background: var(--superficie); color: var(--testo2); }
+.fascia-ass.attesa-f6 { background: transparent; color: var(--giallo-testo); border: 2px dashed #B98300; padding: 1px 5px; }
+.fascia-ass.chiuso { background: repeating-linear-gradient(135deg, var(--superficie) 0 5px, var(--superficie-tenue) 5px 10px); color: var(--testo2); }
+
+/* fase 6: dentro le tabelle le pillole restano nella loro colonna */
+.tab .r .pill { max-width: 100%; }
+.campo .cerca input { border: none; height: auto; padding: 0; background: transparent; border-radius: 0; }
+.imp-f6 .con-suffisso input { padding-right: 78px; }
+.pillola > svg { margin-right: 6px; vertical-align: -3px; }

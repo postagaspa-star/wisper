@@ -208,14 +208,29 @@ const MODULO = {
   ore: 'rapportini', spese: 'spese', trasferte: 'spese', rimborsi: 'spese',
   // Fase 5 (le scadenze: documenti o ticket, lo controlla esporta)
   documenti: 'documenti', scadenze: 'documenti', ticket: 'ticket', contratti: 'ticket',
+  // Fase 6
+  persone: 'persone', qualifiche: 'persone', assenze: 'persone', presenze: 'persone',
+  mezzi: 'mezzi', attrezzature: 'mezzi', tarature: 'mezzi', manutenzioni: 'mezzi', assegnazioni: 'mezzi', km: 'mezzi',
+  collaboratori: 'collaboratori', incarichi: 'collaboratori', compensi: 'collaboratori',
 };
+/** Fase 6: l'esterno esporta solo le sue cose (rapportini, ore, spese). */
+const ESTERNO_ESPORTA = ['rapportini', 'ore', 'spese'];
+const NOMI_RAPPORTO = { titolare: 'Titolare', socio: 'Socio', dipendente: 'Dipendente', apprendista: 'Apprendista', tirocinante: 'Tirocinante',
+  autonomo: 'A partita IVA nello studio', altro: 'Altro', '': 'Da completare' };
 
 module.exports = {
   esporta(d) {
     const cosa = testo(d.cosa);
-    if (!MODULO[cosa]) throw new Rifiuto('Cosa esportare? rapportini, clienti, fornitori, commesse, registro, preventivi, attivita, ore, spese, trasferte, rimborsi, fatture, ricevute, daFatturare, riepilogo, movimenti, scadenziario, impegni, documenti, scadenze, ticket o contratti');
-    const puo = cosa === 'scadenze' ? this.livello('documenti') >= 1 || this.livello('ticket') >= 1 : this.livello(MODULO[cosa]) >= 1;
-    if (!puo) throw senzaPermesso('esportare ' + cosa);
+    if (!MODULO[cosa]) throw new Rifiuto('Cosa esportare? rapportini, clienti, fornitori, commesse, registro, preventivi, attivita, ore, spese, trasferte, rimborsi, fatture, ricevute, daFatturare, riepilogo, movimenti, scadenziario, impegni, documenti, scadenze, ticket, contratti, persone, qualifiche, assenze, presenze, mezzi, attrezzature, tarature, manutenzioni, assegnazioni, km, collaboratori, incarichi o compensi');
+    const puo = cosa === 'scadenze' ? ['documenti', 'ticket', 'persone', 'mezzi', 'collaboratori'].some(m => this.livello(m) >= 1) : this.livello(MODULO[cosa]) >= 1;
+    if (!puo || (this.eEsterno() && ESTERNO_ESPORTA.indexOf(cosa) < 0)) throw senzaPermesso('esportare ' + cosa);
+    if (cosa === 'compensi' && !this.vedeCosti()) throw senzaPermesso('esportare i compensi (serve il permesso dei soldi)');
+    // Fase 6: le esportazioni di persone, mezzi e collaboratori (le colonne dipendono da cosa uno vede).
+    if (MODULO[cosa] === 'persone' || MODULO[cosa] === 'mezzi' || MODULO[cosa] === 'collaboratori') {
+      const x = this.esportaFase6(cosa, d);
+      const periodo6 = testo(d.mese) || [testo(d.da), testo(d.a)].filter(Boolean).join('-') || oggi();
+      return { ok: true, nome: 'wisper-' + cosa + '-' + periodo6 + '.csv', mime: 'text/csv;charset=utf-8', righe: x.righe.length, base64: csv(x.colonne, x.righe).toString('base64') };
+    }
     // Fase 4: fatture e banche si esportano solo col permesso dei soldi.
     if (COLONNE_FASE4[cosa] && !this.vedeCosti()) throw new Rifiuto('Per vedere le fatture serve anche il permesso dei soldi: chiedi al titolare', { permesso: false });
     const costi = this.vedeCosti();
@@ -281,6 +296,129 @@ module.exports = {
     const periodo = [testo(d.da), testo(d.a)].filter(Boolean).join('-') || oggi();
     const nome = 'wisper-' + cosa + '-' + periodo + '.csv';
     return { ok: true, nome, mime: 'text/csv;charset=utf-8', righe: righe.length, base64: csv(colonne, righe).toString('base64') };
+  },
+
+  /**
+   * Fase 6: colonne e righe delle esportazioni di persone, assenze, presenze, mezzi, strumenti e collaboratori
+   * (fase6.md §10). I campi personali solo con persone 2, CCNL e livello e i tipi sanitari solo con "riservati" (con la
+   * riga "esportato" nel registro di chi apre i dati riservati), i soldi solo con "costi".
+   */
+  esportaFase6(cosa, d) {
+    d = d || {};
+    const costi = this.vedeCosti();
+    const personali = this.livello('persone') >= 2;
+    const riservati = this.livello('riservati') >= 1;
+    const siNo = v => !!v;
+    if (cosa === 'persone') {
+      const tutte = this.db.righe('SELECT * FROM persone ORDER BY nome').filter(p => !p.anonimizzata_il && (!this.soloSuoi() || !p.uscita_il || p.uscita_il >= oggi()));
+      const utenti = {};
+      this.db.righe('SELECT * FROM utenti').forEach(u => { utenti[u.id] = u; });
+      let colonne = [['Nome', p => p.nome], ['Rapporto', p => NOMI_RAPPORTO[p.rapporto] || ''], ['Ruolo nello studio', p => p.ruolo_studio], ['Mansione', p => p.mansione],
+        ['Telefono di lavoro', p => p.telefono_lavoro], ['Email di lavoro', p => p.email_lavoro], ['Entrata', p => data(p.entrata_il)], ['Uscita', p => data(p.uscita_il)],
+        ['Ore alla settimana', p => p.ore_settimana], ['Accesso a Wisper', p => siNo(p.utente_id && utenti[p.utente_id] && utenti[p.utente_id].attivo === 1)],
+        ['Ruolo', p => (p.utente_id && utenti[p.utente_id] ? utenti[p.utente_id].ruolo : '')]];
+      if (personali) {
+        colonne = colonne.concat([['Codice fiscale', p => p.codice_fiscale], ['Nato il', p => data(p.nascita_data)], ['Nato a', p => p.nascita_luogo], ['Indirizzo', p => p.indirizzo],
+          ['CAP', p => p.cap], ['Città', p => p.citta], ['Provincia', p => p.provincia], ['Telefono personale', p => p.telefono_personale], ['Email personale', p => p.email_personale],
+          ['IBAN', p => p.iban], ['Contatto di emergenza', p => p.emergenza_nome], ['Telefono di emergenza', p => p.emergenza_telefono], ['Contratto', p => p.contratto_tipo],
+          ['Contratto scade il', p => data(p.contratto_scade)]]);
+      }
+      if (riservati) {
+        colonne = colonne.concat([['CCNL', p => p.ccnl], ['Livello', p => p.livello]]);
+        tutte.forEach(p => { if (p.ccnl || p.livello) this.registraAccessoRiservato(p.id, 'esportazione', 'esportato', 'persone'); });
+      }
+      if (costi) colonne.push(['Costo orario', p => { const c = this.costoDiOggi(p.id); return c ? c.costo_orario : null; }]);
+      return { colonne, righe: tutte };
+    }
+    if (cosa === 'qualifiche') {
+      const tipi = this.tipiQualifica();
+      const nomi = {};
+      this.db.righe('SELECT id, nome FROM persone').forEach(p => { nomi[p.id] = p.nome; });
+      const righe = this.db.righe('SELECT * FROM qualifiche WHERE tolta IS NULL ORDER BY persona_id, data DESC').filter(q => this.vedeLavoroCompleto(q.persona_id))
+        .map(q => Object.assign({ persona: nomi[q.persona_id] || '' }, this.qualificaDaRiga(q, tipi)));
+      return { colonne: [['Persona', q => q.persona], ['Qualifica', q => q.nome], ['Dettaglio', q => q.titolo], ['Data', q => data(q.data)], ['Scade', q => data(q.scade)],
+        ['Stato', q => q.statoVisto], ['Ente', q => q.ente], ['Ore', q => q.ore]], righe };
+    }
+    if (cosa === 'assenze') {
+      const anno = oggi().slice(0, 4);
+      const r = this.leggiAssenze({ da: testo(d.da) || anno + '-01-01', a: testo(d.a) || anno + '-12-31', stato: 'tutte', idPersona: d.idPersona });
+      const conTipoSanitario = r.assenze.filter(a => a.tipoSanitario);
+      conTipoSanitario.forEach(a => this.registraAccessoRiservato(a.idPersona, 'esportazione', 'esportato', 'assenze'));
+      const colonne = [['Persona', a => a.persona], ['Tipo', a => a.tipoVisto], ['Dal', a => data(a.dal)], ['Al', a => data(a.al)], ['Giorni', a => a.giorni], ['Ore', a => a.ore],
+        ['Stato', a => a.statoVisto], ['Approvata da', a => a.approvataDaNome], ['Il', a => dataOra(a.approvataIl)], ['Motivo del rifiuto', a => a.motivoRifiuto]];
+      if (personali) colonne.push(['Nota', a => a.nota || '']);
+      return { colonne, righe: r.assenze };
+    }
+    if (cosa === 'presenze') {
+      const p = this.presenze({ mese: d.mese, idPersona: d.idPersona });
+      const righe = [];
+      for (const x of p.persone) {
+        for (const g of x.giorni) righe.push({ data: data(g.data), persona: x.nome, previste: g.previste, lavorate: g.lavorate, straordinarie: g.straordinarie,
+          assenza: g.assenza ? g.assenza.tipoVisto : (g.giorno === 'festa' ? 'Festa' : g.giorno === 'chiuso' ? 'Studio chiuso' : ''), oreAssenza: g.assenza ? g.assenza.ore : 0, mancano: g.manca });
+        const t = x.totali;
+        righe.push({ data: 'Totale', persona: x.nome, previste: null, lavorate: t.oreLavorate, straordinarie: t.straordinarie,
+          assenza: 'Ferie ' + String(t.ferie).replace('.', ',') + ' · Permessi ' + String(t.permessi).replace('.', ',') + (t.malattia ? ' · Malattia ' + String(t.malattia.ore).replace('.', ',') : '') + ' · Altre assenze ' + String(t.altreAssenze).replace('.', ','),
+          oreAssenza: null, mancano: t.mancano });
+        if (t.malattia && t.malattia.ore > 0 && riservati) this.registraAccessoRiservato(x.idPersona, 'esportazione', 'esportato', 'presenze ' + p.mese);
+      }
+      righe.push({ data: 'Programma paghe del consulente', persona: 'Non collegato', previste: null, lavorate: null, straordinarie: null, assenza: '', oreAssenza: null, mancano: null });
+      return { colonne: [['Data', r => r.data], ['Persona', r => r.persona], ['Ore previste', r => r.previste], ['Lavorate', r => r.lavorate], ['Straordinarie', r => r.straordinarie],
+        ['Assenza', r => r.assenza], ['Ore di assenza', r => r.oreAssenza], ['Mancano', r => r.mancano]], righe };
+    }
+    if (cosa === 'mezzi') {
+      const righe = this.leggiMezzi({ tutti: d.tutti }).mezzi;
+      return { colonne: [['Mezzo', m => m.nome], ['Targa', m => m.targa], ['Tipo', m => m.tipo], ['Di chi è', m => m.proprietaVista], ['Chi ce l\'ha', m => (m.chi ? m.chi.nome : '')],
+        ['Km', m => m.km], ['Letti il', m => data(m.kmIl)], ['Tagliando fra km', m => m.kmAlTagliando], ['Prossima scadenza', m => (m.prossimaScadenza ? m.prossimaScadenza.tipo + ' ' + data(m.prossimaScadenza.data) : '')],
+        ['Stato', m => m.statoVisto]], righe };
+    }
+    if (cosa === 'attrezzature') {
+      const righe = this.leggiAttrezzature(Object.assign({ stato: 'tutte' }, d)).attrezzature;
+      return { colonne: [['Codice', a => a.codice], ['Nome', a => a.nome], ['Categoria', a => a.categoriaNome], ['Marca', a => a.marca], ['Modello', a => a.modello],
+        ['Matricola', a => a.matricola], ['Chi ce l\'ha', a => (a.chi ? a.chi.nome : '')], ['Posizione', a => a.posizione], ['Taratura', a => (a.taratura ? a.taratura.parola : '')],
+        ['Scade', a => (a.taratura ? data(a.taratura.scade) : '')], ['Stato', a => a.statoVisto]], righe };
+    }
+    if (cosa === 'tarature') {
+      const att = {};
+      this.db.righe('SELECT id, codice, nome FROM attrezzature').forEach(a => { att[a.id] = a; });
+      const righe = this.db.righe('SELECT * FROM tarature ORDER BY data DESC, id DESC').map(t => Object.assign({ a: att[t.attrezzatura_id] || {} }, this.taraturaDaRiga(t)));
+      return { colonne: [['Codice', t => t.a.codice], ['Strumento', t => t.a.nome], ['Data', t => data(t.data)], ['Esito', t => t.esitoVisto], ['Scade', t => data(t.scade)],
+        ['Laboratorio', t => t.laboratorio], ['Certificato', t => t.certificato]], righe };
+    }
+    if (cosa === 'manutenzioni') {
+      const righe = this.leggiManutenzioni(d).manutenzioni;
+      return { colonne: [['Mezzo o strumento', m => m.oggetto], ['Tipo', m => m.tipo], ['Stato', m => m.statoVisto], ['Data', m => data(m.data)], ['Km', m => m.km], ['Titolo', m => m.titolo],
+        ['Descrizione', m => m.descrizione], ['Fornitore', m => m.fornitore], ['Fermo', m => m.fermo], ['Chiusa il', m => data(m.chiusaIl)], ['Esito', m => m.esito]], righe };
+    }
+    if (cosa === 'assegnazioni') {
+      const righe = this.leggiAssegnazioni(d).assegnazioni;
+      return { colonne: [['Cosa', x => x.oggetto], ['Tipo', x => x.tipoVisto], ['A chi', x => x.chi], ['Dal', x => data(x.dal)], ['Rientro', x => data(x.rientro)], ['Al', x => data(x.al)],
+        ['In ritardo', x => x.inRitardo]], righe };
+    }
+    if (cosa === 'km') {
+      const mezzi = {};
+      this.db.righe('SELECT * FROM veicoli').forEach(v => { mezzi[v.id] = this.titoloMezzo(v); });
+      const righe = this.db.righe('SELECT * FROM mezzo_letture' + (testo(d.idVeicolo) ? ' WHERE veicolo_id = ?' : '') + ' ORDER BY veicolo_id, data, id', ...(testo(d.idVeicolo) ? [Number(d.idVeicolo)] : []))
+        .map(l => Object.assign({ mezzo: mezzi[l.veicolo_id] || '' }, this.letturaDaRiga(l)));
+      return { colonne: [['Mezzo', l => l.mezzo], ['Data', l => data(l.data)], ['Km', l => l.km], ['Origine', l => l.origine], ['Chi', l => l.utente], ['Nota', l => l.nota]], righe };
+    }
+    if (cosa === 'collaboratori') {
+      const righe = this.leggiCollaboratori({ stato: 'tutti' }).collaboratori.map(c => Object.assign({ abilitazioni: (this.db.riga('SELECT abilitazioni FROM collaboratori WHERE soggetto_id = ?', c.idSoggetto) || {}).abilitazioni || '' }, c));
+      const colonne = [['Codice', c => c.idSoggetto], ['Nome', c => c.nome], ['Tipo', c => c.tipoNome], ['Mestiere', c => c.mestiere], ['Abilitazioni', c => c.abilitazioni],
+        ['Idoneità', c => c.idoneita.parola], ['Incarichi in corso', c => c.incarichiInCorso], ['Valutazioni', c => c.valutazioni.bene + ' bene, ' + c.valutazioni.problemi + ' con qualche problema, ' + c.valutazioni.male + ' male']];
+      if (costi) colonne.splice(7, 0, ['Da fatturare', c => c.daFatturare]);
+      return { colonne, righe };
+    }
+    if (cosa === 'incarichi') {
+      const righe = this.leggiIncarichi(Object.assign({ stato: 'tutti' }, d)).incarichi;
+      let colonne = [['Numero', i => i.numero], ['Collaboratore', i => i.collaboratore], ['Commessa', i => i.idCommessa], ['Titolo', i => i.titolo], ['Come', i => i.modoVisto],
+        ['Stato', i => i.statoVisto], ['Avanzamento', i => i.avanzamento], ['Dal', i => data(i.dal)], ['Al', i => data(i.al)]];
+      if (costi) colonne = colonne.concat([['Pattuito', i => (i.conti ? i.conti.pattuito : null)], ['Maturato', i => (i.conti ? i.conti.maturato : null)],
+        ['Fatturato', i => (i.conti ? i.conti.fatturato : null)], ['Da fatturare', i => (i.conti ? i.conti.daFatturare : null)], ['Da pagare', i => (i.conti ? i.conti.daPagare : null)]]);
+      return { colonne, righe };
+    }
+    const c = this.compensi(d);
+    return { colonne: [['Codice', r => r.idSoggetto], ['Collaboratore', r => r.nome], ['Incarichi', r => r.incarichi], ['Pattuito', r => r.pattuito], ['Maturato', r => r.maturato],
+      ['Fatturato', r => r.fatturato], ['Da fatturare', r => r.daFatturare], ['Da pagare', r => r.daPagare]], righe: c.righe };
   },
 
   /** Le righe delle esportazioni della fase 5, coi filtri dei loro elenchi (tutte le pagine). */

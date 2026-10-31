@@ -163,7 +163,29 @@ fun SchermataDashboard(
                         Triple("${n5.interventiOggi}", "interventi oggi", { apri(Collegamento("calendario")) }),
                         Triple("${(n5.scadenzeScadute ?: 0) + n5.scadenzeEntro}", "scadenze vicine", if (perm.vede(Moduli.DOCUMENTI)) ({ apri(Collegamento("documenti", parametri = mapOf("segmento" to "scadenze"))) }) else null),
                     ), rossi = if (n5.ticketUrgenti > 0) setOf(1) else emptySet())
-                    if (perm.vede(Moduli.COMMESSE)) NumeriDelleCommesse(d.commesse) { filtro -> apri(Collegamento("commesse", filtro = filtro)) }
+                    // Fase 6 (§11.1): Assenti oggi · Ferie da approvare · Tarature scadute (rosso se ce ne sono) · Scadenze vicine.
+                    val n6 = d.fase6
+                    if (perm.vede(Moduli.PERSONE) && n6.personeAttive != null) RiquadriDue(listOfNotNull(
+                        Triple("${n6.assentiOggi}", "assenti oggi") { apri(Collegamento("persone", parametri = mapOf("segmento" to "ferie"))) },
+                        if (sessione.puoApprovareAssenze) Triple("${n6.ferieDaApprovare}", "ferie da approvare") { apri(Collegamento("persone", parametri = mapOf("segmento" to "ferie"))) } else null,
+                        if (n6.mezzi) Triple("${n6.tarateScadute}", "tarature scadute") { apri(Collegamento("mezzi", parametri = mapOf("segmento" to "strumenti", "taratura" to "scadute"))) } else null,
+                        Triple("${n6.scadenzeVicine}", "scadenze vicine") { apri(Collegamento("mezzi", parametri = mapOf("segmento" to "scadenze"))) },
+                    ).map { (a, b, f) -> Triple(a, b, f as (() -> Unit)?) }, rossi = if (n6.tarateScadute > 0) setOf(if (sessione.puoApprovareAssenze) 2 else 1) else emptySet())
+                    // Fase 6 (§12.7): l'esterno vede i suoi incarichi con l'avanzamento.
+                    if (d.incarichiEsterno.isNotEmpty()) Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Etichetta("I tuoi incarichi · ${d.incarichiEsterno.size}")
+                        Scheda(orizzontale = 18.dp, verticale = 4.dp, raggio = 22.dp, spazio = 0.dp) {
+                            d.incarichiEsterno.forEachIndexed { i, x ->
+                                if (i > 0) LineaElenco()
+                                Column(Modifier.fillMaxWidth().clickable { apri(Collegamento("incarico", id = x.id)) }.padding(vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Text(x.numero + " · " + x.titolo, style = Testi.forte, color = c.testo)
+                                    Text(listOf(x.idCommessa, x.commessa).filter { it.isNotBlank() }.joinToString(" · ") + if (x.modo == "corpo") " · avanzamento ${x.avanzamento}%" else "", style = Testi.secondario, color = c.tenue)
+                                    if (x.modo == "corpo") BarraAvanzamento(x.avanzamento)
+                                }
+                            }
+                        }
+                    }
+                    if (perm.vede(Moduli.COMMESSE) && !sessione.esterno) NumeriDelleCommesse(d.commesse) { filtro -> apri(Collegamento("commesse", filtro = filtro)) }
                     if (d.pianificare.isNotEmpty()) SezioneDashboard("Da pianificare", d.pianificare) { apri(it) }
                     if (d.vuota) NienteDaSistemare(if (prima == null) Modifier.bersaglio("cosa-fare") else Modifier)
                 }
@@ -281,6 +303,15 @@ fun apriCollegamento(col: Collegamento?, nav: Navigatore, rapportini: List<Rappo
         "registro" -> nav.vai("amm/registro")
         "cestino" -> nav.vai("amm/cestino")
         "dashboard" -> nav.sezione(Sezione.DASHBOARD)
+        // Fase 6 (§17.17): persone, mezzi, strumenti, collaboratori, incarichi.
+        "persone" -> { RicordoPersone.mostra(p["segmento"].orEmpty()); nav.sezione(Sezione.PERSONE) }
+        "persona" -> if (col.id.isNotBlank()) { nav.sezione(Sezione.PERSONE); nav.vai("persona/${col.id}") } else nav.sezione(Sezione.PERSONE)
+        "mezzi" -> { RicordoMezzi.mostra(p["segmento"].orEmpty(), p["taratura"].orEmpty()); nav.sezione(Sezione.MEZZI) }
+        "mezzo" -> if (col.id.isNotBlank()) { nav.sezione(Sezione.MEZZI); nav.vai("mezzo/${col.id}") } else nav.sezione(Sezione.MEZZI)
+        "attrezzatura" -> if (col.id.isNotBlank()) { nav.sezione(Sezione.MEZZI); nav.vai("strumento/${col.id}") } else nav.sezione(Sezione.MEZZI)
+        "collaboratori" -> { RicordoCollaboratori.mostra(p["segmento"].orEmpty()); nav.sezione(Sezione.COLLABORATORI) }
+        "collaboratore" -> if (col.id.isNotBlank()) { nav.sezione(Sezione.COLLABORATORI); nav.vai("collaboratore/${col.id}") } else nav.sezione(Sezione.COLLABORATORI)
+        "incarico" -> if (col.id.isNotBlank()) { nav.sezione(Sezione.COLLABORATORI); nav.vai("incarico/${col.id}") } else nav.sezione(Sezione.COLLABORATORI)
     }
 }
 
@@ -340,6 +371,13 @@ private fun azioneDi(col: Collegamento?): String = when (col?.pagina?.lowercase(
     "documenti" -> when (col.parametri["segmento"]) { "approvare" -> "Vedi cosa approvare"; "scadenze" -> "Vedi le scadenze"; else -> "Vedi i documenti" }
     "scadenza" -> "Apri la scadenza"
     "impianto" -> "Apri l'impianto"
+    // Fase 6
+    "persone" -> if (col.parametri["daApprovare"] == "true") "Vedi cosa approvare" else "Vedi le ferie"
+    "persona" -> "Apri la scheda"
+    "mezzo", "mezzi" -> "Apri il mezzo"
+    "attrezzatura" -> "Apri lo strumento"
+    "collaboratore", "collaboratori" -> "Apri la scheda"
+    "incarico" -> "Apri l'incarico"
     else -> "Apri"
 }
 
@@ -430,6 +468,15 @@ private fun iconaDi(v: VoceDashboard): ImageVector = when (v.tipo.lowercase()) {
     "documento" -> Icone.documento
     "contratto" -> Icone.preventivo
     "spazio" -> Icone.disco
+    // Fase 6 (§17.17)
+    "assenza" -> Icone.valigia
+    "persona", "visita" -> Icone.persona
+    "qualifica" -> Icone.documento
+    "mezzo" -> Icone.mezzo
+    "strumento" -> Icone.misura
+    "prestito" -> Icone.attrezzo
+    "guasto" -> Icone.allarme
+    "collaboratore", "incarico" -> Icone.collab
     else -> when (v.gravita.lowercase()) {
         "urgente" -> Icone.allarme
         "attenzione" -> Icone.avviso

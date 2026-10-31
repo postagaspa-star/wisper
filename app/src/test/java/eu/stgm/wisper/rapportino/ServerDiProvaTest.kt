@@ -9,19 +9,18 @@ import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Test
-import java.time.LocalDate
 
 /**
- * Il telefono contro il server di prova vero, con i suoi utenti (password "prova"):
+ * Il telefono contro il server di prova vero, con i suoi utenti (password "prova"). Si lanciano in un modo
+ * solo, con un server nuovo fermo al 22/10/2026 (ServerDiProva.kt):
  *
- *     node server/src/avvio.js --prova --porta 8400 --dati <cartella temporanea>
- *     WISPER_SERVER_PROVA=http://localhost:8400 ./gradlew :app:testDebugUnitTest
+ *     node server/prove/telefono.js            (--giri 2: due giri di fila sullo stesso server)
  *
- * Senza la variabile queste prove si saltano: le prove di sempre non devono
+ * Senza WISPER_SERVER_PROVA queste prove si saltano: le prove di sempre non devono
  * dipendere da un server acceso. Scrivono sul database di prova, mai su quello vero.
  */
 class ServerDiProvaTest {
-    private val indirizzo = System.getenv("WISPER_SERVER_PROVA").orEmpty()
+    private val indirizzo = ServerDiProva.indirizzo
 
     @Before
     fun soloColServer() = assumeTrue("Server di prova spento: prove saltate", indirizzo.isNotBlank())
@@ -106,8 +105,8 @@ class ServerDiProvaTest {
         assertEquals(0, permessi.getValue(Ruoli.COLLABORATORE).livello(Moduli.FATTURAZIONE))
         assertEquals(1, p.salvaPermesso(Ruoli.LETTURA, Moduli.DASHBOARD, 1).getValue(Ruoli.LETTURA).livello(Moduli.DASHBOARD))
 
-        // Registro, numerazioni, cestino, copie, esportazione.
-        val reg = p.registro(FiltroRegistro(giorni = 1))
+        // Registro (da oggi del server), numerazioni, cestino, copie, esportazione.
+        val reg = p.registro(FiltroRegistro(giorni = ServerDiProva.giorniDiRegistro()))
         assertTrue(reg.voci.isNotEmpty())
         val n = ana.numerazione("rapportino")!!
         assertEquals(n.formato, p.salvaNumerazione(n).formato)
@@ -143,7 +142,8 @@ class ServerDiProvaTest {
         assertTrue(ana.clienti.isNotEmpty())
         assertTrue(ana.clienti.all { it.tariffaFissa == null && it.ultimaTariffa == null })
         assertTrue(ana.fornitori.isEmpty() || ana.fornitori.isNotEmpty())
-        val suoi = p.rapportini(LocalDate.now().minusMonths(6), LocalDate.now().plusDays(1))
+        val oggi = ServerDiProva.oggi
+        val suoi = p.rapportini(oggi.minusMonths(6), oggi.plusDays(1))
         assertTrue(suoi.all { it.conto?.totale == null || it.conto.totale == 0.0 })
         val d = Dashboard.daJson(p.dashboard())
         assertTrue((d.urgenti + d.settimana + d.pianificare).none { it.gravita == "soldi" })

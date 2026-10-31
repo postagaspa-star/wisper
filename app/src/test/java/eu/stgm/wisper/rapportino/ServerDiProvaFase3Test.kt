@@ -17,16 +17,16 @@ import java.io.File
 import java.time.LocalDate
 
 /**
- * La fase 3 contro il server di prova vero (architettura.md §14), come
- * ServerDiProvaFase2Test:
+ * La fase 3 contro il server di prova vero (architettura.md §14). Si lanciano in un modo solo, con un server
+ * nuovo fermo al 22/10/2026 (ServerDiProva.kt):
  *
- *     node server/src/avvio.js --prova --porta 8431 --dati <cartella temporanea>
- *     WISPER_SERVER_PROVA=http://localhost:8431 ./gradlew :app:testDebugUnitTest
+ *     node server/prove/telefono.js            (--giri 2: due giri di fila sullo stesso server)
  *
- * Senza la variabile si saltano. Scrivono sul database di prova.
+ * Senza WISPER_SERVER_PROVA si saltano. Scrivono sul database di prova, righe con descrizioni nuove a ogni giro,
+ * sul giorno del server.
  */
 class ServerDiProvaFase3Test {
-    private val indirizzo = System.getenv("WISPER_SERVER_PROVA").orEmpty()
+    private val indirizzo = ServerDiProva.indirizzo
 
     @get:Rule
     val cartella = TemporaryFolder()
@@ -41,7 +41,8 @@ class ServerDiProvaFase3Test {
         a to ponte(a.token)
     }
 
-    private val oggi = LocalDate.now()
+    /** Il giorno del server (letto solo quando una prova gira: senza server si saltano prima). */
+    private val oggi: LocalDate get() = ServerDiProva.oggi
     private fun unico(testo: String) = "$testo ${System.nanoTime() % 1_000_000}"
 
     @Test

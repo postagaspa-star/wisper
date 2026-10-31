@@ -6,10 +6,14 @@
  *
  * IL PONTE. Dal giorno del cambio i dati stanno sul server di Wisper, nel NAS.
  * Un telefono o un computer rimasti alla versione vecchia continuano a chiamare
- * questo script col CODICE: con la proprieta' SERVER_URL impostata, lo script
- * passa la richiesta al server e restituisce la sua risposta. Cosi' un
- * rapportino rimasto senza rete su un telefono non ancora aggiornato arriva lo
- * stesso, nel posto giusto.
+ * questo script col CODICE: lo script passa la richiesta al server e
+ * restituisce la sua risposta. Cosi' un rapportino rimasto senza rete su un
+ * telefono non ancora aggiornato arriva lo stesso, nel posto giusto. Due strade:
+ *  - PONTE_PORTA = si (la strada di oggi, docs/gestionale/porta-google.md): la
+ *    richiesta va nella coda della porta Google (Porta.gs) e il server sul NAS
+ *    viene a prenderla, come quelle delle app nuove;
+ *  - SERVER_URL = l'indirizzo del server (solo se un giorno il NAS fosse
+ *    raggiungibile da internet): lo script lo chiama con UrlFetch.
  *
  * IL POSTINO. Il server non ha un Gmail: le email ai clienti partono ancora da
  * qui, dal Gmail di chi possiede il foglio, come oggi. In piu' qui arrivano le
@@ -33,8 +37,14 @@ function indirizzoServer() {
   return testo(PropertiesService.getScriptProperties().getProperty(PROP_SERVER_URL)).replace(/\/+$/, '');
 }
 
+/** PONTE_PORTA = si: il cambio e' fatto e le versioni vecchie passano dalla coda della porta Google. */
+function pontePorta() {
+  return testo(PropertiesService.getScriptProperties().getProperty('PONTE_PORTA')).toLowerCase() === 'si';
+}
+
+/** Il cambio e' fatto: i dati stanno sul server (per una strada o per l'altra). */
 function ponteAttivo() {
-  return indirizzoServer() !== '';
+  return indirizzoServer() !== '' || pontePorta();
 }
 
 // ---------------------------------------------------------------------------
@@ -56,6 +66,8 @@ function inoltraAlServer(d) {
   Object.keys(d || {}).forEach(function (k) {
     if (k !== 'codice' && k !== '_metodo') richiesta[k] = d[k];
   });
+  // La porta Google: in coda come le richieste delle app nuove (Porta.gs).
+  if (!indirizzoServer()) return portaPerLeVersioniVecchie(richiesta);
   var r = UrlFetchApp.fetch(indirizzoServer() + '/ponte', {
     method: 'post',
     contentType: 'application/json',
@@ -157,7 +169,7 @@ function postinoCopia(d) {
  * il postino non deve mai riscriverle.
  */
 function postinoFoglio(d) {
-  if (!ponteAttivo()) throw new Error('Il foglio si riscrive solo dopo il cambio (manca SERVER_URL)');
+  if (!ponteAttivo()) throw new Error('Il foglio si riscrive solo dopo il cambio (manca PONTE_PORTA = si)');
   var nome = testo(d.scheda);
   if (SCHEDE_DEL_POSTINO.indexOf(nome) < 0) throw new Error('Scheda non valida: ' + nome);
   var intestazioni = (d.intestazioni || []).map(testo);
@@ -198,12 +210,19 @@ function installaControlli() {
 function controlloMattina() {
   if (!ponteAttivo()) return;
   var problemi = [];
-  try {
-    var r = UrlFetchApp.fetch(indirizzoServer() + '/salute', { muteHttpExceptions: true, followRedirects: true });
-    var salute = r.getResponseCode() === 200 ? JSON.parse(r.getContentText()) : null;
-    if (!salute || salute.ok !== true) problemi.push('Il server di Wisper non risponde bene (risposta ' + r.getResponseCode() + ').');
-  } catch (err) {
-    problemi.push('Il server di Wisper non risponde: ' + messaggio(err) + '.');
+  if (indirizzoServer()) {
+    try {
+      var r = UrlFetchApp.fetch(indirizzoServer() + '/salute', { muteHttpExceptions: true, followRedirects: true });
+      var salute = r.getResponseCode() === 200 ? JSON.parse(r.getContentText()) : null;
+      if (!salute || salute.ok !== true) problemi.push('Il server di Wisper non risponde bene (risposta ' + r.getResponseCode() + ').');
+    } catch (err) {
+      problemi.push('Il server di Wisper non risponde: ' + messaggio(err) + '.');
+    }
+  } else {
+    // La porta Google: il NAS non si raggiunge, ma viene lui a prendere il lavoro ogni pochi secondi.
+    var ultimo = Number(CacheService.getScriptCache().get('porta:nas') || 0);
+    if (!ultimo) problemi.push('Il server di Wisper non si fa vivo con Google da più di 6 ore.');
+    else if (new Date().getTime() - ultimo > 30 * 60 * 1000) problemi.push('Il server di Wisper non si fa vivo con Google dal ' + quando(new Date(ultimo)) + '.');
   }
   var ultima = Number(PropertiesService.getScriptProperties().getProperty('ULTIMA_COPIA_DATABASE') || 0);
   if (new Date().getTime() - ultima > 50 * 3600 * 1000) {

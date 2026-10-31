@@ -58,7 +58,7 @@
           aggiungi(tab, [h('div', { class: 'r cliccabile', style: { gridTemplateColumns: colonne }, role: 'button', tabindex: '0',
             onclick: () => W.vai('#clienti/' + encodeURIComponent(c.id)), onkeydown: e => { if (e.key === 'Enter') W.vai('#clienti/' + encodeURIComponent(c.id)); } },
           iniziali(c.nome, true),
-          h('span', { class: 'doppia' }, h('span', null, c.nome), c.alias && c.alias.length ? h('span', null, c.alias.join(', ')) : null),
+          h('span', { class: 'doppia' }, h('span', null, c.nome, c.collaboratore && puo('collaboratori') ? [' ', pillCollaboratore(c)] : null), c.alias && c.alias.length ? h('span', null, c.alias.join(', ')) : null),
           h('span', { class: 'taglia t2' }, c.citta || '—'),
           h('span', { class: 'taglia t2 num' }, c.partitaIva || '—'),
           h('span', { class: 'taglia t2' }, fornitori ? (c.email || '—') : (soldi() ? tariffaDi(c) : '—')),
@@ -69,6 +69,11 @@
       if (!f.archiviati && archiviati) {
         aggiungi(area, [h('div', null, h('button', { type: 'button', class: 'btn collegamento', onclick: () => { f.archiviati = true; W.disegnaPagina(); } }, 'Mostra gli archiviati (' + archiviati + ')'))]);
       }
+    }
+
+    /** Fase 6 (§12.8): la pillola Collaboratore sul fornitore che ha la scheda del collaboratore esterno: la apre. */
+    function pillCollaboratore(c) {
+      return h('button', { type: 'button', class: 'pill p-blu pill-fattura', title: 'Apri la scheda del collaboratore', onclick: e => { e.stopPropagation(); W.vai('#collaboratori/c/' + encodeURIComponent(c.id)); } }, 'Collaboratore');
     }
 
     // ===================================================================== scheda
@@ -109,6 +114,7 @@
             h('div', { class: 'titoli' }, h('h1', { class: 'titolo-scheda' }, c.nome),
               h('div', { class: 'pillole-testa' },
                 c.cliente ? pillola('Cliente', 'verde') : null, c.fornitore ? pillola('Fornitore', 'blu') : null,
+                c.collaboratore && puo('collaboratori') ? pillCollaboratore(c) : null,
                 c.archiviato ? pillola('Archiviato', 'grigio') : null,
                 h('span', { class: 'sotto-titolo' }, [c.id, c.citta].filter(Boolean).join(' · '))))),
           h('div', { class: 'azioni-testa' }, contatti, altro,

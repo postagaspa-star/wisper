@@ -7,22 +7,38 @@ import org.json.JSONObject
 import java.util.UUID
 
 /**
- * Quello che l'app deve sapere su questo telefono: dove sta il server, il token
- * di chi è entrato (e chi è, per aprirsi anche senza rete), come si presenta il
- * telefono, il tema.
+ * Quello che l'app deve sapere su questo telefono: dove sta il server (le due
+ * strade: in casa e da fuori, attraverso Google), il token di chi è entrato (e chi
+ * è, per aprirsi anche senza rete), come si presenta il telefono, il tema.
  *
- * L'indirizzo del server nelle build di sviluppo c'è già (build.gradle.kts, da
- * wisper-keys o 10.0.2.2:8400 per l'emulatore) e si salva al primo avvio; nell'APK
- * pubblicato non c'è e si scrive nella schermata di accesso. Il token sta nelle
- * preferenze private dell'app, mai nei log.
+ * Il server di casa è di base il NAS dello studio (http://192.168.1.51:8400); le
+ * build di sviluppo possono portarne un altro (build.gradle.kts, da wisper-keys o
+ * 10.0.2.2:8400 per l'emulatore). L'indirizzo dello script Google NON è mai
+ * nell'APK pubblicato: arriva dalle versioni 0.4.0 (che lo tenevano nelle
+ * Impostazioni, la stessa voce "url"), dalle build di sviluppo, o lo scrive la
+ * persona. Il token sta nelle preferenze private dell'app, mai nei log.
  */
 class Configurazione(ctx: Context) {
     private val prefs = ctx.getSharedPreferences("wisper", Context.MODE_PRIVATE)
 
-    /** L'indirizzo del server: "https://wisper.nas.example" o "http://10.0.2.2:8400". */
+    /**
+     * Il server di casa: "http://192.168.1.51:8400", o "http://10.0.2.2:8450" per
+     * provare con l'emulatore. Vuoto (scritto vuoto apposta) = solo Google.
+     */
     var server: String
-        get() = prefs.getString("server", null)?.takeIf { it.isNotBlank() } ?: BuildConfig.SERVER_URL
+        get() = if (prefs.contains("server")) prefs.getString("server", "").orEmpty() else serverDiBase
         set(v) = prefs.edit().putString("server", v.trim()).apply()
+
+    /**
+     * La porta Google: l'indirizzo dello script del foglio (quello che finisce con
+     * /exec). Vuoto = solo casa, come prima. È la voce "url" della 0.4.0: chi
+     * aggiorna se la ritrova già scritta.
+     */
+    var google: String
+        get() = if (prefs.contains("url")) prefs.getString("url", "").orEmpty() else BuildConfig.SHEET_URL
+        set(v) = prefs.edit().putString("url", v.trim()).apply()
+
+    private val serverDiBase: String get() = BuildConfig.SERVER_URL.ifBlank { Indirizzi.CASA_DI_BASE }
 
     /** Il token di chi è entrato su questo telefono; vuoto = si deve entrare. */
     var token: String
@@ -74,7 +90,8 @@ class Configurazione(ctx: Context) {
     init {
         // Un APK di casa (build di prova, o -PconIndirizzo) porta l'indirizzo dentro:
         // si salva subito, perché l'aggiornamento dopo, preso da GitHub, non ce l'ha.
-        if (prefs.getString("server", null).isNullOrBlank() && BuildConfig.SERVER_URL.isNotBlank()) server = BuildConfig.SERVER_URL
+        if (!prefs.contains("server") && BuildConfig.SERVER_URL.isNotBlank()) server = BuildConfig.SERVER_URL
+        if (!prefs.contains("url") && BuildConfig.SHEET_URL.isNotBlank()) google = BuildConfig.SHEET_URL
     }
 
     /**

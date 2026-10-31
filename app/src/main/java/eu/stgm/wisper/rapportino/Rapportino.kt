@@ -87,6 +87,14 @@ data class Rapportino(
     val numeroTicket: String = "",
     /** "Nel contratto CA/2026/002" o "Non si fattura" per un ticket chiuso così, se no vuoto. */
     val nonSiFattura: String = "",
+    /**
+     * Fase 6 (§3.9, §7.8): gli strumenti usati, con lo stato della taratura del giorno
+     * del rapportino. Null = non toccati (non si mandano: il server non cambia niente);
+     * una lista (anche vuota) si manda intera.
+     */
+    val strumenti: List<StrumentoUsato>? = null,
+    /** Fase 6: l'incarico dell'esterno (lo mette il server). */
+    val idIncarico: String = "",
 ) {
     /** Il rapportino e' di un ticket (anche nato senza rete). */
     val conTicket: Boolean get() = idTicket.isNotBlank() || idLocaleTicket.isNotBlank()
@@ -115,6 +123,7 @@ data class Rapportino(
         oreViaggio = oreViaggio, km = km, spese = spese, noteSpese = noteSpese,
         tariffa = tariffa, noteInterne = noteInterne,
         idTicket = idTicket, idLocaleTicket = idLocaleTicket, numeroTicket = numeroTicket,
+        strumenti = strumenti,
     )
 
     /** Quello che si manda allo script con "salvaRapportino". */
@@ -143,6 +152,8 @@ data class Rapportino(
             // Fase 5: l'id del ticket se il server lo conosce, se no l'idLocale del ticket nato qui.
             if (idTicket.isNotBlank()) put("idTicket", PonteServer.idJson(idTicket))
             else if (idLocaleTicket.isNotBlank()) put("idLocaleTicket", idLocaleTicket)
+            // Fase 6: l'elenco intero degli strumenti, solo se è stato toccato (§17.13).
+            strumenti?.let { l -> put("strumenti", JSONArray().apply { l.forEach { put(it.perServer()) } }) }
         }
 
     /** Tutto, per le copie sul telefono (coda e ultimo elenco letto). */
@@ -162,7 +173,10 @@ data class Rapportino(
         .put("idLocaleTicket", idLocaleTicket)
         .put("numeroTicket", numeroTicket)
         .put("nonSiFattura", nonSiFattura)
+        .put("idIncarico", idIncarico)
         .apply {
+            // Sul telefono gli strumenti restano interi (nome, matricola, stato di quel giorno).
+            strumenti?.let { l -> put("strumenti", JSONArray().apply { l.forEach { put(it.aJson()) } }) }
             if (idTicket.isNotBlank() && !has("idTicket")) put("idTicket", PonteServer.idJson(idTicket))
             conto?.let {
                 put("oreTotali", it.oreTotali)
@@ -256,6 +270,8 @@ data class Rapportino(
                 idLocaleTicket = o.testo("idLocaleTicket"),
                 numeroTicket = o.testo("numeroTicket"),
                 nonSiFattura = o.testo("nonSiFattura"),
+                strumenti = if (o.has("strumenti") && !o.isNull("strumenti")) StrumentoUsato.lista(o.optJSONArray("strumenti")) else null,
+                idIncarico = o.testo("idIncarico"),
             )
         }
     }
@@ -317,6 +333,8 @@ data class Rapportino(
         .put("fatturatoIl", fatturatoIl)
         .put("creato", creato)
         .put("modificato", modificato)
+        // Fase 6 (§3.9): la riga Strumenti del PDF la fa pc/ui/documenti.js, solo quando ce ne sono.
+        .put("strumenti", JSONArray().apply { strumenti.orEmpty().forEach { put(it.aJson()) } })
 }
 
 /** I conti di un rapportino, come li ha fatti il foglio o [Calcolo] sul telefono. */

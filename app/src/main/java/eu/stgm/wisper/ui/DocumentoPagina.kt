@@ -699,7 +699,7 @@ fun SchermataLettera(dati: Dati, nav: Navigatore, idScadenza: String) {
 }
 
 /** La lettera scritta dal telefono, finché pc/ui/documenti.js non ha il suo modello `lettera`. */
-private fun paginaLettera(titolo: String, testo: String, studio: String): String {
+internal fun paginaLettera(titolo: String, testo: String, studio: String): String {
     fun h(t: String) = t.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
     return "<div style=\"font-family:Figtree,sans-serif;color:#1B1B1F;padding:48px 56px;font-size:12pt;line-height:1.5\">" +
         "<div style=\"font-weight:800;font-size:14pt\">${h(studio)}</div><div style=\"height:40px\"></div>" +

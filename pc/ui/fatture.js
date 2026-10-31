@@ -1348,14 +1348,30 @@
           'aria-pressed': x.categoria === c ? 'true' : 'false', onclick: () => { x.categoria = c; disegna(); } }, CATEGORIE[c])))),
         h('div', { class: 'riga-campi' }, campo('Commessa', selezione([['', 'Nessuna']].concat(commesse.map(m => [m.id, m.id + ' · ' + m.descrizione])), x.idCommessa || '', val => { x.idCommessa = val; }, { disabled: sola })),
           nuova || x.scadenzaStimata ? campo('Scadenza', v.scadenza) : null),
+        // Fase 6 (§17.2): l'incarico del collaboratore (prende la commessa dell'incarico), il mezzo e lo strumento dei costi.
+        f6.incarichi.length || x.idIncarico || f6.mezzi.length || f6.strumenti.length ? h('div', { class: 'riga-campi' },
+          f6.incarichi.length || x.idIncarico ? campo('Incarico', selezione([['', 'Nessuno']].concat(f6.incarichi.map(i => [i.id, i.numero + ' · ' + i.titolo])).concat(x.idIncarico && !f6.incarichi.some(i => String(i.id) === String(x.idIncarico)) ? [[x.idIncarico, x.incarico || 'Incarico ' + x.idIncarico]] : []),
+            x.idIncarico || '', val => { x.idIncarico = val; x.f6Toccato = true; }, { disabled: sola })) : null,
+          f6.mezzi.length ? campo('Mezzo', selezione([['', 'Nessuno']].concat(f6.mezzi.map(m => [m.id, m.titolo])), x.idVeicolo || '', val => { x.idVeicolo = val; x.f6Toccato = true; }, { disabled: sola })) : null,
+          f6.strumenti.length ? campo('Strumento', selezione([['', 'Nessuno']].concat(f6.strumenti.map(a => [a.id, a.codice + ' · ' + a.nome])), x.idAttrezzatura || '', val => { x.idAttrezzatura = val; x.f6Toccato = true; }, { disabled: sola })) : null) : null,
         campo('Note', v.note)]);
       };
+      const f6 = { incarichi: [], mezzi: (S.ana.mezzi || []).filter(m => m.proprieta === 'studio'), strumenti: [] };
+      // Gli incarichi del fornitore (collaboratori 1) e gli strumenti (mezzi 1) si leggono mentre la finestra è aperta.
+      (async () => {
+        try {
+          if (puo('collaboratori') && x.idFornitore) f6.incarichi = ((await Rete.get('/server/incarichi?stato=tutti&idSoggetto=' + encodeURIComponent(x.idFornitore))).incarichi || []).filter(i => i.stato !== 'annullato');
+          if (puo('mezzi')) f6.strumenti = (await Rete.get('/server/attrezzature')).attrezzature || [];
+          if (document.body.contains(zona)) disegna();
+        } catch (e) { /* senza: restano Commessa e Note */ }
+      })();
       disegna();
       const salva = async () => {
         const r = {
           idFornitore: x.idFornitore, numero: v.numero.value.trim(), data: v.data.value, totale: RF.leggiImporto(v.totale.value), categoria: x.categoria, idCommessa: x.idCommessa || '', note: v.note.value,
         };
         if (!nuova) Object.assign(r, { id: x.id, idFornitore: x.idFornitore, numero: x.numero, data: x.data, totale: x.totale });
+        if (x.f6Toccato) Object.assign(r, { idIncarico: x.idIncarico ? Number(x.idIncarico) : '', idVeicolo: x.idVeicolo ? Number(x.idVeicolo) : '', idAttrezzatura: x.idAttrezzatura ? Number(x.idAttrezzatura) : '' });
         if (nuova) {
           if (v.imponibile.value.trim()) r.imponibile = RF.leggiImporto(v.imponibile.value);
           if (v.iva.value.trim()) r.iva = RF.leggiImporto(v.iva.value);

@@ -5,6 +5,8 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
+import android.net.ConnectivityManager
+import android.net.Network
 import android.net.Uri
 import android.provider.OpenableColumns
 import androidx.core.app.NotificationCompat
@@ -26,6 +28,8 @@ import eu.stgm.wisper.rapportino.VoceListino
 import eu.stgm.wisper.rapportino.Calcolo
 import eu.stgm.wisper.rapportino.Cliente
 import eu.stgm.wisper.rapportino.CodaInvii
+import eu.stgm.wisper.rapportino.IdRichiesta
+import eu.stgm.wisper.rapportino.Strade
 import eu.stgm.wisper.rapportino.Commessa
 import eu.stgm.wisper.rapportino.Configurazione
 import eu.stgm.wisper.rapportino.Conti
@@ -148,13 +152,27 @@ class Archivio(private val ctx: Context) : Dati {
             "dispNome" to configurazione.nomeDispositivo,
             "app" to "telefono ${BuildConfig.VERSION_NAME}",
         )
-    })
+    }, google = { configurazione.google })
     private val coda = CodaInvii(ctx)
     private val copia = CopiaLocale(ctx)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     /** Un invio alla volta: il lavoratore in sottofondo e l'app non mandano mai la stessa cosa due volte. */
     private val invio = Mutex()
+
+    init {
+        // La regola di casa (docs/gestionale/porta-google.md §8.1): quando cambia la rete
+        // (Wi-Fi e dati, un'altra Wi-Fi) casa o Google si sceglie di nuovo alla prossima richiesta.
+        runCatching {
+            ctx.getSystemService(ConnectivityManager::class.java).registerDefaultNetworkCallback(object : ConnectivityManager.NetworkCallback() {
+                override fun onAvailable(network: Network) = ponte.reteCambiata()
+                override fun onLost(network: Network) = ponte.reteCambiata()
+            })
+        }
+    }
+
+    /** Da dove è arrivata l'ultima risposta del server: in ufficio (casa) o attraverso Google. */
+    val dove: StateFlow<Strade.Dove?> get() = ponte.strade.dove
 
     private val _anagrafiche = MutableStateFlow(copia.anagrafiche())
     override val anagrafiche: StateFlow<Anagrafiche> = _anagrafiche.asStateFlow()
@@ -220,7 +238,8 @@ class Archivio(private val ctx: Context) : Dati {
     private suspend fun leggiDashboard() {
         val j = ponte.dashboard()
         _dashboard.value = Dashboard.daJson(j)
-        copia.scriviDashboard(j)
+        // Fase 6: sul disco niente tipo delle malattie e niente giudizi di idoneità (PrivacyDisco).
+        copia.scriviDashboard(eu.stgm.wisper.rapportino.PrivacyDisco.dashboard(j))
     }
 
     /** Le anagrafiche arrivano già con archiviati e modelli: non c'è altro da leggere. */
@@ -241,9 +260,15 @@ class Archivio(private val ctx: Context) : Dati {
      * Un no del server (password sbagliata, troppi tentativi, utente disattivato)
      * torna come [PonteServer.Rifiutato]; la rete come un altro errore.
      */
-    suspend fun entra(email: String, password: String, server: String = configurazione.server): Result<Unit> = withContext(Dispatchers.IO) {
+    suspend fun entra(
+        email: String,
+        password: String,
+        server: String = configurazione.server,
+        google: String = configurazione.google,
+    ): Result<Unit> = withContext(Dispatchers.IO) {
         try {
             if (server.trim() != configurazione.server) configurazione.server = server.trim()
+            if (google.trim() != configurazione.google) configurazione.google = google.trim()
             configurazione.ultimaEmail = email.trim()
             val a = ponte.accedi(email, password)
             if (configurazione.idUltimoUtente.isNotBlank() && configurazione.idUltimoUtente != a.utente.id) svuotaCopie()
@@ -262,10 +287,19 @@ class Archivio(private val ctx: Context) : Dati {
         }
     }
 
-    /** Cambia l'indirizzo del server: il token di prima non vale lì, si rientra. */
+    /** Cambia l'indirizzo del server di casa: il token di prima potrebbe non valere lì, si rientra. */
     fun cambiaServer(nuovo: String) {
         configurazione.server = nuovo.trim()
         esciQui(perScadenza = false)
+    }
+
+    /**
+     * Cambia l'indirizzo della porta Google. Il server è lo stesso (lo script passa
+     * le richieste al NAS): chi è entrato resta dentro, la strada si sceglie di nuovo.
+     */
+    fun cambiaGoogle(nuovo: String) {
+        configurazione.google = nuovo.trim()
+        ponte.reteCambiata()
     }
 
     /** Il server ha detto "accesso scaduto": si torna alla schermata di accesso, la coda aspetta. */
@@ -281,6 +315,9 @@ class Archivio(private val ctx: Context) : Dati {
         configurazione.token = ""
         configurazione.uscitoPerScadenza = perScadenza
         _sessione.value = Sessione.NESSUNA.copy(scaduta = perScadenza)
+        // Fase 6 (§3.13): le copie per lavorare senza rete (la mia scheda, le assenze, i mezzi)
+        // e i documenti personali aperti si tolgono all'uscita dall'account. La coda resta.
+        fase6.togliRiservati()
     }
 
     /** Un'altra persona: via le copie lette dal server (non la coda, che è ancora da mandare). */
@@ -299,6 +336,7 @@ class Archivio(private val ctx: Context) : Dati {
         _speseLette.value = null
         _trasferteLette.value = null
         fase5.scaffale.svuota()
+        fase6.togliRiservati()
         Promemoria.programma(ctx, emptyList(), "")
     }
 
@@ -534,6 +572,14 @@ class Archivio(private val ctx: Context) : Dati {
         tutte.firstOrNull { it.idOp == idOp }?.let { op ->
             coda.togli(op.idOp)
             if (op.percorso.isNotBlank()) File(op.percorso).delete()
+            // Fase 6: i km e il guasto mai arrivati si portano via le loro foto.
+            if (op.tipo == CodaInvii.Tipo.KM || op.tipo == CodaInvii.Tipo.GUASTO) {
+                val foto = if (op.tipo == CodaInvii.Tipo.KM) CodaInvii.Tipo.FOTO_KM else CodaInvii.Tipo.FOTO_GUASTO
+                tutte.filter { it.tipo == foto && it.idLocale == op.idLocale }.forEach { f ->
+                    coda.togli(f.idOp)
+                    if (f.percorso.isNotBlank()) File(f.percorso).delete()
+                }
+            }
             // Una spesa mai arrivata si porta via il suo scontrino: senza spesa non avrebbe dove andare.
             if (op.tipo == CodaInvii.Tipo.SPESA && op.idRemoto.isBlank()) {
                 tutte.filter { it.tipo == CodaInvii.Tipo.FOTO_SPESA && it.idLocale == op.idLocale && it.idRemoto.isBlank() }.forEach { f ->
@@ -1548,6 +1594,42 @@ class Archivio(private val ctx: Context) : Dati {
 
     private val invio5 by lazy { InvioFase5(fase5.f) }
 
+    // ------------------------------------------------------------- fase 6: persone, mezzi e attrezzature, collaboratori
+
+    /** Quello che si fa anche senza rete (fase6.md §3.13) va nella coda su disco, come i rapportini. */
+    private val codaFase6 = object : eu.stgm.wisper.rapportino.CodaFase6 {
+        override fun assenza(chiave: String, corpo: JSONObject) { coda.assenza(chiave, corpo); dopoModifica() }
+        override fun annullaAssenza(id: String, corpo: JSONObject) { coda.annullaAssenza(id, corpo); dopoModifica() }
+        override fun togliAssenzaInCoda(chiave: String): Boolean {
+            val l = coda.tutte().filter { it.tipo == CodaInvii.Tipo.ASSENZA && it.idLocale == chiave }
+            l.forEach { coda.togli(it.idOp) }
+            _coda.value = coda.tutte()
+            return l.isNotEmpty()
+        }
+        override fun km(chiave: String, corpo: JSONObject) { coda.km(chiave, corpo); dopoModifica() }
+        override fun fotoKm(chiave: String, file: File) { coda.fotoKm(chiave, file.nameWithoutExtension, file.path); dopoModifica() }
+        override fun guasto(chiave: String, corpo: JSONObject) { coda.guasto(chiave, corpo); dopoModifica() }
+        override fun fotoGuasto(chiave: String, file: File) { coda.fotoGuasto(chiave, file.nameWithoutExtension, file.path); dopoModifica() }
+        override fun prestito(chiave: String, corpo: JSONObject) { coda.prestito(chiave, corpo); dopoModifica() }
+        override fun restituisci(chiave: String, corpo: JSONObject) { coda.restituisci(chiave, corpo); dopoModifica() }
+        override fun firmaDpi(id: String, file: File) { coda.firmaDpi(id, file.nameWithoutExtension, file.path); dopoModifica() }
+    }
+
+    override val fase6: eu.stgm.wisper.rapportino.ServizioFase6 by lazy {
+        eu.stgm.wisper.rapportino.ServizioFase6(
+            ponte, Scaffale(File(ctx.filesDir, "fase6"), prefisso = "f6-"),
+            object : EsecutoreFase4 {
+                override suspend fun <T> esegui(lavoro: suspend () -> T): Result<T> = inDiretta { lavoro() }
+            },
+            codaFase6,
+            idPersonaMia = { _sessione.value.idPersona },
+            cartellaFile = ctx.cacheDir,
+            dopoScrittura = { aggiornaDashboard() },
+        )
+    }
+
+    private val invio6 by lazy { eu.stgm.wisper.rapportino.InvioFase6(fase6.f) }
+
     override suspend fun segnaRimborsato(voci: List<VoceRimborso>, annulla: Boolean): Result<Pair<Int, Double>> = inDiretta {
         ponte.segnaRimborsato(voci, annulla).also { meseSpese?.let { m -> provaONull { leggiSpese(m) } } }
     }.also { aggiornaDashboard() }
@@ -1640,6 +1722,7 @@ class Archivio(private val ctx: Context) : Dati {
         var salvati = false
         var fase3 = false
         var fase5 = false
+        var fase6 = false
         var unoAllaVolta = false
         try {
             while (true) {
@@ -1654,16 +1737,20 @@ class Archivio(private val ctx: Context) : Dati {
                     }.take(STATI_PER_RICHIESTA)
                 } else listOf(op)
                 try {
-                    if (gruppo.size > 1) {
-                        sostituisciRemoti(ponte.stato(gruppo.map { chiaveFoglio(it.idLocale) }, op.stato!!))
-                    } else {
-                        esegui(op)
+                    // Lo stesso id a ogni tentativo della stessa operazione, anche se passa da casa a Google (IdRichiesta).
+                    IdRichiesta.perOperazione(op.idOp) {
+                        if (gruppo.size > 1) {
+                            sostituisciRemoti(ponte.stato(gruppo.map { chiaveFoglio(it.idLocale) }, op.stato!!))
+                        } else {
+                            esegui(op)
+                        }
                     }
                     // Ore e spese escono da sole (CodaInvii.completa): se intanto sono state
                     // cambiate di nuovo restano, e ripartono come modifica.
                     if (op.fase3) fase3 = true else gruppo.forEach { coda.togli(it.idOp) }
                     if (op.tipo == CodaInvii.Tipo.SALVA) salvati = true
                     if (op.fase5) fase5 = true
+                    if (op.fase6) fase6 = true
                     _coda.value = coda.tutte()
                 } catch (e: CancellationException) {
                     throw e
@@ -1680,7 +1767,9 @@ class Archivio(private val ctx: Context) : Dati {
                     val attuale = coda.tutte().firstOrNull { it.idOp == op.idOp } ?: op
                     coda.aggiorna(attuale.copy(errore = e.message ?: "rifiutato"))
                     _coda.value = coda.tutte()
-                    avvisa(ID_RIFIUTATO, TestiCoda.rifiutata(op.tipo), e.message.orEmpty(), importante = true)
+                    // Fase 6: per un'assenza la notifica non dice il motivo (potrebbe dire il tipo, che è riservato).
+                    val testo = if (op.tipo in CodaInvii.PERSONALI) "Apri Wisper per vedere il motivo" else e.message.orEmpty()
+                    avvisa(ID_RIFIUTATO, TestiCoda.rifiutata(op.tipo), testo, importante = true)
                     return@withLock Esito.RIFIUTATO
                 } catch (e: Exception) {
                     val attuale = coda.tutte().firstOrNull { it.idOp == op.idOp } ?: op
@@ -1688,10 +1777,7 @@ class Archivio(private val ctx: Context) : Dati {
                     coda.aggiorna(attuale.copy(tentativi = tentativi))
                     _coda.value = coda.tutte()
                     if (tentativi == AVVISO_DOPO_TENTATIVI) {
-                        avvisa(
-                            ID_NON_ANCORA, TestiCoda.titoloNonPartite(coda.tutte()),
-                            "Sono al sicuro sul telefono. Partono da soli appena c'è rete.", importante = false,
-                        )
+                        avvisa(ID_NON_ANCORA, TestiCoda.titoloNonPartite(coda.tutte()), motivoNonPartite(e), importante = false)
                     }
                     return@withLock Esito.RETE
                 }
@@ -1706,6 +1792,8 @@ class Archivio(private val ctx: Context) : Dati {
             else if (fase3) scope.launch { rileggiFase3() }
             // Partiti ticket o scadenze: si rileggono gli aperti e la Dashboard, coi numeri veri.
             if (fase5) scope.launch { provaONull { this@Archivio.fase5.tickets() }; provaONull { leggiDashboard() } }
+            // Partite assenze, km, guasti o prestiti: anagrafiche (i miei strumenti) e Dashboard coi numeri veri.
+            if (fase6 && !salvati) scope.launch { rileggiAnagrafiche(); provaONull { leggiDashboard() } }
         }
     }
 
@@ -1744,6 +1832,13 @@ class Archivio(private val ctx: Context) : Dati {
             CodaInvii.Tipo.TOGLI_FOTO -> sostituisciRemoto(ponte.togliFile(chiaveFoglio(op.idLocale), op.fileId))
 
             CodaInvii.Tipo.TICKET, CodaInvii.Tipo.AZIONE_TICKET, CodaInvii.Tipo.FOTO_TICKET, CodaInvii.Tipo.FAI_SCADENZA -> invio5.esegui(op)
+
+            CodaInvii.Tipo.ASSENZA, CodaInvii.Tipo.ANNULLA_ASSENZA, CodaInvii.Tipo.KM, CodaInvii.Tipo.FOTO_KM, CodaInvii.Tipo.GUASTO,
+            CodaInvii.Tipo.FOTO_GUASTO, CodaInvii.Tipo.PRESTITO, CodaInvii.Tipo.RESTITUISCI, CodaInvii.Tipo.FIRMA_DPI -> {
+                invio6.esegui(op)
+                // La foto o la firma partita non serve più sul telefono.
+                if (op.percorso.isNotBlank()) File(op.percorso).delete()
+            }
 
             CodaInvii.Tipo.ORE, CodaInvii.Tipo.SPESA, CodaInvii.Tipo.FOTO_SPESA -> when (val a = invio3.esegui(op)) {
                 is InvioFase3.Arrivato.Ore -> mettiOre(a.riga)
@@ -1856,6 +1951,9 @@ class Archivio(private val ctx: Context) : Dati {
                 CodaInvii.Tipo.ORE, CodaInvii.Tipo.SPESA, CodaInvii.Tipo.FOTO_SPESA -> null
                 // Ticket e scadenze della fase 5: li mostra fase5 (TicketInCoda).
                 CodaInvii.Tipo.TICKET, CodaInvii.Tipo.AZIONE_TICKET, CodaInvii.Tipo.FOTO_TICKET, CodaInvii.Tipo.FAI_SCADENZA -> null
+                // Assenze, km, guasti, prestiti e firme della fase 6: li mostra fase6 (InCoda6).
+                CodaInvii.Tipo.ASSENZA, CodaInvii.Tipo.ANNULLA_ASSENZA, CodaInvii.Tipo.KM, CodaInvii.Tipo.FOTO_KM, CodaInvii.Tipo.GUASTO,
+                CodaInvii.Tipo.FOTO_GUASTO, CodaInvii.Tipo.PRESTITO, CodaInvii.Tipo.RESTITUISCI, CodaInvii.Tipo.FIRMA_DPI -> null
             }
             if (nuova != null) {
                 viste[op.idLocale] = nuova.copy(
@@ -1918,6 +2016,20 @@ class Archivio(private val ctx: Context) : Dati {
         private const val TROPPO_GRANDE = "Il file è troppo grande: al massimo 10 MB"
         private const val NON_SCARICA = "Non riesco a scaricare un'immagine del PDF (una firma o uno scontrino). "
 
+
+        /**
+         * Il testo dell'avviso "non ancora partiti": la rete che manca, il server dello
+         * studio che non risponde (la porta Google dice spento o attesa), o una cosa troppo
+         * grande per passare da Google, che parte dall'ufficio.
+         */
+        fun motivoNonPartite(e: Exception): String = when {
+            e is PonteServer.SoloInUfficio -> "Una è troppo grande per passare da Google: parte da sola quando sei in ufficio. Intanto sono al sicuro sul telefono."
+            e is PonteServer.ServizioNonRaggiunto && (e.porta == "spento" || e.porta == "attesa") ->
+                "Il server dello studio non risponde: riprovo da solo. Intanto sono al sicuro sul telefono."
+            e is PonteServer.ServizioNonRaggiunto && (e.porta == "occupato" || e.porta == "google") ->
+                "Google non risponde: riprovo da solo. Intanto sono al sicuro sul telefono."
+            else -> "Sono al sicuro sul telefono. Partono da soli appena c'è rete."
+        }
 
         /** Un errore detto in modo che si capisca cosa fare. */
         fun spiega(e: Exception): String = when (e) {

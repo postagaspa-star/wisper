@@ -1,0 +1,48 @@
+{
+  "nota": "I conti della fase 6 su mezzi e strumenti (docs/gestionale/fase6.md §7.1, §7.2, §7.5, architettura.md §17). Li fa il server (server/src/conti.js: scadenzaRevisione, kmAlTagliando, statoTaratura); telefono e computer li rifanno (il telefono anche senza rete, dalla data della taratura) e devono ritrovare gli stessi numeri e le stesse parole. Revisione: senza revisioni l'ultimo giorno del mese dell'immatricolazione + 4 anni; con l'ultima revisione l'ultimo giorno del mese della revisione + 24 mesi. Tagliando a km: ultimo tagliando + ogni quanti km - km di oggi (negativo: passato); null se il tagliando non e' a km o mancano i km. Taratura: giorni = scade - oggi; il giorno 'scade' vale ancora (scade oggi), dal giorno dopo e' scaduta; entro il preavviso 'in_scadenza'; non conforme (esito dell'ultima o fuori uso non conforme) prima di tutto, poi il laboratorio, poi senza taratura; per i DPI 'Verifica' al posto di 'Taratura' e 'Verificato' al posto di 'Tarato'. Senza controllo periodico: null. I valori attesi sono fatti a mano.",
+  "scadenzaRevisione": [
+    {"nome": "immatricolato il 05/11/2021, mai revisionato", "immatricolazione": "2021-11-05", "ultimaRevisione": "", "atteso": "2025-11-30"},
+    {"nome": "revisione fatta il 12/11/2025", "immatricolazione": "2021-11-05", "ultimaRevisione": "2025-11-12", "atteso": "2027-11-30"},
+    {"nome": "il Doblo' immatricolato il 15/03/2023", "immatricolazione": "2023-03-15", "ultimaRevisione": "", "atteso": "2027-03-31"},
+    {"nome": "immatricolato a fine febbraio di un anno bisestile", "immatricolazione": "2024-02-29", "ultimaRevisione": "", "atteso": "2028-02-29"},
+    {"nome": "senza date", "immatricolazione": "", "ultimaRevisione": "", "atteso": ""}
+  ],
+  "kmAlTagliando": [
+    {"nome": "il Doblo': tagliando ogni 15.000, l'ultimo a 75.000, oggi 84.320", "tagliandoKm": 15000, "tagliandoUltimoKm": 75000, "km": 84320, "atteso": 5680},
+    {"nome": "fra 800 km", "tagliandoKm": 15000, "tagliandoUltimoKm": 75000, "km": 89200, "atteso": 800},
+    {"nome": "passato di 300 km", "tagliandoKm": 15000, "tagliandoUltimoKm": 75000, "km": 90300, "atteso": -300},
+    {"nome": "tagliando solo a mesi", "tagliandoKm": null, "tagliandoUltimoKm": 75000, "km": 84320, "atteso": null},
+    {"nome": "senza km", "tagliandoKm": 15000, "tagliandoUltimoKm": 75000, "km": null, "atteso": null}
+  ],
+  "statoTaratura": [
+    {"nome": "tarato fino all'8 aprile", "x": {"controllo": "taratura", "ultima": {"data": "2026-04-08", "scade": "2027-04-08", "esito": "conforme"}}, "oggi": "2026-10-22", "preavviso": 30,
+     "atteso": {"stato": "valida", "parola": "Tarato fino al 08/04/2027", "giorni": 168, "scade": "2027-04-08"}},
+    {"nome": "il misuratore MT-500, fra 24 giorni", "x": {"controllo": "taratura", "ultima": {"data": "2025-11-15", "scade": "2026-11-15", "esito": "conforme"}}, "oggi": "2026-10-22", "preavviso": 30,
+     "atteso": {"stato": "in_scadenza", "parola": "Taratura fra 24 giorni", "giorni": 24, "scade": "2026-11-15"}},
+    {"nome": "scade oggi: vale ancora", "x": {"controllo": "taratura", "ultima": {"data": "2025-10-22", "scade": "2026-10-22", "esito": "regolato"}}, "oggi": "2026-10-22", "preavviso": 30,
+     "atteso": {"stato": "in_scadenza", "parola": "Taratura scade oggi", "giorni": 0, "scade": "2026-10-22"}},
+    {"nome": "fra 1 giorno", "x": {"controllo": "taratura", "ultima": {"data": "2025-10-23", "scade": "2026-10-23", "esito": "conforme"}}, "oggi": "2026-10-22", "preavviso": 30,
+     "atteso": {"stato": "in_scadenza", "parola": "Taratura fra 1 giorno", "giorni": 1, "scade": "2026-10-23"}},
+    {"nome": "scaduta ieri", "x": {"controllo": "taratura", "ultima": {"data": "2025-10-21", "scade": "2026-10-21", "esito": "conforme"}}, "oggi": "2026-10-22", "preavviso": 30,
+     "atteso": {"stato": "scaduta", "parola": "Taratura scaduta da 1 giorno", "giorni": 1, "scade": "2026-10-21"}},
+    {"nome": "il multimetro 87V, scaduto il 12 ottobre", "x": {"controllo": "taratura", "ultima": {"data": "2025-10-12", "scade": "2026-10-12", "esito": "conforme"}}, "oggi": "2026-10-22", "preavviso": 30,
+     "atteso": {"stato": "scaduta", "parola": "Taratura scaduta da 10 giorni", "giorni": 10, "scade": "2026-10-12"}},
+    {"nome": "l'ultima taratura non conforme", "x": {"controllo": "taratura", "ultima": {"data": "2026-10-02", "scade": "", "esito": "non_conforme"}}, "oggi": "2026-10-22", "preavviso": 30,
+     "atteso": {"stato": "non_conforme", "parola": "Non conforme", "giorni": null, "scade": ""}},
+    {"nome": "fuori uso non conforme anche se l'ultima buona non e' scaduta", "x": {"controllo": "taratura", "ultima": {"data": "2026-04-08", "scade": "2027-04-08", "esito": "conforme"}, "fuoriUso": "non_conforme"}, "oggi": "2026-10-22", "preavviso": 30,
+     "atteso": {"stato": "non_conforme", "parola": "Non conforme", "giorni": null, "scade": "2027-04-08"}},
+    {"nome": "al laboratorio", "x": {"controllo": "taratura", "ultima": {"data": "2025-10-25", "scade": "2026-10-25", "esito": "conforme"}, "inLaboratorio": true}, "oggi": "2026-10-22", "preavviso": 30,
+     "atteso": {"stato": "laboratorio", "parola": "In taratura", "giorni": null, "scade": "2026-10-25"}},
+    {"nome": "mai tarato", "x": {"controllo": "taratura", "ultima": null}, "oggi": "2026-10-22", "preavviso": 30,
+     "atteso": {"stato": "senza", "parola": "Taratura non scritta", "giorni": null, "scade": ""}},
+    {"nome": "tarato senza data di scadenza", "x": {"controllo": "taratura", "ultima": {"data": "2026-01-10", "scade": "", "esito": "conforme"}}, "oggi": "2026-10-22", "preavviso": 30,
+     "atteso": {"stato": "valida", "parola": "Tarato", "giorni": null, "scade": ""}},
+    {"nome": "guanti isolanti verificati fino al 31 dicembre", "x": {"controllo": "verifica", "ultima": {"data": "2026-06-30", "scade": "2026-12-31", "esito": "conforme"}}, "oggi": "2026-10-22", "preavviso": 30,
+     "atteso": {"stato": "valida", "parola": "Verificato fino al 31/12/2026", "giorni": 70, "scade": "2026-12-31"}},
+    {"nome": "DPI: verifica fra 12 giorni", "x": {"controllo": "verifica", "ultima": {"data": "2026-05-03", "scade": "2026-11-03", "esito": "conforme"}}, "oggi": "2026-10-22", "preavviso": 30,
+     "atteso": {"stato": "in_scadenza", "parola": "Verifica fra 12 giorni", "giorni": 12, "scade": "2026-11-03"}},
+    {"nome": "DPI al laboratorio", "x": {"controllo": "verifica", "ultima": null, "inLaboratorio": true}, "oggi": "2026-10-22", "preavviso": 30,
+     "atteso": {"stato": "laboratorio", "parola": "In verifica", "giorni": null, "scade": ""}},
+    {"nome": "un attrezzo senza controllo periodico", "x": {"controllo": "", "ultima": null}, "oggi": "2026-10-22", "preavviso": 30, "atteso": null}
+  ]
+}

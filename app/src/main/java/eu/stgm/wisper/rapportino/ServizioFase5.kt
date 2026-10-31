@@ -263,10 +263,10 @@ class InvioFase5(private val f: Fase5) {
 }
 
 /** Le copie sul telefono delle ultime letture (per leggere senza rete): JSON per nome, scritti interi. */
-class Scaffale(private val cartella: File?) {
+class Scaffale(private val cartella: File?, private val prefisso: String = "f5-") {
     private val memoria = HashMap<String, JSONObject>()
 
-    private fun file(nome: String) = File(cartella, "f5-" + nome.replace(Regex("""[^A-Za-z0-9._-]"""), "_") + ".json")
+    private fun file(nome: String) = File(cartella, prefisso + nome.replace(Regex("""[^A-Za-z0-9._-]"""), "_") + ".json")
 
     @Synchronized
     fun leggi(nome: String): JSONObject? {
@@ -293,8 +293,19 @@ class Scaffale(private val cartella: File?) {
     @Synchronized
     fun svuota() {
         memoria.clear()
-        cartella?.listFiles()?.filter { it.name.startsWith("f5-") }?.forEach { it.delete() }
+        cartella?.listFiles()?.filter { it.name.startsWith(prefisso) }?.forEach { it.delete() }
     }
+
+    /** Toglie una copia sola (dal telefono e dalla memoria). */
+    @Synchronized
+    fun togli(nome: String) {
+        memoria.remove(nome)
+        cartella?.let { File(it, file(nome).name).delete() }
+    }
+
+    /** I nomi delle copie che ci sono sul disco (per le prove della privacy). */
+    @Synchronized
+    fun nomiSulDisco(): List<String> = cartella?.listFiles()?.filter { it.name.startsWith(prefisso) && it.name.endsWith(".json") }?.map { it.name }.orEmpty()
 }
 
 /**

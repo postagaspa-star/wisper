@@ -7,6 +7,7 @@ import android.graphics.Matrix
 import android.graphics.Paint
 import android.media.ExifInterface
 import android.net.Uri
+import android.security.NetworkSecurityPolicy
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -52,7 +53,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.focus.focusRequester
@@ -80,7 +84,9 @@ import eu.stgm.wisper.Dati
 import eu.stgm.wisper.NuoveVersioni
 import eu.stgm.wisper.rapportino.Anagrafiche
 import eu.stgm.wisper.rapportino.Numeri
+import eu.stgm.wisper.rapportino.Indirizzi
 import eu.stgm.wisper.rapportino.PonteServer
+import eu.stgm.wisper.rapportino.Strade
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -289,6 +295,7 @@ fun PaginaApp(
     val config = archivio.configurazione
     val ana by archivio.anagrafiche.collectAsStateWithLifecycle()
     val aggiornamento by archivio.aggiornamento.collectAsStateWithLifecycle()
+    val dove by archivio.dove.collectAsStateWithLifecycle()
     val versioni by NuoveVersioni.stato.collectAsStateWithLifecycle()
     var modifica by remember { mutableStateOf<Modifica?>(null) }
     var licenza by remember { mutableStateOf(false) }
@@ -337,7 +344,13 @@ fun PaginaApp(
                         when {
                             aggiornamento.inCorso -> "Leggo…"
                             aggiornamento.errore.isNotBlank() -> aggiornamento.errore
-                            aggiornamento.ultimo != null -> "Letto alle " + aggiornamento.ultimo!!.format(DateTimeFormatter.ofPattern("HH:mm"))
+                            aggiornamento.ultimo != null -> "Letto alle " + aggiornamento.ultimo!!.format(DateTimeFormatter.ofPattern("HH:mm")) +
+                                // Dove si è (porta-google.md §8.6): le due strade danno le stesse risposte.
+                                when (dove) {
+                                    Strade.Dove.CASA -> " · in ufficio"
+                                    Strade.Dove.GOOGLE -> " · attraverso Google"
+                                    null -> ""
+                                }
                             else -> ""
                         },
                         style = Testi.secondario, color = c.tenue, maxLines = 2,
@@ -346,9 +359,20 @@ fun PaginaApp(
                 PulsanteTesto(if (collegato) "Aggiorna" else "Riprova", { archivio.aggiorna() })
             }
             LineaElenco()
-            // Cambiare server vuol dire entrare di nuovo: il token di un server non vale sull'altro.
-            RigaVoce("Server", sotto = config.server.ifBlank { "—" }, onClick = {
-                modifica = Modifica("Indirizzo del server", config.server, locale = "server", righe = 2, tastiera = KeyboardType.Uri)
+            // Le due strade verso lo stesso server: da fuori lo script Google, in casa il NAS.
+            RigaVoce("Da fuori", sotto = if (config.google.isBlank()) "Non impostato" else "Google", onClick = {
+                modifica = Modifica(
+                    "Da fuori, l'indirizzo Google", config.google, locale = "google", righe = 3, tastiera = KeyboardType.Uri,
+                    segnaposto = "https://script.google.com/…/exec",
+                )
+            })
+            LineaElenco()
+            // Cambiare il server di casa vuol dire entrare di nuovo: il token di un server non vale sull'altro.
+            RigaVoce("In casa", sotto = if (config.server.isBlank()) "Non impostato" else Indirizzi.breve(config.server), onClick = {
+                modifica = Modifica(
+                    "In casa", config.server, locale = "server", righe = 2, tastiera = KeyboardType.Uri,
+                    segnaposto = Indirizzi.CASA_DI_BASE,
+                )
             })
         }
     }
@@ -356,8 +380,12 @@ fun PaginaApp(
     modifica?.let { m ->
         FoglioModifica(m, scope, onChiudi = { if (modifica === m) modifica = null }) { valore ->
             when (m.locale) {
-                "server" -> if (valore.isBlank()) "Scrivi l'indirizzo del server" else {
+                "server" -> Indirizzi.controlla(valore, config.google, ::inChiaro) ?: run {
                     if (valore.trim() != config.server) archivio.cambiaServer(valore)
+                    null
+                }
+                "google" -> Indirizzi.controlla(config.server, valore, ::inChiaro) ?: run {
+                    if (valore.trim() != config.google) archivio.cambiaGoogle(valore)
                     null
                 }
                 else -> null
@@ -725,9 +753,11 @@ private fun firmaDaFoto(ctx: Context, sorgente: Uri): ByteArray {
 
 /**
  * La schermata di accesso (docs/gestionale/fase1-schermate.md §2): il simbolo,
- * "Entra in Wisper", l'indirizzo del server solo se manca (o se si tocca Cambia),
- * email e password con l'occhio, Entra. Gli errori del server in un riquadro rosso
- * tenue sopra i campi; la rete che manca in grigio, mai in rosso. L'email resta scritta.
+ * "Entra in Wisper", email e password con l'occhio, Entra. Sotto, in una riga, le
+ * due strade ("Da fuori: Google · In casa: 192.168.1.51 · Cambia"); i due
+ * indirizzi si scrivono solo se mancano tutti e due, o se si tocca Cambia. Gli
+ * errori del server in un riquadro rosso tenue sopra i campi; la rete che manca
+ * in grigio, mai in rosso. L'email resta scritta.
  */
 @Composable
 fun SchermataAccesso(archivio: Archivio, onEntrato: () -> Unit) {
@@ -736,7 +766,8 @@ fun SchermataAccesso(archivio: Archivio, onEntrato: () -> Unit) {
     val scope = rememberCoroutineScope()
     val sessione by archivio.sessione.collectAsStateWithLifecycle()
     var server by remember { mutableStateOf(config.server) }
-    var cambiaServer by remember { mutableStateOf(config.server.isBlank()) }
+    var google by remember { mutableStateOf(config.google) }
+    var cambiaServer by remember { mutableStateOf(config.server.isBlank() && config.google.isBlank()) }
     var email by remember { mutableStateOf(config.ultimaEmail) }
     var password by remember { mutableStateOf("") }
     // Il testo dell'errore e se è un no del server (rosso) o la rete (grigio).
@@ -746,18 +777,23 @@ fun SchermataAccesso(archivio: Archivio, onEntrato: () -> Unit) {
 
     fun entra() {
         if (entro) return
+        val indirizzi = Indirizzi.controlla(server, google, ::inChiaro)
         when {
-            server.isBlank() -> { errore = "Scrivi l'indirizzo del server." to true; cambiaServer = true; return }
+            indirizzi != null -> { errore = indirizzi to true; cambiaServer = true; return }
             email.isBlank() || password.isBlank() -> { errore = "Scrivi email e password." to true; return }
         }
         entro = true
         errore = null
         scope.launch {
-            archivio.entra(email, password, server).fold(
+            archivio.entra(email, password, server, google).fold(
                 onSuccess = { password = ""; onEntrato() },
                 onFailure = { e ->
-                    errore = if (e is PonteServer.Rifiutato) frase(e.message.orEmpty().ifBlank { "Il server ha detto di no" }) to true
-                    else "Il server non risponde: controlla la rete e riprova." to false
+                    errore = when (e) {
+                        is PonteServer.Rifiutato -> frase(e.message.orEmpty().ifBlank { "Il server ha detto di no" }) to true
+                        // La porta Google: "Il server dello studio non risponde dalle 10:42: riprova più tardi".
+                        is PonteServer.ServizioNonRaggiunto -> frase(e.message.orEmpty().ifBlank { "Il server dello studio non risponde: riprova più tardi" }) to false
+                        else -> "Il server non risponde: controlla la rete e riprova." to false
+                    }
                 },
             )
             entro = false
@@ -785,9 +821,16 @@ fun SchermataAccesso(archivio: Archivio, onEntrato: () -> Unit) {
             }
             if (cambiaServer) {
                 CampoTesto(
-                    server, { server = it.trim() }, "Indirizzo del server", Modifier.fillMaxWidth(),
-                    segnaposto = "https://…", tastiera = KeyboardType.Uri, azione = ImeAction.Next,
+                    server, { server = it.trim() }, "In casa", Modifier.fillMaxWidth(),
+                    segnaposto = Indirizzi.CASA_DI_BASE, tastiera = KeyboardType.Uri, azione = ImeAction.Next,
                 )
+                CampoTesto(
+                    google, { google = it.trim() }, "Da fuori, l'indirizzo Google", Modifier.fillMaxWidth(),
+                    segnaposto = "https://script.google.com/…/exec", tastiera = KeyboardType.Uri, azione = ImeAction.Next,
+                )
+                // Con Google l'accesso passa sempre da lì (§14bis). Se Google non funziona, in casa si può
+                // entrare dal server di casa: la password viaggia sulla rete di casa senza cifratura.
+                if (google.isNotBlank()) PulsanteTesto("Non usare Google", { google = "" }, Modifier.fillMaxWidth().heightIn(min = 48.dp), colore = c.testo)
             }
             CampoTesto(
                 email, { email = it.trim() }, "Email", Modifier.fillMaxWidth(), tastiera = KeyboardType.Email,
@@ -799,19 +842,29 @@ fun SchermataAccesso(archivio: Archivio, onEntrato: () -> Unit) {
             )
             PulsantePrincipale(if (entro) "Entro…" else "Entra", { entra() }, abilitato = !entro)
             if (!cambiaServer) {
-                Row(
-                    Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(RoundedCornerShape(12.dp)).clickable { cambiaServer = true },
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically,
+                Box(
+                    Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(RoundedCornerShape(12.dp)).clickable { cambiaServer = true }
+                        .padding(horizontal = 8.dp, vertical = 6.dp),
+                    contentAlignment = Alignment.Center,
                 ) {
-                    Text("Server · ", style = Testi.piccolo, color = c.tenue)
-                    Text(server.removePrefix("https://").removePrefix("http://").trimEnd('/'), style = Testi.piccolo, color = c.tenue, maxLines = 1)
-                    Text(" · Cambia", style = Testi.piccolo.copy(fontWeight = FontWeight.Bold), color = c.gialloTesto)
+                    Text(
+                        buildAnnotatedString {
+                            append(Indirizzi.descrivi(server, google))
+                            withStyle(SpanStyle(fontWeight = FontWeight.Bold, color = c.gialloTesto)) { append(" · Cambia") }
+                        },
+                        style = Testi.piccolo, color = c.tenue, textAlign = TextAlign.Center,
+                    )
                 }
             }
         }
     }
 }
+
+/**
+ * Il telefono può parlare in HTTP senza la S con [host]? Lo decide la configurazione
+ * di rete (res/xml): solo il server di casa, e il computer visto dall'emulatore nelle build di prova.
+ */
+private fun inChiaro(host: String): Boolean = NetworkSecurityPolicy.getInstance().isCleartextTrafficPermitted(host)
 
 /** Le frasi del server con il punto in fondo, come le scrive la guida ("Email o password sbagliate."). */
 private fun frase(t: String): String = t.trim().let { if (it.endsWith(".") || it.endsWith(":")) it else "$it." }

@@ -16,7 +16,7 @@
  */
 'use strict';
 
-const { Rifiuto, senzaPermesso, testo, numero, centesimi, adesso, oggi, dataIso, dataDaIso, dataOraIso, istante, piuGiorni } = require('../utili');
+const { Rifiuto, senzaPermesso, testo, numero, centesimi, adesso, oggi, dataIso, dataDaIso, dataOraIso, istante, piuGiorni, adessoMs } = require('../utili');
 const C = require('../conti');
 const { soldiPropri } = require('../permessi');
 
@@ -67,6 +67,12 @@ module.exports = {
     if (this.livello('ticket') < 1) return false;
     if (!this.soloSuoi()) return true;
     const io = this.chi().utente.id;
+    // Fase 6: l'esterno vede solo i ticket dove e' responsabile o ha un intervento (o un suo rapportino): non quelli liberi.
+    if (this.eEsterno()) {
+      if (t.responsabile_id === io) return true;
+      const v = aiuti || this.aiutiVisibilita();
+      return v.conMioIntervento.has(t.id) || v.conMioRapportino.has(t.id);
+    }
     if (t.responsabile_id === io || t.responsabile_id === null || t.creato_da === io) return true;
     const a = aiuti || this.aiutiVisibilita();
     if (t.commessa_id && a.mie.has(String(t.commessa_id).toUpperCase())) return true;
@@ -132,7 +138,7 @@ module.exports = {
   /** Ritardo: oltre entro_intervento senza intervento, o oltre entro_presa senza presa ("Da prendere da 2 ore"). */
   ritardoTicket(t) {
     if (VIVI.indexOf(t.stato) < 0 || t.stato === 'risolto') return '';
-    const ora = Date.now();
+    const ora = adessoMs();
     if (t.entro_intervento && !t.intervento_il && ora > Date.parse(t.entro_intervento)) return 'Intervento in ritardo da ' + quanto(ore(t.entro_intervento, istante()));
     if (t.entro_presa && !t.preso_il && ora > Date.parse(t.entro_presa)) return 'Da prendere da ' + quanto(ore(t.entro_presa, istante()));
     return '';
@@ -415,7 +421,13 @@ module.exports = {
     };
     o.proposta = this.propostaFatturazione(t);
     o.daFirmare = voce.perche;
-    o.storico = this.storicoImpianto({ idSede: t.sede_id, breve: 5 }).voci;
+    // Fase 6: lo storico dell'impianto e' dello studio (l'esterno non lo vede).
+    o.storico = this.eEsterno() ? [] : this.storicoImpianto({ idSede: t.sede_id, breve: 5 }).voci;
+    // Fase 6: gli strumenti usati nei suoi rapportini, con lo stato della taratura di quel giorno (congelato).
+    const strum = this.strumentiDeiRapportini(c.rapportini.map(r => r.id));
+    o.strumenti = [];
+    for (const r of c.rapportini) for (const x of strum[r.id] || []) o.strumenti.push(Object.assign({ idRapportino: r.id, data: dataIso(r.data) }, x));
+    o.tarataScaduta = o.strumenti.some(x => x.statoAllora === 'scaduta');
     o.cronologia = this.db.righe('SELECT * FROM ticket_eventi WHERE ticket_id = ? ORDER BY id', t.id)
       .map(e => ({ quando: dataOraIso(e.quando), chi: e.utente_id ? a.utenti[e.utente_id] || '' : '', testo: e.testo }));
     const fatt = this.ticketInFattura(t, false);
@@ -545,7 +557,7 @@ module.exports = {
 
   /** Il prossimo numero dell'anno: TK/2026/0001, ... (il piu' alto gia' usato + 1, i buchi non si riusano). */
   prossimoNumeroTicket(anno) {
-    return this.prossimoNumero('ticket', this.db.righe('SELECT numero FROM ticket').map(r => r.numero), anno || new Date().getFullYear());
+    return this.prossimoNumero('ticket', this.db.righe('SELECT numero FROM ticket').map(r => r.numero), anno || Number(oggi().slice(0, 4)));
   },
 
   /** Il contratto attivo che copre quell'impianto (per proporlo aprendo un ticket, §8.2). */
@@ -668,7 +680,7 @@ module.exports = {
       if (prima.priorita !== priorita) this.eventoTicket(id, 'Priorità: ' + PRIORITA[priorita]);
       if (cambioResp) this.cambiaResponsabile(this.db.riga('SELECT * FROM ticket WHERE id = ?', id), responsabile);
     } else {
-      const anno = Number(dataIso(apertoIl).slice(0, 4)) || new Date().getFullYear();
+      const anno = Number(dataIso(apertoIl).slice(0, 4)) || Number(oggi().slice(0, 4));
       const numero = this.numeroTicketNuovo(x.numero, anno);
       id = this.inserisci('ticket', Object.assign(v, {
         numero: numero.codice, id_locale: testo(x.idLocale) || null, responsabile_id: responsabile, stato: responsabile !== null ? 'in_carico' : 'aperto',

@@ -7,6 +7,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { serverDiProva, viesFinto } = require('./aiuto');
+const { oggi } = require('../src/utili');
 
 let s;
 let vies;
@@ -25,13 +26,17 @@ test('anagrafiche: le parti di oggi e quelle nuove', async () => {
   const a = await manuel('anagrafiche');
   for (const k of ['clienti', 'commesse', 'gruppi', 'impostazioni', 'fornitori', 'referenti', 'sedi', 'prestazioni', 'utenti', 'numerazioni']) assert.ok(k in a, k);
   // Fase 4: due fornitori in piu' nei dati di esempio (Ing. Paolo Verdi con la ritenuta, Luce e Gas Esempio Spa).
-  assert.deepEqual(a.fornitori.map(f => f.id), ['F001', 'F002', 'F003', 'F004']);
+  // Fase 6: altri due (il Laboratorio Tarature Nord e Impianti Veneti, il collaboratore esterno: pillola "Collaboratore").
+  assert.deepEqual(a.fornitori.map(f => f.id), ['F001', 'F002', 'F003', 'F004', 'F005', 'F006']);
+  assert.deepEqual(a.fornitori.map(f => f.collaboratore), [false, false, false, false, false, true]);
   assert.equal(a.fornitori[0].fornitore, true);
   assert.equal(a.fornitori[0].cliente, false);
-  assert.deepEqual(Object.keys(a.utenti[0]).sort(), ['attivo', 'id', 'nome', 'ruolo'], 'degli utenti solo nome e ruolo');
+  // Fase 6: in piu' la scheda della persona (idPersona, fase6.md §10.5).
+  assert.deepEqual(Object.keys(a.utenti[0]).sort(), ['attivo', 'id', 'idPersona', 'nome', 'ruolo'], 'degli utenti solo nome, ruolo e la scheda della persona');
   // Fase 4: il PR/2026/012 rev. 1 accettato e' diventato la commessa 26ST003 (il contratto del prototipo).
   // Fase 5: i tre contratti di assistenza hanno le loro commesse (26ST004-26ST006) e ci sono gli impianti 4-9 del prototipo.
-  assert.equal(a.numerazioni.find(n => n.tipo === 'commessa').prossimo, '26ST007');
+  // Il prossimo codice prende l'anno di oggi (26ST007 nel 2026, 27ST007 nel 2027: il numero continua).
+  assert.equal(a.numerazioni.find(n => n.tipo === 'commessa').prossimo, oggi().slice(2, 4) + 'ST007');
   assert.equal(a.sedi.filter(x => x.tipo === 'impianto').length, 7);
   assert.equal(a.commesse.find(m => m.id === '26ST001').responsabileId, 1);
   assert.deepEqual(a.commesse.find(m => m.id === '26ST001').persone, [3]);
@@ -54,7 +59,8 @@ test('salvaSoggetto: i controlli dicono quale campo', async () => {
   const estero = await manuel('salvaSoggetto', { soggetto: { nome: 'Fournisseur Sarl', nazione: 'fr', partitaIva: 'FR12345678901', cap: '75001', fornitore: true, cliente: false } });
   assert.equal(estero.ok, true, estero.errore);
   assert.equal(estero.soggetto.nazione, 'FR');
-  assert.equal(estero.soggetto.id, 'F005', 'nato fornitore: codice F (F003 e F004 sono i fornitori della fase 4)');
+  // Fase 6: F005 (il laboratorio delle tarature) e F006 (il collaboratore esterno) sono i fornitori di prova della fase 6.
+  assert.equal(estero.soggetto.id, 'F007', 'nato fornitore: codice F (F003-F006 sono i fornitori delle fasi 4 e 6)');
 });
 
 test('salvaSoggetto: un doppione per nome o partita IVA restituisce quello che c\'e\'', async () => {
@@ -139,7 +145,7 @@ test('prestazioni: lo stato segue l\'avanzamento, l\'ordine si cambia', async ()
 test('duplicare una commessa: codice nuovo, prestazioni ad avanzamento zero, persone; come modello non si vede', async () => {
   const d = await manuel('duplicaCommessa', { id: '26ST001' });
   assert.equal(d.ok, true, d.errore);
-  assert.match(d.commessa.id, /^26ST\d{3}$/);
+  assert.match(d.commessa.id, new RegExp('^' + oggi().slice(2, 4) + 'ST\\d{3}$'));
   assert.notEqual(d.commessa.id, '26ST001');
   assert.equal(d.commessa.descrizione, 'Nuovo magazzino automatico Batokyo (copia)');
   assert.deepEqual(d.commessa.persone, [3]);
@@ -201,13 +207,14 @@ test('numerazioni: si leggono, un formato nuovo vale per i numeri nuovi e il con
   const prima = (await manuel('numerazioni')).numerazioni.find(n => n.tipo === 'commessa');
   const n = Number(prima.prossimo.slice(4));
   const r = await manuel('salvaNumerazione', { tipo: 'commessa', formato: 'ST{AA}-{NNNN}' });
-  assert.equal(r.numerazione.prossimo, 'ST26-' + String(n).padStart(4, '0'));
+  const aa = oggi().slice(2, 4);
+  assert.equal(r.numerazione.prossimo, 'ST' + aa + '-' + String(n).padStart(4, '0'));
   const m = await manuel('creaCommessa', { idCliente: 'C002', descrizione: 'Col formato nuovo' });
-  assert.equal(m.commessa.id, 'ST26-' + String(n).padStart(4, '0'));
+  assert.equal(m.commessa.id, 'ST' + aa + '-' + String(n).padStart(4, '0'));
   assert.ok((await manuel('anagrafiche')).commesse.some(x => x.id === '26ST001'), 'quelle vecchie restano come sono');
   assert.match((await manuel('salvaNumerazione', { tipo: 'commessa', formato: 'ST{AA}' })).errore, /posto per il numero/);
   await manuel('salvaNumerazione', { tipo: 'commessa', formato: '{AA}ST{NNN}' });
-  assert.equal((await manuel('creaCommessa', { idCliente: 'C002', descrizione: 'Di nuovo 26ST' })).commessa.id, '26ST' + String(n + 1).padStart(3, '0'));
+  assert.equal((await manuel('creaCommessa', { idCliente: 'C002', descrizione: 'Di nuovo 26ST' })).commessa.id, aa + 'ST' + String(n + 1).padStart(3, '0'));
 });
 
 // ------------------------------------------------------------------ esportazione
@@ -234,7 +241,7 @@ test('esporta: CSV per Excel con punto e virgola, BOM, virgola nei decimali', as
   assert.ok(m.includes('26ST001;C001;Elettrodinamica;Nuovo magazzino automatico Batokyo'));
   const reg = await manuel('esporta', { cosa: 'registro' });
   assert.ok(reg.righe > 10);
-  assert.equal((await manuel('esporta', { cosa: 'boh' })).errore, 'Cosa esportare? rapportini, clienti, fornitori, commesse, registro, preventivi, attivita, ore, spese, trasferte, rimborsi, fatture, ricevute, daFatturare, riepilogo, movimenti, scadenziario, impegni, documenti, scadenze, ticket o contratti');
+  assert.equal((await manuel('esporta', { cosa: 'boh' })).errore, 'Cosa esportare? rapportini, clienti, fornitori, commesse, registro, preventivi, attivita, ore, spese, trasferte, rimborsi, fatture, ricevute, daFatturare, riepilogo, movimenti, scadenziario, impegni, documenti, scadenze, ticket, contratti, persone, qualifiche, assenze, presenze, mezzi, attrezzature, tarature, manutenzioni, assegnazioni, km, collaboratori, incarichi o compensi');
 });
 
 // ------------------------------------------------------------------ dashboard
@@ -250,7 +257,9 @@ test('dashboard: tre sezioni di voci con gravita e collegamento; per il titolare
     // Fase 4 (fase4.md §12)
     'fatture', 'fattura', 'ricevute', 'ricevuta', 'scadenziario', 'movimenti', 'impegni', 'conti', 'situazione',
     // Fase 5 (fase5.md §11.1)
-    'tickets', 'ticket', 'contratti', 'contratto', 'documenti', 'documento', 'scadenza', 'impianto'];
+    'tickets', 'ticket', 'contratti', 'contratto', 'documenti', 'documento', 'scadenza', 'impianto',
+    // Fase 6 (fase6.md §11.1)
+    'persone', 'persona', 'mezzi', 'mezzo', 'attrezzatura', 'collaboratori', 'collaboratore', 'incarico'];
   for (const v of voci) {
     assert.ok(['urgente', 'attenzione', 'info', 'soldi'].includes(v.gravita), JSON.stringify(v));
     assert.ok(pagine.includes(v.collegamento.pagina), JSON.stringify(v));

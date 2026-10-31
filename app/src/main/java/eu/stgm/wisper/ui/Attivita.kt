@@ -479,6 +479,7 @@ fun SchermataModificaAttivita(dati: Dati, nav: Navigatore, rotta: String) {
     var nuovaVoce by remember { mutableStateOf("") }
     var perQuali by remember { mutableStateOf(false) }
     var conferma by remember { mutableStateOf<Pair<String, String?>?>(null) }
+    var assente by remember { mutableStateOf(false) }
     val chiediNotifiche = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
 
     fun cambia(n: Attivita) { a = n }
@@ -498,7 +499,11 @@ fun SchermataModificaAttivita(dati: Dati, nav: Navigatore, rotta: String) {
                 }
                 .onFailure { e ->
                     val dc = daConfermare(e)
-                    if (dc != null) conferma = dc.message.orEmpty() to perRicorrenza
+                    // Fase 6 (§6.5): per una persona assente il foglio dice chi e quando (Cambia giorno, o Salvala lo stesso).
+                    if (dc != null) {
+                        assente = dc.risposta.has("assenti")
+                        conferma = dc.message.orEmpty() to perRicorrenza
+                    }
                     else avvisi.mostra(spiegaErrore2(e, "L'attività non è stata salvata: riprova"))
                 }
             salvo = false
@@ -689,7 +694,11 @@ fun SchermataModificaAttivita(dati: Dati, nav: Navigatore, rotta: String) {
         PulsanteTesto("Annulla", { perQuali = false }, Modifier.fillMaxWidth(), colore = c.testo)
     }
     conferma?.let { (testo, perRicorrenza) ->
-        FoglioConferma(
+        if (assente) FoglioDalBasso({ conferma = null }) {
+            Text(testo, style = Testi.titoloScheda, color = c.testo)
+            PulsantePrincipale("Cambia giorno", { conferma = null })
+            PulsanteTesto("Salvala lo stesso", { conferma = null; salva(perRicorrenza, true) }, Modifier.fillMaxWidth(), colore = c.testo)
+        } else FoglioConferma(
             "Si sovrappone a un altro impegno", testo, "Salva lo stesso",
             onConferma = { conferma = null; salva(perRicorrenza, true) }, onAnnulla = { conferma = null },
         )

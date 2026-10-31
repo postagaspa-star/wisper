@@ -248,9 +248,17 @@
 
       const disegnaImporto = () => aggiungi(svuota(zone.importo), [campo('Importo', conSuffisso(v.importo, '€'), errori.importo)]);
       v.importo.addEventListener('input', () => { if (errori.importo) { delete errori.importo; disegnaImporto(); v.importo.focus(); } });
+      // Fase 6 (§7.4): per carburante, pedaggio e parcheggio "Per quale mezzo" (prima quelli che ho io) e, per il carburante, i km del contachilometri.
+      m.idVeicolo = s.idVeicolo || null;
+      const kmCont = h('input', { type: 'text', inputmode: 'numeric', value: s.km ? String(s.km) : '', disabled: spento('km') });
+      const mezziSpesa = () => (S.ana.mezzi || []).slice().sort((a, b2) => (b2.mio ? 1 : 0) - (a.mio ? 1 : 0));
       const disegnaCategoria = () => aggiungi(svuota(zone.categoria), [h('div', { class: 'campo' }, h('label', null, 'Categoria'),
         h('div', { class: 'pillole' }, RO.CATEGORIE.map(c => h('button', { type: 'button', class: 'pillola' + (m.categoria === c[0] ? ' scelta' : ''), 'aria-pressed': m.categoria === c[0] ? 'true' : 'false',
-          disabled: spento('categoria'), onclick: () => { m.categoria = c[0]; disegnaCategoria(); } }, c[1]))))]);
+          disabled: spento('categoria'), onclick: () => { m.categoria = c[0]; disegnaCategoria(); } }, c[1])))),
+        ['carburante', 'pedaggio', 'parcheggio'].indexOf(m.categoria) >= 0 && mezziSpesa().length ? h('div', { class: 'campo' }, h('label', null, 'Per quale mezzo'),
+          h('div', { class: 'pillole' }, mezziSpesa().map(x => h('button', { type: 'button', class: 'pillola piccola' + (String(m.idVeicolo) === String(x.id) ? ' scelta' : ''), disabled: spento('idVeicolo'), onclick: () => { m.idVeicolo = x.id; disegnaCategoria(); } }, x.titolo, x.fermo ? ' · fermo' : '')),
+            h('button', { type: 'button', class: 'pillola piccola' + (!m.idVeicolo ? ' scelta' : ''), disabled: spento('idVeicolo'), onclick: () => { m.idVeicolo = null; disegnaCategoria(); } }, 'Nessuno'))) : null,
+        m.categoria === 'carburante' && m.idVeicolo ? campo('Km del contachilometri', conSuffisso(kmCont, 'km')) : null]);
       const disegnaLegami = () => {
         const aperte = commesseAperte();
         const elenco = aperte.slice();
@@ -269,7 +277,8 @@
           segmenti(RO.DESTINAZIONI.map(d => [d[0], d[1]]), m.destinazione, x => { if (spento('destinazione')) return; m.destinazione = x; m.destToccata = true; delete errori.dest; disegnaLegami(); disegnaDest(); })),
         m.destinazione === 'cliente' ? h('label', { class: 'spunta-campo' }, h('input', { type: 'checkbox', checked: m.anticipazione, disabled: spento('anticipazione'), onchange: e => { m.anticipazione = e.target.checked; } }), 'Il documento è intestato al cliente') : null,
         h('label', { class: 'spunta-campo' }, h('input', { type: 'checkbox', checked: m.pagataDaMe, disabled: spento('pagataDaMe'), onchange: e => { m.pagataDaMe = e.target.checked; } }),
-          !soloSuoi() && m.idUtente && String(m.idUtente) !== String(io()) ? 'L\'ha pagata ' + primo(nomeDi(m.idUtente)) : 'L\'ho pagata io'),
+          // Fase 6 (§12.8): l'esterno non ha rimborsi dallo studio: la mette nella sua fattura.
+          W.eEsterno && W.eEsterno() ? 'La metto nella mia fattura' : !soloSuoi() && m.idUtente && String(m.idUtente) !== String(io()) ? 'L\'ha pagata ' + primo(nomeDi(m.idUtente)) : 'L\'ho pagata io'),
         errori.dest ? h('div', { class: 'campo' }, h('div', { class: 'errore' }, errori.dest)) : null]);
       };
       const disegnaChi = () => {
@@ -294,6 +303,10 @@
           x = { importo, categoria: m.categoria, data: v.data.value, idCommessa: m.idCommessa, destinazione: m.destinazione, anticipazione: m.destinazione === 'cliente' && m.anticipazione,
             pagataDaMe: m.pagataDaMe, descrizione: v.descrizione.value.trim() };
           if (!m.idCommessa && m.idCliente) x.idCliente = m.idCliente;
+          if (['carburante', 'pedaggio', 'parcheggio'].indexOf(m.categoria) >= 0 && (S.ana.mezzi || []).length) {
+            x.idVeicolo = m.idVeicolo || null;
+            if (m.categoria === 'carburante' && m.idVeicolo && C.numONull(kmCont.value) !== null) x.km = Math.round(C.num(kmCont.value));
+          }
           if (esistente) x.id = esistente.id;
           else {
             if (s.idTrasferta) x.idTrasferta = s.idTrasferta;
@@ -403,8 +416,11 @@
       const euroKm = () => {
         if (esistente && String(m.idVeicolo) === String(esistente.idVeicolo)) return C.num(esistente.euroKm);
         const x = veicoli.find(y => String(y.id) === String(m.idVeicolo));
+        // Fase 6 (§3.7): con un mezzo dello studio niente rimborso km (carburante e manutenzione li paga lo studio).
+        if (x && x.proprieta === 'studio') return 0;
         return x ? C.num(x.euroKm) : 0;
       };
+      const delloStudio = () => { const x = veicoli.find(y => String(y.id) === String(m.idVeicolo)); return !!(x && x.proprieta === 'studio') || !!(esistente && String(m.idVeicolo) === String(esistente.idVeicolo) && esistente.mezzoDelloStudio); };
       const proponiIndennita = () => {
         if (m.indennitaToccata || indennitaGiorno === null || sola) return;
         v.indennita.value = String(Math.round(indennitaGiorno * giorni() * 100) / 100).replace('.', ',');
@@ -412,7 +428,8 @@
       const aggiornaConto = () => {
         const r = RO.rimborsoTrasferta({ km: C.num(v.km.value), andataRitorno: m.andataRitorno, euroKm: euroKm(), indennita: C.num(v.indennita.value) });
         aggiungi(svuota(zone.conto), [h('div', { class: 'conto' },
-          h('div', { class: 'rc' }, h('span', null, C.numero(r.kmTotali) + ' km × ' + C.numero(euroKm()) + ' €'), h('span', null, C.euro(r.rimborsoKm))),
+          delloStudio() ? h('div', { class: 'rc' }, h('span', null, 'Mezzo dello studio: niente rimborso km'), h('span', null, C.euro(0)))
+            : h('div', { class: 'rc' }, h('span', null, C.numero(r.kmTotali) + ' km × ' + C.numero(euroKm()) + ' €'), h('span', null, C.euro(r.rimborsoKm))),
           h('div', { class: 'rc' }, h('span', null, 'Indennità'), h('span', null, C.euro(r.indennita))),
           h('div', { class: 'tot' }, h('span', null, 'Rimborso'), h('span', null, C.euro(r.totale))))]);
       };
@@ -420,7 +437,8 @@
         svuota(zone.veicolo);
         if (!veicoli.length) { aggiungi(zone.veicolo, [h('div', { class: 'secondario' }, 'Nessun veicolo: si aggiungono in Amministrazione › Veicoli e rimborso km')]); return; }
         const anno = x => (x.annoAci ? ' (ACI ' + x.annoAci + ')' : '');
-        aggiungi(zone.veicolo, [campo('Veicolo', selezione(veicoli.map(x => [x.id, x.nome + ' · ' + C.numero(x.euroKm) + ' €/km' + anno(x)]), m.idVeicolo, x => { m.idVeicolo = Number(x) || x; aggiornaConto(); }, { disabled: sola }))]);
+        // Fase 6: il mezzo dello studio senza euro al km, e "Fermo" accanto a quello che non si dovrebbe usare.
+        aggiungi(zone.veicolo, [campo('Veicolo', selezione(veicoli.map(x => [x.id, (x.titolo || x.nome) + (x.proprieta === 'studio' ? ' · dello studio' : ' · ' + C.numero(x.euroKm) + ' €/km' + anno(x)) + (x.fermo ? ' · Fermo' : '')]), m.idVeicolo, x => { m.idVeicolo = Number(x) || x; aggiornaConto(); }, { disabled: sola }))]);
       };
       const disegnaErrori = () => aggiungi(svuota(zone.errori), Object.keys(errori).map(k => h('div', { class: 'campo' }, h('div', { class: 'errore' }, errori[k]))));
       const disegnaChi = () => {

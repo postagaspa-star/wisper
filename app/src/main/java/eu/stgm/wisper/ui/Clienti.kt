@@ -31,6 +31,10 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
@@ -129,6 +133,8 @@ fun SchermataClienti(dati: Dati, nav: Navigatore) {
                                 if (segmento == "clienti" && aperte > 0) Testo.quanti(aperte, "commessa aperta", "commesse aperte") else null,
                             ).joinToString(" · ").ifBlank { null },
                             inizio = { Iniziali(cl.nome, dimensione = 40.dp) },
+                            // Fase 6 (§12.8): la pillola Collaboratore sul fornitore che ha la scheda: la apre.
+                            fine = if (cl.collaboratore && perm.vede(Moduli.COLLABORATORI)) ({ PillolaCollaboratore { nav.vai("collaboratore/${cl.id}") } }) else null,
                             onClick = { nav.vai("cliente/${cl.id}") },
                         )
                     }
@@ -244,6 +250,7 @@ fun SchermataCliente(dati: Dati, nav: Navigatore, id: String) {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     if (cl.cliente) PillolaTipo("Cliente", c.firmatoTesto, c.firmatoFondo)
                     if (cl.fornitore) PillolaTipo("Fornitore", c.inviatoTesto, c.inviatoFondo)
+                    if (cl.collaboratore && perm.vede(Moduli.COLLABORATORI)) PillolaCollaboratore { nav.vai("collaboratore/${cl.id}") }
                     if (cl.archiviato) PillolaTipo("Archiviato", c.testo2, c.superficie2)
                     Text(
                         listOfNotNull(cl.id.takeIf { it.isNotBlank() }, cl.luogo.takeIf { it.isNotBlank() }).joinToString(" · "),
@@ -441,6 +448,19 @@ private fun PillolaTipo(testo: String, colore: androidx.compose.ui.graphics.Colo
         testo, style = Testi.piccolo.copy(fontWeight = FontWeight.ExtraBold), color = colore, maxLines = 1,
         modifier = Modifier.clip(RoundedCornerShape(50)).background(fondo).padding(horizontal = 10.dp, vertical = 4.dp),
     )
+}
+
+/** Fase 6 (§12.8): "Collaboratore" in pillola blu sul fornitore che ha la scheda; il tocco (48 dp) la apre. */
+@Composable
+private fun PillolaCollaboratore(onApri: () -> Unit) {
+    val c = W.colori
+    Box(
+        Modifier.heightIn(min = 48.dp).clip(RoundedCornerShape(50)).clickable(onClick = onApri)
+            .semantics { role = Role.Button; contentDescription = "Apri la scheda del collaboratore" },
+        contentAlignment = Alignment.Center,
+    ) {
+        PillolaTipo("Collaboratore", c.inviatoTesto, c.inviatoFondo)
+    }
 }
 
 /** Coppie etichetta/valore su due colonne; "—" dove manca. */

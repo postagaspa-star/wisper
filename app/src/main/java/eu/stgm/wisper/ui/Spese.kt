@@ -395,6 +395,13 @@ fun SchermataSpesa(dati: Dati, nav: Navigatore, arg: String) {
     var anticipazione by rememberSaveable { mutableStateOf(esistente?.anticipazione ?: false) }
     var pagataDaMe by rememberSaveable { mutableStateOf(esistente?.pagataDaMe ?: true) }
     var descrizione by rememberSaveable { mutableStateOf(esistente?.descrizione.orEmpty()) }
+    // Fase 6 (§7.4): per carburante, pedaggio e parcheggio il mezzo (prima quelli che ho io), per il carburante i km.
+    var idVeicolo by rememberSaveable { mutableStateOf(esistente?.idVeicolo.orEmpty()) }
+    var kmContachilometri by rememberSaveable { mutableStateOf(esistente?.km?.toString().orEmpty()) }
+    val mezziSpesa = remember(ana) { ana.mezzi.sortedByDescending { it.mio } }
+    val chiedeMezzo = categoria in CategoriaSpesa.CON_MEZZO && mezziSpesa.isNotEmpty()
+    // Fase 6 (§12.8): l'esterno non ha rimborsi dallo studio, la spesa va nella sua fattura.
+    val esterno = dati.sessione.value.interfaccia.esternoId.isNotBlank()
     var errore by remember { mutableStateOf<String?>(null) }
     var finestraGiorno by remember { mutableStateOf(false) }
     val dest = destinazione ?: Destinazione.diBase(idCommessa)
@@ -460,10 +467,17 @@ fun SchermataSpesa(dati: Dati, nav: Navigatore, arg: String) {
         if (cambia("destinazione") && dest == Destinazione.CLIENTE && idCommessa.isBlank() && (esistente?.idCliente.isNullOrBlank())) {
             errore = "Al cliente: scegli la commessa o il cliente"; return
         }
+        val kmScritti = kmContachilometri.trim().takeIf { it.isNotEmpty() }?.toLongOrNull()
+        if (chiedeMezzo && categoria == "carburante" && idVeicolo.isNotBlank() && kmContachilometri.isNotBlank() && kmScritti == null) {
+            errore = "Km del contachilometri: scrivi un numero"; return
+        }
         val s = (esistente ?: Spesa(idLocale = "", idTrasferta = idTrasferta, idTicket = delTicket?.chiave.orEmpty(), idCliente = if (idCommessa.isBlank()) delTicket?.idCliente.orEmpty() else "")).copy(
             data = data, importo = euro?.let(ContiOreSpese::centesimi) ?: esistente?.importo ?: 0.0, categoria = categoria,
             descrizione = descrizione.trim(), idCommessa = idCommessa, destinazione = dest,
             anticipazione = dest == Destinazione.CLIENTE && anticipazione, pagataDaMe = pagataDaMe,
+            idVeicolo = if (chiedeMezzo) idVeicolo else esistente?.idVeicolo.orEmpty(),
+            km = if (chiedeMezzo && categoria == "carburante" && idVeicolo.isNotBlank()) kmScritti else esistente?.km,
+            mezzoChiesto = chiedeMezzo,
         )
         dati.salvaSpesa(s, foto?.let(::File))
         RicordoSpese.spesa = null
@@ -554,6 +568,21 @@ fun SchermataSpesa(dati: Dati, nav: Navigatore, arg: String) {
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 CategoriaSpesa.ELENCO.forEach { k -> Pillola(CategoriaSpesa.nome(k), k == categoria, { if (cambia("categoria")) categoria = k }, altezza = 48.dp) }
             }
+            if (chiedeMezzo) {
+                Etichetta("Per quale mezzo")
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    mezziSpesa.forEach { m ->
+                        Pillola(m.titolo + if (m.fermo) " · fermo" else "", m.id == idVeicolo, { if (cambia("idVeicolo")) idVeicolo = m.id }, altezza = 48.dp)
+                    }
+                    Pillola("Nessuno", idVeicolo.isBlank(), { if (cambia("idVeicolo")) idVeicolo = "" }, altezza = 48.dp)
+                }
+                if (categoria == "carburante" && idVeicolo.isNotBlank()) {
+                    CampoTesto(
+                        kmContachilometri, { t -> if (t.all { it.isDigit() }) { kmContachilometri = t; errore = null } }, "Km del contachilometri",
+                        tastiera = KeyboardType.Number, suffisso = "km", abilitato = cambia("km"),
+                    )
+                }
+            }
             CampoQuando("Giorno", giornoEsteso(data).replaceFirstChar { it.uppercase() }, { if (cambia("data")) finestraGiorno = true })
             Etichetta("Commessa")
             SceltaCommessa(ana, recenti, idCommessa, { idCommessa = it }, conStudio = true, etichettaStudio = "Nessuna", abilitata = cambia("idCommessa"))
@@ -565,7 +594,7 @@ fun SchermataSpesa(dati: Dati, nav: Navigatore, arg: String) {
             if (dest == Destinazione.CLIENTE) {
                 SceltaGrande("Il documento è intestato al cliente", anticipazione, { if (cambia("anticipazione")) anticipazione = !anticipazione }, casella = true)
             }
-            SceltaGrande("L'ho pagata io", pagataDaMe, { if (cambia("pagataDaMe")) pagataDaMe = !pagataDaMe }, casella = true)
+            SceltaGrande(if (esterno) "La metto nella mia fattura" else "L'ho pagata io", pagataDaMe, { if (cambia("pagataDaMe")) pagataDaMe = !pagataDaMe }, casella = true)
             CampoTesto(descrizione, { descrizione = it }, "Descrizione", abilitato = cambia("descrizione"))
             errore?.let { Text(it, style = Testi.secondarioGrande, color = c.rossoTesto) }
         }
@@ -711,7 +740,9 @@ fun SchermataTrasferta(dati: Dati, nav: Navigatore, arg: String) {
     val giorni = (ChronoUnit.DAYS.between(dal, al) + 1).toInt().coerceAtLeast(1)
     val veicolo: Veicolo? = elencoVeicoli.firstOrNull { it.id == idVeicolo } ?: if (idVeicolo.isBlank()) elencoVeicoli.firstOrNull { it.attivo } else null
     // L'euro al km resta quello con cui è nata, finché non si cambia veicolo (§14.9).
-    val euroKm = if (esistente != null && (veicolo == null || veicolo.id == esistente.idVeicolo)) esistente.euroKm else veicolo?.euroKm
+    // Fase 6 (§3.7): con un mezzo dello studio niente rimborso km (carburante e manutenzione li paga lo studio).
+    val delloStudio = if (esistente != null && (veicolo == null || veicolo.id == esistente.idVeicolo)) esistente.mezzoDelloStudio || veicolo?.delloStudio == true else veicolo?.delloStudio == true
+    val euroKm = if (esistente != null && (veicolo == null || veicolo.id == esistente.idVeicolo)) esistente.euroKm else if (veicolo?.delloStudio == true) 0.0 else veicolo?.euroKm
     val indennitaEuro = indennita?.let(::numeroScritto) ?: if (esistente == null && perGiorno != null) ContiOreSpese.centesimi(perGiorno * giorni) else 0.0
     val conto = ContiOreSpese.rimborsoTrasferta(numeroScritto(km) ?: 0.0, andataRitorno, euroKm, indennitaEuro)
     val puoScrivere = esistente?.puoScrivere ?: true
@@ -776,7 +807,8 @@ fun SchermataTrasferta(dati: Dati, nav: Navigatore, arg: String) {
             if (elencoVeicoli.size > 1) {
                 Etichetta("Veicolo")
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    elencoVeicoli.filter { it.attivo }.forEach { v -> Pillola(v.nome, v.id == veicolo?.id, { if (puoScrivere) idVeicolo = v.id }, altezza = 48.dp) }
+                    // Fase 6: il nome con la targa, e "Fermo" accanto a quello che non si dovrebbe usare.
+                    elencoVeicoli.filter { it.attivo }.forEach { v -> Pillola(v.titolo.ifBlank { v.nome } + if (v.fermo) " · Fermo" else "", v.id == veicolo?.id, { if (puoScrivere) idVeicolo = v.id }, altezza = 48.dp) }
                 }
             }
             CampoTesto(
@@ -786,7 +818,8 @@ fun SchermataTrasferta(dati: Dati, nav: Navigatore, arg: String) {
             // Il rimborso calcolato subito, coi conti del server.
             Row(Modifier.fillMaxWidth().padding(horizontal = 2.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    (veicolo?.nome ?: esistente?.veicolo?.ifBlank { null } ?: "Senza veicolo") +
+                    if (delloStudio) "Mezzo dello studio: niente rimborso km"
+                    else (veicolo?.nome ?: esistente?.veicolo?.ifBlank { null } ?: "Senza veicolo") +
                         (euroKm?.let { " · " + Veicolo(euroKm = it).euroKmTesto } ?: "") +
                         ((veicolo?.annoAci ?: aciAnno)?.let { " (ACI $it)" } ?: ""),
                     style = Testi.secondario, color = c.tenue, modifier = Modifier.weight(1f),

@@ -9,6 +9,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { serverDiProva, PNG } = require('./aiuto');
+const { oggi, dataIso } = require('../src/utili');
 
 // Il finto Google con lo script vero: le sue risposte sono il riferimento.
 process.env.WISPER_POSTA_FINTA = fs.mkdtempSync(path.join(os.tmpdir(), 'wisper-posta-'));
@@ -37,7 +38,11 @@ test('i dati di esempio: stessi clienti, commesse e conti di semina() sullo scri
   const solo = (o, campi) => Object.fromEntries(campi.map(k => [k, o[k]]));
   for (const c of suo.clienti) assert.deepEqual(solo(mio.clienti.find(x => x.id === c.id), campiCliente), solo(c, campiCliente), c.nome);
   const campiCommessa = ['id', 'idCliente', 'descrizione', 'stato', 'indirizzo', 'budgetOre', 'budgetEuro', 'prezzoOrario', 'costoOrario', 'euroKm', 'inizio', 'finePrevista', 'codicePrecedente', 'note'];
-  for (const m of suo.commesse) assert.deepEqual(solo(mio.commesse.find(x => x.id === m.id), campiCommessa), solo(m, campiCommessa), m.id);
+  // Una commessa nata senza inizio prende "oggi": per lo script e' il giorno vero, per il server quello dell'orologio di
+  // prova (WISPER_OGGI_PROVA), se c'e'.
+  const oggiVero = dataIso(new Date());
+  const comeLoScript = m => Object.assign(solo(m, campiCommessa), m.inizio === oggiVero ? { inizio: oggi() } : {});
+  for (const m of suo.commesse) assert.deepEqual(solo(mio.commesse.find(x => x.id === m.id), campiCommessa), comeLoScript(m), m.id);
   for (const k of Object.keys(suo.impostazioni)) assert.deepEqual(mio.impostazioni[k], suo.impostazioni[k], k);
 
   const miei = (await manuel('rapportini', { tutti: true })).rapportini;
@@ -95,14 +100,15 @@ test('codice proposto gia\' preso: il primo libero; scritto a mano: rifiutato', 
   const c = await manuel('creaCommessa', { idCliente: 'C002', descrizione: 'Dal computer', id: '26ST060' });
   assert.equal(c.ok, true, c.errore);
   const r = await nuovo({ idCliente: 'C002', commessa: 'Dal telefono', codiceProposto: '26ST060', tariffa: 42, oreLavoro: 1 });
-  assert.equal(r.rapportino.idCommessa, '26ST061');
+  // Il primo libero col numero che continua e l'anno di oggi (26ST061 nel 2026).
+  assert.equal(r.rapportino.idCommessa, oggi().slice(2, 4) + 'ST061');
   const doppione = await manuel('creaCommessa', { idCliente: 'C002', descrizione: 'Doppione', id: '26ST001' });
   assert.equal(doppione.ok, false);
   assert.match(doppione.errore, /26ST001/);
   const stessa = await manuel('creaCommessa', { idCliente: 'C002', descrizione: 'dal  COMPUTER' });
   assert.equal(stessa.commessa.giaEsisteva, true, 'stesso cliente e stessa descrizione: quella che c\'e\'');
   const auto = await manuel('creaCommessa', { idCliente: 'C002', descrizione: 'Codice automatico' });
-  assert.equal(auto.commessa.id, '26ST062');
+  assert.equal(auto.commessa.id, oggi().slice(2, 4) + 'ST062');
 });
 
 test('le tariffe restano congelate nella riga; si ricalcola solo se cambiano cliente o commessa', async () => {

@@ -9,7 +9,12 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { serverDiProva, PNG } = require('./aiuto');
+const { serverDiProva, PNG, giornoDeiPrototipi } = require('./aiuto');
+// La Dashboard intera del titolare contiene anche la storia a date fisse delle fasi 4 e 5: dal 2027 quella storia
+// invecchia (fatture scadute da mesi, decine di pagamenti scaduti) e riempie le sezioni prima delle voci cercate qui
+// (20 voci al massimo per sezione, come vuole l'accordo): queste prove la guardano dal giorno del prototipo, giovedi' 22/10/2026,
+// qualunque giorno sia (anche con WISPER_OGGI_PROVA). Le altre prove girano sul giorno vero.
+giornoDeiPrototipi();
 const C = require('../src/conti');
 const { CAMPI_COSTI } = require('../src/permessi');
 const { Wisper } = require('../src/wisper');
@@ -508,7 +513,7 @@ test('dashboard: preventivi in scadenza, senza risposta, bozze; i numeri dei pre
   const voci = [].concat(d.urgenti, d.settimana, d.pianificare);
   // Dalla fase 4 il PR/012 e' accettato: un preventivo mandato che scade fra 6 giorni lo fa la prova.
   const inScadenza = await nuovoCompleto();
-  await manuel('salvaPreventivo', { preventivo: { id: inScadenza.id, scadenza: s.wisper.db.riga("SELECT date('now', 'localtime', '+6 days') d").d } });
+  await manuel('salvaPreventivo', { preventivo: { id: inScadenza.id, scadenza: piuGiorni(oggi(), 6) } });
   await manuel('segnaInviato', { id: inScadenza.id });
   const conScadenza = await manuel('dashboard');
   const scade = conScadenza.settimana.find(v => v.collegamento.id === inScadenza.id && / scade fra 6 giorni$/.test(v.titolo));

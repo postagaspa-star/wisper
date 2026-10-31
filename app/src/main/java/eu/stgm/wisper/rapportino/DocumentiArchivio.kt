@@ -350,6 +350,12 @@ data class Scadenza(
     val puoScrivere: Boolean = false,
     /** Del telefono: segnata fatta senza rete, parte appena c'è. */
     val inCoda: Boolean = false,
+    /** Fase 6 (§17.2): di chi è la scadenza (una persona, un mezzo, uno strumento, un collaboratore) e il gruppo. */
+    val gruppo: String = "",
+    val idPersona: String = "",
+    val idVeicolo: String = "",
+    val idAttrezzatura: String = "",
+    val idSoggetto: String = "",
 ) {
     /** "ogni 5 anni", "ogni 6 mesi", "ogni anno", "una volta". */
     val ogniParole: String get() = ogniParole(ogniMesi)
@@ -380,6 +386,8 @@ data class Scadenza(
             idDocumento = o.testo("idDocumento"), documento = o.testo("documento"), idTicket = o.testo("idTicket"), ticket = o.testo("ticket"),
             idProssima = o.testo("idProssima"), assegnataA = o.testo("assegnataA"), assegnata = o.testo("assegnata"), note = o.testo("note"),
             puoScrivere = o.vero("puoScrivere"),
+            gruppo = o.testo("gruppo"), idPersona = o.testo("idPersona"), idVeicolo = o.testo("idVeicolo"),
+            idAttrezzatura = o.testo("idAttrezzatura"), idSoggetto = o.testo("idSoggetto"),
         )
     }
 }

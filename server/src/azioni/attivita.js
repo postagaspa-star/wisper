@@ -132,6 +132,8 @@ module.exports = {
   vedeAttivita(r, mie) {
     if (!this.soloSuoi()) return true;
     const io = this.chi().utente.id;
+    // Fase 6: l'esterno vede solo le sue (assegnate a lui o create da lui), non quelle libere dello studio.
+    if (this.eEsterno()) return r.assegnata_a === io || r.creata_da === io;
     if (r.assegnata_a === io || r.assegnata_a === null || r.creata_da === io) return true;
     return !!r.commessa_id && (mie || this.mieCommesse()).has(String(r.commessa_id).toUpperCase());
   },
@@ -239,7 +241,11 @@ module.exports = {
     if (testo(d.commessa || d.idCommessa)) { cond.push('a.commessa_id = ? COLLATE NOCASE'); par.push(testo(d.commessa || d.idCommessa)); }
     if (testo(d.cliente || d.idCliente)) { cond.push('a.cliente_id = ?'); par.push(testo(d.cliente || d.idCliente)); }
     if (testo(d.ticket || d.idTicket)) { cond.push('a.ticket_id = ?'); par.push(this.idTicketDa(d.ticket || d.idTicket)); }
-    if (this.soloSuoi()) {
+    // Fase 6: l'esterno solo le sue (assegnate a lui o create da lui), come vedeAttivita: non quelle libere dello studio.
+    if (this.eEsterno()) {
+      cond.push('(a.assegnata_a = ? OR a.creata_da = ?)');
+      par.push(io, io);
+    } else if (this.soloSuoi()) {
       cond.push('(a.assegnata_a = ? OR a.assegnata_a IS NULL OR a.creata_da = ? ' +
         'OR a.commessa_id IN (SELECT commessa_id FROM commessa_persone WHERE utente_id = ?) ' +
         'OR a.commessa_id IN (SELECT id FROM commesse WHERE responsabile_id = ?))');
@@ -392,7 +398,18 @@ module.exports = {
       !(prima && prima.assegnata_a === v.assegnata_a)) {
       throw senzaPermesso('assegnare attività agli altri');
     }
+    // Fase 6: l'esterno solo sulle commesse dei suoi incarichi e sui loro clienti.
+    if (this.eEsterno()) {
+      if (v.commessa_id) this.controllaCommessaEsterno(v.commessa_id);
+      else if (v.cliente_id) {
+        const mie = Array.from(this.commesseEsterno());
+        const clienti = new Set(mie.map(id => (this.db.riga('SELECT cliente_id FROM commesse WHERE id = ? COLLATE NOCASE', id) || {}).cliente_id));
+        if (!clienti.has(v.cliente_id)) throw new Rifiuto('Cliente ' + v.cliente_id + ' non trovato');
+      }
+    }
     if (!conferma) this.controllaSovrapposte(v, prima ? prima.id : null);
+    // Fase 6: un'attivita' per qualcuno assente quel giorno chiede conferma (come le sovrapposizioni).
+    if (!conferma) this.controllaAssenti(v);
     const ora = adesso();
     let id;
     let occorrenze;

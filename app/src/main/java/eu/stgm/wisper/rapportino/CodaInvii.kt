@@ -28,6 +28,13 @@ import java.util.UUID
  */
 class CodaInvii(private val file: File) {
 
+    companion object {
+        val TIPI_FASE6 = setOf(Tipo.ASSENZA, Tipo.ANNULLA_ASSENZA, Tipo.KM, Tipo.FOTO_KM, Tipo.GUASTO, Tipo.FOTO_GUASTO, Tipo.PRESTITO, Tipo.RESTITUISCI, Tipo.FIRMA_DPI)
+
+        /** Quelle col contenuto personale (le assenze): negli avvisi del telefono niente motivo, che potrebbe dire il tipo. */
+        val PERSONALI = setOf(Tipo.ASSENZA, Tipo.ANNULLA_ASSENZA)
+    }
+
     constructor(ctx: Context) : this(File(ctx.filesDir, "coda-invii.json"))
 
     /**
@@ -44,6 +51,16 @@ class CodaInvii(private val file: File) {
          * (caricaFile con lo stesso idFile) e la scadenza segnata fatta.
          */
         TICKET, AZIONE_TICKET, FOTO_TICKET, FAI_SCADENZA,
+
+        /**
+         * Fase 6 (fase6.md §3.13): la richiesta di ferie o permesso e la malattia
+         * (salvaAssenza col suo idLocale "A-..."), l'annullamento di una mia richiesta,
+         * i km (segnaKm, idLocale "K-...") con la foto del contachilometri, il guasto
+         * (segnalaGuasto, "G-...") con le sue foto, Lo prendo io e Restituisci
+         * (assegna e restituisci con l'idLocale), la firma di una consegna di DPI.
+         * Ripetuti uguali, il server torna la stessa riga (giaArrivata).
+         */
+        ASSENZA, ANNULLA_ASSENZA, KM, FOTO_KM, GUASTO, FOTO_GUASTO, PRESTITO, RESTITUISCI, FIRMA_DPI,
     }
 
     /**
@@ -85,6 +102,9 @@ class CodaInvii(private val file: File) {
         /** Le cose della fase 5 (ticket, foto del ticket, scadenze): non sono di un rapportino. */
         val fase5: Boolean get() = tipo == Tipo.TICKET || tipo == Tipo.AZIONE_TICKET || tipo == Tipo.FOTO_TICKET || tipo == Tipo.FAI_SCADENZA
 
+        /** Le cose della fase 6 (assenze, km, guasti, prestiti, firme dei DPI): non sono di un rapportino. */
+        val fase6: Boolean get() = tipo in TIPI_FASE6
+
         fun corpoJson(): JSONObject = runCatching { JSONObject(corpo) }.getOrDefault(JSONObject())
     }
 
@@ -97,7 +117,7 @@ class CodaInvii(private val file: File) {
      */
     fun aggiungi(op: Operazione): Operazione = synchronized(lucchetto) {
         val attuali = leggi()
-        val doppione = if (op.tipo == Tipo.SALVA || op.tipo == Tipo.ORE || op.tipo == Tipo.SPESA || op.tipo == Tipo.TICKET) {
+        val doppione = if (op.tipo == Tipo.SALVA || op.tipo == Tipo.ORE || op.tipo == Tipo.SPESA || op.tipo == Tipo.TICKET || op.tipo == Tipo.ASSENZA) {
             attuali.firstOrNull { it.tipo == op.tipo && it.idLocale == op.idLocale && !it.rifiutata }
         } else null
         if (doppione != null) {
@@ -158,6 +178,44 @@ class CodaInvii(private val file: File) {
     /** La scadenza [id] segnata fatta (faiScadenza {id, data?, idDocumento?}): ripetuta uguale, il server non rifà niente. */
     fun faiScadenza(id: String, corpo: JSONObject) =
         aggiungi(Operazione(nuovoId(), Tipo.FAI_SCADENZA, "scadenza:$id", corpo = corpo.toString(), quando = adesso()))
+
+    // ---- fase 6 (fase6.md §3.13)
+
+    /** Una richiesta di ferie, un permesso o una malattia (salvaAssenza {assenza}): [chiave] è il suo idLocale "A-...". */
+    fun assenza(chiave: String, corpo: JSONObject) =
+        aggiungi(Operazione(nuovoId(), Tipo.ASSENZA, chiave, corpo = corpo.toString(), quando = adesso()))
+
+    /** Annulla una mia richiesta già arrivata (annullaAssenza {id, motivo?}). */
+    fun annullaAssenza(id: String, corpo: JSONObject) =
+        aggiungi(Operazione(nuovoId(), Tipo.ANNULLA_ASSENZA, "assenza:$id", corpo = corpo.toString(), quando = adesso()))
+
+    /** I km di un mezzo (segnaKm {idVeicolo, km, data, conferma?}): [chiave] è l'idLocale "K-..." della lettura. */
+    fun km(chiave: String, corpo: JSONObject) =
+        aggiungi(Operazione(nuovoId(), Tipo.KM, chiave, corpo = corpo.toString(), quando = adesso()))
+
+    /** La foto del contachilometri della lettura [chiave], già ridotta. [idFile] è lo stesso a ogni tentativo. */
+    fun fotoKm(chiave: String, idFile: String, percorso: String) =
+        aggiungi(Operazione(nuovoId(), Tipo.FOTO_KM, chiave, idFile = idFile, percorso = percorso, quando = adesso()))
+
+    /** Un guasto (segnalaGuasto {guasto}): [chiave] è il suo idLocale "G-...". */
+    fun guasto(chiave: String, corpo: JSONObject) =
+        aggiungi(Operazione(nuovoId(), Tipo.GUASTO, chiave, corpo = corpo.toString(), quando = adesso()))
+
+    /** Una foto del guasto [chiave] (anche più d'una), già ridotta. */
+    fun fotoGuasto(chiave: String, idFile: String, percorso: String) =
+        aggiungi(Operazione(nuovoId(), Tipo.FOTO_GUASTO, chiave, idFile = idFile, percorso = percorso, quando = adesso()))
+
+    /** Lo prendo io (assegna {tipo: "prestito", ...}): [chiave] è l'idLocale "P-..." del prestito. */
+    fun prestito(chiave: String, corpo: JSONObject) =
+        aggiungi(Operazione(nuovoId(), Tipo.PRESTITO, chiave, corpo = corpo.toString(), quando = adesso()))
+
+    /** Restituisci (restituisci {idVeicolo | idAttrezzatura}): [chiave] è l'idLocale "R-..." del rientro. */
+    fun restituisci(chiave: String, corpo: JSONObject) =
+        aggiungi(Operazione(nuovoId(), Tipo.RESTITUISCI, chiave, corpo = corpo.toString(), quando = adesso()))
+
+    /** La firma della consegna di DPI [id] (firmaConsegna): il PNG in [percorso]; ripetuta, il server la tiene una volta. */
+    fun firmaDpi(id: String, idFile: String, percorso: String) =
+        aggiungi(Operazione(nuovoId(), Tipo.FIRMA_DPI, "dpi:$id", idFile = idFile, percorso = percorso, quando = adesso()))
 
     /**
      * Il server ha risposto per [idOp], col contenuto [corpoInviato]: l'operazione

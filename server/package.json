@@ -1,6 +1,6 @@
 {
   "name": "wisper-server",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "private": true,
   "description": "Il server del gestionale Wisper: dati, conti e permessi in un posto solo.",
   "type": "commonjs",
@@ -10,6 +10,7 @@
   "scripts": {
     "start": "node src/avvio.js --dati ./dati",
     "prova": "node src/avvio.js --dati ./dati-prova --prova",
-    "test": "node --test prove/"
+    "test": "node --test prove/",
+    "prove-giorni": "node prove/giorni.js"
   }
 }

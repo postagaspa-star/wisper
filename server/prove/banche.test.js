@@ -8,7 +8,11 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { serverDiProva } = require('./aiuto');
+const { serverDiProva, giornoDeiPrototipi } = require('./aiuto');
+// Il saldo del 01/10, i movimenti di ottobre, le fatture del 2026 e gli impegni di novembre hanno date fisse (la
+// storia del prototipo): queste prove le guardano dal giorno del prototipo, giovedi' 22/10/2026, qualunque giorno sia
+// (anche con WISPER_OGGI_PROVA). Le altre prove girano sul giorno vero.
+giornoDeiPrototipi();
 const { oggi, piuGiorni } = require('../src/utili');
 const C = require('../src/conti');
 
@@ -173,7 +177,6 @@ test('scadenziario: saldo prudente (uscite scadute dentro, entrate scadute fuori
 
 test('scadenziario: il saldo previsto dei dati di esempio va sotto i 3.000 euro il 30/11 (IRPEF), se oggi e\' prima', async () => {
   const r = await manuel('scadenziario', { a: '2026-12-31' });
-  if (oggi() > '2026-11-15') return;
   assert.equal(r.saldoOggi, 8743.55);
   assert.equal(r.primoSottoSoglia, '2026-11-30');
   const g = r.giorni.find(x => x.data === '2026-11-30');

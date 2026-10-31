@@ -97,7 +97,9 @@
       chiudiPannello(true);
       document.querySelectorAll('.velo').forEach(x => x.remove());
       mostra();
-    } else if (e && e.rete && scrittura) {
+    } else if (e && e.rete && scrittura && !(e.dati && e.dati.porta)) {
+      // Le risposte "riprova" della porta Google hanno già le parole giuste ("Il server dello studio non risponde
+      // dalle 10:42"): restano come sono. Riprovando, il programma rimanda la stessa scrittura con lo stesso id.
       e.message = 'Serve la rete per salvare: riprova quando c\'è';
     }
     throw e;
@@ -154,6 +156,9 @@
       numerazioni: a.numerazioni || [],
       gruppi: a.gruppi || [],
       impostazioni: a.impostazioni || {},
+      // Fase 6 (§17.2): i mezzi e i miei strumenti con l'ultima taratura (per il rapportino), solo con mezzi ≥ 1.
+      mezzi: a.mezzi || [],
+      mieiStrumenti: a.mieiStrumenti || [],
     };
   }
 
@@ -196,6 +201,8 @@
       S.dettoInstallato = true;
       avviso('Wisper Ufficio è installato: lo trovi in Start e sul Desktop. Il file scaricato si può cancellare.', false, 10000);
     }
+    // Aperto col doppio clic sul file dell'email: adesso sa la strada da fuori casa.
+    if (st.appenaCollegato) avviso('Collegato: da fuori casa Wisper Ufficio passa da Google', false, 8000);
     if (!st.entrato) {
       S.entrato = false;
       S.caricato = false;
@@ -317,6 +324,9 @@
     // Fase 5: Documenti e Ticket si rileggono entrando da un'altra voce; i loro pannelli si chiudono cambiando pagina.
     const modulo5 = percorso().split('/')[0];
     if (modulo5 !== S.moduloPrima) { if (modulo5 === 'documenti') Archivio.daRileggere(); if (modulo5 === 'ticket') Ticket.daRileggere(); }
+    // Fase 6: le schede delle persone (dati personali e riservati) non restano in memoria fuori dalla loro pagina.
+    if (modulo5 !== S.moduloPrima) { Persone.daRileggere(); Mezzi.daRileggere(); Collaboratori.daRileggere(); }
+    Persone.chiudiPannello(true);
     S.moduloPrima = modulo5;
     Archivio.M.aperto = null;
     Ticket.M.aperto = null;
@@ -389,6 +399,11 @@
     if (c.pagina === 'scadenza' && !puo('documenti')) { Archivio.apriScadenza(c.id); return; }
     if (d.hash.indexOf('#documenti') === 0) S.filtroDocumenti = f ? Object.assign({}, f) : null;
     if (d.hash.indexOf('#ticket') === 0) S.filtroTicket = f ? Object.assign({}, f) : null;
+    // Fase 6: persone, mezzi, collaboratori (la propria scheda è "Io").
+    if (c.pagina === 'persona' && S.io && S.io.interfaccia && String(c.id) === String(S.io.interfaccia.idPersona) && !puo('persone', 2)) { vai('#persone/io'); return; }
+    if (d.hash.indexOf('#persone') === 0) S.filtroPersone = f ? Object.assign({}, f) : null;
+    if (d.hash.indexOf('#mezzi') === 0) S.filtroMezzi = f ? Object.assign({}, f) : null;
+    if (d.hash.indexOf('#collaboratori') === 0) S.filtroCollaboratori = f ? Object.assign({}, f) : null;
     // Fase 2: il segmento dei preventivi, il segmento o il giorno delle attività.
     if (d.hash === '#preventivi' && f) {
       const seg = f.segmento || { BOZZA: 'bozze', INVIATO: 'inviati', SCADUTO: 'scaduti', ACCETTATO: 'accettati' }[String(f.stato || '').toUpperCase()];
@@ -440,6 +455,10 @@
     // Fase 5: Documenti e Ticket e assistenza.
     else if (nome === 'documenti') { const f = S.filtroDocumenti; S.filtroDocumenti = null; Archivio.vista(pagina, a1 || '', a2 ? decodeURIComponent(a2) : '', f); }
     else if (nome === 'ticket') { const f = S.filtroTicket; S.filtroTicket = null; Ticket.vista(pagina, a1 || '', a2 ? decodeURIComponent(a2) : '', f); }
+    // Fase 6: Persone e risorse umane, Mezzi e attrezzature, Collaboratori esterni.
+    else if (nome === 'persone') { const f = S.filtroPersone; S.filtroPersone = null; Persone.vista(pagina, a1 || '', a2 ? decodeURIComponent(a2) : '', f); }
+    else if (nome === 'mezzi') { const f = S.filtroMezzi; S.filtroMezzi = null; Mezzi.vista(pagina, a1 || '', a2 ? decodeURIComponent(a2) : '', f); }
+    else if (nome === 'collaboratori') { const f = S.filtroCollaboratori; S.filtroCollaboratori = null; Collaboratori.vista(pagina, a1 || '', a2 ? decodeURIComponent(a2) : '', f); }
     else vistaDashboard(pagina);
   }
 
@@ -488,13 +507,16 @@
     const voci = svuota($('#voci'));
     if (S.entrato === false && !S.esempio) return;
     const attiva = R.moduloDi(percorso());
-    R.vociMenu(perm()).forEach(v => {
-      const n = v.modulo === 'fatturazione' && S.caricato ? clientiDaFatturare() : (v.modulo === 'documenti' || v.modulo === 'ticket') && S.caricato ? numerinoFase5(v.modulo) : 0;
+    const esterno = eEsterno();
+    R.vociMenu(perm(), esterno).forEach(v => {
+      const n = v.modulo === 'fatturazione' && S.caricato ? clientiDaFatturare() : (v.modulo === 'documenti' || v.modulo === 'ticket') && S.caricato ? numerinoFase5(v.modulo)
+        : (v.modulo === 'persone' || v.modulo === 'mezzi' || v.modulo === 'collaboratori') && S.caricato && !esterno ? numerinoFase6(v.modulo) : 0;
       const sua = attiva === v.modulo;
+      const nomeV = window.WisperRegolePersone.nomeVoce(v, esterno);
       aggiungi(voci, [h('a', {
         href: '#' + v.modulo, class: 'voce' + (sua ? ' attiva' : ''), 'aria-current': sua ? 'page' : null,
-        'data-nome': v.nome, 'data-visita': 'nav-' + v.modulo,
-      }, icona(v.icona, 22, 2.2), h('span', { class: 'lab' }, v.nome), n ? h('span', { class: 'num-v', 'aria-label': n + ' da fatturare' }, String(n)) : null)]);
+        'data-nome': nomeV, 'data-visita': 'nav-' + v.modulo,
+      }, icona(v.icona, 22, 2.2), h('span', { class: 'lab' }, nomeV), n ? h('span', { class: 'num-v', 'aria-label': n + ' da guardare' }, String(n)) : null)]);
     });
     disegnaChi();
     aggiornaStatoServer();
@@ -514,14 +536,33 @@
     return (t.nonAssegnati || 0) + miei;
   }
 
+  /**
+   * Fase 6: il numerino giallo di Persone (le richieste da approvare, per chi approva), di Mezzi e attrezzature
+   * (tarature scadute, mezzi fermi, prestiti in ritardo; per il collaboratore le sue cose) e di Collaboratori
+   * esterni (con un incarico affidato e documenti non in regola): architettura §17.17.
+   */
+  function numerinoFase6(modulo) {
+    const n = (S.dash && S.dash.numeri) || {};
+    if (modulo === 'persone') return (S.io && S.io.interfaccia && S.io.interfaccia.puoApprovareAssenze && n.persone && n.persone.daApprovare) || 0;
+    if (modulo === 'mezzi') { const m = n.mezzi || {}; return (m.tarateScadute || 0) + (m.fermi || 0) + (m.prestitiInRitardo || 0); }
+    return (n.collaboratori && n.collaboratori.nonInRegola) || 0;
+  }
+
+  /** Fase 6: l'utente è un collaboratore esterno (ruolo esterno, legato al suo fornitore). */
+  function eEsterno() {
+    return !!(S.io && S.io.utente && (S.io.utente.ruolo === 'esterno' || (S.io.interfaccia && S.io.interfaccia.esterno)));
+  }
+
   function disegnaChi() {
     const b = svuota($('#chi'));
     const u = (S.io && S.io.utente) || {};
     if (!u.nome) { b.classList.add('nascosto'); return; }
     b.classList.remove('nascosto');
     b.setAttribute('data-nome', u.nome);
+    // L'esterno: accanto al nome la pillola "Esterno · {il suo collaboratore}" (fase6.md §12.7).
+    const est = eEsterno() && S.io.interfaccia && S.io.interfaccia.esterno;
     aggiungi(b, [h('span', { class: 'cerchio-io' }, B.lettere(u.nome)),
-      h('span', { class: 'lab' }, h('b', null, u.nome), h('span', null, (R.RUOLI[u.ruolo] || { nome: u.ruolo || '' }).nome))]);
+      h('span', { class: 'lab' }, h('b', null, u.nome), est ? h('span', { class: 'pill p-blu piccola pill-esterno' }, 'Esterno · ' + est.nome) : h('span', null, (R.RUOLI[u.ruolo] || { nome: u.ruolo || '' }).nome))]);
   }
 
   function aggiornaStatoServer() {
@@ -630,11 +671,28 @@
    */
   function vistaAccesso(pagina) {
     const st = S.locale || {};
-    let cambiaServer = !st.server;
+    const Coll = window.WisperCollegamento;
+    // Due indirizzi (porta-google.md §8): il server di casa e la porta Google (lo script del foglio). Dell'indirizzo
+    // Google la pagina sa solo se c'è: lo tiene il programma, cifrato, e qui non torna mai.
+    let cambiaServer = !st.server && !st.google;
+    let togliGoogle = false;
     const v = {
-      server: h('input', { type: 'url', value: st.server || '', placeholder: 'https://…', autocomplete: 'url', spellcheck: 'false' }),
+      server: h('input', { type: 'url', value: st.casa || st.server || '', placeholder: 'http://192.168.1.51:8400', autocomplete: 'off', spellcheck: 'false' }),
+      google: h('input', { type: 'url', value: '', placeholder: st.google ? 'Già salvato' : 'https://script.google.com/…/exec', autocomplete: 'off', spellcheck: 'false' }),
       email: h('input', { type: 'email', value: S.emailAccesso || st.email || '', autocomplete: 'username', spellcheck: 'false' }),
       password: h('input', { type: 'password', autocomplete: 'current-password' }),
+    };
+    // Il file "Collega Wisper Ufficio.wisper" che il telefono fa mandare per email: porta l'indirizzo Google.
+    const usaFile = async () => {
+      try {
+        await Api.post('/locale/collega-file', {});
+      } catch (x) {
+        if (x.dati && x.dati.annullato) return;
+        mostraErrore(x.message || 'Il file non va bene.');
+        return;
+      }
+      S.erroreAccesso = { testo: 'Collegato col file dell\'email: da fuori casa Wisper passa da Google.', calmo: true };
+      await carica();
     };
     const zonaServer = h('div');
     const zonaErrore = h('div', { 'aria-live': 'polite' });
@@ -649,7 +707,18 @@
 
     const disegnaServer = () => {
       svuota(zonaServer);
-      if (cambiaServer) aggiungi(zonaServer, [campo('Indirizzo del server', v.server)]);
+      if (!cambiaServer) return;
+      aggiungi(zonaServer, [h('div', { class: 'indirizzi-accesso' },
+        campo('In casa', v.server),
+        campo('Da fuori, l\'indirizzo Google', v.google),
+        h('div', { class: 'riga-collega' },
+          h('button', { type: 'button', class: 'btn collegamento', onclick: usaFile }, 'Usa il file dell\'email'),
+          st.google && !togliGoogle ? h('button', { type: 'button', class: 'btn collegamento', onclick: () => {
+            togliGoogle = true;
+            v.google.value = '';
+            v.google.placeholder = 'https://script.google.com/…/exec';
+            disegnaServer();
+          } }, 'Non usare Google') : null))]);
     };
     const mostraErrore = (testo, calmo) => {
       aggiungi(svuota(zonaErrore), testo ? [h('div', { class: calmo ? 'avviso-calmo' : 'avviso-errore', role: 'alert' }, testo)] : []);
@@ -661,8 +730,12 @@
     const modulo = h('form', { class: 'accesso', novalidate: true, onsubmit: async e => {
       e.preventDefault();
       const corpo = { email: v.email.value.trim(), password: v.password.value };
-      if (cambiaServer) corpo.server = v.server.value.trim();
-      if (cambiaServer && !corpo.server) { mostraErrore('Scrivi l\'indirizzo del server.'); v.server.focus(); return; }
+      if (cambiaServer) {
+        corpo.casa = v.server.value.trim();
+        corpo.google = v.google.value.trim();
+        if (togliGoogle && !corpo.google) corpo.togliGoogle = true;
+      }
+      if (cambiaServer && !corpo.casa && !corpo.google && !(st.google && !togliGoogle)) { mostraErrore('Scrivi l\'indirizzo del server.'); v.server.focus(); return; }
       if (!corpo.email) { mostraErrore('Scrivi la tua email.'); v.email.focus(); return; }
       if (!corpo.password) { mostraErrore('Scrivi la password.'); v.password.focus(); return; }
       entra.disabled = true;
@@ -680,7 +753,7 @@
         entra.disabled = false;
         entra.textContent = 'Entra';
         // Senza rete il riquadro è grigio: non è colpa di nessuno.
-        S.erroreAccesso = { testo: x.rete ? 'Il server non risponde: controlla la rete e riprova.' : (x.message || 'Non sono riuscito a entrare.'), calmo: !!x.rete };
+        S.erroreAccesso = { testo: Coll.erroreAccesso(x), calmo: !!x.rete };
         mostraErrore(S.erroreAccesso.testo, S.erroreAccesso.calmo);
         v.password.select();
         v.password.focus();
@@ -693,7 +766,7 @@
     campo('Email', v.email),
     campo('Password', h('div', { class: 'con-occhio' }, v.password, occhio)),
     entra,
-    st.server && !cambiaServer ? h('div', { class: 'riga-server' }, h('span', null, 'Server · ' + st.server.replace(/^https?:\/\//, '')),
+    !cambiaServer ? h('div', { class: 'riga-server' }, h('span', null, Coll.frase({ casa: st.casa || st.server, google: st.google, ultimoContatto: st.ultimoContatto, ultimaStrada: st.ultimaStrada })),
       h('button', { type: 'button', class: 'btn collegamento', onclick: e => { cambiaServer = true; disegnaServer(); e.target.parentNode.remove(); v.server.focus(); } }, 'Cambia')) : null);
     aggiungi(pagina, [h('div', { class: 'pagina-accesso' }, modulo)]);
     setTimeout(() => (cambiaServer && !v.server.value ? v.server : v.email.value ? v.password : v.email).focus(), 60);
@@ -760,7 +833,10 @@
       // fase 4
       fattura: v.gravita === 'urgente' ? 'allarme' : 'fatturazione', ricevuta: 'scontrino', impegno: 'calendario', cassa: 'banca', conto: 'banca', fiscale: 'scudo',
       // fase 5
-      ticket: 'chiaveInglese', intervento: 'calendario', scadenza: 'bandiera', documento: 'file', contratto: 'contratto', spazio: 'disco', copia: 'disco' }[v.tipo] ||
+      ticket: 'chiaveInglese', intervento: 'calendario', scadenza: 'bandiera', documento: 'file', contratto: 'contratto', spazio: 'disco', copia: 'disco',
+      // fase 6
+      assenza: 'valigia', persona: 'persona', qualifica: 'libro', visita: 'calendario', mezzo: 'furgone', strumento: 'misura', prestito: 'misura',
+      guasto: 'allarme', collaboratore: 'collaboratori', incarico: 'collaboratori' }[v.tipo] ||
       ({ urgente: 'allarme', attenzione: 'calendario', soldi: 'fatturazione' }[v.gravita] || 'lista');
   }
 
@@ -777,10 +853,37 @@
   function vistaDashboard(pagina) {
     const u = (S.io && S.io.utente) || {};
     const nome = String(u.nome || '').split(' ')[0];
+    const esterno = eEsterno();
+    const est = esterno && S.io.interfaccia && S.io.interfaccia.esterno;
     aggiungi(pagina, [h('div', { class: 'testata alta' },
       h('div', { class: 'titoli' }, h('span', { class: 'sotto-titolo' }, R.dataTitolo(new Date())),
-        h('h1', null, R.saluto() + (nome ? ', ' + nome : ''))),
-      puo('rapportini', 2) ? h('button', { type: 'button', class: 'btn giallo', onclick: () => moduloRapportino(null) }, icona('piu', 18, 2.6), 'Nuovo rapportino') : null)]);
+        h('h1', null, R.saluto() + (nome ? ', ' + nome : '')),
+        est ? h('div', { class: 'pillole-testa' }, h('span', { class: 'pill p-blu' }, 'Esterno · ' + est.nome)) : null),
+      puo('rapportini', 2) ? h('button', { type: 'button', class: 'btn giallo', onclick: () => moduloRapportino(null) }, icona('piu', 18, 2.6), esterno ? 'Scrivi il rapportino' : 'Nuovo rapportino') : null)]);
+
+    // Fase 6 (§17.16): l'esterno vede i suoi incarichi in corso con l'avanzamento.
+    if (esterno && S.dash && (S.dash.incarichi || []).length) {
+      aggiungi(pagina, [h('div', { class: 'sezione-dash' }, h('span', { class: 'etichetta' }, 'I tuoi incarichi · ' + S.dash.incarichi.length),
+        h('div', { class: 'scheda righe' }, S.dash.incarichi.map(i => riga({
+          sinistra: h('span', { class: 'codice' }, i.idCommessa), titolo: i.titolo, sotto: [i.numero, i.commessa, i.al ? 'fino al ' + C.data(i.al) : ''].filter(Boolean).join(' · '),
+          destra: i.modo === 'corpo' ? h('span', { class: 'barra-incarico' }, h('span', { class: 'barra sottile' }, h('i', { style: { width: Math.max(0, Math.min(100, Number(i.avanzamento) || 0)) + '%' } })), h('b', null, (Number(i.avanzamento) || 0) + '%')) : h('span', { class: 'pill p-blu' }, 'A ore'),
+          onclick: () => vai('#collaboratori/in/' + i.id),
+        }))))]);
+    }
+
+    // Fase 6 (§17.17): per chi vede le persone, Assenti oggi · Ferie da approvare · Tarature scadute · Scadenze vicine (toccabili).
+    const np = S.dash && S.dash.numeri && S.dash.numeri.persone;
+    if (np && puo('persone') && !esterno) {
+      const nm = (S.dash.numeri.mezzi) || null;
+      const nc = (S.dash.numeri.collaboratori) || null;
+      const box6 = (quanti, che, fn, rosso) => h('button', { type: 'button', class: 'num-box' + (rosso && quanti > 0 ? ' rosso' : ''), onclick: fn }, h('b', null, String(quanti || 0)), h('span', null, che));
+      const vicine = (np.scadenzeVicine || 0) + (nm ? nm.scadenzeVicine || 0 : 0) + (nc ? nc.documentiInScadenza || 0 : 0);
+      aggiungi(pagina, [h('div', { class: 'quattro-num' },
+        box6(np.assentiOggi, 'assenti oggi', () => vaiA({ pagina: 'persone', filtro: { segmento: 'ferie' } })),
+        np.daApprovare !== undefined ? box6(np.daApprovare, 'ferie da approvare', () => vaiA({ pagina: 'persone', filtro: { segmento: 'ferie', daApprovare: true } })) : box6(np.scadute, 'tue scadute', () => vai('#persone/io'), true),
+        nm ? box6(nm.tarateScadute, 'tarature scadute', () => vaiA({ pagina: 'mezzi', filtro: { segmento: 'strumenti', taratura: 'scadute' } }), true) : null,
+        box6(vicine, 'scadenze di persone e mezzi', () => vaiA(puo('persone', 2) ? { pagina: 'persone', filtro: { segmento: 'scadenze' } } : nm ? { pagina: 'mezzi', filtro: { segmento: 'scadenze' } } : { pagina: 'persone' })))]);
+    }
 
     // Fase 5 (§12.5): per chi vede i ticket, Ticket aperti · Urgenti · Interventi oggi · Scadenze vicine (toccabili).
     const nt = S.dash && S.dash.numeri && S.dash.numeri.ticket;
@@ -1095,6 +1198,8 @@
         h('span', null, h('em', null, 'Ore'), h('b', null, C.ore(r.oreTotali))),
         h('span', null, h('em', null, 'Km'), h('b', null, C.numero(r.km) + ' km')),
         h('span', null, h('em', null, 'Spese'), h('b', null, C.num(r.spese) ? C.euro(r.spese) : '—'))),
+      // Fase 6 (§3.9): gli strumenti usati, con lo stato della taratura di quel giorno; l'avviso se uno era scaduto o non si doveva usare.
+      bloccoStrumenti(r),
       soldi() ? h('div', { class: 'conto' }, righeDelConto(r),
         h('div', { class: 'tot' }, h('span', null, 'Totale'), h('span', null, C.euro(r.totale)))) : null,
       r.firma ? h('div', { class: 'firma-box' }, h('img', { src: '/file/' + r.firma.id, alt: 'Firma del cliente' }),
@@ -1139,6 +1244,21 @@
 
     const p = h('aside', { class: 'pannello', 'aria-label': 'Il rapportino ' + (r.id || '') }, corpo, piede);
     if (vecchio) { p.style.animation = 'none'; vecchio.replaceWith(p); } else aggiungi($('#sovrapposti'), [p]);
+  }
+
+  /**
+   * Fase 6: gli strumenti di un rapportino (o di un ticket), con la pillola dello stato di quel giorno, e la banda
+   * quando uno era scaduto (confermato o no), non conforme o al laboratorio. Niente se non ce ne sono.
+   */
+  function bloccoStrumenti(r) {
+    const P6 = window.WisperRegolePersone;
+    const lista = (r && r.strumenti) || [];
+    if (!lista.length) return null;
+    const daGuardare = lista.filter(s => s.statoAllora === 'scaduta' || s.statoAllora === 'non_conforme' || s.statoAllora === 'laboratorio');
+    const frase = daGuardare.length ? daGuardare.map(s => s.nome + ': ' + P6.statoAllora(s).parola.toLowerCase()).join(' · ') : '';
+    return h('div', { class: 'riga-strumenti' }, h('div', { class: 'etichetta' }, 'Strumenti usati'),
+      daGuardare.length ? h('div', { class: daGuardare.some(s => s.statoAllora !== 'scaduta' || !s.confermato) ? 'banda' : 'banda calma' }, icona('avviso', 18), h('span', { class: 'spazio' }, frase)) : null,
+      lista.map(s => { const st = P6.statoAllora(s); return h('div', { class: 'riga-strumento' }, h('span', null, (s.codice ? s.codice + ' · ' : '') + s.nome + (s.matricola ? ' · matr. ' + s.matricola : '')), st.parola ? h('span', { class: 'pill piccola p-' + st.colore }, st.parola) : null); }));
   }
 
   /**
@@ -1496,6 +1616,12 @@
     const campoDescrizione = h('div');
     let luogoAperto = !!r.luogo;
     let notaAperta = !!r.noteInterne;
+    // Fase 6 (§3.9): gli strumenti usati, chiusi in una riga come la nota; dal ticket di tipo Verifica già aperti.
+    const conStrumenti = puo('mezzi') && !eEsterno();
+    const strumentiScelti = (r.strumenti || []).map(s => ({ idAttrezzatura: s.idAttrezzatura, confermato: !!s.confermato, nome: s.nome, codice: s.codice, scadeAllora: s.scadeAllora, statoAllora: s.statoAllora }));
+    let strumentiAperti = strumentiScelti.length > 0 || !!p.verifica;
+    let catalogo = null;
+    const zonaStrumenti = h('div', { class: 'fila', style: { display: 'flex', flexDirection: 'column', gap: '10px' } });
 
     /** Il prezzo della commessa scelta (o l'ultima tariffa del cliente), se la tariffa non l'ha scritta la persona. */
     function proponiTariffa() {
@@ -1631,7 +1757,97 @@
           !notaAperta ? h('button', { type: 'button', class: 'pillola', onclick: () => { notaAperta = true; disegnaAltro(); v.noteInterne.focus(); } }, '+ Una nota per te') : null) : null,
         luogoAperto ? campo('Luogo', v.luogo) : null,
         ticket ? campo('Ticket', v.ticket) : null,
-        notaAperta ? campo('Nota per te, non va al cliente', v.noteInterne) : null]);
+        notaAperta ? campo('Nota per te, non va al cliente', v.noteInterne) : null,
+        conStrumenti ? (strumentiAperti ? zonaStrumenti : h('div', { class: 'pillole' }, h('button', { type: 'button', class: 'pillola', onclick: () => { strumentiAperti = true; disegnaAltro(); disegnaStrumenti(); } }, '+ Strumenti usati'))) : null]);
+    }
+
+    /**
+     * Gli strumenti usati (fase6.md §3.8, §3.9): i miei strumenti come schede con lo stato della taratura alla data del
+     * rapportino (ricalcolato dalla data, come il telefono senza rete), "Come l'ultima volta qui", "Altro strumento".
+     * Non conforme, al laboratorio, guasto: spento, il tocco dice perché. Scaduto: si usa solo confermando (con
+     * TARATURA_BLOCCO = "blocco" non si sceglie), e la conferma resta scritta nel rapportino.
+     */
+    const statoAllaData = s => {
+      const prea = Number(S.ana.impostazioni.TARATURA_PREAVVISO_GIORNI) || 30;
+      if (s.ultimaTaratura !== undefined || s.controllo !== undefined) return window.WisperRegolePersone.statoTaratura({ controllo: s.controllo, ultima: s.ultimaTaratura || null, fuoriUso: s.fuoriUso, inLaboratorio: s.stato === 'laboratorio' }, v.data.value || C.oggiIso(), prea) || s.taratura || null;
+      return s.taratura || null;
+    };
+    function disegnaStrumenti() {
+      const P6 = window.WisperRegolePersone;
+      const miei = S.ana.mieiStrumenti || [];
+      const blocco = (S.io && S.io.interfaccia && S.io.interfaccia.taraturaBlocco) || 'avviso';
+      const scelto = id => strumentiScelti.find(s => String(s.idAttrezzatura) === String(id));
+      const altri = strumentiScelti.filter(s => !miei.some(x => String(x.id) === String(s.idAttrezzatura)));
+      const chip = s => {
+        const t = statoAllaData(s);
+        const sc = P6.sceltaStrumento(Object.assign({}, s, { taratura: t }), blocco);
+        const si = scelto(s.id);
+        return h('button', { type: 'button', class: 'chip-str' + (!sc.si && !si ? ' spento' : ''), 'aria-pressed': si ? 'true' : 'false', title: sc.si ? '' : sc.motivo,
+          onclick: () => tocca(s, t, sc) }, h('span', null, (s.codice ? s.codice + ' · ' : '') + s.nome),
+        t ? h('span', { class: 'pill p-' + P6.coloreTaratura(t) }, t.parola + (si && si.confermato ? ' · confermato' : '')) : null);
+      };
+      const ultime = P6.comeUltimaVolta(S.rapportini, m.idCliente, v.luogo.value, r.id || r.idLocale);
+      const nomeUltimo = id => { for (const x of S.rapportini) { const u = (x.strumenti || []).find(y => String(y.idAttrezzatura) === String(id)); if (u) return u.nome; } return ''; };
+      aggiungi(svuota(zonaStrumenti), [h('div', { class: 'etichetta' }, 'Strumenti usati'),
+        miei.length || altri.length ? h('div', { class: 'strumenti-scelta' }, miei.map(chip), altri.map(a => h('button', { type: 'button', class: 'chip-str', 'aria-pressed': 'true', onclick: () => { strumentiScelti.splice(strumentiScelti.indexOf(a), 1); disegnaStrumenti(); } },
+          h('span', null, (a.codice ? a.codice + ' · ' : '') + (a.nome || 'Strumento')), a.statoAllora ? h('span', { class: 'pill p-' + P6.statoAllora(a).colore }, P6.statoAllora(a).parola) : null))) : null,
+        h('div', { class: 'pillole' },
+          ultime.length && ultime.some(id => !scelto(id)) ? h('button', { type: 'button', class: 'pillola', onclick: () => usaUltime(ultime) }, 'Come l\'ultima volta qui: ' + ultime.map(nomeUltimo).filter(Boolean).join(', ')) : null,
+          h('button', { type: 'button', class: 'pillola', onclick: altroStrumento }, icona('cerca', 16, 2.4), 'Altro strumento'))]);
+    }
+    async function tocca(s, t, sc) {
+      const i = strumentiScelti.findIndex(x => String(x.idAttrezzatura) === String(s.id));
+      if (i >= 0) { strumentiScelti.splice(i, 1); disegnaStrumenti(); return; }
+      if (!sc.si) { avviso(sc.motivo, true); return; }
+      let confermato = false;
+      if (sc.conferma) {
+        confermato = await new Promise(risolvi => {
+          let detto = false;
+          const rispondi = x => { if (!detto) { detto = true; risolvi(x); } };
+          let chiudiC;
+          chiudiC = finestra({ titolo: sc.titolo, fuoco: false, allaChiusura: () => rispondi(false), corpo: h('p', { class: 'testo-forte' }, sc.frase),
+            pulsanti: [h('button', { type: 'button', class: 'btn testo grande', onclick: () => { rispondi(true); chiudiC(); } }, 'Lo uso lo stesso'), 'spazio',
+              h('button', { type: 'button', class: 'btn giallo grande', onclick: () => { rispondi(false); chiudiC(); } }, 'Scegli un altro strumento')] });
+        });
+        if (!confermato) return;
+      }
+      strumentiScelti.push({ idAttrezzatura: s.id, confermato, nome: s.nome, codice: s.codice, statoAllora: t ? (t.stato === 'in_scadenza' ? 'valida' : t.stato) : '' });
+      disegnaStrumenti();
+    }
+    async function leggiCatalogo() {
+      if (!catalogo) catalogo = ((await Rete.get('/server/attrezzature')).attrezzature || []).filter(a => a.controllo || a.categoria === 'strumento');
+      return catalogo;
+    }
+    async function usaUltime(ids) {
+      const tutti = await lavora('Leggo gli strumenti', leggiCatalogo);
+      if (!tutti) return;
+      for (const id of ids) {
+        if (strumentiScelti.some(x => String(x.idAttrezzatura) === String(id))) continue;
+        const s = (S.ana.mieiStrumenti || []).find(x => String(x.id) === String(id)) || tutti.find(x => String(x.id) === String(id));
+        if (!s) continue;
+        const t = statoAllaData(s);
+        await tocca(s, t, window.WisperRegolePersone.sceltaStrumento(Object.assign({}, s, { taratura: t }), (S.io.interfaccia || {}).taraturaBlocco || 'avviso'));
+      }
+    }
+    async function altroStrumento() {
+      const tutti = await lavora('Leggo gli strumenti', leggiCatalogo);
+      if (!tutti) return;
+      const cerca1 = h('input', { type: 'search', placeholder: 'Codice, nome o matricola', 'aria-label': 'Cerca lo strumento' });
+      const elenco = h('div', { class: 'scheda righe' });
+      let chiudiA;
+      const disegnaE = () => {
+        const t = C.normalizza(cerca1.value);
+        const l = tutti.filter(a => !t || C.normalizza([a.codice, a.nome, a.matricola, a.marca, a.modello].join(' ')).indexOf(t) >= 0).slice(0, 12);
+        aggiungi(svuota(elenco), l.length ? l.map(a => {
+          const sc = window.WisperRegolePersone.sceltaStrumento(a, (S.io.interfaccia || {}).taraturaBlocco || 'avviso');
+          return riga({ sinistra: h('span', { class: 'codice' }, a.codice), titolo: a.nome, sotto: [a.matricola ? 'matr. ' + a.matricola : '', a.statoVisto].filter(Boolean).join(' · '),
+            destra: a.taratura ? h('span', { class: 'pill p-' + window.WisperRegolePersone.coloreTaratura(a.taratura) }, a.taratura.parola) : null,
+            classe: sc.si ? '' : 'non-conta', onclick: () => { if (!sc.si) { avviso(sc.motivo, true); return; } chiudiA(); tocca(a, a.taratura, sc); } });
+        }) : [h('p', { class: 'vuoto sinistra' }, 'Nessuno strumento con questa ricerca.')]);
+      };
+      cerca1.addEventListener('input', disegnaE);
+      disegnaE();
+      chiudiA = finestra({ titolo: 'Altro strumento', corpo: [h('label', { class: 'cerca' }, icona('cerca', 18), cerca1), elenco], pulsanti: ['spazio', h('button', { type: 'button', class: 'btn grande', onclick: () => chiudiA() }, 'Chiudi')] });
     }
 
     function leggiModulo() {
@@ -1657,6 +1873,8 @@
         tariffa: C.numONull(v.tariffa.value),
         noteInterne: v.noteInterne.value.trim(),
         ...(r.idTicket && !esistente ? { idTicket: r.idTicket } : {}),
+        // Fase 6: l'elenco intero degli strumenti (il server congela lo stato della taratura di quel giorno).
+        ...(conStrumenti ? { strumenti: strumentiScelti.map(s => ({ idAttrezzatura: s.idAttrezzatura, confermato: !!s.confermato })) } : {}),
       };
     }
 
@@ -1715,6 +1933,9 @@
     }
 
     disegnaPerChi(); disegnaOre(); disegnaKm(); disegnaTariffa(); disegnaAltro(); disegnaDescrizione(); aggiornaConto();
+    if (conStrumenti && strumentiAperti) disegnaStrumenti();
+    // La data cambia lo stato della taratura (uno strumento che scade oggi domani è scaduto).
+    v.data.addEventListener('change', () => { if (conStrumenti && strumentiAperti) disegnaStrumenti(); });
     const corpo = h('div', { class: 'modulo' },
       h('div', { class: 'col' }, r.numeroTicket || r.idTicket ? h('div', { class: 'pillole-testa' }, h('span', { class: 'pill p-grigio' }, icona('chiaveInglese', 14, 2.2), 'Ticket ' + (r.numeroTicket || esistente && esistente.numeroTicket || ''))) : null,
         campo('Data', v.data), h('h3', null, 'Per chi'), zonaPerChi, h('h3', null, 'Ore e strada'),
@@ -1769,6 +1990,8 @@
     vistaRapportini, esporta, rileggiRapportini,
     // fase 5
     percorso,
+    // fase 6
+    bloccoStrumenti,
   };
   const Clienti = window.WisperClienti(W);
   const Commesse = window.WisperCommesse(W);
@@ -1791,6 +2014,14 @@
   const Ticket = window.WisperTicket(W);
   W.Archivio = Archivio;
   W.Ticket = Ticket;
+  // Fase 6: Persone (che porta gli aiuti comuni W.F6), Mezzi e attrezzature, Collaboratori esterni.
+  W.eEsterno = eEsterno;
+  const Persone = window.WisperPersone(W);
+  W.Persone = Persone;
+  const Mezzi = window.WisperMezzi(W);
+  W.Mezzi = Mezzi;
+  const Collaboratori = window.WisperCollaboratori(W);
+  W.Collaboratori = Collaboratori;
 
   /**
    * L'esportazione per Excel (§12.13, §13.9, §14.14): il server prepara il CSV coi
@@ -1878,6 +2109,7 @@
     if (chiudiMenu()) return;
     const veli = document.querySelectorAll('.velo');
     if (veli.length) { const v = veli[veli.length - 1]; if (v.chiudi) v.chiudi(); else v.remove(); } else if (S.aperto) chiudiPannello();
+    else if (document.querySelector('.pannello-f6')) Persone.chiudiPannello();
     else if (document.querySelector('.pannello-doc')) Archivio.chiudiPannello();
     else if (document.querySelector('.pannello-ticket')) Ticket.chiudiPannello();
     else if (document.querySelector('.pannello-contratto')) Ticket.chiudiContrattoPannello();

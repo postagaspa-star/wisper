@@ -20,8 +20,14 @@
     amministrazione: { nome: 'Amministrazione', frase: 'Clienti, commesse, fatture e soldi. Non cambia utenti e permessi.' },
     collaboratore: { nome: 'Collaboratore', frase: 'Scrive i suoi rapportini e vede le commesse, senza importi.' },
     lettura: { nome: 'Lettura', frase: 'Vede tutto, non cambia niente. Per il commercialista.' },
+    // Fase 6 (fase6.md §8.4): un collaboratore esterno, legato al suo fornitore; si invita dalla sua scheda.
+    esterno: { nome: 'Esterno', frase: 'Un collaboratore esterno: vede solo le commesse dei suoi incarichi, i suoi rapportini e i suoi compensi.' },
   };
   const ORDINE_RUOLI = ['titolare', 'amministrazione', 'collaboratore', 'lettura'];
+  /** Ruoli e permessi ha anche la colonna dell'esterno (fase6.md §12.8). */
+  const ORDINE_RUOLI_PERMESSI = ORDINE_RUOLI.concat(['esterno']);
+  /** I moduli che a un esterno non si possono dare (il server lo rifiuta: architettura §17.16). */
+  const VIETATI_ESTERNO = ['persone', 'mezzi', 'clienti', 'preventivi', 'fatturazione', 'banche', 'comunicazioni', 'portale', 'integrazioni', 'amministrazione', 'costi', 'riservati'];
 
   /**
    * Le voci del menu che funzionano oggi, nell'ordine delle specifiche. Le voci delle
@@ -40,15 +46,22 @@
     { modulo: 'fatturazione', nome: 'Fatturazione', spiega: 'Da fatturare, fatture, ricevute, riepilogo', icona: 'fatturazione' },
     // Fase 4 (docs/gestionale/fase4.md §12): voce 9, subito dopo Fatturazione.
     { modulo: 'banche', nome: 'Banche e scadenze', spiega: 'Scadenziario, movimenti, tributi, conti', icona: 'banca' },
+    // Fase 6 (fase6.md §12): voce 10, dopo Banche e scadenze.
+    { modulo: 'persone', nome: 'Persone e risorse umane', spiega: 'Organico, ferie e permessi, presenze, formazione', icona: 'persona' },
     // Fase 5 (docs/gestionale/fase5.md §12): voci 11 e 12, dopo Banche e scadenze.
     { modulo: 'documenti', nome: 'Documenti', spiega: 'Archivio, revisioni, scadenze, modelli', icona: 'file' },
     { modulo: 'ticket', nome: 'Ticket e assistenza', spiega: "Richieste d'intervento, contratti, statistiche", icona: 'chiaveInglese' },
+    // Fase 6: voce 13 dopo Ticket, voce 16 dopo Mezzi.
+    { modulo: 'mezzi', nome: 'Mezzi e attrezzature', spiega: 'Mezzi, strumenti e tarature, DPI, prestiti, guasti', icona: 'furgone' },
+    { modulo: 'collaboratori', nome: 'Collaboratori esterni', spiega: 'Imprese e professionisti, incarichi, compensi', icona: 'collaboratori' },
     { modulo: 'amministrazione', nome: 'Amministrazione', spiega: 'Studio, utenti, permessi, copie', icona: 'amministrazione' },
   ];
 
   /** Le righe di Ruoli e permessi: i moduli del menu più i soldi. */
   const RIGHE_PERMESSI = VOCI_MENU.map(v => ({ modulo: v.modulo, nome: v.nome, spiega: v.spiega }))
-    .concat([{ modulo: 'costi', nome: 'Soldi', spiega: 'Tariffe, totali, costi e margini' }]);
+    .concat([{ modulo: 'costi', nome: 'Soldi', spiega: 'Tariffe, totali, costi e margini' },
+      // Fase 6 (fase6.md §3.2): costo dell'anno, CCNL, giudizi di idoneità, documenti riservati, tipo delle assenze sanitarie.
+      { modulo: 'riservati', nome: 'Dati riservati', spiega: 'Costo dell\'anno, contratti e cedolini, giudizi del medico, malattie' }]);
 
   const LIVELLI = ['Niente', 'Vede', 'Modifica'];
 
@@ -78,8 +91,12 @@
   const CON_SOLDI = ['fatturazione', 'banche'];
   const vede = (permessi, modulo) => puo(permessi, modulo, 1) && (CON_SOLDI.indexOf(modulo) < 0 || puo(permessi, 'costi', 1));
 
-  function vociMenu(permessi) {
-    return VOCI_MENU.filter(v => vede(permessi, v.modulo));
+  /** Per l'esterno il menu ridotto, nel suo ordine (fase6.md §12.7): Ore e rapportini prima di Attività. */
+  const ORDINE_ESTERNO = ['dashboard', 'commesse', 'rapportini', 'attivita', 'spese', 'documenti', 'ticket', 'collaboratori'];
+  function vociMenu(permessi, esterno) {
+    const voci = VOCI_MENU.filter(v => vede(permessi, v.modulo));
+    if (!esterno) return voci;
+    return voci.filter(v => ORDINE_ESTERNO.indexOf(v.modulo) >= 0).sort((a, b) => ORDINE_ESTERNO.indexOf(a.modulo) - ORDINE_ESTERNO.indexOf(b.modulo));
   }
 
   /**
@@ -533,6 +550,24 @@
       }
       case 'documento': return { hash: '#documenti/doc/' + id, filtro: null };
       case 'scadenza': return { hash: '#documenti/scadenza/' + id, filtro: null };
+      // Fase 6: persone, mezzi e attrezzature, collaboratori esterni (architettura.md §17.17).
+      case 'persone': {
+        const seg = c.filtro && c.filtro.segmento;
+        return { hash: '#persone' + (seg && seg !== 'organico' ? '/' + seg : ''), filtro: c.filtro || null };
+      }
+      case 'persona': return { hash: '#persone/p/' + id, filtro: null };
+      case 'mezzi': {
+        const seg = c.filtro && c.filtro.segmento;
+        return { hash: '#mezzi' + (seg && seg !== 'mezzi' ? '/' + seg : ''), filtro: c.filtro || null };
+      }
+      case 'mezzo': return { hash: '#mezzi/mezzo/' + id, filtro: null };
+      case 'attrezzatura': return { hash: '#mezzi/at/' + id, filtro: null };
+      case 'collaboratori': {
+        const seg = c.filtro && c.filtro.segmento;
+        return { hash: '#collaboratori' + (seg && seg !== 'elenco' ? '/' + seg : ''), filtro: c.filtro || null };
+      }
+      case 'collaboratore': return { hash: '#collaboratori/c/' + id, filtro: null };
+      case 'incarico': return { hash: '#collaboratori/in/' + id, filtro: null };
       default: return { hash: '#dashboard', filtro: null };
     }
   }
@@ -557,6 +592,9 @@
       // fase 5
       ticket: 'Apri il ticket', tickets: 'Apri i ticket', contratto: 'Apri il contratto', documento: 'Apri il documento', documenti: 'Apri i documenti',
       scadenza: 'Apri la scadenza', impianto: "Apri l'impianto",
+      // fase 6
+      persone: 'Apri Persone', persona: 'Apri la scheda', mezzi: 'Apri Mezzi e attrezzature', mezzo: 'Apri il mezzo', attrezzatura: 'Apri lo strumento',
+      collaboratori: 'Apri i collaboratori', collaboratore: 'Apri la scheda', incarico: "Apri l'incarico",
     }[p] || 'Apri';
   }
 
@@ -608,7 +646,12 @@
     preventivi: 'il preventivo', preventivo_voci: 'le voci del preventivo', listino: 'la voce del listino', attivita: 'l\'attività',
     attivita_checklist: 'la checklist', scadenze_pagamento: 'le scadenze di pagamento', ricorrenze: 'la ricorrenza',
     // fase 3
-    ore: 'le ore', timer: 'il timer', spese: 'la spesa', trasferte: 'la trasferta', veicoli: 'il veicolo',
+    ore: 'le ore', timer: 'il timer', spese: 'la spesa', trasferte: 'la trasferta', veicoli: 'il mezzo',
+    // fase 6
+    persone: 'la scheda di', persona_costi: 'il costo orario di', assenze: 'l\'assenza', assenze_saldi: 'il saldo di', chiusure: 'la chiusura',
+    qualifiche: 'la formazione', qualifica_tipi: 'il tipo di formazione', visite_mediche: 'la visita medica', dpi_consegne: 'la consegna di un DPI',
+    attrezzature: 'lo strumento', tarature: 'la taratura', assegnazioni: 'l\'assegnazione', manutenzioni: 'la manutenzione', mezzo_letture: 'i km',
+    collaboratori: 'il collaboratore', incarichi: 'l\'incarico',
   };
 
   function valoreLeggibile(v) {
@@ -773,12 +816,14 @@
   function nomeEsportazione(cosa, oggi) {
     const nomi = { rapportini: 'rapportini', clienti: 'clienti e fornitori', fornitori: 'fornitori', commesse: 'commesse', registro: 'registro',
       preventivi: 'preventivi', attivita: 'attività', ore: 'ore', spese: 'spese', trasferte: 'trasferte', rimborsi: 'rimborsi',
-      fatture: 'fatture', ricevute: 'fatture ricevute', daFatturare: 'da fatturare', riepilogo: 'riepilogo del fatturato', movimenti: 'movimenti', scadenziario: 'scadenziario', impegni: 'tributi e rate' };
+      fatture: 'fatture', ricevute: 'fatture ricevute', daFatturare: 'da fatturare', riepilogo: 'riepilogo del fatturato', movimenti: 'movimenti', scadenziario: 'scadenziario', impegni: 'tributi e rate',
+      persone: 'persone', qualifiche: 'formazione', assenze: 'assenze', presenze: 'presenze', mezzi: 'mezzi', attrezzature: 'attrezzature', tarature: 'tarature',
+      manutenzioni: 'manutenzioni', assegnazioni: 'assegnazioni', km: 'km', collaboratori: 'collaboratori', incarichi: 'incarichi', compensi: 'compensi' };
     return 'Wisper ' + (nomi[cosa] || cosa) + ' ' + (oggi || oggiIso()) + '.csv';
   }
 
   const Regole = {
-    RUOLI, ORDINE_RUOLI, VOCI_MENU, RIGHE_PERMESSI, LIVELLI,
+    RUOLI, ORDINE_RUOLI, ORDINE_RUOLI_PERMESSI, VIETATI_ESTERNO, VOCI_MENU, RIGHE_PERMESSI, LIVELLI,
     permessiTutti, livello, puo, vociMenu, moduloDi, paginaPermessa, primaPagina, titolareDi, ultimoTitolare, quantiAttivi, descriviRuolo,
     saluto, dataTitolo, giornoRegistro, quando, raggruppaPerGiorno, periodo, isoGiorno, oggiIso,
     errorePartitaIva, erroreCodiceFiscale, erroreSdi, erroreEmail, erroreCap, erroreProvincia, validaSoggetto,

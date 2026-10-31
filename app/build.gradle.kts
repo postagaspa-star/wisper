@@ -66,10 +66,16 @@ android {
 
     buildTypes {
         debug {
-            buildConfigField("String", "SHEET_URL", "\"${chiave("sheetUrl")}\"")
+            // La porta Google (docs/gestionale/porta-google.md) e' l'indirizzo dello script del foglio.
+            // Per provarla sull'emulatore SENZA il Google vero: -PportaGoogle=http://10.0.2.2:<porta>/exec
+            // (il finto Google): l'APK di prova allora non contiene l'indirizzo vero.
+            val portaGoogle = project.findProperty("portaGoogle") as String?
+            buildConfigField("String", "SHEET_URL", "\"${portaGoogle ?: chiave("sheetUrl")}\"")
             buildConfigField("String", "SHEET_CODICE", "\"${chiave("sheetCodice")}\"")
             // Senza serverUrl in wisper-keys, il server di prova sul computer visto dall'emulatore.
-            buildConfigField("String", "SERVER_URL", "\"${chiave("serverUrl").ifBlank { "http://10.0.2.2:8400" }}\"")
+            // Per le prove anche il server di casa: -PserverCasa=http://10.0.2.2:<porta> (mai il NAS vero).
+            val serverCasa = project.findProperty("serverCasa") as String?
+            buildConfigField("String", "SERVER_URL", "\"${serverCasa ?: chiave("serverUrl").ifBlank { "http://10.0.2.2:8400" }}\"")
         }
         release {
             // R8 rompe le cose in modi che scopri solo sull'APK finale, e non

@@ -69,8 +69,12 @@ enum class Sezione(val nome: String, val icona: ImageVector, val modulo: String)
     SPESE("Spese e trasferte", Icone.scontrino, Moduli.SPESE),
     FATTURAZIONE("Fatturazione", Icone.fatturazione, Moduli.FATTURAZIONE),
     BANCHE("Banche e scadenze", Icone.barre, Moduli.BANCHE),
+    // Fase 6 (fase6.md §12): Persone dopo Banche, Mezzi dopo Ticket, Collaboratori dopo Mezzi.
+    PERSONE("Persone e risorse umane", Icone.persona, Moduli.PERSONE),
     DOCUMENTI("Documenti", Icone.documento, Moduli.DOCUMENTI),
     TICKET("Ticket e assistenza", Icone.chiave, Moduli.TICKET),
+    MEZZI("Mezzi e attrezzature", Icone.mezzo, Moduli.MEZZI),
+    COLLABORATORI("Collaboratori esterni", Icone.collab, Moduli.COLLABORATORI),
     AMMINISTRAZIONE("Amministrazione", Icone.amministrazione, Moduli.AMMINISTRAZIONE),
 }
 
@@ -130,7 +134,12 @@ fun rottaCompito(rotta: String?): Boolean =
         // Fase 5: i moduli di ticket, contratti, documenti, scadenze e lettere.
         rotta.startsWith("ticket-nuovo") || rotta.startsWith("ticket-modifica/") || rotta.startsWith("contratto-ca-nuovo") ||
         rotta.startsWith("contratto-ca-modifica/") || rotta.startsWith("documento-nuovo") || rotta.startsWith("scadenza-nuova") ||
-        rotta.startsWith("lettera-nuova"))
+        rotta.startsWith("lettera-nuova") ||
+        // Fase 6: i moduli di persone, assenze, DPI, guasti, mezzi, strumenti, collaboratori e incarichi.
+        rotta.startsWith("persona-nuova") || rotta.startsWith("persona-modifica/") || rotta.startsWith("assenza-nuova") ||
+        rotta.startsWith("dpi-consegna/") || rotta.startsWith("guasto-nuovo/") || rotta.startsWith("mezzo-nuovo") ||
+        rotta.startsWith("strumento-nuovo") || rotta.startsWith("incarico-nuovo/") || rotta.startsWith("incarico-lettera/") ||
+        rotta.startsWith("collaboratore-nuovo"))
 
 /** La sezione di una pagina interna: dice il nome piccolo accanto a "indietro" e il permesso che serve. */
 fun sezioneDiRotta(rotta: String?, base: Sezione): Sezione = when {
@@ -148,6 +157,10 @@ fun sezioneDiRotta(rotta: String?, base: Sezione): Sezione = when {
     // Fase 5: ticket, impianti e contratti di assistenza; documenti, scadenze, lettere e testi dei modelli.
     rotta.startsWith("ticket") || rotta.startsWith("impianto/") || rotta.startsWith("contratto-ca") -> Sezione.TICKET
     rotta.startsWith("document") || rotta.startsWith("scadenz") || rotta.startsWith("lettera") || rotta.startsWith("modello-testi") -> Sezione.DOCUMENTI
+    // Fase 6: persone e assenze; mezzi, strumenti e guasti; collaboratori e incarichi.
+    rotta.startsWith("persona") || rotta.startsWith("assenza") || rotta.startsWith("accessi-riservati") || rotta.startsWith("dpi-") -> Sezione.PERSONE
+    rotta.startsWith("mezz") || rotta.startsWith("strumento") || rotta.startsWith("guasto") -> Sezione.MEZZI
+    rotta.startsWith("collaborator") || rotta.startsWith("incaric") -> Sezione.COLLABORATORI
     rotta == "amm/categorie" || rotta == "amm/spazio" -> Sezione.AMMINISTRAZIONE
     rotta.startsWith("amm/") -> Sezione.AMMINISTRAZIONE
     else -> base
@@ -293,6 +306,8 @@ fun CassettoMenu(
     onVoce: (Sezione) -> Unit,
     onRiprova: () -> Unit,
     onEsci: () -> Unit,
+    /** Fase 6: per l'esterno il nome del suo collaboratore (la pillola "Esterno · …" e la voce "La tua scheda"). */
+    esterno: String = "",
 ) {
     val c = W.colori
     Column(Modifier.fillMaxSize().padding(start = 12.dp, end = 12.dp, top = 16.dp, bottom = 18.dp)) {
@@ -305,13 +320,14 @@ fun CassettoMenu(
                 CerchioPersona(utente.iniziali, 48.dp)
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text(utente.nome.ifBlank { "Wisper" }, style = Testi.forteGrande, color = c.testo, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text(Ruoli.nome(utente.ruolo), style = Testi.secondario, color = c.tenue, maxLines = 1)
+                    if (esterno.isNotBlank()) Pillolina("Esterno · $esterno", c.fatturatoTesto, c.fatturatoFondo)
+                    else Text(Ruoli.nome(utente.ruolo), style = Testi.secondario, color = c.tenue, maxLines = 1)
                 }
             }
             Box(Modifier.fillMaxWidth().height(1.dp).background(c.riga))
             Spacer(Modifier.height(0.dp))
             voci.forEach { s ->
-                VoceCassetto(s, s == attiva, numeri[s] ?: 0) { onVoce(s) }
+                VoceCassetto(s, s == attiva, numeri[s] ?: 0, if (s == Sezione.COLLABORATORI && esterno.isNotBlank()) "La tua scheda" else s.nome) { onVoce(s) }
             }
         }
         Column(Modifier.fillMaxWidth()) {
@@ -341,7 +357,7 @@ fun CassettoMenu(
 }
 
 @Composable
-private fun VoceCassetto(s: Sezione, attiva: Boolean, numero: Int, onClick: () -> Unit) {
+private fun VoceCassetto(s: Sezione, attiva: Boolean, numero: Int, nome: String = s.nome, onClick: () -> Unit) {
     val c = W.colori
     Row(
         Modifier.fillMaxWidth().heightIn(min = 52.dp).clip(RoundedCornerShape(16.dp))
@@ -354,7 +370,7 @@ private fun VoceCassetto(s: Sezione, attiva: Boolean, numero: Int, onClick: () -
     ) {
         Icon(s.icona, null, tint = if (attiva) c.testo else c.testo2, modifier = Modifier.size(22.dp))
         Text(
-            s.nome, style = Testi.pulsanteSecondario.copy(fontWeight = if (attiva) FontWeight.ExtraBold else FontWeight.Bold),
+            nome, style = Testi.pulsanteSecondario.copy(fontWeight = if (attiva) FontWeight.ExtraBold else FontWeight.Bold),
             color = if (attiva) c.testo else c.testo2, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis,
         )
         if (numero > 0) {
@@ -364,6 +380,9 @@ private fun VoceCassetto(s: Sezione, attiva: Boolean, numero: Int, onClick: () -
                         contentDescription = when (s) {
                             Sezione.TICKET -> "$numero da prendere"
                             Sezione.DOCUMENTI -> "$numero da approvare"
+                            Sezione.PERSONE -> if (numero == 1) "1 richiesta da approvare" else "$numero richieste da approvare"
+                            Sezione.MEZZI -> "$numero da guardare"
+                            Sezione.COLLABORATORI -> "$numero con documenti scaduti"
                             else -> "$numero da fatturare"
                         }
                     },

@@ -2,11 +2,7 @@ package eu.stgm.wisper.rapportino
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
-import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -23,19 +19,24 @@ import java.util.concurrent.TimeUnit
  * `{ok: true|false}`. In più ogni richiesta porta `Authorization: Bearer <token>`,
  * il token che dà [accedi]; i file arrivano da `GET /file/<id>`.
  *
+ * Dal 31/10/2026 le strade sono due ([Strade], docs/gestionale/porta-google.md):
+ * in casa il server direttamente, da fuori lo script Google che tiene le
+ * richieste per lui. Le risposte sono le stesse: qui non cambia niente.
+ *
  * Quattro tipi di errore, e la differenza conta per la coda:
  *  - [Rifiutato]: il server ha risposto e ha detto di no. Riprovare uguale non serve;
  *  - [PermessoNegato] (un [Rifiutato]): manca il permesso per quella cosa;
  *  - [AccessoScaduto]: il token non vale più (scaduto, revocato, utente
  *    disattivato, o non si è ancora entrati). Non è un no sul rapportino: la coda
  *    si ferma e aspetta che si rientri, senza scartare niente;
- *  - qualunque altra eccezione (anche [ServizioNonRaggiunto]): la rete. Si riprova.
+ *  - qualunque altra eccezione (anche [ServizioNonRaggiunto], e le risposte
+ *    "riprova" della porta Google): la rete. Si riprova, con lo stesso id.
  *
- * Le scritture non si ripetono mai da sole (vedi [clientScrittura]): un'email
- * ripetuta sono due email.
+ * Le scritture non si ripetono mai da sole (vedi [Strade]): un'email ripetuta
+ * sono due email.
  */
 class PonteServer(
-    /** "http://10.0.2.2:8400", o l'indirizzo del NAS; va bene anche con /exec in fondo. */
+    /** Il server di casa: "http://192.168.1.51:8400", o "http://10.0.2.2:8400" per l'emulatore; va bene anche con /exec in fondo. */
     private val indirizzo: () -> String,
     private val token: () -> String,
     /** Chi chiama (disp, dispNome, app): il server li scrive nel registro degli accessi. */
@@ -44,9 +45,17 @@ class PonteServer(
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
         .build(),
+    /** La porta Google: l'indirizzo dello script (quello che finisce con /exec). Vuoto = solo casa. */
+    private val google: () -> String = { "" },
 ) : TrasportoFase5 {
 
-    val configurato: Boolean get() = base().isNotBlank() && token().isNotBlank()
+    /** Le due strade e la regola di casa. */
+    val strade = Strade(indirizzo, google, token, client)
+
+    val configurato: Boolean get() = (base().isNotBlank() || google().isNotBlank()) && token().isNotBlank()
+
+    /** La rete del telefono è cambiata: casa o Google si sceglie di nuovo alla prossima richiesta. */
+    fun reteCambiata() = strade.reteCambiata()
 
     /** Il server ha risposto e ha detto di no, col messaggio da mostrare. */
     open class Rifiutato(messaggio: String) : Exception(messaggio)
@@ -57,8 +66,19 @@ class PonteServer(
     /** `accesso: false`, o non si è ancora entrati: si torna alla schermata di accesso, la coda aspetta. */
     class AccessoScaduto(messaggio: String = "Accesso scaduto: entra di nuovo") : Exception(messaggio)
 
-    /** `rete: true`: il server c'è, ma un servizio dietro di lui no (il registro europeo, il postino). Si riprova. */
-    class ServizioNonRaggiunto(messaggio: String) : IOException(messaggio)
+    /**
+     * `rete: true`: il server c'è, ma un servizio dietro di lui no (il registro
+     * europeo, il postino); o la porta Google dice "riprova" ([porta]: `spento`,
+     * `attesa`, `occupato`; `google` se a non rispondere è Google stesso). Si riprova.
+     */
+    open class ServizioNonRaggiunto(messaggio: String, val porta: String = "") : IOException(messaggio)
+
+    /**
+     * Troppo grande per passare da Google (oltre circa 26 MB, porta-google.md §3,
+     * §7). Riprovare via Google non serve, ma non è un no: la coda la tiene e parte
+     * da sola quando il telefono è in ufficio (la strada di casa non ha il limite).
+     */
+    class SoloInUfficio(messaggio: String) : ServizioNonRaggiunto(messaggio, "grande")
 
     /**
      * `serveConferma: true` (§13.5, §13.7): il server si e' fermato per chiedere se
@@ -88,10 +108,11 @@ class PonteServer(
 
     /** Entra con email e password: il token si salva sul telefono e vale finché non si esce. */
     suspend fun accedi(email: String, password: String): Accesso = withContext(Dispatchers.IO) {
-        if (base().isBlank()) throw Rifiutato("Scrivi l'indirizzo del server")
+        if (base().isBlank() && google().isBlank()) throw Rifiutato("Scrivi l'indirizzo del server")
         val corpo = JSONObject().put("azione", "accedi").put("email", email.trim()).put("password", password)
         chiSono().forEach { (k, v) -> corpo.put(k, v) }
-        val r = chiama(post(corpo, conToken = false), clientScrittura)
+        // Senza token la firma di casa non si controlla: se c'è Google, accedi passa da lì (§8.2).
+        val r = verifica(strade.scrivi(corpo, conToken = false))
         val t = r.testo("token").takeIf { it.isNotBlank() } ?: throw Rifiutato("Il server non ha dato l'accesso")
         Accesso(t, Utente.daJson(r.optJSONObject("utente") ?: JSONObject()), Permessi.daJson(r.optJSONObject("permessi")))
     }
@@ -136,7 +157,7 @@ class PonteServer(
      * cruscotto delle commesse e a "restano da fatturare dei mesi prima".
      */
     suspend fun rapportiniTutti(): List<Rapportino> = withContext(Dispatchers.IO) {
-        leggi("rapportini", c = clientLetturaLunga)
+        leggi("rapportini", lunga = true)
             .optJSONArray("rapportini").oggetti()
             .map { Rapportino.daJson(it, dalFoglio = true) }
     }
@@ -341,27 +362,12 @@ class PonteServer(
      * Un file (firme, scontrini, documenti, la firma del compilatore) da
      * `GET /file/<id>`: i byte e il tipo. Qui contano i codici HTTP: 401 accesso
      * scaduto, 403 niente permesso, 404 il file non c'e' (o non e' ancora stato
-     * copiato da Drive).
+     * copiato da Drive). Via Google gli stessi codici arrivano nel campo `stato`;
+     * oltre 25 MB il file si apre solo dall'ufficio ([SoloInUfficio]).
      */
     override suspend fun file(id: String): Pair<ByteArray, String> = withContext(Dispatchers.IO) {
         controllaConfigurazione()
-        val u = (base() + "/file/" + java.net.URLEncoder.encode(id, "UTF-8")).toHttpUrlOrNull()
-            ?: throw Rifiutato("Indirizzo del server non valido")
-        val richiesta = Request.Builder().url(u).get()
-            .header("Authorization", "Bearer " + token())
-            .apply { chiSono()["disp"]?.let { header("X-Wisper-Disp", it) } }
-            .build()
-        clientLetturaLunga.newCall(richiesta).execute().use { r ->
-            when (r.code) {
-                401 -> throw AccessoScaduto()
-                403 -> throw PermessoNegato("Non hai il permesso per vedere questo file")
-                404 -> throw Rifiutato("Il file non c'è")
-            }
-            if (!r.isSuccessful) throw IOException("HTTP ${r.code}")
-            val tipo = (r.header("Content-Type") ?: r.body?.contentType()?.toString())?.substringBefore(';')?.trim()?.ifBlank { null }
-            val byte = r.body?.bytes() ?: throw IOException("risposta vuota")
-            byte to (tipo ?: "application/octet-stream")
-        }
+        strade.file(id, chiSono())
     }
 
     // ------------------------------------------------------------- email
@@ -436,7 +442,7 @@ class PonteServer(
     }
 
     suspend fun controllaPartitaIva(partitaIva: String, nazione: String = "IT"): DatiPartitaIva = withContext(Dispatchers.IO) {
-        val r = leggi("controllaPartitaIva", "partitaIva" to partitaIva.trim(), "nazione" to nazione, c = clientLetturaLunga)
+        val r = leggi("controllaPartitaIva", "partitaIva" to partitaIva.trim(), "nazione" to nazione, lunga = true)
         DatiPartitaIva(
             valida = r.vero("valida"),
             nome = r.testo("nome"),
@@ -591,7 +597,7 @@ class PonteServer(
             if (cosa == "registro" && filtro != null) addAll(parametriRegistro(filtro))
             if (cosa == "rapportini") add("tutti" to "1")
         }
-        val r = leggi("esporta", *parametri.toTypedArray(), c = clientLetturaLunga)
+        val r = leggi("esporta", *parametri.toTypedArray(), lunga = true)
         val byte = try {
             Base64.getMimeDecoder().decode(r.testo("base64"))
         } catch (_: IllegalArgumentException) {
@@ -603,7 +609,8 @@ class PonteServer(
     suspend fun copie(): StatoCopie = withContext(Dispatchers.IO) { StatoCopie.daJson(leggi("copie")) }
 
     suspend fun copiaAdesso(): CopiaSicurezza = withContext(Dispatchers.IO) {
-        val r = chiama(post(JSONObject().put("azione", "copiaAdesso")), clientLetturaLunga.newBuilder().retryOnConnectionFailure(false).build())
+        controllaConfigurazione()
+        val r = verifica(strade.scrivi(conChi(JSONObject().put("azione", "copiaAdesso")), lunga = true))
         CopiaSicurezza.daJson(r.optJSONObject("copia") ?: JSONObject())
     }
 
@@ -966,7 +973,7 @@ class PonteServer(
 
     /** Una lettura della fase 4: GET /exec?azione=... Le risposte grandi (fatture, scadenziario) aspettano di più. */
     override suspend fun leggiAzione(azione: String, parametri: List<Pair<String, String>>): JSONObject = withContext(Dispatchers.IO) {
-        leggi(azione, *parametri.toTypedArray(), c = clientLetturaLunga)
+        leggi(azione, *parametri.toTypedArray(), lunga = true)
     }
 
     /** Una scrittura della fase 4: POST, mai ripetuta da sola. */
@@ -980,96 +987,55 @@ class PonteServer(
     override suspend fun carica(nome: String, mime: String, idFile: String, per: String, dati: ByteArray): JSONObject = withContext(Dispatchers.IO) {
         controllaConfigurazione()
         if (dati.isEmpty()) throw Rifiutato("File vuoto")
-        val u = (base() + "/carica").toHttpUrlOrNull()?.newBuilder()
-            ?.addQueryParameter("nome", nome)?.addQueryParameter("mime", mime)
-            ?.addQueryParameter("idFile", idFile)?.addQueryParameter("per", per)
-            ?.build() ?: throw Rifiutato("Indirizzo del server non valido: controllalo nella schermata di accesso")
-        val r = Request.Builder().url(u)
-            .post(dati.toRequestBody("application/octet-stream".toMediaType()))
-            .header("Authorization", "Bearer " + token())
-            .apply {
-                chiSono()["disp"]?.let { header("X-Wisper-Disp", it) }
-            }
-            .build()
-        chiama(r, clientScrittura.newBuilder().writeTimeout(5, TimeUnit.MINUTES).readTimeout(3, TimeUnit.MINUTES).build())
+        verifica(strade.carica(listOf("nome" to nome, "mime" to mime, "idFile" to idFile, "per" to per), dati, chiSono()))
     }
 
     // ------------------------------------------------------------- interno
 
-    /** L'indirizzo base, senza la barra e senza /exec in fondo. */
-    private fun base(): String = indirizzo().trim().trimEnd('/').removeSuffix("/exec").trimEnd('/')
+    /** L'indirizzo di casa, senza la barra e senza /exec in fondo. */
+    private fun base(): String = Strade.base(indirizzo())
 
-    private fun leggi(azione: String, vararg parametri: Pair<String, String>, c: OkHttpClient = client): JSONObject {
+    /** GET /exec?azione=...: [lunga] per le risposte grandi (tutti i rapportini, le esportazioni). */
+    private fun leggi(azione: String, vararg parametri: Pair<String, String>, lunga: Boolean = false): JSONObject {
         controllaConfigurazione()
-        val u = (base() + "/exec").toHttpUrlOrNull()?.newBuilder()
-            ?.addQueryParameter("azione", azione)
-            ?.apply { chiSono().forEach { (k, v) -> addQueryParameter(k, v) } }
-            ?.apply { parametri.forEach { (k, v) -> addQueryParameter(k, v) } }
-            ?.build()
-            ?: throw Rifiutato("Indirizzo del server non valido: controllalo nella schermata di accesso")
-        return chiama(Request.Builder().url(u).get().header("Authorization", "Bearer " + token()).build(), c)
+        val p = buildList {
+            add("azione" to azione)
+            addAll(chiSono().toList())
+            addAll(parametri)
+        }
+        return verifica(strade.leggi(p, lunga))
     }
 
     private fun scrivi(corpo: JSONObject): JSONObject {
         controllaConfigurazione()
-        return chiama(post(corpo), clientScrittura)
+        return verifica(strade.scrivi(conChi(corpo)))
     }
 
-    private fun post(corpo: JSONObject, conToken: Boolean = true): Request {
+    /** Chi chiama nel corpo delle scritture (se non c'è già). */
+    private fun conChi(corpo: JSONObject): JSONObject {
         chiSono().forEach { (k, v) -> if (!corpo.has(k)) corpo.put(k, v) }
-        val u = (base() + "/exec").toHttpUrlOrNull() ?: throw Rifiutato("Indirizzo del server non valido: controllalo nella schermata di accesso")
-        return Request.Builder()
-            .url(u)
-            // text/plain di proposito, come con lo script: il server legge comunque il corpo grezzo.
-            .post(corpo.toString().toRequestBody("text/plain;charset=utf-8".toMediaType()))
-            .apply { if (conToken) header("Authorization", "Bearer " + token()) }
-            .build()
-    }
-
-    /**
-     * Per le scritture si aspetta di piu', e una scrittura non si ripete MAI da
-     * sola, neanche quando OkHttp crede che la connessione sia caduta prima della
-     * risposta: l'email riprovata sono due email. Riprova la coda (che lo sa fare
-     * senza doppioni) o chi usa l'app.
-     */
-    private val clientScrittura: OkHttpClient by lazy {
-        client.newBuilder().readTimeout(90, TimeUnit.SECONDS).writeTimeout(60, TimeUnit.SECONDS)
-            .retryOnConnectionFailure(false)
-            .build()
-    }
-
-    /** Tutti i rapportini, un file, un'esportazione: risposte grandi, si aspetta come per le scritture. */
-    private val clientLetturaLunga: OkHttpClient by lazy {
-        client.newBuilder().readTimeout(90, TimeUnit.SECONDS).build()
+        return corpo
     }
 
     /** Senza indirizzo o senza token non si parte: non è un no del server, si aspetta l'accesso. */
     private fun controllaConfigurazione() {
-        if (base().isBlank()) throw AccessoScaduto("Manca l'indirizzo del server: entra di nuovo")
+        if (base().isBlank() && google().isBlank()) throw AccessoScaduto("Manca l'indirizzo del server: entra di nuovo")
         if (token().isBlank()) throw AccessoScaduto("Entra in Wisper per continuare")
     }
 
-    private fun chiama(richiesta: Request, c: OkHttpClient): JSONObject {
-        c.newCall(richiesta).execute().use { r ->
-            val testo = r.body?.string().orEmpty()
-            if (!r.isSuccessful) throw IOException("HTTP ${r.code}")
-            val json = try {
-                JSONObject(testo)
-            } catch (_: Exception) {
-                throw Rifiutato("Risposta non valida dal server: controlla l'indirizzo")
+    /** La risposta del server, da una strada o dall'altra: ok, o l'errore giusto per la coda. */
+    private fun verifica(json: JSONObject): JSONObject {
+        if (!json.optBoolean("ok")) {
+            val errore = json.optString("errore").ifBlank { "Errore sconosciuto" }
+            when {
+                json.has("accesso") && !json.optBoolean("accesso", true) -> throw AccessoScaduto(errore)
+                json.has("permesso") && !json.optBoolean("permesso", true) -> throw PermessoNegato(errore)
+                json.optBoolean("rete", false) -> throw ServizioNonRaggiunto(errore, json.optString("porta"))
+                json.optBoolean("serveConferma", false) -> throw DaConfermare(errore, json)
+                else -> throw Rifiutato(errore)
             }
-            if (!json.optBoolean("ok")) {
-                val errore = json.optString("errore").ifBlank { "Errore sconosciuto" }
-                when {
-                    json.has("accesso") && !json.optBoolean("accesso", true) -> throw AccessoScaduto(errore)
-                    json.has("permesso") && !json.optBoolean("permesso", true) -> throw PermessoNegato(errore)
-                    json.optBoolean("rete", false) -> throw ServizioNonRaggiunto(errore)
-                    json.optBoolean("serveConferma", false) -> throw DaConfermare(errore, json)
-                    else -> throw Rifiutato(errore)
-                }
-            }
-            return json
         }
+        return json
     }
 
     companion object {

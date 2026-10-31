@@ -132,8 +132,9 @@ async function main() {
     await entra('manuel@esempio.it');
     let testo = await testoPagina();
     assert.match(testo, /ticket aperti/, 'la Dashboard ha i riquadri dei ticket');
+    // Dalla fase 6 fra Banche e scadenze e Documenti c'è Persone e risorse umane (l'ordine delle specifiche).
     const menu = await valuta("[...document.querySelectorAll('#voci .voce')].map(v => v.dataset.nome)");
-    assert.ok(menu.indexOf('Documenti') === menu.indexOf('Banche e scadenze') + 1 && menu.indexOf('Ticket e assistenza') === menu.indexOf('Documenti') + 1, 'menu nell\'ordine delle specifiche: ' + menu.join(', '));
+    assert.ok(menu.indexOf('Documenti') > menu.indexOf('Banche e scadenze') && menu.indexOf('Ticket e assistenza') === menu.indexOf('Documenti') + 1, 'menu nell\'ordine delle specifiche: ' + menu.join(', '));
     passo('Dashboard coi riquadri dei ticket; menu: Banche e scadenze, Documenti, Ticket e assistenza');
 
     await vai('#ticket');
@@ -376,7 +377,8 @@ async function main() {
 
     // ------------------------------------------------------------- 10. scadenza segnata fatta
     let sc = await server('scadenze');
-    const scaduta = (sc.scadute || [])[0];
+    // Una che si ripete (dalla fase 6 ci sono anche le tarature e i DPI scaduti, che si chiudono in un altro modo).
+    const scaduta = (sc.scadute || []).find(x => x.ogniMesi) || (sc.scadute || [])[0];
     assert.ok(scaduta, 'c\'è una scadenza scaduta');
     await vai('#documenti/scadenze');
     await clicca(scaduta.titolo, '#principale', 900);
@@ -394,7 +396,7 @@ async function main() {
     await vai('#ticket');
     testo = await testoPagina();
     assert.ok(testo.indexOf(nuovo.numero) < 0, 'Marco non vede il ticket di Manuel');
-    const suo = (await server('tickets')).ticket.find(t => t.responsabile === 'Marco Collaboratore');
+    const suo = (await server('tickets')).ticket.find(t => t.responsabile === 'Marco Rossato');
     assert.ok(suo, 'Marco ha un suo ticket');
     await vai('#ticket/tk/' + suo.id);
     await clicca('Altre azioni', '.pannello-ticket', 400);

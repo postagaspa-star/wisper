@@ -59,5 +59,26 @@
         {"idUtente": 1, "totale": 11.4, "inAttesa": 0, "spese": 2, "trasferte": 0, "km": 0},
         {"idUtente": 3, "totale": 77.46, "inAttesa": 153.3, "spese": 1, "trasferte": 1, "km": 96}
       ]}
+  ],
+  "notaCostoOrario": "Fase 6 (fase6.md §3.3, architettura.md §17): il costo orario che si congela in una riga di ore o in un rapportino che nasce (server/src/conti.js: costoOrarioDelLavoro). 1. un esterno (o le ore senza utente di un collaboratore esterno) -> 0; 2. la persona ha un costo valido alla data del lavoro (la riga con dal piu' recente <= data) -> quello; 3. altrimenti la regola di oggi: costo fisso del cliente -> costo orario della commessa -> COSTO_ORARIO. Il budget e il costo previsto della commessa restano costoOrarioDi (cliente -> commessa -> impostazioni). Le righe gia' scritte non si ricalcolano.",
+  "costoOrario": [
+    {"nome": "Marco col suo costo dal 1 gennaio", "esterno": false, "costiPersona": [{"dal": "2026-01-01", "costoOrario": 28.5}], "data": "2026-10-16",
+     "cliente": {"costoFisso": null}, "commessa": {"costoOrario": null}, "impostazioni": {"COSTO_ORARIO": 22}, "atteso": 28.5},
+    {"nome": "la persona prima del costo fisso del cliente", "esterno": false, "costiPersona": [{"dal": "2026-01-01", "costoOrario": 28.5}], "data": "2026-10-16",
+     "cliente": {"costoFisso": 18}, "commessa": {"costoOrario": 25}, "impostazioni": {"COSTO_ORARIO": 22}, "atteso": 28.5},
+    {"nome": "un giorno prima del suo costo: la regola di oggi (commessa)", "esterno": false, "costiPersona": [{"dal": "2026-01-01", "costoOrario": 28.5}], "data": "2025-12-15",
+     "cliente": {"costoFisso": null}, "commessa": {"costoOrario": 25}, "impostazioni": {"COSTO_ORARIO": 22}, "atteso": 25},
+    {"nome": "due costi: vale quello del giorno del lavoro", "esterno": false, "costiPersona": [{"dal": "2026-11-01", "costoOrario": 30}, {"dal": "2026-01-01", "costoOrario": 28.5}], "data": "2026-10-31",
+     "cliente": {"costoFisso": null}, "commessa": {"costoOrario": null}, "impostazioni": {"COSTO_ORARIO": 22}, "atteso": 28.5},
+    {"nome": "due costi: dal 1 novembre il nuovo", "esterno": false, "costiPersona": [{"dal": "2026-11-01", "costoOrario": 30}, {"dal": "2026-01-01", "costoOrario": 28.5}], "data": "2026-11-02",
+     "cliente": {"costoFisso": null}, "commessa": {"costoOrario": null}, "impostazioni": {"COSTO_ORARIO": 22}, "atteso": 30},
+    {"nome": "Manuel senza costo, cliente col costo fisso", "esterno": false, "costiPersona": [], "data": "2026-10-16",
+     "cliente": {"costoFisso": 18}, "commessa": {"costoOrario": 25}, "impostazioni": {"COSTO_ORARIO": 22}, "atteso": 18},
+    {"nome": "Manuel senza costo: la commessa", "esterno": false, "costiPersona": [], "data": "2026-10-16",
+     "cliente": {"costoFisso": null}, "commessa": {"costoOrario": 25}, "impostazioni": {"COSTO_ORARIO": 22}, "atteso": 25},
+    {"nome": "Manuel senza costo: le impostazioni", "esterno": false, "costiPersona": [], "data": "2026-10-16",
+     "cliente": {"costoFisso": null}, "commessa": {"costoOrario": null}, "impostazioni": {"COSTO_ORARIO": 22}, "atteso": 22},
+    {"nome": "un esterno: 0, anche col costo fisso del cliente", "esterno": true, "costiPersona": [], "data": "2026-10-16",
+     "cliente": {"costoFisso": 18}, "commessa": {"costoOrario": 25}, "impostazioni": {"COSTO_ORARIO": 22}, "atteso": 0}
   ]
 }

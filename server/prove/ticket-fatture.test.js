@@ -8,7 +8,11 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { serverDiProva, PNG } = require('./aiuto');
+const { serverDiProva, PNG, giornoDeiPrototipi } = require('./aiuto');
+// I ticket di ottobre e i contratti del 2026 hanno date fisse (la storia del prototipo): queste prove le guardano dal
+// giorno del prototipo, giovedi' 22/10/2026, qualunque giorno sia (anche con WISPER_OGGI_PROVA). Le altre prove
+// girano sul giorno vero.
+giornoDeiPrototipi();
 const { oggi } = require('../src/utili');
 
 let s;

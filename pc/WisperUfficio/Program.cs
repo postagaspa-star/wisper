@@ -11,7 +11,10 @@ namespace WisperUfficio;
 ///
 /// Opzioni, solo per le prove:
 ///   --dati CARTELLA            configurazione e copie in un'altra cartella
-///   --server URL               un altro server (es. http://localhost:8400) senza salvarlo
+///   --server URL               un altro server di casa (es. http://localhost:8400) senza salvarlo;
+///                              da solo = il server di prova diretto, senza porta Google
+///   --google URL               un'altra porta Google (il finto Google: http://127.0.0.1:8766/exec)
+///                              senza salvarla; da sola = solo Google (fuori casa)
 ///   --stampa-prova HTML PDF    stampa un documento col motore del programma ed esce
 ///                              (per capire, su un computer nuovo, se i PDF escono)
 ///   --aggiornamenti URL        un altro aggiornamento.json (le prove degli aggiornamenti)
@@ -20,7 +23,8 @@ namespace WisperUfficio;
 ///                              (le prove dell'installazione), senza toccare il registro
 /// Quelle per sé: --attendi PID (il riavvio dopo un aggiornamento aspetta che il
 /// programma vecchio si chiuda), --appena-installato (la prima apertura dopo
-/// l'installazione lo dice nella pagina), --disinstalla (da App installate).
+/// l'installazione lo dice nella pagina), --disinstalla (da App installate). E il percorso
+/// di un file .wisper (il doppio clic sul file dell'email): si collega e si apre.
 /// </summary>
 internal static class Program
 {
@@ -30,6 +34,8 @@ internal static class Program
         var appData = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "WisperUfficio");
         var locale = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "WisperUfficio");
         string? serverDiProva = null;
+        string? googleDiProva = null;
+        string? fileCollegamento = null;
         (string Html, string Pdf)? stampaProva = null;
         var indirizzoAggiornamenti = Aggiornamenti.IndirizzoPredefinito;
         int? attendi = null;
@@ -47,14 +53,19 @@ internal static class Program
             if (args[i] == "--attendi" && i + 1 < args.Length) { attendi = int.TryParse(args[++i], out var pid) ? pid : null; continue; }
             if (args[i] == "--appena-installato") { appenaInstallato = true; continue; }
             if (args[i] == "--disinstalla") { disinstalla = true; continue; }
-            // Il file "Collega Wisper Ufficio.wisper" della 0.4 non serve più (si entra con email e password):
-            // aperto col doppio clic dall'associazione vecchia, il programma si apre e basta.
-            if (args[i].EndsWith(".wisper", StringComparison.OrdinalIgnoreCase)) continue;
+            // Il doppio clic sul file dell'email ("Collega Wisper Ufficio.wisper"): dentro c'è la strada da
+            // fuori casa (la porta Google). Si usa e il file non si ripete al riavvio.
+            if (args[i].EndsWith(FileCollegamento.Estensione, StringComparison.OrdinalIgnoreCase))
+            {
+                if (File.Exists(args[i])) fileCollegamento = args[i];
+                continue;
+            }
             var prima = i;
             if (args[i] == "--no-installa") noInstalla = true;
             else if (args[i] == "--installa-in" && i + 1 < args.Length) installaIn = Path.GetFullPath(args[++i]);
             else if (args[i] == "--dati" && i + 1 < args.Length) appData = locale = Path.GetFullPath(args[++i]);
             else if (args[i] == "--server" && i + 1 < args.Length) serverDiProva = args[++i];
+            else if (args[i] == "--google" && i + 1 < args.Length) googleDiProva = args[++i];
             else if (args[i] == "--stampa-prova" && i + 2 < args.Length) stampaProva = (Path.GetFullPath(args[++i]), Path.GetFullPath(args[++i]));
             else if (args[i] == "--aggiornamenti" && i + 1 < args.Length) indirizzoAggiornamenti = args[++i];
             // Al riavvio dopo un aggiornamento si riparte con le stesse opzioni.
@@ -90,6 +101,20 @@ internal static class Program
             catch (ArgumentException) { /* già chiuso */ }
         }
 
+        // Il file dell'email si usa subito, prima di guardare se il programma è già aperto:
+        // se lo è, si accorge da solo degli indirizzi nuovi (Configurazione.RileggiSeCambiato).
+        var collegatoDaFile = false;
+        if (fileCollegamento != null)
+        {
+            var errore = FileCollegamento.Importa(fileCollegamento, new Configurazione(Path.Combine(appData, "configurazione.json")));
+            if (errore != null)
+            {
+                MessageBox.Show(errore, "Wisper Ufficio", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+            collegatoDaFile = true;
+        }
+
         // Un Wisper Ufficio alla volta per cartella di dati: due finestre con la stessa
         // chiave d'accesso si pesterebbero i piedi (una esce, l'altra no).
         // (string.GetHashCode cambia a ogni avvio in .NET: serve un'impronta stabile.)
@@ -104,7 +129,9 @@ internal static class Program
         }
         if (!primo)
         {
-            MessageBox.Show("Wisper Ufficio è già aperto.", "Wisper Ufficio", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            MessageBox.Show(collegatoDaFile
+                ? "Wisper Ufficio adesso sa come arrivare al server anche da fuori casa. Torna alla sua finestra."
+                : "Wisper Ufficio è già aperto.", "Wisper Ufficio", MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
 
@@ -117,13 +144,14 @@ internal static class Program
         Application.ThreadException += (_, e) => Log.Errore("eccezione non gestita", e.Exception);
 
         var config = new Configurazione(Path.Combine(appData, "configurazione.json"));
-        if (serverDiProva != null) config.ServerDiProva(serverDiProva);
+        if (serverDiProva != null || googleDiProva != null) config.IndirizziDiProva(serverDiProva, googleDiProva);
         var server = new Server(config);
         var documenti = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "Wisper");
         var ponte = new Ponte(config, server, Path.Combine(locale, "file"), documenti);
         var cartellaUi = Path.Combine(AppContext.BaseDirectory, "ui");
 
         ponte.AppenaInstallato = appenaInstallato;
+        ponte.AppenaCollegato = collegatoDaFile;
         var aggiornamenti = new Aggiornamenti(indirizzoAggiornamenti, unFileSolo && stampaProva == null ? Environment.ProcessPath : null);
         ponte.Aggiornamenti = aggiornamenti;
         ponte.ArgomentiDiAvvio = daRipetere;

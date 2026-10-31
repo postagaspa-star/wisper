@@ -7,7 +7,11 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { serverDiProva, PNG } = require('./aiuto');
+const { serverDiProva, PNG, giornoDeiPrototipi } = require('./aiuto');
+// I ticket chiusi di ottobre, la manutenzione del 20/11 e il contratto CA/2026/002 (fino al 31/12/2026) hanno date
+// fisse (la storia del prototipo): queste prove le guardano dal giorno del prototipo, giovedi' 22/10/2026, qualunque
+// giorno sia (anche con WISPER_OGGI_PROVA). Le altre prove girano sul giorno vero.
+giornoDeiPrototipi();
 const C = require('../src/conti');
 const { istante, dataOraIso, oggi, piuGiorni } = require('../src/utili');
 const CASI = require('./casi-ticket.json');
@@ -129,8 +133,8 @@ test('passaggi: apri, prendi, attesa, riprendi, assegna, risolvi, riapri; i rifi
   const nessuno = ok(await manuel('assegnaTicket', { id: nuovo.id, responsabileId: null })).ticket;
   assert.deepEqual([nessuno.stato, nessuno.responsabileId, nessuno.presoIl], ['aperto', null, preso.presoIl], 'preso_il resta');
   const aMarco = ok(await manuel('assegnaTicket', { id: nuovo.id, responsabileId: MARCO })).ticket;
-  assert.deepEqual([aMarco.stato, aMarco.responsabile], ['in_carico', 'Marco Collaboratore']);
-  assert.ok(aMarco.cronologia.some(e => e.testo === 'Assegnato a Marco Collaboratore'));
+  assert.deepEqual([aMarco.stato, aMarco.responsabile], ['in_carico', 'Marco Rossato']);
+  assert.ok(aMarco.cronologia.some(e => e.testo === 'Assegnato a Marco Rossato'));
   const risolto = ok(await marco('risolviTicket', { id: nuovo.id, esito: 'Rifatto il collegamento' })).ticket;
   assert.deepEqual([risolto.stato, risolto.esito], ['risolto', 'Rifatto il collegamento']);
   assert.ok(risolto.risoltoIl && risolto.interventoIl, 'la risoluzione conta come intervento se non ce n\'era');
@@ -186,7 +190,7 @@ test('pianifica: un\'attività "intervento" del calendario, con le sovrapposizio
   assert.equal(r.attivita.luogo, 'Via dell\'Artigianato 9, 36010 Zanè (VI)', 'l\'indirizzo dell\'impianto');
   assert.equal(r.ticket.stato, 'in_carico');
   assert.equal(r.ticket.prossimoIntervento.id, r.attivita.id);
-  assert.match(r.ticket.cronologia.pop().testo, /^Intervento pianificato per \S+ \d+ alle 15:00 \(Marco Collaboratore\)$/);
+  assert.match(r.ticket.cronologia.pop().testo, /^Intervento pianificato per \S+ \d+ alle 15:00 \(Marco Rossato\)$/);
   assert.ok(ok(await manuel('attivita', { ticket: t.id })).attivita.some(a => a.id === r.attivita.id), 'filtro ticket');
   assert.equal(ok(await manuel('ticket', { id: t.id })).ticket.giallo, 'rapportino', 'con l\'intervento di oggi: scrivi il rapportino');
   // Segnare fatto l'intervento fissa il momento del primo intervento.

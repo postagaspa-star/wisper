@@ -329,10 +329,13 @@ public sealed class Finestra : Form, Ponte.IFinestra
         {
             using var finestra = new OpenFileDialog
             {
-                Title = filtro == "immagini" ? "Scegli una foto" : "Scegli il documento",
+                Title = filtro == "immagini" ? "Scegli una foto" : filtro == "collegamento" ? "Scegli il file dell'email" : "Scegli il documento",
                 Filter = filtro == "immagini"
                     ? "Foto (*.png;*.jpg;*.jpeg;*.heic;*.webp)|*.png;*.jpg;*.jpeg;*.heic;*.webp|Tutti i file|*.*"
+                    // Il file "Collega Wisper Ufficio.wisper" che il telefono fa mandare per email.
+                    : filtro == "collegamento" ? "Collegamento a Wisper (*.wisper)|*.wisper|Tutti i file|*.*"
                     : "Documenti|*.pdf;*.png;*.jpg;*.jpeg;*.doc;*.docx;*.xls;*.xlsx;*.dwg;*.dxf;*.zip;*.txt;*.csv;*.p7m|Tutti i file|*.*",
+                InitialDirectory = filtro == "collegamento" ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads") : "",
                 Multiselect = false,
             };
             scelto = finestra.ShowDialog(this) == DialogResult.OK ? finestra.FileName : null;

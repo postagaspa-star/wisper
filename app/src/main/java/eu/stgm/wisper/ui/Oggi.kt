@@ -19,6 +19,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -100,7 +104,20 @@ fun IlTuoGiorno(
     val oggi = LocalDate.now()
     val diOggi = viste.filter { it.rapportino.data == oggi }
     val ieri = Riepiloghi.ultimo(viste, oggi)
-    val settimana = Riepiloghi.settimana(viste, oggi)
+    // Fase 6 (§6.5): ferie, festa e chiusure non sono giorni che mancano (anche senza rete: le copie lette per ultime).
+    val sessione by dati.sessione.collectAsStateWithLifecycle()
+    val ana by dati.anagrafiche.collectAsStateWithLifecycle()
+    var assenze by remember { mutableStateOf(dati.fase6.assenzeLette()) }
+    var chiusure by remember { mutableStateOf(dati.fase6.chiusureLette()) }
+    if (LocalPermessi.current.vede(eu.stgm.wisper.rapportino.Moduli.PERSONE) && !dati.esempio) LaunchedEffect(Unit) {
+        dati.fase6.assenze().onSuccess { assenze = it.assenze }
+        dati.fase6.chiusure().onSuccess { chiusure = it }
+    }
+    val lunedi = oggi.with(java.time.DayOfWeek.MONDAY)
+    val liberi = remember(assenze, chiusure, sessione.idPersona, ana) {
+        dati.fase6.giorniLiberi(lunedi, lunedi.plusDays(6), sessione.idPersona, ana.impostazione("FESTA_PATRONO"), assenze, chiusure)
+    }
+    val settimana = Riepiloghi.settimana(viste, oggi, liberi)
     val daFirmare = Riepiloghi.daFirmare(viste)
     val delMese = viste.filter { YearMonth.from(it.rapportino.data) == YearMonth.from(oggi) }
 
@@ -258,7 +275,7 @@ private fun GiornoSettimana(g: Riepiloghi.Giorno, modifier: Modifier, onNuovo: (
     val toccabile = when (g.tipo) {
         TipoGiorno.MANCA, TipoGiorno.OGGI -> Modifier.clickable { onNuovo(g.data) }
         TipoGiorno.FATTO, TipoGiorno.OGGI_FATTO -> Modifier.clickable(onClick = onMese)
-        TipoGiorno.FUTURO -> Modifier
+        TipoGiorno.FUTURO, TipoGiorno.LIBERO -> Modifier
     }
     Column(
         modifier.clip(RoundedCornerShape(12.dp)).then(toccabile).padding(vertical = 2.dp)
@@ -281,6 +298,9 @@ private fun GiornoSettimana(g: Riepiloghi.Giorno, modifier: Modifier, onNuovo: (
                 Box(Modifier.size(10.dp).clip(CircleShape).background(c.suGiallo))
             }
             TipoGiorno.FUTURO -> Box(Modifier.size(44.dp).clip(CircleShape).background(c.superficie2))
+            TipoGiorno.LIBERO -> Box(Modifier.size(44.dp).clip(CircleShape).background(c.superficie2), contentAlignment = Alignment.Center) {
+                Icon(if (g.parola == "ferie" || g.parola == "assente") Icone.valigia else Icone.calendario, null, tint = c.tenue, modifier = Modifier.size(18.dp))
+            }
         }
         Text(
             when (g.tipo) {
@@ -288,6 +308,7 @@ private fun GiornoSettimana(g: Riepiloghi.Giorno, modifier: Modifier, onNuovo: (
                 TipoGiorno.MANCA -> "manca"
                 TipoGiorno.OGGI -> "oggi"
                 TipoGiorno.FUTURO -> " "
+                TipoGiorno.LIBERO -> g.parola
             },
             style = Testi.piccolo.copy(fontWeight = if (g.tipo == TipoGiorno.MANCA || g.tipo == TipoGiorno.OGGI) FontWeight.Bold else FontWeight.SemiBold),
             color = when (g.tipo) { TipoGiorno.MANCA -> c.gialloTesto; TipoGiorno.OGGI -> c.testo; else -> c.tenue },
