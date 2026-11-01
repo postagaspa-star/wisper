@@ -27,7 +27,7 @@
 'use strict';
 
 const { Rifiuto } = require('./utili');
-const { leggiZip } = require('../strumenti/xlsx');
+const { leggiZip } = require('./zip');
 
 const MB = 1024 * 1024;
 

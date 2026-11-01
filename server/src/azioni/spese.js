@@ -179,6 +179,8 @@ module.exports = {
     // Le spese di un rapportino annullato non contano (tornano col ripristino).
     else cond.push("(x.rapportino_id IS NULL OR NOT EXISTS (SELECT 1 FROM rapportini r WHERE r.id = x.rapportino_id AND UPPER(r.stato) = 'ANNULLATO'))");
     if (testo(d.idTrasferta)) { cond.push('x.trasferta_id = ?'); par.push(Number(d.idTrasferta)); }
+    // Fase 8 (prova di carico): i rimborsi guardano solo le spese pagate di tasca propria (le altre le scartava dopo).
+    if (d.pagateDaMe === true) cond.push('x.pagata_da_me = 1');
     const dest = testo(d.destinazione);
     if (dest) {
       if (DESTINAZIONI.indexOf(dest) < 0) throw new Rifiuto('A chi va: cliente, studio o personale');
@@ -725,7 +727,7 @@ module.exports = {
     const filtro = { utente: this.filtroUtente(d) === null ? undefined : this.filtroUtente(d) };
     // Fase 6: le spese pagate da un esterno non si rimborsano (vanno nel maturato del suo incarico, o nella sua fattura).
     const esterni = new Set(this.db.righe("SELECT id FROM utenti WHERE ruolo = 'esterno'").map(u => u.id));
-    const sp = this.righeSpese(Object.assign({}, filtro), false).righe.filter(s => s.pagata_da_me === 1 && !esterni.has(s.utente_id));
+    const sp = this.righeSpese(Object.assign({ pagateDaMe: true }, filtro), false).righe.filter(s => s.pagata_da_me === 1 && !esterni.has(s.utente_id));
     const tr = this.righeTrasferte(Object.assign({}, filtro), false).righe.filter(t => !esterni.has(t.utente_id));
     const as = this.aiutiSpese(sp);
     const at = this.aiutiTrasferte(tr);

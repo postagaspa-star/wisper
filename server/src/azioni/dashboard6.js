@@ -213,8 +213,9 @@ module.exports = {
         const mese = piuGiorni(adesso, -31);
         for (const p of attive.filter(x => x.utente_id && x.rapporto !== 'titolare')) {
           if (this.costoDiOggi(p.id)) continue;
-          const usa = this.db.riga("SELECT 1 x FROM ore WHERE utente_id = ? AND tolta IS NULL AND data >= ? UNION SELECT 1 FROM rapportini WHERE utente_id = ? AND UPPER(stato) <> 'ANNULLATO' AND data >= ? LIMIT 1",
-            p.utente_id, mese, p.utente_id, mese);
+          // Fase 8 (prova di carico): due letture da una riga invece della UNION, che le contava tutte prima del LIMIT.
+          const usa = this.db.riga('SELECT 1 x FROM ore WHERE utente_id = ? AND tolta IS NULL AND data >= ? LIMIT 1', p.utente_id, mese)
+            || this.db.riga("SELECT 1 x FROM rapportini WHERE utente_id = ? AND UPPER(stato) <> 'ANNULLATO' AND data >= ? LIMIT 1", p.utente_id, mese);
           if (!usa) continue;
           voce(pianificare, { tipo: 'persona', gravita: 'info', titolo: p.nome + ' non ha il costo orario: le sue ore usano il costo dello studio',
             dettaglio: 'Persone › Costi', collegamento: { pagina: 'persone', filtro: { segmento: 'costi' } } });
@@ -356,14 +357,15 @@ module.exports = {
       // DURC o documento scaduto di chi ha un incarico affidato.
       for (const s of scadColl.filter(x => x.data < adesso && conAffidato.has(x.cliente_id))) {
         const i = affidati.find(x => x.soggetto_id === s.cliente_id);
+        // Fase 8 (§8.1): "DURC scaduto" e "idoneita' non in regola" dello stesso collaboratore sono una cosa sola (oggetto).
         voce(urgenti, { tipo: 'collaboratore', gravita: 'urgente', titolo: s.titolo + ' ' + scaduto(s.titolo) + ' il ' + dataBreve(s.data), dettaglio: 'Incarico ' + i.numero + ' in corso',
-          collegamento: { pagina: 'collaboratore', id: s.cliente_id } });
+          collegamento: { pagina: 'collaboratore', id: s.cliente_id }, oggetto: 'idoneita:' + s.cliente_id });
         gia.add(s.id);
       }
       // Idoneita' non in regola (manca un documento) con un incarico affidato.
       for (const c of coll.filter(x => conAffidato.has(x.soggetto_id) && idon[x.soggetto_id].stato === 'manca')) {
         voce(pianificare, { tipo: 'collaboratore', gravita: 'info', titolo: nomi[c.soggetto_id] + ': ' + idon[c.soggetto_id].frase.charAt(0).toLowerCase() + idon[c.soggetto_id].frase.slice(1),
-          dettaglio: 'Ha un incarico in corso', collegamento: { pagina: 'collaboratore', id: c.soggetto_id } });
+          dettaglio: 'Ha un incarico in corso', collegamento: { pagina: 'collaboratore', id: c.soggetto_id }, oggetto: 'idoneita:' + c.soggetto_id });
       }
       // Incarichi conclusi da valutare.
       for (const i of incarichi.filter(x => x.stato === 'concluso' && !x.valutazione).slice(0, 5)) {

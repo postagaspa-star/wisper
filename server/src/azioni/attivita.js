@@ -161,13 +161,19 @@ module.exports = {
   /** Nomi, checklist, allegati e serie che servono per mandare un elenco di attivita'. */
   aiutiAttivita(ids) {
     const lista = ids && ids.length ? ' IN (' + ids.map(Number).join(',') + ')' : null;
-    const a = { utenti: {}, clienti: {}, commesse: {}, checklist: {}, allegati: {}, ricorrenze: {}, mie: this.mieCommesse() };
-    this.db.righe('SELECT id, nome FROM utenti').forEach(u => { a.utenti[u.id] = u.nome; });
-    this.db.righe('SELECT id, nome FROM soggetti').forEach(s => { a.clienti[s.id] = s.nome; });
-    this.db.righe('SELECT id, descrizione FROM commesse').forEach(m => { a.commesse[String(m.id).toUpperCase()] = m.descrizione; });
-    this.db.righe('SELECT * FROM ricorrenze').forEach(r => { a.ricorrenze[r.id] = r; });
-    a.ticket = {};
-    this.db.righe('SELECT id, numero FROM ticket').forEach(t => { a.ticket[t.id] = t.numero; });
+    // Fase 8 (prova di carico): le mappe dei nomi una volta sola dentro un'esportazione o una Dashboard (ricordata).
+    const n = this.ricordata('aiutiAttivita', () => {
+      const x = { utenti: {}, clienti: {}, commesse: {}, ricorrenze: {}, ticket: {} };
+      this.db.righe('SELECT id, nome FROM utenti').forEach(u => { x.utenti[u.id] = u.nome; });
+      this.db.righe('SELECT id, nome FROM soggetti').forEach(s => { x.clienti[s.id] = s.nome; });
+      this.db.righe('SELECT id, descrizione FROM commesse').forEach(m => { x.commesse[String(m.id).toUpperCase()] = m.descrizione; });
+      this.db.righe('SELECT * FROM ricorrenze').forEach(r => { x.ricorrenze[r.id] = r; });
+      this.db.righe('SELECT id, numero FROM ticket').forEach(t => { x.ticket[t.id] = t.numero; });
+      return x;
+    });
+    const a = { utenti: n.utenti, clienti: n.clienti, commesse: n.commesse, checklist: {}, allegati: {}, ricorrenze: n.ricorrenze,
+      mie: this.ricordata('mieCommesse:' + ((this.chi().utente || {}).id || ''), () => this.mieCommesse()) };
+    a.ticket = n.ticket;
     if (!lista) return a;
     for (const c of this.db.righe('SELECT * FROM attivita_checklist WHERE attivita_id' + lista + ' ORDER BY ordine, id')) {
       (a.checklist[c.attivita_id] = a.checklist[c.attivita_id] || []).push({ id: c.id, testo: c.testo, fatta: c.fatta === 1, ordine: c.ordine });

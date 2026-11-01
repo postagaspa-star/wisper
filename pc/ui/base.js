@@ -137,6 +137,13 @@
     globo: '<path d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',
     whatsapp: '<path d="M20 11.5a8.5 8.5 0 0 1-12.6 7.4L3.5 20l1.1-3.8A8.5 8.5 0 1 1 20 11.5zM9 8.5c0 3.5 3 6.5 6.5 6.5l1-1.6-2-1-1 1a4.6 4.6 0 0 1-2.4-2.4l1-1-1-2z"/>',
     invia: '<path d="M4 12l16-8-6 16-2.5-6.5z"/>',
+    // fase 8: integrazioni e amministrazione completa (dal prototipo Gestionale-fase8.html)
+    spina: '<path d="M9 2v6M15 2v6M6 8h12v3a6 6 0 0 1-12 0zM12 17v5"/>',
+    nuvola: '<path d="M7 18a4 4 0 0 1-.5-8A6 6 0 0 1 18 9a4.5 4.5 0 0 1-.5 9zM12 10v5M9.5 12.5 12 15l2.5-2.5"/>',
+    server: '<path d="M4 4h16v6H4zM4 14h16v6H4zM8 7h.01M8 17h.01"/>',
+    immagine: '<path d="M4 5h16v14H4zM4 16l5-5 4 4 3-3 4 4M15 9h.01"/>',
+    interruttore: '<path d="M7 7h10a5 5 0 0 1 0 10H7A5 5 0 0 1 7 7zM16 12h.01"/>',
+    pennello: '<path d="M4 20c3 0 4-2 4-4l9-9-3-3-9 9c-2 0-4 1-4 4M14 4l3 3"/>',
   };
 
   function icona(nome, dim, spessore) {

@@ -127,6 +127,11 @@ fun SchermataDocumento(dati: Dati, nav: Navigatore, id: String) {
                 Scheda(orizzontale = 16.dp, verticale = 14.dp) {
                     RigaVoce(d.nomeFile.ifBlank { d.titolo }, sotto = listOf(d.mime.substringAfter('/').uppercase().take(5), peso(d.byte)).filter { it.isNotBlank() }.joinToString(" · "),
                         icona = iconaDocumento(d), freccia = false, onClick = if (d.idFile.isNotBlank()) ({ apri(d.idFile, d.nomeDaScaricare, d.mime) }) else null)
+                    // Fase 8 (fase8.md §6.3): una riga calma su come è stato letto il file per la ricerca dentro i file.
+                    if (d.idFile.isNotBlank()) {
+                        val lettura = rememberLettura("lettura-${d.idFile}", 0) { dati.fase8.letturaFile(d.idFile) }
+                        (lettura as? Lettura.Pronta)?.dato?.frase?.takeIf { it.isNotBlank() }?.let { Text(it, style = Testi.secondario, color = c.tenue) }
+                    }
                 }
                 if (d.versioni.isNotEmpty()) Sezione5("Revisioni", d.versioni.size) {
                     SchedaElenco {

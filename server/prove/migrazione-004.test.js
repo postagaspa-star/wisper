@@ -37,7 +37,7 @@ test('migrazione 004 su un database della fase 3: copia prima-4, dati e file con
   const w = new Wisper({ dati });
   try {
     // Dalla fase 5 (e dalla 6) il database va avanti fino all'ultima migrazione: la 004 c'e' (la sua copia prima-4 anche).
-    assert.equal(w.db.versione(), 7);
+    assert.equal(w.db.versione(), 8);
     assert.ok(fs.existsSync(file + '.prima-4'), 'la copia prima della migrazione');
     // Le commesse: a corpo quella con le scadenze di pagamento (anche scritte in minuscolo), a ore l'altra.
     assert.deepEqual(w.db.righe('SELECT id, modo_fatturazione FROM commesse ORDER BY id').map(r => [r.id, r.modo_fatturazione]), [['26ST001', 'corpo'], ['26ST002', 'ore']]);

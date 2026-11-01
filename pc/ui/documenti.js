@@ -50,16 +50,36 @@
     '<circle cx="16" cy="16" r="3.2" fill="#F2F4F7"/></svg>');
 
   /**
+   * Fase 8 (fase8.md §9.3): il logo dello studio in cima ai PDF, se c'è (STUDIO_LOGO, l'id del file) e se è acceso
+   * (PDF_LOGO, di base sì). Senza logo, o con PDF_LOGO spento, i PDF restano identici a prima, carattere per carattere.
+   */
+  function logoDi(imp) {
+    const x = imp || {};
+    if (x.PDF_LOGO === false || x.PDF_LOGO === 'false' || x.PDF_LOGO === 0 || x.PDF_LOGO === 'NO') return '';
+    const v = String(x.STUDIO_LOGO || '');
+    const m = v.match(/^\/file\/([A-Za-z0-9_-]+)/);
+    return m ? m[1] : /^[A-Za-z0-9_-]{4,}$/.test(v) ? v : '';
+  }
+
+  /** La riga in fondo ai PDF (PDF_PIEDE), sotto quella di sempre; vuota = il piè di prima. */
+  const pieDi = imp => String((imp && imp.PDF_PIEDE) || '').trim();
+
+  /**
    * Il formato: A4, Figtree, i grigi di docs/aspetto.md. Niente giallo pieno:
    * si stampa anche in bianco e nero.
    */
   function stile(imp) {
     const piede = [imp.RAGIONE_SOCIALE, imp.PARTITA_IVA ? 'P.IVA ' + imp.PARTITA_IVA : ''].filter(Boolean).join(' · ');
     const carattere = '"Figtree", "Segoe UI", Arial, sans-serif';
+    // Fase 8: con la riga in fondo ai PDF il piè ha due righe; senza, la regola di prima com'era.
+    const sotto = pieDi(imp);
+    const bassoSinistra = sotto
+      ? '  @bottom-left { content: "' + escCss(piede) + '\\A ' + escCss(sotto) + '"; white-space: pre; font: 500 8.5px ' + carattere + '; color: #8A8A92; }'
+      : '  @bottom-left { content: "' + escCss(piede) + '"; font: 500 8.5px ' + carattere + '; color: #8A8A92; }';
     return '<style>' +
       '@font-face { font-family: "Figtree"; src: url("/font/Figtree.ttf") format("truetype"); font-weight: 300 900; font-display: block; }' +
       '@page { size: A4; margin: 14mm 14mm 18mm 14mm;' +
-      '  @bottom-left { content: "' + escCss(piede) + '"; font: 500 8.5px ' + carattere + '; color: #8A8A92; }' +
+      bassoSinistra +
       '  @bottom-right { content: url("' + SIMBOLO + '") "  Pagina " counter(page) " / " counter(pages); font: 500 8.5px ' + carattere + '; color: #8A8A92; } }' +
       '* { box-sizing: border-box; }' +
       'body { margin: 0; font: 500 10.5px/1.45 ' + carattere + '; color: #1B1B1F; }' +
@@ -100,10 +120,25 @@
       '.articolo { margin-bottom: 10px; break-inside: avoid; } .articolo h3 { font-size: 11.5px; font-weight: 800; margin: 0 0 3px; }' +
       '.articolo .testo { white-space: pre-wrap; font-size: 10.5px; }' +
       '.due-blocchi { display: flex; gap: 12px; } .due-blocchi .blocco { flex: 1; }' +
+      (logoDi(imp) ? STILE_LOGO : '') +
       '</style>';
   }
 
+  // Fase 8: il logo a sinistra, alto 14 mm, accanto alla ragione sociale (solo quando c'è).
+  const STILE_LOGO = '.studio-logo { display: flex; align-items: center; gap: 4mm; } .studio-logo img { height: 14mm; max-width: 50mm; object-fit: contain; }';
+
+  /** La ragione sociale in cima, col logo davanti se c'è. */
+  function aziendaInTesta(nome, idLogo) {
+    const azienda = '<div class="azienda">' + esc(nome || '') + '</div>';
+    return idLogo ? '<div class="studio-logo"><img src="/file/' + encodeURIComponent(idLogo) + '" alt="">' + azienda + '</div>' : azienda;
+  }
+
   function intestazione(imp, etichetta, numero, sotto) {
+    if (logoDi(imp)) {
+      return '<div class="testa">' + aziendaInTesta(imp.RAGIONE_SOCIALE, logoDi(imp)) +
+        '<div class="tipo"><div class="etichetta">' + esc(etichetta) + '</div>' +
+        '<div class="numero">' + esc(numero) + '</div><div class="sotto">' + esc(sotto) + '</div></div></div>';
+    }
     return '<div class="testa"><div class="azienda">' + esc(imp.RAGIONE_SOCIALE || '') + '</div>' +
       '<div class="tipo"><div class="etichetta">' + esc(etichetta) + '</div>' +
       '<div class="numero">' + esc(numero) + '</div><div class="sotto">' + esc(sotto) + '</div></div></div>';
@@ -613,7 +648,7 @@
     const studio = (m.prestatore && m.prestatore.denominazione) || '';
     const sezioni = sezioniProspetto(m);
     const nota = m.tipoDocumento === 'TD04';
-    let corpo = '<div class="testa"><div class="azienda">' + esc(studio) + '</div><div class="tipo"><div class="etichetta">Prospetto per il programma delle fatture · non è una fattura</div>' +
+    let corpo = '<div class="testa">' + (o.logo ? aziendaInTesta(studio, o.logo) : '<div class="azienda">' + esc(studio) + '</div>') + '<div class="tipo"><div class="etichetta">Prospetto per il programma delle fatture · non è una fattura</div>' +
       '<div class="numero">Rif. ' + esc(m.riferimento || '') + '</div><div class="sotto">' + esc((nota ? 'Nota di credito' : TIPI_DOCUMENTO[m.tipoDocumento] || 'Fattura') + ' · ' + (m.numero ? m.numero + ' del ' + dataIt(m.data) : 'data proposta ' + dataIt(m.dataProposta))) + '</div></div></div>';
     if (!m.regoleConfermate) corpo += '<div class="avviso-p">' + esc(AVVISO_REGOLE) + '</div>';
     sezioni.forEach(s => {
@@ -622,7 +657,7 @@
         s.campi.map(x => '<tr><td class="k">' + esc(x.etichetta) + '</td><td class="v">' + esc(x.valore) + '</td></tr>').join('') + '</tbody></table></div>';
     });
     return '<!doctype html><html lang="it"><head><meta charset="utf-8"><title>' + esc('Prospetto ' + (m.riferimento || '')) + '</title>' +
-      stile({ RAGIONE_SOCIALE: piedeProspetto(m, o) }) + STILE_PROSPETTO + '</head><body>' + corpo + '</body></html>';
+      stile(o.logo ? { RAGIONE_SOCIALE: piedeProspetto(m, o), STUDIO_LOGO: o.logo } : { RAGIONE_SOCIALE: piedeProspetto(m, o) }) + STILE_PROSPETTO + '</head><body>' + corpo + '</body></html>';
   }
 
   /**
@@ -637,7 +672,8 @@
     const sc = c.sede || {};
     const piede = 'Documento senza valore fiscale: la fattura si emette al pagamento';
     const indirizzo = s => [s.indirizzo, [s.cap, s.comune, s.provincia ? '(' + s.provincia + ')' : ''].filter(Boolean).join(' ')].filter(Boolean).join(', ');
-    let corpo = '<div class="testa"><div class="azienda">' + esc(p.denominazione || '') + '</div><div class="tipo"><div class="etichetta">Avviso di parcella</div>' +
+    const o = opzioni || {};
+    let corpo = '<div class="testa">' + (o.logo ? aziendaInTesta(p.denominazione, o.logo) : '<div class="azienda">' + esc(p.denominazione || '') + '</div>') + '<div class="tipo"><div class="etichetta">Avviso di parcella</div>' +
       '<div class="numero">Rif. ' + esc(m.riferimento || '') + '</div><div class="sotto">' + esc('del ' + dataIt(m.dataProposta || m.data)) + '</div></div></div>';
     corpo += '<div class="parti"><div class="parte"><div class="etichetta">Da</div><div class="nome">' + esc(p.denominazione || '') + '</div>' +
       [indirizzo(sp), p.partitaIva ? 'P.IVA ' + p.partitaIva : '', p.pec ? 'PEC ' + p.pec : p.email].filter(Boolean).map(r => '<div>' + esc(r) + '</div>').join('') + '</div>' +
@@ -662,7 +698,7 @@
     }
     corpo += '<div class="blocco"><div class="testo">' + esc(piede) + '</div></div>';
     return '<!doctype html><html lang="it"><head><meta charset="utf-8"><title>' + esc('Avviso di parcella ' + (m.riferimento || '')) + '</title>' +
-      stile({ RAGIONE_SOCIALE: piede, PARTITA_IVA: '' }) + '</head><body>' + corpo + '</body></html>';
+      stile(o.logo ? { RAGIONE_SOCIALE: piede, PARTITA_IVA: '', STUDIO_LOGO: o.logo } : { RAGIONE_SOCIALE: piede, PARTITA_IVA: '' }) + '</head><body>' + corpo + '</body></html>';
   }
 
   /**
@@ -722,7 +758,7 @@
     return pagina(imp, 'Contratto di assistenza ' + (k.numero || ''), corpo);
   }
 
-  const Documenti = { rapportino, rigaStrumenti, riepilogo, preventivo, incarico, numeroPreventivo, esc, idDaUrl, sezioniProspetto, prospettoFattura, avvisoParcella, lettera, contrattoAssistenza };
+  const Documenti = { rapportino, rigaStrumenti, riepilogo, preventivo, incarico, numeroPreventivo, esc, idDaUrl, sezioniProspetto, prospettoFattura, avvisoParcella, lettera, contrattoAssistenza, logoDi };
   if (typeof module !== 'undefined' && module.exports) module.exports = Documenti;
   else radice.WisperDocumenti = Documenti;
 })(typeof window !== 'undefined' ? window : globalThis);

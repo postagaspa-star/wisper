@@ -36,6 +36,12 @@
  * del portale e le passa solo al router del portale (server/src/portale/). Nessuna porta nuova. Ogni minuto il giro del
  * portale manda gli avvisi raggruppati, fa le pulizie e, ogni ora, il controllo del portale. In prova
  * WISPER_PORTALE_INDIRIZZO scrive l'indirizzo della pagina nei dati di esempio (per i link delle email).
+ *
+ * Fase 8 (docs/gestionale/fase8.md): i controlli delle integrazioni girano da soli (il primo pochi secondi dopo
+ * l'avvio, poi ogni minuto si guarda chi tocca). WISPER_VIES_URL e WISPER_AGGIORNAMENTI_URL: i servizi finti per le prove
+ * (in prova, senza, VIES e GitHub restano Da configurare: niente internet). WISPER_INDIRIZZO_CASA: l'indirizzo del server
+ * in casa (http://192.168.x.y:8400) per gli indirizzi del calendario creati da fuori casa. WISPER_SENZA_FTS5=si: solo con
+ * --prova, la ricerca come se il database non avesse FTS5 (la prova di §16).
  */
 'use strict';
 
@@ -85,7 +91,9 @@ function avvia(o) {
     // In prova, senza un postino vero, le email e le copie vanno su disco.
     cartella: o.prova && !env.WISPER_POSTINO_URL ? path.join(dati, 'posta-finta') : '',
   });
-  const wisper = new Wisper({ dati, memoria: !!o.prova, postino, prova: !!o.prova });
+  // Fase 8: la ricerca senza FTS5 si imita solo in prova (WISPER_SENZA_FTS5=si).
+  const senzaFts5 = !!o.prova && String(env.WISPER_SENZA_FTS5 || '').trim().toLowerCase() === 'si';
+  const wisper = new Wisper({ dati, memoria: !!o.prova, postino, prova: !!o.prova, senzaFts5 });
   if (env.WISPER_SPAZIO_FINTO_MB) wisper.spazioFintoMb = Number(env.WISPER_SPAZIO_FINTO_MB);
   if (o.prova) semina(wisper);
   // La porta Google: parte da sola se c'e' l'indirizzo dello script col segreto (le prove la accendono loro).
@@ -117,6 +125,10 @@ function avvia(o) {
   }
   // In prova il database e' in memoria e riparte da capo: la copia notturna non serve.
   if (o.pianifica !== false && !o.prova) wisper.pianifica(env.WISPER_ORA_COPIA);
+  // Fase 8: i controlli delle integrazioni (anche in prova: senza servizi finti non vanno su internet) e, in prova, la
+  // lettura dei file dei dati di esempio.
+  if (o.pianifica !== false) wisper.pianificaIntegrazioni(o.prova ? 1500 : 5000);
+  if (o.prova) setImmediate(() => wisper.letturaNotturna(5).catch(() => null));
   const server = creaServer(wisper, { segretoPonte: env.SEGRETO_SERVER || '' });
   // Fase 5: la seconda porta, solo per i link per i clienti (Non collegato finche' CONDIVISIONE_INDIRIZZO e' vuoto).
   const condivisione = o.portaCondivisione ? creaServerCondivisione(wisper) : null;

@@ -1,0 +1,23 @@
+{
+  "_cosa": "Fase 8 (fase8.md §9.6): i casi condivisi delle numerazioni. 'codiceDa': il codice da formato, anno e numero. 'prossimo': il prossimo numero dai codici già scritti, contando anche quelli coi formati di prima (precedenti) e, per una numerazione annuale, solo quelli dell'anno; 'nuove' commesse di fila senza rete danno 'attesi'. Gli stessi risultati in server (src/formati.js: codiceDa, prossimoDa), Kotlin e pc/ui/regole.js. Non si cambiano a mano senza cambiare tutti e tre.",
+  "codiceDa": [
+    { "nome": "il formato di oggi col 47", "formato": "{AA}ST{NNN}", "anno": 2026, "numero": 47, "atteso": "26ST047" },
+    { "nome": "il formato di oggi oltre le tre cifre", "formato": "{AA}ST{NNN}", "anno": 2026, "numero": 1000, "atteso": "26ST1000" },
+    { "nome": "il formato delle specifiche nuove", "formato": "ST{AA}-{NNNN}", "anno": 2026, "numero": 48, "atteso": "ST26-0048" },
+    { "nome": "anno a quattro cifre e barra", "formato": "{AAAA}/{NN}", "anno": 2027, "numero": 5, "atteso": "2027/05" },
+    { "nome": "il numero dei rapportini", "formato": "RAP/{AAAA}/{NNNN}", "anno": 2026, "numero": 153, "atteso": "RAP/2026/0153" },
+    { "nome": "anno che cambia a gennaio", "formato": "{AA}ST{NNN}", "anno": 2027, "numero": 48, "atteso": "27ST048" },
+    { "nome": "un formato col solo numero", "formato": "{NNNN}", "anno": 2026, "numero": 7, "atteso": "0007" },
+    { "nome": "anno a due cifre con lo zero", "formato": "C{AA}.{NNN}", "anno": 2009, "numero": 12, "atteso": "C09.012" }
+  ],
+  "prossimo": [
+    { "nome": "formato cambiato: il numero continua da quelli di prima", "formato": "ST{AA}-{NNNN}", "precedenti": ["{AA}ST{NNN}"], "annuale": false, "ultimo": 47,
+      "codici": ["26ST001", "26ST046", "26ST047"], "anno": 2026, "nuove": 1, "attesi": ["ST26-0048"] },
+    { "nome": "due commesse di fila senza rete", "formato": "ST{AA}-{NNNN}", "precedenti": ["{AA}ST{NNN}"], "annuale": false, "ultimo": 47,
+      "codici": ["26ST047"], "anno": 2026, "nuove": 2, "attesi": ["ST26-0048", "ST26-0049"] },
+    { "nome": "un formato di prima più alto del nuovo", "formato": "{AA}ST{NNN}", "precedenti": ["ST{AA}-{NNNN}"], "annuale": false, "ultimo": 0,
+      "codici": ["26ST047", "ST26-0052"], "anno": 2026, "nuove": 1, "attesi": ["26ST053"] },
+    { "nome": "il numero che non riparte a gennaio (commessa)", "formato": "{AA}ST{NNN}", "precedenti": [], "annuale": false, "ultimo": 61,
+      "codici": ["26ST061"], "anno": 2027, "nuove": 1, "attesi": ["27ST062"] }
+  ]
+}

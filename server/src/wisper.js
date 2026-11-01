@@ -104,6 +104,9 @@ class Wisper {
     this.versione = VERSIONE;
     this.postino = opzioni.postino || null;
     this.prova = !!opzioni.prova;
+    // Fase 8: da quando e' acceso (Stato del sistema) e, solo per le prove, la ricerca senza FTS5.
+    this.accesoIl = adesso();
+    this.senzaFts5 = !!opzioni.senzaFts5;
     this.cartellaFile = path.join(this.dati, 'file');
     this.cartellaCopie = path.join(this.dati, 'copie');
     fs.mkdirSync(this.cartellaFile, { recursive: true });
@@ -157,6 +160,10 @@ class Wisper {
   }
 
   chiudi() {
+    // Fase 8: la lettura dei file e le esportazioni in sottofondo si fermano; il giro dei controlli delle integrazioni pure.
+    this.chiuso = true;
+    if (this.giroIntegrazioniTimer) clearInterval(this.giroIntegrazioniTimer);
+    if (this.primoGiroIntegrazioni) clearTimeout(this.primoGiroIntegrazioni);
     if (this.pianificazione) clearInterval(this.pianificazione);
     // Fase 7: il giro del portale (avvisi, pulizie) e il secondo giro di porta.js, quello del portale.
     if (this.giroPortaleTimer) clearInterval(this.giroPortaleTimer);
@@ -202,16 +209,19 @@ class Wisper {
   }
 
   /** I permessi di un ruolo. Il titolare ha sempre tutto, qualunque cosa ci sia scritto. */
-  permessiDi(ruolo) {
+  permessiDi(ruolo, opzioni) {
     const p = {};
     P.TUTTE.forEach(m => { p[m] = 0; });
     if (ruolo === 'titolare') {
       P.TUTTE.forEach(m => { p[m] = 2; });
-      return p;
+    } else {
+      for (const r of this.db.righe('SELECT modulo, livello FROM permessi WHERE ruolo = ?', ruolo)) {
+        if (r.modulo in p) p[r.modulo] = r.livello;
+      }
     }
-    for (const r of this.db.righe('SELECT modulo, livello FROM permessi WHERE ruolo = ?', ruolo)) {
-      if (r.modulo in p) p[r.modulo] = r.livello;
-    }
+    // Fase 8 (§9.5): per una funzione spenta il livello e' 0 per tutti, anche per il titolare. Il punto e' questo, come
+    // tutti i permessi: menu, Dashboard e azioni la perdono insieme. {veri: true}: i permessi scritti (la tabella dei ruoli).
+    if (!(opzioni && opzioni.veri)) for (const m of this.moduliSpenti()) p[m] = 0;
     return p;
   }
 
@@ -266,6 +276,8 @@ class Wisper {
       if (v !== null && v !== undefined && v !== '' && CAMPI_RUMORE.indexOf(k) < 0) dopo[k] = v === true ? 1 : v === false ? 0 : v;
     }
     this.annota(tabella, id, null, dopo, nota);
+    // Fase 8 (§6.1): il file di una revisione nuova si legge subito, in sottofondo (azioni/ricerca.js).
+    if (tabella === 'documento_versioni' && valori.file_id) this.dopoNuovaVersione(valori.file_id);
     return id;
   }
 
@@ -324,6 +336,8 @@ class Wisper {
     if (Object.prototype.hasOwnProperty.call(valori, 'REGOLE_FISCALI_CONFERMATE') && !this.chi().sistema) {
       throw new Rifiuto('La conferma delle regole fiscali si segna con "Segna confermate": la segna solo il titolare');
     }
+    // Fase 8 (§9.4): i limiti delle impostazioni generali ("Ore al giorno: da 1 a 12"), le chiavi che hanno la loro pagina.
+    valori = Object.assign({}, valori, this.controllaImpostazioni(valori));
     const prima = this.leggiImpostazioni();
     for (const k of Object.keys(valori)) {
       const chiave = testo(k);
@@ -436,6 +450,8 @@ for (const parte of ['anagrafiche', 'rapportini', 'file', 'accesso', 'amministra
   // Fase 6: persone e risorse umane, ferie e presenze, mezzi e attrezzature, collaboratori esterni.
   'persone', 'assenze', 'mezzi', 'collaboratori', 'dashboard6',
   // Fase 7: WhatsApp e comunicazioni, il portale clienti dal lato dello studio.
-  'comunicazioni', 'portale']) {
+  'comunicazioni', 'portale',
+  // Fase 8: integrazioni, calendario in altre app, ricerca dentro i file, importa ed esporta, Dashboard di tutte le fasi, amministrazione completa.
+  'integrazioni', 'calendario', 'ricerca', 'importa', 'dashboard8', 'amministrazione8']) {
   Object.assign(Wisper.prototype, require('./azioni/' + parte));
 }

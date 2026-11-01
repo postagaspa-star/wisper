@@ -11,7 +11,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { cartellaNuova, COLONNE_007 } = require('./aiuto');
+const { cartellaNuova, COLONNE_DOPO_007: COLONNE_007 } = require('./aiuto');
 const { Database } = require('../src/db');
 const { Wisper } = require('../src/wisper');
 const PRIMA = require('./migrazione-007/prima.json');
@@ -86,7 +86,7 @@ const comeTitolare = fn => w.come({ utente: w.titolare(), permessi: w.permessiDi
 
 test('migrazione 007: versione 7, la copia wisper.db.prima-7 com\'era; le tabelle di prima riga per riga uguali (le colonne nuove col valore di base)', () => {
   assert.equal(PRIMA.versione, '0.9.0');
-  assert.equal(w.db.versione(), 7);
+  assert.equal(w.db.versione(), 8);
   const copia = new Database(path.join(cartella, 'wisper.db.prima-7'));
   assert.equal(copia.versione(), 6, 'la copia e\' com\'era prima');
   copia.chiudi();
@@ -182,7 +182,7 @@ test('le azioni di prima rispondono uguali campo per campo: rapportini, preventi
     documenti: w.db.righe('SELECT id FROM documenti ORDER BY id').map(d => w.documentoCompleto(w.rigaDocumento(d.id))),
     attivita: w.leggiAttivita({}),
     anagrafiche: w.rispostaAnagrafiche({}),
-    dashboard: w.dashboard({}).numeri,
+    dashboard: w.dashboard({ tutto: true }).numeri,
   }));
   assert.equal(ora.rapportini.length, PRIMA.rapportini.length);
   for (const vecchio of PRIMA.rapportini) contiene(ora.rapportini.find(r => r.id === vecchio.id), vecchio, vecchio.id);
@@ -226,6 +226,6 @@ test('riaperto il server: la migrazione non si rifa\'', () => {
   const n = w.db.riga('SELECT COUNT(*) n FROM comunicazioni').n;
   w.chiudi();
   w = new Wisper({ dati: cartella });
-  assert.equal(w.db.versione(), 7);
+  assert.equal(w.db.versione(), 8);
   assert.equal(w.db.riga('SELECT COUNT(*) n FROM comunicazioni').n, n);
 });

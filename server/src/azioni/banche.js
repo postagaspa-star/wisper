@@ -83,6 +83,10 @@ module.exports = {
    * "registrato", non "verificato".
    */
   saldoConto(c, finoA) {
+    return this.ricordata('saldoConto:' + c.id + ':' + (finoA || ''), () => this.saldoContoLetto(c, finoA));
+  },
+
+  saldoContoLetto(c, finoA) {
     const scritto = this.db.riga('SELECT * FROM conto_saldi WHERE conto_id = ? ORDER BY data DESC, id DESC LIMIT 1', c.id);
     const da = scritto ? scritto.data : '';
     const movimenti = this.db.righe('SELECT * FROM movimenti WHERE conto_id = ? AND annullato = 0 AND data > ?' + (finoA ? ' AND data <= ?' : ''),
@@ -749,7 +753,7 @@ module.exports = {
     this.db.righe('SELECT id, nome FROM soggetti').forEach(s => { clienti[s.id] = s.nome; });
     const righe = [];
     // Entrate: fatture emesse con residuo (le rate, in ordine di data) e pronte da emettere.
-    const fatture = this.db.righe("SELECT * FROM fatture WHERE tipo = 'fattura' AND stato IN ('pronta', 'emessa')");
+    const fatture = this.fattureDiStati(['pronta', 'emessa'], "SELECT * FROM fatture WHERE tipo = 'fattura' AND stato IN ('pronta', 'emessa')");
     const a = this.aiutiFatture(fatture);
     for (const f of fatture) {
       if (!delConto(f.conto_id)) continue;

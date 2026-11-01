@@ -137,7 +137,14 @@
         conVista !== 'calendario' ? h('button', { type: 'button', class: 'btn', 'data-visita': 'vai-calendario', onclick: () => { W.vai('#attivita/calendario'); W.Visita.azione('vai-calendario'); } }, icona('calendario', 18, 2.2), 'Calendario') : null,
         conVista !== 'pianificazione' ? h('button', { type: 'button', class: 'btn', onclick: () => W.vai('#attivita/pianificazione') }, icona('persone', 18, 2.2), 'Pianificazione') : null,
         scrive() ? h('button', { type: 'button', class: 'btn giallo', onclick: () => modulo(null, conVista === 'calendario' ? { tipo: 'appuntamento', giorno: M.giorno || oggi() } : null) }, icona('piu', 18, 2.6),
-          conVista === 'calendario' ? 'Nuovo appuntamento' : 'Nuova attività') : null);
+          conVista === 'calendario' ? 'Nuovo appuntamento' : 'Nuova attività') : null,
+        // Fase 8 (§5.6): Calendario › ⋯ › Il calendario in altre app.
+        conVista === 'calendario' ? altroCalendario() : null);
+    }
+
+    function altroCalendario() {
+      const b = tondo('altro', 'Altro', () => apriMenu(b, [{ testo: 'Il calendario in altre app', fn: () => W.vai('#attivita/altreapp') }]));
+      return b;
     }
 
     function elenco(pagina) {

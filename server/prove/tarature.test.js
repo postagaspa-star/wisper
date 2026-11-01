@@ -49,7 +49,7 @@ test('lo strumento nel rapportino: lo stato di quel giorno; lo scaduto con confe
   const r2 = ok(await rapportino(marco, [{ idAttrezzatura: MULTI }])).rapportino;
   assert.deepEqual(r2.strumentiDaGuardare.map(x => x.idAttrezzatura), [MULTI]);
   // La conferma resta nella Dashboard: "usato oggi in ...".
-  const d = ok(await manuel('dashboard'));
+  const d = ok(await manuel('dashboard', { tutto: true }));
   assert.ok(voci(d).some(v => v.tipo === 'strumento' && v.titolo === 'Multimetro 87V: ' + C.statoTaratura({ controllo: 'taratura', ultima: { data: '2025-10-12', scade: '2026-10-12', esito: 'conforme' } }, T, 30).parola.replace(/^T/, 't')));
   // Leggere i rapportini: gli strumenti ci sono (anche a chi non ha mezzi? lettura ha mezzi 1).
   const letti = ok(await lettura('rapportini', { tutti: true })).rapportini.find(x => x.id === r.id);
@@ -78,7 +78,7 @@ test('taratura non conforme: Fuori uso, gli usi da controllare dall\'ultima buon
   // Il telefono senza rete lo manda lo stesso in un rapportino: si salva, segnato non conforme, e la Dashboard lo dice.
   const coda = ok(await rapportino(marco, [{ idAttrezzatura: MT }])).rapportino;
   assert.deepEqual([coda.strumenti[0].statoAllora, coda.strumentiDaGuardare.length], ['non_conforme', 1]);
-  const d = ok(await manuel('dashboard'));
+  const d = ok(await manuel('dashboard', { tutto: true }));
   assert.ok(voci(d).some(v => v.titolo === coda.id + ' ha usato il Misuratore di terra MT-500, non conforme'));
   // Una conforme dopo lo rimette in uso (e torna a Marco, che l'aveva assegnato).
   const buona = ok(await manuel('registraTaratura', { taratura: { idAttrezzatura: MT, data: T, esito: 'conforme', certificato: 'LAT 2001/26' } }));

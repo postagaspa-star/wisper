@@ -1033,8 +1033,10 @@ module.exports = {
         if (!mie && costi && this.vedePagamenti()) {
           for (const p of dm.proposti.filter(x => /^fattura:/.test(x.proposta)).slice(0, 3)) {
             const f = this.db.riga('SELECT * FROM fatture WHERE id = ?', Number(p.proposta.split(':')[1]));
+            // Fase 8 (§8.1): la stessa fattura della voce "scaduta" della fase 4: una cosa, una voce (oggetto).
             voce(pianificare, { tipo: 'pagamento', gravita: 'info', titolo: (p.proposta.slice(-1) === '2' ? 'Secondo promemoria' : 'Promemoria') + ' di pagamento da preparare: fattura ' + (f.numero || f.riferimento),
-              dettaglio: p.a.cliente + ' · ' + p.dettaglio.replace(/^Fattura [^·]+· /, ''), quanto: p.importoResiduo, unita: 'euro', collegamento: { pagina: 'comunicazioni', filtro: { segmento: 'damandare' } } });
+              dettaglio: p.a.cliente + ' · ' + p.dettaglio.replace(/^Fattura [^·]+· /, ''), quanto: p.importoResiduo, unita: 'euro', collegamento: { pagina: 'comunicazioni', filtro: { segmento: 'damandare' } },
+              oggetto: 'fattura:' + f.id });
           }
         }
       }
@@ -1134,7 +1136,12 @@ module.exports = {
     const ora = adessoMs();
     try {
       this.db.transazione(() => this.come(require('../wisper').SISTEMA, () => this.puliziaPortale()));
-    } catch (err) { console.error('[portale] pulizia: ' + (err && err.message ? err.message : err)); }
+      // Fase 8 (§11.3, T10): le pulizie di conservazione sono girate.
+      if (this.lavoro) this.lavoro('Pulizie', 'ok', 'notifiche, accessi e portale');
+    } catch (err) {
+      console.error('[portale] pulizia: ' + (err && err.message ? err.message : err));
+      if (this.lavoro) this.lavoro('Pulizie', 'errore', err && err.message ? err.message : String(err));
+    }
     try {
       await this.avvisiPortale();
     } catch (err) { console.error('[portale] avvisi: ' + (err && err.message ? err.message : err)); }

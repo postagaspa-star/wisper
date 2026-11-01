@@ -186,6 +186,8 @@ data class DocArchivio(
     val mieRespinte: List<Pair<Int, String>> = emptyList(),
     /** Fase 7 (fase7.md §10.4): pubblicato nel portale e visto dal cliente. */
     val portale: InfoPortale? = null,
+    /** Fase 8 (fase8.md §6.2): trovato dentro il file, con l'estratto ("…di [terra] è…"). */
+    val trovato: TrovatoNelTesto? = null,
 ) {
     val collegamento: Boolean get() = origine == "collegamento"
     val idFile: String get() = if (origine == "collegamento") "" else FileRemoto.idDaUrl(url)
@@ -219,6 +221,7 @@ data class DocArchivio(
             puoApprovare = o.vero("puoApprovare"),
             mieRespinte = o.optJSONArray("mieRespinte").oggetti().map { (it.numero("numero")?.toInt() ?: 0) to it.testo("motivo") },
             portale = InfoPortale.daJson(o.optJSONObject("portale")),
+            trovato = TrovatoNelTesto.daJson(o.optJSONObject("trovato")),
         )
     }
 }
@@ -266,6 +269,8 @@ data class FiltroArchivio(
     val daClassificare: Boolean = false,
     val archiviati: Boolean = false,
     val pagina: Int = 1,
+    /** Fase 8 (§6.2): cerca anche dentro i file; null = come dice il server (RICERCA_FILE). */
+    val dentro: Boolean? = null,
 ) {
     fun parametri(): List<Pair<String, String>> = buildList {
         add("archivio" to "true")
@@ -281,6 +286,7 @@ data class FiltroArchivio(
         if (daClassificare) add("daClassificare" to "true")
         if (archiviati) add("archiviati" to "true")
         if (pagina > 1) add("pagina" to pagina.toString())
+        dentro?.let { add("dentro" to it.toString()) }
     }
 }
 

@@ -199,6 +199,32 @@ const COLONNE_FASE5 = {
   ],
 };
 
+/**
+ * Fase 8 (fase8.md §7.1): gli elenchi che ancora non si esportavano da soli e che Esporta tutto mette nello ZIP:
+ * referenti, sedi e impianti, prestazioni delle commesse, lo storico delle comunicazioni. Le righe sono quelle del
+ * database (righeDaEsportareFase8 in importa.js).
+ */
+const CANALI = { email: 'Email', whatsapp: 'WhatsApp', portale: 'Portale', telefonata: 'Telefonata', nota: 'Nota' };
+const COLONNE_FASE8 = {
+  referenti: [
+    ['Codice azienda', r => r.soggetto_id], ['Azienda', r => r.azienda], ['Nome', r => r.nome], ['Ruolo', r => r.ruolo], ['Email', r => r.email],
+    ['Telefono', r => r.telefono], ['Note', r => r.note], ['Portale', r => r.portale === 1], ['WhatsApp sì', r => r.whatsapp_ok === 1],
+  ],
+  sedi: [
+    ['Codice azienda', r => r.soggetto_id], ['Azienda', r => r.azienda], ['Tipo', r => (r.tipo === 'impianto' ? 'Impianto' : 'Sede')], ['Nome', r => r.nome],
+    ['Indirizzo', r => r.indirizzo], ['CAP', r => r.cap], ['Città', r => r.citta], ['Provincia', r => r.provincia], ['Note', r => r.note], ['Archiviata', r => r.archiviata === 1],
+  ],
+  prestazioni: [
+    ['Commessa', r => r.commessa_id], ['Prestazione', r => r.nome], ['Descrizione', r => r.descrizione], ['Valore', r => r.valore, true],
+    ['Avanzamento %', r => r.avanzamento], ['Stato', r => ({ da_fare: 'Da fare', in_corso: 'In corso', fatta: 'Fatta' }[r.stato] || r.stato)],
+  ],
+  comunicazioni: [
+    ['Quando', r => dataOra(r.quando)], ['Canale', r => CANALI[r.canale] || r.canale], ['Verso', r => (r.direzione === 'entrata' ? 'Ricevuta' : 'Mandata')], ['Tipo', r => r.tipo],
+    ['Codice cliente', r => r.cliente_id], ['Commessa', r => r.commessa_id], ['Rapportino', r => r.rapportino_id], ['A', r => r.a], ['Oggetto', r => r.oggetto],
+    ['Testo', r => r.testo], ['Stato', r => r.stato], ['Mandato il', r => dataOra(r.mandato_il)],
+  ],
+};
+
 /** Di quale modulo serve almeno la lettura, per ogni cosa da esportare. */
 const MODULO = {
   fatture: 'fatturazione', ricevute: 'fatturazione', daFatturare: 'fatturazione', riepilogo: 'fatturazione',
@@ -212,6 +238,8 @@ const MODULO = {
   persone: 'persone', qualifiche: 'persone', assenze: 'persone', presenze: 'persone',
   mezzi: 'mezzi', attrezzature: 'mezzi', tarature: 'mezzi', manutenzioni: 'mezzi', assegnazioni: 'mezzi', km: 'mezzi',
   collaboratori: 'collaboratori', incarichi: 'collaboratori', compensi: 'collaboratori',
+  // Fase 8
+  referenti: 'clienti', sedi: 'clienti', prestazioni: 'commesse', comunicazioni: 'comunicazioni',
 };
 /** Fase 6: l'esterno esporta solo le sue cose (rapportini, ore, spese). */
 const ESTERNO_ESPORTA = ['rapportini', 'ore', 'spese'];
@@ -221,7 +249,7 @@ const NOMI_RAPPORTO = { titolare: 'Titolare', socio: 'Socio', dipendente: 'Dipen
 module.exports = {
   esporta(d) {
     const cosa = testo(d.cosa);
-    if (!MODULO[cosa]) throw new Rifiuto('Cosa esportare? rapportini, clienti, fornitori, commesse, registro, preventivi, attivita, ore, spese, trasferte, rimborsi, fatture, ricevute, daFatturare, riepilogo, movimenti, scadenziario, impegni, documenti, scadenze, ticket, contratti, persone, qualifiche, assenze, presenze, mezzi, attrezzature, tarature, manutenzioni, assegnazioni, km, collaboratori, incarichi o compensi');
+    if (!MODULO[cosa]) throw new Rifiuto('Cosa esportare? referenti, sedi, prestazioni, comunicazioni, rapportini, clienti, fornitori, commesse, registro, preventivi, attivita, ore, spese, trasferte, rimborsi, fatture, ricevute, daFatturare, riepilogo, movimenti, scadenziario, impegni, documenti, scadenze, ticket, contratti, persone, qualifiche, assenze, presenze, mezzi, attrezzature, tarature, manutenzioni, assegnazioni, km, collaboratori, incarichi o compensi');
     const puo = cosa === 'scadenze' ? ['documenti', 'ticket', 'persone', 'mezzi', 'collaboratori'].some(m => this.livello(m) >= 1) : this.livello(MODULO[cosa]) >= 1;
     if (!puo || (this.eEsterno() && ESTERNO_ESPORTA.indexOf(cosa) < 0)) throw senzaPermesso('esportare ' + cosa);
     if (cosa === 'compensi' && !this.vedeCosti()) throw senzaPermesso('esportare i compensi (serve il permesso dei soldi)');
@@ -230,6 +258,15 @@ module.exports = {
       const x = this.esportaFase6(cosa, d);
       const periodo6 = testo(d.mese) || [testo(d.da), testo(d.a)].filter(Boolean).join('-') || oggi();
       return { ok: true, nome: 'wisper-' + cosa + '-' + periodo6 + '.csv', mime: 'text/csv;charset=utf-8', righe: x.righe.length, base64: csv(x.colonne, x.righe).toString('base64') };
+    }
+    // Fase 8: referenti, sedi, prestazioni e comunicazioni (le comunicazioni solo a chi le vede tutte: niente collaboratori, i pagamenti coi soldi).
+    if (COLONNE_FASE8[cosa]) {
+      if (cosa === 'comunicazioni' && this.soloSuoi()) throw senzaPermesso('esportare le comunicazioni');
+      const costi8 = this.vedeCosti();
+      let righe8 = this.righeDaEsportareFase8(cosa);
+      if (cosa === 'comunicazioni' && !this.vedePagamenti()) righe8 = righe8.filter(r => r.tipo !== 'pagamento' && !r.fattura_id);
+      const colonne8 = COLONNE_FASE8[cosa].filter(c => costi8 || !c[2]);
+      return { ok: true, nome: 'wisper-' + cosa + '-' + oggi() + '.csv', mime: 'text/csv;charset=utf-8', righe: righe8.length, base64: csv(colonne8, righe8).toString('base64') };
     }
     // Fase 4: fatture e banche si esportano solo col permesso dei soldi.
     if (COLONNE_FASE4[cosa] && !this.vedeCosti()) throw new Rifiuto('Per vedere le fatture serve anche il permesso dei soldi: chiedi al titolare', { permesso: false });
@@ -421,6 +458,17 @@ module.exports = {
       ['Fatturato', r => r.fatturato], ['Da fatturare', r => r.daFatturare], ['Da pagare', r => r.daPagare]], righe: c.righe };
   },
 
+  /**
+   * Fase 8 (Esporta tutto): il CSV di un elenco della fase 5 dalle sue righe gia' pronte, con le stesse colonne e lo
+   * stesso nome dell'esportazione singola (cosi' Esporta tutto puo' preparare le righe un po' alla volta).
+   */
+  esportaConRighe(cosa, righe, d) {
+    const costi = this.vedeCosti();
+    const colonne = COLONNE_FASE5[cosa].filter(c => costi || !c[2]);
+    const periodo = [testo((d || {}).da), testo((d || {}).a)].filter(Boolean).join('-') || oggi();
+    return { ok: true, nome: 'wisper-' + cosa + '-' + periodo + '.csv', mime: 'text/csv;charset=utf-8', righe: righe.length, base64: csv(colonne, righe).toString('base64') };
+  },
+
   /** Le righe delle esportazioni della fase 5, coi filtri dei loro elenchi (tutte le pagine). */
   righeDaEsportareFase5(cosa, d) {
     if (cosa === 'documenti') {
@@ -428,12 +476,8 @@ module.exports = {
       this.db.righe('SELECT id, nome FROM utenti').forEach(u => { nomi[u.id] = u.nome; });
       const da = {};
       this.db.righe('SELECT id, creato_da FROM documenti').forEach(x => { da[x.id] = x.creato_da; });
-      const tutte = [];
-      for (let pagina = 1; ; pagina++) {
-        const p = this.leggiDocumenti(Object.assign({}, d, { archivio: true, pagina }));
-        tutte.push(...p.documenti);
-        if (pagina >= p.pagine) break;
-      }
+      // Fase 8 (prova di carico): tutte le pagine in una lettura sola (tutte: true), nello stesso ordine.
+      const tutte = this.leggiDocumenti(Object.assign({}, d, { archivio: true, tutte: true })).documenti;
       return tutte.map(x => Object.assign({ caricatoDa: da[x.id] ? nomi[da[x.id]] || '' : '' }, x));
     }
     if (cosa === 'scadenze') {

@@ -154,6 +154,8 @@ fun PaginaStudio(dati: Dati, puoCambiare: Boolean, onIndietro: () -> Unit) {
                 }) else null)
             }
         }
+        // Fase 8 (fase8.md §9.3): il logo, sui PDF sì o no, e l'anteprima dell'intestazione.
+        SchedaLogoStudio(dati, puoCambiare)
         TitoloSezione("Per i preventivi")
         SchedaElenco {
             VOCI_PREVENTIVI.forEachIndexed { i, v ->
@@ -287,6 +289,7 @@ fun PaginaApp(
     onTema: (String) -> Unit,
     onVisita: () -> Unit,
     onIndietro: () -> Unit,
+    titolo: String = "L'app",
 ) {
     val c = W.colori
     val ctx = LocalContext.current
@@ -305,7 +308,7 @@ fun PaginaApp(
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         Testata(onIndietro = onIndietro)
-        TitoloPagina("L'app")
+        TitoloPagina(titolo)
         Scheda(orizzontale = 20.dp, verticale = 18.dp, raggio = 24.dp, spazio = 10.dp) {
             Text("Tema", style = Testi.forte, color = c.testo)
             Segmenti(listOf("auto" to "Automatico", "chiaro" to "Chiaro", "scuro" to "Scuro"), tema, onTema)
@@ -444,6 +447,10 @@ private val VOCI_STUDIO = listOf(
     VoceStudio("Provincia dell'albo", "ALBO_PROVINCIA"),
     VoceStudio("Numero di iscrizione all'albo", "ALBO_NUMERO"),
     VoceStudio("Data di iscrizione all'albo", "ALBO_DATA"),
+    // Fase 8 (fase8.md §9.3): nome breve (menu, email, portale), sito, la riga in fondo ai PDF.
+    VoceStudio("Nome breve", "STUDIO_NOME_BREVE"),
+    VoceStudio("Sito", "STUDIO_SITO", KeyboardType.Uri),
+    VoceStudio("Riga in fondo ai PDF", "PDF_PIEDE", righe = 2),
 )
 
 /**

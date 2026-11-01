@@ -372,7 +372,7 @@ test('registro: chi ha creato, cambiato e fatto le attivita\'', async () => {
 });
 
 test('dashboard: attivita\' scadute, appuntamenti di oggi, agenda; il collaboratore solo le sue', async () => {
-  const d = await manuel('dashboard');
+  const d = await manuel('dashboard', { tutto: true });
   assert.ok(d.urgenti.some(v => v.tipo === 'attivita' && v.gravita === 'urgente'), 'le scadute');
   const sop = d.settimana.find(v => v.titolo === 'Sopralluogo quadri del magazzino Batokyo oggi alle 14:30');
   assert.ok(sop);
@@ -382,7 +382,7 @@ test('dashboard: attivita\' scadute, appuntamenti di oggi, agenda; il collaborat
   assert.ok(d.agenda.oggi.some(a => a.tipo === 'sopralluogo' && a.inizio === T + 'T14:30:00'));
   assert.ok(d.agenda.settimana.every(a => a.giorno > T && a.giorno <= g(7)));
   assert.ok(d.pianificare.some(v => v.tipo === 'attivita' && /non assegnat/.test(v.titolo)));
-  const m = await marco('dashboard');
+  const m = await marco('dashboard', { tutto: true });
   assert.ok(m.agenda.oggi.every(a => a.assegnataA === MARCO));
   assert.ok(m.agenda.settimana.every(a => a.assegnataA === MARCO));
   assert.equal(m.numeri.attivita.scadute, 0, 'quelle scadute sono di Manuel e Laura');

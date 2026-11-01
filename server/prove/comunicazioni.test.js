@@ -364,10 +364,10 @@ test('permessi: ogni ruolo su ogni azione nuova (titolare e amministrazione si, 
   assert.equal((await marco('rispondiNelPortale', { idTicket: 13, testo: 'Arrivo alle 14:30.' })).ok, true, 'ticket 2 sul suo ticket (TK/2026/0013, suo)');
   assert.equal((await marco('rispondiNelPortale', { idTicket: 14, testo: 'x' })).permesso, false, 'non sui ticket che non segue');
   // La Dashboard: il collaboratore non ha i numeri del portale.
-  const dm = await marco('dashboard');
+  const dm = await marco('dashboard', { tutto: true });
   assert.equal('portale' in dm.numeri, false);
   assert.equal(typeof dm.numeri.comunicazioni.daMandareOggi, 'number');
-  const dt = await manuel('dashboard');
+  const dt = await manuel('dashboard', { tutto: true });
   assert.deepEqual(Object.keys(dt.numeri.portale).sort(), ['accettati', 'caricamenti', 'clienti', 'collegato', 'daGuardare', 'firmati', 'messaggi', 'referenti', 'richiesteNuove']);
 });
 

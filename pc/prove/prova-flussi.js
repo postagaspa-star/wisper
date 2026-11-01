@@ -300,7 +300,7 @@ async function main() {
     passo('la password iniziale vale per entrare');
     await vai('#amministrazione/utenti/' + giorgio.id);
     await clicca('Collaboratore');
-    assert.match(await valuta("document.querySelector('.finestra').innerText"), /Non vedrà: Preventivi e contratti, Fatturazione, Banche e scadenze, Portale clienti, Collaboratori esterni, Amministrazione/); // fase 7: il portale non è del collaboratore
+    assert.match(await valuta("document.querySelector('.finestra').innerText"), /Non vedrà: Preventivi e contratti, Fatturazione, Banche e scadenze, Portale clienti, Collaboratori esterni, Integrazioni, Amministrazione/); // fase 7: il portale non è del collaboratore; fase 8: nemmeno Integrazioni
     await clicca('Cambia il ruolo', '.finestra');
     await aspetta(800);
     assert.equal((await server('utenti')).utenti.find(u => u.id === giorgio.id).ruolo, 'collaboratore');
@@ -333,13 +333,17 @@ async function main() {
 
     await vai('#amministrazione/numerazioni');
     // Quella delle commesse (dalla fase 6 ci sono anche strumenti, incarichi e le altre).
-    await valuta("[...document.querySelectorAll('.scheda.numerazione')].find(x => x.querySelector('.etichetta').textContent === 'Commesse').querySelector('button').click(); true");
+    // Fase 8: il codice delle commesse ha la sua pagina (Amministrazione › Numerazioni › Il codice delle commesse).
+    await valuta("document.querySelector('[data-tipo=\"commessa\"]').click(); true");
     await aspetta(900);
-    await valuta(`(() => { const p = [...document.querySelectorAll('.finestra .pezzo')].find(x => x.textContent.includes('Numero')); p.querySelector('button[aria-label="Una cifra in più"]').click(); return true; })()`);
+    assert.equal(await valuta('location.hash'), '#amministrazione/formato');
+    await valuta(`(() => { const c = [...document.querySelectorAll('.campo')].find(x => x.querySelector('label') && x.querySelector('label').textContent === 'Cifre del numero'); [...c.querySelectorAll('button')].find(b => b.textContent.trim() === '4').click(); return true; })()`);
     await aspetta(300);
-    assert.match(await valuta("document.querySelector('.anteprima-numero .codice').textContent"), /^\d{2}ST\d{4}$/);
-    await clicca('Salva', '.finestra');
-    await aspetta(800);
+    assert.match(await valuta("document.querySelector('#anteprima-formato').textContent"), /^\d{2}ST\d{4}$/);
+    await clicca('Salva il formato');
+    await aspetta(600);
+    await clicca('Salva il formato', '.finestra');
+    await aspetta(1200);
     const num = (await server('numerazioni')).numerazioni.find(x => x.tipo === 'commessa');
     assert.equal(num.formato, '{AA}ST{NNNN}');
     passo('numerazione: una cifra in più, anteprima ' + num.prossimo);

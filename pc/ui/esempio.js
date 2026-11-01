@@ -50,15 +50,15 @@
   /** I permessi iniziali dei quattro ruoli (architettura §3), per i moduli che ci sono. */
   function permessiDi(ruolo) {
     const p = {};
-    const tutti = ['dashboard', 'clienti', 'commesse', 'preventivi', 'attivita', 'rapportini', 'spese', 'fatturazione', 'banche', 'persone', 'documenti', 'ticket', 'mezzi', 'comunicazioni', 'portale', 'collaboratori', 'amministrazione', 'costi', 'riservati'];
+    const tutti = ['dashboard', 'clienti', 'commesse', 'preventivi', 'attivita', 'rapportini', 'spese', 'fatturazione', 'banche', 'persone', 'documenti', 'ticket', 'mezzi', 'comunicazioni', 'portale', 'collaboratori', 'integrazioni', 'amministrazione', 'costi', 'riservati'];
     tutti.forEach(m => { p[m] = 0; });
     if (ruolo === 'titolare') tutti.forEach(m => { p[m] = 2; });
     // Fase 6 (architettura §17.18): persone, mezzi e collaboratori; i dati riservati solo al titolare.
-    if (ruolo === 'amministrazione') Object.assign(p, { dashboard: 2, clienti: 2, commesse: 2, preventivi: 2, attivita: 2, rapportini: 2, spese: 2, fatturazione: 2, banche: 2, documenti: 2, ticket: 2, amministrazione: 1, costi: 2, persone: 2, mezzi: 2, collaboratori: 2, comunicazioni: 2, portale: 2 });
+    if (ruolo === 'amministrazione') Object.assign(p, { dashboard: 2, clienti: 2, commesse: 2, preventivi: 2, attivita: 2, rapportini: 2, spese: 2, fatturazione: 2, banche: 2, documenti: 2, ticket: 2, amministrazione: 1, costi: 2, persone: 2, mezzi: 2, collaboratori: 2, comunicazioni: 2, portale: 2, integrazioni: 1 });
     // Fase 5: il collaboratore legge i documenti e lavora i ticket (architettura §16.1). Fase 6: l'organico e i mezzi in lettura.
     // Fase 7 (§11.2): comunicazioni 2 per tutti tranne la lettura (1); il portale a titolare e amministrazione, in lettura alla lettura.
     if (ruolo === 'collaboratore') Object.assign(p, { dashboard: 1, clienti: 1, commesse: 1, attivita: 2, rapportini: 2, spese: 2, documenti: 1, ticket: 2, persone: 1, mezzi: 1, comunicazioni: 2 });
-    if (ruolo === 'lettura') Object.assign(p, { dashboard: 1, clienti: 1, commesse: 1, preventivi: 1, attivita: 1, rapportini: 1, spese: 1, fatturazione: 1, banche: 1, documenti: 1, ticket: 1, costi: 1, persone: 1, mezzi: 1, collaboratori: 1, comunicazioni: 1, portale: 1 });
+    if (ruolo === 'lettura') Object.assign(p, { dashboard: 1, clienti: 1, commesse: 1, preventivi: 1, attivita: 1, rapportini: 1, spese: 1, fatturazione: 1, banche: 1, documenti: 1, ticket: 1, costi: 1, persone: 1, mezzi: 1, collaboratori: 1, comunicazioni: 1, portale: 1, integrazioni: 1 });
     return p;
   }
 
@@ -615,9 +615,20 @@
       const r7 = E7.esegui(dati, azione, b);
       return R.puo(dati.permessiIo, 'costi') ? r7 : togliCosti(r7);
     }
+    // Fase 8: integrazioni, calendario in altre app, importa ed esporta, amministrazione completa, lista di controllo (esempio8.js).
+    const E8 = radice.WisperEsempio8 || (typeof require === 'function' ? require('./esempio8.js') : null);
+    if (E8) E8.prepara(dati);
+    if (E8 && Object.prototype.hasOwnProperty.call(E8.SERVE8, azione)) {
+      const s8 = E8.SERVE8[azione];
+      if (s8 === 'titolare' && dati.io.ruolo !== 'titolare') return NONPERMESSO('fare questa modifica');
+      if (Array.isArray(s8) && !R.puo(dati.permessiIo, s8[0], s8[1])) return NONPERMESSO(s8[1] === 2 ? 'fare questa modifica' : 'vedere questa pagina');
+      const r8 = E8.esegui(dati, azione, b);
+      return R.puo(dati.permessiIo, 'costi') ? r8 : togliCosti(r8);
+    }
     const serve = SERVE[azione];
     if (serve && !R.puo(dati.permessiIo, serve[0], serve[1])) return NONPERMESSO(serve[1] === 2 ? 'fare questa modifica' : 'vedere questa pagina');
-    const risposta = E7 ? E7.arricchisci(dati, azione, esegui(dati, azione, b)) : esegui(dati, azione, b);
+    const prima8 = E7 ? E7.arricchisci(dati, azione, esegui(dati, azione, b)) : esegui(dati, azione, b);
+    const risposta = E8 ? E8.arricchisci(dati, azione, b, prima8) : prima8;
     return R.puo(dati.permessiIo, 'costi') || SOLDI_DELLA_PERSONA.has(azione) ? risposta : togliCosti(risposta);
   }
 

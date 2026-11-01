@@ -116,7 +116,7 @@ async function main() {
       const ok = await valuta(`(() => {
         const radice = document.querySelector(${JSON.stringify(dove)});
         const b = radice && [...radice.querySelectorAll('button, [role=button]')].find(x => x.textContent.toLowerCase().indexOf(${JSON.stringify(testo.toLowerCase())}) >= 0);
-        if (!b) return 'non trovo';
+        if (!b) return 'non trovo' + (radice ? ' in: ' + radice.innerText.slice(0, 400).replace(/\\s+/g, ' ') : ' ' + ${JSON.stringify(dove)});
         b.click();
         return true;
       })()`);
@@ -309,7 +309,15 @@ async function main() {
 
     // La Dashboard porta a Da approvare.
     await vai('#dashboard');
-    await cliccaCon('da approvare', '.dash-corpo', 1500);
+    // Fase 8 (§8.2): al massimo 7 urgenti. Con tante urgenze "N cose da approvare" finisce sotto "Altre N", cioè in
+    // Tutto quello che c'è da fare; se è la cosa più urgente il pulsante dice "Apri Da approvare".
+    const daApprovareDash = "[...document.querySelectorAll('#principale button')].find(b => /cos[ae] da approvare|Apri Da approvare/i.test(b.textContent))";
+    if (!(await valuta('!!' + daApprovareDash))) await cliccaCon('Altre', '.sezione-dash', 1500);
+    assert.ok(await valuta('!!' + daApprovareDash), 'la voce delle cose da approvare');
+    await valuta(daApprovareDash + '.click(); true');
+    await aspetta(1500);
+    // Fase 8 (§8.2 punto 5): "N cose da approvare" è una voce sola che apre il foglio con le tre righe.
+    if (await valuta("!!document.querySelector('.velo .finestra')")) await cliccaCon('Ore e rapportini', '.velo .finestra', 1500);
     assert.match(await valuta("document.querySelector('h1').textContent"), /Da approvare/);
     await foto('da-approvare');
 

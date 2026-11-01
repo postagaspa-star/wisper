@@ -31,6 +31,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -99,6 +100,10 @@ fun SchermataCalendario(dati: Dati, nav: Navigatore, giorno: String) {
     val assenzeDelGiorno = elencoAssenze?.assenze.orEmpty().filter { it.copre(scelto) }
     val chiusureDelGiorno = elencoAssenze?.chiusure.orEmpty().filter { it.copre(scelto) }
 
+    var altro by remember { mutableStateOf(false) }
+    if (altro) FoglioDalBasso({ altro = false }) {
+        VoceMenu(Icone.calendario, "Il calendario in altre app", { altro = false; nav.vai("calendario-altre") })
+    }
     Box(Modifier.fillMaxSize().background(c.fondo)) {
         Column(
             Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(MarginePagina).padding(bottom = if (puo) SpazioSottoBarra else 40.dp),
@@ -124,6 +129,8 @@ fun SchermataCalendario(dati: Dati, nav: Navigatore, giorno: String) {
                 PulsanteTondo(Icone.freccia, if (mese) "Mese dopo" else "Settimana dopo", {
                     sceltoTesto = (if (mese) scelto.plusMonths(1) else scelto.plusWeeks(1)).toString()
                 }, dimensione = 48.dp)
+                // Fase 8 (fase8.md §5.6): ⋯ › Il calendario in altre app.
+                PulsanteTondo(Icone.altro, "Altro", { altro = true }, Modifier.bersaglio("calendario-altro"), dimensione = 48.dp)
             }
 
             AnimatedContent(targetState = mese, transitionSpec = { fadeIn(tween(220)) togetherWith fadeOut(tween(160)) }, label = "settimana o mese") { vediMese ->

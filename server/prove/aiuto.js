@@ -185,4 +185,23 @@ const COLONNE_007 = {
   file: { caricamento_id: null },
 };
 
-module.exports = { serverDiProva, postinoFinto, viesFinto, cartellaNuova, ascolta, chiudi, SEGRETO, PNG, giornoDeiPrototipi, GIORNO_DEI_PROTOTIPI, COLONNE_007 };
+/**
+ * Fase 8: le colonne che la migrazione 008 aggiunge a tabelle che c'erano gia', col valore di base ("come prima": i
+ * riquadri e le notifiche del ruolo, niente password iniziale da cambiare, copie senza conteggi, nessun accesso da fuori).
+ */
+const COLONNE_008 = {
+  utenti: { riquadri: null, notifiche_tipi: null, notifiche_silenzio: 1, password_iniziale: 0, password_il: '' },
+  copie: { conteggi: null, md5: null, cifrata: 0 },
+  sessioni: { da_fuori: '' },
+};
+
+/** Le colonne nuove dalla 007 in poi, insieme: le prove delle migrazioni di prima (003-007) le tolgono prima di confrontare. */
+const COLONNE_DOPO_007 = {};
+for (const gruppo of [COLONNE_007, COLONNE_008]) {
+  for (const [t, c] of Object.entries(gruppo)) COLONNE_DOPO_007[t] = Object.assign({}, COLONNE_DOPO_007[t] || {}, c);
+}
+
+module.exports = {
+  serverDiProva, postinoFinto, viesFinto, cartellaNuova, ascolta, chiudi, SEGRETO, PNG, giornoDeiPrototipi, GIORNO_DEI_PROTOTIPI, COLONNE_007,
+  COLONNE_008, COLONNE_DOPO_007,
+};

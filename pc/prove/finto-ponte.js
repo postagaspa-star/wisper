@@ -52,13 +52,21 @@ const IMMAGINE = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFk
 // o il file di WISPER_FILE. I file scelti si tengono qui (rif -> file): la pagina non vede mai il percorso.
 const PDF_PROVA = () => Buffer.from('%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj 2 0 obj<</Type/Pages/Kids[]/Count 0>>endobj\ntrailer<</Root 1 0 R>>\n%% prova ' + Date.now() + '\n%%EOF\n');
 const scelti = new Map();
+// Fase 8: il CSV di prova di "Importa clienti e fornitori" (solo nomi e numeri di esempio).
+const CSV_PROVA = ['Ragione sociale;P.IVA;Cod. destinatario;PEC;Città;Fax',
+  'Verdi Impianti Snc;;ABC1234;verdi@pec.esempio.it;Thiene;0445 000001',
+  'Officine Dal Santo Srl;;;dalsanto@pec.esempio.it;Schio;',
+  'Rossi Impianti Srl;;XYZ9876;;Bassano del Grappa;',
+  'Bianchi Elettro;12345678901;;;Marostica;',
+  ';;;;Vicenza;'].join('\r\n') + '\r\n';
 // Fase 7: quello che il programma aprirebbe fuori (WhatsApp, collegamenti), per la prova dei flussi.
 const apertiFuori = [];
 const RegoleCom = require('../ui/regole-comunicazioni.js');
 
 // Chi è entrato. Come nel programma, la chiave resta qui: la pagina non la vede mai.
 const sessione = { token: '', email: '', studio: '', esempio: null };
-const DISPOSITIVO = { disp: 'finto-ponte-' + os.hostname(), dispNome: os.hostname() + ' (finto ponte)', app: 'ufficio prova' };
+// Fase 8: niente nome vero del computer (si vede in Sicurezza e nelle schermate): un nome d'esempio.
+const DISPOSITIVO = { disp: 'finto-ponte-prova', dispNome: 'PC dello studio (finto ponte)', app: 'ufficio prova' };
 // La porta Google (--google): il collegamento con le regole di Server.cs, che tiene la chiave per sé.
 const { Collegamento } = require('./porta-ufficio.js');
 const COLL = GOOGLE ? new Collegamento(Object.assign({ casa: CASA, google: GOOGLE, log: x => console.log('[collegamento] ' + x) }, DISPOSITIVO)) : null;
@@ -210,6 +218,12 @@ async function locale(nome, o) {
     // Il promemoria: nel programma vero è una notifica di Windows.
     case 'notifica': console.log('[notifica]', o.titolo, '·', o.testo); return { ok: true };
     case 'scegli-file': {
+      // Fase 8 (§7.2): "Importa clienti e fornitori" sceglie un CSV o un XLSX. Qui la finestra non c'è: il file di
+      // WISPER_IMPORTA, o un CSV di prova con nomi di esempio (un doppione per partita IVA, una partita IVA sbagliata).
+      if (o.filtro === 'importa') {
+        if (process.env.WISPER_IMPORTA) return { ok: true, nome: path.basename(process.env.WISPER_IMPORTA), mime: 'text/csv', base64: fs.readFileSync(process.env.WISPER_IMPORTA).toString('base64') };
+        return { ok: true, nome: 'clienti-fatture.csv', mime: 'text/csv', base64: Buffer.from(CSV_PROVA, 'utf8').toString('base64') };
+      }
       // Fase 4: "Scegli i file" di Importa XML (più file insieme). Qui la finestra di Windows non c'è: si
       // restituiscono i file di WISPER_XML (percorsi separati da virgole), di base lo zip di ottobre degli esempi.
       if (o.filtro === 'fatture') {
@@ -234,6 +248,23 @@ async function locale(nome, o) {
       const file = path.join(STAMPE, String(o.nome || 'esportazione.csv').replace(/[\\/:*?"<>|]+/g, '-'));
       fs.writeFileSync(file, o.base64 ? Buffer.from(o.base64, 'base64') : Buffer.from(String(o.testo || ''), 'utf8'));
       console.log('[salvato]', file);
+      return { ok: true, percorso: file };
+    }
+    // Fase 8 (§7.1): il file di Esporta tutto (GET /esportazione/<id> col Bearer, come Server.cs), nella cartella delle stampe.
+    case 'scarica-esportazione': {
+      const id = String(o.id || '');
+      if (!/^[A-Za-z0-9_-]{1,40}$/.test(id)) return { ok: false, errore: 'Esportazione non trovata' };
+      const nome = String(o.nome || 'wisper-tutto.zip').replace(/[\\/:*?"<>|]+/g, '-');
+      fs.mkdirSync(STAMPE, { recursive: true });
+      const file = path.join(STAMPE, /\.zip$/i.test(nome) ? nome : 'wisper-tutto.zip');
+      if (ESEMPIO) { fs.writeFileSync(file, Buffer.from([0x50, 0x4b, 0x05, 0x06].concat(new Array(18).fill(0)))); return { ok: true, percorso: file }; }
+      if (COLL) return { ok: false, errore: 'Il file con tutti i dati si scarica dalla rete di casa: riprova quando sei in ufficio', rete: true };
+      const rr = await fetch(SERVER + '/esportazione/' + encodeURIComponent(id), { headers: { Authorization: 'Bearer ' + sessione.token } }).catch(() => null);
+      if (!rr) return { ok: false, errore: 'Il server non risponde: controlla la rete e riprova', rete: true };
+      if (rr.status === 401) { sessione.token = ''; return { ok: false, errore: 'Accesso scaduto: entra di nuovo', accesso: false }; }
+      if (!rr.ok) return { ok: false, errore: rr.status === 403 ? 'Il file con tutti i dati lo scarica solo chi l\'ha chiesto' : 'Il file non c\'è più: preparane uno nuovo' };
+      fs.writeFileSync(file, Buffer.from(await rr.arrayBuffer()));
+      console.log('[esportazione]', file);
       return { ok: true, percorso: file };
     }
     case 'pdf': {

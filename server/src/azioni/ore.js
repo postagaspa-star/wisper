@@ -120,6 +120,10 @@ module.exports = {
 
   /** I nomi che servono alle risposte: persone, commesse, clienti. */
   nomiFase3() {
+    return this.ricordata('nomiFase3', () => this.nomiFase3Letti());
+  },
+
+  nomiFase3Letti() {
     const a = { utenti: {}, commesse: {}, clienti: {} };
     this.db.righe('SELECT id, nome FROM utenti').forEach(u => { a.utenti[u.id] = u.nome; });
     this.db.righe('SELECT id, descrizione, cliente_id FROM commesse').forEach(m => {
@@ -744,7 +748,10 @@ module.exports = {
       const k = String(commessa).toUpperCase();
       (kmPerCommessa[k] = kmPerCommessa[k] || []).push({ chi, km });
     };
-    for (const r of this.db.righe("SELECT id, id_commessa, km FROM rapportini WHERE UPPER(stato) <> 'ANNULLATO'")) aggiungiKm(r.id_commessa, 'r' + r.id, numero(r.km));
+    // Fase 8 (prova di carico): dentro la Dashboard gli stessi rapportini (non annullati, stesso ordine) letti una volta sola.
+    const vivi = this.memoLetture ? this.ricordata('rapportiniVivi', () => this.db.righe("SELECT id, data, stato, utente_id, id_cliente, id_commessa, ticket_id, ore_lavoro, ore_extra, ore_viaggio, ore_totali, totale, fatturato_il, stato_approvazione, km FROM rapportini WHERE UPPER(stato) <> 'ANNULLATO'"))
+      : this.db.righe("SELECT id, id_commessa, km FROM rapportini WHERE UPPER(stato) <> 'ANNULLATO'");
+    for (const r of vivi) aggiungiKm(r.id_commessa, 'r' + r.id, numero(r.km));
     for (const t of this.db.righe('SELECT id, commessa_id, km, andata_ritorno FROM trasferte WHERE tolta IS NULL')) {
       aggiungiKm(t.commessa_id, 't' + t.id, rimborsoTrasferta({ km: t.km, andataRitorno: t.andata_ritorno === 1 }).kmTotali);
     }

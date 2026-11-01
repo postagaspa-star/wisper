@@ -164,8 +164,16 @@ async function main() {
     // ------------------------------------------------------------- 2. Manuel approva, Annulla, approva di nuovo: la pianificazione
     await entra('manuel@esempio.it');
     testo = await testoPagina();
-    assert.match(testo, /assenti oggi/, 'la Dashboard ha i riquadri della fase 6');
-    assert.match(testo, /ferie da approvare/);
+    // Fase 8 (§8.4): la Dashboard ha i quattro riquadri della persona (il titolare: Da fatturare, Scaduto, Ticket aperti,
+    // Da approvare); i numeri della fase 6 restano nel server e nella pagina di Persone.
+    const dash6 = await server('dashboard');
+    if (Array.isArray(dash6.riquadri)) {
+      assert.match(testo, /da approvare/, 'il riquadro Da approvare (ferie comprese)');
+      assert.ok(dash6.numeri && dash6.numeri.persone && typeof dash6.numeri.persone.assentiOggi === 'number', 'i numeri della fase 6 ci sono');
+    } else {
+      assert.match(testo, /assenti oggi/, 'la Dashboard ha i riquadri della fase 6');
+      assert.match(testo, /ferie da approvare/);
+    }
     const quando = P.quandoAssenza({ dal, al });
     const apriRichiesta = async () => {
       await vai('#persone/ferie');

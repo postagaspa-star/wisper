@@ -186,7 +186,7 @@ test('l\'esterno: vede solo la commessa del suo incarico (senza budget ne\' note
   assert.deepEqual(ok(await luca('attivita', {})).attivita, []);
   assert.deepEqual(ok(await luca('tickets', {})).ticket, []);
   // La sua Dashboard.
-  const d = ok(await luca('dashboard'));
+  const d = ok(await luca('dashboard', { tutto: true }));
   assert.equal(d.per, 'esterno');
   assert.ok(d.settimana.some(v => v.titolo === 'Il DURC scade fra 7 giorni: carica quello nuovo'));
   assert.deepEqual(d.incarichi.map(i => i.id), inc.filter(i => i.stato === 'affidato').map(i => i.id));

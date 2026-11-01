@@ -78,6 +78,8 @@ enum class Sezione(val nome: String, val icona: ImageVector, val modulo: String)
     COMUNICAZIONI("WhatsApp e comunicazioni", Icone.fumetto, Moduli.COMUNICAZIONI),
     PORTALE("Portale clienti", Icone.globo, Moduli.PORTALE),
     COLLABORATORI("Collaboratori esterni", Icone.collab, Moduli.COLLABORATORI),
+    // Fase 8 (fase8.md §15): 17 Integrazioni (la spina) dopo Collaboratori esterni.
+    INTEGRAZIONI("Integrazioni", Icone.spina, Moduli.INTEGRAZIONI),
     AMMINISTRAZIONE("Amministrazione", Icone.amministrazione, Moduli.AMMINISTRAZIONE),
 }
 
@@ -142,12 +144,18 @@ fun rottaCompito(rotta: String?): Boolean =
         rotta.startsWith("persona-nuova") || rotta.startsWith("persona-modifica/") || rotta.startsWith("assenza-nuova") ||
         rotta.startsWith("dpi-consegna/") || rotta.startsWith("guasto-nuovo/") || rotta.startsWith("mezzo-nuovo") ||
         rotta.startsWith("strumento-nuovo") || rotta.startsWith("incarico-nuovo/") || rotta.startsWith("incarico-lettera/") ||
-        rotta.startsWith("collaboratore-nuovo"))
+        rotta.startsWith("collaboratore-nuovo") ||
+        // Fase 8: l'importazione di clienti e fornitori, a passi come il rapportino.
+        rotta.startsWith("amm/importa-clienti"))
 
 /** La sezione di una pagina interna: dice il nome piccolo accanto a "indietro" e il permesso che serve. */
 fun sezioneDiRotta(rotta: String?, base: Sezione): Sezione = when {
     rotta == null -> base
     rotta == "amm/app" -> base
+    // Fase 8: le pagine di Tu (notifiche, aspetto) sono di tutti, dalla voce in cui si è.
+    rotta.startsWith("tu/") -> base
+    rotta == "tutto" -> Sezione.DASHBOARD
+    rotta.startsWith("integrazion") -> Sezione.INTEGRAZIONI
     rotta.startsWith("client") || rotta.startsWith("fornitor") || rotta.startsWith("soggett") -> Sezione.CLIENTI
     rotta.startsWith("commess") -> Sezione.COMMESSE
     rotta.startsWith("preventiv") || rotta == "listino" || rotta == "contratti" || rotta.startsWith("invio/preventivo") -> Sezione.PREVENTIVI
@@ -417,11 +425,13 @@ private fun VoceCassetto(s: Sezione, attiva: Boolean, numero: Int, nome: String 
                             Sezione.COLLABORATORI -> "$numero con documenti scaduti"
                             Sezione.COMUNICAZIONI -> if (numero == 1) "1 messaggio da mandare" else "$numero messaggi da mandare"
                             Sezione.PORTALE -> "$numero da guardare"
+                            Sezione.INTEGRAZIONI -> "$numero in Errore"
+                            Sezione.RAPPORTINI -> "$numero da approvare"
                             else -> "$numero da fatturare"
                         }
                     },
                 contentAlignment = Alignment.Center,
-            ) { Text("$numero", style = Testi.piccolo.copy(fontWeight = FontWeight.ExtraBold), color = c.suGiallo) }
+            ) { Text(if (numero > 99) "99+" else "$numero", style = Testi.piccolo.copy(fontWeight = FontWeight.ExtraBold), color = c.suGiallo) }
         }
     }
 }

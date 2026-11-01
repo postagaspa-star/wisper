@@ -325,6 +325,39 @@ public sealed class Server
     }
 
     /// <summary>
+    /// Fase 8 (fase8.md §7.1): il file di Esporta tutto (GET /esportazione/&lt;id&gt; col Bearer, solo chi l'ha chiesto).
+    /// Solo dalla rete di casa: è uno ZIP di tutti i dati (MB), e la porta Google non ha questa strada. Stato 200 coi byte;
+    /// 401 (si esce), 403, 404 e 502 con la frase.
+    /// </summary>
+    public async Task<(int Stato, byte[] Dati, string Errore)> EsportazioneAsync(string id)
+    {
+        config.RileggiSeCambiato();
+        if (!config.Entrato) return (401, Array.Empty<byte>(), "Accesso scaduto: entra di nuovo");
+        if (config.Server.Length == 0 || await StradaAsync().ConfigureAwait(false) != "casa")
+            return (502, Array.Empty<byte>(), "Il file con tutti i dati si scarica dalla rete di casa: riprova quando sei in ufficio");
+        try
+        {
+            using var rq = new HttpRequestMessage(HttpMethod.Get, config.Server + "/esportazione/" + Uri.EscapeDataString(id));
+            rq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", config.Token);
+            rq.Headers.Add("X-Wisper-Disp", config.Dispositivo);
+            rq.Headers.Add("X-Wisper-App", "ufficio " + Versione);
+            using var tempo = new CancellationTokenSource(TempoCasa);
+            using var r = await casa.SendAsync(rq, HttpCompletionOption.ResponseHeadersRead, tempo.Token).ConfigureAwait(false);
+            var codice = (int)r.StatusCode;
+            Contatto("casa");
+            if (codice == 200) return (200, await r.Content.ReadAsByteArrayAsync(tempo.Token).ConfigureAwait(false), "");
+            if (codice == 401) { config.Esci(); return (401, Array.Empty<byte>(), "Accesso scaduto: entra di nuovo"); }
+            if (codice == 403) return (403, Array.Empty<byte>(), "Il file con tutti i dati lo scarica solo chi l'ha chiesto");
+            return (codice, Array.Empty<byte>(), "Il file non c'è più: preparane uno nuovo");
+        }
+        catch (Exception e) when (ÈRete(e))
+        {
+            Log.Errore("esportazione non scaricata", e);
+            return (502, Array.Empty<byte>(), "Il server non risponde: controlla la rete e riprova");
+        }
+    }
+
+    /// <summary>
     /// Fase 5: un file in byte al server (POST /carica?nome=&amp;mime=&amp;idFile=&amp;per=), letto dal disco o da
     /// quello che la pagina ha trascinato. In casa parte in byte senza tenerlo tutto in memoria; da Google
     /// passa intero in base64 (strada "carica"), fino a 26 MB. La risposta è quella del server

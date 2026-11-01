@@ -18,6 +18,96 @@ Questa fase ha tre lavori diversi, e ognuno vale da solo:
    **il passaggio dei dati veri**: la prova generale e la sera del cambio con Manuel, col ritorno indietro.
 In più la **Dashboard**: le voci di sette fasi messe insieme non stanno più in una pagina; qui le regole per combinarle.
 
+## 0. Dopo le scelte del 31/10 e dell'01/11/2026 (vale sopra al resto di questo accordo)
+
+Questo accordo è del 22/10. Il 31/10 Andrea ha scelto **Google come porta d'ingresso** (`porta-google.md`: le app parlano
+con lo script del foglio, il NAS va a prendere il lavoro, nessuna porta aperta a casa) e vuole **tutto gratuito**;
+l'01/11 il portale della fase 7 è stato costruito su **Netlify + uno script Google del portale a parte** (`fase7.md` §0).
+La domanda 1 di §17 è chiusa. Tutto quello che qui sotto parla di tailnet, Tailscale, Serve, Funnel, porte 8401 e 8443,
+Cloudflare, dominio o "ingresso" si legge con questa sezione; dove non torna, vale questa.
+
+### 0.1 L'elenco (§3.1 e §3.4)
+
+| # | Prima | Adesso |
+|---|---|---|
+| 4 | Accesso da fuori: tailnet, 8 $ al mese | **Fatto** con la porta Google (fase 6), **0 €**. Si accende coi passi di Andrea: `Porta.gs` nello script del foglio e `WISPER_PORTA_GOOGLE=si` nel `.env` del NAS (dall'01/11 sul NAS c'è `no`, perché lo script vero non ha ancora `Porta.gs`) |
+| 5 | Portale: Funnel o Cloudflare | **Fatto** (fase 7 §0), **0 €**; si accende coi passi di Andrea di fase 7 |
+| 6 | Link che scade: con l'ingresso | **Fatto** col portale (`#/condiviso/<token>`, fase 7) |
+| 7 | Ponte del cambio: Funnel sulla 8443 | **Fatto** con la porta Google: proprietà `PONTE_PORTA = si` (`porta-google.md` §12), **0 €** |
+| 9 | Abbonamento dal telefono, nel tailnet | in casa, diretto al NAS (§0.3) |
+| 10 | Abbonamento da Google Calendar/Outlook: con l'ingresso | **Andrea** (domanda 4), **0 €**: lo stesso indirizzo "anche fuori casa" di §0.3 |
+
+Il resto dell'elenco non cambia. **Costi di questa fase: 0 €**, comprese le risposte che prima costavano (4, 5, 7, 10).
+
+### 0.2 I controlli (§4.2, §4.3, §8.7, §9.8, §12.3, §13.7)
+
+- Il controllo `tailnet` diventa **`porta`**, "Accesso da fuori casa (porta Google)". Guarda, non chiede: lo stato di
+  `w.porta` (porta.js) e l'ultima richiesta arrivata dalla porta (provenienza `google`): "Ultimo accesso da fuori casa:
+  oggi alle 9:58, telefono di Manuel". **Collegato** = l'ultimo giro verso lo script è riuscito negli ultimi 10 minuti;
+  **Da configurare** = mancano `WISPER_POSTINO_URL` o `SEGRETO_SERVER`, oppure c'è `WISPER_PORTA_GOOGLE=no` ("Spenta nel
+  `.env` del NAS"); **Errore** = la regola di §4.1 (due giri di fila falliti). La colonna `sessioni.tailnet` di §12.3 si
+  chiama `sessioni.da_fuori` (quando quella sessione è arrivata l'ultima volta dalla porta); niente `Tailscale-User-Login`
+  in §13.7.
+- `internetinterno` resta, con due motivi d'Errore: (a) una richiesta sulla 8400 con `Tailscale-Funnel-Request` o
+  `X-Forwarded-For`; (b) **una richiesta arrivata sull'ingresso interno 8402** (il contenitore `wisper-ingresso` del
+  22/10, che con la porta Google resta spento). Frase della voce urgente (§8.7) e della scheda di Sicurezza (§9.8): "Una
+  richiesta è arrivata da internet sull'ingresso del NAS il 21/10 alle 3:12: con la porta Google l'ingresso va spento",
+  collegamento ad Amministrazione › Sicurezza. AllowFunnel non si nomina più.
+- `portale`: lo stato del portale di fase 7 §0.5 (`portale {}`: `attivo`, `collegato`, `controllatoIl`) al posto di
+  `GET {PORTALE_INDIRIZZO}/portale/salute`. Da configurare finché mancano `WISPER_PORTALE_URL` e `SEGRETO_PORTALE`.
+- §4.3, gruppo **Collegati a Wisper**: 1-3, 4 (`porta`), 5-7 (portale, link, ponte), 8, 9, 14. 4-7 stanno **Da
+  configurare** finché Andrea non fa i passi; non sono più "Dipendono da una scelta".
+- §9.8, "Due passaggi per entrare": da fuori casa ora si entra con la password di Wisper attraverso lo script del foglio,
+  il cui indirizzo è segreto (mai in pagine, file pubblicati o GitHub) e con i limiti ai tentativi della provenienza
+  `google`. Il codice sul telefono resta fuori da questa fase, ma è la prima cosa da fare se quell'indirizzo finisse in
+  giro: scritto così in pagina.
+
+### 0.3 Il calendario (§5)
+
+- **In casa** (di base): `http://<server>/calendario/<chiave>.ics` sulla 8400, come §5.5, con l'indirizzo che nasce dallo
+  schema e dall'`Host` della richiesta che crea il feed. In §5.1 e §5.6 "fuori casa si aggiorna se il tailnet è acceso"
+  diventa: "si aggiorna quando il telefono è in casa; fuori casa resta l'ultima lettura".
+- **Anche fuori casa** (la terza strada, domanda 4, **spenta di base**): passa dallo **script del portale**, il cui
+  indirizzo è già pubblico per costruzione (quello del foglio non deve finire nei calendari).
+  - `GET <script del portale>?calendario=<chiave>`: il `doGet` di `PortaleClienti.gs` mette in coda
+    `{tipo: "portale", strada: "calendario", metodo: "GET", corpo: {chiave}}` (stessa coda e stessi controlli di forma);
+    il router del portale lo passa a `calendario.js`, che risponde `{ok, stato, ics}`; lo script restituisce il testo
+    con `MimeType.ICAL`. Apps Script non sa mandare ETag, 304, 404 o 429: senza `ics` lo script risponde il testo
+    "Indirizzo del calendario non valido" (uguale per chiave sconosciuta, tolta, utente disattivato, troppe letture,
+    calendario spento).
+  - Risponde **solo** per i feed con `pubblico` e solo con `CALENDARIO_PUBBLICO = true`, che può accendere chi ha
+    `amministrazione` 2 e solo se il portale è Collegato. 60 letture all'ora per chiave anche qui.
+  - `nuovoFeed {pubblico: true}` risponde con `indirizzo` = `<WISPER_PORTALE_URL>?calendario=<chiave>` e `webcal` uguale
+    con `webcal://`. L'indirizzo dello script del portale non è segreto (sta nella pagina del portale), ma resta fuori dai
+    dati di prova e dalle schermate. Errore: "Il calendario fuori casa non è acceso". La casella si chiama "Anche fuori
+    casa (passa da Google)" e nasce senza dettagli (§5.5).
+- Le prove della strada fuori casa si fanno col finto Google in modo portale (`WISPER_PROGETTO=portale`), mai con
+  quello vero. `http://10.0.2.2:<porta>/calendario/<chiave>.ics` per l'emulatore resta.
+
+### 0.4 Il passaggio dei dati (§10, §11)
+
+- **19:45** della sera del cambio: invece di `SERVER_URL`, Andrea mette **`PONTE_PORTA = si`** nelle proprietà dello script
+  del foglio (`porta-google.md` §12). Prima deve essere accesa la porta: `Porta.gs` nello script, `WISPER_POSTINO_URL`,
+  `SEGRETO_SERVER` e `WISPER_PORTA_GOOGLE=si` nel `.env`. Le versioni 0.4.0 passano dalla coda per 4 settimane. Se la
+  porta non è accesa vale il ramo "Senza ingresso" di §10.5 (le 0.4.0 tengono i rapportini in coda). Il postino riscrive
+  il foglio ogni notte (serve al ritorno indietro).
+- Ritorno **B**, punto 3: si toglie `PONTE_PORTA` (lo script torna a lavorare sul foglio). §10.7, fine della quarta
+  settimana: `PONTE_PORTA = no`.
+- `M15.2` di §11.2: "Dal telefono in 4G: la pagina del portale su Netlify si apre e risponde; il NAS non ha porte aperte",
+  a mano (Andrea), **in attesa** finché il portale non è acceso.
+
+### 0.5 Domande e prove (§16, §17)
+
+- §17: la **1** è chiusa (Google, 31/10). La **4** diventa: "**file e abbonamento in casa** (consiglio: 0 €, niente dati a
+  Google o Microsoft) oppure **anche fuori casa e per Google Calendar e Outlook**, dallo script del portale (0 €; gli
+  appuntamenti passano da Google, di base senza dettagli)". Le altre restano. Chi costruisce fa la raccomandazione (la
+  prima) e, dove l'accordo lo prevede, lascia l'altra come impostazione: cifratura della copia costruita e **spenta**,
+  funzioni accese costruite, riquadri a scelta costruiti, calendario fuori casa costruito e spento.
+- §16: resta la prova con `Tailscale-Funnel-Request` sulla 8400 e se ne aggiunge una sull'ingresso 8402. "Feed pubblico
+  solo sulla 8401" diventa "feed pubblico fuori casa solo dallo script del portale (finto Google) e solo con
+  `CALENDARIO_PUBBLICO`; in casa, sulla 8400, un feed pubblico risponde come gli altri". "Se il classico Outlook legge un
+  feed dal computer (allora basta il tailnet)" diventa "(allora l'abbonamento in casa basta anche sul computer)".
+
 ## 1. Cosa consegna
 
 - **17 Integrazioni**:
@@ -1499,3 +1589,160 @@ qui sotto, la copia del foglio per le prove generali, la prova di ripristino ogn
 Workspace 6,80-8,10 € a utente al mese se scelto. Non collegati, coi numeri in §3.1: SDI con un intermediario (circa
 30 € l'anno più il Premium di Aruba, o 0,10-0,15 € a fattura), banca (da 0 € in modalità ristretta a un contratto),
 WhatsApp Business API (circa 0,036 $ a promemoria), assistente (1-1,5 $ al mese per 500 domande).
+
+## 18. Decisioni prese costruendo (server)
+
+Dove l'accordo taceva si è scelta la strada più semplice e più sicura. Server 0.11.0, schema 8.
+
+**Integrazioni (§4, §0)**
+- Le 26 voci (nomi, frasi, costi, motivi) stanno in `server/src/integrazioni/elenco.js`; quelle con un controllo vero
+  hanno una riga in `integrazioni` (`postino`, `vies`, `aggiornamenti`, `porta`, `portale`, `calendariofile`,
+  `calendario`, `ricerca`, `copiafuori`, `internetinterno`). Le voci che dipendono da un'altra (Link, Ponte) prendono lo
+  stato di quella.
+- Colonna in più `integrazioni.riuscito_il` (l'ultimo controllo riuscito: "ok l'ultima volta il …").
+- In prova niente va su internet: VIES e "aggiornamenti" restano **Da configurare** senza i servizi finti
+  (`WISPER_VIES_URL`, `WISPER_AGGIORNAMENTI_URL`). Il controllo degli aggiornamenti legge solo il numero dell'ultima
+  versione: la firma dell'elenco la controllano telefono e computer, come oggi.
+- `internetinterno` (§0.2): una richiesta arrivata da internet sulla porta interna (8400 con `X-Forwarded-For` o
+  `Tailscale-Funnel-Request`, o 8402) segna Errore per **7 giorni** e una riga nel registro ("richiesta da internet sulla
+  porta interna"); si vede in Integrazioni e in Sicurezza.
+- Due errori di fila prima di "Errore" e della notifica (`integrazione_errore` a chi riceve gli avvisi); "Prova adesso"
+  una volta al minuto per collegamento.
+
+**Calendario (§5)**
+- Una ricorrenza scritta compare con tutte le sue volte nel periodo (`UID attivita-<id>-<aaaammgg>@wisper`); le cose
+  annullate negli ultimi 30 giorni restano nel file come `STATUS:CANCELLED` (così il telefono le toglie), poi spariscono.
+- Nel feed: le mie ferie e assenze approvate; nel feed dello studio quelle di tutti con la parola che chi chiede può
+  vedere ("Assente" senza il motivo); le chiusure dello studio come giornate intere.
+- L'indirizzo "in casa" del feed: `WISPER_INDIRIZZO_CASA` se c'è, se no quello con cui la richiesta è arrivata.
+  Il feed "fuori casa" vuole `CALENDARIO_PUBBLICO` acceso (amministrazione 2, portale Collegato) e, se ha i dettagli,
+  la conferma esplicita. Al massimo 5 feed per persona; 60 letture all'ora per feed, poi 429; chiave sconosciuta,
+  tolta o di un utente disattivato: lo stesso 404.
+
+**Ricerca dentro i file (§6)**
+- Tabella `file_testo` (FTS5, `unicode61 remove_diacritics 2`) solo se SQLite ha FTS5; senza, la ricerca dentro i file
+  si spegne da sola e lo dice (Integrazioni › Ricerca). La lettura gira in un worker con 20 secondi al massimo e 200.000
+  caratteri; PDF (anche compressi, con ToUnicode), DOCX, XLSX, PPTX, ODF, DXF, testo. Scansioni e `.doc` vecchi:
+  "senza testo" / "non si legge".
+- Non si leggono: i documenti delle persone, quelli riservati, i file tolti. Un documento che compare già per titolo non
+  prende anche l'estratto: `trovato` (revisione, estratto) c'è solo per quelli trovati **solo** dentro il file.
+  L'estratto si calcola solo per i documenti della pagina che si manda (prova di carico).
+
+**Copie, cifratura, ripristino (§9.8-9.10)**
+- Il file cifrato: `WISPERC1` + versione (1 byte) + nonce (12 byte) = 21 byte d'intestazione, poi i dati e i 16 byte del
+  tag GCM. Chiave AES = SHA-256 di `"wisper-copia-1:"` + le 32 lettere della chiave scritta (maiuscole/minuscole,
+  spazi e trattini non contano). La chiave si mostra una volta sola, quando si accende; mai nel registro né nelle risposte.
+- Cifratura accesa e chiave sparita dal disco: la copia fuori casa **non parte** (errore), mai in chiaro per sbaglio;
+  quella sul NAS sì.
+- `CAMBIO` e `COPIA_CIFRATA` si salvano solo dalle loro pagine (Segna il cambio, Sicurezza), non da Impostazioni generali.
+- `ripristina.js` legge la data solo dal nome del file della copia; con la chiave sbagliata si ferma prima di toccare
+  qualsiasi cosa. `ripristina-file.js` controlla lo SHA-256 di ogni file prima di rimetterlo.
+- La prova automatica chiede al postino l'impronta (MD5) della copia fuori casa: serve l'azione nuova
+  `postinoImpronta {cartella, nome}` in `Ponte.gs` (fuori dalla mia zona: va aggiunta, incollata e pubblicata; senza,
+  la prova dice "non controllata").
+
+**Lista di controllo (§11)**
+- 77 righe (M01.1 … M18.3, T01-T15, C01-C07, G01-G10, E01-E15, R01); M15.2 parte "In attesa di una scelta". Le righe
+  "A + M" sono `a_mano`; quelle che il server sa controllare (M08.2, M17.1, M18.1, T10-T14) sono verdi o rosse da sole.
+  Una riga segnata a mano torna "da rifare" quando cambia la versione del server.
+
+**Dashboard (§8)**
+- Con `tutto: true` niente tetti, niente gruppi e niente voce unica "Da approvare" (sono raggruppamenti), ma sempre
+  una cosa una voce. La famiglia "attività" raggruppa solo le voci di tipo `attivita`.
+- Il ruolo Lettura non vede voci che chiedono di agire. Lo spazio sul disco va nell'area `sistema`. La voce del
+  ripristino non provato compare solo dopo che esiste almeno una copia.
+- Il riquadro "Strumenti con la taratura scaduta" porta a `{pagina: "mezzi", filtro: {segmento: "strumenti", taratura:
+  "scaduta"}}` (la pagina "attrezzature" non esiste).
+- La voce unica "Da approvare" porta alla pagina nuova `approvare`, con le righe per persona. Ha gravità `attenzione` e
+  segue l'ordine fisso (§8.2 punto 2): con più di 7 voci rosse in Urgenti finisce in "Altre". Non la si forza più su,
+  perché le urgenze rosse vengono prima per regola; il numero resta sempre in vista nel riquadro "Da approvare", che è
+  tra i quattro di base del titolare.
+
+**Funzioni spente, impostazioni, notifiche (§9)**
+- `permessiDi` applica `MODULI_SPENTI` (livello 0 anche per il titolare); un'azione di una funzione spenta risponde
+  `{spenta: true}` prima del controllo dei permessi. Eccezione: con Banche spenta, "Pagata" da una fattura scrive lo
+  stesso il movimento (coi permessi veri della persona). Spegnere il portale da Funzioni accese fa anche "Spegni il
+  portale adesso" (lo spegnimento della funzione vale come conferma).
+- `salvaImpostazioni` controlla i limiti di ogni voce (errori che cominciano col nome: "Ore di lavoro al giorno: da 1 a
+  12 ore"); le chiavi senza voce si salvano come prima.
+- Colonne in più su `utenti`: `password_iniziale` e `password_il` (Sicurezza: chi non ha ancora cambiato la password
+  iniziale). Il silenzio di sera (20-7 e festivi) lo calcola il server (`silenzioSera` in `io`, `silenzio` in
+  `notifiche`); il riepilogo del mattino all'ora di `NOTIFICHE_ORA`.
+- Stato del sistema: la differenza d'ora col dispositivo si misura con l'orologio vero del server (anche in prova). In
+  prova `database.mb` è `null` (il database di prova sta in memoria, non c'è un file da misurare) e `versioni.ultime` è
+  vuoto (niente internet in prova): telefono e computer nascondono quelle righe. Sul NAS ci sono tutte e due.
+- Il logo passa solo da `caricaFile` (1 MB sta in una richiesta normale), amministrazione 2.
+
+**Esporta tutto e import (§7)**
+- Gli elenchi nuovi (referenti, sedi, prestazioni, comunicazioni) si possono esportare anche da soli (`esporta`).
+- Il registro intero in un CSV solo, letto a pagine da 20.000 righe; i ticket a pezzi da 50 con le liste lette una volta
+  per pezzo: con dieci anni di dati il server intanto risponde agli altri.
+- L'import prova ogni riga dentro un punto di salvataggio annullato (nessuna scrittura) prima di importare davvero.
+- Lo ZIP si scarica solo in casa (`GET /esportazione/<id>`). Dalla porta Google un lavoro `esportazione` riceve
+  `{ok: false, stato: 403, soloInCasa: true, errore: "Il file con tutti i dati si scarica solo in casa: aprilo quando sei
+  in ufficio"}`; preparare il file (`esportaTutto`) e vederne l'elenco da fuori casa si può.
+
+**Prova di carico (§11.5, PC di Andrea, dati finti di 10 anni, 131 MB)**
+- I dati finti sono realistici: ore e spese più vecchie di 60 giorni fatturate e rimborsate, fatture più vecchie di 90
+  giorni incassate, ricevute più vecchie di 60 giorni pagate, preventivi più vecchi di 60 giorni con una risposta.
+- Sistemato (prima giro): l'indice che mancava su `fatture_ricevute(ricevuta_collegata_id)`; i conti dei preventivi
+  nella Dashboard solo per gli inviati; gli aiuti delle fatture letti una volta in `daMandare`; i documenti di
+  un'esportazione in una lettura sola; l'estratto dei file solo per la pagina.
+- Sistemato (secondo giro, T15): **le mappe dei nomi** (persone, clienti, commesse, numeri dei ticket, sedi, contratti)
+  che ogni scheda rifaceva per ogni riga ora si fanno una volta sola dentro `conLettureRicordate` (Esporta tutto, a pezzi
+  da 50 ticket, e la Dashboard): `ricordata(chiave, fn)`, svuotata a ogni scrittura, attiva solo in quei due punti; fuori
+  tutto come prima. Dentro la Dashboard anche i saldi dei conti e gli incassi di tutte le fatture si leggono una volta.
+  **Indici parziali** nella migrazione 008 (solo le righe di quello stato: bozze e firmati dei rapportini, da approvare
+  e respinti, ore da approvare e respinte): un indice intero su `stato` faceva scegliere a SQLite l'indice anche per
+  "approvata" e una lettura passava da 8 a 112 ms. La Dashboard legge dei rapportini solo le colonne che usa; la prova
+  della fase 6 sul costo orario fa due letture da una riga invece di una UNION; le note di credito delle ricevute si
+  leggono in una volta in `aiutiRicevute`.
+- Lo stesso contenuto: `prove/esporta-tutto-uguale.test.js` su un anno di dati finti confronta ogni CSV dello ZIP, byte
+  per byte, con l'esportazione singola (che passa ancora dal codice di prima), e ogni scheda di ticket, l'elenco delle
+  attività e quello dei documenti con e senza la memoria. Le prove della Dashboard già scritte passano senza toccare
+  nessun valore atteso.
+- Misure finali (HTTP, `prove/carico.js`, 20 chiamate; il PC era carico al 60-84% per l'emulatore e Gradle del
+  costruttore del telefono, quindi il 95° percentile è gonfiato): anagrafiche 69-73 ms, rapportini del mese 12-24 ms,
+  documenti per titolo 64-123 ms (95° 78-149), documenti dentro i file 86-148 ms, esporta rapportini 244-313 ms,
+  **Esporta tutto 8,4-11,6 s** (prima 61-83 s), copia della notte 0,7-0,8 s: dentro i tempi.
+- **Dashboard, terzo giro (letture condivise fra le fasi)**. Prima di toccare il codice, la fotografia:
+  `prove/dashboard-fotografia.test.js` con `prove/dashboard-fotografia/atteso.json` (64 risposte intere, 2.873 voci:
+  dashboard e dashboard {tutto} per i cinque utenti di esempio e per tre utenti di un anno di dati finti, in quattro
+  istanti fermi: 22/10/2026, 12/11/2026, 30/11/2026, 01/01/2027 alle 10:00). Tolto dal confronto solo
+  `numeri.spazio.liberoMb` (lo spazio libero vero del disco: cambia fra due giri anche col codice di prima). La
+  fotografia non si rifà per far passare la prova. Dentro la Dashboard ora si leggono una volta sola e si passano alle
+  fasi: i rapportini non annullati (fase 1 e "da approvare" della fase 3), le fatture di tutti gli stati (fase 4,
+  scadenziario, promemoria della fase 7, filtrate nello stesso ordine dell'indice), le ore del mese e della settimana
+  (una lettura), i preventivi che possono ancora fare una voce (in bozza, inviati o scaduti, accettati senza commessa),
+  oltre a mappe dei nomi, saldi e incassi del giro prima. Le 64 risposte sono uguali alla fotografia.
+- **Misure dopo il terzo giro** (il PC era ancora occupato da emulatore e Gradle del costruttore del telefono): Dashboard
+  in-process mediana 350-373 ms (minimo 304), via HTTP misurata da sola mediana 350 ms (minimo 321); la prova di carico
+  completa, nello stesso momento, 578 / 654 ms. **Sfora ancora il limite di 300 ms sul PC** finché il PC è occupato; resta
+  da misurare col PC libero e sul NAS (limite 800 ms). Il tempo che resta è sparso: i rimborsi della fase 3 (tutte le
+  spese lette), l'elenco dei documenti per i conteggi della fase 5, le voci da fatturare della fase 4. Il passo dopo è
+  lo stesso: leggere anche spese, documenti e ticket una volta sola, con la fotografia come rete.
+- **Ultimo passo della Dashboard**: anche i ticket (fase 5 e voci da fatturare, una lettura sola con i "materiali
+  compresi" del contratto) e le spese dei rimborsi (solo quelle pagate di tasca propria: le altre le scartava dopo) si
+  leggono una volta. L'elenco dei documenti per i conteggi della fase 5 resta com'era (il lavoro e' nei conteggi stessi).
+  La fotografia torna in tutte le 64 risposte.
+- **La fotografia piccola**: `atteso.json` (160 KB invece di 1,3 MB) tiene lo SHA-256 di ogni risposta (JSON con le
+  chiavi in ordine), di ogni campo e (12 cifre) di ogni voce, piu' quattro risposte intere (manuel e lettura del 30/11,
+  normale e {tutto}). Se un'impronta non torna la prova dice chi, che giorno e la prima differenza ("settimana[1] diversa:
+  {...}", "il campo quante e' diverso", "urgenti: 6 voci invece di 7"). La rete non e' piu' debole: un'impronta diversa
+  vuol dire una risposta diversa, come prima; si perde solo il valore atteso delle risposte non intere (si vede quello di
+  adesso). Fatta convertendo la fotografia intera del codice di prima, non col codice nuovo.
+- **Due campi nuovi** chiesti dal costruttore del telefono: `feedCalendario` risponde anche `fuoriCasa` (vero se
+  `CALENDARIO_PUBBLICO` e' acceso); le voci raggruppate della Dashboard ("4 scadenze nei prossimi 30 giorni", oggetto
+  `gruppo:...`) hanno `unita: "voci"` invece di `null`, come la voce unica Da approvare. La fotografia e' stata rifatta
+  dalla fotografia intera del codice di prima piu' quel solo cambiamento (26 voci di gruppo), non col codice nuovo.
+- **Le misure su questo PC non sono affidabili**: nell'ultima prova anche le azioni non toccate erano 2-3 volte piu'
+  lente (anagrafiche 157 ms invece di 69); in-process, dopo circa otto Dashboard di fila, le letture di SQLite diventano 4
+  volte piu' lente e restano cosi', con CPU e memoria libere e l'antivirus (Bitdefender, `bdservicehost`) acceso. La misura
+  che conta e' quella sul NAS (limiti dell'accordo per il NAS: 400 ms per le letture semplici, 800 ms la Dashboard, 500 ms
+  la ricerca dentro i file, 5 s esporta, 40 s Esporta tutto, 2 minuti la copia).
+- **Misura sul NAS (01/11/2026 sera, T15 fatta)**: `prove/carico.js --nas` in un contenitore usa e getta (`node:24-slim`,
+  codice in sola lettura, dati finti di 10 anni in `/tmp` del contenitore, `--network none`, mai la cartella del server
+  vero), mediana / 95°: anagrafiche 55 / 81 ms, rapportini del mese 10 / 12 ms, documenti per titolo 87 / 105 ms,
+  **Dashboard 371 / 413 ms** e {tutto} 385 / 559 ms (limite 800), documenti dentro i file 109 / 123 ms, esporta rapportini
+  di 10 anni 325 / 587 ms, **Esporta tutto 10,0 / 10,3 s** (limite 40), copia della notte 2,3 / 2,8 s; database 131 MB.
+  Tutto dentro i limiti del NAS.

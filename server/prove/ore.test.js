@@ -238,7 +238,7 @@ test('respingi vuole il motivo, che arriva a chi ha scritto (registro e Dashboar
   assert.deepEqual(no, { ok: true, fatte: 1, voci: [{ tipo: 'spesa', id: pranzo.id, stato: 'respinta' }] });
   const vista = (await marco('spese', { da: '2026-01-01', a: piuGiorni(oggi(), 400) })).spese.find(x => x.id === pranzo.id);
   assert.deepEqual([vista.stato, vista.motivoRifiuto, vista.approvataDaNome], ['respinta', 'Manca lo scontrino: fotografalo e rimandala', 'Manuel Gasparotto']);
-  const dash = await marco('dashboard');
+  const dash = await marco('dashboard', { tutto: true });
   const voce = dash.urgenti.find(v => v.tipo === 'respinta' && /^Spesa del .* respinta$/.test(v.titolo));
   assert.ok(voce, 'nella Dashboard di Marco');
   assert.equal(voce.dettaglio, 'Motivo: Manca lo scontrino: fotografalo e rimandala · Manuel Gasparotto');

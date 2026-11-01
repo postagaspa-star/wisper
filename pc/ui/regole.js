@@ -57,6 +57,8 @@
     { modulo: 'comunicazioni', nome: 'WhatsApp e comunicazioni', spiega: 'Da mandare, storico, modelli, notifiche', icona: 'fumetto' },
     { modulo: 'portale', nome: 'Portale clienti', spiega: 'Chi entra, cosa vede, cosa arriva dai clienti', icona: 'globo' },
     { modulo: 'collaboratori', nome: 'Collaboratori esterni', spiega: 'Imprese e professionisti, incarichi, compensi', icona: 'collaboratori' },
+    // Fase 8 (fase8.md §15): voce 17, dopo Collaboratori esterni e prima di Amministrazione.
+    { modulo: 'integrazioni', nome: 'Integrazioni', spiega: 'I collegamenti con lo stato vero e i controlli', icona: 'spina' },
     { modulo: 'amministrazione', nome: 'Amministrazione', spiega: 'Studio, utenti, permessi, copie', icona: 'amministrazione' },
   ];
 
@@ -110,6 +112,8 @@
     const pezzi = String(percorso || '').replace(/^#/, '').split('/');
     const nome = pezzi[0] || 'dashboard';
     if (nome === 'amministrazione' && pezzi[1] === 'app') return null;
+    // Fase 8 (§9.2, §9.7): Tu › Notifiche è di tutti (ognuno le sue); la parte dello studio la vede solo chi può.
+    if (nome === 'amministrazione' && pezzi[1] === 'notifiche') return null;
     if (nome === 'accesso') return null;
     // Fase 7 (§10.3): le notifiche sono di tutti, ognuno le sue.
     if (nome === 'comunicazioni' && pezzi[1] === 'notifiche') return null;
@@ -490,6 +494,57 @@
       : p.tipo === 'numero' ? String(n).padStart(p.cifre, '0') : p.testo).join('');
   }
 
+  /**
+   * Fase 8 (fase8.md §9.6): il codice dal formato, uguale al server (src/formati.js) e al telefono, coi casi condivisi
+   * di server/prove/casi-numerazioni.json. {AA} anno a due cifre, {AAAA} a quattro, {N...} il numero con almeno tante
+   * cifre: non si taglia mai (col 1000 e {NNN} viene 1000).
+   */
+  function codiceDa(formato, anno, numero) {
+    return String(formato || '').replace(/\{(A{2,4}|N+)\}/g, (_, p) => {
+      if (p[0] === 'A') return p.length >= 4 ? String(anno) : String(Number(anno) % 100).padStart(2, '0');
+      return String(numero).padStart(p.length, '0');
+    });
+  }
+
+  /** Il numero (e l'anno, se c'è) di un codice scritto con un formato; null se il codice non è di quel formato. */
+  function numeroDaFormato(formato, codice) {
+    const pezzi = [];
+    const re = '^' + String(formato || '').replace(/\{(A{2,4}|N+)\}|[.*+?^${}()|[\]\\/]/g, (m, p) => {
+      if (!p) return '\\' + m;
+      pezzi.push(p[0] === 'A' ? (p.length >= 4 ? 'anno4' : 'anno2') : 'numero');
+      return p[0] === 'A' ? '(\\d{' + (p.length >= 4 ? 4 : 2) + '})' : '(\\d{' + p.length + ',})';
+    }) + '$';
+    const m = String(codice || '').match(new RegExp(re));
+    if (!m) return null;
+    const out = { numero: null, anno: null };
+    pezzi.forEach((p, i) => {
+      const v = Number(m[i + 1]);
+      if (p === 'numero') out.numero = v;
+      else out.anno = p === 'anno4' ? v : 2000 + v;
+    });
+    return out.numero === null ? null : out;
+  }
+
+  /**
+   * Il prossimo numero (§9.6): continua dal più alto fra l'ultimo dato e i codici già scritti, col formato di adesso e
+   * con quelli di prima (precedenti); se la numerazione riparte a gennaio contano solo quelli dell'anno.
+   */
+  function prossimoDa(o) {
+    const x = o || {};
+    const formati = [x.formato].concat(x.precedenti || []).filter(Boolean);
+    let max = Number(x.ultimo) || 0;
+    (x.codici || []).forEach(c => {
+      for (const f of formati) {
+        const n = numeroDaFormato(f, c);
+        if (!n) continue;
+        if (x.annuale && n.anno !== null && n.anno !== Number(x.anno)) break;
+        if (n.numero > max) max = n.numero;
+        break;
+      }
+    });
+    return max + 1;
+  }
+
   /** "anno a due cifre, ST, numero di 3 cifre" */
   function formatoAParole(formato) {
     return pezziFormato(formato).map(p => p.tipo === 'anno' ? (p.cifre === 4 ? 'anno a quattro cifre' : 'anno a due cifre')
@@ -585,6 +640,13 @@
       case 'portaleCliente': return { hash: '#portale/cliente/' + id, filtro: null };
       case 'caricamento': return { hash: '#portale/file/' + id, filtro: null };
       case 'modello': return { hash: '#comunicazioni/modelli/' + encodeURIComponent(c.chiave || c.id || ''), filtro: null };
+      // Fase 8 (§8.7): Integrazioni (filtro segmento), un collegamento (id = chiave), Tutto quello che c'è da fare (filtro sezione, area).
+      case 'integrazioni': return { hash: '#integrazioni', filtro: c.filtro || null };
+      case 'integrazione': return { hash: '#integrazioni/' + id, filtro: null };
+      case 'tutto': return { hash: '#dashboard/tutto', filtro: c.filtro || null };
+      // Il riquadro Tarature scadute del server porta agli strumenti di Mezzi e attrezzature.
+      case 'attrezzature': return { hash: '#mezzi/strumenti', filtro: Object.assign({ segmento: 'strumenti' }, c.filtro || {}) };
+      case 'calendarioAltre': return { hash: '#attivita/altreapp', filtro: null };
       default: return { hash: '#dashboard', filtro: null };
     }
   }
@@ -614,6 +676,8 @@
       collaboratori: 'Apri i collaboratori', collaboratore: 'Apri la scheda', incarico: "Apri l'incarico",
       // fase 7
       comunicazioni: 'Apri le comunicazioni', portale: 'Apri il portale', portaleCliente: 'Apri il cliente nel portale', caricamento: 'Apri il file', modello: 'Apri il modello',
+      // fase 8
+      integrazioni: 'Apri le Integrazioni', integrazione: 'Apri il collegamento', tutto: 'Apri', approvare: 'Apri Da approvare',
     }[p] || 'Apri';
   }
 
@@ -857,7 +921,7 @@
     errorePartitaIva, erroreCodiceFiscale, erroreSdi, erroreEmail, erroreCap, erroreProvincia, validaSoggetto,
     norm, aliasDi, trovaDoppione, filtraSoggetti, contaSoggetti, indirizzoCompleto,
     inRitardo, filtraCommesse, contaCommesse, statoPrestazione, NOMI_STATO_PRESTAZIONE, avanzamento, ordinaPrestazioni, sposta, totaliPrestazioni,
-    pezziFormato, formatoDaPezzi, formattaNumero, formatoAParole, erroreFormato,
+    pezziFormato, formatoDaPezzi, formattaNumero, formatoAParole, erroreFormato, codiceDa, numeroDaFormato, prossimoDa,
     destinazione, testoAzione, classeGravita,
     NOMI_CAMPI, campiCambiati, fraseRegistro, primaDopo, valoreLeggibile, valoreCampo,
     passwordIniziale, csv, nomeEsportazione, numeroCampo, costoOrarioDelConto,

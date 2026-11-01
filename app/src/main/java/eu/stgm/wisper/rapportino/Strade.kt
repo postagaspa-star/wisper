@@ -255,6 +255,38 @@ class Strade(
         )
     }
 
+    /**
+     * Fase 8 (fase8.md §7.1): lo ZIP di Esporta tutto da `GET /esportazione/<id>` col Bearer.
+     * Solo dalla strada di casa: può essere grande e via Google non passa (porta-google.md non
+     * ha questa strada); fuori casa si scarica in ufficio ([PonteServer.SoloInUfficio]).
+     */
+    fun esportazione(id: String, chi: Map<String, String>): ByteArray = instrada(
+        conToken = true,
+        daCasa = { base, doppia ->
+            val u = (base + "/esportazione/" + java.net.URLEncoder.encode(id, "UTF-8")).toHttpUrlOrNull()
+                ?: throw PonteServer.Rifiutato("Indirizzo del server non valido")
+            val richiesta = Request.Builder().url(u).get()
+                .header("Authorization", "Bearer " + token())
+                .apply { chi["disp"]?.let { header("X-Wisper-Disp", it) } }
+                .build()
+            try {
+                casaLunga.newCall(richiesta).execute().use { r ->
+                    when (r.code) {
+                        401 -> throw PonteServer.AccessoScaduto()
+                        403 -> throw PonteServer.PermessoNegato("Il file con tutti i dati lo scarica solo chi l'ha chiesto")
+                        404, 410 -> throw PonteServer.Rifiutato("Il file non c'è più: preparane uno nuovo")
+                    }
+                    if (r.code >= 500) throw IOException("HTTP ${r.code}")
+                    if (!r.isSuccessful) throw PonteServer.Rifiutato("Il file non è arrivato (errore ${r.code})")
+                    r.body?.bytes() ?: throw IOException("risposta vuota")
+                }
+            } catch (e: IOException) {
+                if (doppia) throw ReteDiCasa(e) else throw e
+            }
+        },
+        daGoogle = { throw PonteServer.SoloInUfficio("Il file con tutti i dati si scarica quando sei in ufficio") },
+    )
+
     // ------------------------------------------------------------- interno
 
     /** Una richiesta a casa caduta per la rete, quando c'è anche Google: si riparte da lì. */

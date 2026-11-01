@@ -241,13 +241,13 @@ test('esporta: CSV per Excel con punto e virgola, BOM, virgola nei decimali', as
   assert.ok(m.includes('26ST001;C001;Elettrodinamica;Nuovo magazzino automatico Batokyo'));
   const reg = await manuel('esporta', { cosa: 'registro' });
   assert.ok(reg.righe > 10);
-  assert.equal((await manuel('esporta', { cosa: 'boh' })).errore, 'Cosa esportare? rapportini, clienti, fornitori, commesse, registro, preventivi, attivita, ore, spese, trasferte, rimborsi, fatture, ricevute, daFatturare, riepilogo, movimenti, scadenziario, impegni, documenti, scadenze, ticket, contratti, persone, qualifiche, assenze, presenze, mezzi, attrezzature, tarature, manutenzioni, assegnazioni, km, collaboratori, incarichi o compensi');
+  assert.equal((await manuel('esporta', { cosa: 'boh' })).errore, 'Cosa esportare? referenti, sedi, prestazioni, comunicazioni, rapportini, clienti, fornitori, commesse, registro, preventivi, attivita, ore, spese, trasferte, rimborsi, fatture, ricevute, daFatturare, riepilogo, movimenti, scadenziario, impegni, documenti, scadenze, ticket, contratti, persone, qualifiche, assenze, presenze, mezzi, attrezzature, tarature, manutenzioni, assegnazioni, km, collaboratori, incarichi o compensi');
 });
 
 // ------------------------------------------------------------------ dashboard
 
 test('dashboard: tre sezioni di voci con gravita e collegamento; per il titolare anche i soldi', async () => {
-  const d = await manuel('dashboard');
+  const d = await manuel('dashboard', { tutto: true });
   assert.equal(d.per, 'titolare');
   for (const k of ['urgenti', 'settimana', 'pianificare']) assert.ok(Array.isArray(d[k]), k);
   const voci = [].concat(d.urgenti, d.settimana, d.pianificare);
@@ -261,7 +261,9 @@ test('dashboard: tre sezioni di voci con gravita e collegamento; per il titolare
     // Fase 6 (fase6.md §11.1)
     'persone', 'persona', 'mezzi', 'mezzo', 'attrezzatura', 'collaboratori', 'collaboratore', 'incarico',
     // Fase 7 (fase7.md §11.1, e "rapportino" con l'id: fase7.md §15)
-    'comunicazioni', 'portale', 'portaleCliente', 'caricamento', 'modello', 'rapportino'];
+    'comunicazioni', 'portale', 'portaleCliente', 'caricamento', 'modello', 'rapportino',
+    // Fase 8 (fase8.md §8.2: "integrazione" con la chiave; la voce unica Da approvare e Tutto quello che c'e' da fare)
+    'integrazione', 'integrazioni', 'approvare', 'tutto'];
   for (const v of voci) {
     assert.ok(['urgente', 'attenzione', 'info', 'soldi'].includes(v.gravita), JSON.stringify(v));
     assert.ok(pagine.includes(v.collegamento.pagina), JSON.stringify(v));
@@ -270,12 +272,12 @@ test('dashboard: tre sezioni di voci con gravita e collegamento; per il titolare
   assert.ok(voci.some(v => v.gravita === 'soldi'), 'ci sono voci di soldi');
   assert.equal(typeof d.numeri.soldi.daFatturare, 'number');
   assert.deepEqual(Object.keys(d.numeri.commesse).sort(), ['aperte', 'chiuse', 'inRitardo', 'sospese']);
-  const comeCollaboratore = await manuel('dashboard', { per: 'collaboratore' });
+  const comeCollaboratore = await manuel('dashboard', { tutto: true, per: 'collaboratore' });
   assert.equal(comeCollaboratore.per, 'collaboratore');
   assert.equal('soldi' in comeCollaboratore.numeri, false);
   // Una commessa in ritardo va negli urgenti.
   const m = (await manuel('creaCommessa', { idCliente: 'C002', descrizione: 'In ritardo', finePrevista: '2026-01-31', inizio: '2026-01-01' })).commessa;
-  const dopo = await manuel('dashboard');
+  const dopo = await manuel('dashboard', { tutto: true });
   const voce = dopo.urgenti.find(v => v.collegamento.id === m.id);
   assert.equal(voce.gravita, 'urgente');
   assert.match(voce.titolo, /in ritardo/);

@@ -332,7 +332,9 @@ class ServerDiProvaFase4Test {
         val dopo = f4.fattura(emessa.id)
         assertEquals(RegoleFattura.centesimi((dopo.incassato ?: 0.0) + nota.conti!!.netto - dopo.conti!!.netto), dopo.daRestituire!!, 0.005)
         assertTrue(dopo.daRestituire!! > 0)
-        val d = Dashboard.daJson(ponteDi("manuel@esempio.it").dashboard())
+        // Dalla fase 8 la Dashboard mostra al massimo 7 urgenti: al secondo giro la voce può essere fra le "Altre N",
+        // quindi si guarda in Tutto quello che c'è da fare (dashboard {tutto: true}, senza tetti).
+        val d = Fase8(ponteDi("manuel@esempio.it")).dashboardTutto()
         assertTrue(d.urgenti.any { it.tipo == "fattura" && it.collegamento?.id == emessa.id && it.titolo.contains("da restituire") })
         // Annulla l'incasso: niente più da restituire, e la Dashboard del prossimo giro non si riempie di queste voci.
         f4.annullaMovimento(incasso.id, "prova")

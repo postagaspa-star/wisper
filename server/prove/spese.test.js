@@ -260,7 +260,7 @@ test('riepilogo spese per persona, per commessa e per categoria (trasferte compr
 // ------------------------------------------------------------------ la Dashboard
 
 test('dashboard: cose da approvare, respinte per chi ha scritto, rimborsi; il collaboratore senza soldi', async () => {
-  const d = await manuel('dashboard');
+  const d = await manuel('dashboard', { tutto: true });
   const appr = d.urgenti.find(v => v.tipo === 'approvare');
   assert.ok(appr, 'cose da approvare');
   assert.match(appr.titolo, /^\d+ cose da approvare di Marco Rossato$/);
@@ -271,7 +271,7 @@ test('dashboard: cose da approvare, respinte per chi ha scritto, rimborsi; il co
   assert.deepEqual([rimb.gravita, rimb.unita, rimb.collegamento], ['soldi', 'euro', { pagina: 'spese', filtro: { segmento: 'rimborsi' } }]);
   assert.equal(rimb.quanto, d.numeri.rimborsi.daFare);
   assert.equal(typeof d.numeri.ore.settimana, 'number');
-  const m = await marco('dashboard');
+  const m = await marco('dashboard', { tutto: true });
   const resp = m.urgenti.find(v => v.tipo === 'respinta');
   assert.ok(resp, 'le ore respinte dei dati di esempio');
   assert.match(resp.titolo, /^Ore del \d{2}\/\d{2} respinte$/);
@@ -284,8 +284,8 @@ test('dashboard: cose da approvare, respinte per chi ha scritto, rimborsi; il co
   // Lettura con costi a zero: niente soldi nemmeno qui.
   await manuel('salvaPermessi', { permessi: { lettura: { costi: 0 } } });
   try {
-    assert.deepEqual(soldiIn(await lettura('dashboard')), []);
-    assert.equal((await lettura('dashboard')).settimana.some(v => v.tipo === 'rimborsi'), false);
+    assert.deepEqual(soldiIn(await lettura('dashboard', { tutto: true })), []);
+    assert.equal((await lettura('dashboard', { tutto: true })).settimana.some(v => v.tipo === 'rimborsi'), false);
   } finally {
     await manuel('salvaPermessi', { permessi: { lettura: { costi: 1 } } });
   }
@@ -293,27 +293,27 @@ test('dashboard: cose da approvare, respinte per chi ha scritto, rimborsi; il co
 
 test('dashboard: il timer acceso da piu\' di 10 ore (per chi l\'ha acceso e per chi approva); a gennaio le tabelle ACI', async () => {
   s.wisper.db.esegui('UPDATE timer SET partito_il = ? WHERE utente_id = ?', istante(new Date(adessoMs() - 11 * 3600000 - 60000)), MARCO);
-  const m = await marco('dashboard');
+  const m = await marco('dashboard', { tutto: true });
   const suo = m.urgenti.find(v => v.tipo === 'timer');
   assert.ok(suo, 'il suo timer');
   assert.equal(suo.titolo, 'Il timer è acceso da 11 ore');
   assert.match(suo.dettaglio, /^26ST001 · dalle \d{1,2}:\d{2}( del \d{2}\/\d{2})? · fermalo e correggi le ore$/);
-  assert.equal((await manuel('dashboard')).urgenti.find(v => v.tipo === 'timer').titolo, 'Il timer di Marco Rossato è acceso da 11 ore');
-  assert.equal((await laura('dashboard')).urgenti.some(v => v.tipo === 'timer'), true, 'amministrazione approva: lo vede');
+  assert.equal((await manuel('dashboard', { tutto: true })).urgenti.find(v => v.tipo === 'timer').titolo, 'Il timer di Marco Rossato è acceso da 11 ore');
+  assert.equal((await laura('dashboard', { tutto: true })).urgenti.some(v => v.tipo === 'timer'), true, 'amministrazione approva: lo vede');
   // L'anno nuovo: le tabelle ACI dei veicoli sono vecchie.
   const anno = Number(oggi().slice(0, 4));
   await manuel('salvaImpostazioni', { valori: { ACI_ANNO: anno - 1 } });
   s.wisper.db.esegui('UPDATE veicoli SET anno_aci = ?', anno - 1);
-  const d = await manuel('dashboard');
+  const d = await manuel('dashboard', { tutto: true });
   const aci = d.settimana.find(v => v.tipo === 'veicoli');
   assert.ok(aci);
   assert.equal(aci.titolo, 'Aggiorna il rimborso km con le tabelle ACI ' + anno);
   assert.deepEqual(aci.collegamento, { pagina: 'amministrazione', filtro: { sezione: 'veicoli' } });
-  assert.equal((await laura('dashboard')).settimana.some(v => v.tipo === 'veicoli'), false, 'lo chiede a chi cambia i veicoli');
+  assert.equal((await laura('dashboard', { tutto: true })).settimana.some(v => v.tipo === 'veicoli'), false, 'lo chiede a chi cambia i veicoli');
   for (const v of (await manuel('veicoli', { tutti: true })).veicoli) await manuel('salvaVeicolo', { veicolo: { id: v.id, annoAci: anno } });
   assert.equal((await manuel('io')).ok, true);
   assert.equal(Number((await manuel('anagrafiche')).impostazioni.ACI_ANNO), anno, 'ACI_ANNO segue il veicolo');
-  assert.equal((await manuel('dashboard')).settimana.some(v => v.tipo === 'veicoli'), false);
+  assert.equal((await manuel('dashboard', { tutto: true })).settimana.some(v => v.tipo === 'veicoli'), false);
 });
 
 // ------------------------------------------------------------------ esportazione e registro

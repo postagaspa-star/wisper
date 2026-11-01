@@ -18,12 +18,13 @@ const ruolo = r => E.permessiDi(r);
 test('permessi: le voci del menu nell\'ordine delle specifiche, solo quelle del ruolo', () => {
   assert.deepEqual(R.vociMenu(ruolo('titolare')).map(v => v.nome),
     ['Dashboard', 'Clienti e fornitori', 'Progetti e commesse', 'Preventivi e contratti', 'Attività e calendario', 'Ore e rapportini', 'Spese e trasferte', 'Fatturazione', 'Banche e scadenze',
-      'Persone e risorse umane', 'Documenti', 'Ticket e assistenza', 'Mezzi e attrezzature', 'WhatsApp e comunicazioni', 'Portale clienti', 'Collaboratori esterni', 'Amministrazione']);
+      'Persone e risorse umane', 'Documenti', 'Ticket e assistenza', 'Mezzi e attrezzature', 'WhatsApp e comunicazioni', 'Portale clienti', 'Collaboratori esterni', 'Integrazioni', 'Amministrazione']);
+  // Fase 8 (fase8.md §15): Integrazioni, voce 17, dopo Collaboratori esterni; la vedono titolare, amministrazione e lettura.
   // Fase 2: il collaboratore vede Attività e calendario, non i preventivi. Fase 3: Spese e trasferte, voce 7.
   // Fase 5: Documenti (in lettura) e Ticket e assistenza. Fase 6: Persone (l'organico e la sua scheda) e Mezzi, non i collaboratori esterni.
   // Fase 7: WhatsApp e comunicazioni a tutti e quattro, Portale clienti a tutti tranne il collaboratore (fase7.md §11.2).
   assert.deepEqual(R.vociMenu(ruolo('collaboratore')).map(v => v.modulo), ['dashboard', 'clienti', 'commesse', 'attivita', 'rapportini', 'spese', 'persone', 'documenti', 'ticket', 'mezzi', 'comunicazioni']);
-  assert.deepEqual(R.vociMenu(ruolo('lettura')).map(v => v.modulo), ['dashboard', 'clienti', 'commesse', 'preventivi', 'attivita', 'rapportini', 'spese', 'fatturazione', 'banche', 'persone', 'documenti', 'ticket', 'mezzi', 'comunicazioni', 'portale', 'collaboratori']);
+  assert.deepEqual(R.vociMenu(ruolo('lettura')).map(v => v.modulo), ['dashboard', 'clienti', 'commesse', 'preventivi', 'attivita', 'rapportini', 'spese', 'fatturazione', 'banche', 'persone', 'documenti', 'ticket', 'mezzi', 'comunicazioni', 'portale', 'collaboratori', 'integrazioni']);
   // Fase 6: l'esterno ha il menu ridotto nel suo ordine (fase6.md §12.7), con Ore e rapportini prima di Attività.
   const esterno = { dashboard: 1, clienti: 0, commesse: 1, preventivi: 0, attivita: 2, rapportini: 2, spese: 2, fatturazione: 0, banche: 0, persone: 0, documenti: 1, ticket: 2, mezzi: 0, collaboratori: 1, amministrazione: 0, costi: 0, riservati: 0 };
   assert.deepEqual(R.vociMenu(esterno, true).map(v => v.modulo), ['dashboard', 'commesse', 'rapportini', 'attivita', 'spese', 'documenti', 'ticket', 'collaboratori']);
@@ -56,7 +57,7 @@ test('permessi: livelli, pagine permesse, l\'app è di tutti', () => {
   assert.equal(R.primaPagina(c), 'dashboard');
   assert.equal(R.primaPagina({}), 'amministrazione/app');
   assert.deepEqual(Object.keys(R.permessiTutti()).sort(), ['amministrazione', 'attivita', 'commesse', 'costi', 'clienti', 'dashboard', 'fatturazione', 'banche', 'documenti', 'preventivi', 'rapportini', 'riservati', 'spese', 'ticket',
-    'persone', 'mezzi', 'collaboratori', 'comunicazioni', 'portale'].sort());
+    'persone', 'mezzi', 'collaboratori', 'comunicazioni', 'portale', 'integrazioni'].sort());
 });
 
 test('permessi: il titolare da chiamare e l\'ultimo titolare che non si toglie', () => {
@@ -79,7 +80,7 @@ test('permessi: cosa vedrà chi cambia ruolo, a parole', () => {
   assert.match(f, /Potrà cambiare: Attività e calendario, Ore e rapportini, Spese e trasferte, Ticket e assistenza, WhatsApp e comunicazioni\./);
   // Fase 6: l'organico e i mezzi in lettura, niente collaboratori esterni.
   assert.match(f, /Solo da leggere: Dashboard, Clienti e fornitori, Progetti e commesse, Persone e risorse umane, Documenti, Mezzi e attrezzature\./);
-  assert.match(f, /Non vedrà: Preventivi e contratti, Fatturazione, Banche e scadenze, Portale clienti, Collaboratori esterni, Amministrazione\./);
+  assert.match(f, /Non vedrà: Preventivi e contratti, Fatturazione, Banche e scadenze, Portale clienti, Collaboratori esterni, Integrazioni, Amministrazione\./);
   assert.match(f, /Senza importi\.$/);
   assert.match(R.descriviRuolo(ruolo('titolare')), /Vede gli importi\.$/);
 });

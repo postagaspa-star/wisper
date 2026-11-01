@@ -6,6 +6,8 @@
  *   GET  /salute                {"ok":true,"versione":"x.y.z","database":"ok"}, senza accesso (il controllo del NAS)
  *   POST /ponte                 le versioni vecchie, inoltrate dallo script (X-Wisper-Segreto)
  *   POST /carica?nome=&mime=&idFile=&per=documento|ticket   un file in byte (fase 5), col Bearer come /exec
+ *   GET  /calendario/<chiave>.ics  il calendario in altre app (fase 8, §5.5): senza Bearer, la chiave e' il permesso
+ *   GET  /esportazione/<id>    il file di Esporta tutto (fase 8, §7.1), col Bearer, solo chi l'ha chiesto
  * Le stesse strade arrivano anche dalla porta Google (porta.js): il server sul
  * NAS va a prendere le richieste dallo script del foglio e le passa qui con
  * richiestaInterna(), senza nessuna porta aperta (docs/gestionale/porta-google.md).
@@ -34,7 +36,7 @@ const { esegui, AZIONI } = require('./richieste');
 const { conRicordo } = require('./ricordo');
 const { testo, idCasuale, adesso, Rifiuto, senzaPermesso, messaggio } = require('./utili');
 const { riconosciTipo, tipoDaSalvare } = require('./documenti');
-const { conProvenienza, provenienzaDi } = require('./provenienza');
+const { conProvenienza, provenienzaDi, provenienza } = require('./provenienza');
 
 /** Una foto o un PDF in base64 arrivano a qualche MB; un documento grande a qualche decina. */
 const MASSIMO_CORPO = 60 * 1024 * 1024;
@@ -122,6 +124,12 @@ async function gestisci(w, req, res, opzioni) {
   const url = new URL(req.url, 'http://localhost');
   const percorso = url.pathname.replace(/\/+$/, '') || '/';
 
+  // Fase 8 (§0.2): il server interno non deve essere su internet. Una richiesta sull'ingresso interno (8402: con la porta
+  // Google il contenitore wisper-ingresso resta spento) o una sulla 8400 con le intestazioni di chi passa da internet e'
+  // l'Errore di "internetinterno" (registro, voce urgente). Le richieste della porta Google (provenienza "google") no.
+  if (opzioni.ingresso) w.segnalaInternetInterno('8402');
+  else if (provenienza().ip !== 'google' && (req.headers['tailscale-funnel-request'] || req.headers['x-forwarded-for'])) w.segnalaInternetInterno('8400');
+
   // Da internet: solo le strade di telefono e computer, prima di leggere qualunque cosa. 404 uguale per tutto il resto.
   if (opzioni.ingresso && !stradaDaFuori(req.method, percorso, opzioni.ingresso)) {
     res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
@@ -145,6 +153,10 @@ async function gestisci(w, req, res, opzioni) {
   }
 
   if (percorso.startsWith('/file/')) return mandaFile(w, req, res, decodeURIComponent(percorso.slice(6)));
+
+  // Fase 8: il calendario in altre app (in casa) e il file di Esporta tutto.
+  if (percorso.startsWith('/calendario/')) return mandaCalendario(w, req, res, percorso);
+  if (percorso.startsWith('/esportazione/')) return mandaEsportazione(w, req, res, percorso.slice('/esportazione/'.length));
 
   if (percorso === '/carica') return carica(w, req, res, url);
 
@@ -187,7 +199,9 @@ async function gestisci(w, req, res, opzioni) {
     const token = tokenDa(req);
     const azione = testo(d.azione) || 'anagrafiche';
     const voce = Object.prototype.hasOwnProperty.call(AZIONI, azione) ? AZIONI[azione] : null;
-    return rispondiJson(res, 200, await conRicordo(w, idRichiesta, token, azione, voce, () => esegui(w, d, { token, get: req.method === 'GET' })));
+    // Fase 8 (§0.3): schema e Host, per l'indirizzo del calendario "in casa" (dalla porta Google non valgono).
+    const richiesta = { host: testo(req.headers.host), schema: testo(req.headers['x-forwarded-proto']) === 'https' ? 'https' : 'http', daGoogle: provenienza().ip === 'google' };
+    return rispondiJson(res, 200, await conRicordo(w, idRichiesta, token, azione, voce, () => esegui(w, d, { token, get: req.method === 'GET', richiesta })));
   }
 
   return rispondiJson(res, 404, { ok: false, errore: 'Indirizzo sconosciuto: ' + percorso });
@@ -289,6 +303,65 @@ async function mandaFile(w, req, res, id) {
     'Content-Disposition': (f.tipo === 'portale' && ['image/png', 'image/jpeg'].indexOf(f.mime) < 0 ? 'attachment' : 'inline') + '; filename*=UTF-8\'\'' + encodeURIComponent(nome),
   });
   fs.createReadStream(percorso).pipe(res);
+}
+
+// ------------------------------------------------------------------ /calendario/<chiave>.ics e /esportazione/<id> (fase 8)
+
+/**
+ * GET /calendario/<chiave>.ics (§5.5): 200 text/calendar con ETag e Last-Modified, 304 se non e' cambiato niente, 404
+ * uguale per chiave sconosciuta, tolta o di un utente disattivato, 429 oltre 60 letture all'ora. Nel registro degli
+ * accessi l'azione "calendario" con l'esito, mai la chiave.
+ */
+function mandaCalendario(w, req, res, percorso) {
+  const m = percorso.match(/^\/calendario\/([A-Za-z0-9_-]{20,100})\.ics$/);
+  const intestazioni = { 'Cache-Control': 'private, max-age=0', 'X-Content-Type-Options': 'nosniff' };
+  const perRegistro = { azione: 'calendario', app: 'calendario', dispNome: testo(req.headers['user-agent']).slice(0, 60) };
+  if (req.method !== 'GET' || !m) {
+    w.registraAccesso(perRegistro, 'non trovato', null);
+    res.writeHead(404, Object.assign({ 'Content-Type': 'text/plain; charset=utf-8' }, intestazioni));
+    return res.end('Non trovato');
+  }
+  let r;
+  try {
+    r = w.leggiFeedCalendario(m[1], { agente: req.headers['user-agent'], seNonCambiato: req.headers['if-none-match'] });
+  } catch (err) {
+    console.error('[calendario] ' + (err && err.stack ? err.stack : err));
+    r = { stato: 500 };
+  }
+  w.registraAccesso(perRegistro, r.stato === 200 || r.stato === 304 ? 'ok' : r.stato === 429 ? 'troppe letture' : r.stato === 404 ? 'non trovato' : 'errore', r.utente || null);
+  if (r.stato === 304) {
+    res.writeHead(304, Object.assign({ ETag: r.etag }, intestazioni));
+    return res.end();
+  }
+  if (r.stato !== 200) {
+    res.writeHead(r.stato, Object.assign({ 'Content-Type': 'text/plain; charset=utf-8' }, intestazioni));
+    return res.end(r.stato === 429 ? 'Troppe letture: riprova fra un\'ora' : r.stato === 404 ? 'Non trovato' : 'Errore del server');
+  }
+  const corpo = Buffer.from(r.ics, 'utf8');
+  res.writeHead(200, Object.assign({ 'Content-Type': 'text/calendar; charset=utf-8', 'Content-Length': corpo.length, ETag: r.etag, 'Last-Modified': r.ultimaModifica }, intestazioni));
+  return res.end(corpo);
+}
+
+/** GET /esportazione/<id> col Bearer: lo ZIP di Esporta tutto, solo per chi l'ha chiesto. */
+function mandaEsportazione(w, req, res, id) {
+  const s = w.utenteDaToken(tokenDa(req));
+  const perRegistro = { azione: 'esportazione', disp: req.headers['x-wisper-disp'], dispNome: req.headers['x-wisper-disp-nome'], app: req.headers['x-wisper-app'] };
+  if (!s) {
+    w.registraAccesso(perRegistro, 'accesso negato', null);
+    return rispondiJson(res, 401, { ok: false, errore: 'Accesso scaduto: entra di nuovo', accesso: false });
+  }
+  const f = req.method === 'GET' && /^\d{1,10}$/.test(id) ? w.fileEsportazione(id, s.utente) : null;
+  if (!f) {
+    w.registraAccesso(perRegistro, 'non trovato', s.utente);
+    return rispondiJson(res, 404, { ok: false, errore: 'Il file non c\'è più: preparane uno nuovo' });
+  }
+  w.registraAccesso(perRegistro, 'ok', s.utente);
+  res.writeHead(200, {
+    'Content-Type': 'application/zip', 'Content-Length': fs.statSync(f.percorso).size, 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff',
+    'Content-Disposition': 'attachment; filename*=UTF-8\'\'' + encodeURIComponent(f.nome),
+  });
+  fs.createReadStream(f.percorso).pipe(res);
+  return undefined;
 }
 
 // ------------------------------------------------------------------ /carica (fase 5, fase5.md §5.4)

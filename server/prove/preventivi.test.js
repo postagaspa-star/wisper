@@ -432,7 +432,7 @@ test('permessi: il collaboratore non vede preventivi, listino ne\' prezzi; lettu
     const r = await marco(azione, dati);
     assert.equal(r.permesso, false, 'marco ' + azione + ': ' + JSON.stringify(r));
   }
-  const d = await marco('dashboard');
+  const d = await marco('dashboard', { tutto: true });
   assert.equal('preventivi' in d.numeri, false);
   assert.equal([].concat(d.urgenti, d.settimana, d.pianificare).some(v => v.tipo === 'preventivo'), false);
 
@@ -468,7 +468,7 @@ test('senza costi: niente prezzi, importi, sconti, totali ne\' conti, a qualunqu
     assert.equal(/4291|3517|773\.85|1900/.test(JSON.stringify(p)), false, 'i numeri dei soldi non escono sotto altri nomi');
     assert.deepEqual(soldiIn(await lettura('preventivi')), []);
     assert.deepEqual(soldiIn(await lettura('listino')), []);
-    assert.deepEqual(soldiIn(await lettura('dashboard')), []);
+    assert.deepEqual(soldiIn(await lettura('dashboard', { tutto: true })), []);
     const csv = Buffer.from((await lettura('esporta', { cosa: 'preventivi' })).base64, 'base64').toString('utf8');
     assert.equal(csv.includes('Totale'), false);
     assert.equal(csv.includes('Imponibile'), false);
@@ -509,13 +509,13 @@ test('registro: ogni modifica dei preventivi ha chi, prima e dopo; le voci tolte
 });
 
 test('dashboard: preventivi in scadenza, senza risposta, bozze; i numeri dei preventivi', async () => {
-  const d = await manuel('dashboard');
+  const d = await manuel('dashboard', { tutto: true });
   const voci = [].concat(d.urgenti, d.settimana, d.pianificare);
   // Dalla fase 4 il PR/012 e' accettato: un preventivo mandato che scade fra 6 giorni lo fa la prova.
   const inScadenza = await nuovoCompleto();
   await manuel('salvaPreventivo', { preventivo: { id: inScadenza.id, scadenza: piuGiorni(oggi(), 6) } });
   await manuel('segnaInviato', { id: inScadenza.id });
-  const conScadenza = await manuel('dashboard');
+  const conScadenza = await manuel('dashboard', { tutto: true });
   const scade = conScadenza.settimana.find(v => v.collegamento.id === inScadenza.id && / scade fra 6 giorni$/.test(v.titolo));
   assert.ok(scade, 'il preventivo scade fra 6 giorni');
   assert.equal(scade.collegamento.pagina, 'preventivo');
@@ -533,7 +533,7 @@ test('dashboard: preventivi in scadenza, senza risposta, bozze; i numeri dei pre
   const p = await nuovoCompleto();
   await manuel('segnaInviato', { id: p.id });
   await manuel('accettaPreventivo', { id: p.id, modo: 'voce', nome: 'Paolo Rossi' });
-  const dopo = await manuel('dashboard');
+  const dopo = await manuel('dashboard', { tutto: true });
   assert.ok(dopo.settimana.some(v => v.collegamento.id === p.id && /manca la commessa/.test(v.titolo)));
 });
 

@@ -92,7 +92,25 @@ class EsempioFase5(private val oggi: LocalDate = LocalDate.now()) : TrasportoFas
         documento(5, "Progetto impianto fotovoltaico Bianchi", "Progetti e schemi", "collegamento", "gdrive", "https://drive.google.com/file/d/1AbCdEsempio/view", "Mario Bianchi"),
         documento(3, "Verbale verifica impianto di terra 2022", "Verbali di verifica", "file", "", "/file/esempio3", "Batokyo Srl", "Impianto di terra stabilimento"),
         documento(9, "Schemi elettrici archivio 2019", "Documenti dello studio", "collegamento", "percorso", "\\\\SERVER-STUDIO\\Archivio\\2019\\Schemi"),
+        documento(11, "Relazione tecnica cabina MT", "Relazioni", "file", "", "/file/esempio11", "Rossi Impianti Srl", "Cabina MT Acme", rev = 1),
     )
+
+    /** Fase 8: il testo letto dentro i file di esempio (la ricerca dentro i file, fase8.md §6). */
+    private val testoDentro = mapOf(
+        1 to "Schema unifilare: collettore di terra principale QG-PE, sezionatore di terra lato MT, interblocchi meccanici.",
+        11 to "Relazione tecnica. La misura della resistenza di terra è stata eseguita il 12/03/2026 con il metodo voltamperometrico: 1,8 ohm.",
+    )
+
+    /** "…la misura della resistenza di [terra] è stata eseguita…": le parole trovate tra parentesi quadre. */
+    private fun estratto(testo: String, parole: List<String>): String {
+        val prima = parole.first()
+        val i = testo.lowercase().indexOf(prima).coerceAtLeast(0)
+        val da = (i - 40).coerceAtLeast(0)
+        val a = (i + prima.length + 60).coerceAtMost(testo.length)
+        var pezzo = testo.substring(da, a)
+        parole.forEach { w -> pezzo = pezzo.replace(Regex(Regex.escape(w), RegexOption.IGNORE_CASE)) { m -> "[" + m.value + "]" } }
+        return (if (da > 0) "…" else "") + pezzo + (if (a < testo.length) "…" else "")
+    }
 
     private fun scadenza(id: Int, titolo: String, cliente: String, impianto: String, giorni: Long, stato: String, ogni: Int?) =
         JSONObject().put("id", id).put("titolo", titolo).put("tipo", "verifica_terra").put("cliente", cliente).put("impianto", impianto).put("data", d(giorni))
@@ -120,9 +138,23 @@ class EsempioFase5(private val oggi: LocalDate = LocalDate.now()) : TrasportoFas
                     .put("fatturazioneCanone", "semestrale").put("copre", "visite_guasti").put("impianti", arr(JSONObject().put("idSede", 4).put("nome", "Cabina MT Acme").put("ogniMesi", 6).put("prossimaVisita", d(29))))
                     .put("ticket", JSONObject().put("aperti", 2).put("anno", 3)).put("puoScrivere", false),
             ))
-            "documenti" -> ok.put("pagina", 1).put("pagine", 1).put("quanti", documenti.size)
-                .put("conteggi", JSONObject().put("daApprovare", 1).put("inScadenza", 1).put("scaduti", 0).put("daClassificare", 0))
-                .put("documenti", JSONArray(documenti.map { JSONObject(it.toString()) })).put("daWisper", JSONArray())
+            "documenti" -> {
+                // Fase 8 (fase8.md §6.2): con le parole, prima i titoli che le hanno, poi i documenti che le hanno dentro (con l'estratto).
+                val parole = p["testo"].orEmpty().trim().lowercase().split(' ').filter { it.isNotBlank() }
+                val trovati = if (parole.isEmpty()) documenti.map { JSONObject(it.toString()) } else {
+                    val titolo = { d: JSONObject -> parole.all { d.testo("titolo").lowercase().contains(it) } }
+                    val nelTitolo = documenti.filter(titolo).map { JSONObject(it.toString()) }
+                    val dentro = if (p["dentro"] == "false") emptyList() else documenti.filterNot(titolo).mapNotNull { d ->
+                        testoDentro[d.optInt("id")]?.takeIf { t -> parole.all { t.lowercase().contains(it) } }?.let { t ->
+                            JSONObject(d.toString()).put("trovato", JSONObject().put("revisione", d.opt("revisione")).put("superata", false).put("estratto", estratto(t, parole)))
+                        }
+                    }
+                    nelTitolo + dentro
+                }
+                ok.put("pagina", 1).put("pagine", 1).put("quanti", trovati.size)
+                    .put("conteggi", JSONObject().put("daApprovare", 1).put("inScadenza", 1).put("scaduti", 0).put("daClassificare", 0))
+                    .put("documenti", JSONArray(trovati)).put("daWisper", JSONArray())
+            }
             "documento" -> ok.put("documento", documenti.firstOrNull { it.optString("id") == p["id"] } ?: throw PonteServer.Rifiutato("Documento ${p["id"]} non trovato"))
             "scadenze" -> ok.put("oggi", d(0))
                 .put("scadute", arr(scadenza(7, "Verifica protezioni SPG e SPI", "Rossi Impianti Srl", "Cabina MT Acme", -22, "Scaduta", 60)))

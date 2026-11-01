@@ -196,7 +196,13 @@ internal fun RigaDocumento(d: DocArchivio, onClick: () -> Unit) {
             // "Da classificare" lo dice già la pillola: nella riga sotto non si ripete.
             val sotto = listOf(if (d.daClassificare) "" else d.categoria, d.legatoA, d.revisione?.let { "rev. $it" } ?: if (d.cartella) "cartella" else "").filter { it.isNotBlank() }.joinToString(" · ")
             Text(sotto, style = Testi.secondario.copy(fontWeight = FontWeight.Medium), color = c.tenue, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            // Fase 8 (fase8.md §6.3): trovato dentro il file, l'estratto in una riga con le parole in grassetto.
+            d.trovato?.takeIf { it.estratto.isNotBlank() }?.let { t ->
+                TestoEstratto(t.estratto, Modifier.padding(top = 2.dp))
+                if (t.nota.isNotBlank()) Text(t.nota, style = Testi.piccolo, color = c.tenue)
+            }
             val pillole = buildList {
+                if (d.trovato != null) add("Nel testo")
                 if (d.daApprovare != null) add("Da approvare")
                 d.scadenza?.statoVisto?.takeIf { it.startsWith("Scad") }?.let { add(it) }
                 if (d.daClassificare) add("Da classificare")
@@ -204,7 +210,7 @@ internal fun RigaDocumento(d: DocArchivio, onClick: () -> Unit) {
                 if (d.statoVisto == "Respinta") add("Respinta")
             }
             if (pillole.isNotEmpty() || d.vede == "costi") FlowRow(Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                pillole.forEach { p -> Parola5(p, colore = if (p == d.collegamentoNome && d.collegamento) ColoreFase5.BLU else null) }
+                pillole.forEach { p -> if (p == "Nel testo") Parola8(p) else Parola5(p, colore = if (p == d.collegamentoNome && d.collegamento) ColoreFase5.BLU else null) }
                 if (d.vede == "costi") Icon(Icone.lucchetto, null, tint = c.tenue, modifier = Modifier.size(16.dp).semantics { contentDescription = "Solo chi vede i prezzi" })
             }
         }

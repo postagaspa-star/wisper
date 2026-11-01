@@ -34,6 +34,7 @@ sbagliato"}`.
 | `postinoCopia` | `cartella` (`database` o `file`), `nome`, `mime`, `base64` | `{ok, id}`. Salva in Drive `Wisper/Copie NAS/<cartella>/<nome>`; un file con lo stesso nome va nel cestino di Drive e lo sostituisce. Massimo 20 MB per chiamata (oltre: il server divide in pezzi `<nome>.parte1`, `.parte2`…). Segna l'ora dell'ultima copia riuscita per cartella. |
 | `postinoFoglio` | `scheda` (`Rapportini`, `Clienti`, `Commesse`, `Impostazioni`), `intestazioni` `[..]`, `righe` `[[..]]` | `{ok, righe}`. Sostituisce il contenuto della scheda (intestazioni comprese), scrivendo partite IVA, telefoni e codici come testo. Solo a ponte acceso. |
 | `postinoProva` | — | `{ok, quando, rimaste}` |
+| `postinoImpronta` | `cartella`, `nome` (come `postinoCopia`) | `{ok, byte, md5}` della copia su Drive (non quella nel cestino), con `Utilities.computeDigest`. Solo lettura. Fase 8: la prova automatica delle copie (fase8.md §9.10). |
 
 ## I controlli del mattino
 

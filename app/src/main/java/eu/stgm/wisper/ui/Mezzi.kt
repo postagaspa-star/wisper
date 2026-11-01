@@ -83,7 +83,7 @@ object RicordoMezzi {
             "scadenze" -> SegmentoMezzi.SCADENZE
             else -> SegmentoMezzi.MIO
         }
-        filtro = if (taratura == "scadute") FiltroStrumenti.SCADUTA else FiltroStrumenti.TUTTI
+        filtro = if (taratura.startsWith("scad")) FiltroStrumenti.SCADUTA else FiltroStrumenti.TUTTI // "scadute" (fase 6) o "scaduta" (fase 8)
     }
 }
 

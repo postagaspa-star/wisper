@@ -80,6 +80,10 @@ fun SchermataDashboard(
     val avvisi = LocalAvvisi.current
     val scope = rememberCoroutineScope()
     var fermoInCorso by remember { mutableStateOf(false) }
+    // Fase 8 (§8): i fogli Nascondi per 30 giorni, Da approvare e Cambia i riquadri.
+    var nascondi by remember { mutableStateOf<VoceDashboard?>(null) }
+    var approvare by remember { mutableStateOf<Pair<VoceDashboard?, String>?>(null) }
+    var cambiaRiquadri by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) { dati.aggiornaDashboard(); if (perm.vede(Moduli.RAPPORTINI)) dati.aggiornaTimer() }
 
@@ -146,6 +150,50 @@ fun SchermataDashboard(
                     Segnaposto(200.dp)
                     Segnaposto(90.dp)
                 }
+                d.regoleNuove -> {
+                    // Fase 8 (fase8.md §8, §15.1): la cosa più urgente, i quattro riquadri della persona, al massimo
+                    // 7 · 7 · 5 righe con Altre N, poi Tutto quello che c'è da fare e Cambia i riquadri.
+                    fun apriVoce(v: VoceDashboard) {
+                        if (v.tipo == "approvare" && (v.pezzi.isNotEmpty() || v.collegamento == null)) approvare = v to "" else apri(v.collegamento)
+                    }
+                    val prima = d.urgenti.firstOrNull()
+                    if (prima != null) CosaPiuUrgente(prima, Modifier.bersaglio("cosa-fare")) { apriVoce(prima) }
+                    RiquadriFase8(d.riquadri.orEmpty()) { r ->
+                        if (r.chiave == "daApprovare" && (r.collegamento == null || r.collegamento.pagina == "approvare")) {
+                            approvare = d.urgenti.plus(d.settimana).plus(d.pianificare).firstOrNull { it.tipo == "approvare" } to r.visto
+                        } else apri(r.collegamento)
+                    }
+                    SezioneDashboard8(
+                        "urgenti", d.urgenti.drop(1), d.quante["urgenti"], if (prima == null) Modifier.bersaglio("cosa-fare") else Modifier,
+                        altreModifier = Modifier.bersaglio("altre"), contaPrima = if (prima != null) 1 else 0,
+                        onApri = ::apriVoce, onLungo = { nascondi = it }, onAltre = { RicordoTutto.sezione = "urgenti"; RicordoTutto.area = ""; nav.vai("tutto") },
+                    )
+                    SezioneDashboard8(
+                        "settimana", d.settimana, d.quante["settimana"], Modifier.bersaglio("settimana"),
+                        altreModifier = if ((d.quante["urgenti"] ?: 0) <= d.urgenti.size) Modifier.bersaglio("altre") else Modifier,
+                        onApri = ::apriVoce, onLungo = { nascondi = it }, onAltre = { RicordoTutto.sezione = "settimana"; RicordoTutto.area = ""; nav.vai("tutto") },
+                    )
+                    // Fase 6 (§12.7): l'esterno vede i suoi incarichi con l'avanzamento.
+                    if (d.incarichiEsterno.isNotEmpty()) Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Etichetta("I tuoi incarichi · ${d.incarichiEsterno.size}")
+                        Scheda(orizzontale = 18.dp, verticale = 4.dp, raggio = 22.dp, spazio = 0.dp) {
+                            d.incarichiEsterno.forEachIndexed { i, x ->
+                                if (i > 0) LineaElenco()
+                                Column(Modifier.fillMaxWidth().clickable { apri(Collegamento("incarico", id = x.id)) }.padding(vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Text(x.numero + " · " + x.titolo, style = Testi.forte, color = c.testo)
+                                    Text(listOf(x.idCommessa, x.commessa).filter { it.isNotBlank() }.joinToString(" · ") + if (x.modo == "corpo") " · avanzamento ${x.avanzamento}%" else "", style = Testi.secondario, color = c.tenue)
+                                    if (x.modo == "corpo") BarraAvanzamento(x.avanzamento)
+                                }
+                            }
+                        }
+                    }
+                    SezioneDashboard8(
+                        "pianificare", d.pianificare, d.quante["pianificare"],
+                        onApri = ::apriVoce, onLungo = { nascondi = it }, onAltre = { RicordoTutto.sezione = "pianificare"; RicordoTutto.area = ""; nav.vai("tutto") },
+                    )
+                    if (d.vuota) NienteDaSistemare(if (prima == null) Modifier.bersaglio("cosa-fare") else Modifier)
+                    PiedeDashboard8(onTutto = { RicordoTutto.sezione = "urgenti"; RicordoTutto.area = ""; nav.vai("tutto") }, onRiquadri = { cambiaRiquadri = true })
+                }
                 else -> {
                     // Fase 4 (fase4.md §13.6): quattro riquadri dei soldi per chi vede le fatture, toccabili.
                     val soldi = d.fase4
@@ -201,6 +249,9 @@ fun SchermataDashboard(
         }
         if (scrive) PillolaReteRapportini(dati, Modifier.align(Alignment.BottomCenter))
     }
+    nascondi?.let { v -> FoglioNascondi(dati, v) { nascondi = null } }
+    approvare?.let { (v, numero) -> FoglioDaApprovare(v, numero, nav, dati) { approvare = null } }
+    if (cambiaRiquadri) dashboard?.let { d -> FoglioRiquadri(dati, d) { cambiaRiquadri = false } }
 }
 
 /**
@@ -221,7 +272,8 @@ fun apriCollegamento(col: Collegamento?, nav: Navigatore, rapportini: List<Rappo
             nav.vai("commessa/${col.id}")
         } else nav.sezione(Sezione.COMMESSE)
         "commesse" -> {
-            RicordoCommesse.mostra(col.filtro.ifBlank { p["filtro"] ?: p["stato"] ?: "" })
+            // Fase 8: i riquadri mandano {stato: "APERTA"} e {inRitardo: true}.
+            RicordoCommesse.mostra(col.filtro.ifBlank { p["filtro"] ?: if (p["inRitardo"] == "true") "ritardo" else if (p["stato"].equals("APERTA", true)) "aperte" else p["stato"] ?: "" })
             nav.sezione(Sezione.COMMESSE)
         }
         "cliente", "fornitore", "soggetto" -> if (col.id.isNotBlank()) nav.vai("cliente/${col.id}") else nav.sezione(Sezione.CLIENTI)
@@ -291,7 +343,29 @@ fun apriCollegamento(col: Collegamento?, nav: Navigatore, rapportini: List<Rappo
             }
             nav.sezione(Sezione.SPESE)
         }
+        // Fase 8 (§8.7): integrazioni (col segmento), un collegamento, Tutto quello che c'è da fare, le pagine di Amministrazione.
+        "integrazioni" -> {
+            RicordoIntegrazioni.segmento = when (p["segmento"]) {
+                "collegati" -> eu.stgm.wisper.rapportino.SegmentoIntegrazioni.COLLEGATI
+                "sistemare", "dasistemare" -> eu.stgm.wisper.rapportino.SegmentoIntegrazioni.DA_SISTEMARE
+                "noncollegati" -> eu.stgm.wisper.rapportino.SegmentoIntegrazioni.NON_COLLEGATI
+                "tutti" -> eu.stgm.wisper.rapportino.SegmentoIntegrazioni.TUTTI
+                else -> null
+            }
+            nav.sezione(Sezione.INTEGRAZIONI)
+        }
+        "integrazione" -> if (col.id.isNotBlank()) nav.vai("integrazione/${col.id}") else nav.sezione(Sezione.INTEGRAZIONI)
+        "tutto" -> { RicordoTutto.sezione = p["sezione"]?.ifBlank { null } ?: "urgenti"; RicordoTutto.area = p["area"].orEmpty(); nav.vai("tutto") }
+        "approvare" -> { RicordoOre.segmento = SegmentoOre.APPROVARE; nav.sezione(Sezione.RAPPORTINI) }
         "amministrazione" -> when (p["sezione"]) {
+            "sicurezza" -> nav.vai("amm/sicurezza")
+            "copie" -> nav.vai("amm/copie")
+            "stato" -> nav.vai("amm/stato")
+            "controlli" -> nav.vai("amm/controlli")
+            "impostazioni" -> nav.vai("amm/impostazioni")
+            "notifiche" -> nav.vai("amm/notifiche")
+            "funzioni" -> nav.vai("amm/funzioni")
+            "importa" -> nav.vai("amm/importa")
             "portale" -> nav.vai("amm/portale")
             "comunicazioni" -> nav.vai("amm/comunicazioni")
             "veicoli" -> nav.vai("amm/veicoli")
@@ -318,6 +392,7 @@ fun apriCollegamento(col: Collegamento?, nav: Navigatore, rapportini: List<Rappo
         "persona" -> if (col.id.isNotBlank()) { nav.sezione(Sezione.PERSONE); nav.vai("persona/${col.id}") } else nav.sezione(Sezione.PERSONE)
         "mezzi" -> { RicordoMezzi.mostra(p["segmento"].orEmpty(), p["taratura"].orEmpty()); nav.sezione(Sezione.MEZZI) }
         "mezzo" -> if (col.id.isNotBlank()) { nav.sezione(Sezione.MEZZI); nav.vai("mezzo/${col.id}") } else nav.sezione(Sezione.MEZZI)
+        "attrezzature" -> { RicordoMezzi.mostra("strumenti", if (p["taratura"].orEmpty().startsWith("scad")) "scadute" else p["taratura"].orEmpty()); nav.sezione(Sezione.MEZZI) }
         "attrezzatura" -> if (col.id.isNotBlank()) { nav.sezione(Sezione.MEZZI); nav.vai("strumento/${col.id}") } else nav.sezione(Sezione.MEZZI)
         "collaboratori" -> { RicordoCollaboratori.mostra(p["segmento"].orEmpty()); nav.sezione(Sezione.COLLABORATORI) }
         "collaboratore" -> if (col.id.isNotBlank()) { nav.sezione(Sezione.COLLABORATORI); nav.vai("collaboratore/${col.id}") } else nav.sezione(Sezione.COLLABORATORI)
@@ -371,6 +446,10 @@ private fun azioneDi(col: Collegamento?): String = when (col?.pagina?.lowercase(
     "amministrazione" -> when (col.parametri["sezione"]) {
         "veicoli" -> "Aggiorna i veicoli"
         "fiscale" -> "Apri le impostazioni fiscali"
+        "sicurezza" -> "Apri la sicurezza"
+        "copie" -> "Vedi le copie"
+        "stato" -> "Vedi lo stato del sistema"
+        "controlli" -> "Apri la lista di controllo"
         else -> "Apri"
     }
     "rapportino" -> "Apri il rapportino"
@@ -398,6 +477,10 @@ private fun azioneDi(col: Collegamento?): String = when (col?.pagina?.lowercase(
     "comunicazioni" -> if (col.parametri["segmento"] == "damandare" || col.parametri["segmento"].isNullOrBlank()) "Vedi cosa mandare" else "Apri le comunicazioni"
     "portale", "caricamento" -> "Apri il portale"
     "portalecliente" -> "Apri il cliente nel portale"
+    // Fase 8
+    "integrazione", "integrazioni" -> "Apri le integrazioni"
+    "approvare" -> "Vedi cosa approvare"
+    "tutto" -> "Vedi tutto"
     else -> "Apri"
 }
 
@@ -433,7 +516,7 @@ private fun RigaDashboard(v: VoceDashboard, onClick: () -> Unit) {
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Box(Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(fondo), contentAlignment = Alignment.Center) {
-            Icon(iconaDi(v), null, tint = tinta, modifier = Modifier.size(20.dp))
+            Icon(iconaDashboard(v), null, tint = tinta, modifier = Modifier.size(20.dp))
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(v.titolo, style = Testi.forte, color = c.testo, maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -457,7 +540,7 @@ private fun quantoDi(v: VoceDashboard): String? {
     }
 }
 
-private fun iconaDi(v: VoceDashboard): ImageVector = when (v.tipo.lowercase()) {
+internal fun iconaDashboard(v: VoceDashboard): ImageVector = when (v.tipo.lowercase()) {
     "scadenza", "giorno", "scaduta" -> Icone.calendario
     "fine" -> Icone.commesse
     "firma", "firmare" -> Icone.firma

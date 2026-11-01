@@ -151,10 +151,10 @@ test('revisioni: rev. 0 -> 1 -> 2; approvata da chi approva, da approvare da chi
     assert.equal((await manuel('respingiVersione', { id: versione })).errore, 'Scrivi il motivo: arriva a chi l\'ha caricata');
     const resp = ok(await manuel('respingiVersione', { id: versione, motivo: 'Manca il cartiglio' })).documento;
     assert.deepEqual([resp.versioni[0].statoVisto, resp.versioni[0].motivoRifiuto, resp.revisione], ['Respinta', 'Manca il cartiglio', 0]);
-    const d = ok(await marco('dashboard'));
+    const d = ok(await marco('dashboard', { tutto: true }));
     assert.ok(d.urgenti.some(v => v.titolo === 'Rilievo di Marco rev. 1 respinta' && v.dettaglio === 'Motivo: Manca il cartiglio · Manuel Gasparotto'));
     assert.equal(ok(await manuel('annullaDecisione', { id: versione })).documento.versioni[0].statoVisto, 'Da approvare', 'Annulla dell\'avviso');
-    assert.ok(ok(await manuel('dashboard')).settimana.some(v => v.tipo === 'documento' && /documenti? da approvare$/.test(v.titolo)));
+    assert.ok(ok(await manuel('dashboard', { tutto: true })).settimana.some(v => v.tipo === 'documento' && /documenti? da approvare$/.test(v.titolo)));
     const appr = ok(await manuel('approvaVersione', { id: versione })).documento;
     assert.deepEqual([appr.revisione, appr.statoVisto], [1, 'Valida']);
     assert.equal((await manuel('approvaVersione', { id: versione })).errore, 'La rev. 1 è già approvata');
@@ -384,10 +384,11 @@ test('spazio sul NAS: disco quasi pieno (finto) = niente documenti nuovi, foto d
     assert.equal(vecchio.spazio, true, 'anche dalle app vecchie');
     const r = ok(await manuel('salvaRapportino', { rapportino: { idLocale: 'spazio-1', idCliente: 'C002', data: oggi(), tariffa: 42, oreLavoro: 1 } })).rapportino;
     ok(await manuel('caricaFile', { tipo: 'spesa', id: r.id, base64: PNG.toString('base64'), mime: 'image/png', idFile: 'spazio-foto' }));
-    const d = ok(await manuel('dashboard'));
-    assert.ok(d.urgenti.some(v => v.tipo === 'spazio' && v.titolo === 'Il disco del NAS è quasi pieno: restano 1,6 GB'));
+    const d = ok(await manuel('dashboard', { tutto: true }));
+    // Fase 8 (§8.7): la voce del disco quasi pieno resta, col tipo "sistema".
+    assert.ok(d.urgenti.some(v => v.tipo === 'sistema' && v.titolo === 'Il disco del NAS è quasi pieno: restano 1,6 GB'));
     assert.deepEqual(d.numeri.spazio, { liberoMb: 1600, avviso: true });
-    assert.equal('spazio' in ok(await marco('dashboard')).numeri, false);
+    assert.equal('spazio' in ok(await marco('dashboard', { tutto: true })).numeri, false);
     w.spazioFintoMb = 150;
     const foto = await manuel('caricaFile', { tipo: 'spesa', id: r.id, base64: PNG.toString('base64'), mime: 'image/png', idFile: 'spazio-foto-2' });
     assert.equal(foto.spazio, true, 'sotto 200 MB nessun file');

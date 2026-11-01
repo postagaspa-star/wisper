@@ -46,18 +46,34 @@
       { k: 'app', titolo: 'L\'app', icona: 'app' },
     ];
 
+    // Fase 8 (fase8.md §9): le pagine nuove stanno in amministrazione8.js (studio, impostazioni generali, funzioni accese,
+    // numerazioni, notifiche, aspetto) e sistema8.js (sicurezza, copie e ripristino, importa ed esporta, stato, lista di controllo).
+    const A8 = radice.WisperAmministrazione8(W, { modificaNumerazione: n => modificaNumerazione(n) });
+    W.A8 = A8;
+    const S8 = radice.WisperSistema8(W);
+    W.Sistema8 = S8;
+
     function vista(pagina, sotto, id) {
       // Cambiando pagina si rilegge: utenti, copie e cestino possono essere cambiati da un altro computer.
       const dove = sotto + '/' + (id || '');
-      if (M.dove !== dove) { M.utenti = null; M.permessi = null; M.copie = null; M.cestino = null; M.veicoli = null; M.tipi = null; M.sessioni = {}; M.dove = dove; }
-      if (sotto && sotto !== 'app' && !puo('amministrazione')) { aggiungi(pagina, [h('div', { class: 'calmo grande' }, icona('scudo', 22, 2.2), 'Non hai il permesso per vedere questa pagina. Chiedi a ' + W.titolare() + '.')]); return; }
+      if (M.dove !== dove) {
+        M.utenti = null; M.permessi = null; M.copie = null; M.cestino = null; M.veicoli = null; M.tipi = null; M.sessioni = {}; M.dove = dove;
+        // Fase 8: l'elenco si completa coi numeri del server; le pagine si rileggono entrando.
+        if (sotto) { A8.daRileggere(); S8.daRileggere(); }
+        S8.chiudiPannello(true);
+      }
+      if (sotto && sotto !== 'app' && sotto !== 'notifiche' && !puo('amministrazione')) { aggiungi(pagina, [h('div', { class: 'calmo grande' }, icona('scudo', 22, 2.2), 'Non hai il permesso per vedere questa pagina. Chiedi a ' + W.titolare() + '.')]); return; }
       if (((sotto === 'tariffe' || sotto === 'fisco' || sotto === 'fiscale') && !soldi()) || (sotto === 'cestino' && !scrive()) || (sotto === 'veicoli' && !puo('spese')) || (sotto === 'categorie' && !puo('documenti'))) { aggiungi(pagina, [h('div', { class: 'calmo grande' }, icona('scudo', 22, 2.2), 'Non hai il permesso per vedere questa pagina. Chiedi a ' + W.titolare() + '.')]); return; }
       if ((sotto === 'persone' || sotto === 'formazione') && !puo('persone')) { aggiungi(pagina, [h('div', { class: 'calmo grande' }, icona('scudo', 22, 2.2), 'Non hai il permesso per vedere questa pagina. Chiedi a ' + W.titolare() + '.')]); return; }
-      const fn = { studio, fiscale, utenti: id ? paginaUtente : elencoUtenti, permessi, numerazioni, tariffe, fisco, veicoli, registro, copie, cestino, app, persone: impostazioniFase6, formazione: tipiFormazione,
-        portale: impostazioniPortale, comunicazioni: impostazioniComunicazioni,
-        categorie: p => W.Archivio.paginaCategorie(p), spazio: p => W.Archivio.paginaSpazio(p) }[sotto];
-      if (!fn) { elenco(pagina); return; }
-      if (sotto !== 'app' || puo('amministrazione')) {
+      const fn = { studio: A8.studio, fiscale, utenti: id ? paginaUtente : elencoUtenti, permessi, numerazioni: A8.numerazioni, tariffe, fisco, veicoli, registro, copie: S8.copie, cestino, app: A8.aspetto,
+        persone: impostazioniFase6, formazione: tipiFormazione, portale: impostazioniPortale, comunicazioni: impostazioniComunicazioni,
+        categorie: p => W.Archivio.paginaCategorie(p), spazio: p => W.Archivio.paginaSpazio(p),
+        // fase 8
+        impostazioni: A8.impostazioni, funzioni: A8.funzioni, formato: A8.formato, notifiche: A8.notifiche,
+        sicurezza: S8.sicurezza, importa: S8.importa, stato: S8.stato, controlli: S8.controlli }[sotto];
+      if (!fn) { A8.elenco(pagina); return; }
+      // Aspetto, Notifiche (di tutti) e il formato della commessa mettono da soli la riga Indietro.
+      if (sotto !== 'app' && sotto !== 'notifiche' && sotto !== 'formato') {
         aggiungi(pagina, [h('div', { class: 'indietro-riga' },
           tondo('indietro', 'Indietro', () => W.vai(sotto === 'utenti' && id ? '#amministrazione/utenti' : '#amministrazione')),
           h('span', { class: 'dove' }, sotto === 'utenti' && id ? 'Utenti' : 'Amministrazione'))]);

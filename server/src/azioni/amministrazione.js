@@ -30,6 +30,19 @@ function utenteDaRiga(u, sessioni, idPersona) {
   };
 }
 
+/** Il formato a parole (§9.6): "anno a due cifre, ST, numero a 3 cifre". */
+function formatoAParole(f) {
+  const pezzi = [];
+  String(f).replace(/\{(AAAA|AA|N+)\}|([^{]+)/g, (m, s, t) => {
+    if (s === 'AAAA') pezzi.push('anno a quattro cifre');
+    else if (s === 'AA') pezzi.push('anno a due cifre');
+    else if (s) pezzi.push('numero a ' + s.length + ' cifre');
+    else if (t) pezzi.push(t);
+    return m;
+  });
+  return pezzi.join(', ');
+}
+
 function json(v) {
   if (v === null || v === undefined) return null;
   try { return JSON.parse(v); } catch (e) { return v; }
@@ -118,6 +131,8 @@ module.exports = {
     const hash = password ? await hashPassword(password) : null;
 
     const id = this.db.transazione(() => {
+      // Fase 8 (§9.8): una password data da un altro (iniziale o scritta qui) e' "iniziale" finche' la persona non la cambia.
+      if (hash) Object.assign(v, { password_iniziale: 1, password_il: adesso() });
       if (nuovo) {
         const idNuovo = this.inserisci('utenti', Object.assign({ attivo: 1 }, v, { password_hash: hash, creato: adesso() }));
         // Fase 6: "Dai l'accesso a Wisper" dalla scheda lega la persona che c'e'; un utente nuovo (non esterno) fa nascere la sua.
@@ -152,7 +167,7 @@ module.exports = {
     const passwordIniziale = generaPassword();
     const hash = await hashPassword(passwordIniziale);
     this.db.transazione(() => {
-      this.aggiorna('utenti', u.id, { password_hash: hash });
+      this.aggiorna('utenti', u.id, { password_hash: hash, password_iniziale: 1, password_il: adesso() });
       this.db.esegui('UPDATE sessioni SET revocata = ? WHERE utente_id = ? AND revocata IS NULL', adesso(), u.id);
     });
     return { ok: true, passwordIniziale };
@@ -325,6 +340,8 @@ module.exports = {
       return {
         tipo: n.tipo, formato: n.formato, annuale: n.annuale === 1, ultimo: n.ultimo,
         prossimo: prossimo ? prossimo.codice : '',
+        // Fase 8 (§9.6): il numero (per l'anteprima di un formato nuovo con codiceDa) e il formato a parole.
+        numeroProssimo: prossimo ? prossimo.numero : null, parole: formatoAParole(n.formato), riparte: n.annuale === 1,
       };
     });
   },

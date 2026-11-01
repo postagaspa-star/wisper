@@ -11,6 +11,7 @@
 'use strict';
 
 const { Rifiuto, senzaPermesso, testo, messaggio, oggi } = require('./utili');
+const { provenienza } = require('./provenienza');
 const { togliCosti } = require('./permessi');
 
 const scrive = (modulo, cosa, fn) => ({ modulo, livello: 2, cosa, scrive: true, fn });
@@ -33,17 +34,17 @@ const siVuole = v => v === true || v === '1' || v === 'true';
 const AZIONI = {
   // --- accesso
   accedi: { pubblica: true, asincrona: true, soloPost: true, fn: (w, d) => w.accedi(d) },
-  esci: { soloPost: true, fn: w => w.esci() },
-  io: { fn: w => w.io() },
-  cambiaPassword: { asincrona: true, soloPost: true, fn: (w, d) => w.cambiaPassword(d) },
+  esci: { soloPost: true, libera: 'ognuno esce dal suo dispositivo', fn: w => w.esci() },
+  io: { libera: 'ognuno legge chi e\' e cosa puo\' fare', fn: (w, d) => w.io(d) },
+  cambiaPassword: { asincrona: true, soloPost: true, libera: 'ognuno la sua password', fn: (w, d) => w.cambiaPassword(d) },
 
   // --- le azioni di oggi
-  anagrafiche: { fn: (w, d) => w.rispostaAnagrafiche(d) },
+  anagrafiche: { libera: 'ognuno i clienti e le commesse che vede (lo decide rispostaAnagrafiche)', fn: (w, d) => w.rispostaAnagrafiche(d) },
   rapportini: legge('rapportini', 'vedere i rapportini', (w, d) => ({
     ok: true,
     rapportini: w.leggiRapportini(d.da, d.a, siVuole(d.tutti), { idCliente: d.idCliente, idCommessa: d.idCommessa, statoApprovazione: d.statoApprovazione, idTicket: d.idTicket }),
   })),
-  file: { fn: (w, d) => ({ ok: true, file: w.leggiFile(d.id) }) },
+  file: { libera: 'chi puo\' leggere il file lo decide puoLeggereFile', fn: (w, d) => ({ ok: true, file: w.leggiFile(d.id) }) },
   // Il nome di Code.gs: con solo idCommessa risponde come prima (cartella e file della commessa, per le versioni vecchie);
   // con archivio: true (o un filtro della fase 5) e' l'elenco dell'archivio (fase5.md §10.1).
   documenti: legge('documenti', 'vedere i documenti', (w, d) => (w.elencoNuovo(d) ? w.leggiDocumenti(d) : w.documentiCommessa(d.idCommessa))),
@@ -71,8 +72,8 @@ const AZIONI = {
   statoCommessa: scrive('commesse', 'cambiare le commesse', (w, d) => ({ ok: true, commessa: w.aggiornaCommessa(d.idCommessa, { stato: d.stato }) })),
   salvaImpostazioni: scrive('amministrazione', 'cambiare le impostazioni', (w, d) => ({ ok: true, impostazioni: w.salvaImpostazioni(d.valori || {}) })),
   inviaEmail: { modulo: 'rapportini', livello: 2, cosa: 'mandare email', asincrona: true, soloPost: true, fn: async (w, d) => ({ ok: true, rapportini: await w.inviaEmail(d) }) },
-  salvaGruppo: nonServePiu,
-  collegaComputer: nonServePiu,
+  salvaGruppo: Object.assign({ libera: 'non serve piu\'' }, nonServePiu),
+  collegaComputer: Object.assign({ libera: 'non serve piu\'' }, nonServePiu),
 
   // --- amministrazione
   utenti: legge('amministrazione', 'vedere gli utenti', w => ({ ok: true, utenti: w.leggiUtenti() })),
@@ -84,7 +85,7 @@ const AZIONI = {
   salvaPermessi: scrive('amministrazione', 'cambiare i permessi', (w, d) => w.salvaPermessi(d)),
   registro: legge('amministrazione', 'vedere il registro', (w, d) => w.leggiRegistro(d)),
   accessi: legge('amministrazione', 'vedere gli accessi', (w, d) => w.leggiAccessi(d)),
-  numerazioni: legge('amministrazione', 'vedere le numerazioni', w => ({ ok: true, numerazioni: w.leggiNumerazioni() })),
+  numerazioni: legge('amministrazione', 'vedere le numerazioni', w => ({ ok: true, numerazioni: w.leggiNumerazioni(), fatture: 'Fatture: il numero lo dà il programma delle fatture' })),
   salvaNumerazione: scrive('amministrazione', 'cambiare le numerazioni', (w, d) => ({ ok: true, numerazione: w.salvaNumerazione(d) })),
   cestino: { modulo: 'amministrazione', livello: 2, cosa: 'vedere il cestino', fn: w => ({ ok: true, file: w.cestino() }) },
   ripristinaFile: scrive('amministrazione', 'ripristinare i file', (w, d) => ({ ok: true, file: w.ripristinaFile(d.id) })),
@@ -122,7 +123,7 @@ const AZIONI = {
   ripristinaRapportino: scrive('rapportini', 'ripristinare i rapportini', (w, d) => ({ ok: true, rapportino: w.ripristinaRapportino(d.id) })),
 
   // --- esportazione: il permesso dipende da cosa (lo controlla esporta)
-  esporta: { fn: (w, d) => w.esporta(d) },
+  esporta: { libera: 'il modulo dipende da cosa si esporta (MODULO di esporta.js)', fn: (w, d) => w.esporta(d) },
 
   // --- preventivi e listino (fase 2)
   listino: legge('preventivi', 'vedere il listino', (w, d) => ({ ok: true, listino: w.leggiListino(siVuole(d.tutte)) })),
@@ -158,10 +159,10 @@ const AZIONI = {
   statisticheOre: legge('rapportini', 'vedere le statistiche delle ore', (w, d) => w.statisticheOre(d)),
   costoCommessa: legge('commesse', 'vedere le commesse', (w, d) => w.costoDellaCommessa(d)),
   // Chi approva lo decide il server voce per voce (titolare e amministrazione, col modulo in scrittura).
-  daApprovare: { fn: w => w.daApprovare() },
-  approva: { scrive: true, fn: (w, d) => w.decidi(d, 'approva') },
-  respingi: { scrive: true, fn: (w, d) => w.decidi(d, 'respingi') },
-  annullaApprovazione: { scrive: true, fn: (w, d) => w.decidi(d, 'annulla') },
+  daApprovare: { libera: 'chi approva lo decide il server voce per voce', fn: w => w.daApprovare() },
+  approva: { scrive: true, libera: 'chi approva lo decide il server voce per voce', fn: (w, d) => w.decidi(d, 'approva') },
+  respingi: { scrive: true, libera: 'chi approva lo decide il server voce per voce', fn: (w, d) => w.decidi(d, 'respingi') },
+  annullaApprovazione: { scrive: true, libera: 'chi approva lo decide il server voce per voce', fn: (w, d) => w.decidi(d, 'annulla') },
 
   // --- spese, trasferte, rimborsi, veicoli (fase 3)
   spese: legge('spese', 'vedere le spese', (w, d) => w.leggiSpese(d)),
@@ -386,11 +387,62 @@ const AZIONI = {
   nonSollecitare: conCosti(scrive('fatturazione', 'cambiare i promemoria di pagamento', (w, d) => w.nonSollecitare(d))),
 
   // --- notifiche (fase 7, §10.3): ognuno le sue
-  notifiche: { fn: (w, d) => w.leggiNotifiche(d) },
-  segnaLette: { scrive: true, fn: (w, d) => w.segnaLette(d) },
-  segnaMostrate: { scrive: true, fn: (w, d) => w.segnaMostrate(d) },
-  salvaPreferenzeNotifiche: { scrive: true, fn: (w, d) => w.salvaPreferenzeNotifiche(d) },
+  notifiche: { libera: 'ognuno le sue', fn: (w, d) => w.leggiNotifiche(d) },
+  segnaLette: { scrive: true, libera: 'ognuno le sue', fn: (w, d) => w.segnaLette(d) },
+  segnaMostrate: { scrive: true, libera: 'ognuno le sue', fn: (w, d) => w.segnaMostrate(d) },
+  salvaPreferenzeNotifiche: { scrive: true, libera: 'ognuno le sue', fn: (w, d) => w.salvaPreferenzeNotifiche(d) },
+
+  // --- integrazioni (fase 8, fase8.md §13.1): le impostazioni che toccano internet vogliono anche amministrazione 2 (le controlla salvaIntegrazione)
+  integrazioni: legge('integrazioni', 'vedere le integrazioni', w => w.integrazioniElenco()),
+  integrazione: legge('integrazioni', 'vedere le integrazioni', (w, d) => w.integrazioneUna(d)),
+  provaIntegrazione: { modulo: 'integrazioni', livello: 2, cosa: 'provare i collegamenti', asincrona: true, soloPost: true, fn: (w, d) => w.provaIntegrazione(d) },
+  salvaIntegrazione: scrive('integrazioni', 'cambiare i collegamenti', (w, d) => w.salvaIntegrazione(d)),
+
+  // --- calendario in altre app (fase 8, §13.2): il proprio file e i propri indirizzi con attivita 1 (anche il collaboratore e l'esterno)
+  esportaCalendario: legge('attivita', 'scaricare il calendario', (w, d) => w.esportaCalendario(d)),
+  feedCalendario: legge('attivita', 'vedere gli indirizzi del calendario', w => w.feedCalendario()),
+  nuovoFeed: { scrive: true, modulo: 'attivita', livello: 1, cosa: 'creare gli indirizzi del calendario', fn: (w, d) => w.nuovoFeed(d) },
+  revocaFeed: { scrive: true, modulo: 'attivita', livello: 1, cosa: 'togliere gli indirizzi del calendario', fn: (w, d) => w.revocaFeed(d) },
+
+  // --- cercare dentro i file (fase 8, §13.3); "documenti {testo, dentro}" e' l'azione documenti di sempre
+  letturaFile: legge('documenti', 'vedere i documenti', (w, d) => w.letturaFile(d)),
+  rileggiFile: scrive('documenti', 'rileggere i file', (w, d) => w.rileggiFile(d)),
+
+  // --- importa ed esporta (fase 8, §13.4): Esporta tutto solo il titolare (lo controlla l'azione)
+  esportaTutto: scrive('amministrazione', 'esportare tutti i dati', w => w.esportaTutto()),
+  esportazioni: legge('amministrazione', 'esportare tutti i dati', w => w.esportazioni()),
+  leggiImport: { modulo: 'clienti', livello: 2, cosa: 'importare clienti e fornitori', soloPost: true, fn: (w, d) => w.leggiImport(d) },
+  controllaImport: scrive('clienti', 'importare clienti e fornitori', (w, d) => w.controllaImport(d)),
+  importaSoggetti: scrive('clienti', 'importare clienti e fornitori', (w, d) => w.importaSoggetti(d)),
+  archiviaImportati: scrive('clienti', 'archiviare clienti e fornitori', (w, d) => w.archiviaImportati(d)),
+  importazioni: legge('clienti', 'vedere le importazioni', w => w.importazioni()),
+
+  // --- Dashboard (fase 8, §13.5): ognuno i suoi riquadri e le sue voci nascoste
+  salvaRiquadri: { scrive: true, modulo: 'dashboard', livello: 1, cosa: 'scegliere i riquadri', fn: (w, d) => w.salvaRiquadri(d) },
+  nascondiVoce: { scrive: true, modulo: 'dashboard', livello: 1, cosa: 'nascondere le voci', fn: (w, d) => w.nascondiVoce(d) },
+  mostraNascoste: { scrive: true, modulo: 'dashboard', livello: 1, cosa: 'nascondere le voci', fn: w => w.mostraNascoste() },
+
+  // --- amministrazione (fase 8, §13.6): funzioni accese, Scollega tutti, cifratura e cambio solo il titolare (lo controllano le azioni)
+  impostazioniGenerali: legge('amministrazione', 'vedere le impostazioni', w => w.impostazioniGenerali()),
+  funzioni: legge('amministrazione', 'vedere le funzioni accese', w => w.funzioni()),
+  salvaFunzioni: scrive('amministrazione', 'accendere e spegnere le funzioni', (w, d) => w.salvaFunzioni(d)),
+  notifichePreferenze: { libera: 'ognuno le sue', fn: w => w.notifichePreferenze() },
+  salvaNotifichePreferenze: { scrive: true, libera: 'ognuno le sue', fn: (w, d) => w.salvaNotifichePreferenze(d) },
+  provaAvvisi: { modulo: 'amministrazione', livello: 2, cosa: 'mandare la prova degli avvisi', asincrona: true, soloPost: true, fn: w => w.provaAvvisi() },
+  sicurezza: legge('amministrazione', 'vedere la sicurezza', w => w.sicurezza()),
+  scollegaTutti: { modulo: 'amministrazione', livello: 2, cosa: 'scollegare tutti i dispositivi', asincrona: true, soloPost: true, fn: (w, d) => w.scollegaTutti(d) },
+  accendiCifratura: scrive('amministrazione', 'accendere la cifratura della copia', w => w.accendiCifratura()),
+  spegniCifratura: scrive('amministrazione', 'spegnere la cifratura della copia', (w, d) => w.spegniCifratura(d)),
+  provaCopia: { modulo: 'amministrazione', livello: 2, cosa: 'provare le copie', asincrona: true, soloPost: true, fn: w => w.provaCopia() },
+  segnaRipristino: scrive('amministrazione', 'segnare il ripristino provato', (w, d) => w.segnaRipristino(d)),
+  statoSistema: legge('amministrazione', 'vedere lo stato del sistema', (w, d) => w.statoSistema(d)),
+  controlliFinali: legge('amministrazione', 'vedere la lista di controllo', w => w.controlliFinali()),
+  segnaControllo: scrive('amministrazione', 'segnare la lista di controllo', (w, d) => w.segnaControllo(d)),
+  segnaCambio: scrive('amministrazione', 'segnare il cambio', (w, d) => w.segnaCambio(d)),
 };
+
+/** Fase 8 (§9.5): il nome della funzione spenta per la frase "La funzione ... e' spenta". */
+const NOMI_FUNZIONI = { portale: 'Portale clienti', comunicazioni: 'WhatsApp e comunicazioni', collaboratori: 'Collaboratori esterni', mezzi: 'Mezzi e attrezzature', banche: 'Banche e scadenze' };
 
 /**
  * Fase 6: le sole azioni che un esterno puo' chiamare (fase6.md §8.4). Tutto il resto risponde permesso:false prima di
@@ -408,6 +460,8 @@ const AZIONI_ESTERNO = new Set([
   'collaboratori', 'collaboratore', 'incarichi', 'incarico', 'compensi',
   // Fase 7: le sue notifiche (niente comunicazioni e niente portale: fase6.md §8.4, fase7.md §11.2).
   'notifiche', 'segnaLette', 'segnaMostrate', 'salvaPreferenzeNotifiche',
+  // Fase 8: il suo calendario in altre app, le sue preferenze delle notifiche, i suoi riquadri e le sue voci nascoste.
+  'esportaCalendario', 'feedCalendario', 'nuovoFeed', 'revocaFeed', 'notifichePreferenze', 'salvaNotifichePreferenze', 'salvaRiquadri', 'nascondiVoce', 'mostraNascoste',
 ]);
 
 /**
@@ -478,9 +532,13 @@ async function esegui(w, d, opzioni) {
     return { ok: false, errore: 'Azione sconosciuta: ' + azione };
   }
 
+  // Fase 8 (§0.2): la sessione arrivata dalla porta Google (sessioni.da_fuori, per "ultimo accesso da fuori casa").
+  if (sessione && provenienza().ip === 'google') w.segnaDaFuori(sessione);
   const chi = {
     utente, permessi, sessione, ponte: !!opzioni.ponte, azione,
     disp: testo(perRegistro.disp), dispNome: testo(perRegistro.dispNome), app: testo(perRegistro.app),
+    // Fase 8 (§0.3): schema e Host della richiesta, per l'indirizzo del calendario in casa.
+    richiesta: opzioni.richiesta || null,
   };
   return w.come(chi, async () => {
     let risposta;
@@ -489,6 +547,19 @@ async function esegui(w, d, opzioni) {
       // Fase 6: l'esterno chiama solo le sue azioni (le altre non sa nemmeno che ci sono).
       if (utente && utente.ruolo === 'esterno' && !AZIONI_ESTERNO.has(azione)) throw senzaPermesso(voce.cosa || 'usare questa parte di Wisper');
       const serve = voce.modulo ? [voce.modulo, voce.livello, voce.cosa] : voce.controllo ? voce.controllo(d, utente) : null;
+      // Fase 8 (§9.5): un'azione di una funzione spenta risponde "spenta" (i dati restano). Eccezione: l'incasso segnato da
+      // una fattura scrive il movimento anche con Banche spenta (serve a "Pagata"), coi permessi veri della persona.
+      const spenti = permessi ? w.moduliSpenti() : [];
+      if (spenti.length) {
+        const spento = serve && spenti.indexOf(serve[0]) >= 0 ? serve[0] : (!serve && voce.vede && voce.vede.every(m => spenti.indexOf(m) >= 0) ? voce.vede[0] : '');
+        if (spento === 'banche' && azione === 'segnaIncasso' && testo(d.idFattura)) {
+          const veri = w.permessiDi(utente.ruolo, { veri: true });
+          if ((veri.fatturazione || 0) < 2 || (veri.banche || 0) < 2) throw senzaPermesso(serve[2]);
+          w.chi().permessi = permessi = veri;
+        } else if (spento) {
+          throw new Rifiuto('La funzione ' + NOMI_FUNZIONI[spento] + ' è spenta: si accende in Amministrazione', { spenta: true });
+        }
+      }
       if (serve && permessi && (permessi[serve[0]] || 0) < serve[1]) throw senzaPermesso(serve[2]);
       // Fase 5: basta uno di questi moduli in lettura (scadenze: documenti o ticket; storico dell'impianto: clienti o ticket).
       if (voce.vede && permessi && !voce.vede.some(m => (permessi[m] || 0) >= 1)) throw senzaPermesso(voce.cosa);

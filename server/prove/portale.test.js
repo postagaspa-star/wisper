@@ -458,8 +458,11 @@ test('accettare: anteprima coi conti della fase 2, firma vera, prova "via google
   const st = await m('portale');
   assert.ok(st.daGuardare.some(r2 => r2.tipo === 'accettato' && r2.collegamento.id === 7));
   assert.ok((await m('notifiche', { soloNuove: true })).notifiche.some(n => n.tipo === 'preventivo_accettato'));
-  const dash = await m('dashboard');
-  assert.ok(dash.settimana.some(v => v.titolo === 'PR/2026/014 accettato nel portale' && v.dettaglio === 'Roberto Ferretti · manca la commessa'));
+  const dash = await m('dashboard', { tutto: true });
+  // Fase 8 (§8.1): una cosa, una voce: "accettato nel portale" e "accettato, manca la commessa" dello stesso preventivo sono una
+  // voce sola (quella della fase 2), col dettaglio del portale in coda.
+  assert.ok(dash.settimana.some(v => v.oggetto === 'preventivo:7' && /accettato, manca la commessa$/.test(v.titolo) && / · accettato nel portale/.test(v.dettaglio)));
+  assert.ok(!dash.settimana.some(v => v.titolo === 'PR/2026/014 accettato nel portale'));
   const studio = (await m('preventivo', { id: 7 })).preventivo;
   assert.equal(studio.accettazione.modo, 'portale');
   assert.equal(studio.accettazione.prova.via, 'google');
@@ -522,8 +525,10 @@ test('richieste: nuova dal portale con la foto -> ticket origine portale, priori
   assert.deepEqual([t.origine, t.priorita, t.responsabile_id, t.stato, t.portale_visibile, t.referente_id], ['portale', 'urgente', null, 'aperto', 1, 4]);
   assert.ok(w.db.riga("SELECT id FROM file WHERE ticket_id = ? AND tipo = 'portale'", t.id), 'la foto sta nel ticket');
   const m = await s.come('manuel@esempio.it');
-  const dash = await m('dashboard');
-  assert.ok(dash.urgenti.some(v => v.titolo === 'Richiesta urgente dal portale: ' + t.numero));
+  const dash = await m('dashboard', { tutto: true });
+  // Fase 8 (§8.1): il ticket urgente e la richiesta urgente dal portale sono la stessa cosa: una voce sola, "· dal portale" in coda.
+  assert.ok(dash.urgenti.some(v => v.oggetto === 'ticket:' + t.id && / · dal portale$/.test(v.dettaglio)));
+  assert.ok(!dash.urgenti.some(v => v.titolo === 'Richiesta urgente dal portale: ' + t.numero));
   const tk = (await m('ticket', { id: t.id })).ticket;
   assert.ok(tk.foto.some(f => f.dalCliente === true));
   // Marco riceve la notifica (urgente), risponde nel portale; il cliente vede "Studio Tecnico GM".

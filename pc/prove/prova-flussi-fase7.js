@@ -143,8 +143,11 @@ async function main() {
     const dash = await server('dashboard');
     assert.ok(dash.numeri && dash.numeri.portale && dash.numeri.comunicazioni, 'la Dashboard ha i numeri della fase 7');
     let testo = await testoPagina();
-    assert.match(testo, /dal portale/, 'il riquadro Dal portale');
-    assert.match(testo, /da mandare oggi/, 'il riquadro Da mandare oggi');
+    // Fase 8 (§8.4): quattro riquadri per persona; Dal portale e Da mandare oggi si scelgono con Cambia i riquadri.
+    if (!Array.isArray(dash.riquadri)) {
+      assert.match(testo, /dal portale/, 'il riquadro Dal portale');
+      assert.match(testo, /da mandare oggi/, 'il riquadro Da mandare oggi');
+    } else assert.equal(dash.riquadri.length, 4, 'i quattro riquadri del titolare');
     const numPortale = K.numerino(dash.numeri, 'portale');
     if (numPortale) assert.ok(vociManuel.some(v => v === 'Portale clienti ' + numPortale), 'il numerino giallo di Portale clienti: ' + vociManuel.join(', '));
     await unGiallo('Dashboard');

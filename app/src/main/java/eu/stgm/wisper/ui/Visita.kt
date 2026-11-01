@@ -83,6 +83,8 @@ class Visita {
         Passo("menu", "Il menu", "Clienti, commesse, preventivi, attività, ore, spese, fatture, banche, documenti e ticket: tocca Menu, o scorri dal bordo sinistro.", false, "dashboard"),
         Passo("cosa-fare", "La Dashboard", "Qui vedi cosa fare adesso: ogni riga porta dove si sistema.", false, "dashboard"),
         Passo("settimana", "Questa settimana", "Appuntamenti di oggi, attività e preventivi in scadenza: tocca una riga per aprirla.", false, "dashboard"),
+        // Fase 8 (fase8.md §15.3): la riga Altre N della Dashboard.
+        Passo("altre", "Il resto", "Qui ci sono le prime cose da fare: il resto è in una pagina sola.", false, "dashboard"),
         Passo("giorno", "Il tuo giorno", "Qui vedi subito se il rapportino di oggi è scritto.", false, "dashboard"),
         Passo("scrivi", "Scrivi il rapportino", "Tocca il pulsante giallo.", true, "dashboard"),
         Passo("recente-0", "Per chi", "I clienti di questi giorni sono già qui. Tocca Elettrodinamica.", true, "rapportino"),

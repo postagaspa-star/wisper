@@ -285,15 +285,21 @@ module.exports = {
     return o;
   },
 
-  /** I preventivi coi loro conti, filtrati come chiede l'elenco (righe del database + conti). */
-  elencoPreventivi(d) {
+  /**
+   * I preventivi coi loro conti, filtrati come chiede l'elenco (righe del database + conti). contiDi (fase 8, prova di
+   * carico): una funzione sulla riga; i conti si fanno solo per le righe che la soddisfano (le altre hanno conti null).
+   */
+  elencoPreventivi(d, contiDi) {
     d = d || {};
     const stato = testo(d.stato).toUpperCase();
     const cliente = testo(d.cliente || d.idCliente);
     const anno = testo(d.anno);
     const cerca = normalizza(d.testo);
     const nomi = this.nomiClienti();
-    const righe = this.db.righe('SELECT * FROM preventivi ORDER BY data DESC, numero DESC, revisione DESC, id DESC').filter(r => {
+    // Fase 8 (prova di carico): d.soloAperti (la Dashboard) legge solo quelli che possono ancora fare una voce: in bozza,
+    // inviati o scaduti, accettati senza commessa. Stesso ordine e stessi filtri di sempre su quelli letti.
+    const dove = d.soloAperti === true ? " WHERE (stato IN ('BOZZA', 'INVIATO', 'SCADUTO') OR (stato = 'ACCETTATO' AND commessa_id = ''))" : '';
+    const righe = this.db.righe('SELECT * FROM preventivi' + dove + ' ORDER BY data DESC, numero DESC, revisione DESC, id DESC').filter(r => {
       if (stato === 'MODELLO') return r.modello === 1;
       if (r.modello === 1 && (!si(d.modelli) || (stato && stato !== 'TUTTI'))) return false;
       if (r.stato === 'SOSTITUITO' && stato !== 'SOSTITUITO' && !si(d.sostituiti)) return false;
@@ -303,8 +309,10 @@ module.exports = {
       if (cerca && [r.numero, r.oggetto, nomi[r.cliente_id] || ''].every(t => normalizza(t).indexOf(cerca) < 0)) return false;
       return true;
     });
-    const contenuti = this.contenutiDi(righe.map(r => r.id));
-    return righe.map(r => ({ riga: r, conti: this.contenutoPreventivo(r, contenuti[r.id]).conti, cliente: nomi[r.cliente_id] || '' }));
+    const servono = contiDi ? righe.filter(contiDi) : righe;
+    const contenuti = this.contenutiDi(servono.map(r => r.id));
+    const conConti = new Set(servono.map(r => r.id));
+    return righe.map(r => ({ riga: r, conti: conConti.has(r.id) ? this.contenutoPreventivo(r, contenuti[r.id]).conti : null, cliente: nomi[r.cliente_id] || '' }));
   },
 
   leggiPreventivi(d) {

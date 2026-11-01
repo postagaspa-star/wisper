@@ -99,6 +99,15 @@ class Postino {
   prova() {
     return this.chiama('postinoProva', {});
   }
+
+  /**
+   * Fase 8 (fase8.md §9.10, §13.7): l'impronta di un file della copia fuori casa, come la calcola Drive
+   * (Utilities.computeDigest nello script): {ok, byte, md5}. Serve alla prova automatica della copia. L'azione
+   * postinoImpronta va aggiunta a Ponte.gs (da incollare e pubblicare come le altre).
+   */
+  impronta({ cartella, nome }) {
+    return this.chiama('postinoImpronta', { cartella, nome });
+  }
 }
 
 function conRete(err) {
@@ -138,6 +147,13 @@ function scriviSuDisco(cartella, d) {
     return { ok: true, righe: (d.righe || []).length };
   }
   if (d.azione === 'postinoProva') return { ok: true, quando: new Date().toISOString(), rimaste: 100 };
+  if (d.azione === 'postinoImpronta') {
+    if (['database', 'file'].indexOf(d.cartella) < 0) return { ok: false, errore: 'Cartella non valida: ' + d.cartella };
+    const p = path.join(cartella, 'copie', d.cartella, path.basename(String(d.nome || '')));
+    if (!fs.existsSync(p)) return { ok: false, errore: 'File non trovato: ' + d.nome };
+    const b = fs.readFileSync(p);
+    return { ok: true, byte: b.length, md5: require('node:crypto').createHash('md5').update(b).digest('hex') };
+  }
   return { ok: false, errore: 'Azione sconosciuta: ' + d.azione };
 }
 

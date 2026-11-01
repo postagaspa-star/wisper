@@ -25,6 +25,9 @@
     <queries>
         <package android:name="com.whatsapp" />
         <package android:name="com.whatsapp.w4b" />
+        <!-- Fase 8 (fase8.md §5.6): Apri con ICSx⁵ o, se manca, Installa ICSx⁵ (da F-Droid, gratis). -->
+        <package android:name="at.bitfire.icsdroid" />
+        <package android:name="org.fdroid.fdroid" />
     </queries>
 
     <application
@@ -72,6 +75,17 @@
                 <data android:mimeType="text/plain" />
                 <data android:mimeType="application/pdf" />
                 <data android:mimeType="image/*" />
+            </intent-filter>
+            <!-- Fase 8 (fase8.md §7.2): l'elenco dei clienti esportato dal programma delle fatture (CSV
+                 o Excel) si condivide con Wisper: Amministrazione, Importa clienti e fornitori. -->
+            <intent-filter android:label="Importa clienti in Wisper">
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/csv" />
+                <data android:mimeType="text/comma-separated-values" />
+                <data android:mimeType="application/csv" />
+                <data android:mimeType="application/vnd.ms-excel" />
+                <data android:mimeType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" />
             </intent-filter>
             <intent-filter android:label="Importa in Wisper">
                 <action android:name="android.intent.action.VIEW" />

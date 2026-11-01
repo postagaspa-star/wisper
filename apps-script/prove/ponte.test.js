@@ -71,6 +71,26 @@ test('postinoCopia: su Drive in Wisper/Copie NAS, lo stesso nome sostituisce', (
   assert.match(post({ azione: 'postinoCopia', segreto: SEGRETO, cartella: 'file', nome: '../x', base64 }).errore, /Nome/);
 });
 
+test('postinoImpronta: byte e MD5 della copia su Drive, come li calcola il server', () => {
+  const contenuto = Buffer.from([0, 1, 127, 128, 200, 255, ...Buffer.from('copia della notte')]);
+  const base64 = contenuto.toString('base64');
+  post({ azione: 'postinoCopia', segreto: SEGRETO, cartella: 'file', nome: 'file-20261101.tar', base64 });
+  const r = post({ azione: 'postinoImpronta', segreto: SEGRETO, cartella: 'file', nome: 'file-20261101.tar' });
+  assert.equal(r.ok, true);
+  assert.equal(r.byte, contenuto.length);
+  assert.equal(r.md5, require('node:crypto').createHash('md5').update(contenuto).digest('hex'));
+  // Una copia rifatta con lo stesso nome: l'impronta e' quella nuova, non quella nel cestino.
+  const nuovo = Buffer.from('copia rifatta');
+  post({ azione: 'postinoCopia', segreto: SEGRETO, cartella: 'file', nome: 'file-20261101.tar', base64: nuovo.toString('base64') });
+  assert.equal(post({ azione: 'postinoImpronta', segreto: SEGRETO, cartella: 'file', nome: 'file-20261101.tar' }).byte, nuovo.length);
+  assert.match(post({ azione: 'postinoImpronta', segreto: SEGRETO, cartella: 'file', nome: 'non-c-e.tar' }).errore, /non trovato/);
+  post({ azione: 'postinoCopia', segreto: SEGRETO, cartella: 'database', nome: 'grande.db.gz.parte1', base64 });
+  assert.match(post({ azione: 'postinoImpronta', segreto: SEGRETO, cartella: 'database', nome: 'grande.db.gz' }).errore, /pezzi/);
+  assert.match(post({ azione: 'postinoImpronta', segreto: SEGRETO, cartella: '../x', nome: 'a' }).errore, /Cartella/);
+  assert.match(post({ azione: 'postinoImpronta', segreto: SEGRETO, cartella: 'file', nome: '../a' }).errore, /Nome/);
+  assert.equal(post({ azione: 'postinoImpronta', cartella: 'file', nome: 'file-20261101.tar' }).errore, 'Segreto sbagliato');
+});
+
 test('postinoFoglio: mai prima del cambio', () => {
   proprieta.delete('SERVER_URL');
   const r = post({ azione: 'postinoFoglio', segreto: SEGRETO, scheda: 'Clienti', intestazioni: ['ID_CLIENTE'], righe: [['C001']] });

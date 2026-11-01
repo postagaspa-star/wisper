@@ -162,3 +162,59 @@ test('il NAS col segreto sbagliato non prende niente', async () => {
   const r = (await manda({ azione: 'portaPrendi', segreto: 'sbagliato', attesa: 0 })).json;
   assert.deepEqual(r, { ok: false, errore: 'Segreto sbagliato' });
 });
+
+// ---------------------------------------------------------------- fase 8 (fase8.md §0.3): il calendario "anche fuori casa"
+
+const CHIAVE = 'Q2hpYXZlRGlQcm92YURlbENhbGVuZGFyaW9GdW9yaUNh';
+const leggiCalendario = async chiave => {
+  const r = await fetch(url + '?calendario=' + encodeURIComponent(chiave));
+  return { stato: r.status, tipo: r.headers.get('content-type'), testo: await r.text() };
+};
+
+test('calendario fuori casa: GET ?calendario=<chiave> va in coda come lavoro "portale" (strada calendario, GET, corpo {chiave}) e torna text/calendar', async () => {
+  svuota();
+  const ics = 'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nEND:VCALENDAR\r\n';
+  const n = await nasFinto(l => (l.lavoro.strada === 'calendario' && l.lavoro.corpo.chiave === CHIAVE ? { ok: true, stato: 200, ics } : { ok: false, stato: 404 }));
+  const r = await leggiCalendario(CHIAVE);
+  await n.ferma();
+  assert.equal(r.stato, 200);
+  assert.match(r.tipo, /^text\/calendar/);
+  assert.equal(r.testo, ics);
+  assert.equal(n.visti.length, 1);
+  const l = n.visti[0].lavoro;
+  assert.deepEqual([l.tipo, l.strada, l.metodo, l.v, l.corpo], ['portale', 'calendario', 'GET', 1, { chiave: CHIAVE }]);
+  assert.equal(l.sessione, '', 'senza sessione: la chiave e\' il permesso');
+});
+
+test('calendario fuori casa: senza calendario la stessa riga di testo (chiave sconosciuta, forma sbagliata, NAS spento, risposta strana)', async () => {
+  const no = 'Indirizzo del calendario non valido';
+  // Il server dice di no (chiave sconosciuta, tolta, utente disattivato, troppe letture, calendario spento: tutto uguale).
+  svuota();
+  let n = await nasFinto(() => ({ ok: false, stato: 404, errore: no }));
+  let r = await leggiCalendario(CHIAVE);
+  await n.ferma();
+  assert.equal(r.testo, no);
+  assert.match(r.tipo, /^text\/plain/);
+  // Una chiave con la forma sbagliata non arriva nemmeno al NAS.
+  svuota();
+  n = await nasFinto(() => ({ ok: true, stato: 200, ics: 'BEGIN:VCALENDAR\r\nEND:VCALENDAR\r\n' }));
+  r = await leggiCalendario('corta');
+  const r2 = await leggiCalendario('../exec?x=' + CHIAVE);
+  await n.ferma();
+  assert.equal(r.testo, no);
+  assert.equal(r2.testo, no);
+  assert.equal(n.visti.length, 0);
+  // Una risposta che non e' un calendario non passa.
+  svuota();
+  n = await nasFinto(() => ({ ok: true, stato: 200, ics: '<html>no</html>' }));
+  r = await leggiCalendario(CHIAVE);
+  await n.ferma();
+  assert.equal(r.testo, no);
+  // NAS spento: subito la riga di testo.
+  svuota();
+  r = await leggiCalendario(CHIAVE);
+  assert.equal(r.testo, no);
+  // Senza il parametro, doGet risponde come prima.
+  const g = await fetch(url);
+  assert.match(await g.text(), /^Portale clienti: questo indirizzo risponde solo alla pagina del portale\.$/);
+});

@@ -485,8 +485,13 @@ module.exports = {
 
     // ---- i promemoria di pagamento (§3.15): solo chi ha fatturazione 2 e costi
     if (this.vedePagamenti() && !soloSuoi) {
-      for (const f of this.db.righe("SELECT * FROM fatture WHERE stato = 'emessa' AND tipo = 'fattura' AND solleciti_no = '' ORDER BY data, id")) {
-        const pag = this.pagamentoDi(f);
+      // Fase 8 (prova di carico, §11.5): gli aiuti delle fatture letti una volta per tutte, non uno per fattura.
+      const emesse = this.memoLetture
+        ? this.fattureDiStati(['emessa'], '').filter(f => f.solleciti_no === '').sort((x, y) => (x.data < y.data ? -1 : x.data > y.data ? 1 : x.id - y.id))
+        : this.db.righe("SELECT * FROM fatture WHERE stato = 'emessa' AND tipo = 'fattura' AND solleciti_no = '' ORDER BY data, id");
+      const aiuti = this.aiutiFatture(emesse);
+      for (const f of emesse) {
+        const pag = this.pagamentoDi(f, aiuti);
         if (!(pag.residuo > 0) || !pag.primaScoperta) continue;
         const scadutaDa = Math.round((Date.parse(t + 'T12:00:00') - Date.parse(pag.primaScoperta + 'T12:00:00')) / 86400000);
         if (scadutaDa < k.solleciti) continue;
@@ -786,6 +791,8 @@ module.exports = {
       const id = Number(u);
       if (!id || id === chiE || fatti.has(id)) continue;
       if (!this.db.riga('SELECT id FROM utenti WHERE id = ? AND attivo = 1', id)) continue;
+      // Fase 8 (§9.7): una notifica spenta non nasce per quella persona (non e' solo nascosta).
+      if (!this.vuoleNotifica(id, tipo)) continue;
       fatti.add(id);
       this.db.esegui('INSERT INTO notifiche (utente_id, tipo, titolo, dettaglio, collegamento, creata) VALUES (?, ?, ?, ?, ?, ?)',
         id, tipo, testo(titolo).slice(0, 200), testo(dettaglio).slice(0, 300), collegamento ? JSON.stringify(collegamento) : null, ora);
@@ -810,7 +817,8 @@ module.exports = {
     const pagina = Math.max(1, Math.round(numero(d.pagina)) || 1);
     const nuove = this.db.riga('SELECT COUNT(*) n FROM notifiche WHERE utente_id = ? AND letta_il IS NULL', io || 0).n;
     return {
-      ok: true, nuove,
+      // Fase 8 (§9.7): di sera e nei festivi niente avvisi sul telefono (restano nella campanella).
+      ok: true, nuove, silenzio: io ? this.silenzioAdesso(io) : false,
       notifiche: tutte.slice((pagina - 1) * NOTIFICHE_PER_PAGINA, pagina * NOTIFICHE_PER_PAGINA).map(n => {
         let col = null;
         try { col = n.collegamento ? JSON.parse(n.collegamento) : null; } catch (e) { col = null; }
@@ -848,12 +856,15 @@ module.exports = {
   /** Alle 8:00, una volta al giorno: "2 messaggi da mandare oggi" a chi deve mandarli (le proposte sue). */
   notificaDaMandare() {
     const t = oggi();
-    if (new Date(adessoMs()).getHours() < 8) return 0;
+    // Fase 8 (§9.7): l'ora del riepilogo del mattino e' NOTIFICHE_ORA (le 8:00 della fase 7).
+    const [hh, mm] = String(this.leggiImpostazioni().NOTIFICHE_ORA || '08:00').split(':').map(Number);
+    const ora = new Date(adessoMs());
+    if (ora.getHours() * 60 + ora.getMinutes() < (hh || 0) * 60 + (mm || 0)) return 0;
     let n = 0;
     for (const u of this.db.righe("SELECT * FROM utenti WHERE attivo = 1 AND ruolo IN ('titolare', 'amministrazione', 'collaboratore')")) {
       if (this.db.riga("SELECT id FROM notifiche WHERE utente_id = ? AND tipo = 'da_mandare' AND substr(creata, 1, 10) = ?", u.id, t)) continue;
       const p = this.come({ utente: { id: u.id, nome: u.nome, email: u.email, ruolo: u.ruolo }, permessi: this.permessiDi(u.ruolo) }, () => this.daMandare());
-      if (!p.oggi.length) continue;
+      if (!p.oggi.length || !this.vuoleNotifica(u.id, 'da_mandare')) continue;
       const nomi = Array.from(new Set(p.oggi.map(x => x.a.nome))).slice(0, 4);
       this.db.esegui('INSERT INTO notifiche (utente_id, tipo, titolo, dettaglio, collegamento, creata) VALUES (?, ?, ?, ?, ?, ?)', u.id, 'da_mandare',
         p.oggi.length === 1 ? '1 messaggio da mandare oggi' : p.oggi.length + ' messaggi da mandare oggi', nomi.join(', '),

@@ -215,9 +215,9 @@ test('giorni senza rapportino: un giorno di assenza, un festivo (anche il 4 otto
     if (feriale(g) && !conRap.has(g) && !s.wisper.db.riga("SELECT id FROM assenze WHERE persona_id = 3 AND stato = 'approvata' AND dal <= ? AND al >= ?", g, g)) senza = g;
   }
   if (!senza) return; // nessun giorno libero negli ultimi 6: niente da provare
-  assert.ok(ok(await marco('dashboard')).numeri.giorniSenzaRapportino.includes(senza));
+  assert.ok(ok(await marco('dashboard', { tutto: true })).numeri.giorniSenzaRapportino.includes(senza));
   ok(await marco('salvaAssenza', { assenza: { tipo: 'malattia', dal: senza, al: senza } }));
-  assert.equal(ok(await marco('dashboard')).numeri.giorniSenzaRapportino.includes(senza), false);
+  assert.equal(ok(await marco('dashboard', { tutto: true })).numeri.giorniSenzaRapportino.includes(senza), false);
   // Anche nelle ore: il giorno ha l'assenza ("Malattia" per lui).
 });
 

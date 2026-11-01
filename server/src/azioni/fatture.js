@@ -185,7 +185,7 @@ module.exports = {
     // "separati" sono sorgenti normali, "contratto" mai (tranne le spese al cliente se i materiali non sono compresi,
     // e le anticipazioni), "no" mai. Un ticket annullato non trattiene niente.
     const tickets = {};
-    this.db.righe('SELECT t.*, c.materiali_inclusi FROM ticket t LEFT JOIN contratti c ON c.id = t.contratto_id').forEach(t => { tickets[t.id] = t; });
+    this.ticketConContratto().forEach(t => { tickets[t.id] = t; });
     const fuoriPerTicket = (idTicket, tipo, anticipazione) => {
       const t = idTicket !== null && idTicket !== undefined ? tickets[idTicket] : null;
       if (!t || t.stato === 'annullato') return false;
@@ -733,11 +733,24 @@ module.exports = {
   incassiDi(ids) {
     const per = {};
     if (!ids.length) return per;
+    // Fase 8 (prova di carico): dentro la Dashboard (conLettureRicordate) gli incassi di tutte le fatture si leggono una
+    // volta sola e ogni elenco prende i suoi (stesso ordine per fattura: data e id del movimento).
+    if (this.memoLetture) {
+      const tutti = this.ricordata('incassiDi', () => this.incassiLetti(null));
+      for (const id of ids) if (tutti[id]) per[id] = tutti[id];
+      return per;
+    }
+    return this.incassiLetti(ids);
+  },
+
+  /** Gli incassi delle fatture ids (null = di tutte), per fattura, in ordine di data. */
+  incassiLetti(ids) {
+    const per = {};
     const conti = {};
     this.db.righe('SELECT * FROM conti').forEach(c => { conti[c.id] = c; });
     for (const r of this.db.righe(
       'SELECT a.fattura_id, a.importo, m.id idm, m.data, m.conto_id, m.verificato FROM movimento_abbinamenti a JOIN movimenti m ON m.id = a.movimento_id ' +
-      'WHERE m.annullato = 0 AND a.fattura_id IN (' + ids.map(Number).join(',') + ') ORDER BY m.data, m.id')) {
+      'WHERE m.annullato = 0 AND ' + (ids ? 'a.fattura_id IN (' + ids.map(Number).join(',') + ')' : 'a.fattura_id IS NOT NULL') + ' ORDER BY m.data, m.id')) {
       (per[r.fattura_id] = per[r.fattura_id] || []).push({
         idMovimento: r.idm, data: r.data, importo: centesimi(r.importo), conto: this.nomeConto(conti[r.conto_id]), verificato: r.verificato === 1,
       });
@@ -745,12 +758,32 @@ module.exports = {
     return per;
   },
 
+  /**
+   * Fase 8 (prova di carico): le fatture (tipo "fattura") di quegli stati. Fuori dalla Dashboard la lettura di sempre
+   * (sql); dentro, da una lettura sola di tutte, filtrata: stesso ordine dell'indice fatture_stato (stato, data, id), lo
+   * stesso che SQLite usa per le letture di prima.
+   */
+  fattureDiStati(stati, sql) {
+    if (!this.memoLetture) return this.db.righe(sql);
+    const tutte = this.ricordata('fattureTutte', () => this.db.righe("SELECT * FROM fatture WHERE tipo = 'fattura' AND stato IN ('annullata', 'bozza', 'emessa', 'pronta')"));
+    return tutte.filter(f => stati.indexOf(f.stato) >= 0);
+  },
+
+  /** Fase 8 (prova di carico): tutti i ticket col "materiali compresi" del contratto; dentro la Dashboard una lettura sola. */
+  ticketConContratto() {
+    return this.ricordata('ticketConContratto', () => this.db.righe('SELECT t.*, c.materiali_inclusi FROM ticket t LEFT JOIN contratti c ON c.id = t.contratto_id'));
+  },
+
   /** Quello che serve a piu' fatture insieme (elenchi): incassi, note collegate, scadenze, nomi. */
   aiutiFatture(righe) {
     const ids = righe.map(f => f.id);
-    const a = { incassi: this.incassiDi(ids), note: {}, scadenze: {}, clienti: {}, conti: {} };
-    this.db.righe('SELECT id, nome FROM soggetti').forEach(s => { a.clienti[s.id] = s.nome; });
-    this.db.righe('SELECT * FROM conti').forEach(c => { a.conti[c.id] = c; });
+    const n = this.ricordata('aiutiFatture', () => {
+      const x = { clienti: {}, conti: {} };
+      this.db.righe('SELECT id, nome FROM soggetti').forEach(s => { x.clienti[s.id] = s.nome; });
+      this.db.righe('SELECT * FROM conti').forEach(c => { x.conti[c.id] = c; });
+      return x;
+    });
+    const a = { incassi: this.incassiDi(ids), note: {}, scadenze: {}, clienti: n.clienti, conti: n.conti };
     if (ids.length) {
       const lista = ids.map(Number).join(',');
       this.db.righe("SELECT * FROM fatture WHERE tipo = 'nota' AND fattura_collegata_id IN (" + lista + ') ORDER BY id')

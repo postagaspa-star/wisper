@@ -694,7 +694,7 @@
     async function pdfProspetto(f, modello) {
       if (S.esempio) { avviso('Nella visita il PDF non si crea'); return; }
       const conf = imp().REGOLE_FISCALI_CONFERMATE;
-      const html = D.prospettoFattura(modello, { oggi: oggi(), confermateIl: conf && conf.data ? conf.data : '' });
+      const html = D.prospettoFattura(modello, { oggi: oggi(), confermateIl: conf && conf.data ? conf.data : '', logo: D.logoDi(S.ana.impostazioni) });
       const ris = await lavora('Preparo il PDF', () => Rete.post('/locale/pdf', { html, nome: W.nomeFile('Prospetto ' + f.riferimento, f.cliente), apri: true }));
       if (ris) avviso('PDF salvato in ' + ris.percorso);
     }
@@ -715,7 +715,7 @@
       const oggetto = h('input', { type: 'text', value: 'Avviso di parcella · ' + (imp().RAGIONE_SOCIALE || '') });
       const messaggio = h('textarea', { rows: 5 });
       messaggio.value = 'Buongiorno,\nin allegato l\'avviso di parcella. La fattura arriva al pagamento.\n\nCordiali saluti\n' + (imp().TECNICO || imp().RAGIONE_SOCIALE || '');
-      const html = () => D.avvisoParcella(p.modello, { oggi: oggi() });
+      const html = () => D.avvisoParcella(p.modello, { oggi: oggi(), logo: D.logoDi(S.ana.impostazioni) });
       let chiudi;
       const zonaA = h('div', null, campo('A', a));
       const manda = async () => {

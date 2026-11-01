@@ -25,6 +25,7 @@
   const RA = window.WisperRegoleAttivita;
   const RO = window.WisperRegoleOreSpese;
   const K7 = window.WisperRegoleComunicazioni;
+  const Q8 = window.WisperRegoleFase8;
   const { $, h, aggiungi, svuota, icona, tondo, iniziali, stato, avviso, lavora, finestra, conferma, apriMenu, chiudiMenu,
     campo, conSuffisso, selezione, segmenti, cerca, riga, quadrato, segnaposto } = B;
 
@@ -156,11 +157,21 @@
       utenti: a.utenti || [],
       numerazioni: a.numerazioni || [],
       gruppi: a.gruppi || [],
-      impostazioni: a.impostazioni || {},
+      impostazioni: conLogoDaIo(a.impostazioni || {}),
       // Fase 6 (§17.2): i mezzi e i miei strumenti con l'ultima taratura (per il rapportino), solo con mezzi ≥ 1.
       mezzi: a.mezzi || [],
       mieiStrumenti: a.mieiStrumenti || [],
     };
+  }
+
+  /**
+   * Fase 8 (§9.3): il logo e la riga in fondo ai PDF. A chi non riceve quelle impostazioni (l'esterno ne ha poche) le dà
+   * "io" (logo, pdfLogo, pdfPiede): così anche i suoi rapportini escono col logo. Chi le riceve resta com'è.
+   */
+  function conLogoDaIo(imp) {
+    const i = (S.io && S.io.interfaccia) || {};
+    if (imp.STUDIO_LOGO !== undefined || !i.logo) return imp;
+    return Object.assign({}, imp, { STUDIO_LOGO: i.logo, PDF_LOGO: i.pdfLogo !== false, PDF_PIEDE: imp.PDF_PIEDE !== undefined ? imp.PDF_PIEDE : (i.pdfPiede || '') });
   }
 
   async function caricaAnagrafiche() {
@@ -332,6 +343,10 @@
     Comunicazioni.chiudiPannello(true);
     Portale.chiudiPannello(true);
     if (modulo5 !== S.moduloPrima) { if (modulo5 === 'comunicazioni') Comunicazioni.daRileggere(); if (modulo5 === 'portale') Portale.daRileggere(); }
+    // Fase 8: il pannello del collegamento si chiude cambiando pagina; entrando in Integrazioni si rilegge lo stato vero.
+    if (percorso().split('/')[0] !== 'integrazioni') Integrazioni.chiudiPannello(true);
+    if (percorso() !== 'amministrazione/controlli' && W.Sistema8) W.Sistema8.chiudiPannello(true);
+    if (modulo5 !== S.moduloPrima && modulo5 === 'integrazioni') Integrazioni.daRileggere();
     S.moduloPrima = modulo5;
     Archivio.M.aperto = null;
     Ticket.M.aperto = null;
@@ -412,6 +427,9 @@
     // Fase 7: comunicazioni (cliente, commessa) e portale (cliente degli accessi).
     if (d.hash.indexOf('#comunicazioni') === 0) S.filtroComunicazioni = f ? Object.assign({}, f) : null;
     if (d.hash.indexOf('#portale') === 0) S.filtroPortale = f ? Object.assign({}, f) : null;
+    // Fase 8: Integrazioni (segmento) e Tutto quello che c'è da fare (sezione, area).
+    if (d.hash.indexOf('#integrazioni') === 0) S.filtroIntegrazioni = f ? Object.assign({}, f) : null;
+    if (d.hash === '#dashboard/tutto') { S.filtroTutto = f ? Object.assign({}, f) : null; Dash8.M.tutto = null; }
     // Fase 2: il segmento dei preventivi, il segmento o il giorno delle attività.
     if (d.hash === '#preventivi' && f) {
       const seg = f.segmento || { BOZZA: 'bozze', INVIATO: 'inviati', SCADUTO: 'scaduti', ACCETTATO: 'accettati' }[String(f.stato || '').toUpperCase()];
@@ -449,6 +467,13 @@
       }
       return;
     }
+    // Fase 8 (§9.5): una funzione spenta lo dice con le parole del server, non come un permesso che manca.
+    const spente8 = (S.io && S.io.interfaccia && S.io.interfaccia.funzioniSpente) || [];
+    if (spente8.indexOf(R.moduloDi(p)) >= 0) {
+      const nomeF = ((Q8.SPEGNIBILI[R.moduloDi(p)]) || {}).nome || R.moduloDi(p);
+      aggiungi(pagina, [h('div', { class: 'calmo grande' }, icona('interruttore', 22, 2.2), h('span', null, 'La funzione ' + nomeF + ' è spenta: si accende in Amministrazione › Funzioni accese.'))]);
+      return;
+    }
     if (!R.paginaPermessa(perm(), p)) { senzaPermesso(pagina); return; }
 
     if (nome === 'clienti') a1 ? Clienti.scheda(pagina, decodeURIComponent(a1)) : Clienti.vista(pagina);
@@ -459,6 +484,7 @@
     else if (nome === 'banche') { const f = S.filtroBanche; S.filtroBanche = null; Banche.vista(pagina, a1 || '', f); }
     else if (nome === 'amministrazione') Amministrazione.vista(pagina, a1 || '', a2 ? decodeURIComponent(a2) : '');
     else if (nome === 'preventivi') Preventivi.vista(pagina, a1 ? decodeURIComponent(a1) : '', a2 || '');
+    else if (nome === 'attivita' && a1 === 'altreapp') Integrazioni.calendarioAltre(pagina);
     else if (nome === 'attivita') { const f = S.filtroAttivita; S.filtroAttivita = null; Attivita.vista(pagina, a1 ? decodeURIComponent(a1) : '', f); }
     // Fase 5: Documenti e Ticket e assistenza.
     else if (nome === 'documenti') { const f = S.filtroDocumenti; S.filtroDocumenti = null; Archivio.vista(pagina, a1 || '', a2 ? decodeURIComponent(a2) : '', f); }
@@ -470,6 +496,9 @@
     // Fase 7: WhatsApp e comunicazioni, Portale clienti.
     else if (nome === 'comunicazioni') { const f = S.filtroComunicazioni; S.filtroComunicazioni = null; Comunicazioni.vista(pagina, a1 || '', a2 || '', f); }
     else if (nome === 'portale') { const f = S.filtroPortale; S.filtroPortale = null; Portale.vista(pagina, a1 || '', a2 || '', f); }
+    // Fase 8: Integrazioni, Tutto quello che c'è da fare, Il calendario in altre app.
+    else if (nome === 'integrazioni') { const f = S.filtroIntegrazioni; S.filtroIntegrazioni = null; Integrazioni.vista(pagina, a1 ? decodeURIComponent(a1) : '', f); }
+    else if (nome === 'dashboard' && a1 === 'tutto' && Dash8.attiva()) { const f = S.filtroTutto; S.filtroTutto = null; Dash8.paginaTutto(pagina, f); }
     else vistaDashboard(pagina);
   }
 
@@ -513,23 +542,33 @@
   function disegnaLato() {
     const lato = $('#lato');
     lato.classList.toggle('chiuso', S.latoChiuso);
-    const studio = (S.io && S.io.ragioneSociale) || S.ana.impostazioni.RAGIONE_SOCIALE || (S.locale && S.locale.studio) || 'Ufficio';
+    // Fase 8 (§9.3): il nome breve dello studio nel menu, se c'è.
+    const interf = (S.io && S.io.interfaccia) || {};
+    const studio = interf.nomeBreve || (S.io && S.io.ragioneSociale) || S.ana.impostazioni.RAGIONE_SOCIALE || (S.locale && S.locale.studio) || 'Ufficio';
     $('#lato-studio').textContent = S.esempio ? 'Studio Tecnico GM' : studio;
     const voci = svuota($('#voci'));
     if (S.entrato === false && !S.esempio) return;
     const attiva = R.moduloDi(percorso());
     const esterno = eEsterno();
-    R.vociMenu(perm(), esterno).forEach(v => {
-      const n = v.modulo === 'fatturazione' && S.caricato ? clientiDaFatturare() : (v.modulo === 'documenti' || v.modulo === 'ticket') && S.caricato ? numerinoFase5(v.modulo)
+    // Fase 8 (§9.5): le funzioni spente spariscono dal menu di tutti.
+    Q8.senzaSpente(R.vociMenu(perm(), esterno), interf.funzioniSpente).forEach(v => {
+      // Col server della fase 8 i numerini arrivano già fatti con la regola sola (§8.6): S.dash.numerini {modulo: n}.
+      const numerini8 = S.dash && S.dash.numerini && typeof S.dash.numerini === 'object' ? S.dash.numerini : null;
+      const n0 = numerini8 && S.caricato ? Number(numerini8[v.modulo]) || 0
+        : v.modulo === 'fatturazione' && S.caricato ? clientiDaFatturare() : (v.modulo === 'documenti' || v.modulo === 'ticket') && S.caricato ? numerinoFase5(v.modulo)
         : (v.modulo === 'persone' || v.modulo === 'mezzi' || v.modulo === 'collaboratori') && S.caricato && !esterno ? numerinoFase6(v.modulo)
           // Fase 7 (§11.1): da mandare oggi più preparati; da guardare.
-          : (v.modulo === 'comunicazioni' || v.modulo === 'portale') && S.caricato ? K7.numerino(S.dash && S.dash.numeri, v.modulo) : 0;
+          : (v.modulo === 'comunicazioni' || v.modulo === 'portale') && S.caricato ? K7.numerino(S.dash && S.dash.numeri, v.modulo)
+            // Fase 8 (§8.6): i collegamenti in Errore, solo per il titolare e chi ha amministrazione 2.
+            : v.modulo === 'integrazioni' && S.caricato ? Integrazioni.numerino() : 0;
+      // Una regola sola (§8.6): il numerino conta le cose che aspettano te; oltre 99 "99+".
+      const n = Q8.numerino(n0);
       const sua = attiva === v.modulo;
       const nomeV = window.WisperRegolePersone.nomeVoce(v, esterno);
       aggiungi(voci, [h('a', {
         href: '#' + v.modulo, class: 'voce' + (sua ? ' attiva' : ''), 'aria-current': sua ? 'page' : null,
         'data-nome': nomeV, 'data-visita': 'nav-' + v.modulo,
-      }, icona(v.icona, 22, 2.2), h('span', { class: 'lab' }, nomeV), n ? h('span', { class: 'num-v', 'aria-label': n + ' da guardare' }, String(n)) : null)]);
+      }, icona(v.icona, 22, 2.2), h('span', { class: 'lab' }, nomeV), n ? h('span', { class: 'num-v', 'aria-label': n + ' da guardare' }, n) : null)]);
     });
     disegnaChi();
     disegnaCampanella();
@@ -624,9 +663,12 @@
 
   $('#richiudi').addEventListener('click', richiudiLato);
   $('#stato-server').addEventListener('click', () => { if (!S.esempio && S.entrato) leggiTutto(true); });
+  // Fase 8 (§9.2): Tu: Cambia la password, Notifiche, Aspetto, Il calendario in altre app, Esci.
   $('#chi').addEventListener('click', () => apriMenu($('#chi'), [
-    { testo: 'L\'app: tema, visita guidata, versione', fn: () => vai('#amministrazione/app') },
     S.esempio ? null : { testo: 'Cambia la password', fn: cambiaPassword },
+    { testo: 'Notifiche', fn: () => vai('#amministrazione/notifiche') },
+    { testo: 'Aspetto', fn: () => vai('#amministrazione/app') },
+    puo('attivita') ? { testo: 'Il calendario in altre app', fn: () => vai('#attivita/altreapp') } : null,
     S.esempio ? null : '-',
     S.esempio ? null : { testo: 'Esci', fn: esci },
   ]));
@@ -870,17 +912,20 @@
       assenza: 'valigia', persona: 'persona', qualifica: 'libro', visita: 'calendario', mezzo: 'furgone', strumento: 'misura', prestito: 'misura',
       guasto: 'allarme', collaboratore: 'collaboratori', incarico: 'collaboratori',
       // fase 7
-      portale: 'globo', messaggio: 'fumetto', pagamento: 'fatturazione' }[v.tipo] ||
+      portale: 'globo', messaggio: 'fumetto', pagamento: 'fatturazione',
+      // fase 8 (§8.7): le voci di sistema, i collegamenti, il ripristino, le versioni, la lista di controllo
+      sistema: /^integrazione/.test(String(v.oggetto || '')) ? 'spina' : v.oggetto === 'ripristino' ? 'disco' : v.oggetto === 'versioni' ? 'scarica' : v.oggetto === 'controlli' ? 'lista' : 'server',
+      integrazione: 'spina', ripristino: 'disco', versione: 'scarica', controlli: 'lista' }[v.tipo] ||
       ({ urgente: 'allarme', attenzione: 'calendario', soldi: 'fatturazione' }[v.gravita] || 'lista');
   }
 
-  function rigaDashboard(v) {
+  function rigaDashboard(v, onclick) {
     return riga({
       sinistra: quadrato(iconaVoce(v), R.classeGravita(v.gravita)),
       titolo: v.titolo, sotto: v.dettaglio,
       // A destra solo gli importi (guida §3): i conteggi sono già nel titolo.
       destra: (v.unita === 'euro' || (!v.unita && v.gravita === 'soldi')) && typeof v.quanto === 'number' && soldi() ? h('span', { class: 'quanto' }, C.euro(v.quanto)) : null,
-      onclick: () => vaiA(v.collegamento),
+      onclick: onclick || (() => vaiA(v.collegamento)),
     });
   }
 
@@ -894,6 +939,25 @@
         h('h1', null, R.saluto() + (nome ? ', ' + nome : '')),
         est ? h('div', { class: 'pillole-testa' }, h('span', { class: 'pill p-blu' }, 'Esterno · ' + est.nome)) : null),
       puo('rapportini', 2) ? h('button', { type: 'button', class: 'btn giallo', onclick: () => moduloRapportino(null) }, icona('piu', 18, 2.6), esterno ? 'Scrivi il rapportino' : 'Nuovo rapportino') : null)]);
+
+    // Fase 8 (§8): col server della fase 8 i quattro riquadri della persona e le sezioni coi tetti (dashboard8.js).
+    if (Dash8.attiva() && !esterno) {
+      // Come nel prototipo: la cosa più urgente in cima, poi i riquadri, poi le sezioni.
+      if (!S.dashErrore) aggiungi(pagina, [Dash8.piuUrgente()]);
+      aggiungi(pagina, [Dash8.riquadri()]);
+      const timer8 = Ore.schedaTimer();
+      if (timer8) aggiungi(pagina, [timer8]);
+      const corpo8 = h('div', { class: 'dash-corpo', 'data-visita': 'dashboard' });
+      aggiungi(pagina, [corpo8]);
+      if (S.dashErrore) {
+        aggiungi(corpo8, [h('div', { class: 'banda calma' }, icona('avviso', 20), h('span', { class: 'spazio' }, 'La Dashboard non si è caricata: ' + S.dashErrore),
+          h('button', { type: 'button', class: 'btn piccolo', onclick: async () => { await caricaDashboard(); ridisegna(); } }, 'Riprova'))]);
+        return;
+      }
+      Dash8.corpo(corpo8, true);
+      if ((S.dash.urgenti || []).length) corpo8.removeAttribute('data-visita');
+      return;
+    }
 
     // Fase 6 (§17.16): l'esterno vede i suoi incarichi in corso con l'avanzamento.
     if (esterno && S.dash && (S.dash.incarichi || []).length) {
@@ -2043,6 +2107,8 @@
     percorso,
     // fase 6
     bloccoStrumenti,
+    // fase 8
+    leggiTutto, richiudiLato, rileggiIo: async () => { await caricaIo(); disegnaLato(); },
   };
   const Clienti = window.WisperClienti(W);
   const Commesse = window.WisperCommesse(W);
@@ -2079,6 +2145,12 @@
   W.Comunicazioni = Comunicazioni;
   const Portale = window.WisperPortale(W);
   W.Portale = Portale;
+  // Fase 8: la Dashboard coi riquadri e i tetti, Integrazioni e il calendario in altre app.
+  W.rigaDashboard = rigaDashboard;
+  const Dash8 = window.WisperDashboard8(W);
+  W.Dash8 = Dash8;
+  const Integrazioni = window.WisperIntegrazioni(W);
+  W.Integrazioni = Integrazioni;
 
   /**
    * L'esportazione per Excel (§12.13, §13.9, §14.14): il server prepara il CSV coi
@@ -2168,6 +2240,8 @@
     if (veli.length) { const v = veli[veli.length - 1]; if (v.chiudi) v.chiudi(); else v.remove(); } else if (S.aperto) chiudiPannello();
     else if (document.querySelector('.pannello-f6')) Persone.chiudiPannello();
     else if (document.querySelector('.pannello-com')) Comunicazioni.chiudiPannello();
+    else if (document.querySelector('.pannello-integrazione')) Integrazioni.chiudiPannello();
+    else if (document.querySelector('.pannello-controllo')) W.Sistema8.chiudiPannello();
     else if (document.querySelector('.pannello-file')) Portale.chiudiPannello();
     else if (document.querySelector('.pannello-doc')) Archivio.chiudiPannello();
     else if (document.querySelector('.pannello-ticket')) Ticket.chiudiPannello();
@@ -2200,6 +2274,9 @@
     Ticket.daRileggere();
     Object.assign(Archivio.M, { aperto: null, doc: null });
     Object.assign(Ticket.M, { aperto: null, tk: null, contrattoAperto: null, contratto: null, miei: null });
+    // fase 8
+    Integrazioni.daRileggere();
+    Dash8.M.tutto = null;
   }
 
   function iniziaVisita() {

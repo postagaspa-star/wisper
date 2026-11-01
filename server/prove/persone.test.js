@@ -109,10 +109,10 @@ test('persone: l\'organico per ruolo (le ferie di Laura: "Ferie" per chi ha pers
   assert.equal(lettura.persone.find(p => p.id === LAURA).costoOrario, 22.4);
   // Anche nella Dashboard, qualunque giorno sia (in ferie da oggi anche di sabato o in un giorno di festa): assentiOggi e i
   // numeri non hanno il limite di 20 voci per sezione (la voce con la frase la prova permessi-fase6.test.js).
-  const d = ok(await chi.manuel('dashboard'));
+  const d = ok(await chi.manuel('dashboard', { tutto: true }));
   assert.deepEqual(d.assentiOggi.map(a => [a.idPersona, a.tipoVisto]), [[LAURA, 'Ferie']]);
   assert.deepEqual(d.numeri.persone.assentiOggiNomi, ['Laura Bianchi']);
-  assert.deepEqual(ok(await chi.marco('dashboard')).assentiOggi.map(a => [a.idPersona, a.tipoVisto]), [[LAURA, 'Assente']]);
+  assert.deepEqual(ok(await chi.marco('dashboard', { tutto: true })).assentiOggi.map(a => [a.idPersona, a.tipoVisto]), [[LAURA, 'Assente']]);
 });
 
 test('assenze: la malattia di un collega arriva "Assente" senza tipo, causale, nota e protocollo; chi ha riservati la vede', async () => {

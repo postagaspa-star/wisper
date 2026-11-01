@@ -100,7 +100,7 @@ test('tagliando a km: la Dashboard avvisa sotto KM_TAGLIANDO_AVVISO; chiuso coi 
   ok(await manuel('salvaMezzo', { mezzo: { id: DOBLO, scadenze: { tagliando: piuGiorni(T, 60) } } }));
   assert.ok(ok(await manuel('mezzo', { id: DOBLO })).mezzo.scadenze.some(x => x.tipo === 'tagliando'));
   ok(await manuel('segnaKm', { idVeicolo: DOBLO, km: kmVicino, conferma: true }));
-  const d = ok(await manuel('dashboard'));
+  const d = ok(await manuel('dashboard', { tutto: true }));
   assert.ok(voci(d).some(v => v.titolo === 'Fiat Doblò GA123BC: tagliando fra 700 km' && v.collegamento.pagina === 'mezzo'), JSON.stringify(voci(d).filter(v => v.tipo === 'mezzo' || /Dobl/.test(v.titolo)).map(v => v.titolo)));
   const tag = ok(await manuel('salvaManutenzione', { manutenzione: { idVeicolo: DOBLO, tipo: 'tagliando', titolo: 'Tagliando dei 90.000', stato: 'in_officina' } })).manutenzione;
   assert.equal(ok(await manuel('mezzo', { id: DOBLO })).mezzo.statoVisto, 'In officina');
@@ -184,7 +184,7 @@ test('assegnazioni: una sola in corso (lo storico resta); il prestito interrompe
   // L'auto di una persona non si assegna.
   assert.equal((await manuel('assegna', { idVeicolo: VOLVO, tipo: 'assegnato', idPersona: 3 })).errore, 'È l\'auto di una persona: non si assegna');
   // L'imbracatura prestata a Impianti Veneti doveva rientrare ieri.
-  const d = ok(await manuel('dashboard'));
+  const d = ok(await manuel('dashboard', { tutto: true }));
   assert.ok(voci(d).some(v => v.tipo === 'prestito' && v.titolo === 'Imbracatura anticaduta AT006: doveva rientrare ieri'));
   assert.ok(ok(await manuel('assegnazioni', { inRitardo: true })).assegnazioni.some(a => a.idAttrezzatura === 6 && a.inRitardo));
   assert.equal(d.numeri.mezzi.prestitiInRitardo, 1);

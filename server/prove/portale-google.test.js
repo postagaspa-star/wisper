@@ -104,7 +104,7 @@ test('collegato: indirizzo scritto, giro che parla con lo script, pagina che ris
   await m('controllaPortale', {});
   const due = await m('controllaPortale', {});
   assert.equal(due.collegato, 'no');
-  const dash = await m('dashboard');
+  const dash = await m('dashboard', { tutto: true });
   assert.ok(dash.urgenti.some(v => /^Il portale non si raggiunge da fuori dalle \d{1,2}:\d{2}$/.test(v.titolo)));
   assert.ok((await m('notifiche', { soloNuove: true })).notifiche.some(n => n.tipo === 'portale_irraggiungibile'));
   delete w.fetchPortale;

@@ -15,6 +15,8 @@
 // carica solo Porta.gs e PortaleClienti.gs (niente foglio, niente dati di esempio, niente CODICE), risponde con
 // Access-Control-Allow-Origin: * come Google dopo il rimbalzo su script.googleusercontent.com, e il segreto del NAS
 // (la proprieta' SEGRETO_SERVER dello script) e' WISPER_SEGRETO_PORTALE, di base "prova-portale".
+// Fase 8 (docs/gestionale/fase8.md §0.3): in modalita' portale anche le GET con ?calendario=<chiave> (il calendario
+// "anche fuori casa"): la risposta e' text/calendar se e' un calendario, text/plain se no (come MimeType.ICAL e TEXT).
 'use strict';
 
 process.env.TZ = 'Europe/Rome';
@@ -255,6 +257,9 @@ const Utilities = {
   getUuid: () => crypto.randomUUID(),
   base64Decode: s => Array.from(Buffer.from(s, 'base64')),
   base64Encode: b => Buffer.from(b).toString('base64'),
+  // Come Google: l'impronta torna in byte con segno (da -128 a 127).
+  DigestAlgorithm: { MD5: 'md5', SHA_256: 'sha256' },
+  computeDigest: (alg, bytes) => Array.from(crypto.createHash(alg).update(Buffer.from(bytes.map(b => b & 0xff))).digest()).map(b => b > 127 ? b - 256 : b),
   newBlob: (bytes, mime, nome) => ({
     nome, mime, bytes: Buffer.from(bytes),
     getBytes() { return Array.from(this.bytes); },
@@ -327,8 +332,8 @@ const contesto = {
   DriveApp, PropertiesService, LockService, CacheService, Utilities, MailApp, UrlFetchApp, ScriptApp,
   Session: { getEffectiveUser: () => ({ getEmail: () => 'proprietario@example.com' }) },
   ContentService: {
-    MimeType: { JSON: 'application/json' },
-    createTextOutput: testo => ({ testo, setMimeType() { return this; } }),
+    MimeType: { JSON: 'application/json', TEXT: 'text/plain', ICAL: 'text/calendar' },
+    createTextOutput: testo => ({ testo, mime: '', setMimeType(m) { this.mime = m; return this; } }),
   },
   Logger: { log: (...x) => console.log('[script]', ...x) },
   console,
@@ -541,6 +546,10 @@ function ascoltaHttp(porta, opzioni) {
         }
         if (risposta.destroyed) return;
         const intestazioni = { 'Content-Type': out.errore !== undefined ? 'text/html; charset=utf-8' : 'application/json; charset=utf-8' };
+        // Lo script del portale, GET (fase 8): il calendario come text/calendar, la riga di testo come text/plain.
+        if (PORTALE && richiesta.method === 'GET' && out.errore === undefined) {
+          intestazioni['Content-Type'] = /^BEGIN:VCALENDAR/.test(testo || '') ? 'text/calendar; charset=utf-8' : 'text/plain; charset=utf-8';
+        }
         // Lo script del portale: Google risponde dal rimbalzo con Access-Control-Allow-Origin: * (la pagina sta su Netlify).
         if (PORTALE) intestazioni['Access-Control-Allow-Origin'] = '*';
         risposta.writeHead(out.troppe ? 429 : 200, intestazioni);

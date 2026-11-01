@@ -96,6 +96,20 @@ clients see), and the NAS fetches the requests itself, so nothing is opened on t
 router. Behind Google the client's IP address doesn't arrive, so neither the access log nor
 the signature evidence records it; there are no cookies either.
 
+Phase 8 closes the plan with integrations, settings and the final checks before the switch.
+An Integrations page lists every connection (Google gateway, portal, VAT number check, app
+updates, calendar feed, backups) with its state, last check, what leaves the NAS and its cost
+(all 0 €); a broken one shows in red with "Try now". The calendar can be added to Google or
+Outlook through a private address that phones read at home; reading it from outside goes
+through the portal script and is off by default. Search now looks inside files (PDF, Word,
+Excel, DXF). Clients and suppliers can be imported from a CSV or Excel file, everything can be
+exported as one ZIP (only at home), each person picks their dashboard tiles, and modules can
+be switched off. Backups can be encrypted, are checked automatically every 30 days (integrity,
+row counts, file hashes, the off-site copy's fingerprint) and a manual restore test is logged
+every 90 days. A checklist of 77 rows tracks the tests before the switch evening. Ten years of
+realistic fake data stay within the agreed times on the NAS (dashboard about 0.4 s, export of
+everything about 10 s).
+
 ## What changed
 
 The first Wisper, built for NGN Hacks 2026, was voice only: a wake word, a

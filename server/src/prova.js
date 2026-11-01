@@ -127,7 +127,76 @@ function seminaTutto(w) {
   seminaFase6(w, utenti, come);
   // Fase 7: portale clienti, WhatsApp e comunicazioni (dopo tutto il resto: id e conteggi di prima restano quelli).
   utenti.fase7 = seminaFase7(w, utenti, come);
+  // Fase 8: integrazioni, calendario in altre app, ricerca dentro i file, lista di controllo (dopo tutto il resto).
+  utenti.fase8 = seminaFase8(w, utenti, come);
   return utenti;
+}
+
+/**
+ * Un PDF piccolo col testo vero (come lo fa un programma da ufficio: font WinAnsi, testo compresso), per la ricerca
+ * dentro i file dei dati di esempio e della prova di carico. righe: le righe di testo.
+ */
+function pdfConTesto(righe) {
+  const zlib = require('node:zlib');
+  const lett = s => '(' + String(s).replace(/([\\()])/g, '\\$1') + ')';
+  let c = 'BT\n/F1 11 Tf\n72 760 Td\n';
+  righe.forEach((r, i) => { c += lett(r) + 'Tj\n' + (i < righe.length - 1 ? '0 -16 Td\n' : ''); });
+  c += 'ET\n';
+  const contenuto = zlib.deflateSync(Buffer.from(c, 'latin1'));
+  const ogg = [
+    '<< /Type /Catalog /Pages 2 0 R >>', '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>',
+    '<< /Type /Font /Subtype /TrueType /BaseFont /Arial /Encoding /WinAnsiEncoding >>',
+  ];
+  const pezzi = [Buffer.from('%PDF-1.7\n', 'latin1')];
+  ogg.forEach((o, i) => pezzi.push(Buffer.from((i + 1) + ' 0 obj\n' + o + '\nendobj\n', 'latin1')));
+  pezzi.push(Buffer.from('5 0 obj\n<< /Filter /FlateDecode /Length ' + contenuto.length + ' >>\nstream\n', 'latin1'), contenuto, Buffer.from('\nendstream\nendobj\ntrailer\n<< /Root 1 0 R >>\n%%EOF\n', 'latin1'));
+  return Buffer.concat(pezzi);
+}
+
+/**
+ * La fase 8 come nel prototipo (docs/prototipo/Gestionale-fase8.html):
+ *  - il verbale di verifica periodica di Batokyo, un PDF col testo vero ("la verifica dell'impianto di terra"): il titolo non
+ *    dice "terra", cosi' cercando "terra" lo si trova "Nel testo";
+ *  - l'indirizzo del calendario "Telefono di Manuel" (letto stamattina da ICSx5; la chiave non si sa: si vede una volta sola);
+ *  - la Verifica della partita IVA in Errore (due controlli di fila non riusciti), per il flusso "un collegamento in
+ *    Errore, Prova adesso" (in prova Prova adesso la rimette Da configurare: VIES vero non si chiama, §0.5);
+ *  - due righe della lista di controllo fatte e una che non va.
+ */
+function seminaFase8(w, utenti, come) {
+  const ids = {};
+  const ora = adessoMs();
+  come('titolare', () => {
+    const cat = nome => (w.db.riga('SELECT id FROM documento_categorie WHERE nome = ?', nome) || {}).id;
+    const batokyo = w.db.riga("SELECT id FROM soggetti WHERE nome LIKE 'Batokyo%'");
+    const f = w.salvaFile({ dati: pdfConTesto([
+      'Verbale di verifica periodica - Magazzino automatico di Schio',
+      'La verifica dell\'impianto di terra e\' stata eseguita il 12/03/2026 con',
+      'il metodo voltamperometrico: la resistenza misurata e\' 4,2 ohm, perche\'',
+      'il dispersore e\' stato ampliato nel 2025. Nessuna non conformita\' rilevata;',
+      'prossima verifica entro due anni secondo il DPR 462/01. Tecnico: Manuel Gasparotto.',
+    ]), nome: 'Verbale verifica periodica Batokyo 2026.pdf', mime: 'application/pdf', tipo: 'caricato' });
+    w.db.esegui('UPDATE file SET caricato_da = ? WHERE id = ?', utenti.titolare.id, f.id);
+    ids.verbale = w.salvaDocumento({ documento: { titolo: 'Verbale di verifica periodica Batokyo 2026', idCategoria: cat('Verbali di verifica'),
+      idCliente: batokyo ? batokyo.id : '', dataDocumento: '2026-03-12', origine: 'file', idFile: f.id } }).documento.id;
+    ids.feed = w.inserisci('calendario_feed', { utente_id: utenti.titolare.id, nome: 'Telefono di Manuel', token_hash: require('node:crypto').randomBytes(32).toString('hex'),
+      cosa: JSON.stringify({ attivita: 'mie', assenze: true, scadenze: false }), dettagli: 1, pubblico: 0, creato: istante(new Date(ora - 9 * 86400000)),
+      ultimo_uso: istante(new Date(ora - 25 * 60000)), agente: 'ICSx5/2.4.3', letture: 214 }, 'id', 'indirizzo del calendario creato: Telefono di Manuel');
+    // VIES in Errore: due controlli di fila non riusciti (l'ultimo un'ora fa), l'ultimo riuscito tre giorni fa.
+    const q = ms => istante(new Date(ora - ms));
+    w.db.esegui("UPDATE integrazioni SET stato = 'errore', controllato_il = ?, esito = ?, millisecondi = 15000, errori_di_fila = 2, riuscito_il = ?, account = 'servizio pubblico, senza account' WHERE chiave = 'vies'",
+      q(3600000), 'Il servizio europeo non risponde: riprova più tardi', q(3 * 86400000));
+    for (const [ms, esito, testo] of [[3 * 86400000, 'ok', 'Risponde · la partita IVA dello studio risulta valida'], [2 * 86400000, 'errore', 'Il servizio europeo non risponde: riprova più tardi'],
+      [3600000, 'errore', 'Il servizio europeo non risponde: riprova più tardi']]) {
+      w.db.esegui('INSERT INTO integrazioni_controlli (chiave, quando, esito, millisecondi, testo) VALUES (?, ?, ?, ?, ?)', 'vies', q(ms), esito, esito === 'ok' ? 412 : 15000, testo);
+    }
+    // La lista di controllo: due righe fatte (con la versione di oggi), una che non va.
+    for (const [chiave, stato, nota] of [['M04.1', 'fatto', 'controlli-finali.html: 16 casi uguali'], ['M06.1', 'fatto', 'controlli-finali.html: tutte le prove passano'],
+      ['T05', 'non_va', 'Il tema scuro della Dashboard sul telefono ha un testo grigio poco leggibile']]) {
+      w.segnaControllo({ chiave, stato, nota });
+    }
+  });
+  return ids;
 }
 
 /**
@@ -1107,4 +1176,4 @@ function seminaFase2(w, utenti, come) {
   });
 }
 
-module.exports = { semina, UTENTI_DI_PROVA, partitaIvaDiProva };
+module.exports = { semina, UTENTI_DI_PROVA, partitaIvaDiProva, pdfConTesto };

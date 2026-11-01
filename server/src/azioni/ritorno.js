@@ -860,7 +860,8 @@ module.exports = {
   statoRicevuta(r, a) {
     const pagamenti = (a.pagamenti[r.id] || []);
     const pagato = centesimi(pagamenti.reduce((t, x) => t + x.importo, 0));
-    const note = this.db.righe("SELECT netto FROM fatture_ricevute WHERE ricevuta_collegata_id = ? AND stato = 'attiva'", r.id);
+    // Fase 8 (prova di carico): le note di credito lette una volta per tutte in aiutiRicevute (stesso ordine, le righe).
+    const note = a.note && a.noteDi.has(Number(r.id)) ? a.note[r.id] || [] : this.db.righe("SELECT netto FROM fatture_ricevute WHERE ricevuta_collegata_id = ? AND stato = 'attiva'", r.id);
     const noteNetto = centesimi(note.reduce((t, n) => t + numero(n.netto), 0));
     const scadenze = a.scadenze[r.id] || [];
     if (r.tipo_documento === 'TD04') return { pagato: 0, daPagare: 0, scaduta: false, giorniScaduta: 0, coperture: scadenze.map(() => 0), pagamenti };
@@ -879,6 +880,12 @@ module.exports = {
     this.db.righe('SELECT id, descrizione FROM commesse').forEach(m => { a.commesse[String(m.id).toUpperCase()] = m.descrizione; });
     if (ids.length) this.db.righe('SELECT * FROM ricevuta_scadenze WHERE ricevuta_id IN (' + ids.map(Number).join(',') + ') ORDER BY data, ordine, id')
       .forEach(s => { (a.scadenze[s.ricevuta_id] = a.scadenze[s.ricevuta_id] || []).push(s); });
+    if (ids.length) {
+      a.note = {};
+      a.noteDi = new Set(ids.map(Number));
+      this.db.righe("SELECT ricevuta_collegata_id, netto FROM fatture_ricevute WHERE stato = 'attiva' AND ricevuta_collegata_id IN (" + ids.map(Number).join(',') + ') ORDER BY rowid')
+        .forEach(n => { (a.note[n.ricevuta_collegata_id] = a.note[n.ricevuta_collegata_id] || []).push({ netto: n.netto }); });
+    }
     return a;
   },
 

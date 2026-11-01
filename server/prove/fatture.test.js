@@ -494,7 +494,7 @@ test('nota di credito totale: tutto torna da fatturare (rapportini di nuovo invi
   const dopo = (await manuel('fattura', { id: f.id })).fattura;
   assert.deepEqual([dopo.stato, dopo.statoVisto], ['annullata', 'Annullata']);
   assert.equal(dopo.daRestituire, 300);
-  const dash = await manuel('dashboard');
+  const dash = await manuel('dashboard', { tutto: true });
   assert.ok(dash.urgenti.some(v => v.titolo === 'Fattura ' + f.numero + ': 300,00 da restituire o compensare'), JSON.stringify(dash.urgenti.map(v => v.titolo)));
   await manuel('annullaMovimento', { id: inc.movimento.id, motivo: 'prova' });
   assert.equal((await manuel('fattura', { id: f.id })).fattura.daRestituire, 0);
@@ -622,7 +622,7 @@ test('permessi: il collaboratore niente; lettura vede ed esporta ma non scrive; 
     const r = await lettura('fatture');
     assert.deepEqual([r.ok, r.permesso, r.errore], [false, false, 'Per vedere le fatture serve anche il permesso dei soldi: chiedi al titolare']);
     assert.equal((await lettura('conti')).errore, 'Per vedere banche e scadenze serve anche il permesso dei soldi: chiedi al titolare');
-    const d = await lettura('dashboard');
+    const d = await lettura('dashboard', { tutto: true });
     assert.equal('soldi' in d.numeri, false);
   } finally {
     await manuel('salvaPermessi', { permessi: { lettura: { costi: 1 } } });
@@ -630,14 +630,14 @@ test('permessi: il collaboratore niente; lettura vede ed esporta ma non scrive; 
   // Il collaboratore: nella commessa niente soldi, nella Dashboard niente voci di fatture e banche.
   const commessa = (await marco('anagrafiche')).commesse.find(m => m.id === '26ST003');
   assert.equal('importoContratto' in commessa, false);
-  const d = await marco('dashboard');
+  const d = await marco('dashboard', { tutto: true });
   const voci = [].concat(d.urgenti, d.settimana, d.pianificare);
   assert.equal(voci.some(v => ['fattura', 'ricevuta', 'impegno', 'cassa', 'conto', 'fiscale'].includes(v.tipo)), false);
   assert.equal('soldi' in d.numeri, false);
 });
 
 test('Dashboard: fatture scadute, da emettere entro 12 giorni, da fatturare per cliente, regole da confermare, i numeri dei soldi', async () => {
-  const d = await manuel('dashboard');
+  const d = await manuel('dashboard', { tutto: true });
   const s = d.numeri.soldi;
   for (const k of ['daFatturare', 'fattureInBozza', 'daIncassare', 'scaduto', 'incassiSettimana', 'pagamentiSettimana', 'saldoConti', 'saldoPrevisto30', 'primoSottoSoglia']) {
     assert.ok(k in s, k);
@@ -645,7 +645,8 @@ test('Dashboard: fatture scadute, da emettere entro 12 giorni, da fatturare per 
   assert.equal(s.scaduto, 310.75);
   const scaduta = d.urgenti.find(v => v.tipo === 'fattura' && /^Fattura 39\/2026 scaduta da \d+ giorni$/.test(v.titolo));
   assert.ok(scaduta);
-  assert.deepEqual([scaduta.dettaglio, scaduta.quanto, scaduta.collegamento], ['Rossi Impianti Srl · restano 310,75 di 810,75', 310.75, { pagina: 'fattura', id: 12 }]);
+  // Fase 8 (§8.1): il promemoria di pagamento della stessa fattura (fase 7) non e' una seconda voce: "· promemoria pronto" in coda.
+  assert.deepEqual([scaduta.dettaglio.replace(/ · promemoria pronto$/, ''), scaduta.quanto, scaduta.collegamento], ['Rossi Impianti Srl · restano 310,75 di 810,75', 310.75, { pagina: 'fattura', id: 12 }]);
   const emetti = d.urgenti.find(v => v.titolo === 'Emetti la fattura per Mario Bianchi entro domenica 1 novembre');
   assert.ok(emetti);
   assert.equal(emetti.dettaglio, 'Ha già pagato il 20/10 · W-14');
@@ -654,8 +655,8 @@ test('Dashboard: fatture scadute, da emettere entro 12 giorni, da fatturare per 
   assert.equal(da.collegamento.pagina, 'fatturazione');
   assert.ok(d.pianificare.some(v => v.tipo === 'fiscale' && v.collegamento.filtro.sezione === 'fiscale'));
   // L'amministrazione vede le regole da confermare; lettura no.
-  assert.ok([].concat((await laura('dashboard')).pianificare).some(v => v.tipo === 'fiscale'));
-  assert.equal([].concat((await lettura('dashboard')).pianificare).some(v => v.tipo === 'fiscale'), false);
+  assert.ok([].concat((await laura('dashboard', { tutto: true })).pianificare).some(v => v.tipo === 'fiscale'));
+  assert.equal([].concat((await lettura('dashboard', { tutto: true })).pianificare).some(v => v.tipo === 'fiscale'), false);
 });
 
 test('rapportini: la pillola della fattura ("In bozza W-15", "Fattura 45/2026") solo per chi vede le fatture', async () => {

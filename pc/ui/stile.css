@@ -1773,3 +1773,124 @@ details.chiuso-f6 .scheda.coppie { border: none; padding: 0; }
 .pannello-com .riga .corpo, .pannello-file .riga .corpo { padding: 0; overflow: visible; gap: 2px; }
 .pannello .riga.riga-int .corpo { padding: 0; overflow: visible; gap: 2px; }
 .interruttore.acceso i { background: var(--scheda); }
+
+/* ======================================================================= fase 8 (fase8.md §15.2) */
+.stretta-1100 { max-width: 1100px; width: 100%; }
+.ambra-testo { font-size: 13px; font-weight: 700; color: var(--ambra-t); }
+.coppia.ambra .v { color: var(--ambra-t); }
+.scheda.righe.interna { border-radius: 16px; padding: 0 14px; }
+.scheda.fila { display: flex; flex-direction: column; gap: 14px; }
+.scheda.fila > h2, .scheda.fila > h3, .scheda-imp > h2 { margin: 0; }
+.con-azione { display: inline-flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+/* Integrazioni: la tabella, la fascia rossa, il pannello */
+.tab-integrazioni .nome-e-cosa { display: flex; flex-direction: column; min-width: 0; }
+.tab-integrazioni .nome-e-cosa .forte { font-weight: 700; }
+.tab-integrazioni .nome-e-cosa .cosa { font-size: 13px; color: var(--tenue); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tab-integrazioni .quando-cella { display: flex; flex-direction: column; min-width: 0; }
+.tab-integrazioni .quando-cella .ambra-testo { font-size: 13px; }
+.fascia-integrazione { align-self: stretch; }
+.pannello-integrazione .titolo-pannello, .pannello-controllo .titolo-pannello { display: flex; align-items: center; gap: 12px; overflow-wrap: anywhere; }
+.pannello-integrazione .corpo .scheda.fila, .pannello-controllo .corpo .fila { padding: 18px; }
+.pannello-controllo .corpo .fila { padding: 0; }
+.pannello-integrazione .riga .corpo, .pannello-controllo .riga .corpo { padding: 0; overflow: visible; gap: 2px; }
+.pannello-integrazione .coppie.una, .pannello-controllo .coppie.una { gap: 10px; }
+/* il calendario in altre app */
+.casella-riga { display: flex; align-items: center; gap: 12px; min-height: 48px; border: none; background: none; padding: 0; font: inherit; font-size: 16px; font-weight: 700; color: var(--testo); cursor: pointer; text-align: left; }
+.casella { width: 24px; height: 24px; border-radius: 7px; border: 2px solid var(--bordo-campo); display: inline-flex; align-items: center; justify-content: center; flex: none; background: var(--scheda); }
+.casella.si { background: var(--testo); border-color: var(--testo); color: var(--scheda); }
+.indirizzo-feed { font-family: Consolas, 'Cascadia Mono', monospace; font-size: 14px; font-weight: 600; background: var(--fondo); border-radius: 12px; padding: 12px 14px; word-break: break-all; user-select: all; }
+/* la Dashboard: Altre N, il menu delle voci nascondibili, i testi in fondo, Cambia i riquadri */
+.altre-righe .t1 { color: var(--giallo-testo); font-size: 15px; }
+.riga-con-altro { display: flex; align-items: center; gap: 6px; border-top: 1px solid var(--riga); }
+.scheda.righe > .riga-con-altro:first-child { border-top: none; }
+.riga-con-altro > .riga { flex: 1; min-width: 0; border-top: none; }
+.altro-voce { flex: none; }
+.piede-dash { display: flex; gap: 22px; flex-wrap: wrap; padding: 4px 2px; }
+.scelte-riquadri { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }
+.scelta-riquadro { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 52px; padding: 0 14px; border-radius: 14px; border: 1.5px solid var(--bordo-scheda); background: var(--scheda); color: var(--testo); font: inherit; font-size: 15px; cursor: pointer; text-align: left; }
+.scelta-riquadro b { font-weight: 800; }
+.scelta-riquadro.scelta { border-color: var(--testo); background: var(--giallo-scelto); }
+.scelta-riquadro .ordine { font-size: 13px; font-weight: 800; color: var(--tenue); }
+/* Amministrazione: l'elenco a gruppi, le impostazioni generali */
+.scheda-imp { display: flex; flex-direction: column; gap: 2px; }
+.scheda-imp > h2 { margin-bottom: 8px; }
+.imp-riga { display: flex; align-items: center; justify-content: space-between; gap: 14px; min-height: 56px; padding: 6px 0; border-top: 1px solid var(--riga); }
+.scheda-imp > h2 + .imp-riga { border-top: none; }
+.imp-riga.colonna { flex-direction: column; align-items: stretch; gap: 8px; padding: 10px 0; }
+.imp-riga .lab { font-size: 15px; font-weight: 700; color: var(--testo); min-width: 0; }
+.imp-riga .val { display: inline-flex; align-items: center; gap: 6px; }
+.imp-riga .con-suffisso { width: auto; flex: none; }
+.num-in { width: 92px; text-align: right; }
+.testo-in { width: 180px; }
+button.imp-riga.collegamento-imp { width: 100%; background: none; border-left: none; border-right: none; border-bottom: none; font: inherit; color: inherit; cursor: pointer; text-align: left; }
+button.imp-riga.collegamento-imp:hover .lab { text-decoration: underline; text-underline-offset: 3px; }
+.piede-scheda { margin-top: 10px; }
+.tab-tempi { display: grid; grid-template-columns: minmax(80px, 1fr) minmax(0, 1fr) minmax(0, 1fr); gap: 8px 12px; align-items: center; }
+.tab-tempi .k { font-size: 12px; font-weight: 700; color: var(--tenue); text-transform: uppercase; letter-spacing: .06em; }
+.tab-tempi .num-in { width: 70px; }
+/* Dati dello studio: logo e anteprima dell'intestazione, in bianco e nero come si stampa */
+.logo-riga { display: flex; align-items: center; gap: 14px; }
+.logo-studio { height: 64px; max-width: 200px; object-fit: contain; border-radius: 10px; border: 1px solid var(--bordo-scheda); background: #fff; padding: 4px; }
+.logo-vuoto { width: 64px; height: 64px; border-radius: 12px; border: 1.5px dashed var(--bordo-campo); display: inline-flex; align-items: center; justify-content: center; color: var(--molto-tenue); font-weight: 800; }
+.anteprima-pdf { background: #fff; color: #1B1B1F; border: 1px solid var(--bordo-scheda); border-radius: 12px; padding: 20px 22px 14px; display: flex; flex-direction: column; gap: 12px; font-size: 12px; }
+.ap-testa { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; border-bottom: 2px solid #1B1B1F; padding-bottom: 8px; }
+.ap-studio { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.ap-studio b { font-size: 16px; font-weight: 800; }
+.ap-logo { height: 40px; max-width: 120px; object-fit: contain; filter: grayscale(1); }
+.ap-tipo { text-align: right; display: flex; flex-direction: column; }
+.ap-tipo span { font-size: 8px; font-weight: 700; letter-spacing: .12em; color: #5F5F67; }
+.ap-tipo b { font-size: 15px; font-weight: 800; }
+.ap-righe { display: flex; flex-direction: column; gap: 7px; padding: 6px 0 14px; }
+.ap-righe i { display: block; height: 8px; border-radius: 4px; background: #ECEBE7; }
+.ap-piede { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; font-size: 10px; font-weight: 500; color: #8A8A92; border-top: 1px solid #EFEEEB; padding-top: 8px; }
+.ap-pagina { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+/* il codice delle commesse */
+.anteprima-formato { gap: 6px; }
+.formato-grande { font-family: Consolas, 'Cascadia Mono', monospace; font-size: 34px; font-weight: 800; letter-spacing: .5px; }
+/* Sicurezza */
+.scheda-controllo { display: flex; gap: 12px; align-items: flex-start; padding: 16px 18px; }
+.scheda-controllo .corpo { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0; }
+.scheda-controllo b { font-size: 16px; font-weight: 800; }
+.scheda-controllo.male { background: var(--rosso-fondo); border-color: transparent; }
+.scheda-controllo.male b, .scheda-controllo.male .secondario { color: var(--rosso-testo); }
+.riga-mini { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 14px; font-weight: 600; margin-top: 4px; }
+.chiave-copia { font-family: Consolas, 'Cascadia Mono', monospace; font-size: 20px; font-weight: 800; letter-spacing: 1px; text-align: center; background: var(--fondo); border-radius: 14px; padding: 16px; user-select: all; }
+/* Copie e ripristino */
+.passi-ripristino { margin: 0; padding-left: 22px; display: flex; flex-direction: column; gap: 10px; font-size: 15px; font-weight: 600; line-height: 1.45; }
+.passi-ripristino li { overflow-wrap: anywhere; }
+/* Importa ed esporta */
+.file-import { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 14px; background: var(--fondo); }
+.file-import .corpo { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.col-import { display: flex; align-items: center; gap: 12px; min-height: 64px; border-top: 1px solid var(--riga); }
+.scheda.righe > .col-import:first-child { border-top: none; }
+.col-import .corpo { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.col-import .t2 { font-size: 13px; font-weight: 600; color: var(--tenue); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.col-import select { width: 210px; flex: none; }
+.import-due { gap: 22px; }
+.controllo-import h3 { margin: 0; }
+/* Lista di controllo */
+.riassunto-controlli .barra { height: 12px; border-radius: 6px; }
+.grande-18 { font-size: 18px; font-weight: 800; }
+.chiave-c { font-family: Consolas, 'Cascadia Mono', monospace; font-size: 13px; font-weight: 800; }
+.taglia-due { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.testa-gruppo { display: inline-flex; align-items: center; gap: 6px; border: none; background: none; padding: 4px 0; color: var(--tenue); cursor: pointer; font: inherit; align-self: flex-start; }
+.gruppo-controlli { gap: 8px; }
+/* Documenti: trovato dentro il file (§6.3) */
+.estratto-doc { font-size: 14px; font-weight: 600; color: var(--tenue); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.estratto-doc b { color: var(--testo); font-weight: 800; }
+/* l'estratto sotto la riga del documento, largo quanto la tabella, allineato al titolo (icona 34 + 10) */
+.tab-archivio .estratto-riga { grid-column: 1 / -1; min-width: 0; padding-left: 44px; margin-top: -4px; }
+.tab-archivio .estratto-riga .estratto-doc { display: block; }
+.titolo-doc .doppia .pill { align-self: flex-start; margin-top: 2px; }
+/* i campi delle impostazioni generali, della sicurezza e dei tempi dei ticket: come i campi, l'unità accanto */
+.imp-riga input, .tab-tempi input { height: 42px; border-radius: 12px; border: 1.5px solid var(--bordo-campo); background: var(--scheda); padding: 0 12px; font-size: 15px; font-weight: 700; outline: none; }
+.imp-riga input:focus, .tab-tempi input:focus { border-color: var(--testo2); }
+.imp-riga .giorno-mese { display: inline-flex; gap: 8px; flex: none; }
+.imp-riga .giorno-mese select { height: 42px; }
+.imp-riga input:disabled, .tab-tempi input:disabled { background: var(--superficie-tenue); color: var(--tenue); }
+.imp-riga .con-suffisso, .tab-tempi .con-suffisso { display: inline-flex; align-items: center; gap: 8px; }
+.imp-riga .con-suffisso input, .tab-tempi .con-suffisso input { padding-right: 12px; }
+.imp-riga .con-suffisso span, .tab-tempi .con-suffisso span { position: static; transform: none; font-size: 14px; white-space: nowrap; }
+.pannello-integrazione .scheda.fila { gap: 10px; }
+.pannello-integrazione .scheda.fila h3 { font-size: 16px; }
+.tab-integrazioni .r { min-height: 58px; }

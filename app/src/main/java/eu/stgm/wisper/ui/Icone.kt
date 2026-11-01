@@ -178,4 +178,12 @@ object Icone {
     val entrata = tratto("entrata", 2.2f, "M9 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h3", "M14 17l-5-5 5-5", "M9 12h12")
     val scollegato = tratto("scollegato", 2.2f, "M9 15l-2 2a3 3 0 0 1-4.2-4.2l2-2", "M15 9l2-2a3 3 0 0 1 4.2 4.2l-2 2", "M8 4V2M4 8H2M16 20v2M20 16h2")
     val banca = tratto("banca", 2.2f, "M3 10l9-6 9 6", "M5 10v8M9.5 10v8M14.5 10v8M19 10v8", "M3 20h18")
+
+    // ---- fase 8 (docs/prototipo/Gestionale-fase8.html): integrazioni, server, funzioni, aspetto, logo
+    val spina = tratto("spina", 2.2f, "M9 2v6M15 2v6", "M6 8h12v3a6 6 0 0 1-12 0z", "M12 17v5")
+    val server = tratto("server", 2.2f, "M4 4h16v6H4z", "M4 14h16v6H4z", "M8 7h.01M8 17h.01")
+    val interruttore = tratto("interruttore", 2.2f, "M7 7h10a5 5 0 0 1 0 10H7A5 5 0 0 1 7 7z", "M16 12h.01")
+    val pennello = tratto("pennello", 2.2f, "M4 20c3 0 4-2 4-4l9-9-3-3-9 9c-2 0-4 1-4 4", "M14 4l3 3")
+    val immagine = tratto("immagine", 2.2f, "M4 5h16v14H4z", "M4 16l5-5 4 4 3-3 4 4", "M15 9h.01")
+    val controlli = tratto("controlli", 2.2f, "M9 6h11M9 12h11M9 18h11", "M4 6l1 1 2-2M4 12l1 1 2-2M4 18l1 1 2-2")
 }

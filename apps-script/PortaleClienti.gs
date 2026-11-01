@@ -25,6 +25,13 @@
  *
  * Porta.gs usa alcune funzioni che nel progetto del foglio stanno in Code.gs e Ponte.gs (FUSO, testo, messaggio,
  * segretoUguale, registraAccesso, cartellaRadice): qui sono scritte da capo, piccole, senza fogli ne' Gmail.
+ *
+ * FASE 8 (docs/gestionale/fase8.md §0.3): il calendario "anche fuori casa", SPENTO DI BASE. Google Calendar o Outlook
+ * leggono GET <questo indirizzo>?calendario=<chiave>: doGet mette in coda {tipo: "portale", strada: "calendario",
+ * metodo: "GET", corpo: {chiave}} come le richieste della pagina, il server risponde col testo del calendario e lo
+ * script lo restituisce come text/calendar. Il server risponde solo ai feed creati "Anche fuori casa" e solo con
+ * CALENDARIO_PUBBLICO acceso (lo accende chi ha Amministrazione: Modifica, col portale collegato). Apps Script non sa
+ * mandare 304, 404 o 429: senza calendario la risposta e' sempre la stessa riga "Indirizzo del calendario non valido".
  */
 
 var FUSO = 'Europe/Rome';
@@ -87,9 +94,36 @@ function cartellaRadice() {
   return nuova;
 }
 
-/** Una riga di testo: questo indirizzo risponde solo alla pagina del portale. */
+/**
+ * Una riga di testo: questo indirizzo risponde solo alla pagina del portale. Con ?calendario=<chiave> (fase 8 §0.3) il
+ * calendario "anche fuori casa", se il server lo da'.
+ */
 function doGet(e) {
+  var chiave = e && e.parameter && typeof e.parameter.calendario === 'string' ? e.parameter.calendario : '';
+  if (chiave) return portaleCalendario(chiave);
   return ContentService.createTextOutput('Portale clienti: questo indirizzo risponde solo alla pagina del portale.').setMimeType(ContentService.MimeType.TEXT);
+}
+
+/** Il testo uguale per chiave sconosciuta, tolta, utente disattivato, troppe letture, calendario spento, server che non c'e'. */
+var PORTALE_CALENDARIO_NO = 'Indirizzo del calendario non valido';
+
+/** Il calendario anche fuori casa: in coda come lavoro "portale" (strada "calendario"), la risposta come text/calendar. */
+function portaleCalendario(chiave) {
+  var no = ContentService.createTextOutput(PORTALE_CALENDARIO_NO).setMimeType(ContentService.MimeType.TEXT);
+  if (!/^[A-Za-z0-9_-]{20,100}$/.test(chiave)) return no;
+  var p = portaProprieta();
+  if (!p.SEGRETO_SERVER) return no;
+  var lavoro = { tipo: 'portale', v: 1, id: '', strada: 'calendario', metodo: 'GET', sessione: '', pre: '', corpo: { chiave: chiave }, agente: 'fuori casa' };
+  var r = portaChiedi(portaNuovoId('c'), lavoro, portaleAttesa(p));
+  if (r.fermo) return no;
+  var j = null;
+  try {
+    j = JSON.parse(r.testo);
+  } catch (err) {
+    j = null;
+  }
+  if (!j || j.ok !== true || typeof j.ics !== 'string' || j.ics.indexOf('BEGIN:VCALENDAR') !== 0) return no;
+  return ContentService.createTextOutput(j.ics).setMimeType(ContentService.MimeType.ICAL);
 }
 
 /**

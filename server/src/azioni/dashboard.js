@@ -24,7 +24,8 @@ const { giornoLungo } = require('./fatture');
 
 const ORDINE = { urgente: 0, soldi: 1, attenzione: 2, info: 3 };
 // Fase 7: da 20 a 30, cosi' le voci del portale e dei messaggi non tolgono quelle di prima.
-const MASSIMO_PER_SEZIONE = 30;
+// Fase 8: non serve piu' (i tetti sono del passaggio finale, azioni/dashboard8.js). Resta per chi lo legge.
+const MASSIMO_PER_SEZIONE = 30; // eslint-disable-line no-unused-vars
 
 const dataBreve = iso => (iso ? iso.slice(8, 10) + '/' + iso.slice(5, 7) : '');
 /** I numeri nelle frasi come li scrive una persona: 7,5 e non 7.5. */
@@ -42,10 +43,19 @@ function plurale(n, uno, tanti) {
 }
 
 module.exports = {
-  dashboard(d) {
+  /**
+   * dashboard {per?, tutto?}. Ogni fase scrive le sue voci; la fase 8 aggiunge le sue (vociFase8) e poi il passaggio
+   * finale per tutte (dashboardFinale, azioni/dashboard8.js): una cosa una voce, ordine fisso, tetti, gruppi, riquadri.
+   * opzioni.grezza: le voci di tutte le fasi senza il passaggio finale (per chi le rilegge dentro il server).
+   */
+  dashboard(d, opzioni) {
+    // Fase 8 (prova di carico): le mappe dei nomi e i saldi letti una volta sola per tutte le fasi (conLettureRicordate).
+    if (!this.memoLetture) return this.conLettureRicordate(() => this.dashboard(d, opzioni));
+    d = d || {};
+    const grezza = !!(opzioni && opzioni.grezza);
     const c = this.chi();
     // Fase 6: l'esterno ha la sua Dashboard (i suoi incarichi, i suoi documenti, i suoi rapportini).
-    if (this.eEsterno()) return this.dashboardEsterno();
+    if (this.eEsterno()) return grezza ? this.dashboardEsterno() : this.dashboardFinale(this.dashboardEsterno(), d, { mie: true });
     const soloSuoi = this.soloSuoi();
     // Il ruolo decide; chi vede tutto puo' guardare anche "come un collaboratore" (per provare).
     const per = soloSuoi ? 'collaboratore' : (d.per === 'collaboratore' ? 'collaboratore' : 'titolare');
@@ -57,7 +67,8 @@ module.exports = {
     const mese = adesso.slice(0, 7);
     const imp = this.leggiImpostazioni();
 
-    const tutti = this.db.righe("SELECT * FROM rapportini WHERE UPPER(stato) <> 'ANNULLATO'");
+    // Fase 8 (prova di carico): solo le colonne che servono qui (con dieci anni di rapportini SELECT * costa il doppio).
+    const tutti = this.ricordata('rapportiniVivi', () => this.db.righe("SELECT id, data, stato, utente_id, id_cliente, id_commessa, ticket_id, ore_lavoro, ore_extra, ore_viaggio, ore_totali, totale, fatturato_il, stato_approvazione, km FROM rapportini WHERE UPPER(stato) <> 'ANNULLATO'"));
     const rapportini = mie ? tutti.filter(r => r.utente_id === io) : tutti;
     const clienti = {};
     for (const s of this.soggettiAttivi()) clienti[s.id] = s;
@@ -131,14 +142,16 @@ module.exports = {
     // Fase 5: i rapportini di un ticket aperto (aspettano la chiusura) o chiuso nel contratto o senza fattura non contano qui.
     const trattenuti = new Set(this.db.righe("SELECT id FROM ticket WHERE stato IN ('aperto', 'in_carico', 'in_attesa', 'risolto') OR (stato = 'chiuso' AND fatturazione IN ('contratto', 'no'))").map(t => t.id));
     const daFatturare = rapportini.filter(r => ['FIRMATO', 'INVIATO'].indexOf(testo(r.stato).toUpperCase()) >= 0 && !(r.ticket_id && trattenuti.has(r.ticket_id)));
+    // Fase 8: le voci di gruppo portano i loro oggetti, cosi' "fallo firmare nel portale" dello stesso rapportino non si ripete (§8.1).
     if (vecchie.length) {
       voce(urgenti, { tipo: 'rapportini', gravita: 'urgente', titolo: plurale(vecchie.length, 'rapportino da far firmare', 'rapportini da far firmare') + ' da più di una settimana',
         dettaglio: 'Il più vecchio è del ' + dataBreve(vecchie.map(r => r.data).sort()[0]), quanto: vecchie.length, unita: 'rapportini',
-        collegamento: { pagina: 'rapportini', filtro: { stato: 'BOZZA', a: settimanaFa } } });
+        collegamento: { pagina: 'rapportini', filtro: { stato: 'BOZZA', a: settimanaFa } }, oggetti: vecchie.map(r => 'rapportino:' + r.id) });
     }
     if (recenti.length) {
       voce(settimana, { tipo: 'rapportini', gravita: 'info', titolo: plurale(recenti.length, 'rapportino da far firmare', 'rapportini da far firmare'),
-        dettaglio: 'Questa settimana', quanto: recenti.length, unita: 'rapportini', collegamento: { pagina: 'rapportini', filtro: { stato: 'BOZZA' } } });
+        dettaglio: 'Questa settimana', quanto: recenti.length, unita: 'rapportini', collegamento: { pagina: 'rapportini', filtro: { stato: 'BOZZA' } },
+        oggetti: recenti.map(r => 'rapportino:' + r.id) });
     }
     if (firmati.length) {
       voce(settimana, { tipo: 'rapportini', gravita: 'attenzione', titolo: plurale(firmati.length, 'rapportino firmato da mandare', 'rapportini firmati da mandare'),
@@ -211,7 +224,8 @@ module.exports = {
     const oreDa = da => Math.round(rapportini.filter(r => r.data && r.data >= da && r.data <= adesso)
       .reduce((s, r) => s + (numero(r.ore_totali) || numero(r.ore_lavoro) + numero(r.ore_extra) + numero(r.ore_viaggio)), 0) * 100) / 100;
 
-    const ordina = lista => lista.sort((a, b) => ORDINE[a.gravita] - ORDINE[b.gravita]).slice(0, MASSIMO_PER_SEZIONE);
+    // Fase 8: niente piu' tetto qui (prima 30): i tetti di §8.2 li mette il passaggio finale, e "tutto" le vuole tutte.
+    const ordina = lista => lista.sort((a, b) => ORDINE[a.gravita] - ORDINE[b.gravita]);
     const risposta = {
       ok: true,
       per,
@@ -258,7 +272,15 @@ module.exports = {
     risposta.settimana = ordina(settimana.filter(nonRipetuto));
     risposta.pianificare = ordina(pianificare.filter(nonRipetuto));
     for (const k of ['ticket', 'documenti', 'scadenze', 'contratti', 'spazio']) if (fase5[k]) risposta.numeri[k] = fase5[k];
-    return risposta;
+    // Fase 8 (§8.7): le voci di sistema e le altre della fase 8, poi il passaggio finale per tutte le fasi.
+    this.vociFase8({ mie, voce, urgenti: risposta.urgenti, settimana: risposta.settimana, pianificare: risposta.pianificare });
+    if (grezza) return risposta;
+    return this.dashboardFinale(risposta, d, { mie });
+  },
+
+  /** Le voci di tutte le fasi senza il passaggio finale (riquadri, voci da nascondere). */
+  dashboardGrezza(d) {
+    return this.dashboard(d || {}, { grezza: true });
   },
 
   /**
@@ -296,7 +318,8 @@ module.exports = {
     // ------------------------------------------------------------ ticket
     if (this.livello('ticket') >= 1) {
       const vis = mie ? this.aiutiVisibilita() : null;
-      let tutti = this.db.righe('SELECT * FROM ticket').filter(t => this.vedeTicket(t, vis));
+      // Fase 8 (prova di carico): dentro la Dashboard i ticket letti una volta sola (con materiali_inclusi, che qui non serve).
+      let tutti = (this.memoLetture ? this.ticketConContratto() : this.db.righe('SELECT * FROM ticket')).filter(t => this.vedeTicket(t, vis));
       if (mie) tutti = tutti.filter(t => t.responsabile_id === io || t.responsabile_id === null);
       const vivi = tutti.filter(t => ['aperto', 'in_carico', 'in_attesa', 'risolto'].indexOf(t.stato) >= 0 && !(t.tipo === 'programmato' && t.previsto_il > t30));
       const conInterventi = new Set(this.db.righe("SELECT DISTINCT ticket_id FROM attivita WHERE ticket_id IS NOT NULL AND stato <> 'annullata'").map(r => r.ticket_id));
@@ -516,7 +539,7 @@ module.exports = {
           dettaglio: plurale(clienti.length, 'cliente', 'clienti') + ' · ' + ordinati.slice(0, 3).map(x => nomi[x.id] || x.id).join(', ') + (clienti.length > 3 ? '…' : ''),
           quanto: totale, unita: 'euro', collegamento: { pagina: 'fatturazione' } });
       }
-      const fatture = this.db.righe("SELECT * FROM fatture WHERE tipo = 'fattura' AND stato IN ('bozza', 'pronta', 'emessa')");
+      const fatture = this.fattureDiStati(['bozza', 'pronta', 'emessa'], "SELECT * FROM fatture WHERE tipo = 'fattura' AND stato IN ('bozza', 'pronta', 'emessa')");
       const a = this.aiutiFatture(fatture);
       out.fattureInBozza = centesimi(fatture.filter(f => f.stato !== 'emessa').reduce((t, f) => t + numero(f.totale), 0));
       const emesse = fatture.filter(f => f.stato === 'emessa').map(f => ({ f, p: this.pagamentoDi(f, a) }));
@@ -535,7 +558,7 @@ module.exports = {
         }
       }
       // Incassate e poi stornate con una nota di credito: soldi del cliente da restituire o compensare.
-      const stornate = this.db.righe("SELECT * FROM fatture WHERE tipo = 'fattura' AND stato IN ('emessa', 'annullata')");
+      const stornate = this.fattureDiStati(['emessa', 'annullata'], "SELECT * FROM fatture WHERE tipo = 'fattura' AND stato IN ('emessa', 'annullata')");
       const aStornate = this.aiutiFatture(stornate);
       for (const f of stornate) {
         const p = this.pagamentoDi(f, aStornate);
@@ -663,11 +686,14 @@ module.exports = {
 
     // I numeri delle ore registrate: le mie (collaboratore) o di tutto lo studio.
     if (vedeOre) {
-      const righe = this.db.righe('SELECT * FROM ore WHERE tolta IS NULL AND data >= ? AND data <= ?', mese + '-01', adesso)
+      // Fase 8 (prova di carico): le ore del mese e della settimana da una lettura sola (filtrate, stesso ordine).
+      const daGiorno = lunedi < mese + '-01' ? lunedi : mese + '-01';
+      const dalGiorno = this.db.righe('SELECT * FROM ore WHERE tolta IS NULL AND data >= ? AND data <= ?', daGiorno, adesso);
+      const righe = dalGiorno.filter(o => o.data >= mese + '-01')
         .filter(o => contaNeiConti(o) && (!mie || o.utente_id === io));
       const somma = l => Math.round(l.reduce((t, o) => t + numero(o.ore), 0) * 100) / 100;
       const mio = io ? this.db.riga('SELECT partito_il FROM timer WHERE utente_id = ?', io) : null;
-      const settimanaOre = this.db.righe('SELECT * FROM ore WHERE tolta IS NULL AND data >= ? AND data <= ?', lunedi, adesso)
+      const settimanaOre = dalGiorno.filter(o => o.data >= lunedi)
         .filter(o => contaNeiConti(o) && (!mie || o.utente_id === io));
       fuori.ore = {
         settimana: somma(settimanaOre), mese: somma(righe), fatturabiliMese: somma(righe.filter(o => o.fatturabile === 1)),
@@ -840,7 +866,8 @@ module.exports = {
     }
 
     if (!mie && this.livello('preventivi') > 0) {
-      const elenco = this.elencoPreventivi({});
+      // Fase 8 (prova di carico): i conti servono solo per gli inviati (il totale in attesa e quelli in scadenza).
+      const elenco = this.elencoPreventivi({ soloAperti: true }, r => r.stato === 'INVIATO');
       const giorniDa = iso => Math.round((Date.parse(adesso + 'T12:00:00') - Date.parse(iso + 'T12:00:00')) / 86400000);
       const quindiciFa = piuGiorni(adesso, -15);
       const stato = x => statoVistoPreventivo(x.riga);

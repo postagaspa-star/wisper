@@ -47,7 +47,7 @@ function stessiCampi(ora, prima, chi) {
 
 test('migrazione 003: versione 3, la copia wisper.db.prima-3, i rapportini non si toccano', () => {
   // Dalla fase 4 (e dalla 5 e dalla 6) il database va avanti fino all'ultima migrazione: la 003 c'e' (la sua copia prima-3 anche).
-  assert.equal(w.db.versione(), 7);
+  assert.equal(w.db.versione(), 8);
   assert.ok(fs.existsSync(path.join(cartella, 'wisper.db.prima-3')), 'la copia prima della migrazione');
   const dopo = w.db.righe('SELECT * FROM rapportini ORDER BY id');
   assert.equal(dopo.length, righePrima.length);
@@ -133,7 +133,7 @@ test('riaperto il server: la migrazione non si rifa\' e i numeri restano quelli 
   const quante = w.db.riga('SELECT COUNT(*) n FROM spese').n;
   w.chiudi();
   w = new Wisper({ dati: cartella });
-  assert.equal(w.db.versione(), 7);
+  assert.equal(w.db.versione(), 8);
   assert.equal(w.db.riga('SELECT COUNT(*) n FROM spese').n, quante);
   assert.equal(w.db.riga('SELECT COUNT(*) n FROM veicoli').n, 1);
   const ora = numeri(w);

@@ -508,6 +508,15 @@ interface Dati {
      * Togli dal portale, Rispondi nel portale e i file decisi vanno nella coda.
      */
     val fase7: eu.stgm.wisper.rapportino.ServizioFase7
+
+    // ------------------------------------------------------------- fase 8: integrazioni, amministrazione, controlli (docs/gestionale/fase8.md)
+
+    /**
+     * Integrazioni, il calendario in altre app, la ricerca dentro i file, importa ed
+     * esporta, la Dashboard con le regole nuove (Tutto quello che c'è da fare, riquadri,
+     * voci nascoste), l'amministrazione completa e la lista di controllo. Tutto in diretta.
+     */
+    val fase8: eu.stgm.wisper.rapportino.ServizioFase8
 }
 
 /**

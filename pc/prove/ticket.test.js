@@ -165,7 +165,8 @@ test('filtri dei ticket aperti e storico per anno', () => {
 test('menu: Documenti e Ticket e assistenza dopo Banche e scadenze, solo col loro permesso', () => {
   // Fase 6: Persone fra Banche e Documenti, Mezzi e Collaboratori esterni dopo Ticket (l'ordine delle specifiche).
   // Fase 7: WhatsApp e comunicazioni e Portale clienti fra Mezzi e Collaboratori esterni.
-  assert.deepEqual(R.vociMenu(E.permessiDi('titolare')).map(v => v.modulo).slice(-9), ['banche', 'persone', 'documenti', 'ticket', 'mezzi', 'comunicazioni', 'portale', 'collaboratori', 'amministrazione']);
+  // Fase 8: Integrazioni fra Collaboratori esterni e Amministrazione.
+  assert.deepEqual(R.vociMenu(E.permessiDi('titolare')).map(v => v.modulo).slice(-10), ['banche', 'persone', 'documenti', 'ticket', 'mezzi', 'comunicazioni', 'portale', 'collaboratori', 'integrazioni', 'amministrazione']);
   const nomi = R.vociMenu(E.permessiDi('titolare')).map(v => v.nome);
   assert.ok(nomi.indexOf('Documenti') === nomi.indexOf('Persone e risorse umane') + 1);
   assert.ok(nomi.indexOf('Ticket e assistenza') === nomi.indexOf('Documenti') + 1);

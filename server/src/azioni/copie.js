@@ -8,12 +8,20 @@
  *  3. il foglio: le schede Rapportini, Clienti, Commesse e Impostazioni
  *     riscritte come oggi, cosi' il foglio resta leggibile e aggiornato.
  * Se la copia fuori casa non riesce due notti di fila arriva un avviso.
+ *
+ * Fase 8 (fase8.md §9.10, §9.8): la riga della copia tiene i conteggi delle tabelle principali (per la prova
+ * automatica), l'impronta MD5 del file mandato fuori casa e se era cifrato; con COPIA_CIFRATA la copia fuori casa
+ * (database e file) parte cifrata (AES-256-GCM, src/cifra.js), senza la chiave non parte affatto (mai in chiaro per
+ * sbaglio). Dopo ogni copia il controllo "copiafuori" delle integrazioni; dopo quella della notte la prova
+ * automatica (ogni PROVA_COPIA_GIORNI giorni), la lettura dei file da leggere e il controllo del database.
  */
 'use strict';
 
 const fs = require('node:fs');
 const path = require('node:path');
 const zlib = require('node:zlib');
+const crypto = require('node:crypto');
+const { cifra } = require('../cifra');
 const { Rifiuto, testo, numero, adesso, adessoMs, oggi, dataOraIso, istante, messaggio } = require('../utili');
 
 const GIORNI_TENUTE = 30;
@@ -38,6 +46,10 @@ module.exports = {
       const nome = 'wisper-' + oggi().replace(/-/g, '') + '.db';
       const file = path.join(this.cartellaCopie, nome);
       const esito = { locale: '', fuori: '', foglio: '', byte: null };
+      // Fase 8: i conteggi presi nello stesso istante della copia (Node fa una cosa alla volta: nessuno scrive in mezzo).
+      const conteggi = this.contaTabelle();
+      let md5 = null;
+      let cifrata = 0;
       try {
         this.db.copiaIn(file);
         esito.byte = fs.statSync(file).size;
@@ -53,9 +65,18 @@ module.exports = {
       } else {
         if (esito.locale === 'ok') {
           try {
-            const dati = zlib.gzipSync(fs.readFileSync(file));
-            await this.postino.copia({ cartella: 'database', nome: nome + '.gz', mime: 'application/gzip', dati });
-            const n = await this.copiaFileNuovi();
+            let dati = zlib.gzipSync(fs.readFileSync(file));
+            let nomeFuori = nome + '.gz';
+            // Fase 8 (§9.8): cifrata con la chiave di /data/copia-chiave; senza la chiave non parte (mai in chiaro per sbaglio).
+            const chiave = this.copiaDaCifrare();
+            if (chiave) {
+              dati = cifra(dati, chiave);
+              nomeFuori += '.cifrato';
+              cifrata = 1;
+            }
+            md5 = crypto.createHash('md5').update(dati).digest('hex');
+            await this.postino.copia({ cartella: 'database', nome: nomeFuori, mime: chiave ? 'application/octet-stream' : 'application/gzip', dati });
+            const n = await this.copiaFileNuovi({ chiave });
             esito.fuori = 'ok' + (n.copiati ? ' · ' + n.copiati + ' file' : '') + (n.restano ? ' · ' + n.restano + ' restano per domani' : '');
           } catch (err) {
             esito.fuori = 'errore: ' + messaggio(err);
@@ -75,8 +96,13 @@ module.exports = {
 
       const quando = adesso();
       const prima = this.db.riga('SELECT fuori FROM copie ORDER BY id DESC LIMIT 1');
-      const id = this.inserisci('copie', { quando, file: nome, byte: esito.byte, locale: esito.locale, fuori: esito.fuori, foglio: esito.foglio, nota: motivo || '' });
+      const id = this.inserisci('copie', {
+        quando, file: nome, byte: esito.byte, locale: esito.locale, fuori: esito.fuori, foglio: esito.foglio, nota: motivo || '',
+        conteggi: esito.locale === 'ok' ? JSON.stringify(conteggi) : null, md5: /^ok/.test(esito.fuori) ? md5 : null, cifrata: /^ok/.test(esito.fuori) ? cifrata : 0,
+      });
       if (/^errore/.test(esito.fuori) && prima && /^errore/.test(prima.fuori)) await this.avvisaCopiaFallita(esito.fuori);
+      // Fase 8: il controllo "copiafuori" delle integrazioni gira a ogni copia (§4.2).
+      try { await this.controllaIntegrazione('copiafuori'); } catch (err) { console.error('[copia] controllo: ' + messaggio(err)); }
       return copiaDaRiga(this.db.riga('SELECT * FROM copie WHERE id = ?', id));
     } finally {
       this.copiaInCorso = false;
@@ -84,10 +110,31 @@ module.exports = {
   },
 
   /**
+   * La chiave con cui cifrare la copia fuori casa: '' se COPIA_CIFRATA e' spenta. Accesa e senza chiave: errore (la
+   * copia fuori casa non parte, quella sul NAS si'), cosi' non finisce mai in chiaro su Drive per sbaglio.
+   */
+  copiaDaCifrare() {
+    const v = this.leggiImpostazioni().COPIA_CIFRATA;
+    if (!(v === true || v === 'true')) return '';
+    const k = this.chiaveCopia();
+    if (!k) throw new Error('la cifratura è accesa ma manca la chiave (/data/copia-chiave): la copia fuori casa non parte in chiaro');
+    return k;
+  },
+
+  /** Dopo la copia della notte (fase 8): la prova automatica se tocca, i file da leggere, il controllo del database. */
+  async dopoLaCopiaDellaNotte() {
+    try { await this.provaCopiaSeTocca(); } catch (err) { console.error('[copia] prova: ' + messaggio(err)); }
+    try { await this.letturaNotturna(); } catch (err) { console.error('[ricerca] ' + messaggio(err)); }
+    try { this.controllaDatabase(); } catch (err) { console.error('[database] ' + messaggio(err)); }
+  },
+
+  /**
    * I file arrivati dopo l'ultima copia fuori casa riuscita (la prima volta:
    * quelli dell'ultimo giorno). Quelli copiati da Drive no: l'originale e' gia' li'.
    */
   async copiaFileNuovi(opzioni) {
+    // Fase 8: con la chiave (COPIA_CIFRATA) ogni file parte cifrato, col nome "<id> <nome>.cifrato".
+    const chiave = opzioni && opzioni.chiave ? opzioni.chiave : '';
     // Fase 5 (fase5.md §5.9): uno per richiesta al postino, dai piu' vecchi, per al massimo 20 minuti; un file che non
     // riesce non ferma gli altri e si riprova la notte dopo; uno oltre COPIA_FUORI_MAX_MB prende fuori_no = 'troppo
     // grande' e non si riprova. Torna {copiati, falliti, restano, troppoGrandi, ultimoErrore}.
@@ -109,7 +156,9 @@ module.exports = {
       }
       const pulito = String(f.nome || '').replace(/[\\/:*?"<>|]/g, '-');
       try {
-        await this.postino.copia({ cartella: 'file', nome: f.id + ' ' + pulito, mime: f.mime || 'application/octet-stream', dati: fs.readFileSync(p) });
+        const byte = fs.readFileSync(p);
+        await this.postino.copia(chiave ? { cartella: 'file', nome: f.id + ' ' + pulito + '.cifrato', mime: 'application/octet-stream', dati: cifra(byte, chiave) }
+          : { cartella: 'file', nome: f.id + ' ' + pulito, mime: f.mime || 'application/octet-stream', dati: byte });
         // Senza riga nel registro: sarebbe una riga per file per notte. L'esito sta nella tabella copie.
         this.db.esegui('UPDATE file SET fuori_il = ? WHERE id = ?', adesso(), f.id);
         esito.copiati++;
@@ -145,6 +194,11 @@ module.exports = {
     } catch (err) {
       // Se il postino non risponde nemmeno per l'avviso, resta l'esito nella tabella copie.
     }
+    // Fase 8: anche la notifica (Sistema) a chi riceve gli avvisi del server, e la voce urgente della Dashboard.
+    try {
+      this.db.transazione(() => this.come(require('../wisper').SISTEMA, () => this.notifica(this.utentiAvvisiSistema(), 'copia_non_riuscita', 'La copia fuori casa non riesce da 2 notti',
+        errore, { pagina: 'amministrazione', filtro: { sezione: 'copie' } })));
+    } catch (err) { /* niente */ }
   },
 
   /** 30 giorni di copie, piu' la prima di ogni mese per 12 mesi. Le altre si tolgono. */
@@ -221,21 +275,25 @@ module.exports = {
   },
 
   leggiCopie() {
+    const prove = this.proveDelleCopie();
+    const provate = new Set(prove.prove.map(p => p.copia).filter(Boolean));
     const file = fs.existsSync(this.cartellaCopie)
       ? fs.readdirSync(this.cartellaCopie).filter(f => RE_COPIA.test(f)).sort().reverse().map(f => {
         const st = fs.statSync(path.join(this.cartellaCopie, f));
-        return { nome: f, byte: st.size, quando: dataOraIso(st.mtime) };
+        return { nome: f, byte: st.size, quando: dataOraIso(st.mtime), provata: provate.has(f) };
       })
       : [];
     return {
       ok: true,
-      copie: this.db.righe('SELECT * FROM copie ORDER BY id DESC LIMIT 60').map(copiaDaRiga),
+      copie: this.db.righe('SELECT * FROM copie ORDER BY id DESC LIMIT 60').map(c => Object.assign(copiaDaRiga(c), { provata: provate.has(c.file) })),
       file,
       oraCopia: this.oraCopia || '02:30',
       prossima: this.prossimaCopia ? dataOraIso(this.prossimaCopia) : '',
       postino: this.postino ? this.postino.descrizione() : 'non configurato',
       // La porta Google (porta.js): "Collegamento a Google: attivo, ultimo contatto alle 10:42" in Amministrazione.
       google: this.porta ? this.porta.stato() : { stato: 'non collegato', frase: 'Non collegato', ultimoContatto: '' },
+      // Fase 8 (§9.10): le ultime 12 prove (automatiche e a mano), quando tocca la prossima, se la copia fuori casa e' cifrata.
+      prove: prove.prove, prossimaProva: prove.prossimaProva, cifrata: this.leggiImpostazioni().COPIA_CIFRATA === true,
     };
   },
 
@@ -268,6 +326,8 @@ module.exports = {
           if (r) console.log('[contratti] ' + r + ' rinnovati da soli');
           const t = this.db.transazione(() => this.generaTicketDaScadenze());
           if (t) console.log('[ticket] ' + t + ' ticket programmati nuovi');
+          // Fase 8: Stato del sistema mostra l'ultimo giro delle ricorrenze.
+          this.lavoro('Ricorrenze', 'ok', n ? n + ' nuove' : 'niente di nuovo');
           // Fase 6: l'accesso delle persone uscite si chiude dalla fine del loro ultimo giorno.
           const u = this.db.transazione(() => this.applicaUscite());
           if (u) console.log('[persone] ' + u + ' accessi chiusi: uscita');
@@ -291,6 +351,8 @@ module.exports = {
         this.ultimaNotturna = oggi();
         this.copiaDiSicurezza('notturna')
           .then(c => console.log('[copia] ' + c.quando + ' NAS ' + c.locale + ' · fuori ' + c.fuori + ' · foglio ' + c.foglio))
+          // Fase 8: dopo la copia della notte, la prova automatica (se tocca), la lettura dei file, il controllo del database.
+          .then(() => this.dopoLaCopiaDellaNotte())
           .catch(err => console.error('[copia] non riuscita: ' + messaggio(err)));
       }
     };
@@ -301,5 +363,5 @@ module.exports = {
 };
 
 function copiaDaRiga(c) {
-  return { id: c.id, quando: dataOraIso(c.quando), file: c.file, byte: c.byte, locale: c.locale, fuori: c.fuori, foglio: c.foglio, nota: c.nota };
+  return { id: c.id, quando: dataOraIso(c.quando), file: c.file, byte: c.byte, locale: c.locale, fuori: c.fuori, foglio: c.foglio, nota: c.nota, cifrata: c.cifrata === 1 };
 }

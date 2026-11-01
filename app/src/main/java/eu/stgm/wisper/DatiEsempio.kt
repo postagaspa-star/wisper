@@ -296,6 +296,22 @@ class DatiEsempio(oggi: LocalDate = LocalDate.now(), private val cartella: File?
         },
     )
 
+    /** Fase 8: integrazioni, calendario, amministrazione e lista di controllo di esempio, in memoria (EsempioFase8). Niente resta sul telefono. */
+    override val fase8: eu.stgm.wisper.rapportino.ServizioFase8 by lazy {
+        eu.stgm.wisper.rapportino.ServizioFase8(
+            EsempioFase8(oggi) { vociTutte }, cartella,
+            object : eu.stgm.wisper.rapportino.EsecutoreFase4 {
+                override suspend fun <T> esegui(lavoro: suspend () -> T): Result<T> = try {
+                    Result.success(lavoro())
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Result.failure(Exception(e.message ?: "È un esempio", e))
+                }
+            },
+        )
+    }
+
     /** Fase 6: persone, mezzi e collaboratori di esempio, in memoria (EsempioFase6). Niente va in coda né resta sul telefono. */
     override val fase6: eu.stgm.wisper.rapportino.ServizioFase6 = eu.stgm.wisper.rapportino.ServizioFase6(
         EsempioFase6(oggi), eu.stgm.wisper.rapportino.Scaffale(null, "f6-"),
@@ -505,10 +521,78 @@ class DatiEsempio(oggi: LocalDate = LocalDate.now(), private val cartella: File?
             collegamento = eu.stgm.wisper.rapportino.Collegamento("comunicazioni", parametri = mapOf("segmento" to "damandare"))))
         val pianificare7 = listOf(VoceDashboard("portale", "2 file dai clienti da guardare", "Schema quadro QG2.pdf · Rossi Impianti Srl, Foto targa inverter.jpg · Mario Bianchi",
             collegamento = eu.stgm.wisper.rapportino.Collegamento("portale", parametri = mapOf("segmento" to "daguardare"))))
+        // Fase 8 (fase8.md §8): le voci di fatture, scadenze, strumenti e sistema come le manda il server, con
+        // l'oggetto, l'area e la famiglia; poi i tetti (7 · 7 · 5) e quante ce ne sono, e i quattro riquadri.
+        val (urgenti8, settimana8, pianificare8) = vociFase8()
+        val tutteU = urgenti3 + urgenti7 + urgenti8 + unita.urgenti
+        val tutteS = settimana8.take(1) + unita.settimana + settimana3 + settimana7 + settimana8.drop(1)
+        val tutteP = pianificare8.take(2) + unita.pianificare + pianificare7 + pianificare8.drop(2)
+        vociTutte = Triple(tutteU, tutteS, tutteP)
         _dashboard.value = unita.copy(
-            urgenti = urgenti3 + urgenti7 + unita.urgenti, settimana = unita.settimana + settimana3 + settimana7, pianificare = unita.pianificare + pianificare7,
+            // I tetti li applica la schermata (come il server, 7 · 7 · 5): qui tutte le voci e quante sono.
+            urgenti = tutteU, settimana = tutteS, pianificare = tutteP,
             fase7 = eu.stgm.wisper.rapportino.NumeriFase7(portaleDaGuardare = 4, richiesteNuove = 1, caricamenti = 2, referenti = 3, collegato = "si", daMandareOggi = 1, preparati = 1, proposti = 2),
+            quante = mapOf("urgenti" to tutteU.size, "settimana" to tutteS.size, "pianificare" to tutteP.size),
+            riquadri = riquadriScelti.mapNotNull { k -> riquadriEsempio[k] },
+            riquadriPossibili = riquadriEsempio.keys.toList(),
+            integrazioniErrore = 1,
         )
+    }
+
+    /** Fase 8: tutte le voci della Dashboard di esempio, senza tetti (Tutto quello che c'è da fare). */
+    @Volatile private var vociTutte: Triple<List<VoceDashboard>, List<VoceDashboard>, List<VoceDashboard>> = Triple(emptyList(), emptyList(), emptyList())
+
+    /** I riquadri del titolare (fase8.md §8.4); nella visita si cambiano solo per finta. */
+    private val riquadriScelti = listOf("daFatturare", "scaduto", "ticketAperti", "daApprovare")
+    private val riquadriEsempio: Map<String, eu.stgm.wisper.rapportino.Riquadro8> by lazy {
+        fun r(k: String, n: Double, unita: String = "", rosso: Boolean = false, col: eu.stgm.wisper.rapportino.Collegamento? = null) = k to eu.stgm.wisper.rapportino.Riquadro8(k, n, unita, rosso, col)
+        fun c(pagina: String, id: String = "", filtro: String = "", parametri: Map<String, String> = emptyMap()) = eu.stgm.wisper.rapportino.Collegamento(pagina, id, filtro, parametri)
+        linkedMapOf(
+            r("daFatturare", 2180.40, "euro", col = c("fatturazione")), r("scaduto", 634.90, "euro", true, c("fatture", parametri = mapOf("scadute" to "true"))),
+            r("ticketAperti", 5.0, col = c("tickets")), r("daApprovare", 10.0, col = c("approvare")),
+            r("daIncassare", 6140.48, "euro", col = c("fatture", parametri = mapOf("pagamento" to "aperta"))), r("nelConto", 18420.10, "euro", col = c("scadenziario")),
+            r("scadenzeVicine", 6.0, col = c("documenti", parametri = mapOf("segmento" to "scadenze"))), r("commesseAperte", 12.0, col = c("commesse", filtro = "aperte")),
+            r("commesseInRitardo", 1.0, rosso = true, col = c("commesse", filtro = "ritardo")), r("interventiOggi", 1.0, col = c("calendario")),
+            r("assentiOggi", 1.0, col = c("persone", parametri = mapOf("segmento" to "ferie"))), r("tarateScadute", 1.0, rosso = true, col = c("mezzi", parametri = mapOf("segmento" to "strumenti", "taratura" to "scadute"))),
+            r("dalPortale", 4.0, col = c("portale", parametri = mapOf("segmento" to "daguardare"))), r("daMandareOggi", 1.0, col = c("comunicazioni", parametri = mapOf("segmento" to "damandare"))),
+            r("preventiviInAttesa", 4291.35, "euro", col = c("preventivi")),
+        ).toMap()
+    }
+
+    /** Le voci di esempio delle fasi 4-6 e della fase 8 (dal prototipo Gestionale-fase8.html): urgenti, questa settimana, da pianificare. */
+    private fun vociFase8(): Triple<List<VoceDashboard>, List<VoceDashboard>, List<VoceDashboard>> {
+        fun c(pagina: String, id: String = "", parametri: Map<String, String> = emptyMap()) = eu.stgm.wisper.rapportino.Collegamento(pagina, id, "", parametri)
+        val u = listOf(
+            VoceDashboard("strumento", "Multimetro 87V: taratura scaduta da 6 giorni", "Ce l'ha Marco Rossato · usato ieri in RAP/2026/0155", gravita = "urgente",
+                collegamento = c("mezzi", parametri = mapOf("segmento" to "strumenti", "taratura" to "scadute")), oggetto = "attrezzatura:12", famiglia = "strumento", area = "persone"),
+            VoceDashboard("fattura", "Fattura 41/2026 scaduta da 12 giorni", "Mario Bianchi · restano 162,36 € · promemoria di pagamento pronto", 162.36, "urgente",
+                c("fatture", parametri = mapOf("scadute" to "true")), oggetto = "fattura:43", famiglia = "fattura", area = "soldi"),
+            VoceDashboard("scadenza", "Verifica protezioni SPG e SPI scaduta da 22 giorni", "Rossi Impianti Srl · Cabina MT di Zanè", gravita = "urgente",
+                collegamento = c("documenti", parametri = mapOf("segmento" to "scadenze")), oggetto = "scadenza:51", famiglia = "scadenza", area = "documenti"),
+            VoceDashboard("preventivo", "PR/2026/007: nessuna risposta da 45 giorni", "Quadro di cantiere · Rossi Impianti Srl · scaduto il 06/10", gravita = "attenzione",
+                collegamento = c("preventivi"), oggetto = "preventivo:7", famiglia = "preventivo", area = "clienti"),
+        )
+        val s = listOf(
+            VoceDashboard("sistema", "Errore: Verifica della partita IVA", "Il servizio europeo non risponde da stamattina alle 6:00", gravita = "attenzione",
+                collegamento = c("integrazione", "vies"), oggetto = "integrazione:vies", famiglia = "sistema", area = "sistema"),
+            VoceDashboard("scadenza", "3 scadenze nei prossimi 30 giorni", "Assicurazione del Fiat Doblò, Taratura del misuratore MT-500, DURC di Impianti Veneti", gravita = "attenzione",
+                collegamento = c("mezzi", parametri = mapOf("segmento" to "scadenze")), oggetto = "gruppo:scadenza", famiglia = "scadenza", area = "persone"),
+            VoceDashboard("assenza", "Oggi è in permesso Marco Rossato fino alle 12:00", "Permesso di 4 ore", collegamento = c("persone", parametri = mapOf("segmento" to "ferie")),
+                oggetto = "assenza:oggi", famiglia = "assenza", area = "persone"),
+        )
+        val p = listOf(
+            VoceDashboard("sistema", "Prova il ripristino di una copia: l'ultima volta è stata 92 giorni fa", "Copie e ripristino · la fa Andrea sul suo computer",
+                collegamento = c("amministrazione", parametri = mapOf("sezione" to "copie")), oggetto = "ripristino", famiglia = "sistema", area = "sistema"),
+            VoceDashboard("versione", "1 dispositivo ha una versione vecchia di Wisper", "Telefono di Marco: 0.8.2 · ultima 0.9.0",
+                collegamento = c("amministrazione", parametri = mapOf("sezione" to "stato")), oggetto = "versioni", famiglia = "sistema", area = "sistema"),
+            VoceDashboard("persona", "Saldo delle ferie di Laura Bianchi: l'ultimo cedolino scritto è di luglio", "Persone › Ferie e permessi",
+                collegamento = c("persone", parametri = mapOf("segmento" to "ferie")), oggetto = "persona:2", famiglia = "persona", area = "persone", nascondibile = true),
+            VoceDashboard("documento", "3 documenti da classificare", "Caricati dal telefono senza categoria",
+                collegamento = c("documenti", parametri = mapOf("daClassificare" to "true")), oggetto = "documenti:classificare", famiglia = "documento", area = "documenti"),
+            VoceDashboard("guasto", "Fiat Doblò GA123BC: spia della pressione delle gomme accesa", "Segnalato da Marco Rossato il 20/10",
+                collegamento = c("mezzi"), oggetto = "guasto:4", famiglia = "guasto", area = "persone"),
+        )
+        return Triple(u, s, p)
     }
 
     /** La fase 3 nasce dopo la prima dashboard (la usa mentre si costruisce): fino ad allora niente voci. */
@@ -1318,5 +1402,6 @@ internal fun nomeModulo(modulo: String): String = when (modulo) {
     Moduli.COMUNICAZIONI -> "WhatsApp e comunicazioni"
     Moduli.PORTALE -> "Portale clienti"
     Moduli.COSTI -> "Soldi"
+    Moduli.INTEGRAZIONI -> "Integrazioni"
     else -> modulo
 }

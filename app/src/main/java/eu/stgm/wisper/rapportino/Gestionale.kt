@@ -42,6 +42,9 @@ object Moduli {
     const val COMUNICAZIONI = "comunicazioni"
     const val PORTALE = "portale"
 
+    /** Fase 8 (fase8.md §4.3, §15): Integrazioni (voce 17), dopo Collaboratori esterni. */
+    const val INTEGRAZIONI = "integrazioni"
+
     /** Tariffe, totali, costi orari, budget in euro, margini. */
     const val COSTI = "costi"
 
@@ -52,7 +55,7 @@ object Moduli {
     val FASE1 = listOf(DASHBOARD, CLIENTI, COMMESSE, RAPPORTINI, FATTURAZIONE, AMMINISTRAZIONE)
 
     /** Quelli che funzionano dalla fase 6, nell'ordine del menu (Persone dopo Banche, Mezzi dopo Ticket, Collaboratori dopo Mezzi). */
-    val FUNZIONANTI = listOf(DASHBOARD, CLIENTI, COMMESSE, PREVENTIVI, ATTIVITA, RAPPORTINI, SPESE, FATTURAZIONE, BANCHE, PERSONE, DOCUMENTI, TICKET, MEZZI, COMUNICAZIONI, PORTALE, COLLABORATORI, AMMINISTRAZIONE)
+    val FUNZIONANTI = listOf(DASHBOARD, CLIENTI, COMMESSE, PREVENTIVI, ATTIVITA, RAPPORTINI, SPESE, FATTURAZIONE, BANCHE, PERSONE, DOCUMENTI, TICKET, MEZZI, COMUNICAZIONI, PORTALE, COLLABORATORI, INTEGRAZIONI, AMMINISTRAZIONE)
 
     /** Fatturazione e Banche si vedono solo col modulo e col permesso dei soldi (§15.1). */
     val CON_SOLDI = setOf(FATTURAZIONE, BANCHE)
@@ -216,6 +219,11 @@ data class Interfaccia(
     val whatsappApp: String = "chiedi",
     val notificheNuove: Int = 0,
     val whatsappTestoMax: Int = 1000,
+    /** Fase 8 (fase8.md §13.7): le funzioni spente (via dal menu), il nome breve, il logo, l'ora del server. */
+    val funzioniSpente: List<String> = emptyList(),
+    val nomeBreve: String = "",
+    val logo: String = "",
+    val oraServer: String = "",
 ) {
     fun aJson(): JSONObject = JSONObject()
         .put("puoApprovare", puoApprovare ?: JSONObject.NULL)
@@ -236,6 +244,10 @@ data class Interfaccia(
         .put("whatsappApp", whatsappApp)
         .put("notificheNuove", notificheNuove)
         .put("whatsappTestoMax", whatsappTestoMax)
+        .put("funzioniSpente", JSONArray(funzioniSpente))
+        .put("nomeBreve", nomeBreve)
+        .put("logo", logo)
+        .put("oraServer", oraServer)
 
     companion object {
         fun daJson(o: JSONObject?) = Interfaccia(
@@ -258,6 +270,10 @@ data class Interfaccia(
             whatsappApp = o?.testo("whatsappApp")?.ifBlank { null } ?: "chiedi",
             notificheNuove = o?.numero("notificheNuove")?.toInt() ?: 0,
             whatsappTestoMax = o?.numero("whatsappTestoMax")?.toInt()?.takeIf { it > 0 } ?: 1000,
+            funzioniSpente = o?.optJSONArray("funzioniSpente")?.stringhe().orEmpty(),
+            nomeBreve = o?.testo("nomeBreve").orEmpty(),
+            logo = o?.testo("logo").orEmpty(),
+            oraServer = o?.testo("oraServer").orEmpty(),
         )
     }
 }
@@ -558,6 +574,13 @@ data class VoceDashboard(
     val gravita: String = "info",
     val collegamento: Collegamento? = null,
     val unita: String = "euro",
+    /** Fase 8 (§8.2, §13.5): la cosa di cui parla ("ticket:23"), la famiglia, l'area, e se si nasconde per 30 giorni. */
+    val oggetto: String = "",
+    val famiglia: String = "",
+    val area: String = "",
+    val nascondibile: Boolean = false,
+    /** "Da approvare" in una voce sola (§8.2 punto 5): le righe del foglio. */
+    val pezzi: List<PezzoDaApprovare> = emptyList(),
 ) {
     companion object {
         fun daJson(o: JSONObject) = VoceDashboard(
@@ -568,6 +591,11 @@ data class VoceDashboard(
             gravita = o.testo("gravita").ifBlank { "info" },
             collegamento = Collegamento.daJson(o.optJSONObject("collegamento")),
             unita = o.testo("unita"),
+            oggetto = o.testo("oggetto"),
+            famiglia = o.testo("famiglia"),
+            area = o.testo("area"),
+            nascondibile = o.vero("nascondibile"),
+            pezzi = (o.optJSONArray("pezzi") ?: o.optJSONArray("righe")).oggetti().map(PezzoDaApprovare::daJson),
         )
     }
 }
@@ -602,8 +630,20 @@ data class Dashboard(
     val incarichiEsterno: List<Incarico> = emptyList(),
     /** Dalla fase 7 (fase7.md §11.1): portale e comunicazioni. */
     val fase7: NumeriFase7 = NumeriFase7(),
+    /** Fase 8 (§8.2, §13.5): quante voci ha ogni sezione (oltre i tetti), i quattro riquadri, quelli tra cui scegliere, le nascoste. */
+    val quante: Map<String, Int> = emptyMap(),
+    val riquadri: List<Riquadro8>? = null,
+    val riquadriPossibili: List<String> = emptyList(),
+    val nascoste: Int = 0,
+    /** I collegamenti in Errore (il numerino di Integrazioni, §8.6), se il server lo dice. */
+    val integrazioniErrore: Int? = null,
+    /** I numerini del menu con la regola sola della fase 8 (§8.6): modulo → cose che aspettano te. Null con un server di prima. */
+    val numerini: Map<String, Int>? = null,
 ) {
     val vuota: Boolean get() = urgenti.isEmpty() && settimana.isEmpty() && pianificare.isEmpty()
+
+    /** Le regole della fase 8: il server manda i riquadri della persona (con un server di prima no). */
+    val regoleNuove: Boolean get() = riquadri != null
 
     companion object {
         fun daJson(o: JSONObject) = Dashboard(
@@ -618,6 +658,16 @@ data class Dashboard(
             assentiOggi = o.optJSONArray("assentiOggi").oggetti().map { AssenteDashboard(it.testo("idPersona"), it.testo("nome"), it.testo("tipoVisto").ifBlank { "Assente" }, it.testo("fino")) },
             incarichiEsterno = if (o.testo("per") == "esterno") o.optJSONArray("incarichi").oggetti().map(Incarico::daJson) else emptyList(),
             fase7 = NumeriFase7.daJson(o.optJSONObject("numeri")),
+            quante = (o.optJSONObject("quante") ?: JSONObject()).let { q -> q.keys().asSequence().associateWith { q.optInt(it) } }
+                .ifEmpty { listOf("urgenti", "settimana", "pianificare").mapNotNull { s -> o.optJSONObject(s + "Info")?.let { s to it.optInt("quante") } }.toMap() },
+            riquadri = o.optJSONArray("riquadri")?.oggetti()?.map(Riquadro8::daJson),
+            riquadriPossibili = (o.optJSONArray("riquadriDaScegliere") ?: o.optJSONArray("riquadriPossibili") ?: o.optJSONArray("riquadriDisponibili"))?.let { a ->
+                (0 until a.length()).mapNotNull { i -> (a.opt(i) as? JSONObject)?.testo("chiave") ?: a.optString(i).takeIf { it.isNotBlank() } }
+            }.orEmpty(),
+            nascoste = o.numero("nascoste")?.toInt() ?: 0,
+            integrazioniErrore = o.optJSONObject("numerini")?.let { if (it.has("integrazioni")) it.optInt("integrazioni") else if (o.has("riquadri")) 0 else null }
+                ?: o.optJSONObject("numeri")?.optJSONObject("integrazioni")?.numero("errori")?.toInt(),
+            numerini = o.optJSONObject("numerini")?.let { n -> n.keys().asSequence().associateWith { n.optInt(it) } },
         )
     }
 }

@@ -301,12 +301,12 @@ test('permessi: il collaboratore niente banche; lettura legge ed esporta ma non 
 test('Dashboard: il saldo che scende sotto soglia, il saldo da aggiornare dopo 30 giorni, i pagamenti della settimana', async () => {
   // Il saldo scritto piu' di 30 giorni fa: lo si chiede.
   db().esegui('UPDATE conto_saldi SET data = ? WHERE conto_id = 1', piuGiorni(oggi(), -40));
-  const d = await manuel('dashboard');
+  const d = await manuel('dashboard', { tutto: true });
   assert.ok(d.pianificare.some(v => v.tipo === 'conto' && v.titolo === 'Aggiorna il saldo di Conto studio …3456'));
   db().esegui("UPDATE conto_saldi SET data = '2026-10-01' WHERE conto_id = 1");
   // Sotto soglia entro 14 giorni: urgente.
   await manuel('salvaImpostazioni', { valori: { SOGLIA_CASSA: 100000 } });
-  const u = await manuel('dashboard');
+  const u = await manuel('dashboard', { tutto: true });
   const cassa = u.urgenti.find(v => v.tipo === 'cassa');
   assert.ok(cassa);
   assert.equal(cassa.titolo, 'Il saldo previsto scende sotto 100.000 € già oggi');
@@ -314,7 +314,7 @@ test('Dashboard: il saldo che scende sotto soglia, il saldo da aggiornare dopo 3
   await manuel('salvaImpostazioni', { valori: { SOGLIA_CASSA: 3000 } });
   assert.equal(typeof u.numeri.soldi.saldoConti, 'number');
   // Lettura vede i numeri (ha "costi"), il collaboratore no.
-  assert.ok('saldoConti' in (await lettura('dashboard')).numeri.soldi);
-  assert.equal('soldi' in (await marco('dashboard')).numeri, false);
+  assert.ok('saldoConti' in (await lettura('dashboard', { tutto: true })).numeri.soldi);
+  assert.equal('soldi' in (await marco('dashboard', { tutto: true })).numeri, false);
   void laura;
 });

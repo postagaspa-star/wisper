@@ -46,6 +46,7 @@ const LAVORO_MASSIMO_MS = 120 * 1000;
 const RE_ID = /^[A-Za-z0-9_-]{8,80}$/;
 
 const NON_VALIDA = '{"ok":false,"errore":"Richiesta non valida"}';
+const SOLO_IN_CASA = JSON.stringify({ ok: false, stato: 403, soloInCasa: true, errore: 'Il file con tutti i dati si scarica solo in casa: aprilo quando sei in ufficio' });
 const ERRORE_SERVER = '{"ok":false,"rete":true,"errore":"Errore del server: riprova"}';
 
 class PortaGoogle {
@@ -263,6 +264,9 @@ class PortaGoogle {
       const r = await chiedi({ metodo: 'POST', percorso: '/ponte', intestazioni: { 'content-type': 'application/json', 'x-wisper-segreto': this.segretoPonte }, corpo: JSON.stringify(dati) });
       return r.stato === 200 ? r.corpo.toString('utf8') : JSON.stringify({ ok: false, rete: true, errore: 'Il server ha risposto ' + r.stato + ': riprova fra poco' });
     }
+    // Fase 8: lo ZIP di Esporta tutto (GET /esportazione/<id>) si scarica solo in casa, non passa da Google: una frase
+    // chiara invece di "Richiesta non valida". Prepararlo (esportaTutto) da fuori casa si puo'.
+    if (l.tipo === 'esportazione') return SOLO_IN_CASA;
     return NON_VALIDA;
   }
 

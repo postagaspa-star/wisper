@@ -107,7 +107,7 @@ test('collaboratore: vede solo i suoi rapportini, e senza tariffe, totali e cost
   assert.deepEqual(soldiIn(a), []);
   assert.equal('EURO_KM' in a.impostazioni, false);
   assert.ok(a.clienti.length >= 2 && a.commesse.length >= 2, 'clienti e commesse li vede');
-  const d = await marco('dashboard');
+  const d = await marco('dashboard', { tutto: true });
   assert.deepEqual(soldiIn(d), []);
   assert.equal(d.per, 'collaboratore');
   assert.equal([].concat(d.urgenti, d.settimana, d.pianificare).some(v => v.gravita === 'soldi'), false);

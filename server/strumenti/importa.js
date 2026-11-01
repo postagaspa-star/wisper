@@ -15,6 +15,17 @@
  *
  * --file: la cartella dove copia-drive.js (o chi per lui) ha messo i file di
  * Drive, uno per id. Senza, i file restano "da copiare" e ci pensa copia-drive.js.
+ *
+ * Fase 8 (fase8.md §10.2): stampa i tempi di ogni passo (lettura, scrittura, controllo) e li scrive in fondo a
+ * controllo.html (la tabella dei tempi della prova generale). E il confronto, che NON scrive niente nel database:
+ *
+ *   node server/strumenti/importa.js --confronta --foglio <copia.xlsx> --dati <cartella con il database>
+ *
+ * legge il foglio con le stesse regole e lo confronta col database (aperto in sola lettura): rapportini (numero, data,
+ * totale, stato), clienti (nome, partita IVA) e commesse (cliente, descrizione, stato) che sono nel foglio e non nel
+ * database, nel database e non nel foglio, o diversi. Scrive confronto.html accanto al foglio; esce con 0 se tutto
+ * torna, 1 se no. Serve la sera del cambio (nessuno ha scritto nel foglio mentre si copiava) e prima di un ritorno
+ * indietro (cosa c'e' nel server e non nel foglio).
  */
 'use strict';
 
@@ -80,6 +91,8 @@ function importa(o) {
     throw new Error('Nella cartella c\'è già un database (' + percorsoDb + '): l\'importazione scrive solo in una cartella nuova');
   }
   fs.mkdirSync(dati, { recursive: true });
+  // Fase 8: i tempi di ogni passo, per la tabella della prova generale.
+  const tempi = { inizio: Date.now() };
   const schede = leggiXlsx(fs.readFileSync(o.foglio));
   const errori = [];
   const avvisi = [];
@@ -224,6 +237,8 @@ function importa(o) {
   }
 
   if (errori.length) return chiudiMale(null, dati, errori, avvisi, {}, o);
+  tempi.lettura = Date.now() - tempi.inizio;
+  o.tempi = tempi;
 
   // ------------------------------------------------------------ 3. il database, in una transazione sola
   const w = new Wisper({ dati });
@@ -293,6 +308,7 @@ function importa(o) {
   }
 
   // ------------------------------------------------------------ 4. il controllo
+  tempi.scrittura = Date.now() - tempi.inizio - tempi.lettura;
   const dalFoglio = fogli.Rapportini.filter(r => giaRap.has(testo(r.id))).map(r => ({
     id: testo(r.id), data: dataIso(r.data), idCliente: testo(r.idCliente), cliente: testo(r.cliente),
     oreTotali: numero(r.oreTotali) || numero(r.oreLavoro) + numero(r.oreExtra) + numero(r.oreViaggio), km: numero(r.km), totale: numero(r.totale),
@@ -350,10 +366,11 @@ function importa(o) {
     }
   }
 
+  tempi.controllo = Date.now() - tempi.inizio - tempi.lettura - tempi.scrittura;
   const percorsoControllo = scriviControllo(dati, o, controllo, errori, avvisi, conteggi);
   if (errori.length) return chiudiMale(w, dati, errori, avvisi, conteggi, o, percorsoControllo);
   w.chiudi();
-  return { ok: true, errori, avvisi, conteggi, controllo: percorsoControllo, dati };
+  return { ok: true, errori, avvisi, conteggi, controllo: percorsoControllo, dati, tempi: { lettura: tempi.lettura, scrittura: tempi.scrittura, controllo: tempi.controllo } };
 }
 
 /** Qualcosa non torna: il database se ne va (non deve restare a meta'), il rapporto resta. */
@@ -391,16 +408,89 @@ function scriviControllo(dati, o, c, errori, avvisi, conteggi) {
       c.file.map(f => ({ celle: [f.id, f.tipo, f.rapportino_id || f.commessa_id || '', f.percorso ? 'sì' : 'no, ci pensa copia-drive.js'] })));
     if (c.ricalcoli.length) html += '<h2>Totali diversi dal conto rifatto</h2>' + tab(['Numero', 'Nel foglio', 'Rifatto'], c.ricalcoli);
   }
-  html += '<h2>Scritto nel database</h2><p>' + esc(JSON.stringify(conteggi)) + '</p></body></html>\n';
+  html += '<h2>Scritto nel database</h2><p>' + esc(JSON.stringify(conteggi)) + '</p>';
+  // Fase 8 (§10.2): i tempi di ogni passo, per la tabella dei tempi della prova generale.
+  if (o.tempi && o.tempi.lettura !== undefined) {
+    const s = ms => (ms === undefined ? '' : (ms / 1000).toFixed(1).replace('.', ',') + ' s');
+    html += '<h2>Tempi</h2>' + tab(['Passo', 'Tempo'], [['Lettura del foglio', s(o.tempi.lettura)], ['Scrittura del database', s(o.tempi.scrittura)], ['Controllo', s(o.tempi.controllo)]]);
+  }
+  html += '</body></html>\n';
   const p = path.join(dati, 'controllo.html');
   fs.writeFileSync(p, html);
   return p;
 }
 
+// ------------------------------------------------------------------ il confronto (fase 8, §10.2)
+
+/**
+ * Il foglio contro il database, senza scrivere niente nel database: torna {ok, differenze: [{scheda, chiave, cosa,
+ * campo?, foglio?, database?}], conteggi, confronto (il percorso di confronto.html)}.
+ */
+function confronta(o) {
+  const dati = path.resolve(o.dati);
+  const percorsoDb = path.join(dati, 'wisper.db');
+  if (!fs.existsSync(percorsoDb)) throw new Error('Nella cartella non c\'è il database da confrontare: ' + percorsoDb);
+  const schede = leggiXlsx(fs.readFileSync(o.foglio));
+  const celle = { Rapportini: scheda(schede, 'Rapportini'), Clienti: scheda(schede, 'Clienti'), Commesse: scheda(schede, 'Commesse') };
+  for (const n of Object.keys(celle)) if (!celle[n]) throw new Error('Nel file manca la scheda ' + n + ': è l\'esportazione del foglio di Wisper?');
+  const fogli = {
+    Rapportini: F.righeDi('Rapportini', celle.Rapportini), Clienti: F.righeDi('Clienti', celle.Clienti), Commesse: F.righeDi('Commesse', celle.Commesse),
+    Gruppi: F.righeDi('Gruppi', scheda(schede, 'Gruppi')), Accessi: [], Dispositivi: [],
+  };
+  F.aggiornaStruttura(fogli, o.anno || new Date().getFullYear());
+  require('../src/db');
+  const { DatabaseSync } = require('node:sqlite');
+  const db = new DatabaseSync(percorsoDb, { readOnly: true });
+  const differenze = [];
+  const c = n => Math.round(numero(n) * 100);
+  try {
+    const confrontaScheda = (nome, dalFoglio, dalDb, campi) => {
+      const f = new Map(dalFoglio.filter(x => x.chiave).map(x => [x.chiave, x]));
+      const d = new Map(dalDb.map(x => [x.chiave, x]));
+      for (const [k, x] of f) {
+        const y = d.get(k);
+        if (!y) { differenze.push({ scheda: nome, chiave: k, cosa: 'solo nel foglio' }); continue; }
+        for (const campo of campi) if (String(x[campo]) !== String(y[campo])) differenze.push({ scheda: nome, chiave: k, cosa: 'diverso', campo, foglio: x[campo], database: y[campo] });
+      }
+      for (const k of d.keys()) if (!f.has(k)) differenze.push({ scheda: nome, chiave: k, cosa: 'solo nel database' });
+    };
+    confrontaScheda('Rapportini',
+      fogli.Rapportini.map(r => ({ chiave: testo(r.id), data: dataIso(r.data), totale: c(r.totale), stato: testo(r.stato).toUpperCase() || 'BOZZA' })),
+      db.prepare('SELECT id, data, totale, stato FROM rapportini').all().map(r => ({ chiave: r.id, data: r.data || '', totale: c(r.totale), stato: testo(r.stato).toUpperCase() || 'BOZZA' })),
+      ['data', 'totale', 'stato']);
+    confrontaScheda('Clienti',
+      fogli.Clienti.map(r => ({ chiave: testo(r.id), nome: testo(r.nome), partitaIva: partitaIvaDalFoglio(r.partitaIva) })),
+      db.prepare('SELECT id, nome, partita_iva FROM soggetti WHERE cliente = 1').all().map(s => ({ chiave: s.id, nome: testo(s.nome), partitaIva: partitaIvaDalFoglio(s.partita_iva) })),
+      ['nome', 'partitaIva']);
+    confrontaScheda('Commesse',
+      fogli.Commesse.map(r => ({ chiave: testo(r.id).toUpperCase(), cliente: testo(r.idCliente), descrizione: testo(r.descrizione), stato: testo(r.stato).toUpperCase() || 'APERTA' })),
+      db.prepare('SELECT id, cliente_id, descrizione, stato FROM commesse WHERE modello = 0').all().map(m => ({ chiave: String(m.id).toUpperCase(), cliente: testo(m.cliente_id), descrizione: testo(m.descrizione), stato: testo(m.stato).toUpperCase() || 'APERTA' })),
+      ['cliente', 'descrizione', 'stato']);
+  } finally {
+    db.close();
+  }
+  const conteggi = { rapportini: fogli.Rapportini.length, clienti: fogli.Clienti.length, commesse: fogli.Commesse.length };
+  const uscita = o.uscita ? path.resolve(o.uscita) : path.join(path.dirname(path.resolve(o.foglio)), 'confronto.html');
+  let html = '<!doctype html><html lang="it"><head><meta charset="utf-8"><title>Confronto foglio e database</title><style>' +
+    'body{font:15px/1.45 system-ui,sans-serif;margin:24px;color:#1b1b1b}table{border-collapse:collapse}td,th{border:1px solid #ccc;padding:4px 8px;text-align:left}th{background:#f2f2f2}' +
+    '.esito{padding:12px 16px;border-radius:10px;font-weight:700}.ok{background:#e3f5e1}.no{background:#fde2e2}</style></head><body><h1>Confronto foglio e database</h1>' +
+    '<p>Foglio: ' + esc(path.basename(o.foglio)) + ' · database: ' + esc(percorsoDb) + ' · ' + esc(new Date().toLocaleString('it-IT')) + '</p>' +
+    '<p>Nel foglio: ' + conteggi.rapportini + ' rapportini, ' + conteggi.clienti + ' clienti, ' + conteggi.commesse + ' commesse.</p>' +
+    '<p class="esito ' + (differenze.length ? 'no">Non torna: ' + differenze.length + (differenze.length === 1 ? ' differenza' : ' differenze') : 'ok">Tutto torna: zero differenze') + '</p>';
+  if (differenze.length) {
+    html += '<table><tr><th>Scheda</th><th>Riga</th><th>Cosa</th><th>Campo</th><th>Nel foglio</th><th>Nel database</th></tr>' +
+      differenze.map(x => '<tr><td>' + [x.scheda, x.chiave, x.cosa, x.campo || '', x.foglio === undefined ? '' : x.foglio, x.database === undefined ? '' : x.database].map(esc).join('</td><td>') + '</td></tr>').join('') + '</table>';
+  }
+  fs.writeFileSync(uscita, html + '</body></html>\n');
+  return { ok: !differenze.length, differenze, conteggi, confronto: uscita };
+}
+
 function argomenti(argv) {
   const a = {};
   for (let i = 0; i < argv.length; i++) {
-    if (argv[i] === '--foglio') a.foglio = argv[++i];
+    if (argv[i] === '--confronta') a.confronta = true;
+    else if (argv[i] === '--uscita') a.uscita = argv[++i];
+    else if (argv[i] === '--foglio') a.foglio = argv[++i];
     else if (argv[i] === '--file') a.file = argv[++i];
     else if (argv[i] === '--dati') a.dati = argv[++i];
     else throw new Error('Non conosco "' + argv[i] + '"');
@@ -412,6 +502,13 @@ function argomenti(argv) {
 if (require.main === module) {
   try {
     const a = argomenti(process.argv.slice(2));
+    if (a.confronta) {
+      const c = confronta(a);
+      c.differenze.slice(0, 50).forEach(x => console.log((x.cosa === 'diverso' ? 'DIVERSO ' : x.cosa.toUpperCase() + ' ') + x.scheda + ' ' + x.chiave +
+        (x.campo ? ' · ' + x.campo + ': foglio ' + x.foglio + ', database ' + x.database : '')));
+      console.log((c.ok ? 'Tutto torna: zero differenze' : 'Non torna: ' + c.differenze.length + ' differenze') + '. Il rapporto è in ' + c.confronto);
+      process.exit(c.ok ? 0 : 1);
+    }
     const r = importa(a);
     r.avvisi.forEach(x => console.log('Da sapere: ' + x));
     if (!r.ok) {
@@ -420,6 +517,7 @@ if (require.main === module) {
       process.exit(1);
     }
     console.log('Importazione riuscita: ' + JSON.stringify(r.conteggi));
+    console.log('Tempi: lettura ' + (r.tempi.lettura / 1000).toFixed(1) + ' s, scrittura ' + (r.tempi.scrittura / 1000).toFixed(1) + ' s, controllo ' + (r.tempi.controllo / 1000).toFixed(1) + ' s');
     console.log('Il rapporto del controllo è in ' + r.controllo + '. Poi: node server/strumenti/copia-drive.js per i file di Drive.');
   } catch (err) {
     console.error(err.message);
@@ -427,4 +525,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { importa };
+module.exports = { importa, confronta };

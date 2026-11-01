@@ -86,6 +86,10 @@ const STRADE = [
   { metodo: 'POST', re: /^richieste$/, nome: 'richiesta nuova', cambia: true, fn: nuovaRichiesta },
   { metodo: 'POST', re: /^richieste\/(\d{1,10})\/messaggio$/, nome: 'messaggio', cambia: true, fn: messaggio },
   { metodo: 'POST', re: /^avvisi$/, nome: 'avvisi', cambia: true, fn: avvisi },
+  // Fase 8 (fase8.md §0.3): il calendario "anche fuori casa", dal doGet dello script del portale (?calendario=<chiave>).
+  // Risponde solo ai feed pubblici e solo con CALENDARIO_PUBBLICO acceso (lo decide calendarioPubblico); il testo ICS torna
+  // allo script, che lo restituisce come text/calendar.
+  { metodo: 'GET', re: /^calendario$/, nome: 'calendario', pubblica: true, fn: (w, x) => w.calendarioPubblico(testo(x.lavoro.corpo.chiave), x.lavoro.agente) },
 ];
 
 /** Le strade che non si ricordano (rifarle e' giusto, e le loro risposte portano la sessione). */

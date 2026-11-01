@@ -314,9 +314,11 @@ public sealed class Finestra : Form, Ponte.IFinestra
     {
         using var finestra = new OpenFileDialog
         {
-            Title = filtro == "immagini" ? "Scegli un'immagine" : "Scegli un file",
+            Title = filtro == "immagini" ? "Scegli un'immagine" : filtro == "importa" ? "Scegli il file dei clienti o dei fornitori" : "Scegli un file",
             Filter = filtro == "immagini"
                 ? "Immagini (*.png;*.jpg;*.jpeg)|*.png;*.jpg;*.jpeg"
+                // Fase 8 (§7.2): Importa clienti e fornitori legge un CSV (; o ,) o un file di Excel.
+                : filtro == "importa" ? "Clienti e fornitori (*.csv;*.xlsx)|*.csv;*.xlsx|Tutti i file|*.*"
                 : "Documenti e immagini|*.pdf;*.png;*.jpg;*.jpeg;*.doc;*.docx;*.xls;*.xlsx|Tutti i file|*.*",
             Multiselect = false,
         };
@@ -383,7 +385,10 @@ public sealed class Finestra : Form, Ponte.IFinestra
                 Title = "Salva",
                 FileName = nomeProposto,
                 Filter = estensione == "csv" ? "File per Excel (*.csv)|*.csv|Tutti i file|*.*"
-                    : estensione == "xml" ? "File XML (*.xml)|*.xml|Tutti i file|*.*" : "Tutti i file|*.*",
+                    : estensione == "xml" ? "File XML (*.xml)|*.xml|Tutti i file|*.*"
+                    // Fase 8: il calendario da importare in Outlook (§5.4) e il file con tutti i dati (§7.1).
+                    : estensione == "ics" ? "Calendario (*.ics)|*.ics|Tutti i file|*.*"
+                    : estensione == "zip" ? "Cartella compressa (*.zip)|*.zip|Tutti i file|*.*" : "Tutti i file|*.*",
                 DefaultExt = estensione,
                 AddExtension = true,
                 OverwritePrompt = true,

@@ -56,4 +56,39 @@ function controllaFormato(formato, annuale) {
   return f;
 }
 
-module.exports = { schemaFormato, formatta, controllaFormato };
+/**
+ * Fase 8 (fase8.md §9.6): il codice da formato, anno e numero. E' formatta() col nome dell'accordo: la stessa funzione
+ * sta in Kotlin e in pc/ui/regole.js, con gli stessi casi (server/prove/casi-numerazioni.json), perche' il telefono
+ * senza rete sa scrivere da solo il codice di una commessa nuova anche con un formato nuovo.
+ */
+function codiceDa(formato, anno, numero) {
+  return formatta(formato, anno, numero);
+}
+
+/**
+ * Il prossimo numero e il suo codice, dai codici gia' scritti: il piu' alto + 1, contando quelli col formato di adesso e
+ * coi formati di prima (cambiare formato non fa ripartire il contatore); per una numerazione che riparte ogni anno solo
+ * quelli dell'anno. n = {formato, precedenti: [formati], annuale, ultimo}. Come Wisper.prossimoNumero, senza database.
+ */
+function prossimoDa(n, codici, anno) {
+  const formati = [n.formato].concat(n.precedenti || []);
+  const schemi = formati.map(schemaFormato);
+  let max = n.annuale ? 0 : (Number(n.ultimo) || 0);
+  for (const c of codici || []) {
+    const s = String(c || '').trim();
+    for (const sc of schemi) {
+      const m = s.match(sc.re);
+      if (!m) continue;
+      if (n.annuale) {
+        const a = sc.anno4 ? Number(m[sc.anno4]) : sc.anno2 ? Number(m[sc.anno2]) : null;
+        if (a === null) continue;
+        if (sc.anno4 ? a !== anno : a !== anno % 100) continue;
+      }
+      max = Math.max(max, parseInt(m[sc.numero], 10));
+      break;
+    }
+  }
+  return { numero: max + 1, codice: formatta(n.formato, anno, max + 1) };
+}
+
+module.exports = { schemaFormato, formatta, controllaFormato, codiceDa, prossimoDa };

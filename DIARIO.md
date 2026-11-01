@@ -11,6 +11,7 @@ mai dati veri di clienti.
 
 | Data | Versione | In breve |
 |------|----------|----------|
+| 01/11/2026 | gestionale, fase 8 (non pubblicata) | [Integrazioni, impostazioni e controlli finali](#gestionale-fase-8) |
 | 01/11/2026 | gestionale, fase 7 (non pubblicata) | [WhatsApp e comunicazioni, portale clienti](#gestionale-fase-7) |
 | 31/10/2026 | gestionale, fase 6 (non pubblicata) | [Persone, mezzi e attrezzature, collaboratori esterni](#gestionale-fase-6) |
 | 22/10/2026 | gestionale, fase 5 (non pubblicata) | [Documenti, ticket e assistenza](#gestionale-fase-5) |
@@ -33,6 +34,67 @@ mai dati veri di clienti.
 | marzo–giugno 2026 | prima del repository | [Le prime versioni](#prima) |
 
 ---
+
+<a id="gestionale-fase-8"></a>
+## 1 novembre 2026 · gestionale, fase 8 · Integrazioni, impostazioni e controlli finali
+
+**Perché.** Ottava e ultima fase del gestionale (`docs/specifiche-stgm.md`, moduli 16, 17 e 18): mettere in ordine
+quello che Wisper scambia col mondo fuori, le impostazioni dello studio e i controlli da fare prima della sera del
+cambio, quando Manuel passerà dal foglio Google al server sul NAS. L'accordo (`docs/gestionale/fase8.md`) e il prototipo
+(`docs/prototipo/Gestionale-fase8.html`) erano del 22 ottobre e davano per scontati Tailscale o un dominio a pagamento;
+il 1° novembre sono stati adattati alla porta Google scelta il 31 ottobre e alla regola "tutto gratuito" (§0
+dell'accordo, vale sopra al resto).
+
+**Cosa cambia.**
+
+- **Integrazioni**: una pagina con tutti i collegamenti (porta Google, portale, link che scade, ponte per le versioni
+  vecchie, verifica della partita IVA, aggiornamenti delle app, calendario, copie fuori casa), per ognuno lo stato,
+  l'ultimo controllo, cosa esce dal NAS e quanto costa: tutto 0 €. Quello che non va sta in cima, in rosso, con
+  **Prova adesso**. I controlli girano da soli e tengono la storia.
+- **Calendario in altre app**: gli impegni di Wisper in Google Calendar, Outlook o nel telefono (con ICSx5) da un
+  indirizzo privato per persona, che si toglie quando si vuole. Il telefono lo legge in casa; leggerlo anche fuori casa
+  passa dallo script del portale ed è spento di base, perché farebbe passare gli appuntamenti da Google.
+- **Cerca dentro i file**: la ricerca dei documenti guarda anche dentro PDF, Word, Excel e disegni DXF e mostra il pezzo
+  di testo trovato ("…la verifica dell'impianto di terra…"). Le scansioni senza testo lo dicono.
+- **Importa ed esporta**: clienti e fornitori da un file CSV o Excel (anche condiviso dal telefono), con le righe
+  nuove, quelle già presenti e quelle da sistemare prima di salvare; **Esporta tutto** fa uno ZIP con tutti i dati, solo
+  dalla rete di casa e solo per il titolare.
+- **Impostazioni**: impostazioni generali, numerazioni (il formato del codice commessa senza ricodificare niente),
+  notifiche dello studio, dati dello studio col logo e una riga in fondo ai PDF (senza logo i PDF restano identici a
+  prima), **Funzioni accese** per spegnere un modulo che non si usa, e ognuno sceglie i suoi riquadri della Dashboard.
+- **Copie e sicurezza**: la copia può essere cifrata (con una chiave da scrivere su carta: senza chiave la copia fuori
+  casa non parte, così non va mai in chiaro su Drive), ogni 30 giorni il server prova da solo la copia (integrità, righe,
+  impronte dei file, impronta della copia su Drive) e ogni 90 giorni chiede di segnare un ripristino provato a mano.
+  **Scollega tutti** fa uscire ogni dispositivo in una volta. Stato del sistema mostra spazio, versioni e collegamenti.
+- **Lista di controllo**: 77 righe, una per ogni prova da fare prima del cambio (automatiche, a mano, sul telefono vero,
+  la sera del cambio, il ritorno indietro), con chi, quando e una nota; in cima lo stato del cambio (prima del cambio,
+  prova generale, cambio fatto, ritorno chiuso), che cambia solo il titolare.
+- **Più veloce**: con dieci anni di dati finti realistici (131 MB) la Dashboard sul NAS risponde in circa 0,4 secondi
+  (prima della fase 1,3 sul PC) ed Esporta tutto in circa 10 secondi (prima 76): le letture ripetute per ogni riga ora si
+  fanno una volta sola. Prima di toccare il codice è stata salvata una fotografia di 64 risposte della Dashboard (cinque
+  utenti, tre profili di dati finti, quattro date): dopo, i numeri sono identici.
+- Server 0.11.0 (schema 8). Lo script del foglio ha un'azione nuova per controllare la copia su Drive.
+
+**Ancora spento.** Restano "Da configurare" finché non si fanno i passi a mano: lo script nuovo incollato nel foglio,
+lo script del portale, la pagina del portale su Netlify. La sera del cambio non è ancora stata fatta.
+
+Prove: server 613, script del foglio e del portale 88, computer 282, pagina del portale 22, telefono 366 (anche contro il
+server di prova, due giri), tutte verdi; tutte le giornate simulate; i nove giri cliccati su Wisper Ufficio, dalla fase 1
+alla 8; la prova di carico sul NAS, in un contenitore a parte con dati finti, dentro tutti i limiti dell'accordo.
+Rifacendo le prove sono venuti fuori e sono stati sistemati alcuni errori veri: spegnere la funzione Portale non spegneva
+davvero il portale, la chiave della copia cifrata si vedeva storpiata (si sarebbe scritta sbagliata sulla carta), due
+pagine nuove venivano rifiutate dal controllo delle impostazioni, chi poteva solo vedere l'amministrazione poteva
+cambiare il logo. Non provati: Google e Netlify veri, i calendari aperti a mano in Outlook e in ICSx5, le finestre Salva
+e Apri di Windows nel programma, un telefono vero.
+
+<p>
+<img src="docs/diario/2026-11-01-gest8-tel-integrazioni-scuro.png" width="220" alt="Telefono: Integrazioni, tema scuro, la verifica della partita IVA in errore con Prova adesso">
+<img src="docs/diario/2026-11-01-gest8-tel-documenti-terra.png" width="220" alt="Telefono: la ricerca trova la parola dentro il testo di un verbale">
+</p>
+
+<img src="docs/diario/2026-11-01-gest8-pc-integrazioni.png" width="720" alt="Wisper Ufficio: Integrazioni, ogni collegamento con stato, ultimo controllo, cosa esce dal NAS e costo">
+
+<img src="docs/diario/2026-11-01-gest8-pc-lista-controllo.png" width="720" alt="Wisper Ufficio: la Lista di controllo prima del cambio">
 
 <a id="gestionale-fase-7"></a>
 ## 1 novembre 2026 · gestionale, fase 7 · WhatsApp e comunicazioni, portale clienti

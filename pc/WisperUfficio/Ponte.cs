@@ -303,6 +303,9 @@ public sealed class Ponte
             case "salva-file":
                 return SalvaFile(o);
 
+            case "scarica-esportazione":
+                return await ScaricaEsportazioneAsync(o).ConfigureAwait(false);
+
             case "apri-documento":
                 return await ApriDocumentoAsync(o).ConfigureAwait(false);
 
@@ -484,6 +487,26 @@ public sealed class Ponte
         var dove = Finestra.SalvaFile(nome);
         if (dove == null) return Json(200, new JsonObject { ["ok"] = false, ["annullato"] = true });
         File.WriteAllBytes(dove, dati);
+        return Json(200, new JsonObject { ["ok"] = true, ["percorso"] = dove });
+    }
+
+    /// <summary>
+    /// Fase 8 (§7.1): il file di Esporta tutto, scaricato dal server e salvato con la finestra Salva di Windows. La pagina
+    /// non vede mai il token: dà solo l'id dell'esportazione e il nome proposto.
+    /// </summary>
+    private async Task<(int, string)> ScaricaEsportazioneAsync(JsonObject? o)
+    {
+        if (Finestra == null) return Json(503, Errore("La finestra non è pronta"));
+        var id = Testo(o?["id"]);
+        if (id.Length == 0 || id.Length > 40 || !id.All(c => char.IsLetterOrDigit(c) || c is '-' or '_')) return Json(404, Errore("Esportazione non trovata"));
+        var nome = NomeFilePulito(Testo(o?["nome"]));
+        if (nome.Length == 0 || !nome.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)) nome = "wisper-tutto.zip";
+        var (stato, dati, errore) = await server.EsportazioneAsync(id).ConfigureAwait(false);
+        if (stato == 401) return Json(200, new JsonObject { ["ok"] = false, ["errore"] = errore, ["accesso"] = false });
+        if (stato != 200) return Json(200, new JsonObject { ["ok"] = false, ["errore"] = errore, ["rete"] = stato == 502 });
+        var dove = Finestra.SalvaFile(nome);
+        if (dove == null) return Json(200, new JsonObject { ["ok"] = false, ["annullato"] = true });
+        await File.WriteAllBytesAsync(dove, dati).ConfigureAwait(false);
         return Json(200, new JsonObject { ["ok"] = true, ["percorso"] = dove });
     }
 

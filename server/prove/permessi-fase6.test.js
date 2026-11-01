@@ -56,7 +56,7 @@ test('Dashboard: le voci nuove per ruolo, con le frasi dell\'accordo; una cosa, 
     const perOggetto = voci(d).filter(v => v.collegamento && ['mezzo', 'attrezzatura', 'persona', 'collaboratore'].includes(v.collegamento.pagina)).map(v => v.titolo);
     assert.equal(new Set(perOggetto).size, perOggetto.length, r);
   };
-  const t = ok(await chi.titolare('dashboard'));
+  const t = ok(await chi.titolare('dashboard', { tutto: true }));
   unaVolta(t, 'titolare');
   const titoli = voci(t).map(v => v.titolo);
   // "Oggi è assente" e' una voce "info", l'ultima per gravita', e le voci "info" scritte prima (rapportini, attivita') le
@@ -79,7 +79,7 @@ test('Dashboard: le voci nuove per ruolo, con le frasi dell\'accordo; una cosa, 
   assert.equal(t.numeri.soldi.compensiDaFatturare, 720);
   assert.deepEqual(t.assentiOggi.map(a => [a.idPersona, a.tipoVisto]), [[2, 'Ferie']]);
   // Il collaboratore: le sue cose, gli assenti come "Assente", niente soldi.
-  const m = ok(await chi.collaboratore('dashboard'));
+  const m = ok(await chi.collaboratore('dashboard', { tutto: true }));
   unaVolta(m, 'collaboratore');
   const tm = voci(m).map(v => v.titolo);
   assert.ok(tm.includes('Primo soccorso di Marco Rossato scaduto da 32 giorni'));
@@ -93,7 +93,7 @@ test('Dashboard: le voci nuove per ruolo, con le frasi dell\'accordo; una cosa, 
   assert.equal('collaboratori' in m.numeri, false);
   assert.deepEqual(m.assentiOggi.map(a => a.tipoVisto), ['Assente']);
   // Lettura: niente dati personali (la visita di Marco), niente approvazioni.
-  const l = ok(await chi.lettura('dashboard'));
+  const l = ok(await chi.lettura('dashboard', { tutto: true }));
   unaVolta(l, 'lettura');
   const tl = voci(l).map(v => v.titolo);
   assert.equal(tl.some(x => /Visita medica|Primo soccorso|richiesta di ferie/.test(x)), false);
@@ -101,11 +101,11 @@ test('Dashboard: le voci nuove per ruolo, con le frasi dell\'accordo; una cosa, 
   // I rientri dal laboratorio dei prossimi 7 giorni (il titolare ne ha tante: la sua sezione si ferma al massimo di voci).
   assert.ok(tl.some(x => /^Analizzatore di rete AR-6 rientra dal laboratorio \S+ \d+$/.test(x)), JSON.stringify(tl));
   // Amministrazione: le persone (con persone 2), la ferie da approvare; non le cose del solo titolare.
-  const a = ok(await chi.amministrazione('dashboard'));
+  const a = ok(await chi.amministrazione('dashboard', { tutto: true }));
   unaVolta(a, 'amministrazione');
   assert.ok(voci(a).some(v => v.titolo === '1 richiesta di ferie da approvare'));
   // L'esterno: la sua.
-  const e = ok(await chi.esterno('dashboard'));
+  const e = ok(await chi.esterno('dashboard', { tutto: true }));
   assert.equal(e.per, 'esterno');
 });
 

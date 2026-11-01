@@ -156,6 +156,28 @@ class MainActivity : ComponentActivity() {
      */
     private fun leggiFileCondivisi(intent: android.content.Intent?) {
         val i = intent ?: return
+        // Fase 8 (fase8.md §7.2): un elenco di clienti o fornitori (CSV o Excel) dal Condividi va in Importa clienti e fornitori.
+        val flusso = if (i.action == android.content.Intent.ACTION_SEND) {
+            if (Build.VERSION.SDK_INT >= 33) i.getParcelableExtra(android.content.Intent.EXTRA_STREAM, android.net.Uri::class.java)
+            else @Suppress("DEPRECATION") i.getParcelableExtra(android.content.Intent.EXTRA_STREAM)
+        } else if (i.action == android.content.Intent.ACTION_VIEW) i.data else null
+        if (flusso != null) {
+            val nome = runCatching { contentResolver.query(flusso, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c -> if (c.moveToFirst()) c.getString(0) else null } }.getOrNull() ?: flusso.lastPathSegment.orEmpty()
+            if (eu.stgm.wisper.ui.FileImport.accettato(nome, i.type)) {
+                i.action = null
+                Thread {
+                    val dati = runCatching { contentResolver.openInputStream(flusso)?.use { it.readBytes() } }.getOrNull()
+                    runOnUiThread {
+                        when {
+                            dati == null -> android.widget.Toast.makeText(this, "Il file non si legge", android.widget.Toast.LENGTH_LONG).show()
+                            dati.size > 5L * 1024 * 1024 -> android.widget.Toast.makeText(this, "Il file è più grande di 5 MB: non si importa", android.widget.Toast.LENGTH_LONG).show()
+                            else -> { eu.stgm.wisper.ui.FileImport.arrivato.value = nome.ifBlank { "clienti.csv" } to dati; apriImportaClienti.value = true }
+                        }
+                    }
+                }.start()
+                return
+            }
+        }
         // Fase 5 (fase5.md §3.1): un collegamento di OneDrive o Drive condiviso come testo va in Documenti, Aggiungi.
         if (i.action == android.content.Intent.ACTION_SEND && i.type?.startsWith("text/") == true) {
             val link = eu.stgm.wisper.rapportino.Collegamenti.daTestoCondiviso(i.getStringExtra(android.content.Intent.EXTRA_TEXT))
@@ -234,6 +256,9 @@ class MainActivity : ComponentActivity() {
 
         /** Fase 5: un collegamento o un file dal Condividi: si apre Documenti, Aggiungi un documento. */
         val apriDocumentoNuovo = kotlinx.coroutines.flow.MutableStateFlow(false)
+
+        /** Fase 8: un CSV o un Excel di clienti dal Condividi: si apre Amministrazione › Importa clienti e fornitori. */
+        val apriImportaClienti = kotlinx.coroutines.flow.MutableStateFlow(false)
 
         /** Fase 7: il collegamento (JSON) di una notifica toccata, da aprire appena si può. */
         val collegamentoDaAprire = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
@@ -395,8 +420,9 @@ private fun Wisper(archivio: Archivio, attivita: ComponentActivity) {
             }
         }
         // Una voce che il ruolo non vede (dopo un cambio di permessi) riporta alla Dashboard.
-        LaunchedEffect(permessi) {
-            if (permessi.livelli.isNotEmpty() && !permessi.vede(sezione.modulo)) aCasa()
+        // Fase 8 (§9.5): anche una funzione spenta dal titolare.
+        LaunchedEffect(permessi, sessione.interfaccia.funzioniSpente) {
+            if (permessi.livelli.isNotEmpty() && (!permessi.vede(sezione.modulo) || sezione.modulo in sessione.interfaccia.funzioniSpente)) aCasa()
         }
 
         fun nuovo(giorno: LocalDate, idCliente: String? = null, idCommessa: String? = null) {
@@ -476,6 +502,20 @@ private fun Wisper(archivio: Archivio, attivita: ComponentActivity) {
             sezioneNome = Sezione.DOCUMENTI.name
         }
 
+        // Fase 8: un elenco di clienti dal Condividi: Amministrazione › Importa clienti e fornitori (con clienti: Modifica).
+        val importaClienti by MainActivity.apriImportaClienti.collectAsStateWithLifecycle()
+        LaunchedEffect(importaClienti, pagina, visita.attiva) {
+            if (!importaClienti || pagina != "sezioni" || visita.attiva) return@LaunchedEffect
+            MainActivity.apriImportaClienti.value = false
+            if (!permessi.modifica(eu.stgm.wisper.rapportino.Moduli.CLIENTI)) {
+                avvisi.mostra("Per importare clienti e fornitori serve Clienti: Modifica")
+                eu.stgm.wisper.ui.FileImport.arrivato.value = null
+                return@LaunchedEffect
+            }
+            mettiPila(Sezione.AMMINISTRAZIONE, listOf("amm/importa", "amm/importa-clienti"))
+            sezioneNome = Sezione.AMMINISTRAZIONE.name
+        }
+
         // Indietro: prima la pila della voce, poi si torna alla Dashboard; dalla Dashboard esce dall'app.
         BackHandler(enabled = pagina == "sezioni" && (pila(sezione).isNotEmpty() || sezione != Sezione.DASHBOARD)) {
             if (pila(sezione).isNotEmpty()) nav.indietro() else aCasa()
@@ -512,7 +552,8 @@ private fun Wisper(archivio: Archivio, attivita: ComponentActivity) {
                         p == "sezioni" -> {
                             val cima = pila(sezione).lastOrNull()
                             val compito = rottaCompito(cima)
-                            val voci = Sezione.entries.filter { permessi.vede(it.modulo) }
+                            // Fase 8 (§9.5): una funzione spenta sparisce dal menu di tutti (il server mette anche il permesso a 0).
+                            val voci = Sezione.entries.filter { permessi.vede(it.modulo) && it.modulo !in sessione.interfaccia.funzioniSpente }
                             ModalNavigationDrawer(
                                 drawerState = cassetto,
                                 // Si apre dal pulsante Menu e dal bordo; aperto, si chiude anche scorrendo a sinistra.
@@ -528,7 +569,8 @@ private fun Wisper(archivio: Archivio, attivita: ComponentActivity) {
                                             utente = sessione.utente,
                                             voci = voci,
                                             attiva = sezioneDiRotta(cima, sezione),
-                                            numeri = mapOf(
+                                            // Fase 8 (§8.6): con un server della fase 8 i numerini li conta lui, con una regola sola.
+                                            numeri = dashboardLetta?.numerini?.let { n -> Sezione.entries.associateWith { s -> n[s.modulo] ?: 0 } } ?: mapOf(
                                                 Sezione.FATTURAZIONE to if (permessi.costi) (dashboardLetta?.fase4?.clientiDaFatturare ?: daFatturare) else 0,
                                                 // Fase 5 (§16.18): i ticket che nessuno ha preso; i documenti da approvare, solo per chi approva.
                                                 Sezione.TICKET to (dashboardLetta?.fase5?.ticketNonAssegnati ?: 0),
@@ -541,6 +583,9 @@ private fun Wisper(archivio: Archivio, attivita: ComponentActivity) {
                                                 // Fase 7 (§11.1): da mandare oggi più preparati non mandati; da guardare del portale.
                                                 Sezione.COMUNICAZIONI to (dashboardLetta?.fase7?.numerinoComunicazioni ?: 0),
                                                 Sezione.PORTALE to (dashboardLetta?.fase7?.portaleDaGuardare ?: 0),
+                                                // Fase 8 (§8.6): i collegamenti in Errore, solo per il titolare e chi ha Amministrazione: Modifica.
+                                                Sezione.INTEGRAZIONI to if (sessione.utente.ruolo == eu.stgm.wisper.rapportino.Ruoli.TITOLARE || permessi.modifica(eu.stgm.wisper.rapportino.Moduli.AMMINISTRAZIONE))
+                                                    (dashboardLetta?.integrazioniErrore ?: 0) else 0,
                                             ),
                                             esterno = if (sessione.esterno) sessione.interfaccia.esternoNome.ifBlank { "collaboratore" } else "",
                                             collegato = aggiornamento.errore.isBlank() && aggiornamento.ultimo != null,
@@ -674,6 +719,7 @@ private fun Wisper(archivio: Archivio, attivita: ComponentActivity) {
                         dati = dati,
                         onChiudi = { foglioTu = null },
                         onApp = { foglioTu = null; nav.vai("amm/app") },
+                        onVai = { r -> foglioTu = null; nav.vai(r) },
                         onUscito = { foglioTu = null; aCasa() },
                         modoIniziale = modoTu,
                     )
@@ -704,7 +750,7 @@ private fun PaginaSezione(
     // Una pagina del modulo che il ruolo non vede: la scheda calma "Non hai il permesso".
     // L'app (tema, visita, versione) è di tutti.
     val modulo = sezioneDiRotta(rotta, sezione).modulo
-    if (rotta != "amm/app" && permessi.livelli.isNotEmpty() && !permessi.vede(modulo)) {
+    if (rotta != "amm/app" && rotta?.startsWith("tu/") != true && permessi.livelli.isNotEmpty() && !permessi.vede(modulo)) {
         NonPermesso(if (rotta != null) ({ nav.indietro() }) else null)
         return
     }
@@ -726,8 +772,15 @@ private fun PaginaSezione(
             Sezione.COLLABORATORI -> eu.stgm.wisper.ui.SchermataCollaboratori(dati, nav)
             Sezione.COMUNICAZIONI -> eu.stgm.wisper.ui.SchermataComunicazioni(dati, nav)
             Sezione.PORTALE -> eu.stgm.wisper.ui.SchermataPortale(dati, nav)
+            Sezione.INTEGRAZIONI -> eu.stgm.wisper.ui.SchermataIntegrazioni(dati, nav)
             Sezione.AMMINISTRAZIONE -> SchermataAmministrazione(dati, archivio, nav)
         }
+        // Fase 8: integrazioni, Tutto quello che c'è da fare, il calendario in altre app, le pagine di Tu (docs/gestionale/fase8.md §15.1)
+        rotta == "integrazioni" -> eu.stgm.wisper.ui.SchermataIntegrazioni(dati, nav)
+        rotta.startsWith("integrazione/") -> eu.stgm.wisper.ui.SchermataIntegrazione(dati, nav, rotta.removePrefix("integrazione/"))
+        rotta == "tutto" -> eu.stgm.wisper.ui.SchermataTutto(dati, nav)
+        rotta == "calendario-altre" -> eu.stgm.wisper.ui.SchermataCalendarioAltre(dati, nav)
+        rotta.startsWith("tu/") -> PaginaAmministrazione("tu-" + rotta.removePrefix("tu/"), dati, archivio, nav, tema, onTema, onVisita)
         // Fase 7: comunicazioni, modelli, portale clienti (docs/gestionale/fase7.md §12)
         rotta == "comunicazioni" -> eu.stgm.wisper.ui.SchermataComunicazioni(dati, nav)
         rotta.startsWith("comunicazione/") -> eu.stgm.wisper.ui.SchermataComunicazione(dati, nav, rotta.removePrefix("comunicazione/"))

@@ -112,6 +112,7 @@ function postino(d) {
       case 'postinoEmail': risposta = postinoEmail(d); break;
       case 'postinoCopia': risposta = postinoCopia(d); break;
       case 'postinoFoglio': risposta = postinoFoglio(d); break;
+      case 'postinoImpronta': risposta = postinoImpronta(d); break;
       case 'postinoProva': risposta = { ok: true, quando: quando(new Date()), rimaste: MailApp.getRemainingDailyQuota() }; break;
       default: throw new Error('Azione sconosciuta: ' + d.azione);
     }
@@ -160,6 +161,35 @@ function postinoCopia(d) {
   var file = dove.createFile(Utilities.newBlob(byte, d.mime || 'application/octet-stream', nome));
   PropertiesService.getScriptProperties().setProperty('ULTIMA_COPIA_' + cartella.toUpperCase(), String(new Date().getTime()));
   return { ok: true, id: file.getId() };
+}
+
+/**
+ * L'impronta (byte e MD5) di una copia gia' su Drive, per la prova automatica
+ * del server (fase8.md §9.10): dice se la copia fuori casa e' uguale a quella
+ * mandata. Legge soltanto.
+ */
+function postinoImpronta(d) {
+  var cartella = testo(d.cartella);
+  if (['database', 'file'].indexOf(cartella) < 0) throw new Error('Cartella delle copie non valida: ' + cartella);
+  var nome = testo(d.nome);
+  if (!nome || /[\/\\]/.test(nome)) throw new Error('Nome del file non valido');
+  var dove = sottocartella(sottocartella(cartellaRadice(), 'Copie NAS'), cartella);
+  var trovati = dove.getFilesByName(nome);
+  var file = null;
+  while (trovati.hasNext() && !file) {
+    var f = trovati.next();
+    if (!f.isTrashed()) file = f;
+  }
+  if (!file && dove.getFilesByName(nome + '.parte1').hasNext()) {
+    // Oltre 15 MB il server la manda a pezzi: rimetterli insieme qui sfora la memoria dello script.
+    throw new Error('Copia in piu\' pezzi: l\'impronta si controlla solo sui file interi');
+  }
+  if (!file) throw new Error('File non trovato: ' + nome);
+  var byte = file.getBlob().getBytes();
+  var md5 = Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, byte).map(function (b) {
+    return ((b & 0xff) + 0x100).toString(16).slice(1);
+  }).join('');
+  return { ok: true, byte: byte.length, md5: md5 };
 }
 
 /**

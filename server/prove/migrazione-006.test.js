@@ -12,7 +12,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { cartellaNuova, COLONNE_007 } = require('./aiuto');
+const { cartellaNuova, COLONNE_DOPO_007: COLONNE_007 } = require('./aiuto');
 const { Database } = require('../src/db');
 const { Wisper } = require('../src/wisper');
 const PRIMA = require('./migrazione-006/prima.json');
@@ -88,7 +88,7 @@ const comeTitolare = fn => w.come({ utente: w.titolare(), permessi: w.permessiDi
 
 test('migrazione 006: versione 6, la copia wisper.db.prima-6 com\'era; le tabelle di prima riga per riga uguali (le colonne nuove vuote)', () => {
   assert.equal(PRIMA.versione, '0.8.0');
-  assert.equal(w.db.versione(), 7);
+  assert.equal(w.db.versione(), 8);
   const copia = new Database(path.join(cartella, 'wisper.db.prima-6'));
   assert.equal(copia.versione(), 5, 'la copia e\' com\'era prima');
   copia.chiudi();
@@ -191,7 +191,7 @@ test('il costo delle commesse: le parti di prima uguali al centesimo; il totale 
 });
 
 test('i soldi della Dashboard del titolare uguali al centesimo (con l\'orologio di prima)', () => {
-  const soldi = comeTitolare(() => w.dashboard({})).numeri.soldi;
+  const soldi = comeTitolare(() => w.dashboard({ tutto: true })).numeri.soldi;
   contiene(soldi, PRIMA.soldi, 'soldi');
   assert.equal(soldi.compensiDaFatturare, 0, 'la voce nuova: nessun collaboratore');
 });
@@ -221,6 +221,6 @@ test('riaperto il server: la migrazione non si rifa\'', () => {
   const persone = w.db.riga('SELECT COUNT(*) n FROM persone').n;
   w.chiudi();
   w = new Wisper({ dati: cartella });
-  assert.equal(w.db.versione(), 7);
+  assert.equal(w.db.versione(), 8);
   assert.equal(w.db.riga('SELECT COUNT(*) n FROM persone').n, persone);
 });

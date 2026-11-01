@@ -1658,6 +1658,22 @@ class Archivio(private val ctx: Context) : Dati {
         )
     }
 
+    // ------------------------------------------------------------- fase 8: integrazioni, amministrazione, controlli
+
+    /** Tutto in diretta (fase8.md §13): dopo le scritture si rilegge la Dashboard; le impostazioni e le funzioni rileggono anagrafiche e chi sono. */
+    override val fase8: eu.stgm.wisper.rapportino.ServizioFase8 by lazy {
+        eu.stgm.wisper.rapportino.ServizioFase8(
+            ponte, ctx.cacheDir,
+            object : EsecutoreFase4 {
+                override suspend fun <T> esegui(lavoro: suspend () -> T): Result<T> = inDiretta { lavoro() }
+            },
+            dopoScrittura = { aggiornaDashboard() },
+            impostazioniCambiate = { provaONull { rileggiAnagrafiche() } },
+            chiSonoCambiato = { provaONull { aggiornaIo() }; aggiornaDashboard() },
+            scaricaEsportazione = { id -> ponte.esportazione(id) },
+        )
+    }
+
     /** Gli id dei messaggi nati qui (idLocale → id del server): non sono dati personali, restano anche dopo l'uscita. */
     private val invio7 by lazy { eu.stgm.wisper.rapportino.InvioFase7(ponte, Scaffale(File(ctx.filesDir, "fase7"), prefisso = "f7id-")) }
 

@@ -224,14 +224,19 @@ module.exports = {
 
   /** Nomi e revisioni che servono per mandare un elenco di documenti. */
   aiutiDocumenti(righe) {
-    const a = { clienti: {}, commesse: {}, sedi: {}, ticket: {}, contratti: {}, categorie: {}, utenti: {}, versioni: {}, scadenze: {} };
-    this.db.righe('SELECT id, nome FROM soggetti').forEach(s => { a.clienti[s.id] = s.nome; });
-    this.db.righe('SELECT id, descrizione FROM commesse').forEach(m => { a.commesse[String(m.id).toUpperCase()] = m; });
-    this.db.righe('SELECT id, nome, tipo FROM sedi').forEach(s => { a.sedi[s.id] = s.nome; });
-    this.db.righe('SELECT id, numero FROM ticket').forEach(t => { a.ticket[t.id] = t.numero; });
-    this.db.righe('SELECT id, numero FROM contratti').forEach(t => { a.contratti[t.id] = t.numero; });
-    this.db.righe('SELECT * FROM documento_categorie').forEach(c => { a.categorie[c.id] = c; });
-    this.db.righe('SELECT id, nome FROM utenti').forEach(u => { a.utenti[u.id] = u.nome; });
+    // Fase 8 (prova di carico): le mappe dei nomi una volta sola dentro un'esportazione o una Dashboard (ricordata).
+    const n = this.ricordata('aiutiDocumenti', () => {
+      const x = { clienti: {}, commesse: {}, sedi: {}, ticket: {}, contratti: {}, categorie: {}, utenti: {} };
+      this.db.righe('SELECT id, nome FROM soggetti').forEach(s => { x.clienti[s.id] = s.nome; });
+      this.db.righe('SELECT id, descrizione FROM commesse').forEach(m => { x.commesse[String(m.id).toUpperCase()] = m; });
+      this.db.righe('SELECT id, nome, tipo FROM sedi').forEach(s => { x.sedi[s.id] = s.nome; });
+      this.db.righe('SELECT id, numero FROM ticket').forEach(t => { x.ticket[t.id] = t.numero; });
+      this.db.righe('SELECT id, numero FROM contratti').forEach(t => { x.contratti[t.id] = t.numero; });
+      this.db.righe('SELECT * FROM documento_categorie').forEach(c => { x.categorie[c.id] = c; });
+      this.db.righe('SELECT id, nome FROM utenti').forEach(u => { x.utenti[u.id] = u.nome; });
+      return x;
+    });
+    const a = { clienti: n.clienti, commesse: n.commesse, sedi: n.sedi, ticket: n.ticket, contratti: n.contratti, categorie: n.categorie, utenti: n.utenti, versioni: {}, scadenze: {} };
     const ids = righe.map(d => Number(d.id));
     if (ids.length) {
       const lista = ids.join(',');
@@ -379,6 +384,9 @@ module.exports = {
     }
     // La ricerca (§5.5): tutte le parole, senza badare a maiuscole, accenti e spazi doppi; prima i titoli che cominciano con la parola.
     const cerca = D.pulisciRicerca(d.testo);
+    // Fase 8 (§6.2): poi quelli trovati dentro i file (dentro: di base vero con RICERCA_FILE), solo fra quelli che si vedono.
+    const trovati = new Map();
+    const visibili = righe;
     if (cerca) {
       const parole = cerca.split(' ');
       righe = righe.filter(x => {
@@ -396,11 +404,28 @@ module.exports = {
         if (ax !== ay) return ax - ay;
         return String(y.modificato || '') < String(x.modificato || '') ? -1 : String(y.modificato || '') > String(x.modificato || '') ? 1 : y.id - x.id;
       });
+      const dentro = d.dentro === undefined ? this.ricercaFileAccesa() : si(d.dentro);
+      if (dentro) {
+        const dentroFile = this.cercaDentro(d.testo, visibili, new Set(righe.map(r => r.id)));
+        trovati.termini = dentroFile.termini;
+        for (const x of dentroFile) {
+          trovati.set(x.riga.id, x.trovato);
+          righe.push(x.riga);
+        }
+      }
     }
     const quanti = righe.length;
     const pagine = Math.max(1, Math.ceil(quanti / PER_PAGINA));
     const pagina = Math.min(Math.max(1, Math.round(numero(d.pagina)) || 1), pagine);
-    const documenti = righe.slice((pagina - 1) * PER_PAGINA, pagina * PER_PAGINA).map(x => this.documentoDaRiga(x, a));
+    // Fase 8: tutte: true (le esportazioni) tutte le righe insieme, senza pagine.
+    const nellaPagina = d.tutte === true ? righe : righe.slice((pagina - 1) * PER_PAGINA, pagina * PER_PAGINA);
+    // Fase 8: gli estratti dei file solo per i documenti di questa pagina (gia' filtrati coi permessi).
+    if (trovati.size) this.estrattiDentro(trovati.termini, nellaPagina.filter(x => trovati.has(x.id)).map(x => trovati.get(x.id)));
+    const documenti = nellaPagina.map(x => {
+      const o = this.documentoDaRiga(x, a);
+      if (trovati.has(x.id)) o.trovato = trovati.get(x.id);
+      return o;
+    });
     const out = { ok: true, pagina, pagine, quanti, conteggi, documenti };
     out.daWisper = testo(d.idCliente) || testo(d.idCommessa) || testo(d.idSede) ? this.daWisper(d) : [];
     return out;
@@ -464,6 +489,9 @@ module.exports = {
   documentoCompleto(d) {
     const a = this.aiutiDocumenti([d]);
     const o = this.documentoDaRiga(d, a);
+    // Fase 8 (§6.3): la riga calma "Testo letto il 21/10 · 12 pagine" della revisione che si apre.
+    const daAprire = this.statoDocumento(d, a.versioni[d.id]).daAprire;
+    o.lettura = daAprire ? this.letturaDocumento(daAprire.file_id) : null;
     const io = this.chi().utente ? this.chi().utente.id : null;
     const approva = this.puoApprovareDocumenti();
     const vive = (a.versioni[d.id] || []).filter(v => !v.tolta);
@@ -1315,6 +1343,8 @@ module.exports = {
         if (fs.existsSync(p)) fs.rmSync(p);
       } catch (e) { /* resta sul disco: la riga dice comunque che e' stato tolto */ }
       this.aggiorna('file', f.id, { svuotato: ora });
+      // Fase 8 (§12.4): un file tolto per sempre esce anche dalla ricerca dentro i file.
+      this.togliLettura(f.id);
     }
     this.annota('file', '', null, null, 'cestino svuotato: ' + vecchi.length + ' file');
     return { ok: true, tolti: vecchi.length, mb: mbTot };

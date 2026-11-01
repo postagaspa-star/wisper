@@ -116,7 +116,7 @@ test('permessi: le GET non scrivono; /carica e /file come le altre (nelle prove 
 // ------------------------------------------------------------------ Dashboard
 
 test('Dashboard del titolare: le voci nuove con le frasi dell\'accordo e i numeri', async () => {
-  const d = await chi.titolare('dashboard');
+  const d = await chi.titolare('dashboard', { tutto: true });
   const tutte = [].concat(d.urgenti, d.settimana, d.pianificare);
   const tk14 = d.urgenti.find(v => v.tipo === 'ticket' && v.titolo === 'TK/2026/0014 urgente: Scatta il generale MT');
   assert.ok(tk14);
@@ -157,7 +157,7 @@ test('Dashboard del titolare: le voci nuove con le frasi dell\'accordo e i numer
 });
 
 test('Dashboard del collaboratore e di lettura: i suoi ticket e quelli da prendere, i suoi interventi; niente contratti, niente spazio', async () => {
-  const m = await chi.collaboratore('dashboard');
+  const m = await chi.collaboratore('dashboard', { tutto: true });
   assert.ok(m.urgenti.some(v => v.titolo === 'TK/2026/0014 urgente: Scatta il generale MT'), 'urgente da prendere');
   // Il suo intervento di oggi: tra le urgenti se è già in ritardo, altrimenti in settimana (mai in tutte e due).
   const suo13 = v => v.collegamento && v.collegamento.pagina === 'ticket' && v.collegamento.id === 13;
@@ -167,7 +167,7 @@ test('Dashboard del collaboratore e di lettura: i suoi ticket e quelli da prende
   assert.equal(tutte.some(v => /risolto: da chiudere/.test(v.titolo)), false, 'non chiude');
   for (const k of ['contratti', 'spazio', 'soldi']) assert.equal(k in m.numeri, false, k);
   assert.ok(m.numeri.ticket);
-  const l = await chi.lettura('dashboard');
+  const l = await chi.lettura('dashboard', { tutto: true });
   assert.equal('spazio' in l.numeri, false);
   assert.ok(l.numeri.contratti, 'lettura vede i contratti (costi 1)');
 });

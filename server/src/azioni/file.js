@@ -41,6 +41,22 @@ function fileDaRiga(f) {
   };
 }
 
+/** Il lato piu' lungo di un PNG o di un JPG in pixel (null se non si capisce). */
+function latoImmagine(b) {
+  if (b.length > 24 && b.readUInt32BE(0) === 0x89504E47) return Math.max(b.readUInt32BE(16), b.readUInt32BE(20));
+  if (b.length > 4 && b[0] === 0xFF && b[1] === 0xD8) {
+    let i = 2;
+    while (i + 9 < b.length) {
+      if (b[i] !== 0xFF) return null;
+      const m = b[i + 1];
+      const lung = b.readUInt16BE(i + 2);
+      if (m >= 0xC0 && m <= 0xCF && m !== 0xC4 && m !== 0xC8 && m !== 0xCC) return Math.max(b.readUInt16BE(i + 5), b.readUInt16BE(i + 7));
+      i += 2 + lung;
+    }
+  }
+  return null;
+}
+
 module.exports = {
   percorsoFile(id) {
     return path.join(this.cartellaFile, id);
@@ -90,6 +106,20 @@ module.exports = {
    * d.idFile nasce sul telefono ed e' lo stesso a ogni tentativo: se il file
    * c'e' gia' non se ne crea un secondo.
    */
+  /** Il logo: PNG o JPG fino a 1 MB, almeno 300 px sul lato piu' lungo; quello di prima va nel cestino. */
+  caricaLogo(d, dati, mime, estensione) {
+    if (this.livello('amministrazione') < 2) throw senzaPermesso('cambiare il logo dello studio');
+    if (['image/png', 'image/jpeg'].indexOf(mime) < 0 || dati.length > 1048576) throw new Rifiuto('Il logo deve essere un PNG o un JPG di al massimo 1 MB');
+    const lato = latoImmagine(dati);
+    if (lato !== null && lato < 300) throw new Rifiuto('Il logo è troppo piccolo: serve almeno 300 px di lato');
+    const prima = testo(this.leggiImpostazioni().STUDIO_LOGO);
+    const f = this.fileGiaArrivato('logo', d.idFile, '', '') || this.salvaFile({ dati, nome: 'logo' + estensione, mime, tipo: 'logo', idClient: testo(d.idFile) });
+    if (prima && prima !== f.id) this.aggiorna('file', prima, { cestinato: adesso() }, 'id', 'logo cambiato');
+    this.salvaImpostazioni({ STUDIO_LOGO: f.id });
+    this.annota('impostazioni', 'STUDIO_LOGO', null, { file: f.id }, 'logo cambiato');
+    return { id: f.id, url: urlFile(f.id) };
+  },
+
   caricaFile(d) {
     const tipo = d.tipo;
     // Fase 5: la foto di un ticket, anche gia' arrivata con /carica (idFileCaricato, senza base64).
@@ -104,6 +134,9 @@ module.exports = {
     if (tipo === 'ticket') return this.caricaFotoTicket(d, dati, mime);
     // Fase 6: la foto del contachilometri e le foto di un guasto (anche dalla coda del telefono, con l'idLocale).
     if (tipo === 'km' || tipo === 'guasto') return this.caricaFotoMezzo(d, dati, mime, estensione);
+
+    // Fase 8 (§9.3, §13.7): il logo dello studio (PNG o JPG fino a 1 MB, almeno 300 px di lato), in STUDIO_LOGO.
+    if (tipo === 'logo') return this.caricaLogo(d, dati, mime, estensione);
 
     if (tipo === 'firmaTecnico') {
       const f = this.fileGiaArrivato('firmaTecnico', d.idFile, '', '') || (this.controllaSpazio('lavoro'), null) ||
@@ -230,6 +263,8 @@ module.exports = {
   puoLeggereFile(f) {
     // Fase 5: un file arrivato con /carica e non ancora legato lo vede solo chi l'ha caricato.
     if (f.tipo === 'caricato') return !!this.chi().utente && f.caricato_da === this.chi().utente.id;
+    // Fase 8: il logo dello studio lo vede chiunque sia entrato (menu, PDF, portale).
+    if (f.tipo === 'logo') return !!this.chi().utente || this.chi().sistema;
     // Fase 6: le foto dei km e dei guasti chi vede i mezzi; la firma di una consegna chi vede i dati personali della persona.
     if (f.tipo === 'km' || f.tipo === 'guasto') return this.livello('mezzi') >= 1;
     if (f.tipo === 'firma_consegna') {

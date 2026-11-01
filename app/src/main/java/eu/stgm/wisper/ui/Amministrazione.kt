@@ -98,80 +98,11 @@ internal val ambitoAmm = MainScope()
 
 // ---------------------------------------------------------------------------------- l'elenco
 
+/** L'elenco di Amministrazione: dalla fase 8 in cinque gruppi (fase8.md §9.2). */
 @Composable
-fun SchermataAmministrazione(dati: Dati, archivio: Archivio, nav: Navigatore) {
-    val c = W.colori
-    val ana by dati.anagrafiche.collectAsStateWithLifecycle()
-    val copie = rememberLettura(Unit, 0) { dati.copie() }
-    // Fase 3: i veicoli col loro euro al km (si leggono col modulo Spese).
-    val vedeSpese = LocalPermessi.current.vede(Moduli.SPESE)
-    val veicoli = rememberLettura(vedeSpese, 0) { if (vedeSpese) dati.veicoli() else Result.failure(Exception("")) }
-    val anno = LocalDate.now().year
-    val numCommesse = ana.numerazione("commessa")?.prossimoNumero(anno) ?: ana.prossimoCodiceCommessa(anno)
-    val numRapportini = ana.numerazione("rapportino")?.prossimoNumero(anno)
-    val voci = listOf(
-        VoceAmm("Dati dello studio", "Intestazione dei PDF, la tua firma", Icone.scudo, "studio"),
-        // Fase 4: le regole delle fatture e la conferma del commercialista.
-        VoceAmm(
-            "Impostazioni fiscali",
-            if (eu.stgm.wisper.rapportino.RegoleFiscali.da(ana.impostazioni).confermate) "Regole confermate dal commercialista" else "Regole da confermare col commercialista",
-            Icone.fatturazione, "fiscale",
-        ).takeIf { LocalPermessi.current.vede(Moduli.FATTURAZIONE) },
-        VoceAmm(
-            "Utenti",
-            if (ana.utenti.isEmpty()) "Chi entra in Wisper e con quale ruolo"
-            else Testo.quanti(ana.utenti.size, "persona", "persone") + " · " + Testo.quanti(ana.utenti.count { it.attivo }, "attiva", "attive"),
-            Icone.clienti, "utenti",
-        ),
-        VoceAmm("Ruoli e permessi", "Titolare, Amministrazione, Collaboratore, Lettura", Icone.lucchetto, "permessi"),
-        VoceAmm("Numerazioni", "Commesse $numCommesse" + (numRapportini?.let { " · Rapportini $it" } ?: "") + " · le fatture le numera il programma", Icone.numero, "numerazioni"),
-        VoceAmm(
-            "Tariffe e rimborsi",
-            listOfNotNull(Numeri.leggi(ana.impostazione("EURO_KM"))?.let { "Rimborso km ${Numeri.scrivi(it)} €" }, ana.costoOrario?.let { "costo orario ${Numeri.scrivi(it)} €" })
-                .joinToString(", ").ifBlank { "Rimborso km, costo orario" },
-            Icone.fatturazione, "tariffe",
-        ),
-        VoceAmm(
-            "Veicoli e rimborso km",
-            (veicoli as? Lettura.Pronta)?.dato?.veicoli?.firstOrNull()?.let { v -> v.nome + " · " + v.euroKmTesto + (v.annoAci?.let { " (ACI $it)" } ?: "") }
-                ?: "Il veicolo, il suo €/km, le tabelle ACI",
-            Icone.auto, "veicoli",
-        ).takeIf { vedeSpese },
-        // Fase 5 (fase5.md §12.4): le categorie dei documenti e lo spazio sul NAS, anche sul telefono.
-        VoceAmm("Categorie dei documenti", "Approvazione, chi le vede, scadenza proposta", Icone.documento, "categorie").takeIf { LocalPermessi.current.vede(Moduli.DOCUMENTI) },
-        // Fase 6 (§12.8): le impostazioni di persone, mezzi e collaboratori; i tipi di formazione.
-        VoceAmm("Persone, mezzi e collaboratori", "Santo patrono, conservazione, tarature, DURC e visura", Icone.persona, "persone").takeIf { LocalPermessi.current.vede(Moduli.PERSONE) },
-        VoceAmm("Tipi di formazione", "PES, PAV, PEI, primo soccorso: ogni quanto e il preavviso", Icone.formazione, "formazione").takeIf { LocalPermessi.current.vede(Moduli.PERSONE) },
-        // Fase 7 (§12.6): le schede Portale clienti e Comunicazioni.
-        VoceAmm("Portale clienti", "Indirizzo, script del portale, durate, informativa, spegnere", Icone.globo, "portale").takeIf { LocalPermessi.current.vede(Moduli.PORTALE) },
-        VoceAmm("Comunicazioni", "WhatsApp sul telefono, promemoria, quello che non è collegato", Icone.fumetto, "comunicazioni").takeIf { LocalPermessi.current.vede(Moduli.COMUNICAZIONI) },
-        VoceAmm("Spazio sul NAS", "Dove va lo spazio, copia fuori casa, cestino", Icone.disco, "spazio"),
-        VoceAmm("Registro attività", "Chi ha cambiato cosa", Icone.lista, "registro"),
-        VoceAmm(
-            "Copie ed esportazioni",
-            (copie as? Lettura.Pronta)?.dato?.ultima?.let { u -> if (u.riuscita) "Copia ${quandoCopia(u.quando).replaceFirstChar { it.lowercase() }}" else "L'ultima copia non è riuscita" }
-                ?: "Copie di sicurezza, file per Excel",
-            Icone.scarica, "copie",
-        ),
-        VoceAmm("Cestino", "File tolti, recuperabili", Icone.cestino, "cestino"),
-        VoceAmm("L'app", "Tema, visita guidata, versione", Icone.amministrazione, "app"),
-    ).filterNotNull()
-    Column(
-        Modifier.fillMaxSize().background(c.fondo).verticalScroll(rememberScrollState()).padding(MarginePagina).padding(bottom = 40.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
-    ) {
-        Testata(onIndietro = { nav.indietro() })
-        TitoloPagina("Amministrazione")
-        Scheda(orizzontale = 18.dp, verticale = 0.dp, raggio = 22.dp, spazio = 0.dp) {
-            voci.forEachIndexed { i, v ->
-                if (i > 0) LineaElenco()
-                RigaVoce(v.titolo, sotto = v.stato, icona = v.icona, onClick = { nav.vai("amm/${v.rotta}") })
-            }
-        }
-    }
+fun SchermataAmministrazione(dati: Dati, @Suppress("UNUSED_PARAMETER") archivio: Archivio, nav: Navigatore) {
+    ElencoAmministrazione8(dati, nav)
 }
-
-private class VoceAmm(val titolo: String, val stato: String, val icona: ImageVector, val rotta: String)
 
 /** Le pagine di Amministrazione: "studio", "utenti", "utente/<id>", "permessi", … */
 @Composable
@@ -188,15 +119,27 @@ fun PaginaAmministrazione(
     val indietro = { nav.indietro() }
     when {
         quale == "studio" -> PaginaStudio(dati, puo, indietro)
+        // Fase 8 (fase8.md §9, §15.1): le pagine nuove; "tu-…" sono quelle del foglio Tu, di tutti.
+        quale == "aspetto" || quale == "tu-aspetto" -> PaginaApp(archivio, tema, onTema, onVisita, indietro, titolo = "Aspetto")
+        quale == "funzioni" -> PaginaFunzioni(dati, indietro)
+        quale == "impostazioni" -> PaginaImpostazioniGenerali(dati, nav, indietro)
+        quale == "notifiche" -> PaginaNotifiche(dati, perLoStudio = true, onIndietro = indietro)
+        quale == "tu-notifiche" -> PaginaNotifiche(dati, perLoStudio = false, onIndietro = indietro)
+        quale == "sicurezza" -> PaginaSicurezza(dati, nav, indietro)
+        quale == "importa" -> PaginaImportaEsporta(dati, nav, indietro)
+        quale == "importa-clienti" -> PaginaImportaClienti(dati, indietro)
+        quale == "stato" -> PaginaStatoSistema(dati, nav, indietro)
+        quale == "controlli" -> PaginaListaControllo(dati, indietro)
+        quale == "formato-commessa" -> PaginaFormatoCommessa(dati, indietro)
         quale == "fiscale" -> PaginaImpostazioniFiscali(dati, puo, indietro)
         quale == "tariffe" -> PaginaTariffe(dati, puo, indietro)
         quale == "app" -> PaginaApp(archivio, tema, onTema, onVisita, indietro)
         quale == "utenti" -> PaginaUtenti(dati, nav, puo)
         quale.startsWith("utente/") -> PaginaUtente(dati, nav, quale.removePrefix("utente/"), puo, indietro)
         quale == "permessi" -> PaginaPermessi(dati, puo, indietro)
-        quale == "numerazioni" -> PaginaNumerazioni(dati, puo, indietro)
+        quale == "numerazioni" -> PaginaNumerazioni(dati, puo, indietro) { nav.vai("amm/formato-commessa") }
         quale == "registro" -> PaginaRegistro(dati, indietro)
-        quale == "copie" -> PaginaCopie(dati, puo, indietro)
+        quale == "copie" -> PaginaCopieRipristino(dati, indietro)
         quale == "cestino" -> PaginaCestino(dati, puo, indietro)
         quale == "categorie" -> PaginaCategorie(dati, puo, indietro)
         quale == "spazio" -> PaginaSpazio(dati, puo, indietro)
@@ -659,7 +602,7 @@ private fun Livelli(cosa: String, livello: Int, attivo: Boolean, onScelta: (Int)
 // ---------------------------------------------------------------------------------- numerazioni
 
 @Composable
-private fun PaginaNumerazioni(dati: Dati, puo: Boolean, onIndietro: () -> Unit) {
+private fun PaginaNumerazioni(dati: Dati, puo: Boolean, onIndietro: () -> Unit, onFormatoCommessa: () -> Unit = {}) {
     val c = W.colori
     val avvisi = LocalAvvisi.current
     val ana by dati.anagrafiche.collectAsStateWithLifecycle()
@@ -677,7 +620,10 @@ private fun PaginaNumerazioni(dati: Dati, puo: Boolean, onIndietro: () -> Unit) 
         TitoloPagina("Numerazioni")
         elenco.forEach { n ->
             Scheda(orizzontale = 18.dp, verticale = 18.dp, raggio = 22.dp, spazio = 12.dp) {
-                Etichetta(when (n.tipo) { "commessa" -> "Commesse"; "rapportino" -> "Rapportini"; "preventivo" -> "Preventivi"; else -> n.tipo })
+                Etichetta(when (n.tipo) {
+                    "commessa" -> "Commesse"; "rapportino" -> "Rapportini"; "preventivo" -> "Preventivi"; "ticket" -> "Ticket"
+                    "contratto" -> "Contratti di assistenza"; "incarico" -> "Incarichi agli esterni"; "attrezzatura" -> "Attrezzature"; else -> n.tipo
+                })
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(
                         n.prossimoNumero(anno), style = Testi.forte.copy(fontSize = 16.sp), color = if (c.scuro) c.suGiallo else c.giallo,
@@ -695,9 +641,11 @@ private fun PaginaNumerazioni(dati: Dati, puo: Boolean, onIndietro: () -> Unit) 
                         Text(if (n.annuale) "riparte a gennaio" else "continua da un anno all'altro", style = Testi.forte.copy(fontWeight = FontWeight.Bold), color = c.testo)
                     }
                 }
-                if (puo && ana.numerazioni.isNotEmpty()) PulsanteBordo("Modifica", { modifica = n }, icona = Icone.matita, altezza = 44.dp)
+                // Fase 8 (§9.6): il codice delle commesse si cambia a pezzi, con l'anteprima grande.
+                if (puo && ana.numerazioni.isNotEmpty()) PulsanteBordo("Modifica", { if (n.tipo == "commessa") onFormatoCommessa() else modifica = n }, icona = Icone.matita, altezza = 44.dp)
             }
         }
+        SchedaElenco { RigaVoce("Fatture", sotto = "Il numero lo dà il programma delle fatture", icona = Icone.fatturazione) }
     }
     modifica?.let { n ->
         FoglioNumerazione(n, onSalva = { nuova, fatto ->
@@ -1086,106 +1034,6 @@ private fun quandoCopia(istante: String): String {
     }
 }
 
-@Composable
-private fun PaginaCopie(dati: Dati, puo: Boolean, onIndietro: () -> Unit) {
-    val c = W.colori
-    val ctx = LocalContext.current
-    val avvisi = LocalAvvisi.current
-    val scope = rememberCoroutineScope()
-    var giro by remember { mutableIntStateOf(0) }
-    val lettura = rememberLettura(Unit, giro) { dati.copie() }
-    var copio by remember { mutableStateOf(false) }
-    var esporto by remember { mutableStateOf<String?>(null) }
-
-    fun copiaAdesso() {
-        if (copio) return
-        copio = true
-        scope.launch {
-            dati.copiaAdesso().onSuccess { avvisi.mostra("Copia fatta adesso"); giro++ }.onFailure { avvisi.mostra(it.message ?: "La copia non è riuscita: riprova") }
-            copio = false
-        }
-    }
-
-    Column(
-        Modifier.fillMaxSize().background(c.fondo).verticalScroll(rememberScrollState()).padding(MarginePagina).padding(bottom = 40.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
-    ) {
-        Testata(onIndietro = onIndietro)
-        TitoloPagina("Copie ed esportazioni")
-        when (lettura) {
-            is Lettura.Pronta -> {
-                val u = lettura.dato.ultima
-                if (u == null || u.riuscita) {
-                    Scheda(orizzontale = 18.dp, verticale = 18.dp, raggio = 22.dp, spazio = 6.dp) {
-                        Etichetta("Ultima copia")
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Icon(Icone.scudo, null, tint = if (u != null) c.firmatoTesto else c.tenue, modifier = Modifier.size(22.dp))
-                            Text(u?.let { quandoCopia(it.quando) } ?: "Ancora nessuna copia", style = Testi.titoloSezione.copy(fontSize = 20.sp), color = c.testo)
-                        }
-                        val dove = listOfNotNull(u?.dove?.takeIf { it.isNotBlank() }, if (lettura.dato.foglioAggiornato) "il foglio è aggiornato" else null).joinToString(" · ")
-                        if (dove.isNotBlank()) Text(dove, style = Testi.secondarioGrande, color = c.tenue)
-                    }
-                } else {
-                    Column(
-                        Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(c.rossoTenue).padding(18.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        Etichetta("Ultima copia")
-                        Text("Non è riuscita · " + quandoCopia(u.quando).replaceFirstChar { it.lowercase() }, style = Testi.forteGrande, color = c.rossoTesto)
-                        if (u.dove.isNotBlank()) Text(u.dove, style = Testi.secondarioGrande, color = c.testo2)
-                        if (puo) PulsanteBordo("Riprova", { copiaAdesso() }, icona = Icone.riapri, altezza = 44.dp)
-                    }
-                }
-                if (puo) PulsanteBordo(if (copio) "Copio…" else "Fai una copia adesso", { copiaAdesso() }, Modifier.fillMaxWidth(), icona = Icone.scudo, altezza = 48.dp)
-                if (lettura.dato.elenco.isNotEmpty()) {
-                    Etichetta("Copie")
-                    Scheda(orizzontale = 18.dp, verticale = 0.dp, raggio = 22.dp, spazio = 0.dp) {
-                        lettura.dato.elenco.take(10).forEachIndexed { i, k ->
-                            if (i > 0) LineaElenco()
-                            RigaCopia(k)
-                        }
-                    }
-                }
-            }
-            else -> StatoLettura(lettura) { giro++ }
-        }
-        Etichetta("Esporta per Excel")
-        Scheda(orizzontale = 18.dp, verticale = 0.dp, raggio = 22.dp, spazio = 0.dp) {
-            val perm = LocalPermessi.current
-            (listOf("rapportini" to "Rapportini", "clienti" to "Clienti e fornitori", "commesse" to "Commesse") +
-                (if (perm.vede(Moduli.PREVENTIVI)) listOf("preventivi" to "Preventivi") else emptyList()) +
-                (if (perm.vede(Moduli.ATTIVITA)) listOf("attivita" to "Attività") else emptyList())).forEachIndexed { i, (cosa, nome) ->
-                if (i > 0) LineaElenco()
-                RigaVoce(
-                    nome, sotto = if (esporto == cosa) "Preparo il file…" else "Un file che Excel apre così com'è", icona = Icone.scarica, freccia = false,
-                    onClick = {
-                        if (esporto != null) return@RigaVoce
-                        esporto = cosa
-                        scope.launch {
-                            dati.esporta(cosa)
-                                .onSuccess { f -> Stampa.condividi(ctx, f, "$nome per Excel", "text/csv") }
-                                .onFailure { avvisi.mostra(it.message ?: "Il file non è pronto: riprova") }
-                            esporto = null
-                        }
-                    },
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun RigaCopia(k: CopiaSicurezza) {
-    val c = W.colori
-    Row(Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(quandoCopia(k.quando), style = Testi.forte.copy(fontWeight = FontWeight.Bold), color = if (k.riuscita) c.testo else c.rossoTesto, modifier = Modifier.weight(1f))
-        Text(
-            if (!k.riuscita) "non riuscita" else if (k.byte > 0) Numeri.scrivi(Math.round(k.byte / 100_000.0) / 10.0) + " MB" else "",
-            style = Testi.secondario, color = c.tenue,
-        )
-    }
-}
-
 // ---------------------------------------------------------------------------------- cestino
 
 @Composable
@@ -1236,7 +1084,7 @@ private fun PaginaCestino(dati: Dati, puo: Boolean, onIndietro: () -> Unit) {
  * visita, versione: per tutti), Cambia la password, Esci.
  */
 @Composable
-fun FoglioTu(dati: Dati, onChiudi: () -> Unit, onApp: () -> Unit, onUscito: () -> Unit, modoIniziale: String = "") {
+fun FoglioTu(dati: Dati, onChiudi: () -> Unit, onApp: () -> Unit, onUscito: () -> Unit, modoIniziale: String = "", onVai: (String) -> Unit = { onApp() }) {
     val c = W.colori
     val avvisi = LocalAvvisi.current
     val scope = rememberCoroutineScope()
@@ -1291,8 +1139,10 @@ fun FoglioTu(dati: Dati, onChiudi: () -> Unit, onApp: () -> Unit, onUscito: () -
                     }
                 }
                 Spacer(Modifier.height(4.dp))
-                VoceMenu(Icone.amministrazione, "L'app", onApp)
                 VoceMenu(Icone.lucchetto, "Cambia la password", { modo = "password" })
+                VoceMenu(Icone.campanella, "Notifiche", { onVai("tu/notifiche") })
+                VoceMenu(Icone.pennello, "Aspetto", { onVai("tu/aspetto") })
+                if (LocalPermessi.current.vede(Moduli.ATTIVITA)) VoceMenu(Icone.calendario, "Il calendario in altre app", { onVai("calendario-altre") })
                 VoceMenu(Icone.esci, "Esci", { modo = "esci" })
             }
         }

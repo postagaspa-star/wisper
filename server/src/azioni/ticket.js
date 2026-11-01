@@ -298,12 +298,17 @@ module.exports = {
   // ------------------------------------------------------------------ le risposte
 
   aiutiTicket(righe) {
-    const a = { utenti: {}, clienti: {}, sedi: {}, commesse: {}, contratti: {}, interventi: {}, rapportini: {}, fatture: {} };
-    this.db.righe('SELECT id, nome FROM utenti').forEach(u => { a.utenti[u.id] = u.nome; });
-    this.db.righe('SELECT id, nome FROM soggetti').forEach(s => { a.clienti[s.id] = s.nome; });
-    this.db.righe('SELECT id, nome, indirizzo, citta FROM sedi').forEach(s => { a.sedi[s.id] = s; });
-    this.db.righe('SELECT id, descrizione FROM commesse').forEach(m => { a.commesse[String(m.id).toUpperCase()] = m; });
-    this.db.righe('SELECT id, numero FROM contratti').forEach(c => { a.contratti[c.id] = c.numero; });
+    // Fase 8 (prova di carico): le mappe dei nomi una volta sola dentro un'esportazione o una Dashboard (ricordata).
+    const n = this.ricordata('aiutiTicket', () => {
+      const x = { utenti: {}, clienti: {}, sedi: {}, commesse: {}, contratti: {} };
+      this.db.righe('SELECT id, nome FROM utenti').forEach(u => { x.utenti[u.id] = u.nome; });
+      this.db.righe('SELECT id, nome FROM soggetti').forEach(s => { x.clienti[s.id] = s.nome; });
+      this.db.righe('SELECT id, nome, indirizzo, citta FROM sedi').forEach(s => { x.sedi[s.id] = s; });
+      this.db.righe('SELECT id, descrizione FROM commesse').forEach(m => { x.commesse[String(m.id).toUpperCase()] = m; });
+      this.db.righe('SELECT id, numero FROM contratti').forEach(c => { x.contratti[c.id] = c.numero; });
+      return x;
+    });
+    const a = { utenti: n.utenti, clienti: n.clienti, sedi: n.sedi, commesse: n.commesse, contratti: n.contratti, interventi: {}, rapportini: {}, fatture: {} };
     const ids = righe.map(t => Number(t.id));
     if (ids.length) {
       const lista = ids.join(',');

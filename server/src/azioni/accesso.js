@@ -179,13 +179,28 @@ module.exports = {
       return null;
     }
     const ultimo = Date.parse(s.ultimo_uso);
-    if (adessoMs() - ultimo > GIORNI_SESSIONE * 86400000) {
+    // Fase 8 (§9.8): SESSIONE_GIORNI (180 di base, da 30 a 365) in Amministrazione › Sicurezza.
+    if (adessoMs() - ultimo > this.giorniSessione() * 86400000) {
       this.db.esegui('UPDATE sessioni SET revocata = ? WHERE id = ?', adesso(), s.sessione);
       return null;
     }
     // L'ultimo uso si riscrive al massimo una volta al minuto: non serve di piu'.
     if (adessoMs() - ultimo > 60000) this.db.esegui('UPDATE sessioni SET ultimo_uso = ? WHERE id = ?', adesso(), s.sessione);
     return { utente: utentePubblico(s), sessione: s.sessione, disp: s.s_disp, dispNome: s.s_disp_nome, app: s.s_app };
+  },
+
+  /** Dopo quanti giorni senza uso un dispositivo esce da solo (SESSIONE_GIORNI, letto ogni minuto al massimo). */
+  giorniSessione() {
+    if (!this.cacheSessione || adessoMs() - this.cacheSessione.quando > 60000) {
+      let n = GIORNI_SESSIONE;
+      try {
+        const r = this.db.riga("SELECT valore FROM impostazioni WHERE chiave = 'SESSIONE_GIORNI'");
+        const v = r ? Number(JSON.parse(r.valore)) : NaN;
+        if (v >= 30 && v <= 365) n = v;
+      } catch (e) { /* di base */ }
+      this.cacheSessione = { quando: adessoMs(), n };
+    }
+    return this.cacheSessione.n;
   },
 
   esci() {
@@ -203,18 +218,31 @@ module.exports = {
     controllaPasswordNuova(d.nuova);
     const hash = await hashPassword(d.nuova);
     this.db.transazione(() => {
-      this.aggiorna('utenti', u.id, { password_hash: hash });
+      // Fase 8 (§9.8): la password scelta dalla persona non e' piu' quella iniziale.
+      this.aggiorna('utenti', u.id, { password_hash: hash, password_iniziale: 0, password_il: adesso() });
       this.db.esegui('UPDATE sessioni SET revocata = ? WHERE utente_id = ? AND id <> ? AND revocata IS NULL', adesso(), u.id, c.sessione || 0);
     });
     return { ok: true };
   },
 
   /** Chi sono, cosa posso fare, e quello che serve all'interfaccia. */
-  io() {
+  io(d) {
     const c = this.chi();
     const imp = this.leggiImpostazioni();
     const t = this.titolare();
     const r = this.ioBase(c, imp, t);
+    // Fase 8 (§13.7): le funzioni spente (il menu le nasconde), il nome breve, il logo, l'ora del server.
+    r.interfaccia.funzioniSpente = this.moduliSpenti();
+    r.interfaccia.nomeBreve = testo(imp.STUDIO_NOME_BREVE) || testo(imp.RAGIONE_SOCIALE);
+    r.interfaccia.logo = testo(imp.STUDIO_LOGO) && this.db.riga('SELECT id FROM file WHERE id = ? AND cestinato IS NULL', testo(imp.STUDIO_LOGO)) ? '/file/' + testo(imp.STUDIO_LOGO) : '';
+    r.interfaccia.oraServer = require('../utili').dataOraIso(new Date(adessoMs()));
+    r.interfaccia.pdfLogo = imp.PDF_LOGO === true || imp.PDF_LOGO === 'true';
+    r.interfaccia.pdfPiede = testo(imp.PDF_PIEDE);
+    r.interfaccia.silenzioSera = c.utente ? this.silenzioAdesso(c.utente.id) : false;
+    if (d && testo(d.oraDispositivo)) {
+      const dev = Date.parse(testo(d.oraDispositivo));
+      if (isFinite(dev)) r.interfaccia.differenzaOraSecondi = Math.round((Date.now() - dev) / 1000);
+    }
     // Fase 6: l'esterno sa di quale collaboratore fa parte (la pillola "Esterno · ..." accanto al nome).
     if (this.eEsterno()) {
       const sog = this.mioSoggetto();

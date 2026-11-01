@@ -370,6 +370,12 @@ class PonteServer(
         strade.file(id, chiSono())
     }
 
+    /** Fase 8 (fase8.md §7.1): lo ZIP di Esporta tutto, dalla strada di casa. */
+    suspend fun esportazione(id: String): ByteArray = withContext(Dispatchers.IO) {
+        controllaConfigurazione()
+        strade.esportazione(id, chiSono())
+    }
+
     // ------------------------------------------------------------- email
 
     /**

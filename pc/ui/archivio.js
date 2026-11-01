@@ -182,7 +182,9 @@
 
       // Ricerca (nel server: titolo, cliente, commessa, impianto, riferimento, nome del file) e filtri.
       let attesa = null;
-      const ricerca = cerca(f.testo, 'Cerca titolo, cliente, commessa, impianto', v => {
+      // Fase 8 (§6): con la ricerca dentro i file accesa si cerca anche nel testo.
+      const dentro = S.ana.impostazioni.RICERCA_FILE !== false && S.ana.impostazioni.RICERCA_FILE !== 'false';
+      const ricerca = cerca(f.testo, dentro ? 'Cerca titolo, cliente, commessa, testo dei file' : 'Cerca titolo, cliente, commessa, impianto', v => {
         f.testo = v;
         clearTimeout(attesa);
         attesa = setTimeout(async () => { try { await leggiArchivio(); tabella(area); } catch (e) { avviso(e.message, true); } }, 300);
@@ -270,14 +272,24 @@
         onclick: () => apriPannello(d.id), onkeydown: e => { if (e.key === 'Enter') apriPannello(d.id); },
       },
       h('span', { class: 'titolo-doc' }, iconaDoc(d), h('span', { class: 'doppia' }, h('span', { title: d.titolo }, d.titolo),
-        h('span', null, d.origine === 'collegamento' ? (d.cartella ? 'Cartella' : 'Collegamento') : [T.tipoFile(d.mime, d.nomeFile), T.grandezza(d.byte), d.riferimento].filter(Boolean).join(' · ')))),
+        // Fase 8 (§6.3): trovato dentro il file, la pillola Nel testo qui e l'estratto su una riga sua, larga quanto la tabella.
+        d.trovato ? h('span', { class: 'pill piccola p-giallo' }, 'Nel testo') : h('span', null, d.origine === 'collegamento' ? (d.cartella ? 'Cartella' : 'Collegamento') : [T.tipoFile(d.mime, d.nomeFile), T.grandezza(d.byte), d.riferimento].filter(Boolean).join(' · ')))),
       d.daClassificare ? h('span', null, h('span', { class: 'pill piccola p-ambra' }, 'Da classificare')) : h('span', { class: 't2 taglia', title: d.categoria }, d.categoria),
       h('span', { class: 't2 legato', title: legatoA(d) }, legatoA(d) || '—'),
       h('span', { class: 'stato-doppio' }, pillStatoDoc(d, true), d.daApprovare !== null && d.daApprovare !== undefined && d.statoVisto === 'Valida' ? h('span', { class: 'pill piccola p-giallo' }, 'rev. ' + d.daApprovare + ' da approvare') : null),
       h('span', null, d.scadenza ? h('span', { class: 'pill piccola p-' + T.coloreScadenza(d.scadenza.statoVisto), title: d.scadenza.statoVisto }, d.scadenza.statoVisto) : h('span', { class: 't2' }, '—')),
-      h('span', { class: 't2' }, C.data(String(d.modificato || d.creato || '').slice(0, 10)).slice(0, 5)))]));
+      h('span', { class: 't2' }, C.data(String(d.modificato || d.creato || '').slice(0, 10)).slice(0, 5)),
+      d.trovato ? h('span', { class: 'estratto-riga' }, estratto(d.trovato)) : null)]));
       aggiungi(area, [tab]);
       if (M.lista.pagine > 1) aggiungi(area, [h('p', { class: 'piccolo' }, 'Si vedono i 50 più recenti di ' + M.lista.quanti + ': cerca per trovare gli altri.')]);
+    }
+
+    /** L'estratto di un documento trovato dentro il file: una riga, le parole cercate in grassetto (§6.2-§6.3). */
+    function estratto(t) {
+      const Q = radice.WisperRegoleFase8;
+      const dove = Q.doveTrovato(t);
+      return h('span', { class: 'estratto-doc', title: String(t.estratto || '').replace(/[[\]]/g, '') },
+        Q.pezziEstratto(t.estratto).map(p => (p.forte ? h('b', null, p.testo) : p.testo)), dove ? ' · ' + dove : '');
     }
 
     // ===================================================================== il pannello del documento
@@ -389,6 +401,7 @@
           d.portale && W.Portale ? W.Portale.pillola(d.portale) : null),
         h('h2', { class: 'titolo-pannello' }, d.titolo),
         h('span', { class: 'sotto-titolo' }, [d.categoria, d.dataDocumento ? C.data(d.dataDocumento) : '', d.riferimento].filter(Boolean).join(' · ')),
+        rigaLettura(d),
         respinte,
         d.descrizione ? h('div', { class: 'testo-forte' }, d.descrizione) : null,
         anteprima(d), sorgente, revisioni,
@@ -410,6 +423,25 @@
       const p = h('aside', { class: 'pannello pannello-doc', 'aria-label': 'Il documento ' + d.titolo }, corpo, h('div', { class: 'piede' }, piede));
       gialloPagina(true);
       if (vecchio) { p.style.animation = 'none'; vecchio.replaceWith(p); } else aggiungi(B.$('#sovrapposti'), [p]);
+    }
+
+    /**
+     * Fase 8 (§6.3): "Testo letto il 21/10 · 12 pagine", "Senza testo: è una scansione o un disegno"... Si chiede al server
+     * per il file della revisione valida (letturaFile); se il server non lo sa (una versione di prima), niente riga.
+     */
+    function rigaLettura(d) {
+      if (d.origine === 'collegamento' || !radice.WisperRegoleFase8) return null;
+      const v = versioneAperta(d) || {};
+      const idFile = v.idFile || d.idFile || W.D.idDaUrl(v.url || d.url);
+      if (!idFile) return null;
+      const zona = h('span', { class: 'secondario riga-lettura' });
+      M.letture = M.letture || {};
+      const mostra = l => { zona.textContent = radice.WisperRegoleFase8.statoLettura(l, new Date()); };
+      // Il server della fase 8 la manda già nel documento (lettura); se no la si chiede.
+      if (d.lettura && d.lettura.stato) mostra(d.lettura);
+      else if (M.letture[idFile]) mostra(M.letture[idFile]);
+      else Rete.get('/server/letturaFile?idFile=' + encodeURIComponent(idFile)).then(l => { M.letture[idFile] = l; mostra(l); }).catch(() => null);
+      return zona;
     }
 
     function altro(d, scriveQui) {
