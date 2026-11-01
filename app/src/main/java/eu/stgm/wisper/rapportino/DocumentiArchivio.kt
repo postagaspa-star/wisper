@@ -184,6 +184,8 @@ data class DocArchivio(
     val righe: List<String> = emptyList(),
     val puoApprovare: Boolean = false,
     val mieRespinte: List<Pair<Int, String>> = emptyList(),
+    /** Fase 7 (fase7.md §10.4): pubblicato nel portale e visto dal cliente. */
+    val portale: InfoPortale? = null,
 ) {
     val collegamento: Boolean get() = origine == "collegamento"
     val idFile: String get() = if (origine == "collegamento") "" else FileRemoto.idDaUrl(url)
@@ -216,6 +218,7 @@ data class DocArchivio(
             righe = o.optJSONArray("righe")?.stringhe().orEmpty(),
             puoApprovare = o.vero("puoApprovare"),
             mieRespinte = o.optJSONArray("mieRespinte").oggetti().map { (it.numero("numero")?.toInt() ?: 0) to it.testo("motivo") },
+            portale = InfoPortale.daJson(o.optJSONObject("portale")),
         )
     }
 }

@@ -78,6 +78,24 @@ report, offline too. Closing it means choosing how it is invoiced, and it enters
 invoicing list under the same unique index, so neither the ticket nor its reports can be
 invoiced twice. Maintenance contracts carry their fee and generate the scheduled visits.
 
+Phase 6 adds people, vehicles and equipment, and external collaborators: leave requests
+(offline too), the hourly cost with its history, measuring instruments whose calibration
+is always visible in the work report, and assignments to outside firms with their invoices
+counted in the job's cost.
+
+Phase 7 adds messages and a client portal. Wisper prepares WhatsApp messages from templates
+(appointment reminders, reports to sign, payment reminders) and opens the chat with the text
+ready; a person always presses send, and Wisper asks afterwards whether it went. Phone
+numbers written in any form become the right WhatsApp number with the same rules on server,
+phone and PC. The portal lets a client's contact sign in with an email code and see only what
+the studio published for their company: accept a quote choosing the optional items, sign a
+work report with a finger, download invoices and documents, open and follow service requests.
+It costs nothing to run: the page is a static file on Netlify, the data goes through a
+separate Google Apps Script (so the main sheet's script address never appears in a page
+clients see), and the NAS fetches the requests itself, so nothing is opened on the home
+router. Behind Google the client's IP address doesn't arrive, so neither the access log nor
+the signature evidence records it; there are no cookies either.
+
 ## What changed
 
 The first Wisper, built for NGN Hacks 2026, was voice only: a wake word, a

@@ -115,9 +115,11 @@ data class RapportinoTicket(
 }
 
 /** Una foto del ticket. [locale] per quelle fatte qui e non ancora partite. */
-data class FotoTicket(val id: String, val url: String, val nome: String = "", val mime: String = "", val idDocumento: String = "", val locale: File? = null) {
+data class FotoTicket(val id: String, val url: String, val nome: String = "", val mime: String = "", val idDocumento: String = "", val locale: File? = null, val dalCliente: Boolean = false) {
     companion object {
-        fun daJson(o: JSONObject) = FotoTicket(o.testo("id"), o.testo("url"), o.testo("nome"), o.testo("mime"), o.testo("idDocumento"))
+        /** Fase 7: una foto mandata dal cliente col portale ha il file di tipo "portale" (§5.3) o "dalCliente". */
+        fun daJson(o: JSONObject) = FotoTicket(o.testo("id"), o.testo("url"), o.testo("nome"), o.testo("mime"), o.testo("idDocumento"),
+            dalCliente = o.vero("dalCliente") || o.testo("tipo") == "portale" || o.testo("origine") == "portale")
     }
 }
 
@@ -251,7 +253,12 @@ data class Ticket(
     /** Fase 6 (§17.13): gli strumenti dei suoi rapportini con lo stato di quel giorno, e se uno era scaduto. */
     val strumenti: List<StrumentoUsato> = emptyList(),
     val tarataScaduta: Boolean = false,
+    /** Fase 7 (fase7.md §10.4): visibile nel portale, messaggi nuovi e la conversazione pubblica col cliente. */
+    val portale: TicketPortale? = null,
 ) {
+    /** Fase 7: arrivato dal portale (la pillola Dal portale). */
+    val dalPortale: Boolean get() = origine == "portale"
+
     /** La chiave per le azioni del server: l'id interno, o l'idLocale di uno nato qui. */
     val chiave: String get() = id.ifBlank { idLocale }
 
@@ -346,6 +353,7 @@ data class Ticket(
                 lettoAl = o.testo("_lettoAl"),
                 strumenti = StrumentoUsato.lista(o.optJSONArray("strumenti")),
                 tarataScaduta = o.vero("tarataScaduta"),
+                portale = TicketPortale.daJson(o),
             )
         }
     }

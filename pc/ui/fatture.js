@@ -926,6 +926,12 @@
         scrive() && f.stato === 'pronta' ? { testo: 'Torna in bozza', fn: () => tornaInBozza(f) } : null,
         scrive() && f.stato === 'pronta' ? { testo: 'Segna emessa senza XML', fn: () => segnaEmessa(f) } : null,
         scrive() && f.stato === 'emessa' && !nota ? { testo: 'Prepara una nota di credito', fn: () => notaCredito(f) } : null,
+        // Fase 7 (§8.2, §3.15, §12.6): la copia di cortesia, il portale, i promemoria di pagamento.
+        scrive() && (f.stato === 'emessa' || f.stato === 'annullata') ? { testo: f.copia ? 'Cambia la copia PDF' : 'Allega la copia PDF', fn: () => allegaCopia(f) } : null,
+        f.copia && f.copia.id ? { testo: 'Copia PDF', fn: () => W.apriFile({ id: f.copia.id, nome: f.copia.nome }) } : null,
+        W.Portale && W.Portale.puoPubblicare('fattura') && (f.stato === 'emessa' || f.stato === 'annullata') && !(f.portale && f.portale.pubblicato) ? { testo: 'Pubblica nel portale', fn: async () => { const r = await W.Portale.pubblica('fattura', f.id, { idCliente: f.idCliente, nomeCliente: f.cliente, titolo: titolo }); if (r) ricaricaPannello(f); } } : null,
+        W.Portale && W.Portale.puoPubblicare('fattura') && f.portale && f.portale.pubblicato ? { testo: 'Togli dal portale', fn: () => W.Portale.togli(f.portale.pubblicazione || { tipo: 'fattura', rif: f.id, idCliente: f.idCliente }, () => ricaricaPannello(f)) } : null,
+        pagamenti7() && f.stato === 'emessa' && !nota && C.num(f.residuo) > 0.004 ? (f.sollecitiNo ? { testo: 'Torna a proporre i promemoria', fn: () => nonSollecitare(f, '') } : { testo: 'Non mandare promemoria', fn: () => chiediNonSollecitare(f) }) : null,
         scrive() && f.stato === 'pronta' ? '-' : null,
         scrive() && f.stato === 'pronta' ? { testo: 'Scarta', pericolo: true, fn: () => scarta(f, () => { chiudiPannello(); W.disegnaPagina(); }) } : null,
       ].filter(Boolean);
@@ -934,16 +940,66 @@
       altro.addEventListener('click', () => apriMenu(altro, voci));
       const corpo = h('div', { class: 'corpo' },
         h('div', { class: 'alto' }, h('span', { class: 'dove spazio' }, nota ? 'Nota di credito' : 'Fattura'), altro, tondo('chiudi', 'Chiudi', chiudiPannello, 'piccolo')),
-        h('div', null, pillStato(f.statoVisto)),
+        h('div', { class: 'pillole-testa' }, pillStato(f.statoVisto), f.portale && W.Portale ? W.Portale.pillola(f.portale) : null, f.sollecitiNo ? h('span', { class: 'pill p-grigio', title: f.sollecitiNo }, 'Niente promemoria') : null),
         h('div', { class: 'titolo-pannello' }, titolo),
         h('div', { class: 'sotto-titolo' }, [f.cliente, f.data ? (f.stato === 'emessa' || f.stato === 'annullata' ? 'del ' : 'data proposta ') + C.data(f.data) : '', !nota && scad ? 'scade il ' + C.data(scad) : ''].filter(Boolean).join(' · ')),
         f.stato === 'pronta' && f.prontaIl ? h('div', { class: 'tenue' }, 'Passata al programma il ' + C.data(String(f.prontaIl).slice(0, 10))) : null,
         avvisi, nota ? null : passiFattura(f),
         h('div', { class: 'scheda' }, schedaConti(k, f)),
         incassi, righe, sdi);
+      // Fase 7 (§12.6): scaduta, il bordo "Prepara un promemoria di pagamento" (con fatturazione 2 e costi; mai dopo "Non mandare promemoria").
+      const promemoria = pagamenti7() && f.scaduta && !nota && f.stato === 'emessa' && !f.sollecitiNo && W.Comunicazioni
+        ? h('button', { type: 'button', class: 'btn', onclick: () => W.Comunicazioni.scrivi({ modello: 'promemoria_pagamento', canale: 'whatsapp', idCliente: f.idCliente, idReferente: referentePagamenti(f.idCliente), idFattura: f.id }) }, 'Prepara un promemoria di pagamento') : null;
+      // Il bordo sta sotto la riga "Scaduta da …" (nel piede del pannello stretto non ci sta accanto al giallo).
+      if (promemoria) { const i = corpo.querySelector('.banda'); if (i) i.after(h('div', null, promemoria)); else corpo.insertBefore(h('div', null, promemoria), corpo.children[3] || null); }
       const piede = principale ? h('div', { class: 'piede' }, principale) : null;
       const p = h('aside', { class: 'pannello pannello-fattura', 'aria-label': titolo }, corpo, piede);
       if (vecchio) { p.style.animation = 'none'; vecchio.replaceWith(p); } else aggiungi(B.$('#sovrapposti'), [p]);
+    }
+
+    // ----------------------------------------------------------------------- fase 7: copia PDF, portale, promemoria di pagamento
+
+    const pagamenti7 = () => !!(radice.WisperRegoleComunicazioni && radice.WisperRegoleComunicazioni.Permessi.pagamenti(W.perm()));
+    /** Il promemoria va al referente che paga le fatture (§3.15); se non c'è, il server usa l'email del cliente. */
+    function referentePagamenti(idCliente) {
+      const r = S.ana.referenti.find(x => x.idSoggetto === idCliente && x.pagamenti);
+      return r ? r.id : null;
+    }
+    async function ricaricaPannello(f) {
+      try { const r = await Rete.get('/server/fattura?id=' + encodeURIComponent(f.id)); if (r && r.fattura && String(M.aperta) === String(f.id)) disegnaPannello(r.fattura); } catch (e) { /* resta com'era */ }
+    }
+    /** Allega la copia PDF (§8.2): la copia di cortesia dal programma di Manuel, fino a 10 MB. */
+    async function allegaCopia(f) {
+      const scelto = await Rete.post('/locale/scegli-file', { filtro: 'pdf' }).catch(() => null);
+      if (!scelto || !scelto.ok) return;
+      if (!/\.pdf$/i.test(scelto.nome || '')) { avviso('La copia di cortesia è un PDF', true); return; }
+      const r = await lavora('Allego la copia', () => Rete.post('/server/allegaCopiaFattura', { id: f.id, nome: scelto.nome, mime: 'application/pdf', base64: scelto.base64 }));
+      if (!r) return;
+      avviso('Copia PDF allegata: è la copia di cortesia, la fattura valida è quella del Sistema di Interscambio');
+      ricaricaPannello(f);
+    }
+    function chiediNonSollecitare(f) {
+      const motivo = h('input', { type: 'text', placeholder: 'pagherà a fine mese, d\'accordo al telefono' });
+      let errore = '';
+      const zona = h('div', { class: 'fila' });
+      const disegna = () => aggiungi(svuota(zona), [h('p', { class: 'testo-forte' }, 'Fattura ' + f.numero + ' · ' + f.cliente), campo('Motivo', motivo, errore)]);
+      disegna();
+      let chiudi;
+      chiudi = finestra({ titolo: 'Non mandare promemoria', corpo: zona,
+        pulsanti: ['spazio', h('button', { type: 'button', class: 'btn testo grande', onclick: () => chiudi() }, 'Annulla'),
+          h('button', { type: 'button', class: 'btn giallo grande', onclick: async () => {
+            if (!motivo.value.trim()) { errore = 'Scrivi il motivo'; disegna(); motivo.focus(); return; }
+            chiudi();
+            await nonSollecitare(f, motivo.value.trim());
+          } }, 'Non proporli più')] });
+    }
+    async function nonSollecitare(f, motivo) {
+      const r = await lavora('Un momento', () => Rete.post('/server/nonSollecitare', { idFattura: f.id, motivo }));
+      if (!r) return;
+      avviso(motivo ? 'Per questa fattura Wisper non propone più promemoria' : 'I promemoria di questa fattura tornano');
+      if (W.Comunicazioni) W.Comunicazioni.daRileggere();
+      W.caricaDashboard();
+      ricaricaPannello(f);
     }
 
     async function ricarica() {

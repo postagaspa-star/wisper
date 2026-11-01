@@ -98,7 +98,7 @@ import kotlin.math.roundToInt
 private val IT = Locale.ITALY
 
 /** Le schede della pagina di una commessa. */
-internal enum class SchedaDiCommessa { PANORAMICA, PRESTAZIONI, RAPPORTINI, DOCUMENTI, INCARICHI, COSTI, FATTURARE }
+internal enum class SchedaDiCommessa { PANORAMICA, PRESTAZIONI, RAPPORTINI, DOCUMENTI, INCARICHI, COMUNICAZIONI, COSTI, FATTURARE }
 
 /**
  * Quello che resta scelto mentre si va e si torna, come sul computer: il segmento,
@@ -288,6 +288,11 @@ fun SchermataCommessa(dati: Dati, nav: Navigatore, id: String) {
     val vedeIncarichi = perm.vede(Moduli.COLLABORATORI) && !dati.sessione.value.esterno && !dati.esempio
     val incarichi = if (vedeIncarichi) rememberLettura("incarichi-commessa-${m.id}", Giri6.collaboratori) { dati.fase6.incarichiCommessa(m.id) } else null
 
+    // Fase 7: quante comunicazioni ha la commessa (dall'ultima lettura, anche senza rete).
+    val comunicazioniCommessa = if (perm.vede(Moduli.COMUNICAZIONI) && !dati.esempio)
+        (rememberLettura("com-idCommessa-${m.id}", Giri7.comunicazioni) { dati.fase7.storicoDi("idCommessa", m.id) } as? Lettura.Pronta)?.dato?.let { it.quante.takeIf { q -> q > 0 } ?: it.comunicazioni.size }
+    else null
+
     // Si apre su Prestazioni se ce ne sono, altrimenti su Panoramica; Costi e Da fatturare solo con i soldi.
     val schede = buildList {
         add(SchedaDiCommessa.PANORAMICA to "Panoramica")
@@ -295,6 +300,8 @@ fun SchermataCommessa(dati: Dati, nav: Navigatore, id: String) {
         add(SchedaDiCommessa.RAPPORTINI to "Rapportini · ${k.rapportini.size}")
         add(SchedaDiCommessa.DOCUMENTI to "Documenti")
         if (vedeIncarichi) add(SchedaDiCommessa.INCARICHI to "Incarichi" + ((incarichi as? Lettura.Pronta)?.dato?.count { it.stato != "annullato" }?.let { " · $it" } ?: ""))
+        // Fase 7 (§12.6): lo storico della commessa.
+        if (perm.vede(Moduli.COMUNICAZIONI)) add(SchedaDiCommessa.COMUNICAZIONI to "Comunicazioni" + (comunicazioniCommessa?.let { " · $it" } ?: ""))
         if (costi) {
             add(SchedaDiCommessa.COSTI to "Costi")
             add(SchedaDiCommessa.FATTURARE to "Da fatturare")
@@ -402,6 +409,7 @@ fun SchermataCommessa(dati: Dati, nav: Navigatore, id: String) {
                     if (perm.vede(Moduli.FATTURAZIONE)) FatturazioneDellaCommessa(dati, m.id, nav)
                     DaFatturareCommessa(dati, k, viste, nav)
                 }
+                SchedaDiCommessa.COMUNICAZIONI -> SezioneComunicazioni(dati, nav, idCommessa = m.id, conTitolo = false)
                 // Fase 5 (§12.5): l'archivio filtrato (cartella in cima, documenti, "Da Wisper"); senza il modulo Documenti come prima.
                 SchedaDiCommessa.DOCUMENTI -> if (LocalPermessi.current.vede(Moduli.DOCUMENTI)) ArchivioFiltrato(dati, nav, eu.stgm.wisper.rapportino.FiltroArchivio(idCommessa = m.id)) else DocumentiCommessa(dati, m)
             }

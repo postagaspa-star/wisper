@@ -496,7 +496,7 @@ fun FondoConPulsante(modifier: Modifier = Modifier, sopraBarra: Boolean = true, 
 // ---------------------------------------------------------------------------------- avvisi
 
 /** Un avviso in basso: scuro, 3,5 secondi; con Annulla resta 5 secondi. */
-class Avviso(val testo: String, val annulla: (() -> Unit)?, val id: Long = System.nanoTime())
+class Avviso(val testo: String, val annulla: (() -> Unit)?, val id: Long = System.nanoTime(), val azione: String = "Annulla")
 
 class Avvisi {
     var corrente by mutableStateOf<Avviso?>(null)
@@ -504,6 +504,11 @@ class Avvisi {
 
     fun mostra(testo: String, annulla: (() -> Unit)? = null) {
         corrente = Avviso(testo, annulla)
+    }
+
+    /** Fase 7: l'avviso con un'azione che non è Annulla ("Manda anche un WhatsApp", "Avvisa il cliente"). */
+    fun mostraConAzione(testo: String, azione: String, fai: () -> Unit) {
+        corrente = Avviso(testo, fai, azione = azione)
     }
 
     fun chiudi() {
@@ -537,7 +542,7 @@ fun StratoAvvisi(avvisi: Avvisi, modifier: Modifier = Modifier) {
         ) {
             Text(ultimo.testo, style = Testi.secondarioGrande, color = if (c.scuro) Color(0xFF1B1B1F) else Color.White, modifier = Modifier.weight(1f))
             if (ultimo.annulla != null) {
-                PulsanteTesto("Annulla", { ultimo.annulla.invoke(); avvisi.chiudi() }, colore = if (c.scuro) Color(0xFF8A5A00) else c.giallo)
+                PulsanteTesto(ultimo.azione, { ultimo.annulla.invoke(); avvisi.chiudi() }, colore = if (c.scuro) Color(0xFF8A5A00) else c.giallo)
             }
         }
     }

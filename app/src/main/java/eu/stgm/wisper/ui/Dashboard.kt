@@ -171,6 +171,14 @@ fun SchermataDashboard(
                         if (n6.mezzi) Triple("${n6.tarateScadute}", "tarature scadute") { apri(Collegamento("mezzi", parametri = mapOf("segmento" to "strumenti", "taratura" to "scadute"))) } else null,
                         Triple("${n6.scadenzeVicine}", "scadenze vicine") { apri(Collegamento("mezzi", parametri = mapOf("segmento" to "scadenze"))) },
                     ).map { (a, b, f) -> Triple(a, b, f as (() -> Unit)?) }, rossi = if (n6.tarateScadute > 0) setOf(if (sessione.puoApprovareAssenze) 2 else 1) else emptySet())
+                    // Fase 7 (§11.1): Dal portale (da guardare) e Da mandare oggi, toccabili; il collaboratore solo i suoi da mandare.
+                    val n7 = d.fase7
+                    val vedeDalPortale = perm.vede(Moduli.PORTALE) && n7.portaleDaGuardare != null
+                    val vedeDaMandare = perm.vede(Moduli.COMUNICAZIONI) && n7.daMandareOggi != null
+                    if (vedeDalPortale || vedeDaMandare) RiquadriDue(listOfNotNull(
+                        if (vedeDalPortale) Triple("${n7.portaleDaGuardare}", "dal portale", { apri(Collegamento("portale", parametri = mapOf("segmento" to "daguardare"))) } as (() -> Unit)?) else null,
+                        if (vedeDaMandare) Triple("${n7.daMandareOggi}", "da mandare oggi", { apri(Collegamento("comunicazioni", parametri = mapOf("segmento" to "damandare"))) } as (() -> Unit)?) else null,
+                    ))
                     // Fase 6 (§12.7): l'esterno vede i suoi incarichi con l'avanzamento.
                     if (d.incarichiEsterno.isNotEmpty()) Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Etichetta("I tuoi incarichi · ${d.incarichiEsterno.size}")
@@ -284,6 +292,8 @@ fun apriCollegamento(col: Collegamento?, nav: Navigatore, rapportini: List<Rappo
             nav.sezione(Sezione.SPESE)
         }
         "amministrazione" -> when (p["sezione"]) {
+            "portale" -> nav.vai("amm/portale")
+            "comunicazioni" -> nav.vai("amm/comunicazioni")
             "veicoli" -> nav.vai("amm/veicoli")
             "fiscale" -> nav.vai("amm/fiscale")
             "spazio" -> nav.vai("amm/spazio")
@@ -312,6 +322,12 @@ fun apriCollegamento(col: Collegamento?, nav: Navigatore, rapportini: List<Rappo
         "collaboratori" -> { RicordoCollaboratori.mostra(p["segmento"].orEmpty()); nav.sezione(Sezione.COLLABORATORI) }
         "collaboratore" -> if (col.id.isNotBlank()) { nav.sezione(Sezione.COLLABORATORI); nav.vai("collaboratore/${col.id}") } else nav.sezione(Sezione.COLLABORATORI)
         "incarico" -> if (col.id.isNotBlank()) { nav.sezione(Sezione.COLLABORATORI); nav.vai("incarico/${col.id}") } else nav.sezione(Sezione.COLLABORATORI)
+        // Fase 7 (§11.1): comunicazioni, portale, il cliente nel portale, un file, un modello.
+        "comunicazioni" -> { RicordoComunicazioni.mostra(p["segmento"].orEmpty(), p["idCliente"].orEmpty(), p["idCommessa"].orEmpty()); nav.sezione(Sezione.COMUNICAZIONI) }
+        "portale" -> { RicordoPortale.mostra(p["segmento"].orEmpty()); nav.sezione(Sezione.PORTALE) }
+        "portalecliente" -> if (col.id.isNotBlank()) nav.vai("portale-cliente/${col.id}") else { RicordoPortale.mostra("clienti"); nav.sezione(Sezione.PORTALE) }
+        "caricamento" -> { RicordoPortale.mostra("daguardare"); nav.sezione(Sezione.PORTALE) }
+        "modello" -> { RicordoComunicazioni.mostra("modelli"); nav.sezione(Sezione.COMUNICAZIONI) }
     }
 }
 
@@ -378,6 +394,10 @@ private fun azioneDi(col: Collegamento?): String = when (col?.pagina?.lowercase(
     "attrezzatura" -> "Apri lo strumento"
     "collaboratore", "collaboratori" -> "Apri la scheda"
     "incarico" -> "Apri l'incarico"
+    // Fase 7
+    "comunicazioni" -> if (col.parametri["segmento"] == "damandare" || col.parametri["segmento"].isNullOrBlank()) "Vedi cosa mandare" else "Apri le comunicazioni"
+    "portale", "caricamento" -> "Apri il portale"
+    "portalecliente" -> "Apri il cliente nel portale"
     else -> "Apri"
 }
 
@@ -477,6 +497,10 @@ private fun iconaDi(v: VoceDashboard): ImageVector = when (v.tipo.lowercase()) {
     "prestito" -> Icone.attrezzo
     "guasto" -> Icone.allarme
     "collaboratore", "incarico" -> Icone.collab
+    // Fase 7 (§11.1)
+    "portale" -> if (v.gravita == "urgente") Icone.allarme else Icone.globo
+    "messaggio" -> Icone.fumetto
+    "pagamento" -> Icone.fatturazione
     else -> when (v.gravita.lowercase()) {
         "urgente" -> Icone.allarme
         "attenzione" -> Icone.avviso

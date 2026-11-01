@@ -163,6 +163,9 @@ data class Attivita(
     /** Fase 5: il ticket dell'intervento (id interno) e il suo numero. */
     val idTicket: String = "",
     val ticket: String = "",
+    /** Fase 7 (fase7.md §3.14): avvisa il cliente ("" | "whatsapp" | "email") e a quale referente. Null = non toccato (vale la regola di base del server). */
+    val avvisaCliente: String? = null,
+    val idReferenteAvviso: String = "",
 ) {
     val fatta: Boolean get() = stato == StatoAttivita.FATTA
     val annullata: Boolean get() = stato == StatoAttivita.ANNULLATA
@@ -198,6 +201,10 @@ data class Attivita(
         .put("checklist", JSONArray().apply { checklist.forEachIndexed { i, v -> put(v.copy(ordine = i + 1).aJson()) } })
         .put("assegnata", nomeAssegnata).put("cliente", nomeCliente).put("commessa", nomeCommessa).put("puoScrivere", puoScrivere)
         .put("idTicket", if (idTicket.isBlank()) JSONObject.NULL else PonteServer.idJson(idTicket)).put("ticket", ticket)
+        .apply {
+            avvisaCliente?.let { put("avvisaCliente", it) }
+            if (idReferenteAvviso.isNotBlank()) put("idReferenteAvviso", PonteServer.idJson(idReferenteAvviso))
+        }
 
     /** Quello che salvaAttivita accetta (§13.7): niente nomi, niente occorrenza. [conRicorrenza] solo se la regola e' cambiata. */
     fun perSalvare(conRicorrenza: Boolean): JSONObject {
@@ -261,6 +268,8 @@ data class Attivita(
                 puoScrivere = if (a.has("puoScrivere")) a.vero("puoScrivere") else true,
                 idTicket = a.testo("idTicket"),
                 ticket = a.testo("ticket"),
+                avvisaCliente = if (a.has("avvisaCliente") && !a.isNull("avvisaCliente")) a.testo("avvisaCliente") else null,
+                idReferenteAvviso = a.primoTesto("idReferenteAvviso", "avvisaReferenteId"),
             )
         }
     }

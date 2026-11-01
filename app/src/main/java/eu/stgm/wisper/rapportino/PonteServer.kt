@@ -456,6 +456,8 @@ class PonteServer(
     suspend fun salvaReferente(x: Referente): Referente = withContext(Dispatchers.IO) {
         val o = JSONObject().put("idSoggetto", x.idSoggetto).put("nome", x.nome.trim()).put("ruolo", x.ruolo.trim())
             .put("email", x.email.trim()).put("telefono", x.telefono.trim()).put("note", x.note.trim())
+            // Fase 7 (§10.4): chi paga le fatture, il numero per WhatsApp e il sì a WhatsApp.
+            .put("pagamenti", x.pagamenti).put("whatsapp", x.whatsapp.trim()).put("whatsappOk", x.whatsappOk)
         if (x.id.isNotBlank()) o.put("id", idJson(x.id)).put("ordine", x.ordine)
         val r = scrivi(JSONObject().put("azione", "salvaReferente").put("referente", o))
         Referente.daJson(r.optJSONObject("referente") ?: throw Rifiutato("Il server non ha restituito il referente"))

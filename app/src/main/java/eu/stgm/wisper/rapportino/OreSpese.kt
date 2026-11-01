@@ -1189,11 +1189,13 @@ object TestiCoda {
         CodaInvii.Tipo.GUASTO, CodaInvii.Tipo.FOTO_GUASTO -> "Il server non ha accettato un guasto"
         CodaInvii.Tipo.PRESTITO, CodaInvii.Tipo.RESTITUISCI -> "Il server non ha accettato un prestito"
         CodaInvii.Tipo.FIRMA_DPI -> "Il server non ha accettato una firma"
+        // Fase 7 (§3.20): il messaggio, la risposta, la pubblicazione o il file.
+        CodaInvii.Tipo.AZIONE7 -> "Il server non ha accettato un'azione di comunicazioni o portale"
         else -> "Il server non ha accettato un rapportino"
     }
 
     fun titoloNonPartite(ops: List<CodaInvii.Operazione>): String = when {
-        ops.all { !it.fase3 && !it.fase5 && !it.fase6 } -> "Rapportini non ancora partiti"
+        ops.all { it.delRapportino } -> "Rapportini non ancora partiti"
         ops.all { it.fase3 } -> "Ore e spese non ancora partite"
         ops.all { it.fase5 } -> "Ticket non ancora partiti"
         else -> "Modifiche non ancora partite"
@@ -1212,10 +1214,12 @@ object TestiCoda {
         val scadenze = vive.count { it.tipo == CodaInvii.Tipo.FAI_SCADENZA }
         // Fase 6 (fase6.md §3.13): "1 richiesta di ferie e 2 letture dei km partono appena c'è rete".
         val sei = vive.filter { it.fase6 }
-        if (ticket > 0 || scadenze > 0 || sei.isNotEmpty()) {
-            val rap = vive.filter { !it.fase3 && !it.fase5 && !it.fase6 }.map { it.idLocale }.distinct().size
+        // Fase 7 (fase7.md §3.20): "2 messaggi e 1 risposta partono appena c'è rete".
+        val sette = vive.filter { it.fase7 }
+        if (ticket > 0 || scadenze > 0 || sei.isNotEmpty() || sette.isNotEmpty()) {
+            val rap = vive.filter { it.delRapportino }.map { it.idLocale }.distinct().size
             val altre = vive.count { it.fase3 }
-            val pezzi6 = pezziFase6(sei)
+            val pezzi6 = pezziFase6(sei) + pezziFase7(sette)
             val pezzi = listOfNotNull(
                 ticket.takeIf { it > 0 }?.let { "$it ticket" },
                 rap.takeIf { it > 0 }?.let { if (it == 1) "1 rapportino" else "$it rapportini" },
@@ -1245,6 +1249,27 @@ object TestiCoda {
      * foto va con la sua lettura), i guasti (con le foto), i prestiti, le restituzioni,
      * le firme dei DPI.
      */
+    /**
+     * I pezzi della fase 7: i messaggi (preparati, mandati, non mandati, le telefonate e le
+     * note), le risposte nel portale, le pubblicazioni (pubblica e togli), i file decisi.
+     */
+    fun pezziFase7(ops: List<CodaInvii.Operazione>): List<Pair<Int, String>> {
+        fun quanti(n: Int, uno: String, tanti: String) = n to (if (n == 1) "1 $uno" else "$n $tanti")
+        val azioni = ops.map { it.corpoJson().testo("azione") }
+        val messaggi = ops.filter { it.corpoJson().testo("azione") in setOf("salvaMessaggio", "segnaMandato", "nonMandare") }.map { it.idLocale.substringAfter(':') }.distinct().size
+        val risposte = azioni.count { it == "rispondiNelPortale" }
+        val pubblicazioni = azioni.count { it == "pubblica" || it == "togliDalPortale" || it == "mostraNelPortale" }
+        val file = azioni.count { it == "accettaCaricamento" || it == "rifiutaCaricamento" }
+        val visti = azioni.count { it == "segnaVistoPortale" }
+        return listOfNotNull(
+            messaggi.takeIf { it > 0 }?.let { quanti(it, "messaggio", "messaggi") },
+            risposte.takeIf { it > 0 }?.let { quanti(it, "risposta", "risposte") },
+            pubblicazioni.takeIf { it > 0 }?.let { quanti(it, "cambio del portale", "cambi del portale") },
+            file.takeIf { it > 0 }?.let { quanti(it, "file", "file") },
+            visti.takeIf { it > 0 }?.let { quanti(it, "segnato visto", "segnati visti") },
+        )
+    }
+
     fun pezziFase6(ops: List<CodaInvii.Operazione>): List<Pair<Int, String>> {
         fun quanti(n: Int, uno: String, tanti: String) = n to (if (n == 1) "1 $uno" else "$n $tanti")
         val out = mutableListOf<Pair<Int, String>>()

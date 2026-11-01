@@ -33,6 +33,8 @@ const COLONNE_006 = {
     'tagliando_ogni_mesi', 'note', 'dismesso_il', 'dismesso_motivo'],
 };
 for (const [t, c] of Object.entries(COLONNE_006)) COLONNE_NUOVE[t] = (COLONNE_NUOVE[t] || []).concat(c);
+// Fase 7: e poi la 007, coi suoi valori di base.
+for (const [t, c] of Object.entries(require('./aiuto').COLONNE_007)) COLONNE_NUOVE[t] = (COLONNE_NUOVE[t] || []).concat(Object.keys(c));
 
 let cartella;
 let w;
@@ -88,7 +90,7 @@ const comeTitolare = fn => w.come({ utente: w.titolare(), permessi: w.permessiDi
 
 test('migrazione 005: versione 5, la copia wisper.db.prima-5 com\'era, le tabelle di prima riga per riga uguali', () => {
   // Fase 6: il server apre il database fino alla versione 6 (la 006 parte dopo la 005); la copia della 005 resta.
-  assert.equal(w.db.versione(), 6);
+  assert.equal(w.db.versione(), 7);
   const copia = new Database(path.join(cartella, 'wisper.db.prima-5'));
   assert.equal(copia.versione(), 4, 'la copia e\' com\'era prima');
   copia.chiudi();
@@ -101,6 +103,9 @@ test('migrazione 005: versione 5, la copia wisper.db.prima-5 com\'era, le tabell
       dopo = dopo.filter(r => r.ruolo !== 'esterno');
       const prima = righePrima.permessi.find(r => r.ruolo === 'collaboratore' && r.modulo === 'persone');
       if (prima) dopo.filter(r => r.ruolo === 'collaboratore' && r.modulo === 'persone').forEach(r => { assert.equal(r.livello, Math.max(prima.livello, 1)); r.livello = prima.livello; });
+      // Fase 7: la 007 da' al collaboratore le sue comunicazioni (comunicazioni 0 -> 2, scritto nel registro).
+      const com = righePrima.permessi.find(r => r.ruolo === 'collaboratore' && r.modulo === 'comunicazioni');
+      if (com) dopo.filter(r => r.ruolo === 'collaboratore' && r.modulo === 'comunicazioni').forEach(r => { assert.equal(r.livello, com.livello === 0 ? 2 : com.livello); r.livello = com.livello; });
     }
     // Impostazioni e numerazioni: la migrazione aggiunge le sue in fondo, quelle di prima restano uguali.
     if (['impostazioni', 'numerazioni'].includes(t)) assert.ok(dopo.length > righePrima[t].length, t);
@@ -216,7 +221,7 @@ test('riaperto il server: la migrazione non si rifa\'', () => {
   const documenti = w.db.riga('SELECT COUNT(*) n FROM documenti').n;
   w.chiudi();
   w = new Wisper({ dati: cartella });
-  assert.equal(w.db.versione(), 6);
+  assert.equal(w.db.versione(), 7);
   assert.equal(w.db.riga('SELECT COUNT(*) n FROM documenti').n, documenti);
   assert.equal(w.db.riga('SELECT COUNT(*) n FROM documento_categorie').n, 25);
 });

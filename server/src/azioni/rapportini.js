@@ -382,6 +382,12 @@ module.exports = {
     const daGuardare = o.strumenti.length ? this.strumentiDaGuardare(o.strumenti) : [];
     if (daGuardare.length) o.strumentiDaGuardare = daGuardare;
     o.idIncarico = r.incarico_id === null || r.incarico_id === undefined ? null : r.incarico_id;
+    // Fase 7 (§10.4): firmato nel portale? da chi; e se e' nel portale (da firmare, visto).
+    o.firmaModo = r.firma_modo || '';
+    o.firmaReferente = '';
+    if (r.firma_referente_id) o.firmaReferente = (this.db.riga('SELECT nome FROM referenti WHERE id = ?', r.firma_referente_id) || {}).nome || '';
+    const pp = this.portaleDi('rapportino', r.id);
+    o.portale = { pubblicato: pp.pubblicato, daFirmare: pp.daFirmare, vistoIl: pp.vistoIl, pubblicazione: pp.pubblicazione };
     return o;
   },
 
@@ -449,6 +455,9 @@ module.exports = {
       const attuale = testo(riga.stato).toUpperCase() || 'BOZZA';
       if (nuovo === 'ANNULLATO' && attuale !== 'ANNULLATO') valori.stato_prima = attuale;
       this.aggiorna('rapportini', riga.id, valori, 'id', nota);
+      // Fase 7 (§8.1): annullato, o riportato in bozza da firmato, esce dal portale (si ripubblica a mano se serve).
+      if (nuovo === 'ANNULLATO' || (nuovo === 'BOZZA' && attuale !== 'BOZZA')) this.chiudiPubblicazioni('rapportino', riga.id, 'annullato');
+      if (nuovo === 'BOZZA' && attuale !== 'BOZZA') this.db.esegui("UPDATE rapportini SET firma_modo = '', firma_prova = NULL, firma_referente_id = NULL WHERE id = ?", riga.id);
       this.allineaSpeseRapportino(riga.id);
       if (riga.ticket_id && (nuovo === 'ANNULLATO' || attuale === 'ANNULLATO')) this.ricalcolaIntervento(riga.ticket_id);
       return this.rapportinoPerId(riga.id);

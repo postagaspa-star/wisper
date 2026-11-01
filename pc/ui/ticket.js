@@ -275,7 +275,9 @@
           puo('spese', 2) && W.Spese ? h('button', { type: 'button', class: 'pillola tratteggiata', onclick: () => W.Spese.moduloSpesa(null, { categoria: 'materiale', idCommessa: t.idCommessa || '', idCliente: t.idCliente, destinazione: 'cliente', idTicket: t.id, dopo: () => aggiorna() }) }, '+ Materiale o spesa') : null) : null);
       const foto = sezione('Foto', h('div', { class: 'miniature foto-tk' },
         (t.foto || []).map(f => {
-          const b = h('button', { type: 'button', class: 'foto-btn', title: f.nome, onclick: () => menuFoto(b, t, f) }, h('img', { src: f.url, alt: f.nome || 'Foto' }), f.idDocumento ? h('span', { class: 'segno-archivio', title: 'È anche nell\'archivio' }, icona('file', 12, 2.6)) : null);
+          const b = h('button', { type: 'button', class: 'foto-btn', title: f.nome, onclick: () => menuFoto(b, t, f) }, h('img', { src: f.url, alt: f.nome || 'Foto' }), f.idDocumento ? h('span', { class: 'segno-archivio', title: 'È anche nell\'archivio' }, icona('file', 12, 2.6)) : null,
+            // Fase 7 (§3.11): le foto mandate dal cliente col portale.
+            f.dalCliente || f.portale || f.tipo === 'portale' ? h('span', { class: 'pill p-grigio piccola segno-cliente' }, 'Dal cliente') : null);
           return b;
         }),
         puoQui ? h('button', { type: 'button', class: 'foto-aggiungi', onclick: () => aggiungiFoto(t) }, icona('foto', 22, 2.2), h('span', null, 'Aggiungi')) : null));
@@ -289,6 +291,8 @@
       const corpo = h('div', { class: 'corpo' },
         h('div', { class: 'alto' }, h('span', { class: 'etichetta-pannello' }, 'Ticket'), h('span', { class: 'spazio' }), menuTicket(t), tondo('chiudi', 'Chiudi', () => chiudiPannello(), 'piccolo')),
         h('div', { class: 'pillole-testa' }, pillPriorita(t), pillStato(t), t.inRitardo ? pill('In ritardo', 'rosso') : null,
+          // Fase 7 (§12.6): da dove arriva, Dal portale.
+          t.origine === 'portale' ? pill('Dal portale', 'grigio') : null,
           t.fattura ? pill(t.fattura.etichetta, t.fattura.stato === 'emessa' ? 'blu' : 'grigio') : null, t.fatturatoIl && !t.fattura ? pill('Fatturato', 'verde') : null),
         h('h2', { class: 'titolo-pannello' }, t.titolo),
         h('span', { class: 'sotto-titolo' }, [t.numero, 'aperto ' + T.quando(t.apertoIl, ad), (t.origineNome || '').toLowerCase(), (t.tipoNome || '').toLowerCase(), t.previstoIl ? 'previsto il ' + C.data(t.previstoIl) : ''].filter(Boolean).join(' · ')),
@@ -296,12 +300,67 @@
         tempi.length ? h('div', { class: 'banda-tempi' + (t.inRitardo ? ' rossa' : '') }, tempi.map(x => h('div', null, T.maiuscola(x)))) : null,
         h('div', { class: 'scheda righe' }, cliRiga, impRiga, contrRiga, comRiga),
         t.descrizione ? sezione('Cosa dice il cliente', h('div', { class: 'scheda testo-cliente' }, t.descrizione)) : null,
+        messaggiCliente(t, sezione),
         interventi, rapportini, strumenti, oreSpese, foto, documenti, storico, cronologia);
 
       const piede = piedeTicket(t);
       const p = h('aside', { class: 'pannello pannello-ticket', 'aria-label': 'Il ticket ' + t.numero }, corpo, piede.length ? h('div', { class: 'piede' }, piede) : null);
       gialloPagina(true);
       if (vecchio) { p.style.animation = 'none'; vecchio.replaceWith(p); } else aggiungi(B.$('#sovrapposti'), [p]);
+    }
+
+    /**
+     * Fase 7 (§3.10, §12.6): i Messaggi col cliente (la conversazione pubblica del portale, divisa dalla cronologia interna),
+     * Rispondi nel portale (bordo) e l'interruttore Mostra nel portale. Col ticket 2, anche senza il permesso del portale.
+     */
+    function messaggiCliente(t, sezione) {
+      const K = radice.WisperRegoleComunicazioni;
+      const pub = t.portale || null;
+      const msg = t.messaggi || [];
+      if (!pub && !msg.length && t.origine !== 'portale') return null;
+      const puoRisp = K && K.Permessi.rispondeNelPortale(W.perm()) && t.puoScrivere !== false && !lettura();
+      const visibile = !!(pub && pub.visibile) || t.origine === 'portale';
+      const bolla = m => {
+        const nomeStudio = (S.io && S.io.ragioneSociale) || S.ana.impostazioni.RAGIONE_SOCIALE || 'Studio Tecnico GM';
+        // Lo studio firma col suo nome (§3.10) e ha chi l'ha scritto (§10.4); i clienti col nome del referente.
+        const studio = m.direzione ? m.direzione === 'uscita' : (!!m.chi || m.da === nomeStudio);
+        return h('div', { class: 'bolla ' + (studio ? 'studio' : 'cliente') }, h('span', { class: 'chi-bolla' }, (studio ? (m.chi || m.da || 'Studio Tecnico GM') : (m.da || 'Cliente')) + ' · ' + K.quando(m.quando, new Date())),
+          h('span', { class: 'testo-bolla' }, m.testo || ''),
+          (m.file || []).length ? h('span', { class: 'pillole-testa' }, m.file.map(f => h('span', { class: 'pill p-grigio' }, f.nome))) : null);
+      };
+      const interr = puoRisp && t.origine !== 'portale' && W.Portale ? W.Portale.interruttore('Mostra nel portale', visibile ? 'Il cliente vede la richiesta e i messaggi' : 'Il cliente non la vede', visibile, async v => {
+        const r = await lavora('Un momento', () => Rete.post('/server/mostraNelPortale', { idTicket: t.id, visibile: v }));
+        if (r) aggiorna(r.ticket, v ? 'Il cliente la vede nel portale' : 'Tolta dal portale');
+      }) : null;
+      return sezione('Messaggi col cliente', msg.length ? h('div', { class: 'scheda conversazione' }, msg.map(bolla)) : h('p', { class: 'vuoto sinistra piccolo' }, 'Nessun messaggio nel portale.'),
+        h('div', { class: 'pillole-testa' }, puoRisp ? h('button', { type: 'button', class: 'btn', onclick: () => rispondiNelPortale(t) }, icona('invia', 18, 2.2), 'Rispondi nel portale') : null,
+          pub && pub.messaggiNuovi ? h('span', { class: 'pill p-giallo' }, pub.messaggiNuovi === 1 ? '1 messaggio nuovo' : pub.messaggiNuovi + ' messaggi nuovi') : null),
+        interr ? h('div', { class: 'scheda righe' }, interr) : null);
+    }
+
+    function rispondiNelPortale(t) {
+      const testo = h('textarea', { rows: 5 });
+      const allegati = [];
+      let errore = '';
+      const zona = h('div', { class: 'fila' });
+      const disegna = () => aggiungi(svuota(zona), [h('p', { class: 'testo-forte' }, t.numero + ' · ' + t.titolo), campo('Risposta', testo, errore),
+        h('div', { class: 'pillole-testa' }, allegati.map((a, i) => h('span', { class: 'pill p-grigio' }, a.nome, h('button', { type: 'button', class: 'pill-x', 'aria-label': 'Togli ' + a.nome, onclick: () => { allegati.splice(i, 1); disegna(); } }, icona('chiudi', 12, 2.6)))),
+          h('button', { type: 'button', class: 'btn collegamento', onclick: async () => {
+            const f = await Rete.post('/locale/scegli-file', {}).catch(() => null);
+            if (!f || !f.ok) return;
+            allegati.push({ nome: f.nome, mime: f.mime, base64: f.base64 }); disegna();
+          } }, icona('graffetta', 16, 2.2), ' Allega'))]);
+      disegna();
+      let chiudi;
+      chiudi = finestra({ titolo: 'Rispondi nel portale', corpo: zona,
+        pulsanti: ['spazio', h('button', { type: 'button', class: 'btn testo grande', onclick: () => chiudi() }, 'Annulla'),
+          h('button', { type: 'button', class: 'btn giallo grande', onclick: async () => {
+            if (!testo.value.trim()) { errore = 'Scrivi la risposta'; disegna(); testo.focus(); return; }
+            const r = await lavora('Mando la risposta', () => Rete.post('/server/rispondiNelPortale', { idTicket: t.id, testo: testo.value.trim(), allegati }));
+            if (!r) return;
+            chiudi();
+            aggiorna(null, 'Risposta nel portale: al cliente arriva un avviso per email');
+          } }, 'Manda')] });
     }
 
     function rigaStorico(v) {
@@ -704,7 +763,11 @@
         if (!r) return;
         chiudi();
         if (W.Attivita) W.Attivita.daRileggere();
-        aggiorna(r.ticket, 'Intervento in calendario: ' + T.quando(corpo.inizio, adesso()));
+        // Fase 7 (§3.14): l'avviso "Intervento fissato per giovedì 23" con Avvisa il cliente (modello Intervento fissato); non parte niente da solo.
+        const d7 = new Date(String(corpo.inizio).slice(0, 10) + 'T12:00:00');
+        const giorno7 = ['domenica', 'lunedì', 'martedì', 'mercoledì', 'giovedì', 'venerdì', 'sabato'][d7.getDay()] + ' ' + d7.getDate();
+        if (W.Comunicazioni && puo('comunicazioni', 2) && t.idCliente) aggiorna(r.ticket, 'Intervento fissato per ' + giorno7, { testo: 'Avvisa il cliente', fn: () => W.Comunicazioni.scrivi({ modello: 'intervento_fissato', canale: 'whatsapp', idCliente: t.idCliente, idReferente: (t.referente && t.referente.id) || null, idTicket: t.id, idAttivita: r.attivita && r.attivita.id ? r.attivita.id : undefined }) });
+        else aggiorna(r.ticket, 'Intervento in calendario: ' + T.quando(corpo.inizio, adesso()));
       };
       disegnaDestra();
       leggiGiorno();

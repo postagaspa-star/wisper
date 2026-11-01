@@ -143,14 +143,14 @@
       const k = C.contiPreventivo(p, voci);
       const giallo = RP.azioneGialla(p, W.perm());
       const altro = h('button', { type: 'button', class: 'tondo', 'aria-label': 'Altre azioni', title: 'Altre azioni' }, icona('altro', 20));
-      altro.addEventListener('click', () => apriMenu(altro, RP.vociMenu(p, W.perm()).map(v => ({ testo: v.testo, pericolo: v.pericolo, fn: () => azione(v.chiave, p) }))));
+      altro.addEventListener('click', () => apriMenu(altro, RP.vociMenu(p, W.perm()).map(v => ({ testo: v.testo, pericolo: v.pericolo, fn: () => azione(v.chiave, p) })).concat(vociPortale(p))));
       const pulsanteGiallo = giallo ? h('button', { type: 'button', class: 'btn giallo', 'data-visita': 'azione-preventivo', onclick: () => azione(giallo.chiave, p) }, giallo.testo) : null;
 
       aggiungi(pagina, [
         h('div', { class: 'indietro-riga' }, tondo('indietro', 'Torna ai preventivi', () => W.vai('#preventivi')), h('span', { class: 'dove' }, 'Preventivi')),
         h('div', { class: 'testata in-alto' },
           h('div', { class: 'titoli' },
-            h('div', { class: 'pillole-testa' }, pillNumero(p), pillStato(p), RP.scadenzaAParole(p) ? h('span', { class: 'sotto-titolo piccolo-14' }, RP.scadenzaAParole(p)) : null,
+            h('div', { class: 'pillole-testa' }, pillNumero(p), pillStato(p), p.portale && W.Portale ? W.Portale.pillola(p.portale) : null, RP.scadenzaAParole(p) ? h('span', { class: 'sotto-titolo piccolo-14' }, RP.scadenzaAParole(p)) : null,
               p.modello ? pillola('Modello', 'grigio') : null),
             h('h1', { class: 'titolo-scheda' }, p.oggetto || 'Senza oggetto'),
             h('span', { class: 'sotto-titolo' }, [p.idCliente ? nomeCliente(p.idCliente) : 'Cliente da scegliere', p.data ? 'del ' + dataParole(p.data) : ''].filter(Boolean).join(' · ')),
@@ -251,9 +251,17 @@
     /** Accettazione, rifiuto, commessa, revisioni e note interne: la storia del preventivo. */
     function schedaStoria(p, st) {
       const righe = [];
-      const MODI = { firma: 'con la firma', email: 'per email', documento: 'col documento firmato', voce: 'a voce' };
+      const MODI = { firma: 'con la firma', email: 'per email', documento: 'col documento firmato', voce: 'a voce', portale: 'nel portale' };
+      // Fase 7 (§3.8, §12.6): accettato nel portale con la firma, "Roberto Ferretti · 22/10/2026 10:07 · nel portale", e la prova.
+      const acc = p.accettazione || null;
+      if (st === 'ACCETTATO' && acc && acc.modo === 'portale') {
+        righe.push(['Accettato', [acc.da || p.accettatoDa, acc.il ? C.dataOra(acc.il) : (p.accettatoIl ? C.data(p.accettatoIl) : ''), 'nel portale'].filter(Boolean).join(' · ')]);
+        const idFirma = (acc.firma && acc.firma.id) || (p.firma && p.firma.id) || '';
+        if (idFirma) righe.push(['Firma', h('img', { class: 'firma-accettazione', src: '/file/' + idFirma, alt: 'Firma di ' + (acc.da || '') })]);
+        if (acc.prova && puo('preventivi', 2)) righe.push(['Prova', h('button', { type: 'button', class: 'btn collegamento', onclick: () => provaAccettazione(p, acc) }, 'Prova dell\'accettazione')]);
+      }
       if (p.inviatoIl) righe.push(['Inviato', 'il ' + C.dataOra(p.inviatoIl)]);
-      if (st === 'ACCETTATO') righe.push(['Accettato', [p.accettatoDa, p.accettatoIl ? 'il ' + C.data(p.accettatoIl) : '', MODI[p.accettazioneModo]].filter(Boolean).join(' · ')]);
+      if (st === 'ACCETTATO' && !(acc && acc.modo === 'portale')) righe.push(['Accettato', [p.accettatoDa, p.accettatoIl ? 'il ' + C.data(p.accettatoIl) : '', MODI[p.accettazioneModo]].filter(Boolean).join(' · ')]);
       if (st === 'RIFIUTATO') righe.push(['Rifiutato', [p.rifiutatoIl ? 'il ' + C.data(p.rifiutatoIl) : '', p.motivoRifiuto].filter(Boolean).join(' · ')]);
       if (p.idCommessa) righe.push(['Commessa', h('button', { type: 'button', class: 'btn collegamento', onclick: () => W.vai('#commesse/' + encodeURIComponent(p.idCommessa)) }, p.idCommessa)]);
       if (p.complessitaNota) righe.push(['Complessità', p.complessitaNota]);
@@ -266,6 +274,32 @@
         revisioni.length ? h('div', { class: 'coppia' }, h('span', { class: 'k' }, 'Altre revisioni'),
           h('div', { class: 'pillole' }, revisioni.map(x => h('button', { type: 'button', class: 'pillola', onclick: () => W.vai('#preventivi/' + encodeURIComponent(x.id)) },
             'rev. ' + x.revisione + ' · ' + ((RP.STATI[String(x.stato).toUpperCase()] || {}).parola || x.stato))))) : null);
+    }
+
+    /** Fase 7 (§8.2): Pubblica nel portale / Togli dal portale nel menu ⋯ (portale 2 e preventivi 1; mai una bozza). */
+    function vociPortale(p) {
+      if (!W.Portale || !W.Portale.puoPubblicare('preventivo') || p.modello) return [];
+      const st = RP.statoVisto(p);
+      if (p.portale && p.portale.pubblicato) return ['-', { testo: 'Togli dal portale', fn: () => W.Portale.togli(p.portale.pubblicazione || { tipo: 'preventivo', rif: p.id, idCliente: p.idCliente }, () => ricarica(p)) }];
+      if (['INVIATO', 'SCADUTO', 'ACCETTATO', 'RIFIUTATO'].indexOf(st) < 0) return [];
+      return ['-', { testo: 'Pubblica nel portale', fn: async () => { const r = await W.Portale.pubblica('preventivo', p.id, { idCliente: p.idCliente, nomeCliente: nomeCliente(p.idCliente), titolo: 'Preventivo ' + RP.numeroConRevisione(p) }); if (r) ricarica(p); } }];
+    }
+    async function ricarica(p) {
+      delete M.aperti[p.id];
+      M.lista = null;
+      W.disegnaPagina();
+    }
+
+    /** La prova dell'accettazione nel portale (§3.8): chi, quando, con che dispositivo, l'impronta del preventivo visto. Niente IP (§0.4). */
+    function provaAccettazione(p, acc) {
+      const x = acc.prova || {};
+      const coppie = [['Chi', [acc.da, x.email || (acc.referente && acc.referente.email)].filter(Boolean).join(' · ')], ['Quando', acc.il ? C.dataOra(acc.il) : ''],
+        ['Dispositivo', x.agente || x.browser || ''], ['Come', x.via === 'google' ? 'dal portale, passando da Google' : 'dal portale'],
+        ['Impronta del preventivo visto', x.impronta || ''], ['Versione', x.versione || '']].filter(c => c[1]);
+      let chiudi;
+      chiudi = finestra({ titolo: 'Prova dell\'accettazione', fuoco: false,
+        corpo: h('div', { class: 'coppie una' }, coppie.map(c => h('div', { class: 'coppia' }, h('span', { class: 'k' }, c[0]), h('span', { class: 'v' + (c[0].indexOf('Impronta') === 0 ? ' impronta' : '') }, c[1])))),
+        pulsanti: ['spazio', h('button', { type: 'button', class: 'btn grande', onclick: () => chiudi() }, 'Chiudi')] });
     }
 
     // ----------------------------------------------------------------- le azioni
@@ -412,7 +446,9 @@
         if (aMe) { avviso('Copia mandata alla tua casella'); return; }
         chiudi();
         accogli(ris);
-        avviso('Preventivo inviato a ' + a.value.trim() + (S.esempio ? ' (esempio: non è partito niente)' : ''));
+        // Fase 7 (§12.6): "Preventivo mandato" con Manda anche un WhatsApp (il modello Preventivo mandato, al referente del preventivo).
+        avviso('Preventivo mandato a ' + a.value.trim() + (S.esempio ? ' (esempio: non è partito niente)' : ''), false, 9000,
+          puo('comunicazioni', 2) && W.Comunicazioni ? { testo: 'Manda anche un WhatsApp', fn: () => W.Comunicazioni.scrivi({ modello: 'preventivo_mandato', canale: 'whatsapp', idReferente: p.idReferente || null, idCliente: p.idCliente, idPreventivo: p.id }) } : null);
         W.ridisegna();
         W.Visita.azione('invia-preventivo');
       };

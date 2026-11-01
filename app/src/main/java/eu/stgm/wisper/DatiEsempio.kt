@@ -121,11 +121,11 @@ class DatiEsempio(oggi: LocalDate = LocalDate.now(), private val cartella: File?
                 Cliente(
                     "C002", "Rossi Impianti Srl", ultimaTariffa = 42.0, email = "rossi@esempio.it",
                     telefono = "0424 555 010", indirizzo = "Via Nuova 3", cap = "36061", citta = "Bassano del Grappa",
-                    provincia = "VI", partitaIva = "04455667788", codiceFiscale = "04455667788",
+                    provincia = "VI", partitaIva = "04455667788", codiceFiscale = "04455667788", portale = true,
                 ),
                 Cliente(
                     "C003", "Mario Bianchi", ultimaTariffa = 38.0, email = "mario.bianchi@esempio.it",
-                    telefono = "347 000 1122", indirizzo = "Via Montegrappa 8", cap = "36063", citta = "Marostica", provincia = "VI",
+                    telefono = "347 000 1122", indirizzo = "Via Montegrappa 8", cap = "36063", citta = "Marostica", provincia = "VI", portale = true,
                 ),
             ),
             fornitori = listOf(
@@ -147,6 +147,10 @@ class DatiEsempio(oggi: LocalDate = LocalDate.now(), private val cartella: File?
                 Referente("R2", "C001", "Paolo Zordan", "Amministrazione", "amministrazione@elettrodinamica.esempio", "0445 123456 int. 2", ordine = 2),
                 Referente("R3", "C002", "Andrea Rossi", "Titolare", "rossi@esempio.it", "333 123 4567", ordine = 1),
                 Referente("R4", "F001", "Sara Comel", "Ordini", "ordini@comel.esempio", "0444 900 101", ordine = 1),
+                // Fase 7: i referenti del portale e di WhatsApp dell'accordo (fase7.md §10.1), solo esempio.
+                Referente("5", "C002", "Sig. Ferretti", "Ufficio tecnico", "f.ferretti@rossi.example", "333 000 1122", ordine = 2, portale = true, statoPortale = "Attivo", whatsappOk = true),
+                Referente("6", "C002", "Anna Rossi", "Amministrazione", "amministrazione@rossi.example", "0445 000004", ordine = 3, portale = true, statoPortale = "Invitato", pagamenti = true),
+                Referente("7", "C003", "Mario Bianchi", "Cliente privato", "mario.bianchi@esempio.it", "340 000 4455", ordine = 1, portale = true, statoPortale = "Invitato", pagamenti = true, whatsappOk = true),
             ),
             sedi = listOf(
                 Sede("S1", "C001", "sede", "Sede legale", "Via dell'Industria 12", "36016", "Thiene", "VI"),
@@ -273,6 +277,25 @@ class DatiEsempio(oggi: LocalDate = LocalDate.now(), private val cartella: File?
         },
     )
 
+    /** Fase 7: comunicazioni e portale di esempio, in memoria (EsempioFase7). Niente va in coda né resta sul telefono. */
+    override val fase7: eu.stgm.wisper.rapportino.ServizioFase7 = eu.stgm.wisper.rapportino.ServizioFase7(
+        EsempioFase7(oggi), eu.stgm.wisper.rapportino.Scaffale(null, "f7-"),
+        object : eu.stgm.wisper.rapportino.EsecutoreFase4 {
+            override suspend fun <T> esegui(lavoro: suspend () -> T): Result<T> = try {
+                Result.success(lavoro())
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Result.failure(Exception(e.message ?: "È un esempio", e))
+            }
+        },
+        object : eu.stgm.wisper.rapportino.CodaFase7 {
+            override fun azione(chiave: String, corpo: org.json.JSONObject) = Unit
+            override fun presente(chiave: String) = false
+            override fun togli(chiave: String) = false
+        },
+    )
+
     /** Fase 6: persone, mezzi e collaboratori di esempio, in memoria (EsempioFase6). Niente va in coda né resta sul telefono. */
     override val fase6: eu.stgm.wisper.rapportino.ServizioFase6 = eu.stgm.wisper.rapportino.ServizioFase6(
         EsempioFase6(oggi), eu.stgm.wisper.rapportino.Scaffale(null, "f6-"),
@@ -305,7 +328,7 @@ class DatiEsempio(oggi: LocalDate = LocalDate.now(), private val cartella: File?
 
     // Fase 6: chi fa la visita è Manuel, persona 1 (ha il Doblò e il multimetro scaduto: "Il mio" si vede).
     override val sessione: StateFlow<Sessione> =
-        MutableStateFlow(Sessione(utentiEsempio.first(), Permessi.iniziali(Ruoli.TITOLARE), interfaccia = eu.stgm.wisper.rapportino.Interfaccia(idPersona = "1", puoApprovareAssenze = true, vedeRiservati = true))).asStateFlow()
+        MutableStateFlow(Sessione(utentiEsempio.first(), Permessi.iniziali(Ruoli.TITOLARE), interfaccia = eu.stgm.wisper.rapportino.Interfaccia(idPersona = "1", puoApprovareAssenze = true, vedeRiservati = true, portaleCollegato = true, portaleAttivo = true, notificheNuove = 2))).asStateFlow()
 
     private val _dashboard = MutableStateFlow<Dashboard?>(null)
     override val dashboard: StateFlow<Dashboard?> = _dashboard.asStateFlow()
@@ -475,7 +498,17 @@ class DatiEsempio(oggi: LocalDate = LocalDate.now(), private val cartella: File?
         val unita = CosaFareFase2.unisci(base, fase2)
         // Le voci della fase 3 (cose da approvare, timer, rimborsi), come le manda il server (§14.13).
         val (urgenti3, settimana3) = fase3OppureNiente()?.vociDashboard() ?: (emptyList<VoceDashboard>() to emptyList())
-        _dashboard.value = unita.copy(urgenti = urgenti3 + unita.urgenti, settimana = unita.settimana + settimana3)
+        // Le voci e i numeri della fase 7 (§11.1), come le manda il server.
+        val urgenti7 = listOf(VoceDashboard("portale", "Richiesta urgente dal portale: TK/2026/0016", "Rossi Impianti Srl · Capannone di Thiene · Sig. Ferretti · alle 9:12", gravita = "urgente",
+            collegamento = eu.stgm.wisper.rapportino.Collegamento("ticket", "16")))
+        val settimana7 = listOf(VoceDashboard("messaggio", "1 messaggio da mandare oggi", "Promemoria a Sig. Ferretti", gravita = "attenzione",
+            collegamento = eu.stgm.wisper.rapportino.Collegamento("comunicazioni", parametri = mapOf("segmento" to "damandare"))))
+        val pianificare7 = listOf(VoceDashboard("portale", "2 file dai clienti da guardare", "Schema quadro QG2.pdf · Rossi Impianti Srl, Foto targa inverter.jpg · Mario Bianchi",
+            collegamento = eu.stgm.wisper.rapportino.Collegamento("portale", parametri = mapOf("segmento" to "daguardare"))))
+        _dashboard.value = unita.copy(
+            urgenti = urgenti3 + urgenti7 + unita.urgenti, settimana = unita.settimana + settimana3 + settimana7, pianificare = unita.pianificare + pianificare7,
+            fase7 = eu.stgm.wisper.rapportino.NumeriFase7(portaleDaGuardare = 4, richiesteNuove = 1, caricamenti = 2, referenti = 3, collegato = "si", daMandareOggi = 1, preparati = 1, proposti = 2),
+        )
     }
 
     /** La fase 3 nasce dopo la prima dashboard (la usa mentre si costruisce): fino ad allora niente voci. */
@@ -1282,6 +1315,8 @@ internal fun nomeModulo(modulo: String): String = when (modulo) {
     Moduli.BANCHE -> "Banche e scadenze"
     Moduli.SPESE -> "Spese e trasferte"
     Moduli.AMMINISTRAZIONE -> "Amministrazione"
+    Moduli.COMUNICAZIONI -> "WhatsApp e comunicazioni"
+    Moduli.PORTALE -> "Portale clienti"
     Moduli.COSTI -> "Soldi"
     else -> modulo
 }

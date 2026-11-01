@@ -93,7 +93,9 @@
     function perSalvare(a) {
       const x = {};
       ['id', 'titolo', 'descrizione', 'tipo', 'idCliente', 'idCommessa', 'idPrestazione', 'assegnataA', 'priorita', 'scadenza', 'inizio', 'fine',
-        'tuttoIlGiorno', 'luogo', 'promemoriaMinuti', 'checklist', 'ricorrenza'].forEach(k => { if (a[k] !== undefined) x[k] = a[k]; });
+        'tuttoIlGiorno', 'luogo', 'promemoriaMinuti', 'checklist', 'ricorrenza',
+        // Fase 7 (§3.14): Avvisa il cliente e a quale referente; senza, per le attività nuove, la regola di base del server.
+        'avvisaCliente', 'idReferenteAvviso'].forEach(k => { if (a[k] !== undefined) x[k] = a[k]; });
       return x;
     }
 
@@ -262,7 +264,7 @@
         // Fase 5: un intervento è di un ticket (nasce da Pianifica l'intervento): qui si sposta, il tipo non si cambia.
         a.tipo === 'intervento' ? h('div', { class: 'pillole' }, pillola('Intervento del ticket ' + (a.ticket || ''), 'blu'),
           a.idTicket ? h('button', { type: 'button', class: 'btn collegamento', onclick: () => { document.querySelectorAll('.velo').forEach(x => x.remove()); W.vai('#ticket/tk/' + a.idTicket); } }, 'Apri il ticket') : null)
-          : segmenti(RA.TIPI, a.tipo, x => { if (sola) return; a.tipo = x; disegnaTipo(); disegnaQuando(); }))]);
+          : segmenti(RA.TIPI, a.tipo, x => { if (sola) return; a.tipo = x; disegnaTipo(); disegnaQuando(); disegnaAvvisa(); }))]);
       const disegnaQuando = () => {
         const orario = a.tipo !== 'attivita';
         aggiungi(svuota(zone.quando), orario ? [
@@ -282,11 +284,27 @@
         const commesse = S.ana.commesse.filter(m => !m.modello && !m.archiviata && (m.stato === 'APERTA' || m.id === a.idCommessa) && (!a.idCliente || m.idCliente === a.idCliente));
         const prestazioni = S.ana.prestazioni.filter(x => x.idCommessa === a.idCommessa);
         aggiungi(svuota(zone.legami), [
-          campo('Cliente', selezione([['', 'Studio, senza cliente']].concat(clienti.map(c => [c.id, c.nome])), a.idCliente || '', x => { a.idCliente = x; if (a.idCommessa && (W.commessa(a.idCommessa) || {}).idCliente !== x) a.idCommessa = ''; disegnaLegami(); }, { disabled: sola })),
+          campo('Cliente', selezione([['', 'Studio, senza cliente']].concat(clienti.map(c => [c.id, c.nome])), a.idCliente || '', x => { a.idCliente = x; if (a.idCommessa && (W.commessa(a.idCommessa) || {}).idCliente !== x) a.idCommessa = ''; a.idReferenteAvviso = undefined; disegnaLegami(); disegnaAvvisa(); }, { disabled: sola })),
           campo('Commessa', selezione([['', 'Nessuna']].concat(commesse.map(m => [m.id, m.id + ' · ' + m.descrizione])), a.idCommessa || '', x => {
-            a.idCommessa = x; a.idPrestazione = null; const m = W.commessa(x); if (m && !a.idCliente) a.idCliente = m.idCliente; disegnaLegami();
+            a.idCommessa = x; a.idPrestazione = null; const m = W.commessa(x); if (m && !a.idCliente) a.idCliente = m.idCliente; disegnaLegami(); disegnaAvvisa();
           }, { disabled: sola })),
           prestazioni.length ? campo('Prestazione', selezione([['', 'Nessuna']].concat(prestazioni.map(x => [x.id, x.nome])), a.idPrestazione || '', x => { a.idPrestazione = x ? Number(x) || x : null; }, { disabled: sola })) : null]);
+      };
+      // Fase 7 (§3.14, §12.6): un appuntamento, un sopralluogo o un intervento con un cliente: Avvisa il cliente (WhatsApp · Email · No) e il referente.
+      // È solo una proposta: non parte niente da solo, il promemoria compare in Comunicazioni › Da mandare.
+      zone.avvisa = h('div');
+      const K7 = radice.WisperRegoleComunicazioni;
+      const disegnaAvvisa = () => {
+        svuota(zone.avvisa);
+        if (!K7 || K7.TIPI_CON_AVVISO.indexOf(a.tipo) < 0 || !a.idCliente) return;
+        const refs = S.ana.referenti.filter(r => r.idSoggetto === a.idCliente);
+        const cli = W.cliente(a.idCliente) || {};
+        const ref = refs.find(r => String(r.id) === String(a.idReferenteAvviso)) || refs.find(r => r.whatsappOk) || refs.find(r => r.email) || null;
+        const scelto = a.avvisaCliente !== undefined && a.avvisaCliente !== null ? a.avvisaCliente : K7.avvisaDiBase(ref, cli);
+        aggiungi(zone.avvisa, [h('div', { class: 'campo' }, h('label', null, 'Avvisa il cliente'),
+          h('div', { class: 'pillole-testa' }, segmenti([['whatsapp', 'WhatsApp'], ['email', 'Email'], ['', 'No']], scelto, x => { if (sola) return; a.avvisaCliente = x; disegnaAvvisa(); }, 'piccoli'),
+            scelto && refs.length > 1 ? h('div', { class: 'pillole' }, refs.map(r => h('button', { type: 'button', class: 'pillola' + (ref && String(ref.id) === String(r.id) ? ' scelta' : ''), disabled: sola,
+              onclick: () => { a.idReferenteAvviso = r.id; if (a.avvisaCliente === undefined) a.avvisaCliente = scelto; disegnaAvvisa(); } }, r.nome))) : scelto && ref ? h('span', { class: 'secondario' }, ref.nome) : null))]);
       };
       const disegnaPriorita = () => aggiungi(svuota(zone.priorita), [h('div', { class: 'riga-campi' },
         h('div', { class: 'campo' }, h('label', null, 'Priorità'), segmenti(RA.PRIORITA, a.priorita, x => { if (sola) return; a.priorita = x; disegnaPriorita(); })),
@@ -363,7 +381,7 @@
           if (ris && ris.file) { a.allegati.push(Object.assign({ nome: f.nome }, ris.file)); disegnaAllegati(); }
         } }, icona('graffetta', 16, 2.2), 'Allega un file'))]);
 
-      disegnaTipo(); disegnaQuando(); disegnaChi(); disegnaLegami(); disegnaPriorita(); disegnaRipeti(); disegnaChecklist(); disegnaAllegati();
+      disegnaTipo(); disegnaQuando(); disegnaChi(); disegnaLegami(); disegnaAvvisa(); disegnaPriorita(); disegnaRipeti(); disegnaChecklist(); disegnaAllegati();
 
       /** Il modulo nella forma di salvaAttivita. */
       const leggiModulo = () => {
@@ -409,7 +427,16 @@
         // Una ricorrenza nuova o cambiata tocca più righe: si rilegge tutto.
         if (x.ricorrenza || perRicorrenza || allegatiNuovi.length) daRileggere(); else accogli(ris.attivita, esistente);
         W.caricaDashboard();
-        avviso(esistente ? 'Attività salvata' : (x.ricorrenza ? 'Attività creata: si ripete ' + RA.ricorrenzaAParole(x.ricorrenza) : 'Attività creata'));
+        // Fase 7 (§3.14): "Intervento fissato per giovedì 23" con Avvisa il cliente (il modello Intervento fissato). Non parte niente da solo.
+        const conAvviso = salvata && K7 && K7.TIPI_CON_AVVISO.indexOf(salvata.tipo) >= 0 && salvata.idCliente && salvata.inizio && W.puo('comunicazioni', 2) && W.Comunicazioni
+          && (salvata.avvisaCliente !== undefined ? salvata.avvisaCliente : x.avvisaCliente) !== '';
+        if (conAvviso) {
+          const d = new Date(String(salvata.inizio).slice(0, 10) + 'T12:00:00');
+          const quando = ['domenica', 'lunedì', 'martedì', 'mercoledì', 'giovedì', 'venerdì', 'sabato'][d.getDay()] + ' ' + d.getDate();
+          const nome = { intervento: 'Intervento', sopralluogo: 'Sopralluogo', appuntamento: 'Appuntamento' }[salvata.tipo] || 'Intervento';
+          avviso(nome + ' fissato per ' + quando, false, 9000, { testo: 'Avvisa il cliente', fn: () => W.Comunicazioni.scrivi({ modello: 'intervento_fissato',
+            canale: (salvata.avvisaCliente || x.avvisaCliente) === 'email' ? 'email' : 'whatsapp', idCliente: salvata.idCliente, idReferente: salvata.idReferenteAvviso || x.idReferenteAvviso || null, idAttivita: salvata.id }) });
+        } else avviso(esistente ? 'Attività salvata' : (x.ricorrenza ? 'Attività creata: si ripete ' + RA.ricorrenzaAParole(x.ricorrenza) : 'Attività creata'));
         W.ridisegna();
       };
       const togli = async () => {
@@ -428,7 +455,7 @@
         ? h('button', { type: 'button', class: 'btn grande', onclick: () => { chiudi(); W.moduloRapportino(null, { data: String(a.inizio).slice(0, 10), idCliente: a.idCliente, idCommessa: a.idCommessa }); } }, 'Scrivi il rapportino') : null;
       const corpo = h('div', { class: 'modulo modulo-attivita' });
       const ridisegnaTutto = () => aggiungi(svuota(corpo), [
-        h('div', { class: 'col' }, campo('Titolo', v.titolo, errori.titolo), zone.tipo, zone.quando, zone.chi, zone.legami, zone.priorita, zone.ripeti),
+        h('div', { class: 'col' }, campo('Titolo', v.titolo, errori.titolo), zone.tipo, zone.quando, zone.chi, zone.legami, zone.avvisa, zone.priorita, zone.ripeti),
         h('div', { class: 'col' }, h('h3', null, 'Checklist'), zone.checklist, campo('Note', v.descrizione), h('h3', null, 'Allegati'), zone.allegati)]);
       ridisegnaTutto();
       chiudi = finestra({

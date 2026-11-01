@@ -227,7 +227,9 @@ module.exports = {
     if (testo(d.da)) { cond.push('substr(quando, 1, 10) >= ?'); par.push(testo(d.da)); }
     if (testo(d.a)) { cond.push('substr(quando, 1, 10) <= ?'); par.push(testo(d.a)); }
     if (testo(d.utente)) { cond.push('utente_id = ?'); par.push(Number(d.utente)); }
-    if (testo(d.tabella)) { cond.push('tabella = ?'); par.push(testo(d.tabella)); }
+    // Fase 7: "portale" vale per tutte le tabelle del portale (portale_pubblicazioni, portale_link, ...).
+    if (testo(d.tabella) === 'portale') cond.push("(tabella = 'portale' OR tabella LIKE 'portale\\_%' ESCAPE '\\')");
+    else if (testo(d.tabella)) { cond.push('tabella = ?'); par.push(testo(d.tabella)); }
     if (testo(d.idRiga)) { cond.push('id_riga = ?'); par.push(testo(d.idRiga)); }
     const dove = cond.length ? ' WHERE ' + cond.join(' AND ') : '';
     const quante = this.db.riga('SELECT COUNT(*) n FROM registro' + dove, ...par).n;

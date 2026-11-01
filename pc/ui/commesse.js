@@ -120,7 +120,9 @@
         segmenti([['panoramica', 'Panoramica'], ['prestazioni', 'Prestazioni · ' + prestazioni.length], ['rapportini', 'Rapportini']].concat(puoDocumenti(1) ? [['documenti', 'Documenti']] : [])
           .concat(soldi() ? [['costi', 'Costi'], ['dafatturare', 'Da fatturare']] : [])
           // Fase 6 (§12.8): gli incarichi ai collaboratori esterni sulla commessa (con collaboratori 1).
-          .concat(puo('collaboratori') && !(W.eEsterno && W.eEsterno()) ? [['incarichi', 'Incarichi' + (S.conteIncarichi && typeof S.conteIncarichi[m.id] === 'number' ? ' · ' + S.conteIncarichi[m.id] : ''), { 'data-conta': 'incarichi' }]] : []),
+          .concat(puo('collaboratori') && !(W.eEsterno && W.eEsterno()) ? [['incarichi', 'Incarichi' + (S.conteIncarichi && typeof S.conteIncarichi[m.id] === 'number' ? ' · ' + S.conteIncarichi[m.id] : ''), { 'data-conta': 'incarichi' }]] : [])
+          // Fase 7 (§12.6): lo storico delle comunicazioni della commessa.
+          .concat(puo('comunicazioni') && W.Comunicazioni ? [['comunicazioni', 'Comunicazioni' + (S.conteComunicazioni && typeof S.conteComunicazioni[m.id] === 'number' ? ' · ' + S.conteComunicazioni[m.id] : ''), { 'data-conta': 'comunicazioni' }]] : []),
         schedaDi(m), x => { S.schedaCommessa[m.id] = x; W.disegnaPagina(); }),
         area]);
 
@@ -137,7 +139,17 @@
       // Fase 5: la scheda Documenti è l'archivio filtrato (cartella in cima, documenti, "Da Wisper"); con un server vecchio quella di prima.
       else if (scheda === 'documenti' && puoDocumenti(1)) { if (W.Archivio && W.perm().documenti !== undefined) W.Archivio.schedaDocumenti(area, { idCommessa: m.id }); else documentiCommessa(area, m); }
       else if (scheda === 'incarichi' && puo('collaboratori')) incarichiCommessa(area, m);
+      else if (scheda === 'comunicazioni' && puo('comunicazioni') && W.Comunicazioni) W.Comunicazioni.schedaCommessa(area, m.id, m.idCliente);
       else { panoramica(area, m, k, soldi() ? RO.costiConFase3(k, costoDi(m)) : null); inPrestito(area, m); }
+      // Fase 7: il numero delle comunicazioni della commessa arriva dal server mentre la scheda è aperta.
+      if (puo('comunicazioni') && W.Comunicazioni && !(S.conteComunicazioni && typeof S.conteComunicazioni[m.id] === 'number')) {
+        Rete.get('/server/comunicazioni?idCommessa=' + encodeURIComponent(m.id)).then(r => {
+          S.conteComunicazioni = S.conteComunicazioni || {};
+          S.conteComunicazioni[m.id] = typeof r.quante === 'number' ? r.quante : (r.comunicazioni || []).length;
+          const b = document.querySelector('[data-conta="comunicazioni"]');
+          if (b) b.textContent = 'Comunicazioni · ' + S.conteComunicazioni[m.id];
+        }).catch(() => null);
+      }
       // Il numero degli incarichi arriva dal server mentre la scheda è aperta.
       if (puo('collaboratori') && !(W.eEsterno && W.eEsterno()) && !(S.conteIncarichi && typeof S.conteIncarichi[m.id] === 'number')) {
         Rete.get('/server/incarichi?stato=tutti&idCommessa=' + encodeURIComponent(m.id)).then(r => {
@@ -182,7 +194,9 @@
     /** Si apre su Prestazioni se ce ne sono, altrimenti su Panoramica. */
     function schedaDi(m) {
       const scelta = S.schedaCommessa[m.id];
-      const valide = ['panoramica', 'prestazioni', 'rapportini', 'documenti'].concat(soldi() ? ['costi', 'dafatturare'] : []);
+      const valide = ['panoramica', 'prestazioni', 'rapportini', 'documenti'].concat(soldi() ? ['costi', 'dafatturare'] : [])
+        // Fase 7: Comunicazioni; con lei anche Incarichi (fase 6), che qui mancava e riportava alla panoramica.
+        .concat(puo('collaboratori') ? ['incarichi'] : []).concat(puo('comunicazioni') ? ['comunicazioni'] : []);
       if (scelta && valide.indexOf(scelta) >= 0) return scelta;
       return S.ana.prestazioni.some(p => p.idCommessa === m.id) ? 'prestazioni' : 'panoramica';
     }

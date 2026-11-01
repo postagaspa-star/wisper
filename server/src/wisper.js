@@ -114,6 +114,8 @@ class Wisper {
     // Le scritture gia' fatte, per non rifarle quando la risposta si perde (ricordo.js, la porta Google).
     preparaRicordo(this);
     this.prepara();
+    // Fase 7: il router del portale clienti (src/portale/): w.portale.richiesta(lavoro), dallo script del portale o da --porta-portale.
+    this.portale = require('./portale').creaPortale(this);
   }
 
   /**
@@ -156,6 +158,9 @@ class Wisper {
 
   chiudi() {
     if (this.pianificazione) clearInterval(this.pianificazione);
+    // Fase 7: il giro del portale (avvisi, pulizie) e il secondo giro di porta.js, quello del portale.
+    if (this.giroPortaleTimer) clearInterval(this.giroPortaleTimer);
+    if (this.portaPortale) this.portaPortale.ferma();
     // La porta Google (porta.js): la chiamata aperta verso lo script si chiude subito.
     if (this.porta) this.porta.ferma();
     this.db.chiudi();
@@ -241,7 +246,8 @@ class Wisper {
     const note = [nota, c.ponte ? 'dalla versione vecchia (ponte)' : ''].filter(Boolean).join('; ');
     this.db.esegui(
       'INSERT INTO registro (quando, utente_id, utente, disp, azione, tabella, id_riga, prima, dopo, nota) VALUES (?,?,?,?,?,?,?,?,?,?)',
-      adesso(), c.utente ? c.utente.id : null, c.utente ? c.utente.nome : (c.sistema ? 'sistema' : ''),
+      // Fase 7: le azioni del portale le fa il referente ("Sig. Ferretti (portale)"), che non e' un utente di Wisper.
+      adesso(), c.utente ? c.utente.id : null, c.utente ? c.utente.nome : c.portale ? c.portale.nome + ' (portale)' : (c.sistema ? 'sistema' : ''),
       testo(c.dispNome || c.disp).slice(0, 80), testo(c.azione).slice(0, 40), tabella, String(idRiga === null || idRiga === undefined ? '' : idRiga),
       pulisci(prima), pulisci(dopo), note);
   }
@@ -428,6 +434,8 @@ module.exports = {
 for (const parte of ['anagrafiche', 'rapportini', 'file', 'accesso', 'amministrazione', 'dashboard', 'esporta', 'copie', 'email', 'vies',
   'preventivi', 'attivita', 'ore', 'spese', 'fatture', 'ritorno', 'banche', 'documenti', 'scadenze', 'ticket', 'contratti',
   // Fase 6: persone e risorse umane, ferie e presenze, mezzi e attrezzature, collaboratori esterni.
-  'persone', 'assenze', 'mezzi', 'collaboratori', 'dashboard6']) {
+  'persone', 'assenze', 'mezzi', 'collaboratori', 'dashboard6',
+  // Fase 7: WhatsApp e comunicazioni, il portale clienti dal lato dello studio.
+  'comunicazioni', 'portale']) {
   Object.assign(Wisper.prototype, require('./azioni/' + parte));
 }

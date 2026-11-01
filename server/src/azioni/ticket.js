@@ -404,8 +404,10 @@ module.exports = {
     o.ore = c.ore.filter(x => this.vedeDi(x.utente_id)).map(x => this.oreDaRiga(x, aOre));
     const aSpese = this.aiutiSpese(c.spese);
     o.spese = c.spese.filter(x => this.vedeDi(x.utente_id) || x.rapportino_id).map(x => this.spesaDaRiga(x, aSpese));
-    o.foto = this.db.righe("SELECT * FROM file WHERE tipo = 'ticket' AND ticket_id = ? AND cestinato IS NULL ORDER BY creato, rowid", t.id)
-      .map(f => ({ id: f.id, url: '/file/' + f.id, nome: f.nome, mime: f.mime, idDocumento: f.documento_id === null ? null : f.documento_id }));
+    // Fase 7: anche le foto e i file mandati dal cliente nel portale (pillola "Dal cliente").
+    o.foto = this.db.righe("SELECT * FROM file WHERE tipo IN ('ticket', 'portale') AND ticket_id = ? AND cestinato IS NULL ORDER BY creato, rowid", t.id)
+      .map(f => Object.assign({ id: f.id, url: '/file/' + f.id, nome: f.nome, mime: f.mime, idDocumento: f.documento_id === null ? null : f.documento_id },
+        f.tipo === 'portale' ? { dalCliente: true } : {}));
     o.documenti = this.livello('documenti') >= 1 ? this.leggiDocumenti({ idTicket: t.id }).documenti : [];
     // La somma (§7.5): ore (rapportini + ore registrate), km, materiale e spese; con i soldi anche costo e importo.
     const oreTot = c.rapportini.reduce((tot, r) => tot + (numero(r.ore_totali) || numero(r.ore_lavoro) + numero(r.ore_extra) + numero(r.ore_viaggio)), 0) +
@@ -434,6 +436,10 @@ module.exports = {
     o.riservata = fatt && fatt.etichetta !== 'fuori' ? fatt.etichetta : null;
     o.puoChiudere = this.puoChiudereTicket() && ['aperto', 'in_carico', 'risolto'].indexOf(t.stato) >= 0;
     o.giallo = this.gialloTicket(t, o);
+    // Fase 7 (§10.4): nel portale? quanti messaggi nuovi del cliente; la conversazione pubblica (divisa dalla cronologia interna).
+    const msg = this.db.righe("SELECT * FROM comunicazioni WHERE canale = 'portale' AND pubblica = 1 AND ticket_id = ? ORDER BY quando, id", t.id);
+    o.portale = { visibile: t.portale_visibile === 1 || t.origine === 'portale', messaggiNuovi: this.db.riga("SELECT COUNT(*) n FROM portale_da_guardare WHERE tipo = 'messaggio' AND rif = ? AND visto_il IS NULL", String(t.id)).n };
+    o.messaggi = msg.map(m => this.messaggioStudio(m));
     return o;
   },
 
@@ -634,7 +640,9 @@ module.exports = {
     const tipo = x.tipo !== undefined ? testo(x.tipo) || 'guasto' : p.tipo || 'guasto';
     if (!TIPI[tipo]) throw new Rifiuto('Tipo: guasto, verifica, piccolo, assistenza o programmato');
     const origine = x.origine !== undefined ? testo(x.origine) || 'telefono' : p.origine || 'telefono';
-    if (origine === 'whatsapp' || origine === 'portale') throw new Rifiuto('Da dove arriva: telefono, email, sopralluogo o ufficio (WhatsApp e il portale non sono ancora collegati)');
+    // Fase 7: "portale" lo mette solo il portale (il router, con c.portale); WhatsApp non e' collegato.
+    if (origine === 'whatsapp') throw new Rifiuto('WhatsApp non è collegato');
+    if (origine === 'portale' && !c.portale && !(prima && prima.origine === 'portale')) throw new Rifiuto('Da dove arriva: «Portale» lo mette solo il portale');
     if (!ORIGINI[origine] || (origine === 'scadenza' && !c.sistema && (!prima || prima.origine !== 'scadenza'))) throw new Rifiuto('Da dove arriva: telefono, email, sopralluogo o ufficio');
     const impatto = x.impatto !== undefined ? testo(x.impatto) : p.impatto || '';
     if (impatto && IMPATTI.indexOf(impatto) < 0) throw new Rifiuto('L\'impianto è fermo? fermo, ridotto o nessuno');
@@ -687,9 +695,11 @@ module.exports = {
         preso_il: responsabile !== null ? ora : '', creato_da: io, creato: ora, modificato: ora,
       }));
       this.segnaNumero('ticket', numero.numero);
-      const chi = c.utente ? c.utente.nome : 'Wisper';
+      const chi = c.utente ? c.utente.nome : c.portale ? c.portale.nome : 'Wisper';
       this.eventoTicket(id, origine === 'scadenza' ? 'Nato da una scadenza' : 'Aperto da ' + chi + ' (' + ORIGINI[origine].toLowerCase() + ')');
       if (responsabile !== null) this.eventoTicket(id, responsabile === io ? 'Preso da ' + chi : 'Assegnato a ' + this.nomeUtente(responsabile));
+      // Fase 7: la regola "richieste: tutte" del cliente col portale (quelle del portale le pubblica il portale).
+      if (origine !== 'portale') this.pubblicaConRegola('ticket', id, {});
     }
     return { ok: true, ticket: this.ticketCompleto(this.db.riga('SELECT * FROM ticket WHERE id = ?', id)) };
   },
@@ -717,6 +727,14 @@ module.exports = {
       if (!t.preso_il) v.preso_il = ora;
     } else if (t.stato === 'in_carico') v.stato = 'aperto';
     this.aggiorna('ticket', t.id, v);
+    // Fase 7: preso o assegnato, la riga "richiesta" di Da guardare si chiude da sola; a chi lo riceve da un altro, la notifica.
+    if (responsabile !== null) {
+      this.chiudiDaGuardare('richiesta', t.id);
+      if (responsabile !== io) {
+        this.notifica([responsabile], 'assegnato', 'Ti hanno assegnato: ' + t.numero + ' ' + t.titolo,
+          (this.db.riga('SELECT nome FROM soggetti WHERE id = ?', t.cliente_id) || {}).nome || '', { pagina: 'ticket', id: t.id });
+      }
+    }
     if (responsabile === null) this.eventoTicket(t.id, 'Nessuno lo segue più');
     else this.eventoTicket(t.id, responsabile === io ? 'Preso da ' + this.nomeUtente(io) : 'Assegnato a ' + this.nomeUtente(responsabile));
   },
@@ -792,6 +810,8 @@ module.exports = {
     this.eventoTicket(t.id, 'Risolto' + (esito ? ': ' + esito : ''));
     this.ricalcolaIntervento(t.id);
     this.chiudiScadenzaDelTicket(t, dataIso(ora));
+    // Fase 7: "Risolta" e' una novita' da dire al cliente nel portale (avviso raggruppato).
+    this.novitaRichiesta(t.id, 'risolta');
     return this.rispostaTicket(t.id);
   },
 
@@ -843,6 +863,8 @@ module.exports = {
       this.aggiorna('attivita', a.id, { stato: 'annullata', modificato: ora }, 'id', 'il ticket ' + t.numero + ' è annullato');
     }
     this.eventoTicket(t.id, 'Annullato: ' + motivo);
+    // Fase 7 (§8.1): un ticket non nato dal portale esce dal portale quando si annulla.
+    if (t.origine !== 'portale') this.chiudiPubblicazioni('ticket', t.id, 'annullato');
     return this.rispostaTicket(t.id);
   },
 
@@ -872,6 +894,8 @@ module.exports = {
     if (dopo.responsabile_id === null) this.cambiaResponsabile(dopo, chi);
     else if (dopo.stato === 'aperto') this.aggiorna('ticket', t.id, { stato: 'in_carico', preso_il: dopo.preso_il || adesso(), modificato: adesso() });
     this.eventoTicket(t.id, 'Intervento pianificato per ' + quandoLungo(r.attivita.inizio) + (chi !== io ? ' (' + this.nomeUtente(chi) + ')' : ''));
+    // Fase 7: "Intervento fissato" e' una novita' da dire al cliente nel portale.
+    this.novitaRichiesta(t.id, 'intervento fissato');
     return { ok: true, ticket: this.ticketCompleto(this.db.riga('SELECT * FROM ticket WHERE id = ?', t.id)), attivita: r.attivita };
   },
 

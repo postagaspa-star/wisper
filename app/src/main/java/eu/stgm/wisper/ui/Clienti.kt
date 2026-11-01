@@ -311,19 +311,27 @@ fun SchermataCliente(dati: Dati, nav: Navigatore, id: String) {
                 if (cl.cliente && perm.vede(Moduli.RAPPORTINI)) RigaRapportiniCliente(viste, ana, id, perm.costi) {
                     nav.sezione(Sezione.RAPPORTINI, FiltroRapportini(mese = null, idCliente = id))
                 }
+                // Fase 7 (§12.6): il portale del cliente e le sue ultime comunicazioni.
+                if (cl.cliente && !cl.archiviato) {
+                    SezionePortaleCliente(dati, nav, id)
+                    SezioneComunicazioni(dati, nav, idCliente = id)
+                }
             }
             "referenti" -> {
                 Scheda(orizzontale = 18.dp, verticale = 0.dp, raggio = 22.dp, spazio = 0.dp) {
                     if (referenti.isEmpty()) TestoRiga("Nessun referente. Aggiungi chi chiami di solito.")
                     referenti.forEachIndexed { i, r ->
                         if (i > 0) LineaElenco()
-                        RigaVoce(
-                            r.nome,
-                            sotto = listOf(r.ruolo, r.telefono).filter { it.isNotBlank() }.joinToString(" · ").ifBlank { null },
-                            inizio = { CerchioPersona(iniziali(r.nome), 40.dp) },
-                            fine = if (r.telefono.isNotBlank()) ({ PulsanteTondo(Icone.telefono, "Chiama ${r.nome}", { chiama(ctx, r.telefono, avvisi) }) }) else null,
-                            freccia = false,
-                            onClick = if (puo) ({ referente = r }) else null,
+                        // Fase 7 (§12.6): le pillole del portale e di WhatsApp, le icone WhatsApp, Email, Chiama.
+                        val scriveCom = perm.modifica(Moduli.COMUNICAZIONI)
+                        RigaReferente7(
+                            dati, r,
+                            onApri = if (puo) ({ referente = r }) else null,
+                            onChiama = { chiama(ctx, r.telefono, avvisi) },
+                            onEmail = {
+                                if (scriveCom) MessaggioDaAprire.bozza = Bozza7(a = eu.stgm.wisper.rapportino.Destinatario.da(r, cl), canale = "email", modello = "libero", daPreparare = true)
+                                else scriviEmail(ctx, r.email, avvisi)
+                            },
                         )
                     }
                 }
@@ -402,6 +410,15 @@ fun SchermataCliente(dati: Dati, nav: Navigatore, id: String) {
     referente?.let { r ->
         FoglioReferente(
             r,
+            onWhatsapp = if (perm.modifica(Moduli.CLIENTI) || perm.modifica(Moduli.COMUNICAZIONI)) ({ ok ->
+                referente = null
+                if (dati.esempio) avvisi.mostra(SOLO_ESEMPIO)
+                else ambito.launch {
+                    dati.fase7.segnaWhatsapp(r.id, ok)
+                        .onSuccess { dati.aggiorna(); avvisi.mostra(if (ok) "${r.nome} ha detto sì a WhatsApp" else "${r.nome} non vuole più WhatsApp") }
+                        .onFailure { avvisi.mostra(spiegaErrore(it)) }
+                }
+            }) else null,
             onSalva = { nuovo, fatto ->
                 ambito.launch {
                     dati.salvaReferente(nuovo).onSuccess { fatto(null); if (r.id.isBlank()) avvisi.mostra("Aggiunto ${nuovo.nome}") }
@@ -500,13 +517,16 @@ private fun RigaRapportiniCliente(viste: List<Vista>, ana: Anagrafiche, id: Stri
 
 /** Il foglio di un referente: nome, ruolo, telefono, email, note; Togli. */
 @Composable
-private fun FoglioReferente(r: Referente, onSalva: (Referente, (String?) -> Unit) -> Unit, onTogli: () -> Unit, onChiudi: () -> Unit) {
+private fun FoglioReferente(r: Referente, onSalva: (Referente, (String?) -> Unit) -> Unit, onTogli: () -> Unit, onChiudi: () -> Unit, onWhatsapp: ((Boolean) -> Unit)? = null) {
     val c = W.colori
     var nome by remember(r.id) { mutableStateOf(r.nome) }
     var ruolo by remember(r.id) { mutableStateOf(r.ruolo) }
     var telefono by remember(r.id) { mutableStateOf(r.telefono) }
     var email by remember(r.id) { mutableStateOf(r.email) }
     var note by remember(r.id) { mutableStateOf(r.note) }
+    // Fase 7 (§12.6): chi paga le fatture e il numero per WhatsApp, se diverso dal telefono.
+    var pagamenti by remember(r.id) { mutableStateOf(r.pagamenti) }
+    var whatsapp by remember(r.id) { mutableStateOf(r.whatsapp) }
     var errore by remember(r.id) { mutableStateOf<String?>(null) }
     var provato by remember(r.id) { mutableStateOf(false) }
     var salvo by remember(r.id) { mutableStateOf(false) }
@@ -518,6 +538,12 @@ private fun FoglioReferente(r: Referente, onSalva: (Referente, (String?) -> Unit
             CampoTesto(telefono, { telefono = it }, "Telefono", Modifier.fillMaxWidth(), tastiera = KeyboardType.Phone)
             CampoTesto(email, { email = it.trim() }, "Email", Modifier.fillMaxWidth(), tastiera = KeyboardType.Email, errore = erroreEmail(email))
             CampoTesto(note, { note = it }, "Note", Modifier.fillMaxWidth(), righe = 2)
+            RigaInterruttore("Paga le fatture", pagamenti, { pagamenti = it })
+            CampoTesto(whatsapp, { whatsapp = it }, "Numero WhatsApp", Modifier.fillMaxWidth(), tastiera = KeyboardType.Phone, segnaposto = "Se diverso dal telefono")
+            if (r.id.isNotBlank() && onWhatsapp != null) {
+                if (r.whatsappOk) PulsanteTesto("Non vuole più WhatsApp", { onWhatsapp(false) }, Modifier.fillMaxWidth(), colore = c.testo2)
+                else PulsanteBordo("Ha detto sì a WhatsApp", { onWhatsapp(true) }, Modifier.fillMaxWidth(), altezza = 48.dp, icona = Icone.whatsapp)
+            }
         }
         errore?.let { Text(it, style = Testi.secondario, color = c.rossoTesto) }
         PulsantePrincipale(if (salvo) "Salvo…" else "Salva", {
@@ -525,7 +551,7 @@ private fun FoglioReferente(r: Referente, onSalva: (Referente, (String?) -> Unit
             if (salvo || nome.isBlank() || erroreEmail(email) != null) return@PulsantePrincipale
             salvo = true
             errore = null
-            onSalva(r.copy(nome = nome.trim(), ruolo = ruolo.trim(), telefono = telefono.trim(), email = email.trim(), note = note.trim())) { e ->
+            onSalva(r.copy(nome = nome.trim(), ruolo = ruolo.trim(), telefono = telefono.trim(), email = email.trim(), note = note.trim(), pagamenti = pagamenti, whatsapp = whatsapp.trim())) { e ->
                 salvo = false
                 if (e == null) onChiudi() else errore = e
             }

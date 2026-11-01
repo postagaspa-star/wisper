@@ -134,6 +134,7 @@ fun SchermataRapportino(
 ) {
     val c = W.colori
     val ctx = LocalContext.current
+    var firmaPortale by remember { mutableStateOf(false) }
     var legaTicket by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val visita = LocalVisita.current
@@ -552,11 +553,20 @@ fun SchermataRapportino(
                 })
                 else VoceMenu(Icone.chiave, "Lega a un ticket", { menu = false; legaTicket = true })
             }
+            // Fase 7 (§3.9): un rapportino da firmare si fa firmare a distanza nel portale.
+            if (st == Stato.BOZZA && stato.base.id.isNotBlank() && !stato.base.portaleDaFirmare && LocalPermessi.current.modifica(eu.stgm.wisper.rapportino.Moduli.PORTALE) &&
+                dati.anagrafiche.value.cliente(stato.base.idCliente, stato.base.cliente)?.portale == true) {
+                VoceMenu(Icone.globo, "Fallo firmare nel portale", { menu = false; firmaPortale = true })
+            }
             if (st == Stato.BOZZA) VoceMenu(Icone.cestino, "Elimina", { menu = false; chiediElimina = true }, pericolo = true)
         }
     }
 
     if (legaTicket) FoglioLegaTicket(dati, stato.base, onChiudi = { legaTicket = false }, onLegato = { legaTicket = false; onChiudi() })
+    if (firmaPortale) {
+        val cl = dati.anagrafiche.value.cliente(stato.base.idCliente, stato.base.cliente)
+        FoglioPubblica(dati, "rapportino", stato.base.id, cl?.id ?: stato.base.idCliente, cl?.nome ?: stato.base.cliente, inBozza = true) { firmaPortale = false }
+    }
 
     if (sceltaScontrino) {
         FoglioDalBasso({ sceltaScontrino = false }) {
@@ -1042,6 +1052,8 @@ private fun ColumnScope.PassoRiepilogo(
         }
     }
 
+    // Fase 7 (§12.6): Da firmare nel portale o Nel portale; "Firmato nel portale da …".
+    if (!stato.nuovo) BloccoPortaleRapportino(dati, stato.base)
     if (stato.base.bloccato) {
         val quando = stato.base.firmatoIl.takeIf { it.isNotBlank() }?.let {
             runCatching { LocalDateTime.parse(it).format(DateTimeFormatter.ofPattern("dd/MM 'alle' HH:mm")) }.getOrNull()

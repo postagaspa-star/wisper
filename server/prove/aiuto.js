@@ -166,4 +166,23 @@ async function viesFinto() {
 /** Un PNG piccolissimo (1x1), per le foto e le firme di prova. */
 const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64');
 
-module.exports = { serverDiProva, postinoFinto, viesFinto, cartellaNuova, ascolta, chiudi, SEGRETO, PNG, giornoDeiPrototipi, GIORNO_DEI_PROTOTIPI };
+/**
+ * Fase 7: le colonne che la migrazione 007 aggiunge a tabelle che c'erano gia', col loro valore di base (quello che vuol
+ * dire "come prima": niente portale, avvisi per email accesi, notifiche sul telefono accese). Le prove delle migrazioni
+ * di prima (003-006) le tolgono prima di confrontare le righe.
+ */
+const COLONNE_007 = {
+  soggetti: { portale: 0, portale_regole: null, portale_importi: 0 },
+  referenti: { portale: 0, portale_permessi: null, portale_sedi: null, portale_invitato_il: '', portale_dal: '', portale_tolto_il: '', ultimo_accesso: '',
+    avvisi_email: 1, informativa_il: '', informativa_versione: '', pagamenti: 0, whatsapp: '', whatsapp_ok: 0, whatsapp_ok_il: '' },
+  rapportini: { firma_modo: '', firma_prova: null, firma_referente_id: null },
+  ticket: { portale_visibile: 0 },
+  attivita: { avvisa_cliente: '', avvisa_referente_id: null },
+  fatture: { solleciti_no: '', copia_file_id: null },
+  documenti: { caricamento_id: null },
+  utenti: { notifiche_telefono: 1 },
+  preventivi: { accettazione_prova: null, accettato_referente_id: null },
+  file: { caricamento_id: null },
+};
+
+module.exports = { serverDiProva, postinoFinto, viesFinto, cartellaNuova, ascolta, chiudi, SEGRETO, PNG, giornoDeiPrototipi, GIORNO_DEI_PROTOTIPI, COLONNE_007 };

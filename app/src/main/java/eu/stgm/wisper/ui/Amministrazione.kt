@@ -142,6 +142,9 @@ fun SchermataAmministrazione(dati: Dati, archivio: Archivio, nav: Navigatore) {
         // Fase 6 (§12.8): le impostazioni di persone, mezzi e collaboratori; i tipi di formazione.
         VoceAmm("Persone, mezzi e collaboratori", "Santo patrono, conservazione, tarature, DURC e visura", Icone.persona, "persone").takeIf { LocalPermessi.current.vede(Moduli.PERSONE) },
         VoceAmm("Tipi di formazione", "PES, PAV, PEI, primo soccorso: ogni quanto e il preavviso", Icone.formazione, "formazione").takeIf { LocalPermessi.current.vede(Moduli.PERSONE) },
+        // Fase 7 (§12.6): le schede Portale clienti e Comunicazioni.
+        VoceAmm("Portale clienti", "Indirizzo, script del portale, durate, informativa, spegnere", Icone.globo, "portale").takeIf { LocalPermessi.current.vede(Moduli.PORTALE) },
+        VoceAmm("Comunicazioni", "WhatsApp sul telefono, promemoria, quello che non è collegato", Icone.fumetto, "comunicazioni").takeIf { LocalPermessi.current.vede(Moduli.COMUNICAZIONI) },
         VoceAmm("Spazio sul NAS", "Dove va lo spazio, copia fuori casa, cestino", Icone.disco, "spazio"),
         VoceAmm("Registro attività", "Chi ha cambiato cosa", Icone.lista, "registro"),
         VoceAmm(
@@ -199,6 +202,8 @@ fun PaginaAmministrazione(
         quale == "spazio" -> PaginaSpazio(dati, puo, indietro)
         quale == "persone" -> PaginaImpostazioniFase6(dati, puo, indietro)
         quale == "formazione" -> PaginaTipiFormazione(dati, puo, indietro)
+        quale == "portale" -> PaginaPortaleImpostazioni(dati, puo, indietro)
+        quale == "comunicazioni" -> PaginaComunicazioniImpostazioni(dati, puo, indietro)
         quale == "veicoli" -> PaginaVeicoli(dati, nav, puo)
         quale == "veicolo-nuovo" -> PaginaVeicolo(dati, nav, "", puo)
         quale.startsWith("veicolo/") -> PaginaVeicolo(dati, nav, quale.removePrefix("veicolo/"), puo)
@@ -549,6 +554,8 @@ private val SPIEGA_MODULI = mapOf(
     Moduli.TICKET to "Richieste d'intervento, contratti, statistiche",
     Moduli.MEZZI to "Mezzi, strumenti e tarature, DPI, prestiti, guasti",
     Moduli.COLLABORATORI to "Imprese e professionisti, incarichi, compensi",
+    Moduli.COMUNICAZIONI to "Da mandare, storico, modelli, notifiche",
+    Moduli.PORTALE to "Chi entra, cosa vede, file dai clienti, accessi",
     Moduli.AMMINISTRAZIONE to "Studio, utenti, permessi, copie",
     Moduli.COSTI to "Tariffe, totali, costi e margini",
     Moduli.RISERVATI to "Costo dell'anno, contratti e cedolini, giudizi del medico, malattie",
@@ -760,6 +767,9 @@ private val TABELLE = listOf(
     "utenti" to "Utenti",
     "permessi" to "Permessi",
     "impostazioni" to "Impostazioni",
+    // Fase 7 (§12.6): il filtro Portale (tutte le tabelle del portale) e le comunicazioni.
+    "portale" to "Portale",
+    "comunicazioni" to "Comunicazioni",
 )
 
 private val PERIODI = listOf(1 to "Oggi", 7 to "Ultimi 7 giorni", 30 to "Ultimi 30 giorni", 0 to "Da sempre")

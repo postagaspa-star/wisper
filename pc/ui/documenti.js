@@ -217,7 +217,10 @@
       '<div class="chi">Firma del compilatore · ' + esc(r.tecnico || imp.TECNICO || '') + '</div></div>' +
       '<div class="firma"><div class="spazio">' + immagine(firmaCliente, 'sig') + '</div>' +
       '<div class="chi">Firma per accettazione' + (r.firmatario ? ' · ' + esc(r.firmatario) : '') +
-      (r.firmatoIl ? ' · firmato il ' + esc(C.data(r.firmatoIl)) : '') + '</div></div>' +
+      (r.firmatoIl ? ' · firmato il ' + esc(C.data(r.firmatoIl)) : '') + '</div>' +
+      // Fase 7 (fase7.md §3.7): firmato a distanza nel portale. Solo allora: i rapportini firmati sul telefono restano identici.
+      (r.firmaModo === 'portale' ? '<div class="chi">Firmato nel portale da ' + esc(r.firmatario || '') + ' · ' + esc(C.dataOra(r.firmatoIl)) + '</div>' : '') +
+      '</div>' +
       '</div>';
 
     if (o.conFoto && (r.foto || []).length) {
@@ -316,12 +319,14 @@
   }
 
   /** La tabella di una sezione: le voci che non contano (facoltative non scelte, alternative scartate) in grigio. */
-  function tabellaSezione(s, conti, accettato, contaDi) {
+  function tabellaSezione(s, conti, accettato, contaDi, nelPortale) {
     let righe = '';
     s.voci.forEach(v => {
       const conta = contaDi(v);
       const segni = [];
-      if (C.gruppoAlternativa(v)) segni.push(conta ? 'scelta' : 'in alternativa');
+      // Fase 7 (§3.7): accettato nel portale, le voci non scelte dal cliente dicono "non inclusa" (in grigio, come le altre fuori).
+      if (nelPortale && !conta && (C.gruppoAlternativa(v) || v.facoltativa === true || v.facoltativa === 1)) segni.push('non inclusa');
+      else if (C.gruppoAlternativa(v)) segni.push(conta ? 'scelta' : 'in alternativa');
       else if (v.facoltativa === true || v.facoltativa === 1) segni.push(conta ? 'facoltativa, compresa' : (accettato ? 'facoltativa, non scelta' : 'facoltativa'));
       const sconto = C.num(v.scontoPercentuale);
       const prezzo = v.modo === 'corpo' || !v.modo ? C.euro(v.prezzo) : C.euro(v.prezzo) + (v.modo === 'ore' ? '/h' : (v.unita ? '/' + v.unita : ''));
@@ -382,7 +387,7 @@
       referente ? 'Alla cortese attenzione di ' + referente.nome : ''];
   }
 
-  function firmeDocumento(p, imp, etichettaStudio) {
+  function firmeDocumento(p, imp, etichettaStudio, rigaPortale) {
     const firmaTecnico = idDaUrl(imp.FIRMA_TECNICO);
     const firmaCliente = p.firma && (p.firma.id || idDaUrl(p.firma.url));
     return '<div class="firme">' +
@@ -390,7 +395,21 @@
       '<div class="chi">' + esc(etichettaStudio) + ' · ' + esc(imp.TECNICO || imp.RAGIONE_SOCIALE || '') + '</div></div>' +
       '<div class="firma"><div class="spazio">' + immagine(firmaCliente, 'sig') + '</div>' +
       '<div class="chi">Per accettazione' + (p.accettatoDa ? ' · ' + esc(p.accettatoDa) : '') +
-      (p.accettatoIl ? ' · il ' + esc(C.data(p.accettatoIl)) : ' · data') + '</div></div></div>';
+      (p.accettatoIl ? ' · il ' + esc(C.data(p.accettatoIl)) : ' · data') + '</div>' +
+      (rigaPortale ? '<div class="chi">' + esc(rigaPortale) + '</div>' : '') + '</div></div>';
+  }
+
+  /**
+   * Fase 7 (§3.7): "Accettato nel portale da Roberto Ferretti il 22/10/2026 alle 10:07", solo per un preventivo
+   * accettato nel portale (accettazioneModo, o l'oggetto accettazione delle risposte nuove); altrimenti ''.
+   */
+  function rigaAccettatoNelPortale(p) {
+    const a = p.accettazione || {};
+    if (p.stato !== 'ACCETTATO' || (p.accettazioneModo || a.modo) !== 'portale') return '';
+    const quando = C.dataOra(p.accettatoIl || a.il);
+    const giorno = quando.slice(0, 10);
+    const ora = quando.length > 10 ? quando.slice(11) : '';
+    return 'Accettato nel portale da ' + (p.accettatoDa || a.da || '') + (giorno ? ' il ' + giorno : '') + (ora ? ' alle ' + ora : '');
   }
 
   /**
@@ -425,7 +444,8 @@
     if (p.complessitaNota) corpo += '<div class="blocco"><div class="etichetta">La complessità dell\'incarico</div><div class="testo">' + esc(p.complessitaNota) + '</div></div>';
     const contano = C.vociCheContano(tutte);
     const contaDi = v => contano[tutte.indexOf(v)];
-    sezioni.forEach(s => { if (s.voci.length) corpo += tabellaSezione(s, k, accettato, contaDi); });
+    const nelPortale = rigaAccettatoNelPortale(p);
+    sezioni.forEach(s => { if (s.voci.length) corpo += tabellaSezione(s, k, accettato, contaDi, !!nelPortale); });
     corpo += tabellaConto(p, k);
     corpo += '<div class="sotto-riga" style="margin:-6px 0 12px">Importi comprensivi di spese. Contributo integrativo e IVA come indicati; le voci facoltative non scelte e le alternative scartate non sono nel totale.</div>';
     if ((p.scadenzePagamento || []).length) corpo += '<h3 class="sez">Pagamenti</h3>' + tabellaScadenze(p, k);
@@ -436,7 +456,7 @@
         (pt.polizza ? 'Polizza: ' + pt.polizza : 'Polizza: —') + '\n' + (pt.titoli || 'Titoli: —')) + '</div></div></div>';
     if (p.condizioni) corpo += '<div class="blocco"><div class="etichetta">Condizioni</div><div class="testo">' + esc(p.condizioni) + '</div></div>';
     if (p.scadenza) corpo += '<div class="blocco"><div class="etichetta">Validità dell\'offerta</div><div class="testo">' + esc('Questa offerta vale fino al ' + C.data(p.scadenza) + '. Dopo l\'accettazione i prezzi non cambiano.') + '</div></div>';
-    corpo += firmeDocumento(p, imp, 'Per lo studio');
+    corpo += firmeDocumento(p, imp, 'Per lo studio', nelPortale);
     return pagina(imp, 'Preventivo ' + numeroPreventivo(p), corpo);
   }
 

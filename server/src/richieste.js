@@ -98,7 +98,13 @@ const AZIONI = {
   salvaSoggetto: scrive('clienti', 'cambiare clienti e fornitori', (w, d) => ({ ok: true, soggetto: w.salvaSoggetto(d.soggetto || {}) })),
   archiviaSoggetto: scrive('clienti', 'archiviare clienti e fornitori', (w, d) => ({ ok: true, soggetto: w.archiviaSoggetto(d.id, true) })),
   ripristinaSoggetto: scrive('clienti', 'ripristinare clienti e fornitori', (w, d) => ({ ok: true, soggetto: w.archiviaSoggetto(d.id, false) })),
-  salvaReferente: scrive('clienti', 'cambiare i referenti', (w, d) => ({ ok: true, referente: w.salvaReferente(d.referente || {}) })),
+  // Fase 7: l'email cambiata di uno col portale lo dice nella risposta ("avviso").
+  salvaReferente: scrive('clienti', 'cambiare i referenti', (w, d) => {
+    const referente = w.salvaReferente(d.referente || {});
+    const o = { ok: true, referente };
+    if (referente.avviso) { o.avviso = referente.avviso; delete referente.avviso; }
+    return o;
+  }),
   togliReferente: scrive('clienti', 'togliere i referenti', (w, d) => { w.togliReferente(d.id); return { ok: true }; }),
   salvaSede: scrive('clienti', 'cambiare sedi e impianti', (w, d) => ({ ok: true, sede: w.salvaSede(d.sede || {}) })),
   archiviaSede: scrive('clienti', 'archiviare sedi e impianti', (w, d) => ({ ok: true, sede: w.archiviaSede(d.id, d.archiviata) })),
@@ -339,6 +345,51 @@ const AZIONI = {
   annullaIncarico: scrive('collaboratori', 'scrivere gli incarichi', (w, d) => w.annullaIncarico(d)),
   valutaIncarico: scrive('collaboratori', 'valutare gli incarichi', (w, d) => w.valutaIncarico(d)),
   compensi: legge('collaboratori', 'vedere i compensi', (w, d) => w.compensi(d)),
+
+  // --- portale clienti, dal lato dello studio (fase 7, fase7.md §10.1): le scritture vogliono il portale collegato e
+  // acceso (nonCollegato / spento), tranne salvaPortaleCliente; spegniPortale e le impostazioni con amministrazione 2.
+  portale: legge('portale', 'vedere il portale clienti', w => w.portaleStato()),
+  segnaVistoPortale: scrive('portale', 'segnare viste le cose del portale', (w, d) => w.segnaVistoPortale(d)),
+  portaleCliente: legge('portale', 'vedere il portale clienti', (w, d) => w.portaleCliente(d)),
+  salvaPortaleCliente: scrive('portale', 'cambiare il portale dei clienti', (w, d) => w.salvaPortaleCliente(d)),
+  invitaReferente: { modulo: 'portale', livello: 2, cosa: 'invitare i referenti nel portale', asincrona: true, soloPost: true, fn: (w, d) => w.invitaReferente(d) },
+  salvaAccessoReferente: scrive('portale', 'cambiare gli accessi al portale', (w, d) => { w.controllaPortaleScrive(); return w.salvaAccessoReferente(d); }),
+  togliAccessoReferente: scrive('portale', 'togliere gli accessi al portale', (w, d) => w.togliAccessoReferente(d)),
+  pubblica: scrive('portale', 'pubblicare nel portale', (w, d) => w.pubblicaAzione(d)),
+  togliDalPortale: scrive('portale', 'togliere le cose dal portale', (w, d) => w.togliDalPortale(d)),
+  pubblicaPrima: legge('portale', 'pubblicare nel portale', (w, d) => w.pubblicaPrima(d)),
+  pubblicati: legge('portale', 'vedere il portale clienti', (w, d) => w.leggiPubblicati(d)),
+  caricamentiPortale: legge('portale', 'vedere i file dei clienti', (w, d) => w.caricamentiPortale(d)),
+  accettaCaricamento: { scrive: true, controllo: () => ['portale', 2, 'accettare i file dei clienti'], vede: ['documenti'], cosa: 'archiviare i file dei clienti',
+    fn: (w, d) => { if (w.livello('documenti') < 2) throw senzaPermesso('archiviare i file dei clienti'); return w.accettaCaricamento(d); } },
+  rifiutaCaricamento: scrive('portale', 'rifiutare i file dei clienti', (w, d) => w.rifiutaCaricamento(d)),
+  accessiPortale: legge('portale', 'vedere gli accessi al portale', (w, d) => w.accessiPortale(d)),
+  anteprimaPortale: { modulo: 'portale', livello: 1, cosa: 'vedere il portale come il cliente', scrive: true, soloPost: true, fn: (w, d) => w.anteprimaPortale(d) },
+  rispondiNelPortale: scrive('ticket', 'rispondere nel portale', (w, d) => w.rispondiNelPortale(d)),
+  mostraNelPortale: scrive('ticket', 'mostrare i ticket nel portale', (w, d) => w.mostraNelPortale(d)),
+  controllaPortale: { modulo: 'portale', livello: 1, cosa: 'controllare il portale', asincrona: true, fn: w => w.controllaPortale() },
+  spegniPortale: scrive('amministrazione', 'spegnere il portale', (w, d) => w.spegniPortale(d)),
+  allegaCopiaFattura: conCosti(scrive('fatturazione', 'allegare la copia delle fatture', (w, d) => w.allegaCopiaFattura(d))),
+
+  // --- WhatsApp e comunicazioni (fase 7, §10.2): il collaboratore solo le sue, mai i pagamenti (lo decide il server)
+  comunicazioni: legge('comunicazioni', 'vedere le comunicazioni', (w, d) => w.leggiComunicazioni(d)),
+  daMandare: legge('comunicazioni', 'vedere i messaggi da mandare', w => w.daMandare()),
+  preparaMessaggio: legge('comunicazioni', 'preparare i messaggi', (w, d) => w.preparaMessaggio(d)),
+  salvaMessaggio: scrive('comunicazioni', 'scrivere le comunicazioni', (w, d) => w.salvaMessaggio(d)),
+  segnaMandato: scrive('comunicazioni', 'segnare i messaggi mandati', (w, d) => w.segnaMandato(d)),
+  mandaEmail: { modulo: 'comunicazioni', livello: 2, cosa: 'mandare email ai clienti', asincrona: true, soloPost: true, fn: (w, d) => w.mandaEmail(d) },
+  nonMandare: scrive('comunicazioni', 'scartare i messaggi da mandare', (w, d) => w.nonMandare(d)),
+  segnaWhatsapp: { scrive: true, vede: ['clienti', 'comunicazioni'], cosa: 'segnare il sì a WhatsApp', fn: (w, d) => w.segnaWhatsapp(d) },
+  modelliMessaggi: legge('comunicazioni', 'vedere i modelli dei messaggi', w => w.leggiModelliMessaggi()),
+  salvaModelloMessaggio: scrive('comunicazioni', 'scrivere i modelli dei messaggi', (w, d) => w.salvaModelloMessaggio(d)),
+  togliModelloMessaggio: scrive('comunicazioni', 'togliere i modelli dei messaggi', (w, d) => w.togliModelloMessaggio(d)),
+  nonSollecitare: conCosti(scrive('fatturazione', 'cambiare i promemoria di pagamento', (w, d) => w.nonSollecitare(d))),
+
+  // --- notifiche (fase 7, §10.3): ognuno le sue
+  notifiche: { fn: (w, d) => w.leggiNotifiche(d) },
+  segnaLette: { scrive: true, fn: (w, d) => w.segnaLette(d) },
+  segnaMostrate: { scrive: true, fn: (w, d) => w.segnaMostrate(d) },
+  salvaPreferenzeNotifiche: { scrive: true, fn: (w, d) => w.salvaPreferenzeNotifiche(d) },
 };
 
 /**
@@ -355,6 +406,8 @@ const AZIONI_ESTERNO = new Set([
   'documento', 'salvaDocumento', 'caricaVersione', 'togliVersione', 'categorieDocumenti', 'scadenze',
   'tickets', 'ticket', 'sospendiTicket', 'riprendiTicket', 'risolviTicket', 'altroIntervento', 'pianificaTicket', 'togliFotoTicket',
   'collaboratori', 'collaboratore', 'incarichi', 'incarico', 'compensi',
+  // Fase 7: le sue notifiche (niente comunicazioni e niente portale: fase6.md §8.4, fase7.md §11.2).
+  'notifiche', 'segnaLette', 'segnaMostrate', 'salvaPreferenzeNotifiche',
 ]);
 
 /**

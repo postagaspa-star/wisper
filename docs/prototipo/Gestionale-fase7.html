@@ -638,7 +638,7 @@ Object.assign(P, {
 
 // ------------------------------------------------------------------ dati di esempio (solo esempio, nessun dato vero)
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
-const STUDIO = { nome: 'Studio Tecnico GM', tel: '0445 000100', email: 'ufficio@studiogm.example', ind: "Via dell'Esempio 1, 36016 Thiene (VI)", piva: '02345678901', host: 'studio-gm.tail1a2b.ts.net' };
+const STUDIO = { nome: 'Studio Tecnico GM', tel: '0445 000100', email: 'ufficio@studiogm.example', ind: "Via dell'Esempio 1, 36016 Thiene (VI)", piva: '02345678901', host: 'studiogm-portale.netlify.app' };
 const CLI = {
   C002: { nome: 'Rossi Impianti Srl', colore: 'c-verde', portale: true, importi: false, regole: { preventivi: true, contratti: true, rapFirmati: true, rapDaFirmare: false, fatture: false, richieste: 'portale' },
     sedi: [{ id: 3, nome: 'Capannone di Thiene', tipo: 'sede' }, { id: 4, nome: 'Cabina MT di Zanè', tipo: 'impianto' }] },
@@ -732,7 +732,7 @@ let PROP = [
   { chiave: 'fattura:43:1', gruppo: 'proposti', modello: 'promemoria_pagamento', ref: 7, canale: 'whatsapp', rif: 'Fattura 41/2026 · scaduta da 12 giorni · 162,36 €', di: 'manuel', pagamento: true,
     testo: 'Buongiorno Mario Bianchi, le scrivo per un promemoria: la fattura 41/2026 del 25/09/2026, di 162,36 €, risultava da saldare entro il 10/10/2026. Se il pagamento è già partito, non tenga conto di questo messaggio. Grazie. Manuel Gasparotto · Studio Tecnico GM' },
   { chiave: 'rapportino:RAP/2026/0153', gruppo: 'proposti', modello: 'rapportino_da_firmare', ref: 3, canale: 'whatsapp', rif: 'Rapportino del 21/10/2026 · da firmare da 1 giorno · già nel portale', di: 'manuel',
-    testo: 'Buongiorno Sig. Ferretti, il rapportino del 21/10/2026 (Ricerca guasto sul quadro QG2, sostituito il differenziale) è ancora da firmare.\nPuò firmarlo nel portale: https://studio-gm.tail1a2b.ts.net/portale/\nAltrimenti lo firmiamo alla prossima visita. Manuel Gasparotto · Studio Tecnico GM' },
+    testo: 'Buongiorno Sig. Ferretti, il rapportino del 21/10/2026 (Ricerca guasto sul quadro QG2, sostituito il differenziale) è ancora da firmare.\nPuò firmarlo nel portale: https://studiogm-portale.netlify.app\nAltrimenti lo firmiamo alla prossima visita. Manuel Gasparotto · Studio Tecnico GM' },
 ];
 const MOD_NOMI = { promemoria_appuntamento: 'Promemoria appuntamento', intervento_fissato: 'Intervento fissato', preventivo_mandato: 'Preventivo mandato', rapportino_da_firmare: 'Rapportino da firmare', promemoria_pagamento: 'Promemoria di pagamento', secondo_promemoria_pagamento: 'Secondo promemoria di pagamento', invito_portale: 'Invito al portale', libero: 'Messaggio libero', messaggio: 'Messaggio', preventivo: 'Preventivo', rapportino: 'Rapportino', avviso_portale: 'Avviso del portale' };
 let MODELLI = [
@@ -766,14 +766,14 @@ let NOTIF = [
   { id: 5, titolo: 'Ti hanno assegnato: Sopralluogo quadri del magazzino', det: 'Giovedì 23 alle 14:30 · Batokyo Srl', quando: 'ieri alle 17:10', letta: true, vai: 'comunicazioni|damandare', per: ['marco'] },
 ];
 let ACCESSI = [
-  { quando: 'oggi alle 9:58', ref: 3, frase: 'Entrato', disp: 'Chrome · Android', ip: '93.45.12.7' },
-  { quando: 'oggi alle 9:20', ref: 3, frase: 'Ha mandato il file Schema quadro QG2.pdf', disp: 'Chrome · Android', ip: '93.45.12.7' },
-  { quando: 'oggi alle 9:12', ref: 3, frase: 'Ha aperto la richiesta TK/2026/0016', disp: 'Chrome · Android', ip: '93.45.12.7' },
-  { quando: 'ieri alle 17:40', ref: 3, frase: 'Ha visto il preventivo PR/2026/012 rev. 1', disp: 'Edge · Windows', ip: '151.18.40.3' },
-  { quando: 'ieri alle 15:21', ref: 6, frase: 'Ha visto il rapportino RAP/2026/0150', disp: 'Safari · iPhone', ip: '79.20.5.44' },
-  { quando: 'ieri alle 15:20', ref: 6, frase: 'Entrata', disp: 'Safari · iPhone', ip: '79.20.5.44' },
-  { quando: 'ieri alle 19:02', ref: 7, frase: 'Ha mandato il file Foto targa inverter.jpg', disp: 'Chrome · Android', ip: '5.90.11.8' },
-  { quando: '20/10 alle 22:14', ref: null, cli: 'C002', frase: 'Codice sbagliato', disp: 'Firefox · Windows', ip: '185.12.3.9', errore: true },
+  { quando: 'oggi alle 9:58', ref: 3, frase: 'Entrato', disp: 'Chrome · Android', ip: '' },
+  { quando: 'oggi alle 9:20', ref: 3, frase: 'Ha mandato il file Schema quadro QG2.pdf', disp: 'Chrome · Android', ip: '' },
+  { quando: 'oggi alle 9:12', ref: 3, frase: 'Ha aperto la richiesta TK/2026/0016', disp: 'Chrome · Android', ip: '' },
+  { quando: 'ieri alle 17:40', ref: 3, frase: 'Ha visto il preventivo PR/2026/012 rev. 1', disp: 'Edge · Windows', ip: '' },
+  { quando: 'ieri alle 15:21', ref: 6, frase: 'Ha visto il rapportino RAP/2026/0150', disp: 'Safari · iPhone', ip: '' },
+  { quando: 'ieri alle 15:20', ref: 6, frase: 'Entrata', disp: 'Safari · iPhone', ip: '' },
+  { quando: 'ieri alle 19:02', ref: 7, frase: 'Ha mandato il file Foto targa inverter.jpg', disp: 'Chrome · Android', ip: '' },
+  { quando: '20/10 alle 22:14', ref: null, cli: 'C002', frase: 'Codice sbagliato', disp: 'Firefox · Windows', ip: '', errore: true },
 ];
 
 // ------------------------------------------------------------------ stato
@@ -1001,7 +1001,7 @@ function corpoPubblicati(cli) {
 }
 function corpoAccessi(cli) {
   const l = ACCESSI.filter(a => !cli || (a.ref ? ref(a.ref).cli === cli : a.cli === cli));
-  return righe(l.map(a => riga({ ico: a.errore ? 'allarme' : a.frase.startsWith('Entrat') ? 'entrata' : 'occhio', col: a.errore ? 'ico-rosso' : 'ico-grigio', t1: a.frase, t2: (a.ref ? ref(a.ref).nome + ' · ' + nomeCli(ref(a.ref).cli) : 'Email non riconosciuta · ' + nomeCli(a.cli)) + ' · ' + a.quando, t3: a.disp + ' · ' + a.ip })));
+  return righe(l.map(a => riga({ ico: a.errore ? 'allarme' : a.frase.startsWith('Entrat') ? 'entrata' : 'occhio', col: a.errore ? 'ico-rosso' : 'ico-grigio', t1: a.frase, t2: (a.ref ? ref(a.ref).nome + ' · ' + nomeCli(ref(a.ref).cli) : 'Email non riconosciuta · ' + nomeCli(a.cli)) + ' · ' + a.quando, t3: a.disp })));
 }
 function pagPortale() {
   const seg = segmenti('segP', [['daguardare', 'Da guardare'], ['clienti', 'Clienti'], ['pubblicati', 'Pubblicati'], ['accessi', 'Accessi']], S.segP);
@@ -1055,7 +1055,7 @@ function pagPreventivo(id) {
     const k = contaPrev(p.scelte);
     corpo += sez('Accettazione', '<div class="scheda" style="display:flex;flex-direction:column;gap:10px"><b>Accettato nel portale da ' + esc(p.accettatoDa) + ' · ' + p.accettatoIl + '</b><div class="firma-box" style="height:120px">' + firmaSvg + '</div>' +
       '<span class="calmo">Scelte: Dichiarazione di rispondenza ' + (p.scelte[14] ? 'inclusa' : 'non inclusa') + ' · ' + (p.scelte[16] ? 'Collaudo con laboratorio esterno' : p.scelte[15] ? 'Collaudo con strumenti propri' : 'nessun collaudo') + '</span>' +
-      '<div class="conti-r tot"><span>Totale accettato</span><b>' + euro(k.tot) + '</b></div>' + riga({ ico: 'scudo', t1: 'Prova dell\'accettazione', t2: 'IP 93.45.12.7 · Chrome · Android · impronta 3f9a…c21e', attr: 'data-azione="avviso" data-testo="Si apre la prova: ora, IP, browser, impronta del preventivo visto"' }) + '</div>');
+      '<div class="conti-r tot"><span>Totale accettato</span><b>' + euro(k.tot) + '</b></div>' + riga({ ico: 'scudo', t1: 'Prova dell\'accettazione', t2: 'Via Google · Chrome · Android · impronta 3f9a…c21e', attr: 'data-azione="avviso" data-testo="Si apre la prova: ora, IP, browser, impronta del preventivo visto"' }) + '</div>');
     g = p.commessa ? '' : giallo('Crea la commessa', 'data-azione="crea-commessa" data-id="' + p.id + '"');
     if (p.commessa) corpo += '<div class="fascia" style="background:var(--firmato-f);color:var(--firmato)">' + ico('spunta', 18) + 'Commessa 26ST047 creata dal preventivo</div>';
   } else corpo += '<div style="display:flex;gap:10px;flex-wrap:wrap">' + bordo(ico('whatsapp', 18) + 'Manda anche un WhatsApp', 'data-azione="wa-preventivo"') + piccolo('Togli dal portale', 'data-azione="togli-pub" data-id="' + p.id + '"') + '</div>';
@@ -1105,7 +1105,7 @@ const nuovoP = p => !p.visto || p.vistoDa !== rC().nome;
 function segnaVisto(p) {
   if (S.anteprima || !p || (p.visto && p.vistoDa === rC().nome)) return;
   p.visto = 'oggi alle 10:05'; p.vistoDa = rC().nome;
-  ACCESSI.unshift({ quando: 'oggi alle 10:05', ref: rC().id, frase: 'Ha visto ' + p.titolo.charAt(0).toLowerCase() + p.titolo.slice(1), disp: DISP === 'pc' ? 'Edge · Windows' : 'Chrome · Android', ip: '93.45.12.7' });
+  ACCESSI.unshift({ quando: 'oggi alle 10:05', ref: rC().id, frase: 'Ha visto ' + p.titolo.charAt(0).toLowerCase() + p.titolo.slice(1), disp: DISP === 'pc' ? 'Edge · Windows' : 'Chrome · Android', ip: '' });
 }
 function cliTesta(conIndietro) {
   return '<div class="cli-testa"><div style="display:flex;align-items:center;gap:10px;min-width:0">' + (conIndietro ? '<button type="button" class="tondo" data-azione="indietro-c" aria-label="Indietro">' + ico('indietro') + '</button>' : '') + '<span class="nome-st"><b>' + STUDIO.nome + '</b><span>Portale clienti</span></span></div>' +
@@ -1146,7 +1146,7 @@ function cLinkScaduto() {
 }
 function cInformativa() {
   const st = statoC(), r = rC();
-  const testo = 'Questo portale è di ' + STUDIO.nome + ' (' + STUDIO.ind + ', P. IVA ' + STUDIO.piva + '), titolare dei dati. Lo usiamo per mostrarti i documenti del lavoro che facciamo per ' + nomeCli(r.cli) + ', per raccogliere accettazioni, firme e richieste. Teniamo il tuo nome, la tua email, il telefono se ce l\'hai dato, le firme e un registro degli accessi (data, ora, indirizzo IP, browser) per 12 mesi. I documenti e le firme li conserviamo come le altre carte dello studio, per 10 anni. Le email partono da Google; il collegamento passa da Tailscale: tutti e due possono trattare dati negli Stati Uniti. Usiamo solo il cookie che serve a tenerti dentro: niente statistiche, niente pubblicità. Puoi chiedere di vedere, correggere o cancellare i tuoi dati scrivendo a ' + STUDIO.email + '; puoi anche rivolgerti al Garante per la protezione dei dati personali.';
+  const testo = 'Questo portale è di ' + STUDIO.nome + ' (' + STUDIO.ind + ', P. IVA ' + STUDIO.piva + '), titolare dei dati. Lo usiamo per mostrarti i documenti del lavoro che facciamo per ' + nomeCli(r.cli) + ', per raccogliere accettazioni, firme e richieste. Teniamo il tuo nome, la tua email, il telefono se ce l\'hai dato, le firme e un registro degli accessi (data, ora, browser) per 12 mesi. I documenti e le firme li conserviamo come le altre carte dello studio, per 10 anni. Le email e il collegamento passano da Google; la pagina è ospitata da Netlify: tutti e due possono trattare dati negli Stati Uniti. Usiamo solo la memoria del browser che serve a tenerti dentro, e si cancella chiudendo la scheda: niente statistiche, niente pubblicità. Puoi chiedere di vedere, correggere o cancellare i tuoi dati scrivendo a ' + STUDIO.email + '; puoi anche rivolgerti al Garante per la protezione dei dati personali.';
   const corpo = '<div class="scheda" style="font-size:16px;font-weight:500;line-height:1.5;color:var(--testo2)">' + testo + '</div>' + (st.tutta ? '<div class="scheda calmo" style="line-height:1.5">Informativa completa (art. 13 del Regolamento europeo 2016/679): il testo che scrive il consulente dello studio, versione del 22/10/2026.</div>' : testoLink("Leggi l'informativa completa", 'data-azione="c-tutta"'));
   if (st.entrato && st.informativa) return paginaCli('Informativa sulla privacy', corpo, '');
   const g = gialloC('Ho letto, entra', 'data-azione="c-ho-letto"');
@@ -1315,7 +1315,7 @@ function cAccesso() {
   const acc = ACCESSI.filter(a => a.ref === r.id).slice(0, 6);
   const corpo = '<div class="scheda">' + coppie([['Nome', r.nome], ['Email', r.email], ['Azienda', nomeCli(r.cli)]]) + '</div>' +
     '<div class="scheda" style="padding:4px 18px">' + rigaInt('Avvisami per email quando c\'è qualcosa di nuovo', '', r.avvisi, 'data-azione="c-avvisi"') + '</div>' +
-    sez('Ultimi accessi', righe(acc.map(a => riga({ ico: 'storia', t1: a.frase, t2: a.quando + ' · ' + a.disp + ' · ' + a.ip.split('.').slice(0, 2).join('.') + '.x.x' })), 'Nessun accesso')) +
+    sez('Ultimi accessi', righe(acc.map(a => riga({ ico: 'storia', t1: a.frase, t2: a.quando + ' · ' + a.disp })), 'Nessun accesso')) +
     '<div style="display:flex;flex-direction:column;gap:6px;align-items:flex-start">' + testoLink('Esci da tutti i dispositivi', 'data-azione="c-esci"') + testoLink('Informativa sulla privacy', 'data-vai-c="informativa"') + '</div><div>' + bordo(ico('esci', 18) + 'Esci', 'data-azione="c-esci"') + '</div>';
   return paginaCli('Il mio accesso', corpo, '');
 }
@@ -1540,7 +1540,7 @@ function registra(m, stato, canale) {
 function apriWa() { avviso('Si apre WhatsApp con il messaggio pronto'); foglioMandato(); }
 function aggiungiDG(x) { DG.unshift(Object.assign({ id: prossimoDg++ }, x)); }
 function aggiungiNotif(titolo, det, vai, per) { NOTIF.unshift({ id: NOTIF.length + 10, titolo, det, quando: 'oggi alle 10:05', letta: false, vai, per: per || ['manuel'] }); }
-const accessoC = frase => { if (!S.anteprima) ACCESSI.unshift({ quando: 'oggi alle 10:05', ref: rC().id, frase, disp: DISP === 'pc' ? 'Edge · Windows' : 'Chrome · Android', ip: '93.45.12.7' }); };
+const accessoC = frase => { if (!S.anteprima) ACCESSI.unshift({ quando: 'oggi alle 10:05', ref: rC().id, frase, disp: DISP === 'pc' ? 'Edge · Windows' : 'Chrome · Android', ip: '' }); };
 const AZ = {
   'indietro': () => indietro(), 'menu': () => apriCassetto(), 'chiudi-foglio': () => chiudiFoglio(),
   'richiudi': () => { S.latoChiuso = !S.latoChiuso; disegna(); },

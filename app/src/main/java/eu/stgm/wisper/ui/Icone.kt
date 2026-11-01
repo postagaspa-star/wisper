@@ -170,4 +170,12 @@ object Icone {
     val attrezzo = tratto("attrezzo", 2.2f, "M14 4l6 6-3 3-6-6z", "M11 7l-8 8 3 3 8-8")
     val storia = tratto("storia", 2.2f, "M3 12a9 9 0 1 0 3-6.7L3 8", "M3 3v5h5", "M12 7v5l3 2")
     val formazione = tratto("formazione", 2.2f, "M5 4h14v16H5z", "M12 8v8", "M8 12h8")
+
+    // Fase 7 (docs/prototipo/Gestionale-fase7.html): comunicazioni, portale, notifiche.
+    val fumetto = tratto("fumetto", 2.2f, "M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z")
+    val globo = tratto("globo", 2.2f, "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z", "M3 12h18", "M12 3a14 14 0 0 1 0 18", "M12 3a14 14 0 0 0 0 18")
+    val whatsapp = tratto("whatsapp", 2.2f, "M20 11.5a8.5 8.5 0 0 1-12.6 7.4L3.5 20l1.1-3.8A8.5 8.5 0 1 1 20 11.5z", "M9 8.5c0 3.5 3 6.5 6.5 6.5l1-1.6-2-1-1 1a4.6 4.6 0 0 1-2.4-2.4l1-1-1-2z")
+    val entrata = tratto("entrata", 2.2f, "M9 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h3", "M14 17l-5-5 5-5", "M9 12h12")
+    val scollegato = tratto("scollegato", 2.2f, "M9 15l-2 2a3 3 0 0 1-4.2-4.2l2-2", "M15 9l2-2a3 3 0 0 1 4.2 4.2l-2 2", "M8 4V2M4 8H2M16 20v2M20 16h2")
+    val banca = tratto("banca", 2.2f, "M3 10l9-6 9 6", "M5 10v8M9.5 10v8M14.5 10v8M19 10v8", "M3 20h18")
 }

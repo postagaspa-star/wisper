@@ -845,6 +845,9 @@ module.exports = {
       esitoSdi: f.esito_sdi, prontaIl: dataOraIso(f.pronta_il), emessaIl: dataOraIso(f.emessa_il), avvisoInviatoIl: dataOraIso(f.avviso_inviato_il),
       regoleConfermate: f.stato === 'bozza' ? !!this.regoleConfermate() : !!f.regole_confermate,
       creato: dataOraIso(f.creato), modificato: dataOraIso(f.modificato),
+      // Fase 7 (§10.4): niente promemoria di pagamento (il motivo), la copia di cortesia in PDF, se e' nel portale.
+      sollecitiNo: f.solleciti_no || '', copia: this.copiaFatturaDi(f),
+      portale: (pp => ({ pubblicato: pp.pubblicato, vistoIl: pp.vistoIl, vistoDa: pp.vistoDa, pubblicazione: pp.pubblicazione }))(this.portaleDi('fattura', f.id)),
     };
   },
 
@@ -1282,7 +1285,15 @@ module.exports = {
    * con la sua riga nel registro. Una nota di credito invece libera i gruppi
    * che storna per intero.
    */
+  /** Fase 7: la copia di cortesia della fattura ({id, url, nome} o null). */
+  copiaFatturaDi(f) {
+    const c = f.copia_file_id ? this.db.riga('SELECT id, nome FROM file WHERE id = ? AND cestinato IS NULL', f.copia_file_id) : null;
+    return c ? { id: c.id, url: '/file/' + c.id, nome: c.nome } : null;
+  },
+
   dopoEmissione(f) {
+    // Fase 7 (§8.1): emessa (anche una nota di credito dello stesso cliente), la regola "fatture" del cliente col portale la pubblica.
+    this.pubblicaConRegola('fattura', f.id, {});
     if (f.tipo === 'nota') {
       this.effettiNota(f);
       return;
@@ -1537,7 +1548,11 @@ module.exports = {
     return this.db.transazione(() => {
       this.aggiorna('fatture', f.id, { avviso_inviato_il: adesso(), modificato: adesso() }, 'id', 'avviso di parcella mandato a ' + a);
       // Fase 5: la copia del PDF mandato (COPIA_INVIATI), nella categoria Mandati ai clienti.
-      this.copiaInviati({ allegati: posta.allegati, a, idCliente: f.cliente_id, idCommessa: f.commessa_id });
+      const copie = this.copiaInviati({ allegati: posta.allegati, a, idCliente: f.cliente_id, idCommessa: f.commessa_id });
+      // Fase 7: lo storico (§9.1).
+      this.scriviComunicazione({ canale: 'email', tipo: 'avviso_parcella', cliente_id: f.cliente_id, fattura_id: f.id, commessa_id: f.commessa_id || '', a, oggetto: posta.oggetto,
+        testo: posta.messaggio, allegati: (posta.allegati || []).map(x => ({ nome: x.nome, byte: Buffer.from(String(x.base64 || ''), 'base64').length })),
+        documento_id: copie.length ? copie[0] : null, stato: 'mandato' });
       return { ok: true, fattura: this.fatturaCompleta(this.db.riga('SELECT * FROM fatture WHERE id = ?', f.id)) };
     });
   },

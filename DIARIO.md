@@ -11,6 +11,7 @@ mai dati veri di clienti.
 
 | Data | Versione | In breve |
 |------|----------|----------|
+| 01/11/2026 | gestionale, fase 7 (non pubblicata) | [WhatsApp e comunicazioni, portale clienti](#gestionale-fase-7) |
 | 31/10/2026 | gestionale, fase 6 (non pubblicata) | [Persone, mezzi e attrezzature, collaboratori esterni](#gestionale-fase-6) |
 | 22/10/2026 | gestionale, fase 5 (non pubblicata) | [Documenti, ticket e assistenza](#gestionale-fase-5) |
 | 22/10/2026 | gestionale, fase 4 (non pubblicata) | [Fatture, banche e scadenze](#gestionale-fase-4) |
@@ -30,6 +31,72 @@ mai dati veri di clienti.
 | 26/09–14/10/2026 | 0.1 | [Un rapportino confermato non si perde più](#coda) |
 | 7–9/08/2026 | 0.1.0 | [Hackathon NGN Hacks: la versione a voce, senza mani](#v0-1-0) |
 | marzo–giugno 2026 | prima del repository | [Le prime versioni](#prima) |
+
+---
+
+<a id="gestionale-fase-7"></a>
+## 1 novembre 2026 · gestionale, fase 7 · WhatsApp e comunicazioni, portale clienti
+
+**Perché.** Settima fase del gestionale (`docs/specifiche-stgm.md`, moduli 14 e 15). Lo studio scrive ai clienti tutti
+i giorni (promemoria, rapportini da firmare, pagamenti) e i clienti chiedono le stesse cose al telefono: a che punto è
+la richiesta, mi rimandi la fattura. L'accordo (`docs/gestionale/fase7.md`) e il prototipo
+(`docs/prototipo/Gestionale-fase7.html`) erano pronti dal 22 ottobre; il 1° novembre il portale è stato ripensato per
+la porta Google scelta il 31 ottobre e per la regola "tutto gratuito" (§0 dell'accordo).
+
+**Cosa cambia.**
+
+- **WhatsApp e comunicazioni**: Wisper prepara il messaggio (promemoria dell'appuntamento, rapportino da firmare,
+  promemoria di pagamento) dai modelli, con i segnaposti riempiti; "Apri WhatsApp" apre la chat del cliente col testo
+  già scritto, e al ritorno Wisper chiede "L'hai mandato?". Niente invii automatici: decide sempre la persona. Prima
+  del primo messaggio si chiede se il cliente ha detto di sì a WhatsApp. **Da mandare** propone ogni giorno quello che
+  c'è da scrivere; lo **Storico** tiene messaggi, email, telefonate e note per cliente, commessa e ticket. I numeri
+  scritti in tutti i modi (spazi, +39, 0039, fissi, esteri) diventano il numero giusto per WhatsApp con le stesse
+  regole su server, telefono e computer (17 casi in `server/prove/casi-whatsapp.json`).
+- **Notifiche**: una campanella per ognuno, con le novità che lo riguardano (richieste dal portale, file dei clienti,
+  preventivi accettati); sul telefono anche come notifica di sistema, se la vuole.
+- **Portale clienti**: il referente del cliente entra col suo indirizzo email e un codice (o un link), e vede solo
+  quello che lo studio ha pubblicato per la sua azienda: preventivi da accettare (scegliendo le voci facoltative),
+  rapportini da firmare col dito, fatture, documenti e le sue richieste d'intervento, a cui può rispondere e
+  allegare file. Lo studio decide per ogni cliente chi entra, cosa vede e cosa si pubblica da solo; ogni cosa
+  pubblicata si toglie con un tocco. **Da guardare** raccoglie quello che arriva dai clienti; il registro degli
+  accessi non si cancella. Un preventivo accettato o un rapportino firmato nel portale lo dice anche nel PDF.
+- **Come arriva su internet, a 0 €**: la pagina del portale è un file fisso, senza dati dentro, da pubblicare su
+  Netlify (gratis, anche per uno studio). I dati passano da uno **script Google a parte**, solo per il portale, con un
+  segreto suo: così l'indirizzo dello script del foglio non finisce mai in una pagina vista dai clienti. Il NAS va a
+  prendere le richieste come fa già con la porta Google: a casa non si apre niente. Scartata la pagina servita
+  direttamente da Google, che ci mette sopra la fascia grigia "creata da un altro utente". Quello che si perde: dietro
+  Google l'indirizzo IP del cliente non arriva, quindi né il registro né la prova della firma lo hanno (la firma
+  resta valida con nome, data, ora e impronta del documento). Niente cookie: si esce chiudendo la scheda.
+- Dashboard (riquadri Dal portale e Da mandare oggi), permessi (moduli Comunicazioni e Portale) e Amministrazione
+  (impostazioni del portale e delle comunicazioni) sanno delle cose nuove. Server 0.10.0, non ancora sul NAS.
+
+**Ancora spento.** Il portale resta "Non collegato" finché non si fanno i passi a mano: creare lo script Google del
+portale, pubblicare la pagina su Netlify, scrivere due righe nella configurazione del NAS. WhatsApp, storico,
+modelli e notifiche funzionano anche senza.
+
+Prove: server 534, script del foglio e del portale 85, computer 251, pagina del portale 22, telefono 332 (anche contro
+il server di prova, due giri), tutte verdi; tutte le giornate simulate (anche Capodanno 2027 e il 29/02/2028) e gli otto
+giri cliccati su Wisper Ufficio, dalla fase 1 alla 7 più la porta Google. La pagina del portale è stata provata con
+Edge senza finestra contro il server di prova vero (23 passi: accetta il preventivo, firma il rapportino, manda una
+richiesta urgente con la foto, scarica il PDF, testi cattivi, link scaduto, portale spento); sul telefono, sull'emulatore,
+il promemoria a un cliente con WhatsApp aperto nel browser, l'invito di un referente, il file del cliente accettato,
+togli e ripubblica, le risposte nel portale. Rifacendo le prove sono venuti fuori e sono stati sistemati un difetto
+vecchio (la scheda Incarichi della commessa sul computer non si apriva) e uno nuovo (una risposta nel portale rimandata
+dal telefono dopo una caduta di rete poteva arrivare due volte). Non provati: Google e Netlify veri, WhatsApp vero (sul
+computer avrebbe aperto il browser, sull'emulatore non c'è), la notifica di sistema ogni 15 minuti, un telefono vero.
+
+<p>
+<img src="docs/diario/2026-11-01-gest7-tel-whatsapp.png" width="220" alt="Telefono: il promemoria dell'appuntamento pronto per WhatsApp">
+<img src="docs/diario/2026-11-01-gest7-tel-portale-scuro.png" width="220" alt="Telefono: Portale clienti, Da guardare, tema scuro">
+</p>
+
+<img src="docs/diario/2026-11-01-gest7-pc-da-mandare.png" width="720" alt="Wisper Ufficio: Comunicazioni, Da mandare">
+
+<img src="docs/diario/2026-11-01-gest7-pc-cliente-portale.png" width="720" alt="Wisper Ufficio: un cliente nel portale, chi entra e cosa è pubblicato">
+
+<img src="docs/diario/2026-11-01-gest7-portale-preventivo.png" width="720" alt="Il portale clienti: il preventivo da accettare con le voci da scegliere">
+
+Versione: non ancora pubblicata (ramo `gestionale`).
 
 ---
 

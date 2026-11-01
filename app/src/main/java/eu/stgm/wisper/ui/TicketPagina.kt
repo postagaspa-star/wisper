@@ -111,7 +111,8 @@ internal fun rememberTicket(dati: Dati, chiave: String, giro: Int): Pair<Ticket?
     val chi = chiTicket(dati)
     val nato = remember(ops, ana, chiave) { TicketInCoda.nato(chiave, ops, ana, chi) }
     val inCoda = ops.count { it.fase5 }
-    val lettura = rememberLettura(chiave to (nato != null), giro + Giri5.ticket * 1000 + inCoda * 7) {
+    // Giri7.portale: quando la risposta nel portale o "Mostra nel portale" arriva al server, il ticket si rilegge.
+    val lettura = rememberLettura(chiave to (nato != null), giro + Giri5.ticket * 1000 + inCoda * 7 + Giri7.portale * 100_000) {
         nato?.let { Result.success(it) } ?: dati.fase5.ticket(chiave)
     }
     val base = nato ?: (lettura as? Lettura.Pronta)?.dato
@@ -194,6 +195,8 @@ fun SchermataDettaglioTicket(dati: Dati, nav: Navigatore, chiave: String) {
                 Parola5(t.statoVisto + if (t.stato == "chiuso" && t.statoDettaglio.isNotBlank()) " · " + t.statoDettaglio else "")
                 if (t.inRitardo) Parola5("In ritardo")
                 if (t.inCoda) PillolaInCoda()
+                // Fase 7 (§12.6): da dove arriva.
+                if (t.dalPortale) Parola7("Dal portale")
             }
             Text(t.titolo, style = Testi.titoloPagina.copy(fontSize = Testi.titoloPagina.fontSize * 0.87f), color = c.testo)
             val aperto = istanteLocale(t.apertoIl)
@@ -361,6 +364,7 @@ fun SchermataDettaglioTicket(dati: Dati, nav: Navigatore, chiave: String) {
                 Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     t.foto.forEach { f ->
                         if (f.locale != null) MiniaturaFoto(f.locale, "Foto del ticket, ancora sul telefono") { fotoScelta = f }
+                        else if (f.dalCliente) Column(verticalArrangement = Arrangement.spacedBy(4.dp)) { MiniaturaRemota(dati, f.id) { fotoScelta = f }; Parola7("Dal cliente") }
                         else MiniaturaRemota(dati, f.id) { fotoScelta = f }
                     }
                     if (scrive) RiquadroFotografa { scatta() }
@@ -382,6 +386,8 @@ fun SchermataDettaglioTicket(dati: Dati, nav: Navigatore, chiave: String) {
                 }
             }
 
+            // Fase 7 (§12.6): la conversazione pubblica col cliente, divisa dalla cronologia interna.
+            BloccoTicketPortale(dati, t)
             Sezione5("Cronologia") { Cronologia(t.cronologia) }
             if (t.stato == "risolto" && !sessione.puoChiudereTicket) Text("Lo chiude l'ufficio.", style = Testi.secondarioGrande, color = c.tenue, modifier = Modifier.fillMaxWidth(), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
         }

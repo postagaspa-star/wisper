@@ -9,6 +9,12 @@
 //
 // Codice: "prova". Le email non partono: finiscono in apps-script/prove/posta-finta/.
 // Si parte con qualche cliente, commessa e rapportino di esempio.
+//
+// Fase 7 (docs/gestionale/fase7.md §0.1): con WISPER_PROGETTO=portale fa lo SCRIPT DEL PORTALE, il progetto a parte:
+//   WISPER_PROGETTO=portale node apps-script/prove/finto-google.js 8766
+// carica solo Porta.gs e PortaleClienti.gs (niente foglio, niente dati di esempio, niente CODICE), risponde con
+// Access-Control-Allow-Origin: * come Google dopo il rimbalzo su script.googleusercontent.com, e il segreto del NAS
+// (la proprieta' SEGRETO_SERVER dello script) e' WISPER_SEGRETO_PORTALE, di base "prova-portale".
 'use strict';
 
 process.env.TZ = 'Europe/Rome';
@@ -20,6 +26,7 @@ const vm = require('node:vm');
 const crypto = require('node:crypto');
 
 const PORTA = Number(process.argv[2] || 8765);
+const PORTALE = process.env.WISPER_PROGETTO === 'portale';
 const CARTELLA_POSTA = process.env.WISPER_POSTA_FINTA || path.join(__dirname, 'posta-finta');
 
 // ------------------------------------------------------------------ Fogli
@@ -173,7 +180,7 @@ const DriveApp = {
 
 // ------------------------------------------------------------------ il resto di Google
 
-const proprieta = new Map([['CODICE', 'prova']]);
+const proprieta = PORTALE ? new Map([['SEGRETO_SERVER', process.env.WISPER_SEGRETO_PORTALE || 'prova-portale']]) : new Map([['CODICE', 'prova']]);
 const PropertiesService = {
   getScriptProperties: () => ({
     getProperty: k => (proprieta.has(k) ? proprieta.get(k) : null),
@@ -330,8 +337,9 @@ vm.createContext(contesto);
 // I file del progetto Apps Script, nell'ordine dell'editor. WISPER_SCRIPT: un altro Code.gs (per esempio
 // quello di prima, per vedere che le prove lo bocciano). Ponte.gs: il ponte verso il server e il postino;
 // Porta.gs: la porta Google (le app nuove e il server sul NAS che viene a prendere il lavoro).
-const FILE_SCRIPT = [process.env.WISPER_SCRIPT || path.join(__dirname, '..', 'Code.gs')]
-  .concat(['Ponte.gs', 'Porta.gs'].map(f => path.join(__dirname, '..', f)).filter(f => fs.existsSync(f)));
+const FILE_SCRIPT = PORTALE ? ['Porta.gs', 'PortaleClienti.gs'].map(f => path.join(__dirname, '..', f))
+  : [process.env.WISPER_SCRIPT || path.join(__dirname, '..', 'Code.gs')]
+    .concat(['Ponte.gs', 'Porta.gs'].map(f => path.join(__dirname, '..', f)).filter(f => fs.existsSync(f)));
 FILE_SCRIPT.forEach(f => vm.runInContext(fs.readFileSync(f, 'utf8'), contesto, { filename: path.basename(f) }));
 
 /** Accende o spegne il servizio avanzato Drive API (vedi DriveAvanzato). */
@@ -366,7 +374,7 @@ function semina() {
   console.log('Seminati 2 clienti, 2 commesse, 4 rapportini.');
 }
 
-semina();
+if (!PORTALE) semina();
 
 // ------------------------------------------------------------------ le esecuzioni in parallelo
 
@@ -532,7 +540,10 @@ function ascoltaHttp(porta, opzioni) {
           console.log(richiesta.method, azione || '(anagrafiche)', testo.length + ' byte');
         }
         if (risposta.destroyed) return;
-        risposta.writeHead(out.troppe ? 429 : 200, { 'Content-Type': out.errore !== undefined ? 'text/html; charset=utf-8' : 'application/json; charset=utf-8' });
+        const intestazioni = { 'Content-Type': out.errore !== undefined ? 'text/html; charset=utf-8' : 'application/json; charset=utf-8' };
+        // Lo script del portale: Google risponde dal rimbalzo con Access-Control-Allow-Origin: * (la pagina sta su Netlify).
+        if (PORTALE) intestazioni['Access-Control-Allow-Origin'] = '*';
+        risposta.writeHead(out.troppe ? 429 : 200, intestazioni);
         risposta.end(testo);
       });
     });
@@ -559,5 +570,7 @@ if (require.main !== module) return;
 
 // ------------------------------------------------------------------ il server
 
-ascoltaHttp(PORTA).on('listening', () => console.log('Finto Google su http://localhost:' + PORTA + '/exec (codice: prova)'));
+ascoltaHttp(PORTA).on('listening', () => console.log(PORTALE
+  ? 'Finto Google, script del portale, su http://localhost:' + PORTA + '/exec (segreto del NAS: ' + proprieta.get('SEGRETO_SERVER') + ')'
+  : 'Finto Google su http://localhost:' + PORTA + '/exec (codice: prova)'));
 

@@ -41,8 +41,9 @@ function iniziali(ruolo) {
     p.costi = 2;
   } else if (ruolo === 'collaboratore') {
     // Fase 6: persone 1 (l'organico come una rubrica, e la propria scheda).
+    // Fase 7: comunicazioni 2 (solo le sue: le sue attivita', i ticket e i rapportini che vede; mai i pagamenti), portale 0.
     Object.assign(p, { dashboard: 1, clienti: 1, commesse: 1, rapportini: 2, attivita: 2, spese: 2,
-      documenti: 1, ticket: 2, mezzi: 1, persone: 1 });
+      documenti: 1, ticket: 2, mezzi: 1, persone: 1, comunicazioni: 2 });
   } else if (ruolo === 'lettura') {
     MODULI.forEach(m => { p[m] = 1; });
     p.amministrazione = 0;
@@ -86,6 +87,8 @@ const CAMPI_COSTI = new Set([
   // "conti" e "compensi", che spariscono interi; dove serve, il server li toglie a mano (collaboratori.js).
   'costoDal', 'tariffaIncarico', 'pattuito', 'maturato', 'collaboratoriPrevisto', 'altreRicevute',
   'costiMezzo', 'euroKmMezzo', 'tetto', 'compensiDaFatturare', 'compensi', 'speseDaRiconoscere', 'costoAcquisto',
+  // Fase 7: il residuo nelle proposte di pagamento, il totale accettato nel portale (Dashboard, Da guardare).
+  'importoResiduo', 'totaleAccettato',
 ]);
 
 /**

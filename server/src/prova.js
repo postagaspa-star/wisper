@@ -125,6 +125,8 @@ function seminaTutto(w) {
   seminaFase4(w, utenti, come);
   seminaFase5(w, utenti, come);
   seminaFase6(w, utenti, come);
+  // Fase 7: portale clienti, WhatsApp e comunicazioni (dopo tutto il resto: id e conteggi di prima restano quelli).
+  utenti.fase7 = seminaFase7(w, utenti, come);
   return utenti;
 }
 
@@ -308,6 +310,204 @@ function seminaFase6(w, utenti, come) {
     const voci = w.db.righe("SELECT id FROM assenze WHERE stato = 'da_approvare' AND persona_id = ?", w.personaDiUtente(utenti.amministrazione.id).id).map(a => ({ tipo: 'assenza', id: a.id }));
     if (voci.length) w.decidi({ voci }, 'approva');
   });
+}
+
+/**
+ * Il portale clienti, WhatsApp e le comunicazioni come nel prototipo della fase 7 (docs/prototipo/Gestionale-fase7.html),
+ * aggiunti dopo tutto il resto, senza toccare id, numeri e conteggi di prima:
+ *  - il portale acceso; l'indirizzo della pagina vuoto (Non collegato) se WISPER_PORTALE_INDIRIZZO non lo scrive (solo in
+ *    prova); il telefono dello studio resta quello delle impostazioni di prima (vuoto, come semina() dello script);
+ *  - Rossi Impianti Srl (C002) col portale acceso: Sig. Ferretti (f.ferretti@rossi.example, WhatsApp 333 000 1122 col si',
+ *    gia' entrato, fatture 1) e Anna Rossi (amministrazione@rossi.example, invitata, paga le fatture); Batokyo Srl (C004):
+ *    Giulia Neri (giulia.neri@batokyo.example, referente nuovo) limitata al Magazzino automatico; Mario Bianchi (C003)
+ *    privato, entrato;
+ *  - il preventivo PR/aaaa/014 per Rossi (il PR/aaaa/012 rev. 1 e' gia' accettato dalla fase 4: questo e' quello da
+ *    accettare, con la voce facoltativa e il gruppo di alternative come nel prototipo), mandato con la copia del PDF e
+ *    pubblicato dalla regola; pubblicati a mano il 012 rev. 1 accettato, il 007 scaduto, il RAP/aaaa/0004 da firmare, il
+ *    collaudo firmato, lo schema unifilare della cabina, le fatture 39 e 45, il contratto CA/2026/002, le richieste
+ *    TK/2026/0014 (coi messaggi) e TK/2026/0010 (chiusa); per Batokyo il contratto, la TK/2026/0013 e il verbale della
+ *    terra (fuori dalla sede di Giulia Neri: lei non lo vede); per Mario Bianchi il rapportino firmato e la TK/2026/0012;
+ *  - lo storico (email del preventivo, un WhatsApp mandato e uno preparato, una telefonata), una domanda sul preventivo,
+ *    un file "Schema quadro QG2.pdf" da guardare, le notifiche, il registro degli accessi;
+ *  - il sopralluogo alla cabina il prossimo giorno lavorativo con "Avvisa il cliente: WhatsApp" a Sig. Ferretti (il
+ *    promemoria e' in Da mandare › Oggi dalle 8:00).
+ * Gli id nuovi (referente, pubblicazioni, attivita') stanno nel file "pronto" per gli altri costruttori.
+ */
+function seminaFase7(w, utenti, come) {
+  const T = oggi();
+  const quando = ms => istante(new Date(ms));
+  const ora = adessoMs();
+  const giorni = n => ora - n * 86400000;
+  const pdf = nome => Buffer.from('%PDF-1.4\n% Documento di esempio: ' + nome + '\n%%EOF\n', 'utf8');
+  const ids = {};
+  // L'indirizzo della pagina del portale: vuoto come sul NAS appena acceso (Non collegato: le prove di telefono e computer
+  // contano sui link della fase 5 "Non collegato"); WISPER_PORTALE_INDIRIZZO lo scrive, solo in prova, per provare la
+  // pagina, gli inviti e le pubblicazioni (per esempio http://localhost:8790).
+  const indirizzo = String(process.env.WISPER_PORTALE_INDIRIZZO || '').replace(/\/+$/, '');
+  const ref = nome => w.db.riga('SELECT * FROM referenti WHERE nome = ? ORDER BY id LIMIT 1', nome);
+  const pubblica = (tipo, rif, soggetto, x) => w.pubblicaInterna(Object.assign({ tipo, rif, soggetto, origine: 'mano' }, x || {})).id;
+  const retro = (tabella, id, campi) => {
+    const k = Object.keys(campi);
+    w.db.esegui('UPDATE ' + tabella + ' SET ' + k.map(c => c + ' = ?').join(', ') + ' WHERE id = ?', ...k.map(c => campi[c]), id);
+  };
+  const permessi = o => JSON.stringify(Object.assign({ preventivi: 2, rapportini: 2, fatture: 0, documenti: 2, richieste: 2 }, o));
+
+  come('titolare', () => {
+    // ------------------------------------------------ il portale acceso, il telefono dello studio
+    w.salvaImpostazioni({ PORTALE_ATTIVO: true, PORTALE_INDIRIZZO: indirizzo });
+
+    // ------------------------------------------------ i clienti e i referenti col portale
+    for (const id of ['C002', 'C003', 'C004']) w.aggiorna('soggetti', id, { portale: 1, modificato: adesso() }, 'id', 'portale acceso per il cliente');
+    const ferretti = ref('Sig. Ferretti');
+    w.aggiorna('referenti', ferretti.id, {
+      email: 'f.ferretti@rossi.example', whatsapp: '333 000 1122', whatsapp_ok: 1, whatsapp_ok_il: piuGiorni(T, -8), portale: 1, portale_permessi: permessi({ fatture: 1 }),
+      portale_invitato_il: quando(giorni(8)), portale_dal: quando(giorni(7)), ultimo_accesso: quando(ora - 25 * 60000), informativa_il: quando(giorni(7)),
+      informativa_versione: '2026-10-22',
+    }, 'id', 'invito al portale per f.ferretti@rossi.example');
+    const anna = ref('Anna Rossi');
+    w.aggiorna('referenti', anna.id, { email: 'amministrazione@rossi.example', pagamenti: 1, portale: 1, portale_invitato_il: quando(giorni(2)),
+      portale_permessi: permessi({ preventivi: 1, rapportini: 1, fatture: 1, documenti: 1, richieste: 0 }) }, 'id', 'invito al portale per amministrazione@rossi.example');
+    const magazzino = w.db.riga("SELECT id FROM sedi WHERE soggetto_id = 'C004' AND nome = 'Magazzino automatico'").id;
+    const giulia = w.salvaReferente({ idSoggetto: 'C004', nome: 'Giulia Neri', ruolo: 'Responsabile manutenzione', telefono: '340 000 4455', email: 'giulia.neri@batokyo.example' });
+    w.aggiorna('referenti', giulia.id, { portale: 1, portale_permessi: permessi({}), portale_sedi: JSON.stringify([magazzino]), portale_invitato_il: quando(giorni(5)),
+      portale_dal: quando(giorni(4)), ultimo_accesso: quando(giorni(1)), informativa_il: quando(giorni(4)), informativa_versione: '2026-10-22' }, 'id', 'invito al portale per giulia.neri@batokyo.example');
+    const mario = ref('Mario Bianchi');
+    w.aggiorna('referenti', mario.id, { email: 'mario.bianchi@example.com', portale: 1, portale_permessi: permessi({ fatture: 1 }), portale_invitato_il: quando(giorni(6)),
+      portale_dal: quando(giorni(6)), ultimo_accesso: quando(giorni(3)), informativa_il: quando(giorni(6)), informativa_versione: '2026-10-22' }, 'id', 'invito al portale per mario.bianchi@example.com');
+    ids.referenti = { ferretti: ferretti.id, anna: anna.id, giulia: giulia.id, mario: mario.id };
+
+    // ------------------------------------------------ PR/aaaa/014: da accettare, con la facoltativa e le alternative
+    const L = codice => w.leggiListino(true).find(v => v.codice === codice).id;
+    const cabina = w.db.riga("SELECT id FROM sedi WHERE soggetto_id = 'C002' AND nome = 'Cabina MT Acme'").id;
+    const p14 = w.salvaPreventivo({ idCliente: 'C002', idSede: cabina, idReferente: ferretti.id, oggetto: 'Adeguamento delle protezioni della cabina MT',
+      introduzione: 'Come concordato al sopralluogo, ecco la proposta per l\'adeguamento delle protezioni della cabina MT.', complessita: 'media',
+      oneriPrevisti: 'Pratiche presso il distributore di energia, a carico del cliente', data: piuGiorni(T, -7), scadenza: piuGiorni(T, 6),
+      condizioni: 'Il compenso è quello delle voci, a corpo o a ore come scritto. Le voci facoltative si pagano solo se scelte.',
+      sezioni: [{ titolo: 'Cantiere', voci: [
+        { idListino: L('DL'), descrizione: 'Direzione lavori', quantita: 16 },
+        { idListino: L('DIRI'), descrizione: 'Dichiarazione di rispondenza', facoltativa: true, scelta: false },
+        { idListino: L('COL'), descrizione: 'Collaudo con strumenti propri', alternativa: 'collaudo', scelta: true },
+        { descrizione: 'Collaudo con laboratorio esterno', prezzo: 620, alternativa: 'collaudo', scelta: false }] }],
+      scadenzePagamento: [{ tipo: 'percentuale', valore: 30, quando: 'firma' }, { tipo: 'percentuale', valore: 40, quando: 'avanzamento', descrizione: '40% a fine progetto' },
+        { tipo: 'percentuale', valore: 30, quando: 'fine', descrizione: 'Saldo a fine lavori' }] }, { numero: 14 });
+    w.segnaInviato({ id: p14.id });
+    const inviatoIl = quando(giorni(7) + 3 * 3600000);
+    retro('preventivi', p14.id, { inviato_il: inviatoIl, creato: quando(giorni(7)), modificato: inviatoIl });
+    // La copia del PDF mandato (come inviaPreventivo): il cliente la scarica dal portale.
+    const copie = w.copiaInviati({ allegati: [{ nome: 'PR-' + T.slice(0, 4) + '-014 Rossi Impianti Srl.pdf', mime: 'application/pdf', base64: pdf('PR/014').toString('base64') }],
+      a: 'f.ferretti@rossi.example', idCliente: 'C002', idCommessa: '' });
+    const fileP14 = w.fileValidoDocumento(copie[0]);
+    w.db.esegui("UPDATE portale_pubblicazioni SET file_id = ?, pubblicata_il = ?, avviso_da = NULL, avvisato_il = ? WHERE tipo = 'preventivo' AND rif = ?", fileP14, inviatoIl, inviatoIl, String(p14.id));
+    w.scriviComunicazione({ quando: inviatoIl, canale: 'email', tipo: 'preventivo', cliente_id: 'C002', referente_id: ferretti.id, preventivo_id: p14.id, a: 'f.ferretti@rossi.example',
+      oggetto: 'Preventivo ' + p14.etichetta, testo: 'In allegato il preventivo.', allegati: [{ nome: 'PR-' + T.slice(0, 4) + '-014 Rossi Impianti Srl.pdf', byte: pdf('PR/014').length }],
+      documento_id: copie[0], stato: 'mandato' });
+    ids.preventivo = p14.id;
+
+    // ------------------------------------------------ le altre cose di Rossi nel portale
+    const prev = numero => w.db.riga('SELECT id FROM preventivi WHERE numero LIKE ? ORDER BY revisione DESC LIMIT 1', '%/' + numero).id;
+    const rap = idLocale => w.db.riga('SELECT id FROM rapportini WHERE id_locale = ?', idLocale).id;
+    const fattura = numero => w.db.riga('SELECT id FROM fatture WHERE numero = ?', numero).id;
+    // Per titolo, non per numero: i ticket della fase 5 aperti "adesso" prendono il numero dell'anno di oggi (TK/2027/... a gennaio).
+    const ticket = titolo => w.db.riga('SELECT id FROM ticket WHERE titolo = ? ORDER BY id LIMIT 1', titolo).id;
+    const T14 = 'Scatta il generale MT';
+    const T10 = 'Presa del quadro bruciata';
+    const T13 = 'Navetta 2 si ferma in errore';
+    const T12 = 'Inverter in errore di isolamento';
+    const pub = {};
+    pub.preventivo = w.db.riga("SELECT id FROM portale_pubblicazioni WHERE tipo = 'preventivo' AND rif = ?", String(p14.id)).id;
+    pub.preventivoAccettato = pubblica('preventivo', prev('012'), 'C002');
+    pub.preventivoScaduto = pubblica('preventivo', prev('007'), 'C002');
+    pub.rapportinoDaFirmare = pubblica('rapportino', rap('seme-4'), 'C002', { daFirmare: true });
+    pub.rapportinoFirmato = pubblica('rapportino', rap('seme-f4-rossi-1'), 'C002');
+    pub.rapportinoTk10 = pubblica('rapportino', rap('seme-f5-tk10'), 'C002');
+    pub.documento = pubblica('documento', w.db.riga("SELECT id FROM documenti WHERE titolo = 'Schema unifilare cabina MT'").id, 'C002');
+    pub.fattura45 = pubblica('fattura', fattura('45/2026'), 'C002');
+    pub.fattura39 = pubblica('fattura', fattura('39/2026'), 'C002');
+    pub.contratto = pubblica('contratto', w.db.riga("SELECT id FROM contratti WHERE titolo = 'Manutenzione cabina MT Acme'").id, 'C002', { origine: 'regola' });
+    for (const n of [T14, T10]) w.aggiorna('ticket', ticket(n), { portale_visibile: 1 }, 'id', 'mostrato nel portale');
+    pub.richiesta = pubblica('ticket', ticket(T14), 'C002');
+    pub.richiestaChiusa = pubblica('ticket', ticket(T10), 'C002');
+    // Batokyo (Giulia Neri vede solo il Magazzino automatico: il verbale della terra no).
+    w.aggiorna('ticket', ticket(T13), { portale_visibile: 1 }, 'id', 'mostrato nel portale');
+    pub.batokyoRichiesta = pubblica('ticket', ticket(T13), 'C004');
+    pub.batokyoContratto = pubblica('contratto', w.db.riga("SELECT id FROM contratti WHERE titolo = 'Assistenza magazzino automatico'").id, 'C004', { origine: 'regola' });
+    pub.batokyoVerbale = pubblica('documento', w.db.riga("SELECT id FROM documenti WHERE titolo = 'Verbale verifica impianto di terra 2022'").id, 'C004');
+    // Mario Bianchi.
+    w.aggiorna('ticket', ticket(T12), { portale_visibile: 1 }, 'id', 'mostrato nel portale');
+    pub.marioRapportino = pubblica('rapportino', rap('seme-f5-tk12'), 'C003');
+    pub.marioRichiesta = pubblica('ticket', ticket(T12), 'C003');
+    // Le date: pubblicate nei giorni scorsi (gli avvisi sono gia' partiti), il 012 rev. 1 visto da Ferretti ieri.
+    let i = 0;
+    for (const k of Object.keys(pub)) {
+      if (k === 'preventivo') continue;
+      w.db.esegui('UPDATE portale_pubblicazioni SET pubblicata_il = ?, avviso_da = NULL, avvisato_il = ? WHERE id = ?', quando(giorni(6) + (i++) * 600000), quando(giorni(6) + i * 600000), pub[k]);
+    }
+    w.db.esegui('UPDATE portale_pubblicazioni SET visto_il = ?, visto_da = ? WHERE id = ?', quando(giorni(1) - 6 * 60000), ferretti.id, pub.preventivoAccettato);
+    w.db.esegui('UPDATE portale_pubblicazioni SET visto_il = ?, visto_da = ? WHERE id = ?', quando(giorni(5)), ferretti.id, pub.fattura45);
+    ids.pubblicazioni = pub;
+
+    // ------------------------------------------------ lo storico: un WhatsApp mandato, uno preparato, una telefonata
+    const tk14 = ticket(T14);
+    w.scriviComunicazione({ quando: quando(giorni(2) - 2 * 3600000), canale: 'whatsapp', tipo: 'promemoria_appuntamento', modello: 'promemoria_appuntamento', cliente_id: 'C002',
+      referente_id: ferretti.id, commessa_id: '26ST002', a: '+39 333 000 1122', stato: 'mandato',
+      testo: 'Buongiorno Sig. Ferretti, le ricordo l\'appuntamento di domani alle 9:00 presso Capannone: Collaudo quadro. Se non va più bene mi scriva pure. Manuel Gasparotto · Studio Tecnico GM' });
+    w.scriviComunicazione({ quando: quando(giorni(1)), canale: 'whatsapp', tipo: 'libero', modello: 'libero', cliente_id: 'C002', referente_id: ferretti.id, ticket_id: tk14,
+      a: '+39 333 000 1122', stato: 'preparato', testo: 'Buongiorno Sig. Ferretti, domani mattina passiamo a vedere il generale della cabina. Manuel Gasparotto · Studio Tecnico GM' });
+    w.scriviComunicazione({ quando: quando(giorni(3)), canale: 'telefonata', direzione: 'entrata', tipo: 'libero', cliente_id: 'C002', referente_id: anna.id, stato: 'ricevuto',
+      testo: 'Chiede quando arriva la fattura del 40% di 26ST003' });
+    // La risposta dello studio nella richiesta TK/2026/0014 (pubblica, la vede il cliente).
+    w.scriviComunicazione({ quando: quando(ora - 70 * 60000), canale: 'portale', tipo: 'messaggio', cliente_id: 'C002', ticket_id: tk14, pubblica: 1, stato: 'mandato',
+      testo: 'Abbiamo ricevuto la richiesta: la chiamiamo entro mezz\'ora per organizzare l\'intervento.' });
+
+    // ------------------------------------------------ l'attivita' del prossimo giorno lavorativo con l'avviso al cliente
+    let domani = piuGiorni(T, 1);
+    while ([0, 6].indexOf(new Date(domani + 'T12:00:00').getDay()) >= 0) domani = piuGiorni(domani, 1);
+    const sopralluogo = w.salvaAttivita({ attivita: { titolo: 'Sopralluogo protezioni cabina MT Acme', tipo: 'sopralluogo', idCliente: 'C002', assegnataA: utenti.titolare.id,
+      inizio: domani + 'T09:00:00', fine: domani + 'T10:30:00', luogo: 'Cabina MT Acme, Zanè', avvisaCliente: 'whatsapp', idReferenteAvviso: ferretti.id }, conferma: true }).attivita;
+    ids.attivita = sopralluogo.id;
+  });
+
+  // ------------------------------------------------ quello che arriva dal portale: lo fa il referente (le notifiche vanno allo studio)
+  const comeReferente = (r, fn) => w.come({ utente: null, permessi: null, app: 'portale', dispNome: 'Portale · Chrome · Android', azione: 'portale',
+    portale: { nome: r.nome, referenteId: r.id, soggettoId: r.soggetto_id } }, () => w.db.transazione(fn));
+  const ferretti = w.db.riga('SELECT * FROM referenti WHERE id = ?', ids.referenti.ferretti);
+  comeReferente(ferretti, () => {
+    const tk14 = w.db.riga("SELECT * FROM ticket WHERE titolo = 'Scatta il generale MT' ORDER BY id LIMIT 1");
+    const testo = 'Va bene, vi aspetta il custode al cancello nord.';
+    w.scriviComunicazione({ quando: quando(ora - 40 * 60000), canale: 'portale', direzione: 'entrata', tipo: 'messaggio', stato: 'ricevuto', pubblica: 1, cliente_id: 'C002',
+      referente_id: ferretti.id, ticket_id: tk14.id, testo, utente_id: null });
+    w.daGuardare('messaggio', tk14.id, 'C002', ferretti.id, 'Messaggio di Sig. Ferretti su ' + tk14.numero, testo);
+    w.notifica(w.utentiDeiRuoli(['titolare', 'amministrazione']), 'messaggio_portale', 'Messaggio di Sig. Ferretti su ' + tk14.numero, testo, { pagina: 'ticket', id: tk14.id });
+    // La domanda sul preventivo PR/aaaa/014.
+    const p14 = w.db.riga('SELECT * FROM preventivi WHERE id = ?', ids.preventivo);
+    const domanda = 'Il collaudo esterno comprende la relazione?';
+    w.scriviComunicazione({ quando: quando(ora - 3 * 3600000), canale: 'portale', direzione: 'entrata', tipo: 'domanda', stato: 'ricevuto', cliente_id: 'C002', referente_id: ferretti.id,
+      preventivo_id: p14.id, testo: domanda, utente_id: null });
+    w.daGuardare('domanda', p14.id, 'C002', ferretti.id, 'Domanda sul preventivo ' + p14.numero, 'Sig. Ferretti · ' + domanda);
+    w.notifica(w.utentiDeiRuoli(['titolare', 'amministrazione']), 'domanda', 'Domanda sul preventivo ' + p14.numero, 'Sig. Ferretti · ' + domanda, { pagina: 'preventivo', id: p14.id });
+    // Il file mandato allo studio: Schema quadro QG2.pdf, da guardare.
+    const dati = pdf('Schema quadro QG2');
+    const f = w.salvaFile({ dati, nome: 'Schema quadro QG2.pdf', mime: 'application/pdf', tipo: 'portale' });
+    const idC = w.inserisci('portale_caricamenti', { file_id: f.id, soggetto_id: 'C002', referente_id: ferretti.id, per: 'documento', titolo: 'Schema quadro QG2',
+      nota: 'Versione aggiornata dal nostro ufficio', nome_originale: 'Schema quadro QG2.pdf', estensione: 'pdf', byte: dati.length, stato: 'da_guardare', creato: quando(ora - 2 * 3600000) });
+    w.db.esegui('UPDATE file SET caricamento_id = ? WHERE id = ?', idC, f.id);
+    w.daGuardare('caricamento', idC, 'C002', ferretti.id, 'Schema quadro QG2.pdf', 'Rossi Impianti Srl · Sig. Ferretti · 0,1 MB');
+    w.notifica(w.utentiDeiRuoli(['titolare', 'amministrazione']), 'file_portale', 'File dal portale: Schema quadro QG2.pdf', 'Rossi Impianti Srl · 0,1 MB', { pagina: 'caricamento', id: idC });
+    ids.caricamento = idC;
+    // Il registro degli accessi: gli ingressi di Ferretti e quello che ha guardato.
+    const a = (azione, ms, oggetto) => w.accessoPortale({ quando: quando(ms), referente_id: ferretti.id, soggetto_id: 'C002', azione, oggetto: oggetto || '', agente: 'Chrome · Android' });
+    a('entrato', giorni(1) - 8 * 60000);
+    a('visto', giorni(1) - 6 * 60000, 'preventivo:' + ids.pubblicazioni.preventivoAccettato);
+    a('entrato', ora - 3 * 3600000 - 60000);
+    a('domanda', ora - 3 * 3600000, 'preventivo:' + ids.pubblicazioni.preventivo);
+    a('caricato', ora - 2 * 3600000, 'Schema quadro QG2.pdf');
+    a('entrato', ora - 25 * 60000);
+  });
+  // Le date di Da guardare e delle notifiche: quando sono successe.
+  w.db.esegui("UPDATE portale_da_guardare SET creato = ? WHERE tipo = 'messaggio'", quando(ora - 40 * 60000));
+  w.db.esegui("UPDATE portale_da_guardare SET creato = ? WHERE tipo = 'domanda'", quando(ora - 3 * 3600000));
+  w.db.esegui("UPDATE portale_da_guardare SET creato = ? WHERE tipo = 'caricamento'", quando(ora - 2 * 3600000));
+  return ids;
 }
 
 /** Una firma di esempio (un PNG 1x1). */

@@ -95,6 +95,14 @@ data class Rapportino(
     val strumenti: List<StrumentoUsato>? = null,
     /** Fase 6: l'incarico dell'esterno (lo mette il server). */
     val idIncarico: String = "",
+    /** Fase 7 (fase7.md §10.4): "" firmato sul telefono o col foglio, "portale" firmato nel portale, e da chi. */
+    val firmaModo: String = "",
+    val firmaReferente: String = "",
+    /** Fase 7: pubblicato nel portale, da firmare là, visto dal cliente (e l'id della pubblicazione, se il server lo manda). */
+    val portalePubblicato: Boolean = false,
+    val portaleDaFirmare: Boolean = false,
+    val portaleVistoIl: String = "",
+    val portaleId: String = "",
 ) {
     /** Il rapportino e' di un ticket (anche nato senza rete). */
     val conTicket: Boolean get() = idTicket.isNotBlank() || idLocaleTicket.isNotBlank()
@@ -174,6 +182,9 @@ data class Rapportino(
         .put("numeroTicket", numeroTicket)
         .put("nonSiFattura", nonSiFattura)
         .put("idIncarico", idIncarico)
+        .put("firmaModo", firmaModo)
+        .put("firmaReferente", firmaReferente)
+        .put("portale", JSONObject().put("pubblicato", portalePubblicato).put("daFirmare", portaleDaFirmare).put("vistoIl", portaleVistoIl).put("pubblicazione", portaleId))
         .apply {
             // Sul telefono gli strumenti restano interi (nome, matricola, stato di quel giorno).
             strumenti?.let { l -> put("strumenti", JSONArray().apply { l.forEach { put(it.aJson()) } }) }
@@ -272,6 +283,12 @@ data class Rapportino(
                 nonSiFattura = o.testo("nonSiFattura"),
                 strumenti = if (o.has("strumenti") && !o.isNull("strumenti")) StrumentoUsato.lista(o.optJSONArray("strumenti")) else null,
                 idIncarico = o.testo("idIncarico"),
+                firmaModo = o.testo("firmaModo"),
+                firmaReferente = o.testo("firmaReferente"),
+                portalePubblicato = o.optJSONObject("portale")?.vero("pubblicato") == true,
+                portaleDaFirmare = o.optJSONObject("portale")?.vero("daFirmare") == true,
+                portaleVistoIl = o.optJSONObject("portale")?.testo("vistoIl").orEmpty(),
+                portaleId = o.optJSONObject("portale")?.primoTesto("pubblicazione", "id", "idPubblicazione").orEmpty(),
             )
         }
     }

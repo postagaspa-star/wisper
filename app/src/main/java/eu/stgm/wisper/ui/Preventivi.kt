@@ -57,6 +57,7 @@ import eu.stgm.wisper.rapportino.Numeri
 import eu.stgm.wisper.rapportino.Preventivo
 import eu.stgm.wisper.rapportino.ScadenzaPagamento
 import eu.stgm.wisper.rapportino.Stampa
+import eu.stgm.wisper.rapportino.InCoda7
 import eu.stgm.wisper.rapportino.StatoPreventivo
 import eu.stgm.wisper.rapportino.VoceListino
 import eu.stgm.wisper.rapportino.VocePreventivo
@@ -268,7 +269,7 @@ fun SchermataPreventivo(dati: Dati, nav: Navigatore, id: String) {
     var giro by remember { mutableIntStateOf(0) }
     var errore by remember { mutableStateOf<String?>(null) }
     var letto by remember { mutableStateOf(false) }
-    LaunchedEffect(id, giro) {
+    LaunchedEffect(id, giro, Giri7.portale) {
         errore = null
         dati.preventivo(id).onSuccess { letto = true }.onFailure { errore = spiegaErrore2(it, "Il server non risponde: riprova") }
     }
@@ -293,6 +294,9 @@ fun SchermataPreventivo(dati: Dati, nav: Navigatore, id: String) {
     var conferma by remember { mutableStateOf<String?>(null) }
     var inCorso by remember { mutableStateOf<String?>(null) }
     var motivo by remember { mutableStateOf("") }
+    // Fase 7: Pubblica nel portale dal menu ⋯.
+    var pubblica by remember { mutableStateOf(false) }
+    val ops by dati.operazioni.collectAsStateWithLifecycle()
 
     fun fai(cosa: String, lavoro: suspend () -> Result<*>, dopo: (Any?) -> Unit) {
         if (inCorso != null) return
@@ -373,6 +377,9 @@ fun SchermataPreventivo(dati: Dati, nav: Navigatore, id: String) {
                     p.motivoRifiuto.ifBlank { "Senza motivo" },
                 )
             }
+
+            // ---- fase 7 (§12.6): nel portale, accettato nel portale con la firma e la prova, Manda anche un WhatsApp
+            if (!p.modello) BloccoPortalePreventivo(dati, p)
 
             // ---- le sezioni con le voci
             if (!completo && p.sezioni.isEmpty()) {
@@ -516,11 +523,17 @@ fun SchermataPreventivo(dati: Dati, nav: Navigatore, id: String) {
             if (puo && !p.modello && (stato == StatoPreventivo.INVIATO || stato == StatoPreventivo.SCADUTO)) {
                 VoceMenu(Icone.chiudi, "Rifiutato", { menu = false; motivo = ""; conferma = "rifiuta" })
             }
+            if (!p.modello && !p.bozza && p.idCliente.isNotBlank()) {
+                val info = portaleDi(p)
+                VociPortale(dati, info, InCoda7.portaleInCoda("preventivo", p.id, info?.id.orEmpty(), ops),
+                    puoPubblicare = p.stato in setOf(StatoPreventivo.INVIATO, StatoPreventivo.ACCETTATO, StatoPreventivo.RIFIUTATO), onPubblica = { pubblica = true }, onFatto = { menu = false })
+            }
             VoceMenu(Icone.pdf, "PDF", { menu = false; pdf(incarico = false, condividi = false) })
             VoceMenu(Icone.condividi, "Condividi il PDF", { menu = false; pdf(incarico = false, condividi = true) })
             if (p.stato == StatoPreventivo.ACCETTATO) VoceMenu(Icone.firma, "PDF dell'incarico", { menu = false; pdf(incarico = true, condividi = false) })
         }
     }
+    FoglioPubblicaSe(dati, pubblica, "preventivo", p.id, p.idCliente, nomeClienteDi(p, ana)) { pubblica = false; giro++ }
 
     // ---- le conferme
     when (val cf = conferma) {

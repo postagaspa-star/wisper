@@ -59,7 +59,13 @@ module.exports = {
     if (!aMe) {
       const righe = ids.map(id => this.trovaRiga(id, id)).filter(Boolean);
       const unico = k => (righe.length && righe.every(r => testo(r[k]) === testo(righe[0][k])) ? righe[0][k] : '');
-      this.db.transazione(() => this.copiaInviati({ allegati: posta.allegati, a: destinatario, idCliente: unico('id_cliente'), idCommessa: unico('id_commessa'), idTicket: unico('ticket_id') || null }));
+      this.db.transazione(() => {
+        const copie = this.copiaInviati({ allegati: posta.allegati, a: destinatario, idCliente: unico('id_cliente'), idCommessa: unico('id_commessa'), idTicket: unico('ticket_id') || null });
+        // Fase 7: lo storico (§9.1): un rapportino o un riepilogo (piu' rapportini).
+        this.scriviComunicazione({ canale: 'email', tipo: righe.length > 1 ? 'riepilogo' : 'rapportino', cliente_id: unico('id_cliente') || '', commessa_id: unico('id_commessa') || '',
+          ticket_id: unico('ticket_id') || null, rapportino_id: righe.length === 1 ? righe[0].id : '', a: destinatario, oggetto: posta.oggetto, testo: posta.messaggio,
+          allegati: posta.allegati.map(x => ({ nome: x.nome, byte: Buffer.from(String(x.base64 || ''), 'base64').length })), documento_id: copie.length ? copie[0] : null, stato: 'mandato' });
+      });
     }
     if (aMe || !ids.length) return [];
     return this.db.transazione(() => {

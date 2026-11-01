@@ -205,6 +205,8 @@ module.exports = {
       // Fase 5
       idTicket: r.ticket_id === null || r.ticket_id === undefined ? null : r.ticket_id, ticket: r.ticket_id ? aiuti.ticket[r.ticket_id] || '' : '',
       creato: dataOraIso(r.creato), modificato: dataOraIso(r.modificato),
+      // Fase 7: avvisa il cliente e il referente del promemoria.
+      avvisaCliente: r.avvisa_cliente || '', idReferenteAvviso: r.avvisa_referente_id === null || r.avvisa_referente_id === undefined ? null : r.avvisa_referente_id,
     };
   },
 
@@ -316,6 +318,20 @@ module.exports = {
     // Quando: una scadenza, oppure inizio e fine.
     v.tutto_il_giorno = x.tuttoIlGiorno !== undefined ? (si(x.tuttoIlGiorno) ? 1 : 0) : prima ? p.tutto_il_giorno : 0;
     v.scadenza = x.scadenza !== undefined ? (x.scadenza ? dataDaIso(x.scadenza) : '') : prima ? p.scadenza : '';
+    // Fase 7 (§3.14): avvisa il cliente ('' | whatsapp | email) e quale referente. Per le attivita' nuove con un cliente
+    // (appuntamento, sopralluogo, intervento) la proposta di base: WhatsApp se ha detto si', se no email, se no niente.
+    if (x.avvisaCliente !== undefined) {
+      const a = testo(x.avvisaCliente);
+      if (['', 'whatsapp', 'email'].indexOf(a) < 0) throw new Rifiuto('Avvisa il cliente: WhatsApp, email o no');
+      v.avvisa_cliente = a;
+    } else v.avvisa_cliente = prima ? p.avvisa_cliente || '' : null;
+    if (x.idReferenteAvviso !== undefined) {
+      v.avvisa_referente_id = vuoto(x.idReferenteAvviso) ? null : Number(x.idReferenteAvviso);
+      if (v.avvisa_referente_id !== null) {
+        const ref = this.db.riga('SELECT soggetto_id FROM referenti WHERE id = ?', v.avvisa_referente_id);
+        if (!ref || (v.cliente_id && ref.soggetto_id !== v.cliente_id)) throw new Rifiuto('Il referente ' + v.avvisa_referente_id + ' non è di questo cliente');
+      }
+    } else v.avvisa_referente_id = prima ? p.avvisa_referente_id : null;
     v.inizio = x.inizio !== undefined ? istanteDa(x.inizio, 'Inizio') : prima ? p.inizio : '';
     v.fine = x.fine !== undefined ? istanteDa(x.fine, 'Fine') : prima ? p.fine : '';
     if (!v.inizio && v.tipo !== 'attivita') throw new Rifiuto('Inizio: scrivi quando comincia');
@@ -413,6 +429,8 @@ module.exports = {
     const ora = adesso();
     let id;
     let occorrenze;
+    // Fase 7: la proposta di base dell'avviso al cliente, solo per le attivita' nuove (§3.14).
+    if (v.avvisa_cliente === null) v.avvisa_cliente = !prima ? this.avvisoDiBase(v) : '';
     if (!prima) {
       id = this.inserisci('attivita', Object.assign({}, v, { creata_da: io, creato: ora, modificato: ora }));
       if (x.checklist !== undefined) this.scriviChecklist(id, x.checklist);
@@ -426,11 +444,28 @@ module.exports = {
       id = prima.id;
       occorrenze = this.salvaOccorrenza(prima, v, x, per);
     }
+    // Fase 7 (§9.7): a chi riceve un'attivita' da un altro, la notifica "Ti hanno assegnato".
+    if (v.assegnata_a !== null && v.assegnata_a !== io && (!prima || prima.assegnata_a !== v.assegnata_a)) {
+      const giorno = v.inizio ? require('../comunicazioni').giornoLungo(v.inizio.slice(0, 10)) : v.scadenza ? require('../comunicazioni').giornoLungo(v.scadenza) : '';
+      const cliente = v.cliente_id ? (this.db.riga('SELECT nome FROM soggetti WHERE id = ?', v.cliente_id) || {}).nome || '' : '';
+      this.notifica([v.assegnata_a], 'assegnato', 'Ti hanno assegnato: ' + v.titolo, [giorno, cliente].filter(Boolean).join(' · '), { pagina: 'attivita', id });
+    }
     const risposta = { ok: true, attivita: this.attivitaPerId(id) };
     if (occorrenze !== undefined) risposta.occorrenze = occorrenze;
     // Fase 5: un intervento fatto (o tolto) cambia il momento del primo intervento del ticket.
     for (const tk of new Set([prima && prima.ticket_id, v.ticket_id].filter(x => x !== null && x !== undefined))) this.ricalcolaIntervento(tk);
     return risposta;
+  },
+
+  /** Fase 7 (§3.14): WhatsApp se il referente (o il cliente) ha detto si', se no email se c'e', se no niente. */
+  avvisoDiBase(v) {
+    if (['appuntamento', 'sopralluogo', 'intervento'].indexOf(v.tipo) < 0 || !v.cliente_id) return '';
+    const refs = this.db.righe('SELECT * FROM referenti WHERE soggetto_id = ? ORDER BY ordine, id', v.cliente_id);
+    const scelto = v.avvisa_referente_id ? refs.find(r => r.id === v.avvisa_referente_id) : null;
+    if (scelto ? scelto.whatsapp_ok === 1 : refs.some(r => r.whatsapp_ok === 1)) return 'whatsapp';
+    const s = this.db.riga('SELECT email FROM soggetti WHERE id = ?', v.cliente_id);
+    if ((scelto && testo(scelto.email)) || refs.some(r => testo(r.email)) || (s && testo(s.email))) return 'email';
+    return '';
   },
 
   // ------------------------------------------------------------------ ricorrenze

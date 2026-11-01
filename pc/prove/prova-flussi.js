@@ -300,7 +300,7 @@ async function main() {
     passo('la password iniziale vale per entrare');
     await vai('#amministrazione/utenti/' + giorgio.id);
     await clicca('Collaboratore');
-    assert.match(await valuta("document.querySelector('.finestra').innerText"), /Non vedrà: Preventivi e contratti, Fatturazione, Banche e scadenze, Collaboratori esterni, Amministrazione/);
+    assert.match(await valuta("document.querySelector('.finestra').innerText"), /Non vedrà: Preventivi e contratti, Fatturazione, Banche e scadenze, Portale clienti, Collaboratori esterni, Amministrazione/); // fase 7: il portale non è del collaboratore
     await clicca('Cambia il ruolo', '.finestra');
     await aspetta(800);
     assert.equal((await server('utenti')).utenti.find(u => u.id === giorgio.id).ruolo, 'collaboratore');

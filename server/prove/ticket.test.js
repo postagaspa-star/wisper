@@ -161,7 +161,9 @@ test('salvaTicket: i controlli dicono quale campo; l\'idLocale ripetuto non fa d
   await no({ idCliente: 'C002' }, 'Titolo: scrivi in poche parole cosa succede');
   await no({ idCliente: 'C002', titolo: 'X', tipo: 'boh' }, 'Tipo: guasto, verifica, piccolo, assistenza o programmato');
   await no({ idCliente: 'C002', titolo: 'X', origine: 'piccione' }, 'Da dove arriva: telefono, email, sopralluogo o ufficio');
-  await no({ idCliente: 'C002', titolo: 'X', origine: 'whatsapp' }, 'Da dove arriva: telefono, email, sopralluogo o ufficio (WhatsApp e il portale non sono ancora collegati)');
+  // Fase 7 (fase7.md §5.3, §10.4): WhatsApp resta non collegato; "portale" lo mette solo il portale.
+  await no({ idCliente: 'C002', titolo: 'X', origine: 'whatsapp' }, 'WhatsApp non è collegato');
+  await no({ idCliente: 'C002', titolo: 'X', origine: 'portale' }, 'Da dove arriva: «Portale» lo mette solo il portale');
   await no({ idCliente: 'C002', titolo: 'X', origine: 'scadenza' }, 'Da dove arriva: telefono, email, sopralluogo o ufficio');
   await no({ idCliente: 'C002', titolo: 'X', idSede: 7 }, 'Impianto 7 non trovato tra quelli di Rossi Impianti Srl');
   await no({ idCliente: 'C002', titolo: 'X', idContratto: 1 }, 'Il contratto CA/2026/001 è di Batokyo Srl');

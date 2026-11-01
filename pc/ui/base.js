@@ -132,6 +132,11 @@
     laptop: '<path d="M5 6h14v9H5zM3 18h18"/>',
     attrezzo: '<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.8-3.8a6 6 0 0 1-7.9 7.9l-6.9 6.9a2.1 2.1 0 0 1-3-3l6.9-6.9a6 6 0 0 1 7.9-7.9z"/>',
     km: '<path d="M12 20a8 8 0 1 1 8-8M12 12l3-3M20 20l-3-3"/>',
+    // fase 7: portale clienti, WhatsApp e comunicazioni (dal prototipo Gestionale-fase7.html)
+    fumetto: '<path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/>',
+    globo: '<path d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',
+    whatsapp: '<path d="M20 11.5a8.5 8.5 0 0 1-12.6 7.4L3.5 20l1.1-3.8A8.5 8.5 0 1 1 20 11.5zM9 8.5c0 3.5 3 6.5 6.5 6.5l1-1.6-2-1-1 1a4.6 4.6 0 0 1-2.4-2.4l1-1-1-2z"/>',
+    invia: '<path d="M4 12l16-8-6 16-2.5-6.5z"/>',
   };
 
   function icona(nome, dim, spessore) {

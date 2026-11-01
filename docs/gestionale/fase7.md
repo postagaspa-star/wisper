@@ -10,9 +10,194 @@ fasi 2-6, da cui dipende): se qualcosa manca o non torna, lo dice invece di inve
 quelle scritte qui, uguali su telefono e computer. La migrazione è la **007** e viene dopo la 006 della fase 6.
 
 **Vincolo di Andrea del 22/10/2026: tutto gratuito.** Niente dominio, niente abbonamenti: le strade A (Tailscale
-Standard) e B (Cloudflare + dominio) di §3 **non valgono più**. Il Tailscale gratis non si usa per lo studio (è solo per uso
-non commerciale). Come si entra da fuori (telefono di Manuel e portale) è da decidere tra strade gratuite: finché non si
-decide, il portale resta "non collegato".
+Standard) e B (Cloudflare + dominio) di §3 **non valgono più**. **Il 31/10/2026 Andrea ha scelto Google come porta
+d'ingresso** ([`porta-google.md`](porta-google.md)): il portale passa anche lui da Google, come scritto in **§0**, che
+**vale sopra** a tutto quello che nelle sezioni successive parla di porta 8401, Tailscale, Funnel, Cloudflare, cookie,
+CSRF, indirizzi IP e ingresso.
+
+## 0. La strada Google (01/11/2026): cosa cambia in questo accordo
+
+Tutto il resto dell'accordo (dati, viste a elenco chiuso, pubblicazioni, accettare e firmare, richieste, file, email,
+WhatsApp, comunicazioni, notifiche, schermate dello studio) resta com'è. Cambia **come il cliente arriva al server** e,
+di conseguenza, sessione, limiti e prove di sicurezza. Gratis, senza dominio, senza toccare il router.
+
+### 0.1 I tre pezzi
+
+```
+ cliente (browser)
+   │ 1. apre la pagina del portale: file fissi, senza dati      ──►  Netlify (gratis): https://studiogm-portale.netlify.app
+   │ 2. ogni richiesta: POST JSON allo script del portale       ──►  Google: lo script del portale (progetto SUO, separato
+   │                                                                  da quello del foglio), che la tiene in coda
+   ▼                                                                         ▲
+ il NAS di casa: un secondo giro di porta.js (soloPortale) va a prendere ─────┘ il lavoro e lo passa SOLO al router del
+ portale (server/src/portale/), mai a /exec. A casa non si apre niente.
+```
+
+1. **La pagina del portale** (`portale/` nella radice del repository): `index.html`, `portale.css`, `portale.js`,
+   `documenti.js` (copiato da `pc/ui/documenti.js` quando si prepara), il carattere Figtree, `_headers` (le intestazioni
+   di §0.4 per Netlify) e `config.js` con l'indirizzo dello script del portale. `config.js` **non sta nel repository**
+   (c'è `config.esempio.js`): lo scrive `node strumenti/prepara-portale.js --script <indirizzo> --uscita <cartella>`,
+   che mette nella cartella tutta la pagina pronta. Andrea la pubblica su **Netlify** (piano gratuito, che permette l'uso
+   commerciale; lui lo usa già): trascina la cartella su app.netlify.com/drop, nome del sito per esempio
+   `studiogm-portale`. Quell'indirizzo va in `PORTALE_INDIRIZZO`. Netlify consegna solo file fissi: i dati non passano
+   da lì. Perché non una pagina servita dallo script stesso (HtmlService): Google ci mette sopra la fascia grigia "Questa
+   applicazione è stata creata da un altro utente, non da Google" e la chiude in una cornice dove scaricare e stampare
+   funzionano male; per i clienti dello studio non va.
+2. **Lo script del portale**: un **progetto Apps Script nuovo**, dello stesso account Google dello studio, con due file:
+   `Porta.gs` (identico a quello del foglio) e `PortaleClienti.gs`. Pubblicato come app web, "Esegui come: io", "Chi ha
+   accesso: chiunque". Proprietà dello script: `SEGRETO_SERVER` = un segreto **nuovo**, diverso da quello del foglio
+   (sul NAS si chiama `SEGRETO_PORTALE`). Non ha bisogno di fogli né di Gmail; Drive solo per i file oltre 2 MB, come la
+   porta. Il suo indirizzo è pubblico per forza (sta nella pagina) e da solo non apre niente: risponde solo al protocollo
+   di §0.2 e passa tutto al server. **L'indirizzo dello script del foglio resta segreto come sempre** e non compare mai
+   nella pagina, nelle email o nei messaggi: è il motivo per cui lo script del portale è un progetto a parte.
+3. **Il NAS**: nel `.env` `WISPER_PORTALE_URL` (l'indirizzo dello script del portale, quello che finisce con `/exec`) e
+   `SEGRETO_PORTALE`. `avvio.js` accende un secondo `PortaGoogle` con `soloPortale: true`: prende i lavori solo da lì,
+   accetta solo `tipo: "portale"` e li passa a `w.portale.richiesta(lavoro)` (il router di §6.1). Il giro di sempre
+   (quello del foglio) rifiuta `tipo: "portale"` (`Richiesta non valida`). **Nessuna porta nuova**: niente 8401, niente
+   contenitore d'ingresso, niente righe in `docker-compose.yml` oltre alle due variabili. `--porta-portale <n>` esiste
+   **solo con `--prova`** (fuori da `--prova` il server si rifiuta di partire): un ascolto HTTP locale che parla il
+   protocollo di §0.2 come lo script, per provare la pagina sul PC senza Google.
+
+Il finto Google fa anche lo script del portale: `WISPER_PROGETTO=portale node apps-script/prove/finto-google.js 8766`
+carica `Porta.gs` e `PortaleClienti.gs` (niente foglio, niente dati di esempio) e risponde con
+`Access-Control-Allow-Origin: *` come Google dopo il rimbalzo su `script.googleusercontent.com`.
+
+### 0.2 Il protocollo fra la pagina e lo script
+
+Sempre **POST** all'indirizzo dello script, corpo JSON come testo (`fetch` con un corpo stringa: `Content-Type:
+text/plain`, nessuna domanda preliminare del browser), `redirect: "follow"`, `credentials: "omit"`. Google rimbalza su
+`script.googleusercontent.com`, che risponde con `Access-Control-Allow-Origin: *`.
+
+```json
+{"portale": 1, "v": 1, "id": "q7Kp2xRw9sLm4tVbX2", "strada": "preventivi/12/accetta", "metodo": "POST",
+ "sessione": "4zGTu2KD…", "pre": "", "corpo": {"scelte": {"14": true}, "nome": "Roberto Ferretti", "…": "…"},
+ "agente": "Chrome · Android"}
+```
+
+| Campo | Cosa |
+|---|---|
+| `portale`, `v` | sempre `1`; `v` è la versione del protocollo: diversa da quella del server → `{"ok": false, "stato": 426, "errore": "Il portale è stato aggiornato: ricarica la pagina", "ricarica": true}` |
+| `id` | 16-80 caratteri `[A-Za-z0-9_-]`, nuovo per ogni operazione e **lo stesso quando la pagina riprova la stessa** (porta-google.md §5): una POST ripetuta non si fa due volte |
+| `strada` | il percorso di §6.1 senza `/portale/api/`: `entra`, `codice`, `link`, `link-nuovo`, `esci`, `informativa`, `azienda`, `io`, `casa`, `preventivi`, `preventivi/12`, `preventivi/12/accetta`, `scarica/<chiave>`, `immagine/<chiave>`, `carica`, … più due nuove: `studio` (pubblica, §0.3) e `condiviso/<token>` / `condiviso/<token>/scarica` (i link della fase 5, che diventano pagine del portale). Forma: `^[a-z-]+(/[A-Za-z0-9_.-]{1,200}){0,3}$`, niente `..` |
+| `metodo` | `GET` per le letture, `POST` per i cambi, come §6.1. Strada o metodo fuori elenco → `{"ok": false, "stato": 404, "errore": "Non trovato"}`, sempre uguale |
+| `sessione` | il token della sessione (§0.4), `""` prima di entrare |
+| `pre` | la pre-sessione (§0.4), solo con `entra` e `codice` |
+| `corpo` | il corpo JSON di §7 (oggetto; `{}` per le letture). Limiti di §6.4 sul testo del corpo: 64 KB, 300 KB per `accetta` e `firma`, `carica` a parte |
+| `agente` | "Chrome · Android", "Edge · Windows" (la pagina lo ricava da `navigator.userAgent`, al massimo 40 caratteri): è quello che finisce nel registro come dispositivo |
+
+**La risposta** è il JSON di §7 con in più **`stato`**, il codice HTTP che §7 dava (200, 400, 401, 403, 404, 409, 413,
+426, 429, 503): lo script risponde sempre HTTP 200. Lo script controlla solo la forma (portale 1, strada con la forma
+giusta, corpo oggetto, grandezza fino a 36 milioni di caratteri) e non guarda dentro: decide tutto il server. Le
+risposte "riprova" della porta (porta-google.md §4: `rete: true`, `porta: spento | attesa | occupato`) arrivano così
+come sono: la pagina dice "Il portale non risponde adesso: riprova fra qualche minuto" con il telefono dello studio
+(dall'ultima `studio` letta, tenuta in `localStorage`). Lo script aspetta il server **al massimo 20 secondi**
+(`PORTALE_ATTESA_MS`), la pagina 45.
+
+**File.** Il cliente manda un file con `strada: "carica"`, `corpo: {"nome": "Schema quadro QG2.pdf", "per": "documento",
+"base64": "…"}` (20 MB di file sono 27 MB in base64: passano dalla porta); i controlli sono quelli di §6.7 sui byte
+decodificati. `scarica/<chiave>` e `immagine/<chiave>` rispondono `{"ok": true, "stato": 200, "nome", "mime", "byte",
+"base64"}` (le regole di §7.8 restano: chiave di 10 minuti, solo con la stessa sessione, file ancora vedibile); la
+pagina fa un `Blob`: scaricare = un collegamento con `download`, immagine = `blob:` nell'`img`. Oltre 25 MB un file non
+passa da Google (`stato: 413`, "Il file è troppo grande per scaricarlo dal portale: chiedilo allo studio").
+
+### 0.3 La strada `studio`
+
+`GET studio` (senza sessione) → `{"ok": true, "stato": 200, "studio": {"nome": "Studio Tecnico GM", "telefono": "0445
+000100", "email": "ufficio@studiogm.example", "indirizzo": "…", "partitaIva": "…"}, "attivo": true}`: quello che la
+pagina d'ingresso e il piè di pagina mostrano (sono già pubblici sui documenti dello studio). Con il portale spento
+`attivo: false` e la pagina mostra "Il portale di Studio Tecnico GM non è attivo" col telefono.
+
+### 0.4 Sessione e sicurezza senza cookie
+
+- **Niente cookie.** Lo script non può metterne e la pagina sta su un altro indirizzo. La **sessione** è un token di 32
+  byte che il server dà con `codice`, `link` e `azienda` (`"sessione": "…"` nella risposta) e che la pagina tiene in
+  `sessionStorage` (si perde chiudendo la scheda, come il cookie di sessione di prima) e manda in `sessione` a ogni
+  richiesta. La **pre-sessione** è un valore casuale di 32 byte che la pagina crea, tiene in `sessionStorage` e manda in
+  `pre` con `entra` e con `codice`: il codice vale solo con la stessa pre-sessione (ASVS 6.6.2, come il cookie di prima).
+  Nel database solo lo SHA-256 di tutti e due. Durate, uscita, **Esci da tutti i dispositivi**, chiusure (§3.4, §6.3)
+  restano uguali.
+- **CSRF non c'è da difendere**: nessuna credenziale parte da sola dal browser (il token lo mette la pagina, a mano). Cade
+  tutto il pezzo CSRF di §6.3: niente `csrf` in `io`, niente `csrf_hash` in `portale_sessioni`, niente `Sec-Fetch-Site`.
+- **L'indirizzo IP non c'è**: Google non lo passa allo script. Le colonne `ip` restano vuote; nella **prova**
+  dell'accettazione e della firma (§3.8, §3.9) al posto dell'IP c'è `"via": "google"` con `agente`, ora, impronta,
+  nome, firma, email. Il cliente in **Il mio accesso** vede quando e con che dispositivo (niente "da"); lo studio vede
+  lo stesso. È un limite detto: la firma elettronica semplice resta valida, con una prova in meno.
+- **Limiti** (§6.4): quelli "per IP" diventano **uno per tutto il portale**: al massimo **60 richieste di link all'ora**
+  in tutto (oltre: la stessa risposta di sempre, nessuna email, riga `bloccato`) e **1.500 letture ogni 5 minuti** in
+  tutto. Quelli per email, referente e sessione restano.
+- **Il link**: `{PORTALE_INDIRIZZO}/#/entra/<token>` (e `#/condiviso/<token>`). La parte dopo `#` non arriva a Netlify e
+  non finisce nei registri di nessuno; la pagina la toglie dall'indirizzo appena letta. Aprire la pagina non consuma
+  niente: solo la strada `link`, mandata dal pulsante **Entra nel portale** (Safe Links resta innocuo).
+- **Intestazioni** (§6.2) sulla pagina, in `portale/_headers`:
+  `Content-Security-Policy: default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self'
+  data: blob:; font-src 'self'; connect-src https://script.google.com https://script.googleusercontent.com; form-action
+  'none'; frame-src 'self'; frame-ancestors 'none'; base-uri 'none'`, più `X-Content-Type-Options: nosniff`,
+  `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, `Permissions-Policy: camera=(), microphone=(), geolocation=(),
+  payment=(), usb=()`, `Cross-Origin-Opener-Policy: same-origin`, e `Cache-Control: no-cache` per `index.html` e
+  `config.js`. Nessuno script in linea; `textContent` sempre (§7.10).
+- **Modello delle minacce** (§4), righe che cambiano: **1** sul NAS non c'è niente su internet; lo script del portale
+  risponde solo a §0.2 (strada fuori elenco → 404 uguale), e lo script del foglio non è nominato da nessuna parte;
+  **2** e **3** limite generale al posto di quello per IP; **8** niente cookie, quindi niente CSRF; `frame-ancestors`
+  sulla pagina; **13** chi ruba l'account Google dello studio o l'account Netlify: verifica in due passi su tutti e due
+  (Netlify potrebbe cambiare la pagina e leggere i codici: per questo valgono 10 minuti e accettare e firmare mandano
+  un'email di conferma); **14** HTTPS fino a Netlify e fino a Google; Google vede le richieste che passano (le tiene
+  nella cache dello script il tempo della consegna, come la porta); **18** lo script del portale ha la sua coda, ma le
+  esecuzioni contemporanee (30) sono **per account**: se un giorno il portale avesse tanto traffico da rallentare i
+  telefoni dello studio fuori casa, lo script del portale si sposta su un account Google suo, gratis (nota per Andrea,
+  non serve ora).
+
+### 0.5 Se il NAS è spento, collegato o no
+
+- Con il NAS spento la pagina c'è comunque (Netlify) e lo script risponde subito `spento`: la pagina mostra "Il portale
+  non risponde adesso. Riprova fra qualche minuto o chiama lo studio allo 0445 000100". Sostituisce il primo punto di
+  §3.18.
+- **Collegato** vuol dire: `PORTALE_INDIRIZZO` scritto **e** il giro del portale che parla con lo script (ultimo
+  contatto entro 2 minuti). `controllaPortale` (e il controllo di ogni ora di §3.18) guarda tutte e due le cose: il giro
+  e una GET di `PORTALE_INDIRIZZO` che risponde 200 con dentro `<meta name="wisper-portale" content="1">`. Due controlli
+  falliti di fila → Dashboard "Il portale non si raggiunge da fuori dalle 14:00" ed email, come §3.18.
+- `portale {}` (§10.1): `stato` = `{"attivo", "indirizzo", "collegato": "si" | "no" | "non_collegato", "controllatoIl",
+  "script": "attivo" | "non risponde" | "non collegato", "emailRimaste"}` (niente `ingresso`). Nelle schermate dello studio
+  la riga dello stato dice "Portale **Collegato** · studiogm-portale.netlify.app"; **Non collegato** con "Il portale non è
+  ancora su internet: Amministrazione › Impostazioni › Portale clienti"; in quella scheda, sotto l'indirizzo, la riga
+  **Script del portale** con **Attivo** / **Non risponde** / **Non collegato** ("mancano WISPER_PORTALE_URL e
+  SEGRETO_PORTALE sul NAS").
+- Il battito `postinoBattito` di §10.4 **non serve**: `controlloMattina()` di `Ponte.gs` guarda già l'ultima chiamata del
+  NAS alla porta (`porta:nas`). Il server interno non è su internet già oggi.
+
+### 0.6 Le altre sezioni, punto per punto
+
+- **§3.1, §3.2, §6.5, §6.6**: sostituite da §0.1-0.5. `PORTALE_INGRESSO` non esiste. Domande 1 e 2 di §14: decise
+  (Google). Costi della fase: **0 €**.
+- **§3.4**: valgono i link, il codice, le durate e i limiti per email; cookie e pre-sessione come §0.4.
+- **§3.7**: "Scarica il PDF" scarica il file in base64 (§0.2); "Stampa o salva in PDF" resta.
+- **§3.19 e §9.8**: i fornitori sono **Google** (lo script del portale porta le richieste; il postino manda le email) e
+  **Netlify** (consegna la pagina e vede l'indirizzo di chi la apre, non i dati). Nel riassunto di **Prima di entrare**
+  la frase sui fornitori diventa "Le email e il collegamento passano da Google; la pagina è ospitata da Netlify: tutti e
+  due possono trattare dati negli Stati Uniti." e quella sul registro "un registro degli accessi (data, ora, browser)";
+  quella sui cookie "Usiamo solo la memoria del browser che serve a tenerti dentro, e si cancella chiudendo la scheda:
+  niente statistiche, niente pubblicità."
+- **§5**: in `portale_link` e `portale_sessioni` niente `csrf_hash`; `pre_hash` è lo SHA-256 di `pre`; `ip` resta
+  (vuoto). Le impostazioni di §5.1 senza `PORTALE_INGRESSO`. `CONDIVISIONE_INDIRIZZO` vuoto → i link condivisi della fase 5
+  sono `{PORTALE_INDIRIZZO}/#/condiviso/<token>`; la seconda porta `--porta-condivisione` resta com'è (per le prove).
+- **§6.1**: la mappa fissa è di strade (§0.2), non di percorsi HTTP; le pagine statiche di §6.1 e §7.10 sono in `portale/`
+  con le rotte dopo `#` (`#/preventivi/12`).
+- **§6.2, §6.3**: §0.4. **§6.4**: §0.4. **§6.7**: uguale, sui byte decodificati dal base64.
+- **§7**: ogni risposta ha `stato`; `codice`, `link` e `azienda` restituiscono anche `"sessione"`; `io` senza `csrf`;
+  `accessi` senza `da`; `anteprimaPortale` restituisce `{PORTALE_INDIRIZZO}/#/entra/<token>`.
+- **§10.4**: niente `postinoBattito`; `io` in più `portaleCollegato` come §0.5.
+- **§13.2**, le prove di sicurezza che cambiano: **1** contro il router del portale (e contro `--porta-portale` in prova):
+  strade fuori elenco, `exec`, `io` dello studio, `../`, `%2e`, metodi sbagliati → 404 tutti uguali; il giro del foglio
+  rifiuta i lavori `portale` e il giro del portale rifiuta tutto il resto; `--porta-portale` senza `--prova` non parte;
+  **5** senza "limiti per IP" ma col limite generale; **6** il token di sessione al posto del cookie (nuovo a ogni
+  ingresso, chiuso sul server, pre-sessione diversa → codice rifiutato); **7** diventa: un token di un altro referente
+  o di una sessione chiusa → 401; **8** il file `portale/_headers` ha le intestazioni di §0.4 (prova che lo legge) e
+  nessuna risorsa esterna nelle pagine; **12** (Andrea, col telefono in 4G): la pagina si apre, si entra con l'email, e
+  nella pagina e nei suoi file non c'è l'indirizzo dello script del foglio; **13** ZAP, facoltativa, contro la pagina
+  di prova.
+- **§14**: per Andrea restano da fare a mano, quando vuole accendere il portale: il progetto Apps Script del portale (due
+  file da incollare e "Nuova versione"), il segreto, le due variabili nel `.env` del NAS, la pagina su Netlify, la
+  verifica in due passi sugli account Google e Netlify, la prova da fuori casa. Fino ad allora il portale è **Non
+  collegato** e tutto il resto della fase 7 funziona.
 
 Il portale è **il primo pezzo di Wisper su internet**. Per questo la sicurezza viene prima di tutto il resto: §3.1-3.6,
 il modello delle minacce (§4), le strade del portale (§6) e le prove di sicurezza (§13.2) valgono più delle comodità.
@@ -759,7 +944,7 @@ Cache-Control: no-store            (tutto tranne /portale/static/: lì "public, 
 - Ogni ingresso, uscita, lettura di una cosa (`visto`, una volta per sessione e cosa), scaricamento, azione, errore di
   accesso scrive `portale_accessi` (§5.4). **Mai** token, codici, cookie, email di chi non ha l'accesso, contenuto dei
   file, immagini delle firme.
-- Il cliente vede i suoi ultimi 20 accessi (§7.9) con l'IP accorciato ("93.45.x.x"); lo studio li vede per cliente e
+- Il cliente vede i suoi ultimi 20 accessi (§7.9) senza IP (§0.4: dietro Google l'IP non arriva); lo studio li vede per cliente e
   referente (§10.1) con l'IP intero.
 - I log del contenitore non scrivono i percorsi `/portale/entra/<token>` e `/condiviso/<token>` interi (scrivono
   `/portale/entra/…`).
@@ -1114,7 +1299,7 @@ per PNG e JPEG e con `inline` (le firme e le foto nelle pagine); mai per altri t
 ### 7.9 Il mio accesso
 
 `GET /portale/api/accessi` → `{"ok": true, "accessi": [{"quando": "2026-10-22T09:58:00", "frase": "Entrato", "dispositivo":
-"Chrome · Android", "da": "93.45.x.x"}, {"quando": "2026-10-21T17:40:00", "frase": "Ha visto il preventivo PR/2026/012 rev.
+"Chrome · Android", "da": ""}, {"quando": "2026-10-21T17:40:00", "frase": "Ha visto il preventivo PR/2026/012 rev.
 1", "dispositivo": "Edge · Windows", "da": "151.18.x.x"}]}` (gli ultimi 20 di **questo referente**).
 `POST /portale/api/avvisi {"email": false}` → `{"ok": true}` (spegne o accende gli avvisi per email; link e conferme
 partono comunque).
@@ -1180,7 +1365,7 @@ pubblicazione nasce nella stessa transazione del cambio, con `origine = regola`.
 | `mandaEmail` (Comunicazioni, §10.2) | `email`, `uscita`, il modello, `mandato` o `errore` |
 | `salvaMessaggio` WhatsApp | `whatsapp`, `uscita`, il modello, `preparato`; `segnaMandato` → `mandato` |
 | **Non mandare** una proposta | `whatsapp` o `email`, `non_mandato`, `motivo` |
-| Telefonata o nota (**Annota una telefonata**) | `telefonata` o `nota`, `uscita` o `entrata`, `libero` |
+| Telefonata o nota (**Annota una telefonata**) | `telefonata` o `nota`, `uscita` o `entrata`, `libero`; `mandato` in uscita, `ricevuto` in entrata |
 | Email del portale (invito, avviso, conferma; non i link e i codici d'accesso) | `email`, `uscita`, `invito_portale` / `avviso_portale` / `conferma_portale` |
 | Messaggio del cliente nel portale (richiesta, domanda su un preventivo, segnalazione su un rapportino) | `portale`, `entrata`, `messaggio` / `domanda` / `segnalazione`, `ricevuto` |
 | **Rispondi nel portale** | `portale`, `uscita`, `messaggio`, `mandato`, `pubblica = 1` |
@@ -1234,6 +1419,11 @@ stessi casi (`server/prove/casi-whatsapp.json`):
 Casi: `"333 000 1122"` → `393330001122`; `"+39 333-000-1122"` → `393330001122`; `"0039 3330001122"` → `393330001122`;
 `"0445 000100"` → `390445000100`, `fisso: true`; `"+41 79 000 11 22"` → `41790001122`; `"123"` → non valido; `""` → non valido.
 Si mostra come `+39 333 000 1122` (gruppi da 3, 3, 4 dopo il prefisso per l'Italia).
+
+Precisazioni dell'01/11/2026, scritte in `server/prove/casi-whatsapp.json` (17 casi, valgono loro): i punti 3 e 4 valgono
+solo se davanti **non** c'erano `+` o `00` (un numero col prefisso è già internazionale: `+376 312 345` resta
+`376312345`); col punto 5 `fisso` è vero se dopo il 39 viene uno 0; un fisso italiano si mostra con le cifre attaccate
+(`+39 0445000100`), un estero come `+41790001122`.
 
 ### 9.4 Il messaggio pronto
 
@@ -1354,14 +1544,17 @@ tranne le letture e `salvaPortaleCliente` (si può preparare tutto prima di acce
     {"id": 4, "nome": "Anna Rossi", "ruolo": "Amministrazione", "email": "amministrazione@rossi.example", "portale": true,
      "statoVisto": "Invitato", "permessi": {"preventivi": 1, "rapportini": 1, "fatture": 1, "documenti": 1, "richieste": 0},
      "sedi": null, "ultimoAccesso": "", "pagamenti": true, "whatsappOk": false, "…": "…"}],
-   "pubblicati": [{"id": 12, "tipo": "preventivo", "titolo": "Preventivo PR/2026/012 rev. 1", "pubblicataIl": "2026-10-15T10:00:00",
+   "pubblicati": [{"id": 12, "tipo": "preventivo", "rif": "5", "titolo": "Preventivo PR/2026/012 rev. 1", "pubblicataIl": "2026-10-15T10:00:00",
                    "origine": "regola", "vistoIl": "2026-10-21T17:40:00", "vistoDa": "Sig. Ferretti", "daFirmare": false}],
    "caricamenti": [{"id": 31, "titolo": "Schema quadro QG2", "nome": "Schema quadro QG2.pdf", "byte": 1258291,
                     "referente": "Sig. Ferretti", "creato": "2026-10-22T09:20:00", "stato": "da_guardare"}],
-   "accessi": [{"quando": "2026-10-22T09:58:00", "referente": "Sig. Ferretti", "frase": "Entrato", "dispositivo": "Chrome · Android", "ip": "93.45.12.7"}]}
+   "accessi": [{"quando": "2026-10-22T09:58:00", "referente": "Sig. Ferretti", "frase": "Entrato", "dispositivo": "Chrome · Android", "ip": ""}]}
   ```
   `statoVisto` del referente: **Attivo** (è entrato almeno una volta), **Invitato** (non ancora), **Senza accesso**,
-  **Tolto**.
+  **Tolto**. Ogni riga di `pubblicati` porta `rif`, l'id della cosa pubblicata (testo: `"5"` per il preventivo 5,
+  `"RAP/2026/0004"` per un rapportino), che con `tipo` dice cosa aprire. Le righe di `caricamenti` sono **le stesse** di
+  `caricamentiPortale` (con `idCliente`, `cliente`, `ticket`, `nota`, `per`, `idSede`, `motivo`, `file {id, url}`,
+  `idDocumento`; §15).
 - `salvaPortaleCliente {idCliente, portale?, regole?, importi?}` (2) → come `portaleCliente`. `portale: false` chiude le
   sessioni dei suoi referenti (`motivo_chiusura = spento`) e annulla i link.
 - `invitaReferente {idReferente? | idCliente?, permessi?, sedi?, manda?: true}` (2): con `idCliente` e senza
@@ -1376,7 +1569,7 @@ tranne le letture e `salvaPortaleCliente` (si può preparare tutto prima di acce
 - `togliAccessoReferente {idReferente}` (2) → `{"ok": true}`: `portale = 0`, `portale_tolto_il`, sessioni chiuse
   (`tolto`), link annullati. `salvaReferente` con l'email cambiata chiude le sessioni (`email cambiata`); `togliReferente`
   di uno con l'accesso lo toglie prima.
-- `pubblica {tipo, id, daFirmare?, allegato?: {nome, mime, base64}, conferma?}` (2, e il modulo della cosa ≥ 1: preventivi,
+- `pubblica {tipo, id, daFirmare?, prima?, allegato?: {nome, mime, base64}, conferma?}` (2, e il modulo della cosa ≥ 1: preventivi,
   contratti col modulo ticket, rapportini, fatturazione per le fatture, documenti, ticket) → `{"ok": true, "pubblicazione":
   {...}, "vedranno": ["Sig. Ferretti", "Anna Rossi"]}`. `allegato` solo per le fatture (PDF, la copia di cortesia, fino a
   10 MB, controllato come §6.7). Senza nessun referente che possa vederla: `{"ok": false, "serveConferma": true, "frase":
@@ -1386,8 +1579,9 @@ tranne le letture e `salvaPortaleCliente` (si può preparare tutto prima di acce
   portale: carica il file o condividilo da OneDrive"`, `"È già nel portale"`. Ripetuta uguale (coda) → ok.
 - `togliDalPortale {id}` (2) → `{"ok": true}`; `annulla: true` la riapre (l'avviso con Annulla).
 - `pubblicaPrima {idCliente, tipo}` (2) → `{"ok": true, "proposte": [...]}` (le cose degli ultimi 12 mesi da scegliere),
-  poi `pubblica` per ognuna scelta (senza avviso per email).
-- `pubblicati {idCliente?, tipo?, visto?, pagina?}` (1) → righe come in `portaleCliente.pubblicati`, con `cliente`.
+  poi `pubblica` con **`prima: true`** per ognuna scelta: niente avviso per email (§8.3).
+- `pubblicati {idCliente?, tipo?, visto?, pagina?}` (1) → righe come in `portaleCliente.pubblicati` (con `rif`), con
+  `cliente`.
 - `caricamentiPortale {stato?, idCliente?}` (1) → righe come sopra con `cliente` e `ticket`.
 - `accettaCaricamento {id, titolo?, idCategoria, idCommessa?, idSede?, idTicket?}` (portale 2 e documenti 2) → `{"ok": true,
   "documento": {...}}`: nasce un documento della fase 5 (`origine = file`, `caricamento_id`, cliente del caricamento,
@@ -1395,8 +1589,11 @@ tranne le letture e `salvaPortaleCliente` (si può preparare tutto prima di acce
   richiesta basta `{id, soloTicket: true}` (restano foto del ticket).
 - `rifiutaCaricamento {id, motivo}` (2) → `{"ok": true}`; motivo obbligatorio (`"Scrivi il motivo: lo vede il cliente"`);
   il file si toglie dal disco dopo 30 giorni.
-- `accessiPortale {idCliente?, idReferente?, azione?, da?, a?, pagina?}` (1) → 100 per pagina, righe `{quando, cliente,
-  referente, frase, oggetto, esito, ip, dispositivo}`.
+- `accessiPortale {idCliente?, idReferente?, gruppo?, da?, a?, pagina?}` (1) → 100 per pagina, righe `{quando, cliente,
+  referente, frase, oggetto, esito, ip, dispositivo}`. **`gruppo`** è il filtro delle pillole: `tutti` (o niente),
+  `entrati` (entrato, uscito, ha cambiato azienda), `azioni` (visto, scaricato, accettato, rifiutato, domanda, firmato,
+  segnalato, caricato, richiesta, messaggio), `errori` (codice sbagliato, link scaduto, bloccato, negato, sessione
+  scaduta). Si chiama `gruppo` perché `azione` è già il nome dell'azione su `/exec`.
 - `anteprimaPortale {idReferente}` (1) → `{"ok": true, "link": "https://…/portale/entra/…"}`: link `anteprima` di 5
   minuti, monouso, che apre una sessione **di sola lettura** di 30 minuti come quel referente (§6.3), con la fascia
   "Anteprima dello studio: niente di quello che fai arriva al cliente". Il link intero torna solo qui. Nel registro dello
@@ -1448,7 +1645,8 @@ tranne le letture e `salvaPortaleCliente` (si può preparare tutto prima di acce
 - `salvaMessaggio {messaggio: {idLocale, canale: "whatsapp" | "telefonata" | "nota", direzione?, tipo?, modello?, proposta?,
   idReferente?, idCliente?, a?, testo, stato: "preparato" | "mandato", idAttivita?, idTicket?, idPreventivo?, idRapportino?,
   idFattura?, idCommessa?, quando?}}` (2) → `{"ok": true, "comunicazione": {...}}`. Ripetuto con lo stesso `idLocale`: la
-  stessa riga. Per WhatsApp vuole il referente col sì (`"Sig. Ferretti non ha detto di sì a WhatsApp"`, `serveConferma`
+  stessa riga. Una telefonata o una nota con `direzione: "entrata"` diventa **`ricevuto`** (statoVisto "Ricevuto"),
+  qualunque `stato` arrivi; `ricevuto` senza `entrata` non si accetta. Per WhatsApp vuole il referente col sì (`"Sig. Ferretti non ha detto di sì a WhatsApp"`, `serveConferma`
   con `segnaSi: true` per segnarlo nello stesso momento). Testo oltre `WHATSAPP_TESTO_MAX`: `"Il messaggio è più lungo di
   1.000 caratteri: accorcialo"`.
 - `segnaMandato {id, mandato}` (2) → la comunicazione: `true` → `mandato`, `mandato_il` adesso; `false` → resta `preparato`.
@@ -1487,10 +1685,11 @@ tranne le letture e `salvaPortaleCliente` (si può preparare tutto prima di acce
   `inviaPreventivo` e `segnaInviato` pubblicano con la regola (col PDF mandato come `file_id`).
 - `accettaPreventivo`: `modo` `portale` solo dal portale (dall'`/exec`: `"«Portale» lo mette solo il portale"`); il
   preventivo ha in più `accettazione: {modo, da, il, referente?, prova?}` (`prova` solo con preventivi 2: IP, browser,
-  impronta) e `portale: {pubblicato, vistoIl, vistoDa}`.
+  impronta) e `portale: {pubblicato, vistoIl, vistoDa, pubblicazione}`.
 - `nuovaRevisione`, `riapriPreventivo`: chiudono la pubblicazione della vecchia (`sostituito`).
 - `creaCommessaDaPreventivo`: chiude la riga `accettato` di Da guardare.
-- `rapportini`, il rapportino: `firmaModo`, `firmaReferente` (nome), `portale: {pubblicato, daFirmare, vistoIl}`;
+- `rapportini`, il rapportino: `firmaModo`, `firmaReferente` (nome), `portale: {pubblicato, daFirmare, vistoIl,
+  pubblicazione}`;
   `salvaRapportino` su una BOZZA pubblicata `da_firmare` aggiorna `modificato` (il cliente deve rileggerla, §3.9).
   `cambiaStato` ANNULLATO o BOZZA da firmato: chiude la pubblicazione (`annullato`).
 - `salvaTicket`: `origine` `portale` solo dal portale (`"Da dove arriva: «Portale» lo mette solo il portale"`); `ticket`:
@@ -1498,12 +1697,15 @@ tranne le letture e `salvaPortaleCliente` (si può preparare tutto prima di acce
   `prendiTicket`, `assegnaTicket` chiudono la riga `richiesta` di Da guardare.
 - `salvaAttivita`: `avvisaCliente` (`""` | `whatsapp` | `email`), `idReferenteAvviso`; senza, per le attività nuove, la
   regola di base di §3.14. `attivita`: i due campi.
-- `fatture`, `fattura`: `sollecitiNo`, `copia` (`{id, url, nome}`), `portale`; `allegaCopiaFattura {id, nome, mime,
+- `fatture`, `fattura`: `sollecitiNo`, `copia` (`{id, url, nome}`), `portale: {pubblicato, vistoIl, vistoDa,
+  pubblicazione}`; `allegaCopiaFattura {id, nome, mime,
   base64}` (fatturazione 2): la copia di cortesia (PDF, 10 MB), che diventa anche il `file_id` della pubblicazione.
-- `documenti`, `documento`: `portale: {pubblicato, vistoIl}`; `condividiDocumento` (fase 5) funziona quando c'è
+- `documenti`, `documento`: `portale: {pubblicato, vistoIl, pubblicazione}`; `condividiDocumento` (fase 5) funziona quando c'è
   `PORTALE_INDIRIZZO` (o `CONDIVISIONE_INDIRIZZO`): il link è `{indirizzo}/condiviso/<token>`.
 - `/salute` della 8400 resta com'è (per chi la chiama dal tailnet).
 - `dashboard`: §11.1.
+- In tutti gli oggetti `portale` qui sopra, `pubblicazione` è l'id della pubblicazione aperta (numero), `null` se non è
+  nel portale: è quello che vuole `togliDalPortale {id}`.
 - **Postino** (`apps-script/Ponte.gs`): azione nuova `postinoBattito {versione}` (col segreto) che segna l'ora;
   `controlloMattina()` avvisa se l'ultimo battito ha più di 3 ore (al massimo un'email ogni 12 ore, come oggi) invece di
   chiamare `/salute`. Il server manda il battito ogni ora (e all'avvio). Finché lo script non è aggiornato da Andrea,
@@ -1916,3 +2118,90 @@ fuori casa della fase 1; con la strada B **5-12 € l'anno** per un dominio nuov
 usano servizi esterni, Antivirus Essential è gratuito. Non collegati, coi numeri in §3.17: WhatsApp Business API (circa
 0,036 $ a promemoria), assistente con un modello a pagamento (circa 1-1,5 $ al mese per 500 domande, più il problema dei
 dati fuori UE).
+
+## 15. Decisioni prese costruendo il server (01/11/2026)
+
+Dove l'accordo taceva o non tornava, la scelta più semplice e sicura. Valgono per server, portale, telefono e computer.
+
+**Dati e migrazione 007**
+- `preventivi` si rifà per il CHECK di `accettazione_modo` (accetta `portale`) con le chiavi esterne rimandate alla fine
+  della transazione (`PRAGMA defer_foreign_keys`): voci, sezioni e scadenze restano legate agli stessi id, e se ne
+  mancasse uno la migrazione non chiuderebbe. `ticket` **non** si rifà: il CHECK della fase 5 accetta già `portale`.
+- `/data/portale-segreto` lo crea il server al primo uso (non la migrazione, che non conosce la cartella dei dati).
+- Colonne in più, solo interne (mai nelle risposte): `portale_pubblicazioni.avviso_da` e `avviso_cosa` (gli avvisi
+  raggruppati e i cambi delle richieste), `senza_avviso` (Pubblica anche quelli di prima, rapportini già firmati);
+  `portale_sessioni.da_scegliere` (più aziende con la stessa email); `portale_caricamenti.stato` ha anche `caricato`
+  (arrivato con `carica` e non ancora legato a un documento, una richiesta o un messaggio: dopo 2 ore nel cestino) e
+  la colonna `comunicazione_id`; `portale_pulizia` (l'unica eccezione del trigger del registro degli accessi).
+- Lo storico che parte dalle copie dei PDF mandati: `tipo = documento`, `quando` = l'istante della copia, `a` dalla nota.
+- Le attività nuove con un cliente prendono la proposta di base dell'avviso (§3.14) anche nei dati di esempio delle
+  fasi di prima: quasi tutti i clienti hanno l'email, quindi Da mandare propone anche quegli appuntamenti.
+
+**Dati di esempio** (`src/prova.js`, `seminaFase7`, aggiunti in fondo: id, numeri e conteggi di prima invariati)
+- Il **PR/2026/012 rev. 1 è già accettato dalla fase 4** (commessa 26ST003, fatture 45 e W-15): il preventivo da accettare
+  con la voce facoltativa e il gruppo di alternative è il **PR/2026/014** (id 7, Rossi, cabina MT); il 012 rev. 1 è
+  pubblicato come Accettato.
+- `PORTALE_INDIRIZZO` resta vuoto (Non collegato, come il NAS appena acceso: i link della fase 5 restano Non collegati e
+  le prove di telefono e computer non cambiano); in prova `WISPER_PORTALE_INDIRIZZO` lo scrive. `PORTALE_ATTIVO` è vero.
+- `TELEFONO` dello studio resta vuoto (le prove confrontano le impostazioni con `semina()` dello script): il portale
+  mostra il telefono che c'è nelle impostazioni.
+- La Dashboard tiene fino a **30** voci per sezione (erano 20), così le voci del portale non tolgono quelle di prima.
+
+**Azioni dello studio**
+- Vogliono il portale collegato e acceso (`nonCollegato`, `spento`) solo `invitaReferente`, `salvaAccessoReferente`,
+  `pubblica` e `anteprimaPortale` (solo `nonCollegato`). Togliere (`togliAccessoReferente`, `togliDalPortale`,
+  `spegniPortale`) e decidere i file dei clienti funzionano sempre.
+- `accessiPortale`: il filtro delle pillole si chiama **`gruppo`** (`entrati`, `azioni`, `errori`), perché `azione` è già
+  il nome dell'azione su `/exec`. Le righe hanno anche `oggetto` ed `esito`.
+- `salvaReferente`: `avviso` sta in cima alla risposta (`{"ok": true, "referente": {...}, "avviso": "..."}`).
+- Campi in più nelle risposte dello studio (le app li possono ignorare): `comunicazioni[]` con `idCliente`,
+  `idReferente`, `idCommessa`, `allegati`, `mandatoIl`, `errore`, `motivo`, `modello`, `proposta`, `pubblica`;
+  `daMandare` con `importoResiduo` nelle proposte di pagamento (campo dei soldi); `notifiche[].mostrata`;
+  `io.interfaccia.notificheTelefono`; `ticket.messaggi[]` = `{id, quando, direzione, da, chi, testo, file: [{nome, byte,
+  url}], letto}` e `ticket.foto[].dalCliente`; `pubblicati[]` con `rif`, `idCliente`, `cliente`, `toltaIl`, `motivoTolta`;
+  `caricamentiPortale[]` con `idCliente`, `nota`, `per`, `idSede`, `motivo`, `file {id, url}`, `idDocumento`.
+- `collegamento` nuovo della Dashboard e di Da guardare: oltre a quelli di §11.1, `{pagina: "rapportino", id}`.
+- `spegniPortale` vuole `amministrazione` 2: coi permessi di base lo può fare solo il titolare.
+- `rispondiNelPortale` del collaboratore: sui ticket "suoi" come `sospendiTicket` (responsabile lui, o nessuno e creato da lui).
+
+**Il portale (router, §0 e §7)**
+- `GET studio` ha in più **`informativa`** (il testo intero di `PORTALE_INFORMATIVA` coi dati dello studio, `{cliente}` =
+  "il cliente"): serve al piè di pagina prima di entrare. `io.informativa` ha in più **`testo`** (col nome dell'azienda).
+- `codice` con più aziende risponde anche `sessione`: vale **solo** per `azienda` ed `esci` finché non si sceglie (le
+  altre strade: 401 "Scegli prima l'azienda"). `azienda` restituisce una sessione nuova e `informativa`.
+- `condiviso/<token>` → `{studio, documento: {titolo, revisione, nomeFile, byte}}`; `condiviso/<token>/scarica` →
+  `{nome, mime, byte, base64}`; non valido: 404 "Questo link non vale più".
+- `entra` e `codice` vogliono `pre` (16-200 caratteri `[A-Za-z0-9_-]`): senza, 400 "Ricarica la pagina e riprova".
+- Quota finita in `entra` e `link-nuovo`: `stato` 503 con `quota: true`. Portale spento: 503 `{spento: true, telefono}`.
+- Un elenco di un tipo che il referente non vede (permesso 0) risponde 404, come le cose che non esistono.
+- La chiave dei file porta in più l'id della pubblicazione da cui il file si vede (`p`): scaricando si ricontrolla
+  che quella pubblicazione si veda ancora e che il file sia suo.
+- La firma "non vuota" si controlla sui pixel veri del PNG (filtri tolti con zlib di Node): un riquadro tutto uguale è
+  "Manca la firma". La prova del rapportino ha anche un'impronta (data, lavoro, ore, km).
+- Le letture contano in memoria (300 ogni 5 minuti per sessione, 1.500 per tutto il portale); i link e i codici nel
+  database (`portale_tentativi`, chiavi `portale`, `email:<sha256>`, `codice:<referente>`, `email_portale`).
+- Le POST che cambiano qualcosa si ricordano per un giorno con l'`id` della pagina (`ricordo.js`, legate alla sessione):
+  la rete che cade non rifà un'accettazione. Non si ricordano quelle che portano una sessione (entra, codice, link,
+  azienda) né `carica`.
+- Il controllo del portale in prova fa la GET solo verso un indirizzo di questo computer (le prove non vanno su
+  internet); sul NAS ogni ora, solo se il giro del portale è configurato.
+
+**Le sei richieste di Wisper Ufficio (01/11/2026)**
+- `portale.pubblicazione`: preventivo (`preventivi`, `preventivo`), rapportino, fattura (`fatture`, `fattura`) e documento
+  (`documenti`, `documento`) hanno nell'oggetto `portale` l'id della pubblicazione aperta (numero, `null` se non è nel
+  portale). Prima il server lo toglieva: ora "Togli dal portale" manda `togliDalPortale {id: portale.pubblicazione}`
+  senza cercarlo in `pubblicati`. `pubblicati[]` porta comunque `rif` (scritto anche in §10.1).
+- `portaleCliente.caricamenti[]` = le stesse righe di `caricamentiPortale` (stessa funzione nel server): `id`, `titolo`,
+  `nome`, `byte`, `referente`, `creato`, `stato`, `idCliente`, `cliente`, `ticket` (`{id, numero}` o `null`), `nota`,
+  `per`, `idSede`, `motivo`, `file {id, url}`, `idDocumento`.
+- Registro: `registro {tabella: "portale"}` vale per la tabella `portale` e per tutte le `portale_*`
+  (`portale_pubblicazioni`, `portale_link`, `portale_caricamenti`...). Gli altri nomi restano confronti esatti.
+- `pubblica {..., prima: true}` = "Pubblica anche quelli di prima" (§8.1, §8.3): la pubblicazione nasce con
+  `senza_avviso`, quindi **nessuna email d'avviso** ai referenti (vale anche il nome `senzaAvviso: true`). Il resto è
+  uguale (controlli, `vedranno`, Annulla). Prova in `server/prove/comunicazioni.test.js`.
+- Telefonata in entrata: `salvaMessaggio` con `canale` `telefonata` o `nota` e `direzione: "entrata"` scrive **`stato:
+  "ricevuto"`** (statoVisto "Ricevuto", come i messaggi del cliente di §9.1), qualunque `stato` mandi l'app (anche
+  "mandato"). In uscita resta `mandato` di base; `stato: "ricevuto"` senza `entrata` → "Stato: preparato o mandato". Il
+  WhatsApp resta sempre in uscita.
+- `accessiPortale {gruppo}`: `gruppo` è il nome del filtro (§10.1: `tutti`, `entrati`, `azioni`, `errori`). Per chi
+  avesse già usato `azione`, il server lo accetta ancora se è un gruppo o un'azione del registro del portale.

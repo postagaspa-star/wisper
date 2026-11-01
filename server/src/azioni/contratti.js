@@ -384,6 +384,8 @@ module.exports = {
     for (const i of impianti) this.creaVisita(attivo, i);
     this.creaScadenzaDisdetta(attivo);
     this.generaTicketDaScadenze();
+    // Fase 7 (§8.1): attivato, la regola "contratti" del cliente col portale lo pubblica (col documento firmato se c'e').
+    this.pubblicaConRegola('contratto', c.id, {});
     return { ok: true, contratto: this.contrattoDaRiga(this.db.riga('SELECT * FROM contratti WHERE id = ?', c.id), true) };
   },
 

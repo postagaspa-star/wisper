@@ -318,6 +318,8 @@ class Archivio(private val ctx: Context) : Dati {
         // Fase 6 (§3.13): le copie per lavorare senza rete (la mia scheda, le assenze, i mezzi)
         // e i documenti personali aperti si tolgono all'uscita dall'account. La coda resta.
         fase6.togliRiservati()
+        // Fase 7: le copie di messaggi, notifiche e portale sono di chi è entrato.
+        fase7.svuota()
     }
 
     /** Un'altra persona: via le copie lette dal server (non la coda, che è ancora da mandare). */
@@ -337,6 +339,7 @@ class Archivio(private val ctx: Context) : Dati {
         _trasferteLette.value = null
         fase5.scaffale.svuota()
         fase6.togliRiservati()
+        fase7.svuota()
         Promemoria.programma(ctx, emptyList(), "")
     }
 
@@ -1630,6 +1633,34 @@ class Archivio(private val ctx: Context) : Dati {
 
     private val invio6 by lazy { eu.stgm.wisper.rapportino.InvioFase6(fase6.f) }
 
+    // ------------------------------------------------------------- fase 7: comunicazioni, WhatsApp, portale clienti
+
+    /** Quello che si fa anche senza rete (fase7.md §3.20) va nella coda su disco, come i rapportini. */
+    private val codaFase7 = object : eu.stgm.wisper.rapportino.CodaFase7 {
+        override fun azione(chiave: String, corpo: JSONObject) { coda.azione7(chiave, corpo); dopoModifica() }
+        override fun presente(chiave: String): Boolean = coda.tutte().any { it.tipo == CodaInvii.Tipo.AZIONE7 && it.idLocale == chiave && !it.rifiutata }
+        override fun togli(chiave: String): Boolean {
+            val l = coda.tutte().filter { it.tipo == CodaInvii.Tipo.AZIONE7 && it.idLocale == chiave && !it.rifiutata }
+            l.forEach { coda.togli(it.idOp) }
+            _coda.value = coda.tutte()
+            return l.isNotEmpty()
+        }
+    }
+
+    override val fase7: eu.stgm.wisper.rapportino.ServizioFase7 by lazy {
+        eu.stgm.wisper.rapportino.ServizioFase7(
+            ponte, Scaffale(File(ctx.filesDir, "fase7"), prefisso = "f7-"),
+            object : EsecutoreFase4 {
+                override suspend fun <T> esegui(lavoro: suspend () -> T): Result<T> = inDiretta { lavoro() }
+            },
+            codaFase7,
+            dopoScrittura = { aggiornaDashboard() },
+        )
+    }
+
+    /** Gli id dei messaggi nati qui (idLocale → id del server): non sono dati personali, restano anche dopo l'uscita. */
+    private val invio7 by lazy { eu.stgm.wisper.rapportino.InvioFase7(ponte, Scaffale(File(ctx.filesDir, "fase7"), prefisso = "f7id-")) }
+
     override suspend fun segnaRimborsato(voci: List<VoceRimborso>, annulla: Boolean): Result<Pair<Int, Double>> = inDiretta {
         ponte.segnaRimborsato(voci, annulla).also { meseSpese?.let { m -> provaONull { leggiSpese(m) } } }
     }.also { aggiornaDashboard() }
@@ -1723,6 +1754,7 @@ class Archivio(private val ctx: Context) : Dati {
         var fase3 = false
         var fase5 = false
         var fase6 = false
+        var fase7 = false
         var unoAllaVolta = false
         try {
             while (true) {
@@ -1751,6 +1783,7 @@ class Archivio(private val ctx: Context) : Dati {
                     if (op.tipo == CodaInvii.Tipo.SALVA) salvati = true
                     if (op.fase5) fase5 = true
                     if (op.fase6) fase6 = true
+                    if (op.fase7) fase7 = true
                     _coda.value = coda.tutte()
                 } catch (e: CancellationException) {
                     throw e
@@ -1794,6 +1827,8 @@ class Archivio(private val ctx: Context) : Dati {
             if (fase5) scope.launch { provaONull { this@Archivio.fase5.tickets() }; provaONull { leggiDashboard() } }
             // Partite assenze, km, guasti o prestiti: anagrafiche (i miei strumenti) e Dashboard coi numeri veri.
             if (fase6 && !salvati) scope.launch { rileggiAnagrafiche(); provaONull { leggiDashboard() } }
+            // Partiti messaggi o cambi del portale: la Dashboard (numerini, Da mandare) coi numeri veri.
+            if (fase7 && !fase6 && !salvati) scope.launch { provaONull { leggiDashboard() } }
         }
     }
 
@@ -1839,6 +1874,8 @@ class Archivio(private val ctx: Context) : Dati {
                 // La foto o la firma partita non serve più sul telefono.
                 if (op.percorso.isNotBlank()) File(op.percorso).delete()
             }
+
+            CodaInvii.Tipo.AZIONE7 -> invio7.esegui(op)
 
             CodaInvii.Tipo.ORE, CodaInvii.Tipo.SPESA, CodaInvii.Tipo.FOTO_SPESA -> when (val a = invio3.esegui(op)) {
                 is InvioFase3.Arrivato.Ore -> mettiOre(a.riga)
@@ -1920,6 +1957,8 @@ class Archivio(private val ctx: Context) : Dati {
                             modificato = b.modificato, inviatoIl = b.inviatoIl, fatturatoIl = b.fatturatoIl,
                             creato = b.creato, costoOrario = b.costoOrario,
                             statoApprovazione = b.statoApprovazione, motivoRifiuto = b.motivoRifiuto,
+                            firmaModo = b.firmaModo, firmaReferente = b.firmaReferente, portalePubblicato = b.portalePubblicato,
+                            portaleDaFirmare = b.portaleDaFirmare, portaleVistoIl = b.portaleVistoIl, portaleId = b.portaleId,
                         )
                     } ?: scritto.copy(conto = null)
                     (attuale ?: Vista(unito)).copy(rapportino = unito, cambiatoQui = true)
@@ -1954,6 +1993,8 @@ class Archivio(private val ctx: Context) : Dati {
                 // Assenze, km, guasti, prestiti e firme della fase 6: li mostra fase6 (InCoda6).
                 CodaInvii.Tipo.ASSENZA, CodaInvii.Tipo.ANNULLA_ASSENZA, CodaInvii.Tipo.KM, CodaInvii.Tipo.FOTO_KM, CodaInvii.Tipo.GUASTO,
                 CodaInvii.Tipo.FOTO_GUASTO, CodaInvii.Tipo.PRESTITO, CodaInvii.Tipo.RESTITUISCI, CodaInvii.Tipo.FIRMA_DPI -> null
+                // Messaggi e portale della fase 7: li mostra fase7 (InCoda7).
+                CodaInvii.Tipo.AZIONE7 -> null
             }
             if (nuova != null) {
                 viste[op.idLocale] = nuova.copy(

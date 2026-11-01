@@ -259,7 +259,9 @@ test('dashboard: tre sezioni di voci con gravita e collegamento; per il titolare
     // Fase 5 (fase5.md §11.1)
     'tickets', 'ticket', 'contratti', 'contratto', 'documenti', 'documento', 'scadenza', 'impianto',
     // Fase 6 (fase6.md §11.1)
-    'persone', 'persona', 'mezzi', 'mezzo', 'attrezzatura', 'collaboratori', 'collaboratore', 'incarico'];
+    'persone', 'persona', 'mezzi', 'mezzo', 'attrezzatura', 'collaboratori', 'collaboratore', 'incarico',
+    // Fase 7 (fase7.md §11.1, e "rapportino" con l'id: fase7.md §15)
+    'comunicazioni', 'portale', 'portaleCliente', 'caricamento', 'modello', 'rapportino'];
   for (const v of voci) {
     assert.ok(['urgente', 'attenzione', 'info', 'soldi'].includes(v.gravita), JSON.stringify(v));
     assert.ok(pagine.includes(v.collegamento.pagina), JSON.stringify(v));

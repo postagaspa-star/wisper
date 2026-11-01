@@ -181,6 +181,8 @@ module.exports = {
     });
     // Fase 5: la firma va nella cronologia del ticket del rapportino.
     if (riga.ticket_id) this.eventoTicket(riga.ticket_id, 'Rapportino ' + riga.id + ' firmato' + (testo(d.firmatario) ? ' da ' + testo(d.firmatario) : ''));
+    // Fase 7 (§8.1): diventa FIRMATO, la regola "rapportini firmati" del cliente col portale lo pubblica (senza avviso).
+    if (stato === 'BOZZA') this.pubblicaConRegola('rapportino', riga.id, {});
     return { id: f.id, url: urlFile(f.id) };
   },
 
@@ -244,6 +246,15 @@ module.exports = {
       if (f.tipo === 'documento' || f.tipo === 'inviato') return false;
     }
     if (f.tipo === 'inviato') return false;
+    // Fase 7: un file arrivato dal portale: chi vede il portale, o chi vede il ticket a cui e' legato.
+    if (f.tipo === 'portale') {
+      if (this.eEsterno()) return false;
+      if (f.ticket_id) {
+        const t = this.db.riga('SELECT * FROM ticket WHERE id = ?', f.ticket_id);
+        if (t && this.vedeTicket(t)) return true;
+      }
+      return this.livello('portale') >= 1;
+    }
     if (f.tipo === 'ticket') {
       const t = this.db.riga('SELECT * FROM ticket WHERE id = ?', f.ticket_id || 0);
       return !!t && this.vedeTicket(t);

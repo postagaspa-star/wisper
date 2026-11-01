@@ -483,6 +483,7 @@ fun SchermataModificaAttivita(dati: Dati, nav: Navigatore, rotta: String) {
     val chiediNotifiche = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
 
     fun cambia(n: Attivita) { a = n }
+    val scriveComunicazioniOra = scriveComunicazioni()
     val erroreTitolo = if (provato && x.titolo.isBlank()) "Scrivi cosa c'è da fare" else null
     val erroreInizio = if (provato && x.tipo != TipoAttivita.ATTIVITA && x.inizio == null) "Scegli quando comincia" else null
     val erroreFine = if (x.inizio != null && x.fine != null && !x.fine.isAfter(x.inizio)) "Deve venire dopo l'inizio" else null
@@ -493,7 +494,10 @@ fun SchermataModificaAttivita(dati: Dati, nav: Navigatore, rotta: String) {
         scope.launch {
             dati.salvaAttivita(x, perRicorrenza, regolaCambiata, confermato)
                 .onSuccess { s ->
-                    avvisi.mostra(if (nuova) "Attività creata" else "Attività salvata")
+                    // Fase 7 (§3.14): "Intervento fissato per giovedì 23" con Avvisa il cliente (non parte niente da solo).
+                    val conAvviso = scriveComunicazioniOra && (s.avvisaCliente ?: x.avvisaCliente).let { it == null || it.isNotBlank() } &&
+                        avvisoInterventoFissato(dati, s.copy(avvisaCliente = s.avvisaCliente ?: x.avvisaCliente, idReferenteAvviso = s.idReferenteAvviso.ifBlank { x.idReferenteAvviso }), avvisi)
+                    if (!conAvviso) avvisi.mostra(if (nuova) "Attività creata" else "Attività salvata")
                     nav.indietro()
                     if (nuova) nav.vai("attivita/${s.id}")
                 }
@@ -557,6 +561,8 @@ fun SchermataModificaAttivita(dati: Dati, nav: Navigatore, rotta: String) {
             val chi = ana.utente(x.assegnataA)
             CampoDaScegliere("Chi", chi?.nome ?: if (x.assegnataA == io.id) io.nome else "Nessuno: non assegnata", x.assegnataA.isBlank(), { scelta = "chi" })
             CampoDaScegliere("Cliente", ana.cliente(x.idCliente)?.nome ?: x.nomeCliente.ifBlank { "Nessuno" }, x.idCliente.isBlank(), { scelta = "cliente" })
+            // Fase 7 (§3.14): appuntamento, sopralluogo o intervento con un cliente: Avvisa il cliente.
+            RigaAvvisaCliente(dati, x) { cambia(it) }
             val commessa = ana.commessa(x.idCommessa)
             CampoDaScegliere("Commessa", commessa?.let { "${it.id} · ${it.descrizione}" } ?: x.idCommessa.ifBlank { "Nessuna" }, x.idCommessa.isBlank(), { scelta = "commessa" })
             val prestazioni = if (x.idCommessa.isNotBlank()) ana.prestazioniDi(x.idCommessa) else emptyList()

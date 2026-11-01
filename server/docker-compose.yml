@@ -27,6 +27,11 @@ services:
       # "expose": la raggiunge soltanto la rete Docker del progetto, MAI in "ports" (chi la raggiungesse
       # potrebbe scrivere l'indirizzo che vuole).
       WISPER_PORTA_INGRESSO: "8402"
+      # Fase 7, il portale clienti (docs/gestionale/fase7.md §0): l'indirizzo dello script del portale (quello che
+      # finisce con /exec, un progetto Apps Script a parte) e il suo segreto, diverso da SEGRETO_SERVER. Con tutti e due
+      # un secondo giro va a prendere le richieste della pagina del portale; nessuna porta nuova. I valori nel .env.
+      WISPER_PORTALE_URL: ${WISPER_PORTALE_URL:-}
+      SEGRETO_PORTALE: ${SEGRETO_PORTALE:-}
     ports:
       # In casa sulla porta 8400 per le prove; quando c'e' Tailscale si puo' chiudere
       # a "127.0.0.1:8400:8400" (come Sol), cosi' le password non girano in chiaro sul Wi-Fi.

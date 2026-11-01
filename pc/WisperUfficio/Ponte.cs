@@ -75,6 +75,17 @@ public sealed class Ponte
         (u.Scheme == Uri.UriSchemeHttps || u.Scheme == Uri.UriSchemeHttp || u.Scheme == Uri.UriSchemeMailto || u.Scheme == "tel") &&
         !string.Equals(u.Host, Host, StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// Fase 7 (fase7.md §3.13, §9.4): il messaggio pronto per WhatsApp. Si apre nel browser del sistema (WhatsApp
+    /// Web, o l'app se prende il link) solo un indirizzo https://wa.me/ con le cifre del numero e al massimo il
+    /// testo codificato come encodeURIComponent: niente altro passa da questa strada. Lo stesso controllo è in
+    /// pc/ui/regole-comunicazioni.js (linkWhatsappValido).
+    /// </summary>
+    private static readonly System.Text.RegularExpressions.Regex LinkWhatsapp = new(
+        @"^https://wa\.me/[0-9]{8,15}(\?text=[A-Za-z0-9%\-_.!~*'()]*)?$", System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+
+    public static bool ÈLinkWhatsapp(string? url) => url != null && url.Length <= 12000 && LinkWhatsapp.IsMatch(url);
+
     public static bool ÈApi(Uri uri) =>
         uri.AbsolutePath.StartsWith("/locale/", StringComparison.Ordinal) ||
         uri.AbsolutePath.StartsWith("/server/", StringComparison.Ordinal);
@@ -309,6 +320,23 @@ public sealed class Ponte
 
             case "apri-collegamento":
                 return await ApriCollegamentoAsync(Testo(o?["url"])).ConfigureAwait(false);
+
+            case "apri-whatsapp":
+            {
+                // Mai dentro la WebView: il browser del sistema. Al ritorno della finestra la pagina chiede "L'hai mandato?".
+                var url = Testo(o?["url"]);
+                if (!ÈLinkWhatsapp(url)) return Json(200, Errore("Il messaggio per WhatsApp non è andato bene: riprova"));
+                try
+                {
+                    Process.Start(new ProcessStartInfo(url) { UseShellExecute = true })?.Dispose();
+                }
+                catch (Exception e) when (e is System.ComponentModel.Win32Exception or InvalidOperationException)
+                {
+                    Log.Errore("WhatsApp non aperto", e);
+                    return Json(200, Errore("Il browser non si è aperto: copia il testo e mandalo da WhatsApp"));
+                }
+                return Json(200, new JsonObject { ["ok"] = true });
+            }
 
             case "notifica":
             {

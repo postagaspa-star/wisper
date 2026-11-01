@@ -60,6 +60,8 @@ data class Cliente(
     val fatturazioneLetta: Boolean = false,
     /** Fase 6 (§12.8): il fornitore ha la scheda del collaboratore esterno. */
     val collaboratore: Boolean = false,
+    /** Fase 7 (fase7.md §10.4): il portale è acceso per questo cliente. */
+    val portale: Boolean = false,
 ) {
     /** "C001 · Thiene": la citta', o l'indirizzo se la citta' non c'e' ancora (i clienti del foglio). */
     val luogo: String get() = citta.ifBlank { indirizzo }
@@ -86,6 +88,7 @@ data class Cliente(
         .put("citta", citta).put("provincia", provincia).put("nazione", nazione).put("archiviato", archiviato)
         .apply {
             if (collaboratore) put("collaboratore", true)
+            if (portale) put("portale", true)
             if (fatturazioneLetta) {
                 put("sostitutoImposta", sostitutoImposta ?: JSONObject.NULL)
                 put("pagamentoGiorni", pagamentoGiorni ?: JSONObject.NULL)
@@ -128,6 +131,7 @@ data class Cliente(
             pagamentoFineMese = c.booleanoONull("pagamentoFineMese"),
             fatturazioneLetta = c.has("sostitutoImposta") || c.has("pagamentoGiorni") || c.has("pagamentoFineMese"),
             collaboratore = c.vero("collaboratore"),
+            portale = c.vero("portale"),
         )
     }
 }

@@ -80,7 +80,7 @@ fun SchermataFattura(dati: Dati, nav: Navigatore, id: String) {
     val regole = RegoleFiscali.da(ana.impostazioni)
     val scriveModulo = scriveFatture()
     var giro by remember { mutableIntStateOf(0) }
-    val lettura = rememberLettura(id, giro) { dati.fase4.fattura(id) }
+    val lettura = rememberLettura(id, giro + Giri7.portale * 100_000) { dati.fase4.fattura(id) }
     var f by remember(id) { mutableStateOf<Fattura?>(null) }
     LaunchedEffect(lettura) { (lettura as? Lettura.Pronta)?.dato?.let { f = it } }
     var menu by remember { mutableStateOf(false) }
@@ -126,6 +126,11 @@ fun SchermataFattura(dati: Dati, nav: Navigatore, id: String) {
         return
     }
     val scrive = scriveModulo && x.puoScrivere
+    // Fase 7
+    var pubblica7 by remember { mutableStateOf(false) }
+    var nonSollecitare by remember { mutableStateOf(false) }
+    val ops7 by dati.operazioni.collectAsStateWithLifecycle()
+    val allegaCopia = rememberAllegaCopia(dati, x) { ricarica() }
     val modificabile = scrive && x.modificabile && x.bozza
 
     Box(Modifier.fillMaxSize().background(c.fondo)) {
@@ -240,6 +245,8 @@ fun SchermataFattura(dati: Dati, nav: Navigatore, id: String) {
                 }
                 if ((x.residuo ?: 0.0) > 0 && !x.nota) Text("Restano " + euro(x.residuo), style = Testi.forte, color = if (x.scaduta) c.rossoTesto else c.testo)
             }
+            // Fase 7 (§12.6): nel portale, la copia di cortesia, il promemoria di pagamento.
+            BloccoFatturaPortale(dati, x)
             if (x.note.isNotEmpty()) {
                 TitoloSezione("Note di credito")
                 SchedaElenco {
@@ -297,9 +304,19 @@ fun SchermataFattura(dati: Dati, nav: Navigatore, id: String) {
                 VoceMenu(Icone.matita, "Segna emessa senza XML", { menu = false; emessaAMano = true })
             }
             if (scrive && x.emessa && !x.nota) VoceMenu(Icone.riapri, "Prepara una nota di credito", { menu = false; nota = true })
+            // Fase 7 (§12.6): Allega la copia PDF, Pubblica nel portale, Non mandare promemoria.
+            if (scrive && x.emessa) VoceMenu(Icone.pdf, "Allega la copia PDF", { menu = false; allegaCopia() })
+            if (x.emessa || x.stato == "annullata") {
+                val info = portaleDi(x)
+                VociPortale(dati, info, eu.stgm.wisper.rapportino.InCoda7.portaleInCoda("fattura", x.id, info?.id.orEmpty(), ops7), puoPubblicare = x.idCliente.isNotBlank(), onPubblica = { pubblica7 = true }, onFatto = { menu = false })
+            }
+            if (x.emessa && !x.nota && vedePagamenti() && scrive) VoceMenu(Icone.chiudi, "Non mandare promemoria", { menu = false; nonSollecitare = true })
             if (scrive && (x.bozza || x.pronta)) VoceMenu(Icone.cestino, if (x.bozza) "Scarta la bozza" else "Scarta", { menu = false; scarta = "" }, pericolo = true)
         }
     }
+
+    FoglioPubblicaSe(dati, pubblica7, "fattura", x.id, x.idCliente, x.cliente) { pubblica7 = false; ricarica() }
+    if (nonSollecitare) FoglioNonSollecitare(dati, x) { fatto -> nonSollecitare = false; if (fatto) ricarica() }
 
     riga?.let { i ->
         val r = x.righe.getOrNull(i) ?: return@let

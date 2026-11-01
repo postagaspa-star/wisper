@@ -53,6 +53,9 @@
     { modulo: 'ticket', nome: 'Ticket e assistenza', spiega: "Richieste d'intervento, contratti, statistiche", icona: 'chiaveInglese' },
     // Fase 6: voce 13 dopo Ticket, voce 16 dopo Mezzi.
     { modulo: 'mezzi', nome: 'Mezzi e attrezzature', spiega: 'Mezzi, strumenti e tarature, DPI, prestiti, guasti', icona: 'furgone' },
+    // Fase 7 (fase7.md §12): voci 14 e 15, dopo Mezzi e attrezzature e prima di Collaboratori esterni.
+    { modulo: 'comunicazioni', nome: 'WhatsApp e comunicazioni', spiega: 'Da mandare, storico, modelli, notifiche', icona: 'fumetto' },
+    { modulo: 'portale', nome: 'Portale clienti', spiega: 'Chi entra, cosa vede, cosa arriva dai clienti', icona: 'globo' },
     { modulo: 'collaboratori', nome: 'Collaboratori esterni', spiega: 'Imprese e professionisti, incarichi, compensi', icona: 'collaboratori' },
     { modulo: 'amministrazione', nome: 'Amministrazione', spiega: 'Studio, utenti, permessi, copie', icona: 'amministrazione' },
   ];
@@ -108,6 +111,8 @@
     const nome = pezzi[0] || 'dashboard';
     if (nome === 'amministrazione' && pezzi[1] === 'app') return null;
     if (nome === 'accesso') return null;
+    // Fase 7 (§10.3): le notifiche sono di tutti, ognuno le sue.
+    if (nome === 'comunicazioni' && pezzi[1] === 'notifiche') return null;
     return VOCI_MENU.some(v => v.modulo === nome) ? nome : 'dashboard';
   }
 
@@ -568,6 +573,18 @@
       }
       case 'collaboratore': return { hash: '#collaboratori/c/' + id, filtro: null };
       case 'incarico': return { hash: '#collaboratori/in/' + id, filtro: null };
+      // Fase 7 (§11.1): comunicazioni (segmento damandare | storico | modelli | notifiche), portale, il cliente nel portale, un file, un modello.
+      case 'comunicazioni': {
+        const seg = c.filtro && c.filtro.segmento;
+        return { hash: '#comunicazioni' + (seg && seg !== 'damandare' ? '/' + seg : ''), filtro: c.filtro || null };
+      }
+      case 'portale': {
+        const seg = c.filtro && c.filtro.segmento;
+        return { hash: '#portale' + (seg && seg !== 'daguardare' ? '/' + seg : ''), filtro: c.filtro || null };
+      }
+      case 'portaleCliente': return { hash: '#portale/cliente/' + id, filtro: null };
+      case 'caricamento': return { hash: '#portale/file/' + id, filtro: null };
+      case 'modello': return { hash: '#comunicazioni/modelli/' + encodeURIComponent(c.chiave || c.id || ''), filtro: null };
       default: return { hash: '#dashboard', filtro: null };
     }
   }
@@ -595,6 +612,8 @@
       // fase 6
       persone: 'Apri Persone', persona: 'Apri la scheda', mezzi: 'Apri Mezzi e attrezzature', mezzo: 'Apri il mezzo', attrezzatura: 'Apri lo strumento',
       collaboratori: 'Apri i collaboratori', collaboratore: 'Apri la scheda', incarico: "Apri l'incarico",
+      // fase 7
+      comunicazioni: 'Apri le comunicazioni', portale: 'Apri il portale', portaleCliente: 'Apri il cliente nel portale', caricamento: 'Apri il file', modello: 'Apri il modello',
     }[p] || 'Apri';
   }
 
@@ -631,6 +650,11 @@
     INDIRIZZO: 'l\'indirizzo dello studio', PARTITA_IVA: 'la partita IVA dello studio', EMAIL: 'l\'email dello studio', TELEFONO: 'il telefono dello studio',
     PEC: 'la PEC dello studio', AUTO: 'l\'auto', TICKET_ATTIVO: 'il campo ticket', FIRMA_TECNICO: 'la firma', EMAIL_AVVISI: 'l\'email degli avvisi',
     ore_lavoro: 'le ore', oreLavoro: 'le ore', km: 'i km', spese: 'le spese',
+    // fase 7: portale e comunicazioni (§11.3)
+    portale: 'il portale', portale_regole: 'cosa si pubblica da solo', portale_importi: 'gli importi nei rapportini', portale_permessi: "l'accesso al portale",
+    portale_sedi: 'le sedi del portale', avvisi_email: 'gli avvisi per email', pagamenti: 'chi paga le fatture', whatsapp: 'il numero WhatsApp',
+    whatsapp_ok: 'il sì a WhatsApp', solleciti_no: 'i promemoria di pagamento', avvisa_cliente: "l'avviso al cliente", portale_visibile: 'la richiesta nel portale',
+    PORTALE_ATTIVO: 'il portale', PORTALE_INDIRIZZO: "l'indirizzo del portale", PORTALE_INFORMATIVA: "l'informativa del portale", WHATSAPP_APP: "l'app di WhatsApp",
   };
 
   /** Campi che il registro non mostra: date di servizio, ordine tecnico. */
@@ -647,6 +671,10 @@
     attivita_checklist: 'la checklist', scadenze_pagamento: 'le scadenze di pagamento', ricorrenze: 'la ricorrenza',
     // fase 3
     ore: 'le ore', timer: 'il timer', spese: 'la spesa', trasferte: 'la trasferta', veicoli: 'il mezzo',
+    // fase 7
+    portale_pubblicazioni: 'la pubblicazione nel portale', portale_caricamenti: 'il file dal portale', portale_da_guardare: 'la voce da guardare',
+    portale_link: 'il link del portale', portale_sessioni: 'la sessione del portale', comunicazioni: 'il messaggio', modelli_messaggi: 'il modello di messaggio',
+    notifiche: 'la notifica',
     // fase 6
     persone: 'la scheda di', persona_costi: 'il costo orario di', assenze: 'l\'assenza', assenze_saldi: 'il saldo di', chiusure: 'la chiusura',
     qualifiche: 'la formazione', qualifica_tipi: 'il tipo di formazione', visite_mediche: 'la visita medica', dpi_consegne: 'la consegna di un DPI',

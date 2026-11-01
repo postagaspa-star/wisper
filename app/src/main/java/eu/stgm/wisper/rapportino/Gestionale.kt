@@ -38,6 +38,10 @@ object Moduli {
     const val MEZZI = "mezzi"
     const val COLLABORATORI = "collaboratori"
 
+    /** Fase 7 (fase7.md §11.2): WhatsApp e comunicazioni (voce 14), portale clienti (15). */
+    const val COMUNICAZIONI = "comunicazioni"
+    const val PORTALE = "portale"
+
     /** Tariffe, totali, costi orari, budget in euro, margini. */
     const val COSTI = "costi"
 
@@ -48,7 +52,7 @@ object Moduli {
     val FASE1 = listOf(DASHBOARD, CLIENTI, COMMESSE, RAPPORTINI, FATTURAZIONE, AMMINISTRAZIONE)
 
     /** Quelli che funzionano dalla fase 6, nell'ordine del menu (Persone dopo Banche, Mezzi dopo Ticket, Collaboratori dopo Mezzi). */
-    val FUNZIONANTI = listOf(DASHBOARD, CLIENTI, COMMESSE, PREVENTIVI, ATTIVITA, RAPPORTINI, SPESE, FATTURAZIONE, BANCHE, PERSONE, DOCUMENTI, TICKET, MEZZI, COLLABORATORI, AMMINISTRAZIONE)
+    val FUNZIONANTI = listOf(DASHBOARD, CLIENTI, COMMESSE, PREVENTIVI, ATTIVITA, RAPPORTINI, SPESE, FATTURAZIONE, BANCHE, PERSONE, DOCUMENTI, TICKET, MEZZI, COMUNICAZIONI, PORTALE, COLLABORATORI, AMMINISTRAZIONE)
 
     /** Fatturazione e Banche si vedono solo col modulo e col permesso dei soldi (§15.1). */
     val CON_SOLDI = setOf(FATTURAZIONE, BANCHE)
@@ -160,6 +164,8 @@ data class Permessi(val livelli: Map<String, Int>) {
                     p[Moduli.DOCUMENTI] = 1; p[Moduli.TICKET] = 2
                     // Fase 6 (§17.18): la rubrica e la sua scheda, i mezzi e gli strumenti che ha.
                     p[Moduli.PERSONE] = 1; p[Moduli.MEZZI] = 1
+                    // Fase 7 (fase7.md §11.2): le sue comunicazioni sì, il portale no.
+                    p[Moduli.COMUNICAZIONI] = 2
                 }
                 Ruoli.LETTURA -> {
                     Moduli.FUNZIONANTI.forEach { p[it] = 1 }
@@ -203,6 +209,13 @@ data class Interfaccia(
     val esternoNome: String = "",
     /** "avviso" (lo strumento scaduto si usa confermando) o "blocco" (non si sceglie). */
     val taraturaBlocco: String = "avviso",
+    /** Fase 7 (fase7.md §10.4): il portale collegato e acceso, l'app di WhatsApp, le notifiche nuove, i caratteri di un WhatsApp. */
+    val portaleCollegato: Boolean = false,
+    val portaleAttivo: Boolean = false,
+    /** "business", "normale" o "chiedi". */
+    val whatsappApp: String = "chiedi",
+    val notificheNuove: Int = 0,
+    val whatsappTestoMax: Int = 1000,
 ) {
     fun aJson(): JSONObject = JSONObject()
         .put("puoApprovare", puoApprovare ?: JSONObject.NULL)
@@ -218,6 +231,11 @@ data class Interfaccia(
         .put("vedeRiservati", vedeRiservati)
         .put("esterno", if (esternoId.isBlank()) JSONObject.NULL else JSONObject().put("idSoggetto", esternoId).put("nome", esternoNome))
         .put("taraturaBlocco", taraturaBlocco)
+        .put("portaleCollegato", portaleCollegato)
+        .put("portaleAttivo", portaleAttivo)
+        .put("whatsappApp", whatsappApp)
+        .put("notificheNuove", notificheNuove)
+        .put("whatsappTestoMax", whatsappTestoMax)
 
     companion object {
         fun daJson(o: JSONObject?) = Interfaccia(
@@ -235,6 +253,11 @@ data class Interfaccia(
             esternoId = o?.optJSONObject("esterno")?.testo("idSoggetto").orEmpty(),
             esternoNome = o?.optJSONObject("esterno")?.testo("nome").orEmpty(),
             taraturaBlocco = o?.testo("taraturaBlocco")?.ifBlank { null } ?: "avviso",
+            portaleCollegato = o?.vero("portaleCollegato") == true,
+            portaleAttivo = o?.vero("portaleAttivo") == true,
+            whatsappApp = o?.testo("whatsappApp")?.ifBlank { null } ?: "chiedi",
+            notificheNuove = o?.numero("notificheNuove")?.toInt() ?: 0,
+            whatsappTestoMax = o?.numero("whatsappTestoMax")?.toInt()?.takeIf { it > 0 } ?: 1000,
         )
     }
 }
@@ -300,9 +323,21 @@ data class Referente(
     val telefono: String = "",
     val note: String = "",
     val ordine: Int = 0,
+    /** Fase 7 (fase7.md §10.4): l'accesso al portale e le sue parole (Attivo, Invitato, Senza accesso, Tolto). */
+    val portale: Boolean = false,
+    val statoPortale: String = "",
+    /** Paga le fatture: a lui (e solo a lui) i promemoria di pagamento (§3.15). */
+    val pagamenti: Boolean = false,
+    /** Il numero per WhatsApp, se diverso dal telefono. */
+    val whatsapp: String = "",
+    /** Ha detto di sì a WhatsApp (§3.13). */
+    val whatsappOk: Boolean = false,
+    val ultimoAccesso: String = "",
 ) {
     fun aJson(): JSONObject = JSONObject().put("id", id).put("soggettoId", idSoggetto).put("nome", nome)
         .put("ruolo", ruolo).put("email", email).put("telefono", telefono).put("note", note).put("ordine", ordine)
+        .put("portale", portale).put("statoPortale", statoPortale).put("pagamenti", pagamenti).put("whatsapp", whatsapp)
+        .put("whatsappOk", whatsappOk).put("ultimoAccesso", ultimoAccesso)
 
     companion object {
         fun daJson(o: JSONObject) = Referente(
@@ -314,6 +349,12 @@ data class Referente(
             telefono = o.testo("telefono"),
             note = o.testo("note"),
             ordine = o.optInt("ordine", 0),
+            portale = o.vero("portale"),
+            statoPortale = o.testo("statoPortale"),
+            pagamenti = o.vero("pagamenti"),
+            whatsapp = o.testo("whatsapp"),
+            whatsappOk = o.vero("whatsappOk"),
+            ultimoAccesso = o.testo("ultimoAccesso"),
         )
     }
 }
@@ -559,6 +600,8 @@ data class Dashboard(
     val fase6: NumeriFase6 = NumeriFase6(),
     val assentiOggi: List<AssenteDashboard> = emptyList(),
     val incarichiEsterno: List<Incarico> = emptyList(),
+    /** Dalla fase 7 (fase7.md §11.1): portale e comunicazioni. */
+    val fase7: NumeriFase7 = NumeriFase7(),
 ) {
     val vuota: Boolean get() = urgenti.isEmpty() && settimana.isEmpty() && pianificare.isEmpty()
 
@@ -574,6 +617,7 @@ data class Dashboard(
             fase6 = NumeriFase6.daJson(o.optJSONObject("numeri")),
             assentiOggi = o.optJSONArray("assentiOggi").oggetti().map { AssenteDashboard(it.testo("idPersona"), it.testo("nome"), it.testo("tipoVisto").ifBlank { "Assente" }, it.testo("fino")) },
             incarichiEsterno = if (o.testo("per") == "esterno") o.optJSONArray("incarichi").oggetti().map(Incarico::daJson) else emptyList(),
+            fase7 = NumeriFase7.daJson(o.optJSONObject("numeri")),
         )
     }
 }

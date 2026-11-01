@@ -15,6 +15,11 @@
  *   3. La risposta parte con la chiamata portaPrendi successiva; se una chiamata
  *      e' gia' aperta ad aspettare, parte subito con portaConsegna.
  *
+ * Fase 7 (fase7.md §0.1): un secondo giro, con soloPortale, va a prendere il lavoro dallo script DEL PORTALE (un
+ * progetto Apps Script a parte, col suo segreto SEGRETO_PORTALE e WISPER_PORTALE_URL): accetta solo i lavori
+ * {tipo: "portale"} e li passa al router del portale (w.portale.richiesta), mai a /exec. Il giro di sempre (quello del
+ * foglio) rifiuta i lavori "portale" (Richiesta non valida), e questo rifiuta tutto il resto.
+ *
  * Senza perdere niente: una risposta che non arriva allo script resta qui e
  * riparte; un lavoro che lo script ridà (risposta persa) non si rifa' se e' una
  * scrittura (ricordo.js, con l'id della richiesta) e se e' ancora in corso si
@@ -61,6 +66,8 @@ class PortaGoogle {
     this.attesaS = Math.min(Math.max(o.attesaS === undefined || o.attesaS === null || isNaN(Number(o.attesaS)) ? ATTESA_S : Number(o.attesaS), 0), 55);
     this.pausaS = Math.min(Math.max(Number(o.pausaS) || 0, 0), 300);
     this.spenta = !!o.spenta;
+    // Fase 7: il giro del portale (solo i lavori "portale", al router del portale).
+    this.soloPortale = !!o.soloPortale;
     this.fetch = o.fetch || ((...a) => fetch(...a));
     this.acceso = false;
     this.inAttesaLunga = false;
@@ -98,7 +105,9 @@ class PortaGoogle {
 
   /** Per /salute e per Amministrazione (copie): {stato, frase, ultimoContatto, ...}. */
   stato() {
-    if (!this.configurata()) return { stato: 'non collegato', frase: 'Non collegato: mancano WISPER_POSTINO_URL e SEGRETO_SERVER nel .env', ultimoContatto: '' };
+    if (!this.configurata()) {
+      return { stato: 'non collegato', frase: this.soloPortale ? 'Non collegato: mancano WISPER_PORTALE_URL e SEGRETO_PORTALE nel .env' : 'Non collegato: mancano WISPER_POSTINO_URL e SEGRETO_SERVER nel .env', ultimoContatto: '' };
+    }
     this.contiDiOggi();
     const ultimo = this.ultimoContatto ? dataOraIso(new Date(this.ultimoContatto)) : '';
     const alle = ultimo ? ultimo.slice(11, 16) : '';
@@ -200,6 +209,14 @@ class PortaGoogle {
 
   /** Il lavoro, dallo stesso gestore delle richieste di casa. Torna il testo JSON per l'app. */
   async esegui(l, id) {
+    // Fase 7: il giro del portale passa i lavori "portale" al router del portale e rifiuta tutto il resto; il giro del
+    // foglio rifiuta i lavori "portale" (cade in fondo: Richiesta non valida).
+    if (this.soloPortale) {
+      if (l.tipo !== 'portale' || !this.w.portale) return NON_VALIDA;
+      const lavoro = Object.assign({}, l, { id: testo(l.id) || id });
+      return JSON.stringify(await this.w.portale.richiesta(lavoro));
+    }
+    if (l.tipo === 'portale') return NON_VALIDA;
     const accesso = testo(l.token) ? { authorization: 'Bearer ' + testo(l.token) } : {};
     const opzioni = { segretoPonte: this.segretoPonte };
     const chiedi = r => richiestaInterna(this.w, opzioni, r, PROVENIENZA);
@@ -344,7 +361,7 @@ class PortaGoogle {
 
   contatto() {
     this.ultimoContatto = Date.now();
-    if (this.erroriDiFila || !this.annunciato) console.log('Collegamento a Google: attivo');
+    if (this.erroriDiFila || !this.annunciato) console.log((this.soloPortale ? 'Portale clienti (Google): ' : 'Collegamento a Google: ') + 'attivo');
     this.annunciato = true;
     this.erroriDiFila = 0;
     this.ultimoErrore = '';
@@ -355,7 +372,7 @@ class PortaGoogle {
     this.contiDiOggi();
     this.conti.errori++;
     const frase = err && err.message ? err.message : String(err);
-    if (this.erroriDiFila === 1 || frase !== this.ultimoErrore) console.log('Collegamento a Google: non risponde (' + frase + '): riprovo da solo');
+    if (this.erroriDiFila === 1 || frase !== this.ultimoErrore) console.log((this.soloPortale ? 'Portale clienti (Google): ' : 'Collegamento a Google: ') + 'non risponde (' + frase + '): riprovo da solo');
     this.ultimoErrore = frase;
   }
 

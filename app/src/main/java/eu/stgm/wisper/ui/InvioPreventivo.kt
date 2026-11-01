@@ -65,6 +65,7 @@ fun SchermataInvioPreventivo(dati: Dati, nav: Navigatore, id: String) {
     val dettagli by dati.dettagliPreventivi.collectAsStateWithLifecycle()
     LaunchedEffect(id) { if (dettagli[id] == null) dati.preventivo(id) }
     val p = dettagli[id]
+    val puoWhatsapp = scriveComunicazioni()
 
     var aScritto by rememberSaveable(id) { mutableStateOf<String?>(null) }
     var ccScritto by rememberSaveable(id) { mutableStateOf("") }
@@ -134,7 +135,13 @@ fun SchermataInvioPreventivo(dati: Dati, nav: Navigatore, id: String) {
                 r.onSuccess {
                     val esempio = if (dati.esempio) " (esempio: non è partito niente)" else ""
                     if (aMe) avvisi.mostra("Copia mandata alla tua casella$esempio")
-                    else { nav.indietro(); avvisi.mostra("Preventivo inviato a $indirizzo$esempio") }
+                    else {
+                        nav.indietro()
+                        // Fase 7 (§12.6): l'avviso "Preventivo mandato" con Manda anche un WhatsApp.
+                        if (puoWhatsapp && p.idCliente.isNotBlank()) avvisi.mostraConAzione("Preventivo mandato$esempio", "Manda anche un WhatsApp") {
+                            apriMessaggio(dati, p.idCliente, "preventivo_mandato", eu.stgm.wisper.rapportino.Riferimento7("preventivo", p.id, p.numero), idReferente = p.idReferente)
+                        } else avvisi.mostra("Preventivo inviato a $indirizzo$esempio")
+                    }
                 }.onFailure { e ->
                     val dc = daConfermare(e)
                     if (dc != null) daConfermare = "email" to dc.message.orEmpty()

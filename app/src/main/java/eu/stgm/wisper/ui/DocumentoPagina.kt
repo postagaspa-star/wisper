@@ -75,8 +75,11 @@ fun SchermataDocumento(dati: Dati, nav: Navigatore, id: String) {
     val sessione by dati.sessione.collectAsStateWithLifecycle()
     val scrive = scriveDocumenti()
     var giro by remember { mutableIntStateOf(0) }
-    val lettura = rememberLettura(id, giro + Giri5.documenti * 1000) { dati.fase5.documento(id) }
+    // Giri7.portale: quando Pubblica o Togli dal portale arriva al server, la pagina si rilegge.
+    val lettura = rememberLettura(id, giro + Giri5.documenti * 1000 + Giri7.portale * 100_000) { dati.fase5.documento(id) }
     var menu by remember { mutableStateOf(false) }
+    var pubblicaDoc by remember { mutableStateOf(false) }
+    val opsDoc by dati.operazioni.collectAsStateWithLifecycle()
     var respingi by remember { mutableStateOf(false) }
     var manda by remember { mutableStateOf(false) }
     var revisione by remember { mutableStateOf(false) }
@@ -203,9 +206,13 @@ fun SchermataDocumento(dati: Dati, nav: Navigatore, id: String) {
         }
     }
 
+    d?.let { doc -> FoglioPubblicaSe(dati, pubblicaDoc, "documento", doc.id, doc.idCliente, doc.cliente) { pubblicaDoc = false } }
     if (menu) FoglioDalBasso({ menu = false }) {
         Text("Altre azioni", style = Testi.titoloScheda, color = c.testo)
         if (scrive && d.puoScrivere && !d.archiviato) VoceMenu(Icone.matita, "Cambia", { menu = false; cambia = true })
+        // Fase 7 (§12.6): Pubblica nel portale (mai riservati, collegamenti, archiviati; il cliente del documento).
+        if (d.idCliente.isNotBlank()) VociPortale(dati, d.portale, eu.stgm.wisper.rapportino.InCoda7.portaleInCoda("documento", d.id, d.portale?.id.orEmpty(), opsDoc),
+            puoPubblicare = !d.archiviato && !d.collegamento && d.vede != "riservati", onPubblica = { pubblicaDoc = true }, onFatto = { menu = false })
         if (d.idFile.isNotBlank()) {
             if (tenuto) VoceMenu(Icone.cestino, "Non tenere più sul telefono", { menu = false; dati.fase5.nonTenere(d.idFile); tenuto = false; avvisi.mostra("Tolto dal telefono") })
             else VoceMenu(Icone.scarica, "Tieni sul telefono", {

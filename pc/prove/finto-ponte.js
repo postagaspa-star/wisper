@@ -52,6 +52,9 @@ const IMMAGINE = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFk
 // o il file di WISPER_FILE. I file scelti si tengono qui (rif -> file): la pagina non vede mai il percorso.
 const PDF_PROVA = () => Buffer.from('%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj 2 0 obj<</Type/Pages/Kids[]/Count 0>>endobj\ntrailer<</Root 1 0 R>>\n%% prova ' + Date.now() + '\n%%EOF\n');
 const scelti = new Map();
+// Fase 7: quello che il programma aprirebbe fuori (WhatsApp, collegamenti), per la prova dei flussi.
+const apertiFuori = [];
+const RegoleCom = require('../ui/regole-comunicazioni.js');
 
 // Chi è entrato. Come nel programma, la chiave resta qui: la pagina non la vede mai.
 const sessione = { token: '', email: '', studio: '', esempio: null };
@@ -189,7 +192,16 @@ async function locale(nome, o) {
     case 'apri': return { ok: true };
     case 'apri-documento': console.log(o.salva ? '[salva documento]' : '[apri documento]', o.nome); return { ok: true, percorso: path.join(STAMPE, String(o.nome || 'documento')) };
     // Fase 5: un collegamento si apre fuori (nel programma vero: il browser o Esplora file). Qui si scrive e basta.
-    case 'apri-collegamento': console.log('[apri collegamento]', o.url); return { ok: true };
+    case 'apri-collegamento': console.log('[apri collegamento]', o.url); apertiFuori.push({ tipo: 'collegamento', url: String(o.url || '') }); return { ok: true };
+    // Fase 7: il messaggio pronto per WhatsApp si apre nel browser del sistema (Ponte.cs, stesso controllo del link).
+    // Qui si scrive e si tiene da parte: la prova dei flussi lo legge con /locale/aperti-fuori (solo nel finto ponte).
+    case 'apri-whatsapp': {
+      if (!RegoleCom.linkWhatsappValido(o.url)) return { ok: false, errore: 'Il messaggio per WhatsApp non è andato bene: riprova' };
+      console.log('[apri whatsapp]', o.url);
+      apertiFuori.push({ tipo: 'whatsapp', url: String(o.url) });
+      return { ok: true };
+    }
+    case 'aperti-fuori': return { ok: true, aperti: apertiFuori.slice(-20) };
     case 'carica': {
       const f = scelti.get(String(o.rif || ''));
       if (!f) return { ok: false, errore: 'Il file scelto non c\'è più: sceglilo di nuovo' };

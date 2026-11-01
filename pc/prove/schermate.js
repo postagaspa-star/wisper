@@ -27,7 +27,7 @@ const EDGE = 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe'
 const BASE = 'http://localhost:' + PORTA;
 
 // Fase 5: chiude finestre e pannelli dopo la schermata; clicca il giallo della pagina col testo dato.
-const CHIUDI = "document.querySelectorAll('.velo, .pannello, .pannello-doc, .pannello-ticket, .pannello-contratto').forEach(v => v.remove())";
+const CHIUDI = "document.querySelectorAll('.velo, .pannello, .pannello-doc, .pannello-ticket, .pannello-contratto, .pannello-com, .pannello-file').forEach(v => v.remove())";
 const GIALLO = testo => "[...document.querySelectorAll('.btn.giallo, [data-giallo-pagina]')].find(b => b.textContent.indexOf(" + JSON.stringify(testo) + ") >= 0).click()";
 // Fase 6: aspetta che la pagina abbia letto dal server (i pannelli si aprono dopo la lettura).
 const ATTENDI = ms => 'await new Promise(r => setTimeout(r, ' + ms + '))';
@@ -213,6 +213,21 @@ const PAGINE = [
   { nome: 'f6-permessi-esterno', hash: '#amministrazione/permessi', fai: "await new Promise(r => setTimeout(r, 900)); const b = [...document.querySelectorAll('.segmenti button')].find(b => b.textContent === 'Esterno'); if (b) b.click(); await new Promise(r => setTimeout(r, 600))" },
   { nome: 'f6-impostazioni', hash: '#amministrazione/persone', fai: ATTENDI(900) },
   { nome: 'f6-dashboard', hash: '#dashboard', fai: ATTENDI(900) },
+  // fase 7: WhatsApp e comunicazioni, Portale clienti (lo studio), le aggiunte alle altre pagine
+  { nome: 'f7-dashboard', hash: '#dashboard', fai: ATTENDI(900) },
+  { nome: 'f7-da-mandare', hash: '#comunicazioni', fai: ATTENDI(1200) },
+  { nome: 'f7-storico', hash: '#comunicazioni/storico', fai: ATTENDI(1200) },
+  { nome: 'f7-storico-pannello', hash: '#comunicazioni/storico', fai: ATTENDI(1200) + "; const r = document.querySelector('.tab .r.cliccabile'); if (r) r.click(); await new Promise(r => setTimeout(r, 600))", dopo: CHIUDI },
+  { nome: 'f7-modelli', hash: '#comunicazioni/modelli', fai: ATTENDI(1200) },
+  { nome: 'f7-modello', hash: '#comunicazioni/modelli', fai: ATTENDI(1200) + "; const r = document.querySelector('.tab .r.cliccabile'); if (r) r.click(); await new Promise(r => setTimeout(r, 600))", dopo: CHIUDI },
+  { nome: 'f7-notifiche', hash: '#comunicazioni/notifiche', fai: ATTENDI(1200) },
+  { nome: 'f7-portale', hash: '#portale', fai: ATTENDI(1200) },
+  { nome: 'f7-portale-file', hash: '#portale', fai: ATTENDI(1200) + "; const c = [...document.querySelectorAll('.carta-msg')].find(x => /File dal cliente/i.test(x.textContent)); if (c) c.querySelector('.testa-proposta').click(); await new Promise(r => setTimeout(r, 1200))", dopo: CHIUDI },
+  { nome: 'f7-portale-clienti', hash: '#portale/clienti', fai: ATTENDI(1800) },
+  { nome: 'f7-portale-pubblicati', hash: '#portale/pubblicati', fai: ATTENDI(1200) },
+  { nome: 'f7-portale-accessi', hash: '#portale/accessi', fai: ATTENDI(1200) },
+  { nome: 'f7-amm-portale', hash: '#amministrazione/portale', fai: ATTENDI(1200) },
+  { nome: 'f7-amm-comunicazioni', hash: '#amministrazione/comunicazioni', fai: ATTENDI(900) },
 ];
 
 const aspetta = ms => new Promise(r => setTimeout(r, ms));

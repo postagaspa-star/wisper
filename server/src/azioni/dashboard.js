@@ -23,7 +23,8 @@ const C = require('../conti');
 const { giornoLungo } = require('./fatture');
 
 const ORDINE = { urgente: 0, soldi: 1, attenzione: 2, info: 3 };
-const MASSIMO_PER_SEZIONE = 20;
+// Fase 7: da 20 a 30, cosi' le voci del portale e dei messaggi non tolgono quelle di prima.
+const MASSIMO_PER_SEZIONE = 30;
 
 const dataBreve = iso => (iso ? iso.slice(8, 10) + '/' + iso.slice(5, 7) : '');
 /** I numeri nelle frasi come li scrive una persona: 7,5 e non 7.5. */
@@ -246,6 +247,9 @@ module.exports = {
     if (soldi && fase6.compensiDaFatturare !== undefined) soldi.compensiDaFatturare = fase6.compensiDaFatturare;
     // Fase 5: ticket, documenti, scadenze, contratti, spazio sul NAS (le voci entrano nelle tre sezioni prima di ordinarle).
     const fase5 = this.dashboardFase5({ mie, costi, io, adesso, voce, urgenti, settimana, pianificare, gia });
+    // Fase 7: portale clienti e comunicazioni (fase7.md §11.1).
+    const fase7 = this.dashboardFase7({ mie, costi, io, adesso, voce, urgenti, settimana, pianificare });
+    for (const k of ['portale', 'comunicazioni']) if (fase7[k]) risposta.numeri[k] = fase7[k];
     risposta.urgenti = ordina(urgenti);
     // Un ticket, una voce sola: se e' gia' tra le urgenti (in ritardo, non preso), non si ripete in settimana o da
     // pianificare (per esempio "Intervento di oggi" dello stesso ticket). Il resto delle voci resta com'e'.

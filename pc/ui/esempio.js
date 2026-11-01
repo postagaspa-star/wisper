@@ -50,14 +50,15 @@
   /** I permessi iniziali dei quattro ruoli (architettura §3), per i moduli che ci sono. */
   function permessiDi(ruolo) {
     const p = {};
-    const tutti = ['dashboard', 'clienti', 'commesse', 'preventivi', 'attivita', 'rapportini', 'spese', 'fatturazione', 'banche', 'persone', 'documenti', 'ticket', 'mezzi', 'collaboratori', 'amministrazione', 'costi', 'riservati'];
+    const tutti = ['dashboard', 'clienti', 'commesse', 'preventivi', 'attivita', 'rapportini', 'spese', 'fatturazione', 'banche', 'persone', 'documenti', 'ticket', 'mezzi', 'comunicazioni', 'portale', 'collaboratori', 'amministrazione', 'costi', 'riservati'];
     tutti.forEach(m => { p[m] = 0; });
     if (ruolo === 'titolare') tutti.forEach(m => { p[m] = 2; });
     // Fase 6 (architettura §17.18): persone, mezzi e collaboratori; i dati riservati solo al titolare.
-    if (ruolo === 'amministrazione') Object.assign(p, { dashboard: 2, clienti: 2, commesse: 2, preventivi: 2, attivita: 2, rapportini: 2, spese: 2, fatturazione: 2, banche: 2, documenti: 2, ticket: 2, amministrazione: 1, costi: 2, persone: 2, mezzi: 2, collaboratori: 2 });
+    if (ruolo === 'amministrazione') Object.assign(p, { dashboard: 2, clienti: 2, commesse: 2, preventivi: 2, attivita: 2, rapportini: 2, spese: 2, fatturazione: 2, banche: 2, documenti: 2, ticket: 2, amministrazione: 1, costi: 2, persone: 2, mezzi: 2, collaboratori: 2, comunicazioni: 2, portale: 2 });
     // Fase 5: il collaboratore legge i documenti e lavora i ticket (architettura §16.1). Fase 6: l'organico e i mezzi in lettura.
-    if (ruolo === 'collaboratore') Object.assign(p, { dashboard: 1, clienti: 1, commesse: 1, attivita: 2, rapportini: 2, spese: 2, documenti: 1, ticket: 2, persone: 1, mezzi: 1 });
-    if (ruolo === 'lettura') Object.assign(p, { dashboard: 1, clienti: 1, commesse: 1, preventivi: 1, attivita: 1, rapportini: 1, spese: 1, fatturazione: 1, banche: 1, documenti: 1, ticket: 1, costi: 1, persone: 1, mezzi: 1, collaboratori: 1 });
+    // Fase 7 (§11.2): comunicazioni 2 per tutti tranne la lettura (1); il portale a titolare e amministrazione, in lettura alla lettura.
+    if (ruolo === 'collaboratore') Object.assign(p, { dashboard: 1, clienti: 1, commesse: 1, attivita: 2, rapportini: 2, spese: 2, documenti: 1, ticket: 2, persone: 1, mezzi: 1, comunicazioni: 2 });
+    if (ruolo === 'lettura') Object.assign(p, { dashboard: 1, clienti: 1, commesse: 1, preventivi: 1, attivita: 1, rapportini: 1, spese: 1, fatturazione: 1, banche: 1, documenti: 1, ticket: 1, costi: 1, persone: 1, mezzi: 1, collaboratori: 1, comunicazioni: 1, portale: 1 });
     return p;
   }
 
@@ -603,9 +604,20 @@
     const q = {};
     String(query || '').split('&').filter(Boolean).forEach(x => { const [k, v] = x.split('='); q[decodeURIComponent(k)] = decodeURIComponent(v || ''); });
     const b = Object.assign({}, q, corpo || {});
+    // Fase 7: portale clienti, comunicazioni e notifiche stanno in esempio7.js (si aggiungono alle risposte di sempre).
+    const E7 = radice.WisperEsempio7 || (typeof require === 'function' ? require('./esempio7.js') : null);
+    if (E7) E7.prepara(dati);
+    if (E7 && Object.prototype.hasOwnProperty.call(E7.SERVE7, azione)) {
+      const s7 = E7.SERVE7[azione];
+      if (s7 && !R.puo(dati.permessiIo, s7[0], s7[1])) return NONPERMESSO(s7[1] === 2 ? 'fare questa modifica' : 'vedere questa pagina');
+      if (azione === 'segnaWhatsapp' && !(R.puo(dati.permessiIo, 'clienti', 2) || R.puo(dati.permessiIo, 'comunicazioni', 2))) return NONPERMESSO('fare questa modifica');
+      if ((azione === 'nonSollecitare' || azione === 'allegaCopiaFattura') && !R.puo(dati.permessiIo, 'costi')) return NONPERMESSO('fare questa modifica');
+      const r7 = E7.esegui(dati, azione, b);
+      return R.puo(dati.permessiIo, 'costi') ? r7 : togliCosti(r7);
+    }
     const serve = SERVE[azione];
     if (serve && !R.puo(dati.permessiIo, serve[0], serve[1])) return NONPERMESSO(serve[1] === 2 ? 'fare questa modifica' : 'vedere questa pagina');
-    const risposta = esegui(dati, azione, b);
+    const risposta = E7 ? E7.arricchisci(dati, azione, esegui(dati, azione, b)) : esegui(dati, azione, b);
     return R.puo(dati.permessiIo, 'costi') || SOLDI_DELLA_PERSONA.has(azione) ? risposta : togliCosti(risposta);
   }
 

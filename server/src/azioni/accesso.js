@@ -244,13 +244,20 @@ module.exports = {
         // Fase 5: il giallo "Approva" dei documenti, "Chiudi il ticket", i link per i clienti, la grandezza massima di un file.
         puoApprovareDocumenti: this.puoApprovareDocumenti() && this.livello('documenti') >= 2,
         puoChiudereTicket: this.puoChiudereTicket(),
-        condivisioneCollegata: !!testo(imp.CONDIVISIONE_INDIRIZZO),
+        condivisioneCollegata: !!testo(imp.CONDIVISIONE_INDIRIZZO) || !!testo(imp.PORTALE_INDIRIZZO),
         fileMaxMb: Number(imp.FILE_MAX_MB) || 50,
         // Fase 6: la persona di chi entra, chi approva le assenze, chi vede i dati riservati, come si usa uno strumento scaduto.
         idPersona: this.miaPersonaId(),
         puoApprovareAssenze: this.puoApprovareAssenze(),
         vedeRiservati: this.livello('riservati') >= 1,
         taraturaBlocco: testo(imp.TARATURA_BLOCCO) === 'blocco' ? 'blocco' : 'avviso',
+        // Fase 7 (§10.4, §0.5): il portale collegato e acceso, quale WhatsApp apre il telefono, le notifiche nuove, la lunghezza dei messaggi.
+        portaleCollegato: this.statoPortaleStudio().collegato === 'si',
+        portaleAttivo: imp.PORTALE_ATTIVO === true || imp.PORTALE_ATTIVO === 'true',
+        whatsappApp: ['business', 'normale', 'chiedi'].indexOf(testo(imp.WHATSAPP_APP)) >= 0 ? testo(imp.WHATSAPP_APP) : 'chiedi',
+        notificheNuove: c.utente ? this.db.riga('SELECT COUNT(*) n FROM notifiche WHERE utente_id = ? AND letta_il IS NULL', c.utente.id).n : 0,
+        whatsappTestoMax: Number(imp.WHATSAPP_TESTO_MAX) || 1000,
+        notificheTelefono: c.utente ? ((this.db.riga('SELECT notifiche_telefono FROM utenti WHERE id = ?', c.utente.id) || {}).notifiche_telefono !== 0) : true,
       },
     };
   },

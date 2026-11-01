@@ -23,7 +23,7 @@ const { contiPreventivo, gruppoAlternativa } = require('../conti');
 const { formatta } = require('../formati');
 
 const MODI = ['corpo', 'ore', 'quantita'];
-const MODI_ACCETTAZIONE = ['firma', 'email', 'documento', 'voce'];
+const MODI_ACCETTAZIONE = ['firma', 'email', 'documento', 'voce', 'portale'];
 const QUANDO = { firma: 'alla firma', avanzamento: 'a stato di avanzamento', fine: 'a fine lavori', data: 'alla data' };
 const COMPLESSITA = ['', 'bassa', 'media', 'alta'];
 
@@ -262,7 +262,27 @@ module.exports = {
       conti,
       revisioni,
       mancano: this.mancanoPreventivo(r, contenuto),
-    });
+    }, this.accettazioneEPortale(r));
+  },
+
+  /**
+   * Fase 7 (§10.4): come e' stato accettato ({modo, da, il, referente?, prova?}: la prova, "via google" con browser e
+   * impronta al posto dell'IP, solo con preventivi 2) e se e' nel portale ({pubblicato, vistoIl, vistoDa}).
+   */
+  accettazioneEPortale(r) {
+    const p = this.portaleDi('preventivo', r.id);
+    const o = { accettazione: null, portale: { pubblicato: p.pubblicato, vistoIl: p.vistoIl, vistoDa: p.vistoDa, pubblicazione: p.pubblicazione } };
+    if (r.stato === 'ACCETTATO') {
+      o.accettazione = { modo: r.accettazione_modo, da: r.accettato_da, il: dataOraIso(r.accettato_il) };
+      if (r.accettato_referente_id) {
+        const ref = this.db.riga('SELECT nome FROM referenti WHERE id = ?', r.accettato_referente_id);
+        o.accettazione.referente = ref ? ref.nome : '';
+      }
+      if (r.accettazione_prova && this.livello('preventivi') >= 2) {
+        try { o.accettazione.prova = JSON.parse(r.accettazione_prova); } catch (e) { /* niente */ }
+      }
+    }
+    return o;
   },
 
   /** I preventivi coi loro conti, filtrati come chiede l'elenco (righe del database + conti). */
@@ -633,6 +653,8 @@ module.exports = {
     }));
     this.copiaContenuto(r.id, nuovo);
     this.aggiorna('preventivi', r.id, { stato: 'SOSTITUITO', modificato: ora });
+    // Fase 7: il cliente vede solo la revisione in corso: la pubblicazione della vecchia si chiude (anche da riapriPreventivo).
+    this.chiudiPubblicazioni('preventivo', r.id, 'sostituito');
     this.ricalcolaScadenze(nuovo);
     return this.preventivoCompleto(nuovo);
   },
@@ -660,6 +682,8 @@ module.exports = {
     if (r.stato === 'BOZZA') {
       const ora = adesso();
       this.aggiorna('preventivi', r.id, { stato: 'INVIATO', inviato_il: ora, modificato: ora });
+      // Fase 7 (§8.1): diventa INVIATO, la regola "preventivi" del cliente col portale lo pubblica.
+      this.pubblicaConRegola('preventivo', r.id, {});
     }
     return this.preventivoCompleto(r.id);
   },
@@ -695,12 +719,19 @@ module.exports = {
     if (aMe) return { ok: true, preventivo: this.preventivoCompleto(r.id) };
     return this.db.transazione(() => {
       // Fase 5: la copia del PDF mandato (COPIA_INVIATI), nella categoria Mandati ai clienti.
-      this.copiaInviati({ allegati: posta.allegati, a: destinatario, idCliente: r.cliente_id, idCommessa: r.commessa_id });
+      const copie = this.copiaInviati({ allegati: posta.allegati, a: destinatario, idCliente: r.cliente_id, idCommessa: r.commessa_id });
       const adessoR = this.db.riga('SELECT * FROM preventivi WHERE id = ?', r.id);
       if (adessoR.stato === 'BOZZA') {
         const ora = adesso();
         this.aggiorna('preventivi', r.id, { stato: 'INVIATO', inviato_il: ora, modificato: ora });
       }
+      // Fase 7: lo storico (§9.1) e la pubblicazione con la regola, col PDF mandato come file da scaricare.
+      const fileMandato = copie.length ? this.fileValidoDocumento(copie[0]) : null;
+      this.scriviComunicazione({ canale: 'email', tipo: 'preventivo', cliente_id: r.cliente_id, referente_id: r.referente_id, preventivo_id: r.id, commessa_id: r.commessa_id || '',
+        a: destinatario, oggetto: posta.oggetto, testo: posta.messaggio, allegati: posta.allegati.map(a => ({ nome: a.nome, byte: Buffer.from(String(a.base64 || ''), 'base64').length })),
+        documento_id: copie.length ? copie[0] : null, stato: 'mandato' });
+      const pub = this.pubblicaConRegola('preventivo', r.id, fileMandato ? { fileId: fileMandato } : {});
+      if (!pub && fileMandato) this.db.esegui("UPDATE portale_pubblicazioni SET file_id = ? WHERE tipo = 'preventivo' AND rif = ? AND tolta_il IS NULL", fileMandato, String(r.id));
       return { ok: true, preventivo: this.preventivoCompleto(r.id) };
     });
   },
@@ -715,6 +746,8 @@ module.exports = {
     const modo = testo(d.modo).toLowerCase();
     const nome = testo(d.nome);
     const n = 'Il preventivo ' + etichetta(r);
+    // Fase 7: "portale" lo mette solo il portale (il router, con chi().portale).
+    if (modo === 'portale' && !this.chi().portale) throw new Rifiuto('«Portale» lo mette solo il portale');
     if (r.stato === 'ACCETTATO') {
       if (r.accettato_da === nome && r.accettazione_modo === modo) return this.preventivoCompleto(r.id);
       throw new Rifiuto(n + ' è già accettato');
@@ -723,6 +756,7 @@ module.exports = {
     if (r.stato === 'BOZZA') throw new Rifiuto(n + ' non è ancora stato inviato');
     if (r.stato !== 'INVIATO') this.controllaModificabile(r);
     if (MODI_ACCETTAZIONE.indexOf(modo) < 0) throw new Rifiuto('Come ha accettato? firma, email, documento o voce');
+    if (modo === 'portale' && !(d.firma && d.firma.base64)) throw new Rifiuto('Manca la firma');
     if (!nome) throw new Rifiuto('Nome: scrivi chi ha accettato');
     const firma = d.firma && d.firma.base64 ? d.firma : null;
     if (modo === 'firma' && !firma) throw new Rifiuto('Per la firma serve il tratto del cliente');
@@ -757,14 +791,15 @@ module.exports = {
         : null;
       const f = gia || this.salvaFile({
         dati, mime, tipo: 'preventivo', preventivoId: r.id, idClient: testo(firma.idFile),
-        nome: etichetta(r).replace(/\//g, '-') + (modo === 'firma' ? ' firma' : ' accettazione') + estensioneDi(mime),
+        nome: etichetta(r).replace(/\//g, '-') + (modo === 'firma' || modo === 'portale' ? ' firma' : ' accettazione') + estensioneDi(mime),
       });
       idFirma = f.id;
     }
     const ora = adesso();
-    this.aggiorna('preventivi', r.id, {
-      stato: 'ACCETTATO', accettato_il: ora, accettato_da: nome, accettazione_modo: modo, firma_file_id: idFirma, modificato: ora,
-    });
+    const valori = { stato: 'ACCETTATO', accettato_il: ora, accettato_da: nome, accettazione_modo: modo, firma_file_id: idFirma, modificato: ora };
+    // Fase 7: nel portale anche chi ha accettato (il referente); la prova la scrive il router.
+    if (modo === 'portale') valori.accettato_referente_id = Number(d.idReferente) || null;
+    this.aggiorna('preventivi', r.id, valori, 'id', modo === 'portale' ? 'accettato nel portale da ' + nome : undefined);
     this.ricalcolaScadenze(r.id);
     return this.preventivoCompleto(r.id);
   },
@@ -833,6 +868,8 @@ module.exports = {
     });
     for (const s of contenuto.scadenze) this.aggiorna('scadenze_pagamento', s.id, { commessa_id: codice });
     this.aggiorna('preventivi', r.id, { commessa_id: codice, modificato: ora });
+    // Fase 7: la riga "accettato nel portale" di Da guardare si chiude quando nasce la commessa.
+    this.chiudiDaGuardare('accettato', r.id);
     return {
       ok: true,
       commessa: this.commessa(codice),

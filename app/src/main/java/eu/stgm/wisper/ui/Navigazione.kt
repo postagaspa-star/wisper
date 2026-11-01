@@ -74,6 +74,9 @@ enum class Sezione(val nome: String, val icona: ImageVector, val modulo: String)
     DOCUMENTI("Documenti", Icone.documento, Moduli.DOCUMENTI),
     TICKET("Ticket e assistenza", Icone.chiave, Moduli.TICKET),
     MEZZI("Mezzi e attrezzature", Icone.mezzo, Moduli.MEZZI),
+    // Fase 7 (fase7.md §12): dopo Mezzi e attrezzature, prima di Collaboratori esterni.
+    COMUNICAZIONI("WhatsApp e comunicazioni", Icone.fumetto, Moduli.COMUNICAZIONI),
+    PORTALE("Portale clienti", Icone.globo, Moduli.PORTALE),
     COLLABORATORI("Collaboratori esterni", Icone.collab, Moduli.COLLABORATORI),
     AMMINISTRAZIONE("Amministrazione", Icone.amministrazione, Moduli.AMMINISTRAZIONE),
 }
@@ -161,6 +164,9 @@ fun sezioneDiRotta(rotta: String?, base: Sezione): Sezione = when {
     rotta.startsWith("persona") || rotta.startsWith("assenza") || rotta.startsWith("accessi-riservati") || rotta.startsWith("dpi-") -> Sezione.PERSONE
     rotta.startsWith("mezz") || rotta.startsWith("strumento") || rotta.startsWith("guasto") -> Sezione.MEZZI
     rotta.startsWith("collaborator") || rotta.startsWith("incaric") -> Sezione.COLLABORATORI
+    // Fase 7: comunicazioni e modelli; il portale, i suoi clienti e i file arrivati.
+    rotta.startsWith("comunicazion") || rotta.startsWith("modello-messaggio") -> Sezione.COMUNICAZIONI
+    rotta.startsWith("portale") || rotta.startsWith("caricamento") -> Sezione.PORTALE
     rotta == "amm/categorie" || rotta == "amm/spazio" -> Sezione.AMMINISTRAZIONE
     rotta.startsWith("amm/") -> Sezione.AMMINISTRAZIONE
     else -> base
@@ -178,6 +184,9 @@ class Guscio(
     val utente: Utente,
     val apriMenu: () -> Unit,
     val apriTu: () -> Unit,
+    /** Fase 7 (§3.16): le notifiche nuove e la campanella che le apre (null: chi non vede le comunicazioni). */
+    val notifiche: Int = 0,
+    val apriNotifiche: (() -> Unit)? = null,
 )
 
 val LocalGuscio = staticCompositionLocalOf<Guscio?> { null }
@@ -217,6 +226,29 @@ fun CerchioPersona(iniziali: String, dimensione: Dp = 40.dp, modifier: Modifier 
     }
 }
 
+/** Fase 7 (§12): la campanella accanto al cerchio, col numero delle notifiche nuove. */
+@Composable
+private fun Campanella(g: Guscio) {
+    val apri = g.apriNotifiche ?: return
+    val c = W.colori
+    Box(
+        Modifier.size(48.dp).clip(CircleShape).clickable(onClick = apri)
+            .semantics { contentDescription = if (g.notifiche > 0) "Notifiche: ${g.notifiche} nuove" else "Notifiche"; role = Role.Button }
+            .bersaglio("campanella"),
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(Modifier.size(44.dp).clip(CircleShape).background(c.superficie2), contentAlignment = Alignment.Center) {
+            Icon(Icone.campanella, null, tint = c.testo, modifier = Modifier.size(20.dp))
+        }
+        if (g.notifiche > 0) {
+            Box(
+                Modifier.align(Alignment.TopEnd).widthIn(min = 20.dp).height(20.dp).clip(RoundedCornerShape(10.dp)).background(c.giallo).padding(horizontal = 5.dp),
+                contentAlignment = Alignment.Center,
+            ) { Text(if (g.notifiche > 99) "99" else "${g.notifiche}", style = Testi.pillola.copy(fontWeight = FontWeight.ExtraBold), color = c.suGiallo, maxLines = 1) }
+        }
+    }
+}
+
 /** Il cerchio in alto a destra: apre il foglio "Tu". */
 @Composable
 private fun CerchioTu(g: Guscio) {
@@ -238,7 +270,7 @@ fun TestataMenu(azioni: @Composable RowScope.() -> Unit = {}) {
         if (g != null) PulsanteMenu(g.apriMenu, Modifier.bersaglio("menu"))
         Spacer(Modifier.weight(1f))
         azioni()
-        if (g != null) CerchioTu(g)
+        if (g != null) { Campanella(g); CerchioTu(g) }
     }
 }
 
@@ -265,7 +297,7 @@ fun TestataInterna(onIndietro: () -> Unit, azioni: @Composable RowScope.() -> Un
         }
         Spacer(Modifier.weight(1f))
         azioni()
-        if (g != null) CerchioTu(g)
+        if (g != null) { Campanella(g); CerchioTu(g) }
     }
 }
 
@@ -383,6 +415,8 @@ private fun VoceCassetto(s: Sezione, attiva: Boolean, numero: Int, nome: String 
                             Sezione.PERSONE -> if (numero == 1) "1 richiesta da approvare" else "$numero richieste da approvare"
                             Sezione.MEZZI -> "$numero da guardare"
                             Sezione.COLLABORATORI -> "$numero con documenti scaduti"
+                            Sezione.COMUNICAZIONI -> if (numero == 1) "1 messaggio da mandare" else "$numero messaggi da mandare"
+                            Sezione.PORTALE -> "$numero da guardare"
                             else -> "$numero da fatturare"
                         }
                     },

@@ -1678,3 +1678,98 @@ details.chiuso-f6 .scheda.coppie { border: none; padding: 0; }
 .campo .cerca input { border: none; height: auto; padding: 0; background: transparent; border-radius: 0; }
 .imp-f6 .con-suffisso input { padding-right: 78px; }
 .pillola > svg { margin-right: 6px; vertical-align: -3px; }
+
+/* ============================================================ fase 7: WhatsApp e comunicazioni, Portale clienti */
+/* Misure e colori dal prototipo docs/prototipo/Gestionale-fase7.html (vista Computer). */
+
+/* la campanella in fondo al menu, sopra il nome */
+.lato .voce.campanella { min-height: 42px; }
+.lato .voce.campanella.attiva { background: var(--giallo-tenue); color: var(--testo); font-weight: 800; }
+
+/* Dashboard: Dal portale e Da mandare oggi */
+.quattro-num.due-num { grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 640px; }
+
+/* Da mandare: a sinistra l'elenco a gruppi, a destra il messaggio scelto già aperto */
+.due-col-msg { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; align-items: start; }
+.colonna-msg { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.colonna-msg.destra { position: sticky; top: 0; }
+@media (max-width: 1100px) { .due-col-msg { grid-template-columns: minmax(0, 1fr); } .colonna-msg.destra { position: static; } }
+.proposte { display: flex; flex-direction: column; gap: 10px; }
+.carta-msg { background: var(--scheda); border: 1px solid var(--bordo-scheda); border-radius: 20px; padding: 14px 18px; display: flex; flex-direction: column; gap: 8px; transition: border-color .15s, box-shadow .15s; }
+.carta-msg.scelta { border-color: var(--giallo); box-shadow: 0 0 0 1px var(--giallo); }
+.carta-msg.urgente { background: var(--rosso-fondo); border-color: transparent; }
+.carta-msg.urgente.scelta { border-color: var(--giallo); }
+.testa-proposta { display: flex; align-items: center; gap: 12px; border: none; background: none; padding: 0; width: 100%; text-align: left; font: inherit; color: inherit; cursor: pointer; }
+.testa-proposta .corpo { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.testa-proposta .t1 { font-size: 16px; font-weight: 800; }
+.testa-proposta .t2 { font-size: 14px; font-weight: 600; color: var(--tenue); }
+.testa-proposta .etichetta { font-size: 11px; letter-spacing: .06em; }
+.testa-proposta:hover .t1 { text-decoration: underline; text-underline-offset: 3px; }
+.testa-proposta .freccia { color: var(--molto-tenue); display: flex; }
+.rif-proposta { font-size: 14px; font-weight: 700; color: var(--testo2); }
+.testo-proposta { font-size: 15px; line-height: 1.45; color: var(--testo2); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.piede-proposta { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.riga.scelta-riga { background: var(--giallo-scelto); margin: 0 -18px; padding-left: 18px; padding-right: 18px; }
+.riga.calma .t1 { font-weight: 600; color: var(--testo2); }
+
+/* il Messaggio */
+.scheda-msg { display: flex; flex-direction: column; gap: 14px; }
+.composer { display: flex; flex-direction: column; gap: 14px; }
+.composer textarea { min-height: 150px; }
+.riga-a { display: flex; align-items: center; gap: 12px; min-height: 52px; }
+.riga-a .corpo { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.riga-a .t1 { font-size: 16px; font-weight: 800; }
+.riga-a .t2 { font-size: 14px; font-weight: 600; color: var(--tenue); }
+.sotto-testo { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-top: -6px; }
+.mancano { display: flex; gap: 6px; flex-wrap: wrap; }
+.manca-seg { display: inline-flex; align-items: center; height: 26px; padding: 0 10px; border-radius: 999px; background: var(--giallo-tenue); color: var(--giallo-testo); font-size: 13px; font-weight: 800; }
+.bottoni-msg { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.bottoni-msg .btn.collegamento { display: inline-flex; align-items: center; gap: 4px; }
+.anteprima-msg { background: var(--fondo); border-radius: 16px; padding: 14px 16px; font-size: 15px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+.anteprima-msg.piccola { font-size: 14px; max-height: 160px; overflow: auto; color: var(--testo2); }
+.anteprima-modello { position: sticky; top: 0; }
+.segnaposti-mod .pillola { height: 32px; padding: 0 12px; font-size: 13px; }
+.riga-destra { display: flex; justify-content: flex-end; }
+.pallino-nuovo { display: inline-block; width: 8px; height: 8px; border-radius: 4px; background: var(--giallo); margin-right: 8px; vertical-align: 2px; }
+
+/* lo Storico */
+.canale-cella { display: inline-flex; align-items: center; gap: 8px; font-weight: 700; }
+.ico-mini { width: 26px; height: 26px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; flex: none; }
+.pannello-com .titolo-pannello, .pannello-file .titolo-pannello { display: flex; align-items: center; gap: 12px; overflow-wrap: anywhere; }
+
+/* il portale: la riga dello stato, gli interruttori, le tabelle */
+.stato-portale { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 15px; font-weight: 600; color: var(--testo2); }
+.stato-portale b { font-weight: 800; color: var(--testo); }
+.stato-portale svg { color: var(--tenue); flex: none; }
+.riga.riga-int { min-height: 58px; }
+.interruttore { width: 52px; height: 32px; border-radius: 16px; border: none; background: var(--bordo-campo); position: relative; flex: none; transition: background .15s; padding: 0; }
+.interruttore i { position: absolute; top: 3px; left: 3px; width: 26px; height: 26px; border-radius: 13px; background: #fff; box-shadow: 0 1px 2px rgba(0, 0, 0, .2); transition: left .18s; }
+.interruttore.acceso { background: var(--testo); }
+.interruttore.acceso i { left: 23px; }
+.interruttore:disabled { opacity: .55; cursor: default; }
+.nome-cella { display: inline-flex; align-items: center; gap: 10px; min-width: 0; }
+.cliccabile-riga { cursor: pointer; }
+.cliccabile-riga:hover .t1 { text-decoration: underline; text-underline-offset: 3px; }
+.tab .r.riga-errore { background: var(--superficie-tenue); }
+.permessi-portale .riga { min-height: 54px; padding: 8px 0; }
+.anteprima-file { max-width: 100%; max-height: 260px; object-fit: contain; border-radius: 14px; border: 1px solid var(--bordo-scheda); background: var(--fondo); align-self: flex-start; }
+.pannello-file .testo-cliente { display: flex; flex-direction: column; gap: 4px; }
+.segmenti button:disabled { opacity: .45; cursor: default; }
+.pillole-testa.sotto-riga { margin-top: 6px; }
+.azioni-referente { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.firma-accettazione { height: 64px; max-width: 220px; object-fit: contain; background: #fff; border-radius: 8px; border: 1px solid var(--bordo-scheda); }
+.coppie.una { grid-template-columns: minmax(0, 1fr); }
+.coppia .v.impronta { font-family: Consolas, 'Cascadia Mono', monospace; font-size: 13px; font-weight: 600; word-break: break-all; }
+/* i Messaggi col cliente nel ticket: lo studio a sinistra, il cliente a destra */
+.conversazione { display: flex; flex-direction: column; gap: 10px; padding: 14px 16px; }
+.bolla { max-width: 86%; display: flex; flex-direction: column; gap: 4px; padding: 10px 14px; border-radius: 16px; background: var(--fondo); }
+.bolla.cliente { align-self: flex-end; background: var(--inviato-fondo); }
+.chi-bolla { font-size: 12px; font-weight: 700; color: var(--tenue); }
+.testo-bolla { font-size: 15px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
+.foto-btn .segno-cliente { position: absolute; left: 4px; bottom: 4px; height: 20px; font-size: 11px; padding: 0 6px; }
+.pill-x { border: none; background: none; padding: 0 0 0 4px; display: inline-flex; color: inherit; cursor: pointer; }
+.btn.bordo-rosso { border-color: var(--rosso); color: var(--rosso-testo); background: var(--rosso-fondo); }
+/* ".pannello .corpo" (il corpo del pannello) prende anche il corpo delle righe dentro il pannello: nei pannelli nuovi si toglie */
+.pannello-com .riga .corpo, .pannello-file .riga .corpo { padding: 0; overflow: visible; gap: 2px; }
+.pannello .riga.riga-int .corpo { padding: 0; overflow: visible; gap: 2px; }
+.interruttore.acceso i { background: var(--scheda); }

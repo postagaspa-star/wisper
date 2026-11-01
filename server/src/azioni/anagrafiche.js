@@ -69,6 +69,8 @@ function soggettoDaRiga(r) {
     sostitutoImposta: r.sostituto_imposta === null || r.sostituto_imposta === undefined ? null : r.sostituto_imposta === 1,
     pagamentoGiorni: r.pagamento_giorni === null || r.pagamento_giorni === undefined ? null : r.pagamento_giorni,
     pagamentoFineMese: r.pagamento_fine_mese === null || r.pagamento_fine_mese === undefined ? null : r.pagamento_fine_mese === 1,
+    // Fase 7: il portale acceso per questo cliente.
+    portale: r.portale === 1,
   };
 }
 
@@ -139,6 +141,8 @@ function referenteDaRiga(r) {
   return {
     id: r.id, idSoggetto: r.soggetto_id, nome: r.nome, ruolo: r.ruolo, email: r.email, telefono: r.telefono,
     note: r.note, ordine: r.ordine,
+    // Fase 7 (§10.4): l'accesso al portale, chi paga le fatture, WhatsApp (statoPortale lo aggiunge leggiReferenti a chi vede il portale).
+    portale: r.portale === 1, pagamenti: r.pagamenti === 1, whatsapp: r.whatsapp || '', whatsappOk: r.whatsapp_ok === 1,
   };
 }
 
@@ -292,7 +296,12 @@ module.exports = {
   },
 
   leggiReferenti() {
-    return this.db.righe('SELECT * FROM referenti ORDER BY soggetto_id, ordine, id').map(referenteDaRiga);
+    const portale = this.livello('portale') >= 1;
+    return this.db.righe('SELECT * FROM referenti ORDER BY soggetto_id, ordine, id').map(r => {
+      const o = referenteDaRiga(r);
+      if (portale) { o.statoPortale = this.statoReferente(r); o.ultimoAccesso = dataOraIso(r.ultimo_accesso); }
+      return o;
+    });
   },
 
   leggiSedi(opzioni) {
@@ -504,13 +513,34 @@ module.exports = {
     ['nome', 'ruolo', 'email', 'telefono', 'note'].forEach(k => { if (x[k] !== undefined) v[k] = testo(x[k]); });
     if (x.ordine !== undefined) v.ordine = Math.round(numero(x.ordine));
     if (v.email && !/^[^@\s]+@[^@\s]+$/.test(v.email)) throw new Rifiuto('Email: manca la @ o c\'è uno spazio');
+    // Fase 7 (§10.4): paga le fatture, il numero WhatsApp (se diverso dal telefono), il si' a WhatsApp.
+    if (x.pagamenti !== undefined) v.pagamenti = siNoONull(x.pagamenti) ? 1 : 0;
+    if (x.whatsapp !== undefined) v.whatsapp = testo(x.whatsapp);
+    let whatsappOk;
+    if (x.whatsappOk !== undefined) whatsappOk = siNoONull(x.whatsappOk) ? 1 : 0;
     if (x.id) {
       const prima = this.db.riga('SELECT * FROM referenti WHERE id = ?', Number(x.id));
       if (!prima) throw new Rifiuto('Referente ' + x.id + ' non trovato');
       if (v.nome !== undefined && !v.nome) throw new Rifiuto('Nome: scrivi il nome del referente');
-      this.aggiorna('referenti', prima.id, v);
-      return referenteDaRiga(this.db.riga('SELECT * FROM referenti WHERE id = ?', prima.id));
+      if (whatsappOk !== undefined && whatsappOk !== prima.whatsapp_ok) Object.assign(v, { whatsapp_ok: whatsappOk, whatsapp_ok_il: whatsappOk ? oggi() : '' });
+      // L'email cambiata di uno col portale: si chiudono le sue sessioni e due referenti della stessa azienda non hanno la stessa email.
+      const emailCambiata = v.email !== undefined && v.email.toLowerCase() !== testo(prima.email).toLowerCase();
+      if (emailCambiata && prima.portale === 1) {
+        if (!v.email) throw new Rifiuto('Il referente ha l\'accesso al portale: l\'email serve (o togli prima l\'accesso)');
+        if (this.db.riga('SELECT id FROM referenti WHERE soggetto_id = ? AND portale = 1 AND lower(email) = lower(?) AND id <> ?', prima.soggetto_id, v.email, prima.id)) {
+          throw new Rifiuto('Questa email è già di un altro referente di ' + ((this.db.riga('SELECT nome FROM soggetti WHERE id = ?', prima.soggetto_id) || {}).nome || prima.soggetto_id));
+        }
+      }
+      this.aggiorna('referenti', prima.id, v, 'id', whatsappOk !== undefined && whatsappOk !== prima.whatsapp_ok ? (whatsappOk ? 'WhatsApp: ha detto di sì' : 'WhatsApp: non vuole più') : undefined);
+      const o = referenteDaRiga(this.db.riga('SELECT * FROM referenti WHERE id = ?', prima.id));
+      if (emailCambiata && prima.portale === 1) {
+        this.chiudiSessioniPortale('referente_id = ?', [prima.id], 'email cambiata');
+        this.annullaLinkPortale('referente_id = ?', [prima.id]);
+        o.avviso = 'L\'email è cambiata: per entrare nel portale userà quella nuova';
+      }
+      return o;
     }
+    if (whatsappOk !== undefined) Object.assign(v, { whatsapp_ok: whatsappOk, whatsapp_ok_il: whatsappOk ? oggi() : '' });
     if (!this.db.riga('SELECT id FROM soggetti WHERE id = ?', soggettoId)) throw new Rifiuto('Soggetto ' + soggettoId + ' non trovato');
     if (!v.nome) throw new Rifiuto('Nome: scrivi il nome del referente');
     if (v.ordine === undefined) {
@@ -523,6 +553,8 @@ module.exports = {
   togliReferente(id) {
     const r = this.db.riga('SELECT * FROM referenti WHERE id = ?', Number(id));
     if (!r) throw new Rifiuto('Referente ' + id + ' non trovato');
+    // Fase 7: uno con l'accesso al portale lo perde prima (sessioni chiuse, link annullati).
+    if (r.portale === 1) this.togliAccessoInterno(r, 'tolto');
     this.db.esegui('DELETE FROM referenti WHERE id = ?', r.id);
     this.annota('referenti', r.id, Object.assign({}, r), null, 'tolto');
   },

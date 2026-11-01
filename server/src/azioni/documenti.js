@@ -298,6 +298,9 @@ module.exports = {
       if (d.vede === 'riservati') o.documentoRiservato = true;
       datiPersona(o, d.persona_id, 'documento');
     }
+    // Fase 7 (§10.4): se e' nel portale e quando l'ha visto il cliente (nell'elenco e nella pagina).
+    const pp = this.portaleDi('documento', d.id);
+    o.portale = { pubblicato: pp.pubblicato, vistoIl: pp.vistoIl, pubblicazione: pp.pubblicazione };
     return o;
   },
 
@@ -954,6 +957,10 @@ module.exports = {
     }
     return this.db.transazione(() => {
       this.annota('documenti', doc.id, null, null, 'mandato per email a ' + a);
+      // Fase 7: lo storico (§9.1).
+      this.scriviComunicazione({ canale: 'email', tipo: 'documento', cliente_id: doc.cliente_id || '', commessa_id: doc.commessa_id || '', ticket_id: doc.ticket_id || null,
+        documento_id: doc.id, a, oggetto: posta.oggetto, testo: posta.messaggio,
+        allegati: (posta.allegati || []).map(x => ({ nome: x.nome, byte: Buffer.from(String(x.base64 || ''), 'base64').length })), stato: 'mandato' });
       return { ok: true };
     });
   },
@@ -1005,7 +1012,8 @@ module.exports = {
   condividiDocumento(d) {
     const doc = this.rigaDocumento(d.id);
     const imp = this.leggiImpostazioni();
-    const indirizzo = testo(imp.CONDIVISIONE_INDIRIZZO).replace(/\/+$/, '');
+    // Fase 7 (§0.6): senza CONDIVISIONE_INDIRIZZO i link sono pagine del portale, {PORTALE_INDIRIZZO}/#/condiviso/<token>.
+    const indirizzo = testo(imp.CONDIVISIONE_INDIRIZZO).replace(/\/+$/, '') || (testo(imp.PORTALE_INDIRIZZO) ? testo(imp.PORTALE_INDIRIZZO).replace(/\/+$/, '') + '/#' : '');
     if (!indirizzo) return { ok: false, errore: 'I link per i clienti non sono collegati: manda il documento per email', nonCollegato: true };
     if (doc.origine === 'collegamento') throw new Rifiuto('Un collegamento si condivide da ' + (D.PILLOLE[doc.collegamento_tipo] || 'dove sta il file') + ': il link per i clienti è per i file sul NAS');
     if (!this.puoScrivereDocumento(doc)) throw senzaPermesso('condividere questo documento');
@@ -1040,7 +1048,8 @@ module.exports = {
     const hash = crypto.createHash('sha256').update(String(token)).digest('hex');
     const c = this.db.riga('SELECT * FROM documento_condivisioni WHERE token_hash = ?', hash);
     if (!c || c.revocata_il || c.scade < oggi()) return null;
-    if (!testo(this.leggiImpostazioni().CONDIVISIONE_INDIRIZZO)) return null;
+    const impC = this.leggiImpostazioni();
+    if (!testo(impC.CONDIVISIONE_INDIRIZZO) && !testo(impC.PORTALE_INDIRIZZO)) return null;
     const doc = this.db.riga('SELECT * FROM documenti WHERE id = ?', c.documento_id);
     const v = this.db.riga('SELECT * FROM documento_versioni WHERE id = ?', c.versione_id);
     const f = v ? this.db.riga('SELECT * FROM file WHERE id = ?', v.file_id) : null;

@@ -108,6 +108,8 @@ class Visita {
         // Fase 6 (fase6.md §12.8): i tuoi strumenti (la taratura col colore e la parola) e le ferie.
         Passo("strumento-scaduto", "I tuoi strumenti", "Il colore e la parola ti dicono se la taratura vale.", false, "mezzi"),
         Passo("chiedi-ferie", "Le ferie", "Chiedile da qui: vedi subito quanti giorni ti restano.", false, "persone"),
+        // Fase 7 (fase7.md §12.6): Comunicazioni › Da mandare, la prima scheda.
+        Passo("prima-proposta", "Messaggi pronti", "Wisper li prepara, tu li mandi da WhatsApp.", false, "comunicazioni"),
         Passo(null, "Ecco fatto", "Adesso Wisper lavora con i tuoi dati veri.", false, "dashboard"),
     )
 

@@ -31,6 +31,9 @@ class CodaInvii(private val file: File) {
     companion object {
         val TIPI_FASE6 = setOf(Tipo.ASSENZA, Tipo.ANNULLA_ASSENZA, Tipo.KM, Tipo.FOTO_KM, Tipo.GUASTO, Tipo.FOTO_GUASTO, Tipo.PRESTITO, Tipo.RESTITUISCI, Tipo.FIRMA_DPI)
 
+        /** Fase 7 (fase7.md §3.20): le azioni di comunicazioni e portale che si fanno anche senza rete. */
+        val TIPI_FASE7 = setOf(Tipo.AZIONE7)
+
         /** Quelle col contenuto personale (le assenze): negli avvisi del telefono niente motivo, che potrebbe dire il tipo. */
         val PERSONALI = setOf(Tipo.ASSENZA, Tipo.ANNULLA_ASSENZA)
     }
@@ -61,6 +64,15 @@ class CodaInvii(private val file: File) {
          * Ripetuti uguali, il server torna la stessa riga (giaArrivata).
          */
         ASSENZA, ANNULLA_ASSENZA, KM, FOTO_KM, GUASTO, FOTO_GUASTO, PRESTITO, RESTITUISCI, FIRMA_DPI,
+
+        /**
+         * Fase 7 (fase7.md §3.20): un'azione delle comunicazioni o del portale fatta senza
+         * rete. Il corpo è la richiesta intera ({azione, ...}): un messaggio preparato o
+         * mandato (salvaMessaggio col suo idLocale "M-..."), segnaMandato, Non mandare, una
+         * telefonata o una nota, Pubblica e Togli dal portale, Rispondi nel portale,
+         * accettare o rifiutare un file. Ripetute uguali, il server non le rifà.
+         */
+        AZIONE7,
     }
 
     /**
@@ -105,6 +117,12 @@ class CodaInvii(private val file: File) {
         /** Le cose della fase 6 (assenze, km, guasti, prestiti, firme dei DPI): non sono di un rapportino. */
         val fase6: Boolean get() = tipo in TIPI_FASE6
 
+        /** Le cose della fase 7 (messaggi, portale): non sono di un rapportino. */
+        val fase7: Boolean get() = tipo in TIPI_FASE7
+
+        /** Nessuna fase dopo la prima: è un rapportino (salvato, foto, firma, stato). */
+        val delRapportino: Boolean get() = !fase3 && !fase5 && !fase6 && !fase7
+
         fun corpoJson(): JSONObject = runCatching { JSONObject(corpo) }.getOrDefault(JSONObject())
     }
 
@@ -117,7 +135,7 @@ class CodaInvii(private val file: File) {
      */
     fun aggiungi(op: Operazione): Operazione = synchronized(lucchetto) {
         val attuali = leggi()
-        val doppione = if (op.tipo == Tipo.SALVA || op.tipo == Tipo.ORE || op.tipo == Tipo.SPESA || op.tipo == Tipo.TICKET || op.tipo == Tipo.ASSENZA) {
+        val doppione = if (op.tipo == Tipo.SALVA || op.tipo == Tipo.ORE || op.tipo == Tipo.SPESA || op.tipo == Tipo.TICKET || op.tipo == Tipo.ASSENZA || op.tipo == Tipo.AZIONE7) {
             attuali.firstOrNull { it.tipo == op.tipo && it.idLocale == op.idLocale && !it.rifiutata }
         } else null
         if (doppione != null) {
@@ -216,6 +234,16 @@ class CodaInvii(private val file: File) {
     /** La firma della consegna di DPI [id] (firmaConsegna): il PNG in [percorso]; ripetuta, il server la tiene una volta. */
     fun firmaDpi(id: String, idFile: String, percorso: String) =
         aggiungi(Operazione(nuovoId(), Tipo.FIRMA_DPI, "dpi:$id", idFile = idFile, percorso = percorso, quando = adesso()))
+
+    // ---- fase 7 (fase7.md §3.20)
+
+    /**
+     * Un'azione di comunicazioni o portale ([corpo] = la richiesta intera, con "azione").
+     * [chiave] la riconosce: la stessa chiave rimessa in coda prima di partire prende il
+     * corpo nuovo (un messaggio preparato e poi segnato mandato parte una volta, mandato).
+     */
+    fun azione7(chiave: String, corpo: JSONObject) =
+        aggiungi(Operazione(nuovoId(), Tipo.AZIONE7, chiave, corpo = corpo.toString(), quando = adesso()))
 
     /**
      * Il server ha risposto per [idOp], col contenuto [corpoInviato]: l'operazione

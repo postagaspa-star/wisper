@@ -499,6 +499,15 @@ interface Dati {
      * dei colleghi, e si tolgono all'uscita dall'account.
      */
     val fase6: eu.stgm.wisper.rapportino.ServizioFase6
+
+    // ------------------------------------------------------------- fase 7: comunicazioni, WhatsApp, portale clienti (docs/gestionale/fase7.md)
+
+    /**
+     * Da mandare, storico, modelli, notifiche, il portale visto dallo studio. Le letture di
+     * §3.20 restano sul telefono; i messaggi preparati o mandati, Non mandare, Pubblica e
+     * Togli dal portale, Rispondi nel portale e i file decisi vanno nella coda.
+     */
+    val fase7: eu.stgm.wisper.rapportino.ServizioFase7
 }
 
 /**

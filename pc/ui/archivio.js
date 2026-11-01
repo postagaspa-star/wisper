@@ -385,7 +385,8 @@
         h('div', { class: 'alto' }, h('span', { class: 'etichetta-pannello' }, 'Documento'), h('span', { class: 'spazio' }), altro(d, scriveQui), tondo('chiudi', 'Chiudi', () => chiudiPannello(), 'piccolo')),
         h('div', { class: 'pillole-testa' }, pillStatoDoc(d),
           daApprovare && d.statoVisto === 'Valida' ? pill('rev. ' + daApprovare.numero + ' da approvare', 'giallo') : null,
-          d.archiviato ? pill('Archiviato', 'grigio') : null, d.vede === 'costi' ? pill('Chi vede i prezzi', 'grigio') : d.vede === 'riservati' ? pill('Riservato', 'grigio') : null),
+          d.archiviato ? pill('Archiviato', 'grigio') : null, d.vede === 'costi' ? pill('Chi vede i prezzi', 'grigio') : d.vede === 'riservati' ? pill('Riservato', 'grigio') : null,
+          d.portale && W.Portale ? W.Portale.pillola(d.portale) : null),
         h('h2', { class: 'titolo-pannello' }, d.titolo),
         h('span', { class: 'sotto-titolo' }, [d.categoria, d.dataDocumento ? C.data(d.dataDocumento) : '', d.riferimento].filter(Boolean).join(' · ')),
         respinte,
@@ -416,6 +417,10 @@
         scriveQui ? { testo: 'Cambia', fn: () => aggiungiDocumento({ esistente: d }) } : null,
         d.origine !== 'collegamento' ? { testo: 'Scarica', fn: () => { const v = versioneAperta(d); apriFile(v ? v.url : d.url, v ? (v.nomeDaScaricare || v.nomeFile) : d.nomeFile, true); } } : null,
         scrive() && d.puoScrivere !== false ? (d.archiviato ? { testo: 'Rimetti nell\'archivio', fn: () => archivia(d, false) } : { testo: 'Archivia', fn: () => archivia(d, true), pericolo: true }) : null,
+        // Fase 7 (§8.1-8.2, §12.6): un documento si pubblica solo a mano; mai riservato, mai un collegamento, mai archiviato.
+        W.Portale && W.Portale.puoPubblicare('documento') && d.origine !== 'collegamento' && d.vede !== 'riservati' && !d.archiviato
+          ? (d.portale && d.portale.pubblicato ? { testo: 'Togli dal portale', fn: () => W.Portale.togli(d.portale.pubblicazione || { tipo: 'documento', rif: d.id, idCliente: d.idCliente || '' }, () => aggiorna(null)) }
+            : { testo: 'Pubblica nel portale', fn: async () => { const r = await W.Portale.pubblica('documento', d.id, { idCliente: d.idCliente || undefined, nomeCliente: d.cliente, titolo: d.titolo }); if (r) aggiorna(null); } }) : null,
       ].filter(Boolean);
       if (!voci.length) return null;
       const b = h('button', { type: 'button', class: 'tondo piccolo', 'aria-label': 'Altre azioni', title: 'Altre azioni' }, icona('altro', 18));

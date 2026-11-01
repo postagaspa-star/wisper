@@ -54,6 +54,12 @@ public sealed class Finestra : Form, Ponte.IFinestra
         vista = new WebView2 { Dock = DockStyle.Fill, DefaultBackgroundColor = BackColor };
         Controls.Add(vista);
         Load += async (_, _) => await InizializzaAsync();
+        // Fase 7 (§3.13): la finestra torna attiva (per esempio dopo WhatsApp nel browser): la pagina chiede "L'hai mandato?".
+        Activated += (_, _) =>
+        {
+            try { vista.CoreWebView2?.PostWebMessageAsJson("{\"tipo\":\"attiva\"}"); }
+            catch (Exception ex) { Log.Errore("avviso di finestra attiva non mandato", ex); }
+        };
     }
 
     private async Task InizializzaAsync()

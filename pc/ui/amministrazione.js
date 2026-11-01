@@ -34,6 +34,9 @@
       // fase 6: patrono, conservazione, tarature, DURC e visura, documenti dei collaboratori, esterni; i tipi di formazione
       { k: 'persone', titolo: 'Persone, mezzi e collaboratori', icona: 'persona', modulo: 'persone' },
       { k: 'formazione', titolo: 'Tipi di formazione', icona: 'libro', modulo: 'persone' },
+      // fase 7: le impostazioni del portale clienti e delle comunicazioni (fase7.md §0.5, §12.6)
+      { k: 'portale', titolo: 'Portale clienti', icona: 'globo' },
+      { k: 'comunicazioni', titolo: 'Comunicazioni', icona: 'fumetto' },
       { k: 'registro', titolo: 'Registro attività', icona: 'lista' },
       { k: 'copie', titolo: 'Copie ed esportazioni', icona: 'scarica' },
       { k: 'cestino', titolo: 'Cestino', icona: 'cestino', scrive: true },
@@ -51,6 +54,7 @@
       if (((sotto === 'tariffe' || sotto === 'fisco' || sotto === 'fiscale') && !soldi()) || (sotto === 'cestino' && !scrive()) || (sotto === 'veicoli' && !puo('spese')) || (sotto === 'categorie' && !puo('documenti'))) { aggiungi(pagina, [h('div', { class: 'calmo grande' }, icona('scudo', 22, 2.2), 'Non hai il permesso per vedere questa pagina. Chiedi a ' + W.titolare() + '.')]); return; }
       if ((sotto === 'persone' || sotto === 'formazione') && !puo('persone')) { aggiungi(pagina, [h('div', { class: 'calmo grande' }, icona('scudo', 22, 2.2), 'Non hai il permesso per vedere questa pagina. Chiedi a ' + W.titolare() + '.')]); return; }
       const fn = { studio, fiscale, utenti: id ? paginaUtente : elencoUtenti, permessi, numerazioni, tariffe, fisco, veicoli, registro, copie, cestino, app, persone: impostazioniFase6, formazione: tipiFormazione,
+        portale: impostazioniPortale, comunicazioni: impostazioniComunicazioni,
         categorie: p => W.Archivio.paginaCategorie(p), spazio: p => W.Archivio.paginaSpazio(p) }[sotto];
       if (!fn) { elenco(pagina); return; }
       if (sotto !== 'app' || puo('amministrazione')) {
@@ -102,6 +106,8 @@
         categorie: 'Approvazione, chi vede, scadenza proposta',
         persone: 'Santo patrono, conservazione, tarature, DURC e visura',
         formazione: 'PES, PAV, PEI, primo soccorso: ogni quanto e il preavviso',
+        portale: (imp.PORTALE_INDIRIZZO ? radice.WisperRegoleComunicazioni.host(imp.PORTALE_INDIRIZZO) : 'Non collegato') + ' · ' + (imp.PORTALE_ATTIVO === true || imp.PORTALE_ATTIVO === 'true' || imp.PORTALE_ATTIVO === 1 ? 'acceso' : 'spento'),
+        comunicazioni: 'WhatsApp, promemoria degli appuntamenti e di pagamento',
         spazio: 'Dove va lo spazio, copia fuori casa, cestino vecchio',
         app: 'Tema, visita guidata, versione' + (S.versione ? ' ' + S.versione : ''),
         fiscale: regoleConfermate() ? 'Confermate dal commercialista il ' + C.data(regoleConfermate().data) : 'Regole delle fatture da confermare col commercialista',
@@ -364,6 +370,142 @@
           h('div', { class: 'scheda' }, h('h2', null, 'Mezzi'), h('div', { class: 'fila' },
             campo('Avviso del tagliando a km', conSuffisso(c.tagliando, 'km prima')),
             salvaBtn(() => salvaValori({ KM_TAGLIANDO_AVVISO: num(c.tagliando) }, 'Salvato'))))) ]);
+    }
+
+    // ===================================================================== fase 7: portale clienti e comunicazioni
+
+    const vero = v => v === true || v === 'true' || v === 1 || v === '1' || v === 'SI';
+    async function salvaValori7(valori, frase) {
+      const ris = await lavora('Salvo', () => Rete.post('/server/salvaImpostazioni', { valori }));
+      if (ris) { S.ana.impostazioni = Object.assign({}, S.ana.impostazioni, ris.impostazioni || valori); if (W.Portale) W.Portale.daRileggere(); avviso(frase || 'Salvato'); W.disegnaPagina(); }
+      return ris;
+    }
+
+    /**
+     * Amministrazione › Impostazioni › Portale clienti (§0.5, §12.6): l'indirizzo con lo stato e Prova adesso, lo script del
+     * portale, Portale acceso, le durate, i file dal cliente, le email lasciate allo studio, l'informativa, Spegni il portale adesso.
+     */
+    function impostazioniPortale(pagina) {
+      const K = radice.WisperRegoleComunicazioni;
+      const imp = S.ana.impostazioni;
+      const sola = !scrive();
+      // I valori iniziali dell'accordo (§5.1), se il server non li ha ancora.
+      const BASE = { PORTALE_LINK_MINUTI: 10, PORTALE_LINK_AVVISO_ORE: 72, PORTALE_SESSIONE_MINUTI: 30, PORTALE_SESSIONE_ORE: 8, PORTALE_FILE_MAX_MB: 20, PORTALE_EMAIL_RISERVA: 20 };
+      const inp = (k, extra) => h('input', Object.assign({ type: 'text', value: imp[k] === undefined || imp[k] === null || imp[k] === '' ? (BASE[k] !== undefined ? String(BASE[k]) : '') : String(imp[k]), disabled: sola }, extra || {}));
+      const num = i => (i.value.trim() === '' ? '' : C.num(i.value));
+      const c = { indirizzo: inp('PORTALE_INDIRIZZO', { type: 'url', placeholder: 'https://studiogm-portale.netlify.app', spellcheck: 'false' }),
+        link: inp('PORTALE_LINK_MINUTI', { inputmode: 'numeric' }), avviso: inp('PORTALE_LINK_AVVISO_ORE', { inputmode: 'numeric' }),
+        sessMin: inp('PORTALE_SESSIONE_MINUTI', { inputmode: 'numeric' }), sessOre: inp('PORTALE_SESSIONE_ORE', { inputmode: 'numeric' }),
+        mb: inp('PORTALE_FILE_MAX_MB', { inputmode: 'numeric' }), riserva: inp('PORTALE_EMAIL_RISERVA', { inputmode: 'numeric' }) };
+      const TIPI = ['pdf', 'jpg', 'jpeg', 'png', 'heic', 'dwg', 'dxf', 'docx', 'xlsx'];
+      let tipi = [];
+      try { tipi = Array.isArray(imp.PORTALE_TIPI_FILE) ? imp.PORTALE_TIPI_FILE.slice() : JSON.parse(imp.PORTALE_TIPI_FILE || '[]'); } catch (e) { tipi = []; }
+      if (!tipi.length) tipi = TIPI.slice();
+      const attivo = vero(imp.PORTALE_ATTIVO);
+      const zonaStato = h('div', { class: 'stato-portale' }, segnaposto(1, 26));
+      const zonaTipi = h('div', { class: 'pillole' });
+      // Si può solo togliere (§5.1): il server non accetta tipi fuori dall'elenco.
+      const disegnaTipi = () => aggiungi(svuota(zonaTipi), TIPI.map(t => h('button', { type: 'button', class: 'pillola piccola' + (tipi.indexOf(t) >= 0 ? ' scelta' : ''), disabled: sola,
+        onclick: () => { const i = tipi.indexOf(t); if (i >= 0) tipi.splice(i, 1); else tipi.push(t); disegnaTipi(); } }, t.toUpperCase())));
+      disegnaTipi();
+      const statoDa = st => {
+        const s = K.statoPortale(Object.assign({ attivo: true }, st || {}));
+        const sc = st && st.script ? K.statoScript(st.script) : null;
+        aggiungi(svuota(zonaStato), [h('span', { class: 'pill p-' + s.colore }, s.spento ? 'Spento' : s.parola),
+          st && st.controllatoIl ? h('span', { class: 'secondario' }, 'provato ' + K.quando(st.controllatoIl, new Date())) : null,
+          !sola || W.puo('portale') ? h('button', { type: 'button', class: 'btn piccolo', onclick: provaAdesso }, 'Prova adesso') : null]);
+        aggiungi(zonaScript, sc ? [h('span', { class: 'pill p-' + sc.colore }, sc.parola), sc.frase ? h('span', { class: 'secondario' }, sc.frase) : null] : [h('span', { class: 'pill p-grigio' }, 'Non collegato'), h('span', { class: 'secondario' }, 'mancano WISPER_PORTALE_URL e SEGRETO_PORTALE sul NAS')]);
+      };
+      const zonaScript = h('div', { class: 'stato-portale' });
+      const leggiStato = () => (W.puo('portale') ? Rete.get('/server/portale').then(r => r.stato) : Promise.resolve({ collegato: imp.PORTALE_INDIRIZZO ? (S.io.interfaccia.portaleCollegato ? 'si' : 'no') : 'non_collegato', indirizzo: imp.PORTALE_INDIRIZZO }));
+      leggiStato().then(st => { svuota(zonaScript); statoDa(st); }).catch(() => { svuota(zonaScript); statoDa({ collegato: imp.PORTALE_INDIRIZZO ? 'no' : 'non_collegato' }); });
+      async function provaAdesso() {
+        const r = await lavora('Provo il portale da fuori', () => Rete.post('/server/controllaPortale', {}));
+        if (!r) return;
+        avviso(r.collegato === 'si' ? 'Raggiunto da fuori' + (r.ms ? ' in ' + r.ms + ' ms' : '') : r.collegato === 'no' ? 'Il portale non si raggiunge da fuori' : 'Il portale non è collegato: manca l\'indirizzo', r.collegato === 'no');
+        leggiStato().then(st => { svuota(zonaScript); statoDa(st); }).catch(() => null);
+      }
+      const accendi = async v => {
+        if (v) { await salvaValori7({ PORTALE_ATTIVO: true }, 'Portale acceso'); return; }
+        spegni();
+      };
+      async function spegni() {
+        const prova = c2 => lavora('Spengo il portale', () => Rete.post('/server/spegniPortale', c2 ? { conferma: true } : {}).catch(e => { if (e && e.dati && e.dati.serveConferma) return { serveConferma: e.dati.frase || e.message }; throw e; }));
+        const r = await prova(false);
+        if (!r) return;
+        if (r.serveConferma && !(await conferma('Spegnere il portale adesso?', r.serveConferma, 'Spegni il portale', true))) return;
+        const r2 = r.serveConferma ? await prova(true) : r;
+        if (!r2 || r2.serveConferma) return;
+        S.ana.impostazioni = Object.assign({}, S.ana.impostazioni, { PORTALE_ATTIVO: false });
+        if (W.Portale) W.Portale.daRileggere();
+        avviso('Portale spento: nessun cliente può entrare. Si riaccende da qui.');
+        W.disegnaPagina();
+      }
+      const cambiaInformativa = () => {
+        const t = h('textarea', { rows: 14, disabled: sola });
+        t.value = imp.PORTALE_INFORMATIVA || '';
+        let chiudi;
+        chiudi = finestra({ titolo: 'Informativa per i clienti', corpo: campo('Testo dell\'informativa', t), larghezza: 'media', fuoco: false,
+          pulsanti: ['spazio', h('button', { type: 'button', class: 'btn testo grande', onclick: () => chiudi() }, sola ? 'Chiudi' : 'Annulla'),
+            sola ? null : h('button', { type: 'button', class: 'btn giallo grande', onclick: async () => {
+              if (!t.value.trim()) { avviso('Scrivi il testo dell\'informativa', true); return; }
+              // Cambiando la data, al prossimo ingresso tutti i referenti la rivedono (§3.19).
+              const r = await salvaValori7({ PORTALE_INFORMATIVA: t.value.trim(), PORTALE_INFORMATIVA_DATA: C.oggiIso() }, 'Informativa cambiata: al prossimo ingresso i clienti la rivedono');
+              if (r) chiudi();
+            } }, 'Salva l\'informativa')].filter(Boolean) });
+      };
+      const interr = W.Portale ? W.Portale.interruttore('Portale acceso', attivo ? 'I clienti col portale possono entrare' : 'Nessun cliente può entrare', attivo, accendi, sola) : null;
+      aggiungi(pagina, [h('div', { class: 'testata' }, h('h1', null, 'Portale clienti')),
+        h('div', { class: 'stretta-820 sezione imp-f6' },
+          h('div', { class: 'scheda scheda-indirizzo' }, h('h2', null, 'Su internet'), h('div', { class: 'fila' },
+            campo('Indirizzo del portale', c.indirizzo), zonaStato,
+            h('div', { class: 'campo' }, h('label', null, 'Script del portale'), zonaScript),
+            sola ? null : h('div', null, h('button', { type: 'button', class: 'btn', onclick: () => {
+              const v = c.indirizzo.value.trim();
+              if (v && !/^https:\/\/[^\s/]+/.test(v)) { avviso('L\'indirizzo del portale comincia con https://', true); return; }
+              salvaValori7({ PORTALE_INDIRIZZO: v.replace(/\/+$/, '') }, v ? 'Salvato: provo il portale da fuori' : 'Salvato: il portale è Non collegato').then(r => { if (r && v) provaAdesso(); });
+            } }, 'Salva')))),
+          h('div', { class: 'scheda righe' }, interr),
+          h('div', { class: 'scheda' }, h('h2', null, 'Ingresso e file'), h('div', { class: 'fila' },
+            h('div', { class: 'riga-campi' }, campo('Link e codice valgono', conSuffisso(c.link, 'minuti')), campo('Link negli avvisi', conSuffisso(c.avviso, 'ore'))),
+            h('div', { class: 'riga-campi' }, campo('Sessione senza uso', conSuffisso(c.sessMin, 'minuti')), campo('Sessione al massimo', conSuffisso(c.sessOre, 'ore'))),
+            h('div', { class: 'riga-campi' }, campo('File dal cliente al massimo', conSuffisso(c.mb, 'MB')), campo('Email lasciate allo studio', conSuffisso(c.riserva, 'al giorno'))),
+            h('div', { class: 'campo' }, h('label', null, 'Tipi di file dal cliente'), zonaTipi),
+            sola ? null : h('div', null, h('button', { type: 'button', class: 'btn', onclick: () => {
+              if (!tipi.length) { avviso('Lascia almeno un tipo di file', true); return; }
+              salvaValori7({ PORTALE_LINK_MINUTI: num(c.link), PORTALE_LINK_AVVISO_ORE: num(c.avviso), PORTALE_SESSIONE_MINUTI: num(c.sessMin), PORTALE_SESSIONE_ORE: num(c.sessOre),
+                PORTALE_FILE_MAX_MB: num(c.mb), PORTALE_EMAIL_RISERVA: num(c.riserva), PORTALE_TIPI_FILE: TIPI.filter(t => tipi.indexOf(t) >= 0) }, 'Salvato: vale per i prossimi ingressi');
+            } }, 'Salva')))),
+          h('div', { class: 'scheda' }, h('h2', null, 'Informativa per i clienti'), h('div', { class: 'fila' },
+            h('div', { class: 'coppia' }, h('span', { class: 'k' }, 'Versione'), h('span', { class: 'v' }, imp.PORTALE_INFORMATIVA_DATA ? 'versione del ' + C.data(imp.PORTALE_INFORMATIVA_DATA) : 'da scrivere')),
+            h('div', null, h('button', { type: 'button', class: 'btn', onclick: cambiaInformativa }, sola ? 'Leggi' : 'Cambia')))),
+          K.Permessi.impostazioniPortale(W.perm()) && attivo ? h('div', null, h('button', { type: 'button', class: 'btn grande bordo-rosso', onclick: spegni }, 'Spegni il portale adesso')) : null)]);
+    }
+
+    /** Amministrazione › Impostazioni › Comunicazioni (§12.6): WhatsApp sul telefono, i promemoria, le righe Non collegato col perché (§3.17). */
+    function impostazioniComunicazioni(pagina) {
+      const imp = S.ana.impostazioni;
+      const sola = !scrive();
+      const inp = (k, d) => h('input', { type: 'text', inputmode: 'numeric', value: imp[k] === undefined || imp[k] === null || imp[k] === '' ? String(d) : String(imp[k]), disabled: sola });
+      const num = i => (i.value.trim() === '' ? '' : C.num(i.value));
+      let app = ['business', 'normale', 'chiedi'].indexOf(imp.WHATSAPP_APP) >= 0 ? imp.WHATSAPP_APP : 'chiedi';
+      const c = { prima: inp('PROMEMORIA_GIORNI_PRIMA', 1), dopo: inp('SOLLECITO_DOPO_GIORNI', 7), secondo: inp('SOLLECITO_SECONDO_GIORNI', 30) };
+      const zonaApp = h('div');
+      const disegnaApp = () => aggiungi(svuota(zonaApp), [segmenti([['business', 'Business'], ['normale', 'Normale'], ['chiedi', 'Chiedi']], app, k => { if (!sola) { app = k; disegnaApp(); } }, 'piccoli')]);
+      disegnaApp();
+      const nc = (titolo, perche, ico) => riga({ sinistra: quadrato(ico), titolo, sotto: perche, destra: h('span', { class: 'pill p-grigio' }, 'Non collegato') });
+      aggiungi(pagina, [h('div', { class: 'testata' }, h('h1', null, 'Comunicazioni')),
+        h('div', { class: 'stretta-820 sezione imp-f6' },
+          h('div', { class: 'scheda' }, h('h2', null, 'WhatsApp e promemoria'), h('div', { class: 'fila' },
+            h('div', { class: 'campo' }, h('label', null, 'WhatsApp sul telefono'), zonaApp),
+            h('div', { class: 'riga-campi' }, campo('Promemoria degli appuntamenti', conSuffisso(c.prima, 'giorni lavorativi prima')),
+              campo('Promemoria di pagamento dopo', conSuffisso(c.dopo, 'giorni')), campo('Il secondo dopo', conSuffisso(c.secondo, 'giorni'))),
+            sola ? null : h('div', null, h('button', { type: 'button', class: 'btn', onclick: () => salvaValori7({ WHATSAPP_APP: app, PROMEMORIA_GIORNI_PRIMA: num(c.prima), SOLLECITO_DOPO_GIORNI: num(c.dopo), SOLLECITO_SECONDO_GIORNI: num(c.secondo) },
+              'Salvato: vale per le proposte di Da mandare da adesso') }, 'Salva')))),
+          h('div', { class: 'scheda righe' },
+            nc('WhatsApp Business', 'Costa a messaggio (circa 0,036 $ un promemoria) e vuole un indirizzo aperto su internet per le risposte: per ora i messaggi li manda Manuel', 'whatsapp'),
+            nc('Ore e spese via messaggio', 'Con WhatsApp servirebbe l\'API a pagamento; l\'app lo fa già in meno di un minuto, anche senza rete', 'scontrino'),
+            nc('Assistente operativo', 'I dati dei clienti andrebbero a un fornitore fuori dall\'Europa; un modello sul NAS è troppo lento', 'fumetto')))]);
     }
 
     /** I tipi di formazione e abilitazione (§5.3): ogni quanto e il preavviso; Nuovo tipo col bordo. */
@@ -840,7 +982,9 @@
 
     const TABELLE = [['', 'Tutto'], ['soggetti', 'Clienti e fornitori'], ['commesse', 'Commesse'], ['prestazioni', 'Prestazioni'], ['rapportini', 'Rapportini'],
       ['ore', 'Ore'], ['spese', 'Spese'], ['trasferte', 'Trasferte'], ['veicoli', 'Veicoli'],
-      ['utenti', 'Utenti'], ['permessi', 'Permessi'], ['impostazioni', 'Impostazioni']];
+      ['utenti', 'Utenti'], ['permessi', 'Permessi'], ['impostazioni', 'Impostazioni'],
+      // Fase 7 (§12.6): il filtro Portale (pubblicazioni, file dal cliente, accessi dati, da guardare).
+      ['portale', 'Portale']];
     const PERIODI = [['oggi', 'Oggi'], ['7', 'Ultimi 7 giorni'], ['30', 'Ultimi 30 giorni'], ['', 'Da sempre']];
 
     /** Fase 6 (§5.7): il filtro "Dati riservati" del registro, solo per il titolare: chi ha visto, scaricato, cambiato o esportato dati riservati. */

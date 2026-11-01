@@ -162,13 +162,27 @@
           onclick: () => W.vaiARapportini({ mese: '', cliente: c.id }),
         }))]);
       }
+      // Fase 7 (§12.6): il portale del cliente e le sue ultime comunicazioni.
+      if (c.cliente && W.Portale) W.Portale.schedaCliente(area, c);
+      if (c.cliente && W.Comunicazioni) W.Comunicazioni.schedaCliente(area, c.id);
     }
 
     function schedaReferenti(area, c, referenti, scrive) {
+      // Fase 7 (§12.6): WhatsApp (il Messaggio col modello libero), Email, Chiama; le pillole Accesso al portale, Ha detto sì a WhatsApp, Paga le fatture.
+      const scriveMsg = puo('comunicazioni', 2) && W.Comunicazioni;
+      const ferma = fn => e => { e.stopPropagation(); fn(); };
       aggiungi(area, [h('div', { class: 'scheda righe' }, referenti.length ? referenti.map(r => riga({
         sinistra: iniziali(r.nome, true),
         titolo: r.nome, sotto: [r.ruolo, r.telefono].filter(Boolean).join(' · ') || r.email || '',
-        destra: r.telefono ? h('a', { class: 'tondo', href: 'tel:' + String(r.telefono).replace(/[^\d+]/g, ''), 'aria-label': 'Chiama ' + r.nome, title: 'Chiama ' + r.nome, onclick: e => e.stopPropagation() }, icona('telefono', 18, 2.2)) : null,
+        destra: h('span', { class: 'azioni-referente' },
+          h('span', { class: 'pillole-testa' },
+            r.portale && puo('portale') ? h('span', { class: 'pill p-' + (radice.WisperRegoleComunicazioni.coloreReferente(r.statoPortale || 'Attivo')) }, r.statoPortale && r.statoPortale !== 'Attivo' ? 'Accesso al portale · ' + r.statoPortale.toLowerCase() : 'Accesso al portale') : null,
+            r.whatsappOk ? h('span', { class: 'pill p-verde' }, 'Ha detto sì a WhatsApp') : null,
+            r.pagamenti ? h('span', { class: 'pill p-grigio' }, 'Paga le fatture') : null),
+          scriveMsg && (r.whatsapp || r.telefono) ? h('button', { type: 'button', class: 'tondo', 'aria-label': 'WhatsApp a ' + r.nome, title: 'WhatsApp a ' + r.nome, onclick: ferma(() => W.Comunicazioni.scrivi({ modello: 'libero', canale: 'whatsapp', idReferente: r.id, idCliente: c.id })) }, icona('whatsapp', 18, 2.2)) : null,
+          r.email ? (scriveMsg ? h('button', { type: 'button', class: 'tondo', 'aria-label': 'Email a ' + r.nome, title: 'Email a ' + r.nome, onclick: ferma(() => W.Comunicazioni.scrivi({ modello: 'libero', canale: 'email', idReferente: r.id, idCliente: c.id })) }, icona('email', 18, 2.2))
+            : h('a', { class: 'tondo', href: 'mailto:' + r.email, 'aria-label': 'Email a ' + r.nome, title: 'Email a ' + r.nome, onclick: e => e.stopPropagation() }, icona('email', 18, 2.2))) : null,
+          r.telefono ? h('a', { class: 'tondo', href: 'tel:' + String(r.telefono).replace(/[^\d+]/g, ''), 'aria-label': 'Chiama ' + r.nome, title: 'Chiama ' + r.nome, onclick: e => e.stopPropagation() }, icona('telefono', 18, 2.2)) : null),
         onclick: scrive ? () => moduloReferente(c, r) : null, freccia: false,
       })) : h('p', { class: 'vuoto sinistra' }, 'Nessun referente. Aggiungi chi chiami di solito.'))]);
       if (scrive) aggiungi(area, [h('div', null, h('button', { type: 'button', class: 'btn grande', onclick: () => moduloReferente(c, null) }, icona('piu', 18, 2.6), 'Aggiungi un referente'))]);
@@ -389,11 +403,32 @@
         note: h('textarea', { rows: 2 }),
       };
       v.note.value = x.note || '';
+      // Fase 7 (§12.6): Paga le fatture, Numero WhatsApp (se diverso), Ha detto sì a WhatsApp / Non vuole più WhatsApp.
+      v.whatsapp = h('input', { type: 'tel', value: x.whatsapp || '' });
+      const f7 = { pagamenti: !!x.pagamenti, whatsappOk: !!x.whatsappOk };
+      const puoWa = radice.WisperRegoleComunicazioni.Permessi.segnaWhatsapp(W.perm());
       let errori = {};
       const zona = h('div', { class: 'fila' });
+      const segnaWa = async ok => {
+        if (!r) { f7.whatsappOk = ok; disegna(); return; }
+        const ris = await lavora(ok ? 'Segno il sì' : 'Tolgo il sì', () => Rete.post('/server/segnaWhatsapp', { idReferente: r.id, ok }));
+        if (!ris) return;
+        f7.whatsappOk = ok;
+        r.whatsappOk = ok;
+        avviso(ok ? 'Segnato: ha detto sì a WhatsApp' : 'Segnato: non vuole più WhatsApp');
+        W.ricaricaAnagrafiche().catch(() => null);
+        disegna();
+      };
       const disegna = () => aggiungi(svuota(zona), [campo('Nome', v.nome, errori.nome),
         h('div', { class: 'riga-campi' }, campo('Ruolo', v.ruolo), campo('Telefono', v.telefono)),
-        campo('Email', v.email, errori.email), campo('Note', v.note)]);
+        campo('Email', v.email, errori.email),
+        h('div', { class: 'riga-campi' }, campo('Numero WhatsApp', v.whatsapp, errori.whatsapp),
+          h('div', { class: 'campo' }, h('label', null, 'Paga le fatture'), segmenti([['si', 'Sì'], ['no', 'No']], f7.pagamenti ? 'si' : 'no', k => { f7.pagamenti = k === 'si'; disegna(); }, 'piccoli'))),
+        h('div', { class: 'campo' }, h('label', null, 'WhatsApp'), h('div', { class: 'pillole-testa' },
+          f7.whatsappOk ? h('span', { class: 'pill p-verde' }, 'Ha detto sì a WhatsApp') : h('span', { class: 'pill p-grigio' }, 'WhatsApp non chiesto'),
+          puoWa ? (f7.whatsappOk ? h('button', { type: 'button', class: 'btn collegamento', onclick: () => segnaWa(false) }, 'Non vuole più WhatsApp')
+            : h('button', { type: 'button', class: 'btn collegamento', onclick: () => segnaWa(true) }, 'Ha detto sì a WhatsApp')) : null)),
+        campo('Note', v.note)]);
       disegna();
       let chiudi;
       const salva = async () => {
@@ -401,14 +436,19 @@
         if (!v.nome.value.trim()) errori.nome = 'Scrivi il nome';
         const e = R.erroreEmail(v.email.value);
         if (e) errori.email = e;
+        if (v.whatsapp.value.trim() && !radice.WisperRegoleComunicazioni.numeroWhatsapp(v.whatsapp.value).valido) errori.whatsapp = 'Non sembra un numero di telefono';
         if (Object.keys(errori).length) { disegna(); return; }
-        const campi = { idSoggetto: c.id, nome: v.nome.value.trim(), ruolo: v.ruolo.value.trim(), telefono: v.telefono.value.trim(), email: v.email.value.trim(), note: v.note.value.trim() };
+        const campi = { idSoggetto: c.id, nome: v.nome.value.trim(), ruolo: v.ruolo.value.trim(), telefono: v.telefono.value.trim(), email: v.email.value.trim(), note: v.note.value.trim(),
+          pagamenti: f7.pagamenti, whatsapp: v.whatsapp.value.trim() };
+        // Il sì a WhatsApp di un referente nuovo va col salvataggio; per uno che c'è già lo segna segnaWhatsapp (resta nel registro).
+        if (!r) campi.whatsappOk = f7.whatsappOk;
         if (r) campi.id = r.id;
         const ris = await lavora('Salvo il referente', () => Rete.post('/server/salvaReferente', { referente: campi }));
         if (!ris) return;
         await W.ricaricaAnagrafiche().catch(() => null);
         chiudi();
-        avviso(r ? 'Referente salvato' : 'Referente aggiunto');
+        // Fase 7 (§10.4): l'email cambiata di chi ha l'accesso al portale chiude le sue sessioni, e il server lo dice.
+        avviso(ris.avviso || (r ? 'Referente salvato' : 'Referente aggiunto'));
         W.ridisegna();
       };
       chiudi = finestra({

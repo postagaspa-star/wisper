@@ -133,6 +133,10 @@ class MainActivity : ComponentActivity() {
         }
 
         val archivio = (application as WisperApp).archivio
+        // Fase 7 (§3.16): il controllo delle notifiche ogni 15 minuti con la rete.
+        ControlloNotifiche.canale(this)
+        ControlloNotifiche.programma(this)
+        leggiNotifica(intent)
         leggiPromemoria(intent)
         leggiFileCondivisi(intent)
         setContent { Wisper(archivio, this) }
@@ -140,6 +144,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: android.content.Intent) {
         super.onNewIntent(intent)
+        leggiNotifica(intent)
         leggiPromemoria(intent)
         leggiFileCondivisi(intent)
     }
@@ -208,6 +213,13 @@ class MainActivity : ComponentActivity() {
         }.start()
     }
 
+    /** Fase 7: toccando una notifica dello studio si apre la cosa (il collegamento come la Dashboard). */
+    private fun leggiNotifica(intent: android.content.Intent?) {
+        val i = intent ?: return
+        i.getStringExtra(ControlloNotifiche.EXTRA_COLLEGAMENTO)?.takeIf { it.isNotBlank() }?.let { collegamentoDaAprire.value = it }
+        i.removeExtra(ControlloNotifiche.EXTRA_COLLEGAMENTO)
+    }
+
     /** Toccando la notifica di un promemoria si apre quell'attività. */
     private fun leggiPromemoria(intent: android.content.Intent?) {
         intent?.getStringExtra(Promemoria.EXTRA_ATTIVITA)?.takeIf { it.isNotBlank() }?.let { attivitaDaAprire.value = it }
@@ -222,6 +234,9 @@ class MainActivity : ComponentActivity() {
 
         /** Fase 5: un collegamento o un file dal Condividi: si apre Documenti, Aggiungi un documento. */
         val apriDocumentoNuovo = kotlinx.coroutines.flow.MutableStateFlow(false)
+
+        /** Fase 7: il collegamento (JSON) di una notifica toccata, da aprire appena si può. */
+        val collegamentoDaAprire = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
     }
 
     override fun onResume() {
@@ -340,6 +355,15 @@ private fun Wisper(archivio: Archivio, attivita: ComponentActivity) {
                     pagina = "sezioni"
                 }
                 // Fase 6 (fase6.md §12.8): Mezzi › Il mio (lo strumento scaduto) e Persone › Ferie e permessi (il giallo).
+                // Fase 7 (fase7.md §12.6): Comunicazioni › Da mandare, la prima scheda.
+                "comunicazioni" -> {
+                    modulo = null
+                    scope.launch { cassetto.close() }
+                    eu.stgm.wisper.ui.RicordoComunicazioni.mostra("damandare")
+                    mettiPila(Sezione.COMUNICAZIONI, emptyList())
+                    sezioneNome = Sezione.COMUNICAZIONI.name
+                    pagina = "sezioni"
+                }
                 "mezzi", "persone" -> {
                     modulo = null
                     scope.launch { cassetto.close() }
@@ -424,6 +448,16 @@ private fun Wisper(archivio: Archivio, attivita: ComponentActivity) {
             sezioneNome = Sezione.ATTIVITA.name
         }
 
+        // Fase 7: da una notifica dello studio, la cosa (come una riga della Dashboard).
+        val daNotifica by MainActivity.collegamentoDaAprire.collectAsStateWithLifecycle()
+        LaunchedEffect(daNotifica, pagina, visita.attiva) {
+            val testo = daNotifica ?: return@LaunchedEffect
+            if (pagina != "sezioni" || visita.attiva) return@LaunchedEffect
+            MainActivity.collegamentoDaAprire.value = null
+            val col = runCatching { eu.stgm.wisper.rapportino.Collegamento.daJson(org.json.JSONObject(testo)) }.getOrNull()
+            eu.stgm.wisper.ui.apriCollegamento(col, nav, dati.viste.value.map { it.rapportino })
+        }
+
         // Dal Condividi di Android (un XML di fattura da un'email o da WhatsApp): Fatturazione, Importa l'XML.
         val importa by MainActivity.apriImporta.collectAsStateWithLifecycle()
         LaunchedEffect(importa, pagina, visita.attiva) {
@@ -504,6 +538,9 @@ private fun Wisper(archivio: Archivio, attivita: ComponentActivity) {
                                                 Sezione.PERSONE to if (sessione.puoApprovareAssenze) (dashboardLetta?.fase6?.ferieDaApprovare ?: 0) else 0,
                                                 Sezione.MEZZI to (dashboardLetta?.fase6?.numerinoMezzi ?: 0),
                                                 Sezione.COLLABORATORI to if (sessione.esterno) 0 else (dashboardLetta?.fase6?.nonInRegola ?: 0),
+                                                // Fase 7 (§11.1): da mandare oggi più preparati non mandati; da guardare del portale.
+                                                Sezione.COMUNICAZIONI to (dashboardLetta?.fase7?.numerinoComunicazioni ?: 0),
+                                                Sezione.PORTALE to (dashboardLetta?.fase7?.portaleDaGuardare ?: 0),
                                             ),
                                             esterno = if (sessione.esterno) sessione.interfaccia.esternoNome.ifBlank { "collaboratore" } else "",
                                             collegato = aggiornamento.errore.isBlank() && aggiornamento.ultimo != null,
@@ -536,6 +573,12 @@ private fun Wisper(archivio: Archivio, attivita: ComponentActivity) {
                                             utente = sessione.utente,
                                             apriMenu = { scope.launch { cassetto.open() } },
                                             apriTu = { foglioTu = "" },
+                                            // Fase 7: la campanella, per chi vede le comunicazioni.
+                                            notifiche = sessione.interfaccia.notificheNuove,
+                                            apriNotifiche = if (permessi.vede(eu.stgm.wisper.rapportino.Moduli.COMUNICAZIONI)) ({
+                                                eu.stgm.wisper.ui.RicordoComunicazioni.segmento = eu.stgm.wisper.ui.SegmentoComunicazioni.NOTIFICHE
+                                                nav.sezione(Sezione.COMUNICAZIONI)
+                                            }) else null,
                                         )
                                         CompositionLocalProvider(LocalGuscio provides guscio) {
                                             Box(
@@ -622,6 +665,10 @@ private fun Wisper(archivio: Archivio, attivita: ComponentActivity) {
                     }
                 }
                 lavoroFinito?.let { r -> eu.stgm.wisper.ui.FoglioLavoroFinito(dati, r) { lavoroFinito = null } }
+                // Fase 7 (§3.13): al ritorno da WhatsApp, "L'hai mandato?".
+                eu.stgm.wisper.ui.FoglioLhaiMandato(dati)
+                eu.stgm.wisper.ui.FoglioMessaggioGlobale(dati)
+                eu.stgm.wisper.ui.SeguiCoda7(dati)
                 foglioTu?.let { modoTu ->
                     FoglioTu(
                         dati = dati,
@@ -677,8 +724,17 @@ private fun PaginaSezione(
             Sezione.PERSONE -> eu.stgm.wisper.ui.SchermataPersone(dati, nav)
             Sezione.MEZZI -> eu.stgm.wisper.ui.SchermataMezzi(dati, nav)
             Sezione.COLLABORATORI -> eu.stgm.wisper.ui.SchermataCollaboratori(dati, nav)
+            Sezione.COMUNICAZIONI -> eu.stgm.wisper.ui.SchermataComunicazioni(dati, nav)
+            Sezione.PORTALE -> eu.stgm.wisper.ui.SchermataPortale(dati, nav)
             Sezione.AMMINISTRAZIONE -> SchermataAmministrazione(dati, archivio, nav)
         }
+        // Fase 7: comunicazioni, modelli, portale clienti (docs/gestionale/fase7.md §12)
+        rotta == "comunicazioni" -> eu.stgm.wisper.ui.SchermataComunicazioni(dati, nav)
+        rotta.startsWith("comunicazione/") -> eu.stgm.wisper.ui.SchermataComunicazione(dati, nav, rotta.removePrefix("comunicazione/"))
+        rotta == "modello-messaggio-nuovo" -> eu.stgm.wisper.ui.SchermataModello(dati, nav, null)
+        rotta.startsWith("modello-messaggio/") -> eu.stgm.wisper.ui.SchermataModello(dati, nav, rotta.removePrefix("modello-messaggio/"))
+        rotta == "portale" -> eu.stgm.wisper.ui.SchermataPortale(dati, nav)
+        rotta.startsWith("portale-cliente/") -> eu.stgm.wisper.ui.SchermataPortaleCliente(dati, nav, rotta.removePrefix("portale-cliente/"))
         // Fase 6: persone, mezzi e attrezzature, collaboratori esterni (docs/gestionale/fase6.md §12)
         rotta == "persona-nuova" -> eu.stgm.wisper.ui.SchermataModificaPersona(dati, nav, null)
         rotta.startsWith("persona-modifica/") -> eu.stgm.wisper.ui.SchermataModificaPersona(dati, nav, rotta.removePrefix("persona-modifica/"))

@@ -285,7 +285,8 @@ async function mandaFile(w, req, res, id) {
     'Content-Length': st.size,
     'Cache-Control': 'private, max-age=86400',
     'X-Content-Type-Options': 'nosniff',
-    'Content-Disposition': 'inline; filename*=UTF-8\'\'' + encodeURIComponent(nome),
+    // Fase 7 (§3.11): un file arrivato dal portale si scarica sempre (le immagini si mostrano come immagini).
+    'Content-Disposition': (f.tipo === 'portale' && ['image/png', 'image/jpeg'].indexOf(f.mime) < 0 ? 'attachment' : 'inline') + '; filename*=UTF-8\'\'' + encodeURIComponent(nome),
   });
   fs.createReadStream(percorso).pipe(res);
 }

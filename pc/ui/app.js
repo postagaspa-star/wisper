@@ -24,6 +24,7 @@
   const Esempio = window.WisperEsempio;
   const RA = window.WisperRegoleAttivita;
   const RO = window.WisperRegoleOreSpese;
+  const K7 = window.WisperRegoleComunicazioni;
   const { $, h, aggiungi, svuota, icona, tondo, iniziali, stato, avviso, lavora, finestra, conferma, apriMenu, chiudiMenu,
     campo, conSuffisso, selezione, segmenti, cerca, riga, quadrato, segnaposto } = B;
 
@@ -327,6 +328,10 @@
     // Fase 6: le schede delle persone (dati personali e riservati) non restano in memoria fuori dalla loro pagina.
     if (modulo5 !== S.moduloPrima) { Persone.daRileggere(); Mezzi.daRileggere(); Collaboratori.daRileggere(); }
     Persone.chiudiPannello(true);
+    // Fase 7: i pannelli della comunicazione e del file dal cliente si chiudono cambiando pagina; entrando si rilegge.
+    Comunicazioni.chiudiPannello(true);
+    Portale.chiudiPannello(true);
+    if (modulo5 !== S.moduloPrima) { if (modulo5 === 'comunicazioni') Comunicazioni.daRileggere(); if (modulo5 === 'portale') Portale.daRileggere(); }
     S.moduloPrima = modulo5;
     Archivio.M.aperto = null;
     Ticket.M.aperto = null;
@@ -404,6 +409,9 @@
     if (d.hash.indexOf('#persone') === 0) S.filtroPersone = f ? Object.assign({}, f) : null;
     if (d.hash.indexOf('#mezzi') === 0) S.filtroMezzi = f ? Object.assign({}, f) : null;
     if (d.hash.indexOf('#collaboratori') === 0) S.filtroCollaboratori = f ? Object.assign({}, f) : null;
+    // Fase 7: comunicazioni (cliente, commessa) e portale (cliente degli accessi).
+    if (d.hash.indexOf('#comunicazioni') === 0) S.filtroComunicazioni = f ? Object.assign({}, f) : null;
+    if (d.hash.indexOf('#portale') === 0) S.filtroPortale = f ? Object.assign({}, f) : null;
     // Fase 2: il segmento dei preventivi, il segmento o il giorno delle attività.
     if (d.hash === '#preventivi' && f) {
       const seg = f.segmento || { BOZZA: 'bozze', INVIATO: 'inviati', SCADUTO: 'scaduti', ACCETTATO: 'accettati' }[String(f.stato || '').toUpperCase()];
@@ -459,6 +467,9 @@
     else if (nome === 'persone') { const f = S.filtroPersone; S.filtroPersone = null; Persone.vista(pagina, a1 || '', a2 ? decodeURIComponent(a2) : '', f); }
     else if (nome === 'mezzi') { const f = S.filtroMezzi; S.filtroMezzi = null; Mezzi.vista(pagina, a1 || '', a2 ? decodeURIComponent(a2) : '', f); }
     else if (nome === 'collaboratori') { const f = S.filtroCollaboratori; S.filtroCollaboratori = null; Collaboratori.vista(pagina, a1 || '', a2 ? decodeURIComponent(a2) : '', f); }
+    // Fase 7: WhatsApp e comunicazioni, Portale clienti.
+    else if (nome === 'comunicazioni') { const f = S.filtroComunicazioni; S.filtroComunicazioni = null; Comunicazioni.vista(pagina, a1 || '', a2 || '', f); }
+    else if (nome === 'portale') { const f = S.filtroPortale; S.filtroPortale = null; Portale.vista(pagina, a1 || '', a2 || '', f); }
     else vistaDashboard(pagina);
   }
 
@@ -510,7 +521,9 @@
     const esterno = eEsterno();
     R.vociMenu(perm(), esterno).forEach(v => {
       const n = v.modulo === 'fatturazione' && S.caricato ? clientiDaFatturare() : (v.modulo === 'documenti' || v.modulo === 'ticket') && S.caricato ? numerinoFase5(v.modulo)
-        : (v.modulo === 'persone' || v.modulo === 'mezzi' || v.modulo === 'collaboratori') && S.caricato && !esterno ? numerinoFase6(v.modulo) : 0;
+        : (v.modulo === 'persone' || v.modulo === 'mezzi' || v.modulo === 'collaboratori') && S.caricato && !esterno ? numerinoFase6(v.modulo)
+          // Fase 7 (§11.1): da mandare oggi più preparati; da guardare.
+          : (v.modulo === 'comunicazioni' || v.modulo === 'portale') && S.caricato ? K7.numerino(S.dash && S.dash.numeri, v.modulo) : 0;
       const sua = attiva === v.modulo;
       const nomeV = window.WisperRegolePersone.nomeVoce(v, esterno);
       aggiungi(voci, [h('a', {
@@ -519,6 +532,7 @@
       }, icona(v.icona, 22, 2.2), h('span', { class: 'lab' }, nomeV), n ? h('span', { class: 'num-v', 'aria-label': n + ' da guardare' }, String(n)) : null)]);
     });
     disegnaChi();
+    disegnaCampanella();
     aggiornaStatoServer();
     $('#richiudi .lab').textContent = S.latoChiuso ? 'Apri il menu' : 'Richiudi il menu';
     $('#richiudi').setAttribute('data-nome', S.latoChiuso ? 'Apri il menu' : 'Richiudi il menu');
@@ -549,6 +563,24 @@
   }
 
   /** Fase 6: l'utente è un collaboratore esterno (ruolo esterno, legato al suo fornitore). */
+  /**
+   * Fase 7 (§3.16, §12): la campanella in fondo al menu, sopra il nome, col numero delle notifiche nuove.
+   * Le notifiche sono di tutti (ognuno le sue): si apre Comunicazioni › Notifiche.
+   */
+  function disegnaCampanella() {
+    const b = $('#campanella');
+    if (!b) return;
+    const dentro = (S.entrato && S.caricato) || S.esempio;
+    b.classList.toggle('nascosto', !dentro);
+    if (!dentro) return;
+    const n = Comunicazioni.nuove();
+    const sua = percorso() === 'comunicazioni/notifiche';
+    b.classList.toggle('attiva', sua);
+    b.setAttribute('data-nome', 'Notifiche' + (n ? ' · ' + n + ' nuove' : ''));
+    aggiungi(svuota(b), [icona('campana', 22, 2.2), h('span', { class: 'lab' }, 'Notifiche'), n ? h('span', { class: 'num-v', 'aria-label': n + ' nuove' }, String(n)) : null]);
+  }
+  $('#campanella').addEventListener('click', () => vai('#comunicazioni/notifiche'));
+
   function eEsterno() {
     return !!(S.io && S.io.utente && (S.io.utente.ruolo === 'esterno' || (S.io.interfaccia && S.io.interfaccia.esterno)));
   }
@@ -836,7 +868,9 @@
       ticket: 'chiaveInglese', intervento: 'calendario', scadenza: 'bandiera', documento: 'file', contratto: 'contratto', spazio: 'disco', copia: 'disco',
       // fase 6
       assenza: 'valigia', persona: 'persona', qualifica: 'libro', visita: 'calendario', mezzo: 'furgone', strumento: 'misura', prestito: 'misura',
-      guasto: 'allarme', collaboratore: 'collaboratori', incarico: 'collaboratori' }[v.tipo] ||
+      guasto: 'allarme', collaboratore: 'collaboratori', incarico: 'collaboratori',
+      // fase 7
+      portale: 'globo', messaggio: 'fumetto', pagamento: 'fatturazione' }[v.tipo] ||
       ({ urgente: 'allarme', attenzione: 'calendario', soldi: 'fatturazione' }[v.gravita] || 'lista');
   }
 
@@ -895,6 +929,15 @@
         box5(nt.urgenti, 'urgenti', () => vaiA({ pagina: 'tickets', filtro: { segmento: 'aperti', priorita: 'urgente' } }), true),
         box5(nt.interventiOggi, nt.interventiOggi === 1 ? 'intervento oggi' : 'interventi oggi', () => vaiA({ pagina: 'calendario', filtro: { giorno: C.oggiIso() } })),
         box5(ns.vicine !== undefined ? ns.vicine : (ns.scadute || 0) + (ns.entro || 0), 'scadenze vicine', () => (puo('documenti') ? vaiA({ pagina: 'documenti', filtro: { segmento: 'scadenze' } }) : vai('#ticket/programmati')), (ns.scadute || 0) > 0))]);
+    }
+
+    // Fase 7 (§11.1): Dal portale (da guardare) e Da mandare oggi, toccabili; il collaboratore solo Da mandare oggi (i suoi).
+    const n7 = (S.dash && S.dash.numeri) || {};
+    if ((n7.portale && puo('portale')) || (n7.comunicazioni && puo('comunicazioni'))) {
+      const box7 = (quanti, che, fn) => h('button', { type: 'button', class: 'num-box', onclick: fn }, h('b', null, String(quanti || 0)), h('span', null, che));
+      aggiungi(pagina, [h('div', { class: 'quattro-num due-num' },
+        n7.portale && puo('portale') ? box7(n7.portale.daGuardare, 'dal portale', () => vaiA({ pagina: 'portale', filtro: { segmento: 'daguardare' } })) : null,
+        n7.comunicazioni && puo('comunicazioni') ? box7(n7.comunicazioni.daMandareOggi, 'da mandare oggi', () => vaiA({ pagina: 'comunicazioni', filtro: { segmento: 'damandare' } })) : null)]);
     }
 
     // Fase 4 (§13.6): quattro riquadri dei soldi per chi vede fatture o banche: Da fatturare · Da incassare · Scaduto · Nel conto.
@@ -1183,6 +1226,8 @@
     const corpo = h('div', { class: 'corpo' },
       h('div', { class: 'alto' }, h('span', { class: 'numero' }, r.id || 'Rapportino'), stato(r.stato, true), tondo('chiudi', 'Chiudi', () => chiudiPannello(), 'piccolo')),
       passi(r.stato),
+      // Fase 7 (§12.6): Da firmare nel portale o Nel portale, col visto.
+      r.portale && r.portale.pubblicato && Portale ? h('div', { class: 'pillole-testa' }, Portale.pillola(r.portale)) : null,
       // Fase 4 (§15.2): la pillola della fattura in cui sta, col collegamento (solo per chi vede le fatture).
       r.fattura ? h('button', { type: 'button', class: 'pill ' + (r.fattura.stato === 'emessa' ? 'p-blu' : 'p-grigio') + ' pill-fattura', title: 'Apri', onclick: () => apriSuaFattura(r) }, icona('fatturazione', 14, 2.2), r.fattura.etichetta) : null,
       // Fase 5: il ticket di cui è il rapportino (apre il ticket) e "Nel contratto" / "Non si fattura".
@@ -1203,7 +1248,9 @@
       soldi() ? h('div', { class: 'conto' }, righeDelConto(r),
         h('div', { class: 'tot' }, h('span', null, 'Totale'), h('span', null, C.euro(r.totale)))) : null,
       r.firma ? h('div', { class: 'firma-box' }, h('img', { src: '/file/' + r.firma.id, alt: 'Firma del cliente' }),
-        h('div', null, h('b', null, r.firmatario || 'Firmato'), h('span', { class: 'tenue' }, r.firmatoIl ? 'firmato il ' + C.dataOra(r.firmatoIl).replace(' ', ' alle ') : 'firmato'))) : null,
+        h('div', null, h('b', null, r.firmatario || 'Firmato'), h('span', { class: 'tenue' }, r.firmatoIl ? 'firmato il ' + C.dataOra(r.firmatoIl).replace(' ', ' alle ') : 'firmato'),
+          // Fase 7 (§3.9): sotto la firma "Firmato nel portale da Roberto Ferretti · 22/10/2026 10:15".
+          r.firmaModo === 'portale' ? h('span', { class: 'tenue' }, 'Firmato nel portale da ' + (r.firmatario || r.firmaReferente || '') + (r.firmatoIl ? ' · ' + C.dataOra(r.firmatoIl) : '')) : null)) : null,
       (r.foto || []).length ? h('div', null, h('div', { class: 'etichetta', style: { marginBottom: '8px' } }, 'Scontrini'),
         h('div', { class: 'miniature' }, r.foto.map(f => h('a', { href: '#', title: 'Apri lo scontrino', onclick: e => { e.preventDefault(); apriFile(f); } }, h('img', { src: '/file/' + f.id, alt: 'Scontrino' }))))) : null,
       r.luogo ? h('div', null, h('div', { class: 'etichetta' }, 'Luogo'), h('div', null, r.luogo)) : null,
@@ -1226,6 +1273,10 @@
       // Fase 5 (§3.3): legare un rapportino scritto dalla strada solita a un ticket, o toglierlo.
       scrive && puo('ticket') && r.id && r.stato !== 'FATTURATO' && !r.idTicket && !r.fattura ? { testo: 'Lega a un ticket', fn: () => legaATicket(r) } : null,
       scrive && r.idTicket && r.stato !== 'FATTURATO' && !r.fattura ? { testo: 'Togli dal ticket', fn: () => togliDalTicket(r) } : null,
+      // Fase 7 (§3.9, §8.2): far firmare a distanza un rapportino in bozza; pubblicare un firmato; togliere.
+      Portale && Portale.puoPubblicare('rapportino') && r.id && !(r.portale && r.portale.pubblicato) && (r.stato === 'BOZZA' || bloccato) ? { testo: r.stato === 'BOZZA' ? 'Fallo firmare nel portale' : 'Pubblica nel portale',
+        fn: async () => { const x = await Portale.pubblica('rapportino', r.id, { idCliente: r.idCliente, nomeCliente: r.cliente, titolo: 'Rapportino ' + r.id + ' del ' + C.data(r.data), bozza: r.stato === 'BOZZA', daFirmare: r.stato === 'BOZZA' }); if (x) { await rileggiRapportini(); disegnaPannello(); } } } : null,
+      Portale && Portale.puoPubblicare('rapportino') && r.portale && r.portale.pubblicato ? { testo: 'Togli dal portale', fn: () => Portale.togli(r.portale.pubblicazione || { tipo: 'rapportino', rif: r.id, idCliente: r.idCliente }, async () => { await rileggiRapportini(); disegnaPannello(); }) } : null,
       scrive && r.stato === 'BOZZA' ? '-' : null,
       scrive && r.stato === 'BOZZA' ? { testo: 'Elimina', fn: () => annulla(r), pericolo: true } : null,
     ].filter(Boolean);
@@ -2022,6 +2073,12 @@
   W.Mezzi = Mezzi;
   const Collaboratori = window.WisperCollaboratori(W);
   W.Collaboratori = Collaboratori;
+  // Fase 7: WhatsApp e comunicazioni, Portale clienti (le altre pagine usano il Messaggio, Pubblica e Togli dal portale).
+  W.disegnaCampanella = () => disegnaCampanella();
+  const Comunicazioni = window.WisperComunicazioni(W);
+  W.Comunicazioni = Comunicazioni;
+  const Portale = window.WisperPortale(W);
+  W.Portale = Portale;
 
   /**
    * L'esportazione per Excel (§12.13, §13.9, §14.14): il server prepara il CSV coi
@@ -2110,6 +2167,8 @@
     const veli = document.querySelectorAll('.velo');
     if (veli.length) { const v = veli[veli.length - 1]; if (v.chiudi) v.chiudi(); else v.remove(); } else if (S.aperto) chiudiPannello();
     else if (document.querySelector('.pannello-f6')) Persone.chiudiPannello();
+    else if (document.querySelector('.pannello-com')) Comunicazioni.chiudiPannello();
+    else if (document.querySelector('.pannello-file')) Portale.chiudiPannello();
     else if (document.querySelector('.pannello-doc')) Archivio.chiudiPannello();
     else if (document.querySelector('.pannello-ticket')) Ticket.chiudiPannello();
     else if (document.querySelector('.pannello-contratto')) Ticket.chiudiContrattoPannello();
