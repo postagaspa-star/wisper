@@ -24,6 +24,23 @@
 
   const meseDiOggi = () => C.oggiIso().slice(0, 7);
 
+  // Un numero da scrivere in un campo da modificare: la virgola per i decimali e NIENTE punto
+  // delle migliaia. Con C.numero un budget di 2500 diventava "2.500", che C.num rilegge come 2,5:
+  // salvato senza toccarlo, il budget passava da 2.500 € a 2,50 €.
+  function numeroCampo(n) {
+    if (n === null || n === undefined || n === '') return '';
+    const x = C.num(n);
+    if (!isFinite(x)) return '';
+    return String(Math.round(x * 100) / 100).replace('.', ',');
+  }
+
+  // Un numero scritto a mano nei campi della commessa: "2.500" (punto delle migliaia, come lo
+  // scrive chiunque) vale 2500, come sul telefono; il resto come C.numONull.
+  function leggiCampo(testo) {
+    const s = String(testo === null || testo === undefined ? '' : testo).trim().replace(/\s/g, '');
+    return C.numONull(/^\d{1,3}(\.\d{3})+(,\d+)?$/.test(s) ? s.replace(/\./g, '') : s);
+  }
+
   const S = {
     configurato: false,
     caricato: false,
@@ -1062,10 +1079,10 @@
       data: h('input', { type: 'date', value: r.data }),
       ricerca: h('input', { type: 'search', placeholder: 'Scrivi il nome', 'aria-label': 'Cerca il cliente' }),
       nuovaCommessa: h('input', { type: 'text', placeholder: 'Come la chiami tu' }),
-      km: h('input', { type: 'text', inputmode: 'decimal', value: r.km !== '' && r.km !== null && r.km !== undefined && (esistente || C.num(r.km)) ? C.numero(r.km) : '' }),
-      tariffa: h('input', { type: 'text', inputmode: 'decimal', value: r.tariffa ? C.numero(r.tariffa) : '' }),
+      km: h('input', { type: 'text', inputmode: 'decimal', value: r.km !== '' && r.km !== null && r.km !== undefined && (esistente || C.num(r.km)) ? numeroCampo(r.km) : '' }),
+      tariffa: h('input', { type: 'text', inputmode: 'decimal', value: r.tariffa ? numeroCampo(r.tariffa) : '' }),
       descrizione: h('textarea', { rows: 5 }),
-      spese: h('input', { type: 'text', inputmode: 'decimal', value: C.num(r.spese) ? C.numero(r.spese) : '' }),
+      spese: h('input', { type: 'text', inputmode: 'decimal', value: C.num(r.spese) ? numeroCampo(r.spese) : '' }),
       noteSpese: h('input', { type: 'text', value: r.noteSpese || '' }),
       luogo: h('input', { type: 'text', value: r.luogo || '' }),
       ticket: h('input', { type: 'text', value: r.ticket || '' }),
@@ -1094,7 +1111,7 @@
     function proponiTariffa() {
       if (m.tariffaToccata) return;
       const proposta = C.tariffaProposta(clienteScelto(), S.rapportini, commessa(m.idCommessa));
-      v.tariffa.value = proposta ? C.numero(proposta) : '';
+      v.tariffa.value = proposta ? numeroCampo(proposta) : '';
     }
 
     function scegliCliente(c, nuovo) {
@@ -1108,7 +1125,7 @@
       delete errori.cliente;
       if (!m.tariffaToccata) {
         const proposta = C.tariffaProposta(c, S.rapportini, null);
-        v.tariffa.value = proposta ? C.numero(proposta) : '';
+        v.tariffa.value = proposta ? numeroCampo(proposta) : '';
       }
       disegnaPerChi();
       disegnaKm();
@@ -1192,7 +1209,7 @@
           ultimi !== null ? h('button', { type: 'button', class: 'pillola', onclick: () => impostaKm(ultimi) }, 'Ultima volta · ' + C.numero(ultimi) + ' km') : null,
           h('button', { type: 'button', class: 'pillola', onclick: () => impostaKm(0) }, 'Senza auto'))]);
     }
-    function impostaKm(n) { v.km.value = C.numero(n); if (errori.km) { delete errori.km; disegnaKm(); } aggiornaConto(); }
+    function impostaKm(n) { v.km.value = numeroCampo(n); if (errori.km) { delete errori.km; disegnaKm(); } aggiornaConto(); }
 
     function disegnaTariffa() {
       const regole = regoleAttuali();
@@ -1245,7 +1262,7 @@
         km: C.num(v.km.value),
         spese: C.num(v.spese.value),
         noteSpese: v.noteSpese.value.trim(),
-        tariffa: C.numONull(v.tariffa.value),
+        tariffa: leggiCampo(v.tariffa.value),
         noteInterne: v.noteInterne.value.trim(),
       };
     }
@@ -1585,12 +1602,12 @@
       indirizzo: h('input', { type: 'text', value: m.indirizzo || '' }),
       inizio: h('input', { type: 'date', value: m.inizio || (esistente ? '' : C.oggiIso()) }),
       fine: h('input', { type: 'date', value: m.finePrevista || '' }),
-      budgetOre: h('input', { type: 'text', inputmode: 'decimal', value: m.budgetOre ? C.numero(m.budgetOre) : '' }),
-      prezzoOrario: h('input', { type: 'text', inputmode: 'decimal', value: m.prezzoOrario ? C.numero(m.prezzoOrario) : '' }),
-      budgetEuro: h('input', { type: 'text', inputmode: 'decimal', value: m.budgetEuro ? C.numero(m.budgetEuro) : '' }),
-      costoOrario: h('input', { type: 'text', inputmode: 'decimal', value: m.costoOrario ? C.numero(m.costoOrario) : '' }),
+      budgetOre: h('input', { type: 'text', inputmode: 'decimal', value: m.budgetOre ? numeroCampo(m.budgetOre) : '' }),
+      prezzoOrario: h('input', { type: 'text', inputmode: 'decimal', value: m.prezzoOrario ? numeroCampo(m.prezzoOrario) : '' }),
+      budgetEuro: h('input', { type: 'text', inputmode: 'decimal', value: m.budgetEuro ? numeroCampo(m.budgetEuro) : '' }),
+      costoOrario: h('input', { type: 'text', inputmode: 'decimal', value: m.costoOrario ? numeroCampo(m.costoOrario) : '' }),
       // Vuoto = quello delle impostazioni, che si vede in grigio.
-      euroKm: h('input', { type: 'text', inputmode: 'decimal', value: m.euroKm !== null && m.euroKm !== undefined ? C.numero(m.euroKm) : '', placeholder: C.numero(C.num(S.ana.impostazioni.EURO_KM)) }),
+      euroKm: h('input', { type: 'text', inputmode: 'decimal', value: m.euroKm !== null && m.euroKm !== undefined ? numeroCampo(m.euroKm) : '', placeholder: C.numero(C.num(S.ana.impostazioni.EURO_KM)) }),
       note: h('textarea', { rows: 3 }),
     };
     v.note.value = m.note || '';
@@ -1605,21 +1622,21 @@
     const aggiornaFissi = () => {
       const c = clienteSel();
       v.prezzoOrario.disabled = fisso(c, 'tariffaFissa');
-      if (v.prezzoOrario.disabled) v.prezzoOrario.value = C.numero(c.tariffaFissa);
+      if (v.prezzoOrario.disabled) v.prezzoOrario.value = numeroCampo(c.tariffaFissa);
       v.costoOrario.disabled = fisso(c, 'costoFisso');
-      if (v.costoOrario.disabled) v.costoOrario.value = C.numero(c.costoFisso);
+      if (v.costoOrario.disabled) v.costoOrario.value = numeroCampo(c.costoFisso);
       const costoImp = C.numONull(S.ana.impostazioni.COSTO_ORARIO);
       v.costoOrario.placeholder = costoImp !== null ? C.numero(costoImp) : '';
     };
     const ricalcola = cambiato => {
-      const ore = C.numONull(v.budgetOre.value);
-      const prezzo = C.numONull(v.prezzoOrario.value);
-      const euro = C.numONull(v.budgetEuro.value);
-      if ((cambiato === 'ore' || cambiato === 'prezzo') && ore && prezzo) v.budgetEuro.value = C.numero(Math.round(ore * prezzo * 100) / 100);
-      if (cambiato === 'euro' && euro && prezzo) v.budgetOre.value = C.numero(Math.round(euro / prezzo * 10) / 10);
-      if (cambiato === 'prezzo' && !ore && euro && prezzo) v.budgetOre.value = C.numero(Math.round(euro / prezzo * 10) / 10);
-      const b = C.budgetDi({ budgetOre: C.numONull(v.budgetOre.value), budgetEuro: C.numONull(v.budgetEuro.value),
-        prezzoOrario: C.numONull(v.prezzoOrario.value), costoOrario: C.numONull(v.costoOrario.value) }, clienteSel(), S.ana.impostazioni);
+      const ore = leggiCampo(v.budgetOre.value);
+      const prezzo = leggiCampo(v.prezzoOrario.value);
+      const euro = leggiCampo(v.budgetEuro.value);
+      if ((cambiato === 'ore' || cambiato === 'prezzo') && ore && prezzo) v.budgetEuro.value = numeroCampo(Math.round(ore * prezzo * 100) / 100);
+      if (cambiato === 'euro' && euro && prezzo) v.budgetOre.value = numeroCampo(Math.round(euro / prezzo * 10) / 10);
+      if (cambiato === 'prezzo' && !ore && euro && prezzo) v.budgetOre.value = numeroCampo(Math.round(euro / prezzo * 10) / 10);
+      const b = C.budgetDi({ budgetOre: leggiCampo(v.budgetOre.value), budgetEuro: leggiCampo(v.budgetEuro.value),
+        prezzoOrario: leggiCampo(v.prezzoOrario.value), costoOrario: leggiCampo(v.costoOrario.value) }, clienteSel(), S.ana.impostazioni);
       svuota(sottoBudget);
       const pezzi = [];
       if (b.margineOrario !== null) pezzi.push('Margine ' + C.numero(b.margineOrario) + ' €/h');
@@ -1643,11 +1660,11 @@
       const campi = {
         idCliente: v.cliente.value, descrizione: v.descrizione.value.trim(), indirizzo: v.indirizzo.value.trim(),
         inizio: v.inizio.value, finePrevista: v.fine.value,
-        budgetOre: C.numONull(v.budgetOre.value), budgetEuro: C.numONull(v.budgetEuro.value), euroKm: C.numONull(v.euroKm.value), note: v.note.value.trim(),
+        budgetOre: leggiCampo(v.budgetOre.value), budgetEuro: leggiCampo(v.budgetEuro.value), euroKm: leggiCampo(v.euroKm.value), note: v.note.value.trim(),
       };
       // Prezzo e costo fissi del cliente restano sulla sua scheda, non si copiano sulla commessa.
-      if (!v.prezzoOrario.disabled) campi.prezzoOrario = C.numONull(v.prezzoOrario.value);
-      if (!v.costoOrario.disabled) campi.costoOrario = C.numONull(v.costoOrario.value);
+      if (!v.prezzoOrario.disabled) campi.prezzoOrario = leggiCampo(v.prezzoOrario.value);
+      if (!v.costoOrario.disabled) campi.costoOrario = leggiCampo(v.costoOrario.value);
       const codice = v.codice.value.trim().toUpperCase() === prossimo ? '' : v.codice.value.trim().toUpperCase();
       const ris = await lavora('Salvo la commessa', () => esistente
         ? Rete.post('/foglio/aggiornaCommessa', { id: m.id, campi })
@@ -1726,9 +1743,9 @@
       indirizzo: h('input', { type: 'text', value: c.indirizzo || '' }),
       partitaIva: h('input', { type: 'text', value: c.partitaIva || '' }),
       alias: h('input', { type: 'text', value: (c.alias || []).join(', ') }),
-      tariffaFissa: h('input', { type: 'text', inputmode: 'decimal', value: c.tariffaFissa !== null && c.tariffaFissa !== undefined ? C.numero(c.tariffaFissa) : '' }),
-      costoFisso: h('input', { type: 'text', inputmode: 'decimal', value: c.costoFisso !== null && c.costoFisso !== undefined ? C.numero(c.costoFisso) : '' }),
-      ultimaTariffa: h('input', { type: 'text', inputmode: 'decimal', value: c.ultimaTariffa ? C.numero(c.ultimaTariffa) : '' }),
+      tariffaFissa: h('input', { type: 'text', inputmode: 'decimal', value: c.tariffaFissa !== null && c.tariffaFissa !== undefined ? numeroCampo(c.tariffaFissa) : '' }),
+      costoFisso: h('input', { type: 'text', inputmode: 'decimal', value: c.costoFisso !== null && c.costoFisso !== undefined ? numeroCampo(c.costoFisso) : '' }),
+      ultimaTariffa: h('input', { type: 'text', inputmode: 'decimal', value: c.ultimaTariffa ? numeroCampo(c.ultimaTariffa) : '' }),
       note: h('textarea', { rows: 2 }),
     };
     v.note.value = c.note || '';
@@ -1746,7 +1763,7 @@
         indirizzo: v.indirizzo.value.trim(), partitaIva: v.partitaIva.value.trim(),
         alias: v.alias.value.split(',').map(s => s.trim()).filter(Boolean),
         pagaViaggio: scelte.pagaViaggio === 'SI', kmRimborsati: scelte.kmRimborsati === 'SI',
-        tariffaFissa: C.numONull(v.tariffaFissa.value), costoFisso: C.numONull(v.costoFisso.value), ultimaTariffa: C.numONull(v.ultimaTariffa.value), note: v.note.value.trim(),
+        tariffaFissa: leggiCampo(v.tariffaFissa.value), costoFisso: leggiCampo(v.costoFisso.value), ultimaTariffa: leggiCampo(v.ultimaTariffa.value), note: v.note.value.trim(),
       };
       const ris = await lavora('Salvo il cliente', async () => {
         if (esistente) return Rete.post('/foglio/aggiornaCliente', { id: c.id, campi });
@@ -1820,7 +1837,7 @@
       const inputImp = (chiave, etichetta) => {
         const valore = imp[chiave] === undefined || imp[chiave] === null ? '' : imp[chiave];
         // I numeri alla italiana: 0,76 e non 0.76.
-        campiImp[chiave] = h('input', { type: 'text', value: typeof valore === 'number' ? C.numero(valore) : String(valore) });
+        campiImp[chiave] = h('input', { type: 'text', value: typeof valore === 'number' ? numeroCampo(valore) : String(valore) });
         return campo(etichetta, campiImp[chiave]);
       };
       const salvaImp = (chiavi, conferma) => async () => {
