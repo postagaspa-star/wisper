@@ -35,7 +35,9 @@
  * finisce con /exec) e SEGRETO_PORTALE un secondo giro di porta.js (soloPortale) va a prendere le richieste della pagina
  * del portale e le passa solo al router del portale (server/src/portale/). Nessuna porta nuova. Ogni minuto il giro del
  * portale manda gli avvisi raggruppati, fa le pulizie e, ogni ora, il controllo del portale. In prova
- * WISPER_PORTALE_INDIRIZZO scrive l'indirizzo della pagina nei dati di esempio (per i link delle email).
+ * WISPER_PORTALE_INDIRIZZO scrive l'indirizzo della pagina nei dati di esempio (per i link delle email); sul NAS
+ * (02/11/2026) lo scrive in PORTALE_INDIRIZZO all'avvio se li' e' vuoto, cosi' il database nuovo della sera del cambio
+ * lo ha da solo. Se qualcuno lo cambia da Impostazioni vince il suo.
  *
  * Fase 8 (docs/gestionale/fase8.md): i controlli delle integrazioni girano da soli (il primo pochi secondi dopo
  * l'avvio, poi ogni minuto si guarda chi tocca). WISPER_VIES_URL e WISPER_AGGIORNAMENTI_URL: i servizi finti per le prove
@@ -56,7 +58,19 @@ const { PortaGoogle } = require('./porta');
 const { creaServer, creaServerIngresso, creaServerCondivisione } = require('./http');
 const { creaServerPortale } = require('./portale/ascolto');
 const { semina } = require('./prova');
-const { accendiOrologioDiProva, orologioDiProva } = require('./utili');
+const { accendiOrologioDiProva, orologioDiProva, testo } = require('./utili');
+
+/**
+ * WISPER_PORTALE_INDIRIZZO (l'indirizzo della pagina su Netlify) in PORTALE_INDIRIZZO, solo se li' e' vuoto: il .env
+ * resta dove stanno gli indirizzi, e un database nuovo (la sera del cambio importa.js riscrive le impostazioni) lo
+ * ritrova al primo avvio. Solo https: un valore sbagliato nel .env non finisce nei link per i clienti.
+ */
+function scriviIndirizzoPortale(w, valore) {
+  const indirizzo = testo(valore).replace(/\/+$/, '');
+  if (!/^https:\/\/[^\s/?#]+(\/[^\s?#]*)?$/.test(indirizzo) || testo(w.leggiImpostazioni().PORTALE_INDIRIZZO)) return false;
+  w.salvaImpostazioni({ PORTALE_INDIRIZZO: indirizzo });
+  return true;
+}
 
 function argomenti(argv) {
   const a = { porta: 8400, prova: false, dati: '', portaCondivisione: 0, portaIngresso: 0, portaPortale: 0 };
@@ -98,6 +112,7 @@ function avvia(o) {
   const wisper = new Wisper({ dati, memoria: !!o.prova, postino, prova: !!o.prova, senzaFts5 });
   if (env.WISPER_SPAZIO_FINTO_MB) wisper.spazioFintoMb = Number(env.WISPER_SPAZIO_FINTO_MB);
   if (o.prova) semina(wisper);
+  const indirizzoPortale = !o.prova && scriviIndirizzoPortale(wisper, env.WISPER_PORTALE_INDIRIZZO);
   // La porta Google: parte da sola se c'e' l'indirizzo dello script col segreto (le prove la accendono loro).
   wisper.porta = new PortaGoogle(wisper, {
     url: env.WISPER_POSTINO_URL || '',
@@ -140,7 +155,7 @@ function avvia(o) {
   const portaIngresso = Number(o.portaIngresso || env.WISPER_PORTA_INGRESSO || 0);
   const ponteDaFuori = String(env.WISPER_PONTE_DA_FUORI || '').trim().toLowerCase() === 'si';
   const ingresso = portaIngresso ? creaServerIngresso(wisper, { segretoPonte: env.SEGRETO_SERVER || '', ponteDaFuori }) : null;
-  return { wisper, server, dati, condivisione, ingresso, portaIngresso, ponteDaFuori, portale };
+  return { wisper, server, dati, condivisione, ingresso, portaIngresso, ponteDaFuori, portale, indirizzoPortale };
 }
 
 if (require.main === module) {
@@ -155,7 +170,7 @@ if (require.main === module) {
     console.log('Si usa: node server/src/avvio.js --dati <cartella> [--porta 8400] [--porta-condivisione 8401] [--porta-ingresso 8402] [--prova]');
     process.exit(a.aiuto ? 0 : 2);
   }
-  const { wisper, server, dati, condivisione, ingresso, portaIngresso, ponteDaFuori, portale } = avvia(a);
+  const { wisper, server, dati, condivisione, ingresso, portaIngresso, ponteDaFuori, portale, indirizzoPortale } = avvia(a);
   if (portale) portale.listen(a.portaPortale, () => console.log('Portale clienti di prova sulla porta ' + a.portaPortale + ' (POST come lo script del portale, §0.2 di fase7.md; le email in ' + path.join(dati, 'posta-finta', 'email') + ')'));
   if (condivisione) condivisione.listen(a.portaCondivisione, () => console.log('Link per i clienti sulla porta ' + a.portaCondivisione + ' (solo /condiviso/<token>)'));
   if (ingresso) {
@@ -168,6 +183,7 @@ if (require.main === module) {
       (a.prova ? ' · copia notturna spenta in prova' : ' · copia ogni notte alle ' + wisper.oraCopia));
     console.log('Porta Google: ' + (wisper.porta.acceso ? 'il server va a prendere il lavoro dallo script del foglio' : wisper.porta.stato().frase));
     console.log('Portale clienti: ' + (wisper.portaPortale.acceso ? 'il server va a prendere le richieste dallo script del portale' : wisper.portaPortale.stato().frase));
+    if (indirizzoPortale) console.log('Portale clienti: indirizzo della pagina scritto nelle impostazioni (da WISPER_PORTALE_INDIRIZZO)');
     if (orologioDiProva()) console.log('Orologio di prova: per il server oggi e\' ' + orologioDiProva() + ' (WISPER_OGGI_PROVA; le ore sono quelle vere)');
     // Il postino risponde? Lo si dice subito, invece di scoprirlo alla prima email o stanotte.
     if (wisper.postino.configurato() && !wisper.postino.cartella) {

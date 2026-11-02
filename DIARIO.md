@@ -11,6 +11,7 @@ mai dati veri di clienti.
 
 | Data | Versione | In breve |
 |------|----------|----------|
+| 02/11/2026 | gestionale, server 0.11.2 (non pubblicata) | [Foglio, portale ed email collegati sul Google vero](#collegati) |
 | 02/11/2026 | gestionale, server 0.11.1 (non pubblicata) | [Su Google si incolla un file solo, il resto lo fa il NAS](#senza-mani) |
 | 02/11/2026 | gestionale (non pubblicata) | [Il computer entra col telefono, inquadrando un QR](#gestionale-qr) |
 | 02/11/2026 | 0.4.0, computer 0.3.6.1 (non pubblicata) | [Un budget salvato non si divide più per mille](#budget-0-3-6-1) |
@@ -37,6 +38,28 @@ mai dati veri di clienti.
 | marzo–giugno 2026 | prima del repository | [Le prime versioni](#prima) |
 
 ---
+
+<a id="collegati"></a>
+## 2 novembre 2026 · gestionale, server 0.11.2 · Foglio, portale ed email collegati sul Google vero
+
+**Perché.** Andrea ha incollato lo script nuovo nel foglio vero, ha pubblicato lo script del portale e la pagina dei
+clienti su Netlify. Restava da collegare tutto al server sul NAS, e da controllare che funzionasse davvero.
+
+**Cosa cambia.**
+
+- Il server sul NAS parla con lo script del foglio e con quello del portale. Una richiesta come quella di un'app nuova
+  va dal foglio al NAS e torna in circa 5 secondi. Le app di oggi scrivono ancora nel foglio: il ponte si accende solo
+  la sera del cambio.
+- **Le email non partivano.** Il progetto del foglio aveva l'elenco dei permessi scritto a mano (`appsscript.json`) e
+  lì mancava quello per mandare email. Tolto l'elenco, Google ricava i permessi dal codice; dopo `autorizza` e una
+  nuova versione il postino risponde (100 email al giorno).
+- L'indirizzo della pagina del portale sta nel `.env` del NAS (`WISPER_PORTALE_INDIRIZZO`), come gli altri indirizzi.
+  All'avvio il server lo scrive nelle impostazioni se lì è vuoto: il database nuovo della sera del cambio lo ritrova
+  da solo, senza che nessuno debba riscriverlo.
+
+**Prove.** Server 630, comprese quelle nuove sull'indirizzo del portale: scritto in un database nuovo, lasciato stare
+se c'è già, ignorato se non è un indirizzo https. Sul Google vero, con richieste che non cambiano niente: lo stato della
+porta, il giro dal foglio al NAS e ritorno, la pagina del portale che mostra il nome dello studio arrivato dal NAS.
 
 <a id="senza-mani"></a>
 ## 2 novembre 2026 · gestionale, server 0.11.1 · Su Google si incolla un file solo, il resto lo fa il NAS

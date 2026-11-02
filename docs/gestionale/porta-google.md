@@ -342,6 +342,15 @@ Andrea: "non bisognava cambiare solamente Code.gs?". Da qui il suo lavoro su Goo
   Drive (`copia-drive.js --postino`, `postinoLeggi`) li prende il NAS col segreto: niente download a mano, niente codice.
 - Resta ad Andrea solo copiare una volta l'indirizzo dello script (il NAS non lo può sapere da solo): lo scrivo io in
   `WISPER_POSTINO_URL`.
+- **L'indirizzo della pagina del portale** (Netlify) sta nel `.env` come gli altri: `WISPER_PORTALE_INDIRIZZO`. Dal
+  server 0.11.2, all'avvio, va in Impostazioni › Portale clienti (`PORTALE_INDIRIZZO`) se lì è vuoto: il database nuovo
+  della sera del cambio (`importa.js` riscrive le impostazioni) lo ritrova da solo. Se qualcuno lo cambia da
+  Impostazioni vince il suo.
+- **I permessi dello script** (provato sul Google vero il 02/11/2026): il progetto del foglio aveva l'elenco dei
+  permessi scritto a mano in `appsscript.json` (`oauthScopes`) senza `script.send_mail`, e il postino rispondeva "Le
+  autorizzazioni specificate non sono sufficienti per chiamare MailApp". Rimedio: `appsscript.json` senza `oauthScopes`
+  (Google ricava i permessi dal codice), `autorizza` › Esegui con **Seleziona tutto**, poi Nuova versione del
+  deployment (la versione pubblicata si porta dietro il suo manifesto).
 
 ## 15. Da provare sul Google vero
 

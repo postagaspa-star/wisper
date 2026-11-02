@@ -238,7 +238,7 @@ test('SESSIONE_GIORNI: da 30 a 365; un dispositivo fermo da piu\' giorni esce', 
 
 test('stato del sistema: server, database, disco, lavori, collegamenti, versioni; l\'ora del NAS confrontata con quella del dispositivo', async () => {
   const st = ok(await manuel('statoSistema', { oraDispositivo: new Date(Date.now() - 6 * 60000).toISOString() }));
-  assert.deepEqual([st.server.versione, st.server.schema, st.server.node], ['0.11.1', 8, process.versions.node]);
+  assert.deepEqual([st.server.versione, st.server.schema, st.server.node], ['0.11.2', 8, process.versions.node]);
   assert.match(st.server.avvisoOra, /^L'ora del NAS è avanti di 6 minuti: i rapportini prendono l'ora del NAS$/);
   assert.ok(st.database.righe.rapportini > 0);
   assert.ok(Array.isArray(st.lavori) && st.lavori.some(l => l.nome === 'Copia'));
@@ -260,7 +260,7 @@ test('la lista di controllo: le righe dal server verdi o rosse da sole; Segna (N
   assert.equal((await manuel('segnaControllo', { chiave: 'M17.1', stato: 'fatto' })).errore, 'Questa riga la controlla il server da solo');
   assert.equal((await manuel('segnaControllo', { chiave: 'T03', stato: 'non_va' })).errore, 'Nota: scrivi cosa non va');
   const r = ok(await manuel('segnaControllo', { chiave: 'M01.1', stato: 'fatto', nota: 'controlli-finali.html: 1.204 prove, 0 fallite' }));
-  assert.deepEqual([r.riga.stato, r.riga.versione, r.riga.utente], ['fatto', '0.11.1', 'Manuel Gasparotto']);
+  assert.deepEqual([r.riga.stato, r.riga.versione, r.riga.utente], ['fatto', '0.11.2', 'Manuel Gasparotto']);
   // Il server cambia versione: la riga automatica torna "da rifare".
   s.wisper.db.esegui("UPDATE controlli_finali SET versione = '0.10.9' WHERE chiave = 'M01.1'");
   const dopo = ok(await manuel('controlliFinali'));

@@ -306,6 +306,9 @@ email, access-log notices, "send it to me"). `Session.getEffectiveUser()` needs 
 `https://www.googleapis.com/auth/userinfo.email` scope; a project whose
 `appsscript.json` lists `oauthScopes` by hand without it fails with "Le autorizzazioni
 specificate non sono sufficienti". The script then asks Drive who owns the sheet.
+A hand-written `oauthScopes` list is best removed altogether: on the real sheet it also lacked
+`script.send_mail`, and every email failed. Without the list Google derives the scopes from the code; after
+changing `appsscript.json`, run `autorizza()` (tick "Select all") and deploy a new version.
 Run `autorizza()` from the editor after pasting a new version: Google asks for any
 missing permission, and the execution log says whether the owner's email can be read
 and how many emails are left for the day. It changes nothing in the sheet.
