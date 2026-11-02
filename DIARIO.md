@@ -14,7 +14,7 @@ mai dati veri di clienti.
 | 02/11/2026 | gestionale, server 0.11.2 (non pubblicata) | [Foglio, portale ed email collegati sul Google vero](#collegati) |
 | 02/11/2026 | gestionale, server 0.11.1 (non pubblicata) | [Su Google si incolla un file solo, il resto lo fa il NAS](#senza-mani) |
 | 02/11/2026 | gestionale (non pubblicata) | [Il computer entra col telefono, inquadrando un QR](#gestionale-qr) |
-| 02/11/2026 | 0.4.0, computer 0.3.6.1 (non pubblicata) | [Un budget salvato non si divide più per mille](#budget-0-3-6-1) |
+| 02/11/2026 | 0.4.0, computer 0.3.6.1 | [Un budget salvato non si divide più per mille](#budget-0-3-6-1) |
 | 01/11/2026 | gestionale, fase 8 (non pubblicata) | [Integrazioni, impostazioni e controlli finali](#gestionale-fase-8) |
 | 01/11/2026 | gestionale, fase 7 (non pubblicata) | [WhatsApp e comunicazioni, portale clienti](#gestionale-fase-7) |
 | 31/10/2026 | gestionale, fase 6 (non pubblicata) | [Persone, mezzi e attrezzature, collaboratori esterni](#gestionale-fase-6) |
@@ -132,11 +132,15 @@ telefono non aveva il difetto. Andrea ha voluto la correzione "non con una nuova
 
 **Cosa cambia.** I campi da modificare si riempiono senza il punto delle migliaia ("2500", "0,9"), e "2.500" scritto
 a mano vale 2500, come sul telefono. Il programma resta la 0.3.6 a schermo e su GitHub resta la 0.4.0: dentro il
-numero è 0.3.6.1, perché l'aggiornamento automatico scarica solo un numero più alto. Ramo `fix/budget-computer`.
+numero è 0.3.6.1, perché l'aggiornamento automatico scarica solo un numero più alto. Il codice è sul ramo
+`feat/rapportini-manuali`, quello della 0.4.0.
 
 **Prove.** Sul foglio finto: 2.500 € salvato senza toccarlo resta 2500; 100 ore × 42 €/h scrive 4200; "3.000" scritto
 a mano salva 3000 e ricalcola 71,4 ore. Prove dei conti 23 e dello script 53 della 0.4.0, tutte passate. Costruiti APK
-(uguale, codice 8) ed exe 0.3.6.1, firmato l'elenco degli aggiornamenti; **non ancora pubblicati**.
+(uguale, codice 8, stessa firma) ed exe 0.3.6.1, firmato l'elenco degli aggiornamenti.
+
+Pubblicata il 2 novembre 2026 sera nella release [v0.4.0](https://github.com/postagaspa-star/wisper/releases/tag/v0.4.0):
+i computer con Wisper Ufficio si aggiornano da soli entro un'ora.
 
 ---
 
