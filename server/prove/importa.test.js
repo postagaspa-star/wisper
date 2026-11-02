@@ -252,3 +252,48 @@ test('importa: se qualcosa non torna esce con errore e non lascia il database', 
   // Una cartella con gia' un database non si tocca.
   assert.throws(() => importa({ foglio: p, dati }), /c'è già un database/);
 });
+
+test('la sera del cambio senza mani: il foglio in Excel e i file arrivano dal postino, col segreto e senza codice', async () => {
+  const { scaricaFoglio } = require('../strumenti/scarica-foglio');
+  const { ponte } = require('../strumenti/ponte');
+  const { Postino } = require('../src/postino');
+  const SEGRETO_POSTINO = 'segreto-del-postino-0123456789';
+  const INVITO = 'invito-della-prova-0123456789abc';
+  const server = servi(finto.contesto);
+  const url = await ascolta(server);
+  const urlFetch = finto.contesto.UrlFetchApp;
+  const scriptApp = finto.contesto.ScriptApp;
+  const cartella = cartellaNuova('senza-mani');
+  // Google dà il foglio in Excel: qui lo stesso file che fa esporta() dalle schede del finto Google.
+  const xlsx = fs.readFileSync(esporta(cartellaNuova('excel-di-google')));
+  finto.contesto.UrlFetchApp = { fetch: () => ({ getResponseCode: () => 200, getBlob: () => ({ getBytes: () => Array.from(xlsx).map(b => (b > 127 ? b - 256 : b)) }) }) };
+  finto.contesto.ScriptApp = Object.assign({}, scriptApp, { getOAuthToken: () => 'chiave-finta' });
+  // Lo script incollato ha l'invito; il segreto lo impara alla prima chiamata del NAS.
+  finto.proprieta.delete('SEGRETO_SERVER');
+  finto.contesto.INVITO_NAS = INVITO;
+  try {
+    const postino = new Postino({ url: url + '/exec', segreto: SEGRETO_POSTINO, invito: INVITO });
+    const r = await scaricaFoglio({ postino, uscita: path.join(cartella, 'foglio.xlsx') });
+    assert.equal(r.byte, xlsx.length);
+    assert.equal(finto.proprieta.get('SEGRETO_SERVER'), SEGRETO_POSTINO, 'il segreto l\'ha imparato dall\'invito');
+    const c = await copiaDrive({ postino, dati: cartella });
+    assert.deepEqual(c.falliti, []);
+    assert.equal(c.copiati, 5, 'le stesse copie che col codice');
+    const imp = importa({ foglio: r.uscita, dati: cartella, file: path.join(cartella, 'file') });
+    assert.equal(imp.ok, true, JSON.stringify(imp.errori));
+    // Il ponte lo accende il NAS, e lo rispegne (il ritorno indietro).
+    assert.equal(await ponte(postino, true), true);
+    assert.equal(finto.proprieta.get('PONTE_PORTA'), 'si');
+    assert.equal(await ponte(postino, false), false);
+    // Un postino col segreto sbagliato non legge niente.
+    const altro = new Postino({ url: url + '/exec', segreto: 'segreto-sbagliato-0123456789', invito: INVITO });
+    assert.match(String((await copiaDrive({ postino: altro, dati: cartellaNuova('sbagliato') }).catch(e => e)).message), /Segreto sbagliato/);
+  } finally {
+    finto.contesto.UrlFetchApp = urlFetch;
+    finto.contesto.ScriptApp = scriptApp;
+    finto.contesto.INVITO_NAS = '';
+    finto.proprieta.delete('SEGRETO_SERVER');
+    finto.proprieta.delete('PONTE_PORTA');
+    await chiudi(server);
+  }
+});

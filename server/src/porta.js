@@ -64,6 +64,8 @@ class PortaGoogle {
     this.url = testo(o.url);
     this.segreto = testo(o.segreto);
     this.segretoPonte = testo(o.segretoPonte);
+    // L'invito (WISPER_INVITO_SCRIPT / WISPER_INVITO_PORTALE): con quello lo script impara il segreto la prima volta.
+    this.invito = testo(o.invito);
     this.attesaS = Math.min(Math.max(o.attesaS === undefined || o.attesaS === null || isNaN(Number(o.attesaS)) ? ATTESA_S : Number(o.attesaS), 0), 55);
     this.pausaS = Math.min(Math.max(Number(o.pausaS) || 0, 0), 300);
     this.spenta = !!o.spenta;
@@ -322,6 +324,7 @@ class PortaGoogle {
    */
   corpo(azione, risposte, altro) {
     let s = '{"azione":' + JSON.stringify(azione) + ',"segreto":' + JSON.stringify(this.segreto);
+    if (this.invito) s += ',"invito":' + JSON.stringify(this.invito);
     for (const k of Object.keys(altro)) s += ',' + JSON.stringify(k) + ':' + JSON.stringify(altro[k]);
     return s + ',"risposte":[' + risposte.map(r => '{"id":' + JSON.stringify(r.id) + ',"risposta":' + r.testo + '}').join(',') + ']}';
   }

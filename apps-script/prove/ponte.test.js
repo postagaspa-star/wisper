@@ -183,3 +183,88 @@ test('controlli del mattino: avviso se il server non risponde o la copia e\' vec
   assert.equal(posta().length, prima + 1, 'al massimo una ogni 12 ore');
   proprieta.delete('SERVER_URL');
 });
+
+test('il segreto del NAS lo impara lo script da solo, con l\'invito scritto nel file incollato, una volta sola', () => {
+  const invito = 'invito-di-prova-0123456789abcdef';
+  const nuovo = 'segreto-nuovo-del-nas-0123456789';
+  const vecchio = proprieta.get('SEGRETO_SERVER');
+  proprieta.delete('SEGRETO_SERVER');
+  contesto.INVITO_NAS = invito;
+  try {
+    // Invito sbagliato o segreto troppo corto: niente.
+    assert.equal(post({ azione: 'postinoProva', segreto: nuovo, invito: 'invito-sbagliato-0123456789abcdef' }).errore, 'Segreto sbagliato');
+    assert.equal(post({ azione: 'postinoProva', segreto: 'corto', invito }).errore, 'Segreto sbagliato');
+    assert.ok(!proprieta.get('SEGRETO_SERVER'));
+    // Invito giusto: se lo tiene e risponde subito.
+    assert.equal(post({ azione: 'postinoProva', segreto: nuovo, invito }).ok, true);
+    assert.equal(proprieta.get('SEGRETO_SERVER'), nuovo);
+    // Dopo, lo stesso invito non cambia piu' niente.
+    assert.equal(post({ azione: 'postinoProva', segreto: 'un-altro-segreto-0123456789abc', invito }).errore, 'Segreto sbagliato');
+    assert.equal(proprieta.get('SEGRETO_SERVER'), nuovo);
+    assert.ok(!JSON.stringify(righe('Accessi')).includes(nuovo), 'il segreto non va nel registro');
+    // Senza invito nel file (quello del repository): niente.
+    proprieta.delete('SEGRETO_SERVER');
+    contesto.INVITO_NAS = '';
+    assert.equal(post({ azione: 'postinoProva', segreto: nuovo, invito: '' }).errore, 'Segreto sbagliato');
+    assert.ok(!proprieta.get('SEGRETO_SERVER'));
+    // Anche la porta lo impara, alla prima chiamata del NAS.
+    contesto.INVITO_NAS = invito;
+    assert.equal(post({ azione: 'portaPrendi', segreto: nuovo, invito, attesa: 0 }).ok, true);
+    assert.equal(proprieta.get('SEGRETO_SERVER'), nuovo);
+  } finally {
+    contesto.INVITO_NAS = '';
+    proprieta.set('SEGRETO_SERVER', vecchio);
+  }
+});
+
+test('postinoPonte: il ponte lo accende e lo spegne il NAS, solo col segreto', () => {
+  assert.equal(post({ azione: 'postinoPonte', acceso: true }).errore, 'Segreto sbagliato');
+  assert.ok(!proprieta.get('PONTE_PORTA'));
+  try {
+    assert.deepEqual(post({ azione: 'postinoPonte', segreto: SEGRETO, acceso: true }), { ok: true, ponte: true });
+    assert.equal(proprieta.get('PONTE_PORTA'), 'si');
+    assert.equal(contesto.ponteAttivo(), true);
+    assert.deepEqual(post({ azione: 'postinoPonte', segreto: SEGRETO, acceso: false }), { ok: true, ponte: false });
+    assert.equal(proprieta.get('PONTE_PORTA'), 'no');
+    assert.match(post({ azione: 'postinoPonte', segreto: SEGRETO, acceso: 'si' }).errore, /acceso/);
+  } finally {
+    proprieta.delete('PONTE_PORTA');
+  }
+});
+
+test('postinoLeggi: le letture di sempre per il NAS, col segreto e mai col codice', () => {
+  assert.equal(post({ azione: 'postinoLeggi', richiesta: { azione: 'anagrafiche' } }).errore, 'Segreto sbagliato');
+  assert.equal(post({ azione: 'postinoLeggi', codice: 'prova', richiesta: { azione: 'anagrafiche' } }).errore, 'Segreto sbagliato');
+  const ana = post({ azione: 'postinoLeggi', segreto: SEGRETO, richiesta: { azione: 'anagrafiche' } });
+  assert.equal(ana.ok, true);
+  assert.ok(Array.isArray(ana.clienti) && Array.isArray(ana.commesse));
+  const rap = post({ azione: 'postinoLeggi', segreto: SEGRETO, richiesta: { azione: 'rapportini', tutti: '1' } });
+  assert.equal(rap.ok, true);
+  assert.ok(Array.isArray(rap.rapportini));
+  assert.match(post({ azione: 'postinoLeggi', segreto: SEGRETO, richiesta: { azione: 'salvaRapportino' } }).errore, /Lettura sconosciuta/);
+});
+
+test('postinoEsporta: il foglio intero in Excel, come File > Scarica, con la chiave di chi lo possiede', () => {
+  const urlFetch = contesto.UrlFetchApp;
+  const scriptApp = contesto.ScriptApp;
+  const xlsx = Buffer.from('PK finto file excel');
+  let chiamata = null;
+  let codice = 200;
+  contesto.UrlFetchApp = { fetch: (url, o) => { chiamata = { url, o }; return { getResponseCode: () => codice, getBlob: () => ({ getBytes: () => Array.from(xlsx).map(b => (b > 127 ? b - 256 : b)) }) }; } };
+  contesto.ScriptApp = Object.assign({}, scriptApp, { getOAuthToken: () => 'chiave-finta' });
+  try {
+    const r = post({ azione: 'postinoEsporta', segreto: SEGRETO });
+    assert.equal(r.ok, true, r.errore);
+    assert.equal(r.nome, 'Wisper.xlsx');
+    assert.equal(r.byte, xlsx.length);
+    assert.equal(Buffer.from(r.base64, 'base64').toString(), xlsx.toString());
+    assert.equal(chiamata.url, 'https://docs.google.com/spreadsheets/d/foglio-finto/export?format=xlsx');
+    assert.equal(chiamata.o.headers.Authorization, 'Bearer chiave-finta');
+    codice = 403;
+    assert.match(post({ azione: 'postinoEsporta', segreto: SEGRETO }).errore, /non ha dato il foglio/);
+    assert.equal(post({ azione: 'postinoEsporta' }).errore, 'Segreto sbagliato');
+  } finally {
+    contesto.UrlFetchApp = urlFetch;
+    contesto.ScriptApp = scriptApp;
+  }
+});

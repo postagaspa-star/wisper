@@ -11,6 +11,7 @@ mai dati veri di clienti.
 
 | Data | Versione | In breve |
 |------|----------|----------|
+| 02/11/2026 | gestionale, server 0.11.1 (non pubblicata) | [Su Google si incolla un file solo, il resto lo fa il NAS](#senza-mani) |
 | 02/11/2026 | gestionale (non pubblicata) | [Il computer entra col telefono, inquadrando un QR](#gestionale-qr) |
 | 02/11/2026 | 0.4.0, computer 0.3.6.1 (non pubblicata) | [Un budget salvato non si divide più per mille](#budget-0-3-6-1) |
 | 01/11/2026 | gestionale, fase 8 (non pubblicata) | [Integrazioni, impostazioni e controlli finali](#gestionale-fase-8) |
@@ -36,6 +37,26 @@ mai dati veri di clienti.
 | marzo–giugno 2026 | prima del repository | [Le prime versioni](#prima) |
 
 ---
+
+<a id="senza-mani"></a>
+## 2 novembre 2026 · gestionale, server 0.11.1 · Su Google si incolla un file solo, il resto lo fa il NAS
+
+**Perché.** Le istruzioni per mettere in funzione la porta Google e la sera del cambio chiedevano ad Andrea di
+copiare segreti fra il NAS e le proprietà dello script, di lanciare programmi sul NAS, di scaricare il foglio in Excel
+e di dare il codice di Wisper. Andrea: "non bisognava cambiare solamente Code.gs? E non si può fare tutto più
+semplice?".
+
+**Cosa cambia.**
+
+- Lo script del foglio si incolla **in un file solo** (Code, Ponte e Porta insieme), con dentro un invito: alla prima
+  chiamata del NAS lo script impara da solo il segreto, e nessuno deve più scriverlo nelle proprietà.
+- Il ponte per le app vecchie (`PONTE_PORTA`) lo accende e lo spegne il NAS.
+- La sera del cambio il foglio in Excel e i file di Drive li prende il NAS col segreto: niente download a mano e
+  niente codice da dare.
+- Ad Andrea su Google resta incollare il file, fare una nuova versione e copiare una volta l'indirizzo dello script.
+
+**Prove.** Script 92, server 626, compreso il giro della sera del cambio contro il finto Google: il segreto imparato
+dall'invito, il foglio in Excel e i 5 file arrivati dal postino, l'importazione che torna, il ponte acceso e spento.
 
 <a id="gestionale-qr"></a>
 ## 2 novembre 2026 · gestionale · Il computer entra col telefono, inquadrando un QR

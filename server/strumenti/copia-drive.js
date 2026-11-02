@@ -4,6 +4,10 @@
  * script di oggi: solo letture, gli originali restano su Drive (accordo §8).
  *
  *   node server/strumenti/copia-drive.js --da <url dello script> --dati <cartella> [--codice <codice>]
+ *   node server/strumenti/copia-drive.js --postino --dati <cartella>
+ *
+ * --postino (02/11/2026, la sera del cambio sul NAS): le stesse letture passano dal postino del server
+ * (postinoLeggi, col segreto e l'invito del .env, WISPER_POSTINO_URL), senza il codice delle app.
  *
  * Il codice si puo' dare anche con la variabile WISPER_CODICE, o scriverlo
  * quando lo chiede (cosi' non resta nella cronologia dei comandi).
@@ -23,6 +27,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const readline = require('node:readline');
 const { testo, istante, adesso, sha256 } = require('../src/utili');
+const { Postino } = require('../src/postino');
 
 const CHI = { disp: 'wisper-copia-drive', dispNome: 'Server Wisper (copia dei file)', app: 'copia-drive' };
 const ATTESA_MS = 120000;
@@ -34,6 +39,8 @@ function idDaUrl(url) {
 
 /** Una lettura dallo script, come la fa Wisper Ufficio (GET con il codice); una volta si riprova. */
 async function leggi(da, codice, parametri) {
+  // Col postino del server: il segreto al posto del codice (Ponte.gs, postinoLeggi). Il postino riprova da se'.
+  if (da && typeof da.chiama === 'function') return da.chiama('postinoLeggi', { richiesta: parametri });
   const u = new URL(da);
   u.searchParams.set('codice', codice);
   for (const [k, v] of Object.entries(Object.assign({}, CHI, parametri))) u.searchParams.set(k, v);
@@ -151,8 +158,9 @@ async function copiaElenco(o, citati, salva, giaCopiato) {
 }
 
 async function copiaDrive(o) {
-  if (!o.da || !o.dati) throw new Error('Si usa: node server/strumenti/copia-drive.js --da <url dello script> --dati <cartella> [--codice <codice>]');
-  if (!o.codice) throw new Error('Manca il codice del foglio');
+  if (o.postino) o = Object.assign({}, o, { da: o.postino });
+  if (!o.da || !o.dati) throw new Error('Si usa: node server/strumenti/copia-drive.js --da <url dello script> --dati <cartella> [--codice <codice>], oppure --postino --dati <cartella>');
+  if (!o.codice && !o.postino) throw new Error('Manca il codice del foglio');
   fs.mkdirSync(o.dati, { recursive: true });
   return fs.existsSync(path.join(o.dati, 'wisper.db')) ? copiaNelDatabase(o) : copiaPrima(o);
 }
@@ -173,9 +181,10 @@ if (require.main === module) {
       if (argv[i] === '--da') a.da = argv[++i];
       else if (argv[i] === '--dati') a.dati = path.resolve(argv[++i]);
       else if (argv[i] === '--codice') a.codice = argv[++i];
+      else if (argv[i] === '--postino') a.postino = Postino.dalEnv(process.env);
       else throw new Error('Non conosco "' + argv[i] + '"');
     }
-    a.codice = a.codice || process.env.WISPER_CODICE || (a.da && a.dati ? await chiediCodice() : '');
+    if (!a.postino) a.codice = a.codice || process.env.WISPER_CODICE || (a.da && a.dati ? await chiediCodice() : '');
     const r = await copiaDrive(a);
     console.log('Copiati ' + r.copiati + ' file, ' + r.gia + ' c\'erano già, ' + r.falliti.length + ' non riusciti.');
     r.falliti.forEach(f => console.log('  ' + f.tipo + ' ' + f.id + ': ' + f.errore));

@@ -35,6 +35,9 @@ sbagliato"}`.
 | `postinoFoglio` | `scheda` (`Rapportini`, `Clienti`, `Commesse`, `Impostazioni`), `intestazioni` `[..]`, `righe` `[[..]]` | `{ok, righe}`. Sostituisce il contenuto della scheda (intestazioni comprese), scrivendo partite IVA, telefoni e codici come testo. Solo a ponte acceso. |
 | `postinoProva` | — | `{ok, quando, rimaste}` |
 | `postinoImpronta` | `cartella`, `nome` (come `postinoCopia`) | `{ok, byte, md5}` della copia su Drive (non quella nel cestino), con `Utilities.computeDigest`. Solo lettura. Fase 8: la prova automatica delle copie (fase8.md §9.10). |
+| `postinoLeggi` | `richiesta: {azione: rapportini | file | documenti | anagrafiche, ...}` | La stessa risposta di `doGet`, col segreto al posto del codice delle app. Solo letture. 02/11/2026: `copia-drive.js --postino` la sera del cambio. |
+| `postinoEsporta` | — | `{ok, nome, byte, base64}`: il foglio intero in Excel, lo stesso file di File › Scarica › Microsoft Excel (export di Google con la chiave del proprietario). 02/11/2026: `scarica-foglio.js` per `importa.js`. |
+| `postinoPonte` | `acceso: true | false` | Scrive `PONTE_PORTA` = `si` / `no` e torna `{ok, ponte}`. 02/11/2026: `strumenti/ponte.js si` la sera del cambio, `no` per tornare indietro. |
 
 ## I controlli del mattino
 

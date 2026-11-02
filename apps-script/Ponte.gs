@@ -101,6 +101,8 @@ function segretoUguale(a, b) {
 
 function postino(d) {
   var chi = { azione: testo(d.azione).slice(0, 40), disp: 'server-nas', dispNome: 'Server Wisper (NAS)', app: 'postino' };
+  // La prima volta il segreto arriva col NAS stesso, se porta l'invito giusto (Porta.gs).
+  portaImparaSegreto(d);
   var giusto = PropertiesService.getScriptProperties().getProperty(PROP_SEGRETO_SERVER);
   if (!giusto || !segretoUguale(d.segreto || '', giusto)) {
     registraAccesso(chi, 'rifiutato');
@@ -113,6 +115,9 @@ function postino(d) {
       case 'postinoCopia': risposta = postinoCopia(d); break;
       case 'postinoFoglio': risposta = postinoFoglio(d); break;
       case 'postinoImpronta': risposta = postinoImpronta(d); break;
+      case 'postinoPonte': risposta = postinoPonte(d); break;
+      case 'postinoLeggi': risposta = postinoLeggi(d); break;
+      case 'postinoEsporta': risposta = postinoEsporta(); break;
       case 'postinoProva': risposta = { ok: true, quando: quando(new Date()), rimaste: MailApp.getRemainingDailyQuota() }; break;
       default: throw new Error('Azione sconosciuta: ' + d.azione);
     }
@@ -161,6 +166,50 @@ function postinoCopia(d) {
   var file = dove.createFile(Utilities.newBlob(byte, d.mime || 'application/octet-stream', nome));
   PropertiesService.getScriptProperties().setProperty('ULTIMA_COPIA_' + cartella.toUpperCase(), String(new Date().getTime()));
   return { ok: true, id: file.getId() };
+}
+
+/**
+ * Il ponte acceso o spento dal NAS (02/11/2026): la sera del cambio lo accende il
+ * server (server/strumenti/ponte.js) invece di Andrea a mano nelle proprieta'
+ * dello script. {acceso: true|false} scrive PONTE_PORTA = si / no.
+ */
+function postinoPonte(d) {
+  if (d.acceso !== true && d.acceso !== false) throw new Error('Serve acceso: true o false');
+  PropertiesService.getScriptProperties().setProperty('PONTE_PORTA', d.acceso ? 'si' : 'no');
+  return { ok: true, ponte: pontePorta() };
+}
+
+/**
+ * Le letture di sempre (le stesse di doGet) per il server, col segreto invece del
+ * codice delle app: la sera del cambio il NAS copia i file di Drive da solo
+ * (server/strumenti/copia-drive.js --postino), senza che nessuno debba dargli il
+ * codice. Solo letture.
+ */
+function postinoLeggi(d) {
+  var p = d.richiesta || {};
+  switch (p.azione) {
+    case 'rapportini': return { ok: true, rapportini: leggiRapportini(p.da, p.a, p.tutti === '1') };
+    case 'file': return { ok: true, file: leggiFile(p.id) };
+    case 'documenti': return documentiCommessa(p.idCommessa);
+    case 'anagrafiche': return rispostaAnagrafiche();
+    default: throw new Error('Lettura sconosciuta: ' + p.azione);
+  }
+}
+
+/**
+ * Il foglio intero in Excel, lo stesso file di File > Scarica > Microsoft Excel:
+ * la sera del cambio lo prende il NAS (server/strumenti/scarica-foglio.js) e
+ * importa.js lo legge come sempre. Solo lettura.
+ */
+function postinoEsporta() {
+  var foglio = SpreadsheetApp.getActiveSpreadsheet();
+  var r = UrlFetchApp.fetch('https://docs.google.com/spreadsheets/d/' + foglio.getId() + '/export?format=xlsx', {
+    headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() },
+    muteHttpExceptions: true
+  });
+  if (r.getResponseCode() !== 200) throw new Error('Google non ha dato il foglio in Excel (' + r.getResponseCode() + ')');
+  var byte = r.getBlob().getBytes();
+  return { ok: true, nome: foglio.getName() + '.xlsx', byte: byte.length, base64: Utilities.base64Encode(byte) };
 }
 
 /**

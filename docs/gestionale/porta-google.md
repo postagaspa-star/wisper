@@ -327,6 +327,22 @@ collegato` (mancano indirizzo o segreto). La Dashboard di Amministrazione mostra
   "Non usare Google" (solo server di casa) sapendo che la password viaggia sulla rete di casa senza cifratura. Da migliorare
   in futuro con una chiave del server conosciuta dall'app dopo il primo accesso.
 
+## 14ter. Niente proprietà a mano (02/11/2026)
+
+Andrea: "non bisognava cambiare solamente Code.gs?". Da qui il suo lavoro su Google è incollare **un file solo**
+(Code.gs + Ponte.gs + Porta.gs uniti, con l'invito scritto dentro) e fare una nuova versione del deployment:
+
+- **Il segreto**: nel file incollato `INVITO_NAS` è già scritto (nel repository resta vuoto); il NAS ha lo stesso invito
+  in `WISPER_INVITO_SCRIPT` e lo manda con ogni chiamata, insieme al segreto. La prima chiamata con l'invito giusto, se
+  `SEGRETO_SERVER` non c'è ancora, la scrive lo script da solo (`portaImparaSegreto`, in Porta.gs, chiamata da `portaNas`
+  e da `postino`). Dopo, l'invito non conta più: un altro con lo stesso invito e un altro segreto riceve "Segreto
+  sbagliato". Per lo script del portale lo stesso, con `WISPER_INVITO_PORTALE`.
+- **Il ponte**: `PONTE_PORTA` lo scrive il NAS (`postinoPonte`, `node strumenti/ponte.js si|no`).
+- **I dati della sera del cambio**: il foglio in Excel (`postinoEsporta`, `strumenti/scarica-foglio.js`) e i file di
+  Drive (`copia-drive.js --postino`, `postinoLeggi`) li prende il NAS col segreto: niente download a mano, niente codice.
+- Resta ad Andrea solo copiare una volta l'indirizzo dello script (il NAS non lo può sapere da solo): lo scrivo io in
+  `WISPER_POSTINO_URL`.
+
 ## 15. Da provare sul Google vero
 
 - che Google tenga aperta una chiamata `portaPrendi` per 45 s senza chiuderla prima (se la chiude, `WISPER_PORTA_ATTESA`

@@ -101,6 +101,7 @@ function comeFogli(v) {
 const fogli = new Map();
 const Cartella = {
   getId: () => 'foglio-finto',
+  getName: () => 'Wisper',
   getSheetByName: n => fogli.get(n) || null,
   insertSheet: n => { const f = new Foglio(n); fogli.set(n, f); return f; },
   getSheets: () => Array.from(fogli.values()),

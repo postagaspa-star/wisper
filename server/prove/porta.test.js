@@ -309,3 +309,12 @@ test('la prova a tempo reale: quanto aspetta un\'app che passa da Google (finto 
     ' ms; da casa diretto: mediana ' + mediana(casa) + ' ms; in coda sullo script in media ' + st.attesaInCodaMs + ' ms, lavoro del server ' + st.lavoroMs + ' ms');
   assert.ok(mediana(tempi) < 2000, 'mediana ' + mediana(tempi) + ' ms');
 });
+
+test('l\'invito: la porta lo manda insieme al segreto (lo script lo usa la prima volta: apps-script/prove/ponte.test.js)', () => {
+  const conInvito = new PortaGoogle(s.wisper, { url: script, segreto: 'segreto-0123456789abcdef', invito: 'invito-0123456789abcdefghij' });
+  const d = JSON.parse(conInvito.corpo('portaPrendi', [], { attesa: 1 }));
+  assert.equal(d.segreto, 'segreto-0123456789abcdef');
+  assert.equal(d.invito, 'invito-0123456789abcdefghij');
+  const senza = new PortaGoogle(s.wisper, { url: script, segreto: 'segreto-0123456789abcdef' });
+  assert.equal('invito' in JSON.parse(senza.corpo('portaPrendi', [], {})), false, 'senza WISPER_INVITO_SCRIPT niente invito');
+});

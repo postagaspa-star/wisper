@@ -88,6 +88,8 @@ function avvia(o) {
   const postino = new Postino({
     url: env.WISPER_POSTINO_URL || '',
     segreto: env.WISPER_POSTINO_SEGRETO || env.SEGRETO_SERVER || '',
+    // L'invito scritto nel file che Andrea incolla: lo script impara il segreto da solo (Porta.gs).
+    invito: env.WISPER_INVITO_SCRIPT || '',
     // In prova, senza un postino vero, le email e le copie vanno su disco.
     cartella: o.prova && !env.WISPER_POSTINO_URL ? path.join(dati, 'posta-finta') : '',
   });
@@ -101,6 +103,7 @@ function avvia(o) {
     url: env.WISPER_POSTINO_URL || '',
     segreto: env.WISPER_POSTINO_SEGRETO || env.SEGRETO_SERVER || '',
     segretoPonte: env.SEGRETO_SERVER || '',
+    invito: env.WISPER_INVITO_SCRIPT || '',
     attesaS: env.WISPER_PORTA_ATTESA === undefined || env.WISPER_PORTA_ATTESA === '' ? undefined : Number(env.WISPER_PORTA_ATTESA),
     pausaS: Number(env.WISPER_PORTA_PAUSA) || 0,
     spenta: String(env.WISPER_PORTA_GOOGLE || '').trim().toLowerCase() === 'no',
@@ -110,6 +113,7 @@ function avvia(o) {
   wisper.portaPortale = new PortaGoogle(wisper, {
     url: env.WISPER_PORTALE_URL || '',
     segreto: env.SEGRETO_PORTALE || '',
+    invito: env.WISPER_INVITO_PORTALE || '',
     soloPortale: true,
     attesaS: env.WISPER_PORTA_ATTESA === undefined || env.WISPER_PORTA_ATTESA === '' ? undefined : Number(env.WISPER_PORTA_ATTESA),
     pausaS: Number(env.WISPER_PORTA_PAUSA) || 0,

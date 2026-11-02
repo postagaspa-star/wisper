@@ -24,11 +24,18 @@ class Postino {
    * @param o.url      l'indirizzo dello script (WISPER_POSTINO_URL)
    * @param o.segreto  WISPER_POSTINO_SEGRETO (o SEGRETO_SERVER)
    * @param o.cartella il postino finto: dove scrivere invece di spedire
+   * @param o.invito   WISPER_INVITO_SCRIPT: con quello lo script impara il segreto la prima volta (Porta.gs)
    */
   constructor(o) {
     this.url = (o && o.url) || '';
     this.segreto = (o && o.segreto) || '';
     this.cartella = (o && o.cartella) || '';
+    this.invito = (o && o.invito) || '';
+  }
+
+  /** Il postino vero, dal .env del server: per gli strumenti che girano nel contenitore (copia-drive, scarica-foglio). */
+  static dalEnv(env) {
+    return new Postino({ url: env.WISPER_POSTINO_URL || '', segreto: env.WISPER_POSTINO_SEGRETO || env.SEGRETO_SERVER || '', invito: env.WISPER_INVITO_SCRIPT || '' });
   }
 
   configurato() {
@@ -45,7 +52,7 @@ class Postino {
     if (!this.configurato()) {
       throw new Error('Il postino non è collegato: mancano WISPER_POSTINO_URL e WISPER_POSTINO_SEGRETO nel .env del server');
     }
-    const dati = Object.assign({ azione, segreto: this.segreto }, corpo);
+    const dati = Object.assign({ azione, segreto: this.segreto }, this.invito ? { invito: this.invito } : {}, corpo);
     if (this.cartella) return scriviSuDisco(this.cartella, dati);
     let r;
     try {

@@ -84,6 +84,29 @@ function portaProprieta() {
   return PropertiesService.getScriptProperties().getProperties() || {};
 }
 
+/**
+ * L'invito del NAS (02/11/2026): nel file che Andrea incolla c'e' gia' scritto (qui, nel repository pubblico, resta
+ * vuoto), e il NAS ha lo stesso invito nel suo .env (WISPER_INVITO_SCRIPT, o WISPER_INVITO_PORTALE per lo script del
+ * portale). Alla prima chiamata del NAS che porta l'invito giusto, se SEGRETO_SERVER non c'e' ancora, lo script si
+ * tiene il segreto che il NAS manda: nessuna proprieta' da scrivere a mano. Dopo, l'invito non conta piu'.
+ */
+var INVITO_NAS = '';
+
+function portaImparaSegreto(d) {
+  if (!d || INVITO_NAS.length < 24) return;
+  var segreto = testo(d.segreto);
+  if (segreto.length < 16 || !segretoUguale(testo(d.invito), INVITO_NAS)) return;
+  var proprieta = PropertiesService.getScriptProperties();
+  if (proprieta.getProperty('SEGRETO_SERVER')) return;
+  var lucchetto = LockService.getScriptLock();
+  if (!lucchetto.tryLock(10000)) return;
+  try {
+    if (!proprieta.getProperty('SEGRETO_SERVER')) proprieta.setProperty('SEGRETO_SERVER', segreto);
+  } finally {
+    lucchetto.releaseLock();
+  }
+}
+
 /** Quanto aspetta l'esecuzione di un'app: PORTA_ATTESA_MS (le prove), mai oltre 25 s (le app vecchie leggono con 30 s). */
 function portaAttesaApp(p) {
   var ms = Number(p.PORTA_ATTESA_MS);
@@ -364,6 +387,7 @@ function portaCartella(crea) {
  *  - portaConsegna {risposte: [{id, risposta}]}: solo le risposte.
  */
 function portaNas(d) {
+  portaImparaSegreto(d);
   var p = portaProprieta();
   if (!p.SEGRETO_SERVER || !segretoUguale(d.segreto || '', p.SEGRETO_SERVER)) {
     registraAccesso({ azione: testo(d.azione).slice(0, 40), disp: 'server-nas', dispNome: 'Server Wisper (NAS)', app: 'porta' }, 'rifiutato');

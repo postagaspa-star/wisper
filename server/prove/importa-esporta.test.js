@@ -132,7 +132,7 @@ test('Esporta tutto: uno ZIP che Windows apre, un CSV per elenco uguale all\'esp
   }
   const leggimi = z.leggi('leggimi.txt').toString('utf8');
   assert.match(leggimi, /I file \(foto, firme, documenti\) non ci sono: stanno nella copia del NAS e in quella fuori casa\./);
-  assert.match(leggimi, /dal server 0\.11\.0/);
+  assert.match(leggimi, /dal server 0\.11\.1/);
   // Un CSV per elenco, ognuno uguale all'esportazione singola con gli stessi filtri.
   for (const [nome, cosa, filtri] of ELENCHI_ESPORTA_TUTTO.filter(x => x[1] !== 'registro')) {
     assert.ok(z.nomi.includes(nome + '.csv'), nome + '.csv nello zip');
