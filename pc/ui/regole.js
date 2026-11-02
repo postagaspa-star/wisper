@@ -824,6 +824,8 @@
     }
     if (v.tabella === 'sessioni') return dici('ha scollegato un dispositivo', nome && nome !== v.idRiga ? 'di ' + nome : '');
     if (v.tabella === 'tentativi_accesso') return dici(v.nota || 'troppe password sbagliate per', v.idRiga);
+    // Il collegamento col QR (server/src/azioni/collega.js): la riga ha il nome del computer.
+    if (v.tabella === 'collegamenti_qr') return dici('ha collegato col telefono il computer', v.idRiga);
     // La password nel registro è sempre "(cambiata)", prima e dopo: basta che ci sia.
     if (v.tabella === 'utenti' && p && d && 'password_hash' in d && cambiati.filter(c => c.campo !== 'password_hash').length === 0) return dici('ha cambiato la password di', nome);
     const attivo = cambiati.find(c => c.campo === 'attivo');

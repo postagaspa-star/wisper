@@ -348,6 +348,8 @@ fun CassettoMenu(
     onEsci: () -> Unit,
     /** Fase 6: per l'esterno il nome del suo collaboratore (la pillola "Esterno · …" e la voce "La tua scheda"). */
     esterno: String = "",
+    /** Collega un computer col QR (collega-qr.md §7); null = la voce non c'è (la visita guidata). */
+    onCollega: (() -> Unit)? = null,
 ) {
     val c = W.colori
     Column(Modifier.fillMaxSize().padding(start = 12.dp, end = 12.dp, top = 16.dp, bottom = 18.dp)) {
@@ -372,6 +374,20 @@ fun CassettoMenu(
         }
         Column(Modifier.fillMaxWidth()) {
             Box(Modifier.fillMaxWidth().height(1.dp).background(c.riga))
+            // Nel gruppo in basso, prima dello stato del collegamento e di Esci (prototipo Collega-QR.html).
+            if (onCollega != null) {
+                Row(
+                    Modifier.fillMaxWidth().padding(top = 8.dp).heightIn(min = 52.dp).clip(RoundedCornerShape(16.dp))
+                        .clickable(onClick = onCollega)
+                        .semantics { role = Role.Button }
+                        .padding(horizontal = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                ) {
+                    Icon(Icone.pc, null, tint = c.testo2, modifier = Modifier.size(22.dp))
+                    Text("Collega un computer", style = Testi.pulsanteSecondario, color = c.testo2, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
             Column(Modifier.fillMaxWidth().padding(start = 8.dp, end = 8.dp, top = 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Row(
                     Modifier.fillMaxWidth().heightIn(min = 32.dp).let { if (!collegato) it.clip(RoundedCornerShape(8.dp)).clickable(onClick = onRiprova) else it },

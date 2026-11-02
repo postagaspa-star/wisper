@@ -161,11 +161,11 @@ fun SchermataDettaglioTicket(dati: Dati, nav: Navigatore, chiave: String) {
         avvisi.mostra(avviso)
     }
 
-    val fotocamera = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { riuscito ->
-        val percorso = scattoInCorso ?: return@rememberLauncherForActivityResult
+    val fotocamera = rememberFotoSistema { riuscito ->
+        val percorso = scattoInCorso ?: return@rememberFotoSistema
         scattoInCorso = null
         val scatto = File(percorso)
-        if (!riuscito) { scatto.delete(); return@rememberLauncherForActivityResult }
+        if (!riuscito) { scatto.delete(); return@rememberFotoSistema }
         scope.launch {
             runCatching { dati.preparaFoto(Uri.fromFile(scatto)) }
                 .onSuccess { f -> dati.fase5.fotoTicket(chiaveAzioni, f); avvisi.mostra("Foto salvata sul telefono: parte appena c'è rete") }

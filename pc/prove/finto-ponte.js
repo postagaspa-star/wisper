@@ -12,6 +12,10 @@
 //     node pc/prove/finto-ponte.js [porta] --esempio
 //   poi http://localhost:8790/ ed entra con manuel@esempio.it, laura@esempio.it,
 //   marco@esempio.it o lettura@esempio.it, password "prova".
+//   Col server di prova si entra anche col telefono, come nel programma (docs/gestionale/collega-qr.md): la pagina
+//   mostra il QR (/locale/collega-qr, /locale/collega-qr-stato fatti qui come CollegaQr.cs) e il telefono, o chi fa
+//   la sua parte (pc/prove/prova-flussi-collega.js), chiama autorizzaComputer sul server di prova. WISPER_NOME_PC: il
+//   nome del computer nel QR (di base "UFFICIO-PC", un nome d'esempio).
 //
 // Fa quello che fa Ponte.cs: serve pc/ui, entra ed esce (/locale/accedi, /locale/esci)
 // tenendo per sé la chiave d'accesso, gira /server/* al server con la chiave,
@@ -62,6 +66,12 @@ const CSV_PROVA = ['Ragione sociale;P.IVA;Cod. destinatario;PEC;Città;Fax',
 // Fase 7: quello che il programma aprirebbe fuori (WhatsApp, collegamenti), per la prova dei flussi.
 const apertiFuori = [];
 const RegoleCom = require('../ui/regole-comunicazioni.js');
+// Entrare col telefono (collega-qr.md §6): le chiavi del QR in memoria, al massimo 2 vive, come CollegaQr.cs.
+const crypto = require('node:crypto');
+const RegoleColl = require('../ui/regole-collegamento.js');
+const { decifraPacchetto } = require('../../server/src/azioni/collega.js');
+const NOME_PC = process.env.WISPER_NOME_PC || 'UFFICIO-PC';
+const chiaviQr = [];
 
 // Chi è entrato. Come nel programma, la chiave resta qui: la pagina non la vede mai.
 const sessione = { token: '', email: '', studio: '', esempio: null };
@@ -125,6 +135,68 @@ async function alServerCarica(dati, q) {
   } catch (e) {
     return { ok: false, errore: 'Il server non risponde', rete: true };
   }
+}
+
+// ----------------------------------------------------------------------------- entrare col telefono (QR)
+
+/** Via le chiavi scadute: la precedente dopo 20 secondi, tutte dopo 2 minuti e 20 (come CollegaQr.cs). */
+function pulisciQr() {
+  const ora = Date.now();
+  for (let i = chiaviQr.length - 1; i >= 0; i--) {
+    const c = chiaviQr[i];
+    if (ora - c.creata > 140000 || (c.sostituita && ora - c.sostituita > 20000)) chiaviQr.splice(i, 1);
+  }
+}
+
+/** POST /locale/collega-qr: chiavi nuove; alla pagina solo il testo del QR. */
+function nuovoQr() {
+  pulisciQr();
+  const ecdh = crypto.createECDH('prime256v1');
+  ecdh.generateKeys();
+  const id = crypto.randomBytes(16);
+  chiaviQr.forEach(c => { if (!c.sostituita) c.sostituita = Date.now(); });
+  while (chiaviQr.length > 1) chiaviQr.shift();
+  chiaviQr.push({ id: id.toString('base64url'), idByte: id, ecdh, creata: Date.now(), sostituita: 0 });
+  return RegoleColl.testoQr(id.toString('base64url'), ecdh.getPublicKey(null, 'compressed').toString('base64url'), NOME_PC);
+}
+
+/** attesaComputer al server di casa, 1,5 secondi al massimo, senza chiave: null se non risponde (come Server.cs). */
+async function attesaComputer(id) {
+  try {
+    const r = await fetch(SERVER + '/exec', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(Object.assign({ azione: 'attesaComputer', id }, DISPOSITIVO)), signal: AbortSignal.timeout(1500),
+    });
+    if (r.status !== 200) return null;
+    const j = JSON.parse(await r.text());
+    return j && j.ok === true ? j : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+/** GET /locale/collega-qr-stato: attesa, lontano, rifiutato o entrato (la chiave d'accesso resta qui). */
+async function statoQr() {
+  pulisciQr();
+  const vive = chiaviQr.slice();
+  if (!vive.length) return { ok: true, stato: 'attesa' };
+  let risposte = 0;
+  for (const c of vive) {
+    const r = await attesaComputer(c.id);
+    if (!r) continue;
+    risposte++;
+    if (r.stato === 'rifiutato') { chiaviQr.splice(chiaviQr.indexOf(c), 1); return { ok: true, stato: 'rifiutato' }; }
+    if (r.stato !== 'pronto') continue;
+    let p;
+    try { p = JSON.parse(decifraPacchetto(c.ecdh.getPrivateKey(), c.idByte, r)); } catch (e) { console.log('[collega-qr] pacchetto non decifrato'); continue; }
+    if (!p || p.ok !== true || !p.token) continue;
+    sessione.token = p.token;
+    sessione.email = String((p.utente && p.utente.email) || '');
+    chiaviQr.length = 0;
+    console.log('[collega-qr] entrato col telefono come ' + ((p.utente && p.utente.ruolo) || '?') + (p.google ? ' (con la porta Google)' : ''));
+    return { ok: true, stato: 'entrato', utente: p.utente, permessi: p.permessi };
+  }
+  return { ok: true, stato: risposte ? 'attesa' : 'lontano' };
 }
 
 // ----------------------------------------------------------------------------- PDF
@@ -195,6 +267,14 @@ async function locale(nome, o) {
     case 'aggiorna': return { ok: true, aggiornamento: aggiornamento() };
     // Il file .wisper dell'email: qui la finestra di Windows non c'è.
     case 'collega-file': return { ok: false, annullato: true };
+    // Entrare col telefono: solo col server di prova (coi dati di esempio e dalla porta Google si entra con email e password).
+    case 'collega-qr':
+      if (ESEMPIO || COLL) return { ok: false, errore: 'In questa prova si entra con email e password' };
+      if (sessione.token) return { ok: false, errore: 'Sei già entrato' };
+      return { ok: true, testo: nuovoQr() };
+    case 'collega-qr-stato':
+      if (ESEMPIO || COLL) return { ok: true, stato: 'attesa' };
+      return statoQr();
     case 'riavvia': console.log('[riavvia]'); return { ok: true };
     case 'cartella-pdf': return { ok: true };
     case 'apri': return { ok: true };
@@ -292,6 +372,8 @@ http.createServer(async (rq, rs) => {
       }
       if (!entrato()) return json({ ok: false, errore: 'Accesso scaduto: entra di nuovo', accesso: false });
       const r = await alServer(rq.method, azione, u.searchParams, corpo);
+      // La ragione sociale si ricorda: la pagina di accesso la mostra anche senza essere entrati (come Ponte.cs).
+      if (azione === 'io' && r && r.ok && r.ragioneSociale) sessione.studio = r.ragioneSociale;
       return json(r, COLL && r && r.rete ? 502 : 200);
     }
     if (u.pathname.startsWith('/file/')) {

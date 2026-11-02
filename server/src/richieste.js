@@ -38,6 +38,13 @@ const AZIONI = {
   io: { libera: 'ognuno legge chi e\' e cosa puo\' fare', fn: (w, d) => w.io(d) },
   cambiaPassword: { asincrona: true, soloPost: true, libera: 'ognuno la sua password', fn: (w, d) => w.cambiaPassword(d) },
 
+  // --- collegare il computer col QR (docs/gestionale/collega-qr.md §4): ognuno collega un computer per se', coi suoi
+  // permessi. attesaComputer e' senza token (il computer non e' ancora entrato) e solo da casa (lo controlla lei); le
+  // risposte "attesa" (ogni 2 secondi) e "pronto" (la riga la scrive lei, "accedi col QR") non lasciano righe negli accessi.
+  autorizzaComputer: { scrive: true, soloPost: true, libera: 'ognuno collega un computer per se\'', fn: (w, d) => w.autorizzaComputer(d) },
+  attesaComputer: { pubblica: true, soloPost: true, registra: r => !(r && r.ok && (r.stato === 'attesa' || r.stato === 'pronto')), fn: (w, d) => w.attesaComputer(d) },
+  statoComputer: { libera: 'ognuno i computer che ha collegato lui', fn: (w, d) => w.statoComputer(d) },
+
   // --- le azioni di oggi
   anagrafiche: { libera: 'ognuno i clienti e le commesse che vede (lo decide rispostaAnagrafiche)', fn: (w, d) => w.rispostaAnagrafiche(d) },
   rapportini: legge('rapportini', 'vedere i rapportini', (w, d) => ({
@@ -451,6 +458,8 @@ const NOMI_FUNZIONI = { portale: 'Portale clienti', comunicazioni: 'WhatsApp e c
  */
 const AZIONI_ESTERNO = new Set([
   'io', 'esci', 'cambiaPassword', 'anagrafiche', 'dashboard', 'esporta',
+  // Collegare il proprio computer col QR: come entrare con email e password, che un esterno puo' fare.
+  'autorizzaComputer', 'statoComputer',
   'rapportini', 'file', 'documenti', 'salvaRapportino', 'caricaFile', 'togliFile', 'stato', 'inviaEmail', 'legaRapportino',
   'ore', 'salvaOre', 'togliOre', 'timer', 'avviaTimer', 'fermaTimer', 'statisticheOre',
   'spese', 'salvaSpesa', 'togliSpesa', 'togliFotoSpesa', 'trasferte', 'rimborsi', 'riepilogoSpese', 'veicoli',
@@ -590,7 +599,8 @@ async function esegui(w, d, opzioni) {
     if (permessi && !permessi.costi) risposta = togliCosti(risposta);
     if (opzioni.ponte) risposta = perIlPonte(risposta);
     const chiE = utente || (azione === 'accedi' && risposta.ok ? risposta.utente : null);
-    w.registraAccesso(perRegistro, opzioni.ponte && esito === 'ok' ? 'ponte' : esito, chiE);
+    // Il collegamento col QR: le attese ogni 2 secondi riempirebbero gli accessi (voce.registra decide).
+    if (!voce.registra || voce.registra(risposta)) w.registraAccesso(perRegistro, opzioni.ponte && esito === 'ok' ? 'ponte' : esito, chiE);
     return risposta;
   });
 }

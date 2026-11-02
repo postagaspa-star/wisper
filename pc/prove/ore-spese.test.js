@@ -243,9 +243,11 @@ test('esempio: il titolare approva, Annulla rimette da approvare; respingere vuo
   assert.ok(d.quante > 0 && d.conAnomalie > 0, 'ci sono cose da approvare, qualcuna con un\'anomalia');
   const v = d.persone[0].voci.find(x => x.tipo === 'ore');
   assert.equal(g('/server/approva', { voci: [{ tipo: v.tipo, id: v.id }] }).fatte, 1);
-  assert.equal(g('/server/ore?utente=3').ore.find(o => o.id === v.id).stato, 'approvata');
+  // Tutto il periodo: senza date l'elenco è la settimana di oggi, e il lunedì le ore da approvare sono della settimana prima.
+  const oreDi = () => g('/server/ore?utente=' + d.persone[0].idUtente + '&da=2000-01-01&a=2100-12-31').ore;
+  assert.equal(oreDi().find(o => o.id === v.id).stato, 'approvata');
   g('/server/annullaApprovazione', { voci: [{ tipo: v.tipo, id: v.id }] });
-  assert.equal(g('/server/ore?utente=3').ore.find(o => o.id === v.id).stato, 'da_approvare');
+  assert.equal(oreDi().find(o => o.id === v.id).stato, 'da_approvare');
   assert.equal(g('/server/respingi', { voci: [{ tipo: v.tipo, id: v.id }], motivo: ' ' }).errore, 'Scrivi il motivo: arriva a chi l\'ha scritta');
 });
 

@@ -22,6 +22,9 @@ public sealed class Ponte
     private readonly Server server;
     private readonly string cartellaFile;
 
+    /// <summary>Entrare col telefono (docs/gestionale/collega-qr.md): le chiavi del QR stanno qui, in memoria.</summary>
+    private readonly CollegaQr collegaQr;
+
     /// <summary>Dove finiscono i PDF: Documenti\Wisper.</summary>
     public string CartellaPdf { get; }
 
@@ -62,6 +65,7 @@ public sealed class Ponte
         this.server = server;
         this.cartellaFile = cartellaFile;
         CartellaPdf = cartellaPdf;
+        collegaQr = new CollegaQr(config, server);
     }
 
     public static bool ÈInterno(string? indirizzo) =>
@@ -210,6 +214,19 @@ public sealed class Ponte
 
             case "accedi":
                 return await AccediAsync(o).ConfigureAwait(false);
+
+            case "collega-qr":
+            {
+                // Il QR della pagina di accesso (collega-qr.md §6): chiavi nuove, alla pagina solo il testo da disegnare.
+                if (metodo != "POST") return Json(405, Errore("Vuole una POST"));
+                config.RileggiSeCambiato();
+                if (config.Entrato) return Json(200, Errore("Sei già entrato"));
+                return Json(200, new JsonObject { ["ok"] = true, ["testo"] = collegaQr.Nuovo() });
+            }
+
+            case "collega-qr-stato":
+                // attesa, lontano, rifiutato o entrato (col nome e i permessi: la chiave d'accesso resta qui).
+                return Json(200, await collegaQr.StatoAsync().ConfigureAwait(false));
 
             case "collega-file":
             {

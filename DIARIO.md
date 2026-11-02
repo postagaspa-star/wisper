@@ -11,6 +11,8 @@ mai dati veri di clienti.
 
 | Data | Versione | In breve |
 |------|----------|----------|
+| 02/11/2026 | gestionale (non pubblicata) | [Il computer entra col telefono, inquadrando un QR](#gestionale-qr) |
+| 02/11/2026 | 0.4.0, computer 0.3.6.1 (non pubblicata) | [Un budget salvato non si divide più per mille](#budget-0-3-6-1) |
 | 01/11/2026 | gestionale, fase 8 (non pubblicata) | [Integrazioni, impostazioni e controlli finali](#gestionale-fase-8) |
 | 01/11/2026 | gestionale, fase 7 (non pubblicata) | [WhatsApp e comunicazioni, portale clienti](#gestionale-fase-7) |
 | 31/10/2026 | gestionale, fase 6 (non pubblicata) | [Persone, mezzi e attrezzature, collaboratori esterni](#gestionale-fase-6) |
@@ -32,6 +34,65 @@ mai dati veri di clienti.
 | 26/09–14/10/2026 | 0.1 | [Un rapportino confermato non si perde più](#coda) |
 | 7–9/08/2026 | 0.1.0 | [Hackathon NGN Hacks: la versione a voce, senza mani](#v0-1-0) |
 | marzo–giugno 2026 | prima del repository | [Le prime versioni](#prima) |
+
+---
+
+<a id="gestionale-qr"></a>
+## 2 novembre 2026 · gestionale · Il computer entra col telefono, inquadrando un QR
+
+**Perché.** Sul gestionale un computer nuovo doveva scrivere a mano l'indirizzo dello script Google (lungo e segreto)
+e poi email e password, e l'email col file di collegamento della 0.4.0 non c'era più. Andrea: "quando scarichi l'app
+da pc ti appare un QR code, e da telefono al posto di inserire la mail a cui inviare un codice o roba simile appare una
+telecamera dove devi inquadrare il codice qr del pc, un po' come fa WhatsApp per collegare più dispositivi". Prima la
+ricerca (WhatsApp e Signal, la guida Android sui permessi, gli attacchi ai QR di accesso), poi il prototipo
+(`docs/prototipo/Collega-QR.html`) e l'accordo (`docs/gestionale/collega-qr.md`).
+
+**Cosa cambia.**
+
+- **Sul computer** la pagina di accesso si apre sul codice, con tre passi accanto: apri Wisper sul telefono, nel menu
+  tocca Collega un computer, inquadra questo codice. Il codice cambia ogni 2 minuti; dopo 5 si ferma e chiede "Mostra
+  un codice nuovo". "Entra con email e password" resta, un tocco più in basso.
+- **Sul telefono** la voce Collega un computer apre la fotocamera. Letto il codice, il riquadro diventa giallo e un
+  foglio chiede: "Collegare questo computer? Entrerà come Manuel Gasparotto, con i tuoi stessi permessi." Toccato
+  Collega, il telefono dice "UFFICIO-PC è entrato" e nello stesso momento il computer apre la Dashboard.
+- **Sicurezza**: nel codice ci sono solo un numero a caso e la chiave pubblica del computer. Quello che il server manda
+  al computer (la chiave d'accesso e l'indirizzo Google) è cifrato per lui: chi fotografa il codice non ottiene niente.
+  Il computer lo ritira solo dalla rete dell'ufficio, e la conferma sul telefono col nome del computer ferma chi fa
+  inquadrare un codice suo. Il computer collegato si scollega da Amministrazione › Dispositivi come gli altri.
+- **La prima volta il computer deve essere in ufficio**, sulla rete del server: prima non sa dove sta Google. Fuori
+  ufficio la pagina lo dice ("Il server dell'ufficio non risponde") e propone email e password.
+- **Trovato strada facendo**: il telefono riusava connessioni che il server aveva già chiuso (il server le chiude
+  dopo 5 secondi di silenzio, il telefono le controllava dopo 10), e una scrittura fatta dopo una pausa di 5-10
+  secondi poteva cadere. Ora il telefono le butta dopo 4 secondi: vale per tutte le richieste, non solo per il QR.
+  E siccome l'app ora chiede la fotocamera, le foto fatte con la fotocamera del telefono (scontrini, fogli firmati,
+  ticket, mezzi, documenti) chiedono il permesso la prima volta invece di chiudere l'app.
+
+**Prove.** Server 625; computer 305 (13 sul codificatore del QR, che ZXing legge in 80 codici su 80, uno per ogni
+versione e maschera); giro del QR in Edge senza finestra 8 passi su 8, giro principale del computer 26 su 26; telefono
+382 col server di prova acceso, nessuna saltata. Sull'emulatore la fotocamera ha letto un QR vero disegnato dalla
+pagina e il computer è entrato. Non provati: una fotocamera vera davanti a uno schermo vero, la finestra di Wisper
+Ufficio (la pagina è provata in Edge), Google vero.
+
+![Wisper Ufficio: la pagina di accesso col codice](docs/diario/2026-11-02-qr-pc-codice-chiaro.png)
+![Il telefono chiede conferma col nome del computer, tema scuro](docs/diario/2026-11-02-qr-tel-conferma-scuro.png)
+![Il computer è entrato](docs/diario/2026-11-02-qr-pc-entrato-chiaro.png)
+![Sul telefono: UFFICIO-PC è entrato](docs/diario/2026-11-02-qr-tel-entrato-chiaro.png)
+
+<a id="budget-0-3-6-1"></a>
+## 2 novembre 2026 · 0.4.0, computer 0.3.6.1 · Un budget salvato non si divide più per mille
+
+**Perché.** Su Wisper Ufficio 0.3.6 (dentro la 0.4.0 che usa Manuel) un budget di 2.500 € aperto e salvato senza
+toccarlo diventava 2,50 €: il campo veniva riempito con "2.500", e il programma rileggeva il punto come virgola. Lo
+stesso per il budget calcolato da ore × prezzo e per i numeri grandi delle schede di clienti e impostazioni. Il
+telefono non aveva il difetto. Andrea ha voluto la correzione "non con una nuova versione, sempre nella stessa".
+
+**Cosa cambia.** I campi da modificare si riempiono senza il punto delle migliaia ("2500", "0,9"), e "2.500" scritto
+a mano vale 2500, come sul telefono. Il programma resta la 0.3.6 a schermo e su GitHub resta la 0.4.0: dentro il
+numero è 0.3.6.1, perché l'aggiornamento automatico scarica solo un numero più alto. Ramo `fix/budget-computer`.
+
+**Prove.** Sul foglio finto: 2.500 € salvato senza toccarlo resta 2500; 100 ore × 42 €/h scrive 4200; "3.000" scritto
+a mano salva 3000 e ricalcola 71,4 ore. Prove dei conti 23 e dello script 53 della 0.4.0, tutte passate. Costruiti APK
+(uguale, codice 8) ed exe 0.3.6.1, firmato l'elenco degli aggiornamenti; **non ancora pubblicati**.
 
 ---
 

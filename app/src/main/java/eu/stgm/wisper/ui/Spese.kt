@@ -429,11 +429,11 @@ fun SchermataSpesa(dati: Dati, nav: Navigatore, arg: String) {
 
     // ---- la foto: come nel rapportino, ridotta subito e tenuta sul telefono finché non parte.
     var scattoInCorso by rememberSaveable { mutableStateOf<String?>(null) }
-    val fotocamera = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { riuscito ->
-        val percorso = scattoInCorso ?: return@rememberLauncherForActivityResult
+    val fotocamera = rememberFotoSistema { riuscito ->
+        val percorso = scattoInCorso ?: return@rememberFotoSistema
         scattoInCorso = null
         val scatto = File(percorso)
-        if (!riuscito) { scatto.delete(); return@rememberLauncherForActivityResult }
+        if (!riuscito) { scatto.delete(); return@rememberFotoSistema }
         scope.launch {
             runCatching { dati.preparaFoto(Uri.fromFile(scatto)) }.onSuccess { foto = it.path; passo = 2 }
                 .onFailure { avvisi.mostra("La foto non si legge: riprova") }

@@ -82,6 +82,8 @@ async function main() {
     // 2. Fuori: la pagina di accesso.
     const stato0 = await valuta("fetch('/locale/stato').then(r => r.json())");
     assert.equal(stato0.entrato, false);
+    // Dal 02/11/2026 la pagina di accesso si apre sul codice per il telefono: si passa a email e password come una persona.
+    for (let i = 0; i < 25 && !(await valuta("!!document.querySelector('.accesso') || (b => { if (b) b.click(); return false; })([...document.querySelectorAll('.pagina-accesso button')].find(x => x.textContent.trim() === 'Entra con email e password'))")); i++) await aspetta(200);
     assert.equal(await valuta("document.body.classList.contains('fuori') && !!document.querySelector('.accesso')"), true, 'si vede la pagina di accesso');
     await foto('accesso');
     console.log('ok  pagina di accesso');

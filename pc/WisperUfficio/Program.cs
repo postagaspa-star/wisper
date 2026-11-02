@@ -21,6 +21,10 @@ namespace WisperUfficio;
 ///   --no-installa              parte da dov'è, senza installarsi
 ///   --installa-in CARTELLA     si installa lì invece che in Programs, Start e Desktop
 ///                              (le prove dell'installazione), senza toccare il registro
+///   --prova-collega CASI ESITO decifra i casi fissi del collegamento col QR (server/prove/casi-collega.json),
+///                              scrive l'esito in ESITO ed esce (pc/prove/collega-exe.test.js)
+///   --prova-collega-vivo TESTO ESITO  il collegamento col QR dal vivo, senza finestra, contro --server
+///                              (scrive il testo del QR in TESTO, aspetta il telefono, l'esito in ESITO)
 /// Quelle per sé: --attendi PID (il riavvio dopo un aggiornamento aspetta che il
 /// programma vecchio si chiuda), --appena-installato (la prima apertura dopo
 /// l'installazione lo dice nella pagina), --disinstalla (da App installate). E il percorso
@@ -48,6 +52,14 @@ internal static class Program
         {
             Environment.Exit(Configurazione.IndirizzoPredefinito.Length > 0 ? 3 : 0);
         }
+        // Per pc/prove/collega-exe.test.js: decifra il caso fisso di server/prove/casi-collega.json come farebbe col
+        // pacchetto vero del server, scrive l'esito ed esce (0 = tutto torna). Non apre niente, non si installa, non
+        // tocca la configurazione: anche --no-installa e --dati, se ci sono, si saltano.
+        var iProva = Array.IndexOf(args, "--prova-collega");
+        if (iProva >= 0 && iProva + 2 < args.Length)
+        {
+            Environment.Exit(CollegaQr.ProvaCasi(Path.GetFullPath(args[iProva + 1]), Path.GetFullPath(args[iProva + 2])));
+        }
         for (int i = 0; i < args.Length; i++)
         {
             if (args[i] == "--attendi" && i + 1 < args.Length) { attendi = int.TryParse(args[++i], out var pid) ? pid : null; continue; }
@@ -74,6 +86,16 @@ internal static class Program
 
         Directory.CreateDirectory(locale);
         Log.File = Path.Combine(locale, "registro.txt");
+
+        // Per pc/prove/collega-exe.test.js: il collegamento col QR dal vivo contro il server di prova (--server), con la
+        // configurazione nella cartella di prova (--dati). Niente finestra, niente installazione.
+        var iVivo = Array.IndexOf(args, "--prova-collega-vivo");
+        if (iVivo >= 0 && iVivo + 2 < args.Length)
+        {
+            var configVivo = new Configurazione(Path.Combine(appData, "configurazione.json"));
+            if (serverDiProva != null || googleDiProva != null) configVivo.IndirizziDiProva(serverDiProva, googleDiProva);
+            Environment.Exit(CollegaQr.ProvaDalVivo(configVivo, new Server(configVivo), Path.GetFullPath(args[iVivo + 1]), Path.GetFullPath(args[iVivo + 2])));
+        }
 
         // Si installa (e si aggiorna da solo) solo il programma in un file solo, quello che si
         // distribuisce: una build di sviluppo ha le sue dll accanto e un exe da solo non basterebbe.

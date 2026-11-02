@@ -44,6 +44,8 @@
     entrato: null,
     erroreAccesso: '',
     uscito: false,
+    // La pagina di accesso: '' o 'qr' = il codice per il telefono, 'password' = il modulo con email e password.
+    modoAccesso: '',
     caricato: false,
     erroreLettura: '',
     io: null,
@@ -739,112 +741,272 @@
   // ======================================================================= ACCESSO
 
   /**
-   * La pagina di accesso (guida §2): email, password con l'occhio, Entra. Il
-   * programma parla col server e tiene la chiave d'accesso per sé: la pagina
-   * non la vede mai.
+   * La pagina di accesso (prototipo docs/prototipo/Collega-QR.html, accordo docs/gestionale/collega-qr.md §6): di
+   * base il codice da inquadrare col telefono, come WhatsApp, coi tre passi accanto; sotto, "Entra con email e
+   * password" mostra il modulo di sempre (guida §2). Il programma parla col server e tiene la chiave d'accesso per
+   * sé: la pagina non la vede mai, nemmeno quando si entra col telefono.
    */
   function vistaAccesso(pagina) {
     const st = S.locale || {};
     const Coll = window.WisperCollegamento;
+    fermaQr();
+    // Il codice funziona solo col server di casa (attesaComputer non passa da Google): senza indirizzo di casa, il modulo.
+    const conQr = !!(st.casa || st.server) && !!window.WisperQr;
+    if (!conQr) S.modoAccesso = 'password';
     // Due indirizzi (porta-google.md §8): il server di casa e la porta Google (lo script del foglio). Dell'indirizzo
     // Google la pagina sa solo se c'è: lo tiene il programma, cifrato, e qui non torna mai.
     let cambiaServer = !st.server && !st.google;
-    let togliGoogle = false;
-    const v = {
-      server: h('input', { type: 'url', value: st.casa || st.server || '', placeholder: 'http://192.168.1.51:8400', autocomplete: 'off', spellcheck: 'false' }),
-      google: h('input', { type: 'url', value: '', placeholder: st.google ? 'Già salvato' : 'https://script.google.com/…/exec', autocomplete: 'off', spellcheck: 'false' }),
-      email: h('input', { type: 'email', value: S.emailAccesso || st.email || '', autocomplete: 'username', spellcheck: 'false' }),
-      password: h('input', { type: 'password', autocomplete: 'current-password' }),
-    };
-    // Il file "Collega Wisper Ufficio.wisper" che il telefono fa mandare per email: porta l'indirizzo Google.
-    const usaFile = async () => {
-      try {
-        await Api.post('/locale/collega-file', {});
-      } catch (x) {
-        if (x.dati && x.dati.annullato) return;
-        mostraErrore(x.message || 'Il file non va bene.');
-        return;
-      }
-      S.erroreAccesso = { testo: 'Collegato col file dell\'email: da fuori casa Wisper passa da Google.', calmo: true };
-      await carica();
-    };
-    const zonaServer = h('div');
-    const zonaErrore = h('div', { 'aria-live': 'polite' });
-    const occhio = h('button', { type: 'button', class: 'occhio', 'aria-label': 'Mostra la password', title: 'Mostra la password', onclick: () => {
-      const vedi = v.password.type === 'password';
-      v.password.type = vedi ? 'text' : 'password';
-      occhio.setAttribute('aria-label', vedi ? 'Nascondi la password' : 'Mostra la password');
-      occhio.classList.toggle('acceso', vedi);
-      v.password.focus();
-    } }, icona('occhio', 22, 2.2));
-    const entra = h('button', { type: 'submit', class: 'btn-entra' }, 'Entra');
-
-    const disegnaServer = () => {
-      svuota(zonaServer);
-      if (!cambiaServer) return;
-      aggiungi(zonaServer, [h('div', { class: 'indirizzi-accesso' },
-        campo('In casa', v.server),
-        campo('Da fuori, l\'indirizzo Google', v.google),
-        h('div', { class: 'riga-collega' },
-          h('button', { type: 'button', class: 'btn collegamento', onclick: usaFile }, 'Usa il file dell\'email'),
-          st.google && !togliGoogle ? h('button', { type: 'button', class: 'btn collegamento', onclick: () => {
-            togliGoogle = true;
-            v.google.value = '';
-            v.google.placeholder = 'https://script.google.com/…/exec';
-            disegnaServer();
-          } }, 'Non usare Google') : null))]);
-    };
+    const zonaErrore = h('div', { class: 'zona-errore-accesso', 'aria-live': 'polite' });
     const mostraErrore = (testo, calmo) => {
       aggiungi(svuota(zonaErrore), testo ? [h('div', { class: calmo ? 'avviso-calmo' : 'avviso-errore', role: 'alert' }, testo)] : []);
     };
-    disegnaServer();
     if (S.erroreAccesso) mostraErrore(S.erroreAccesso.testo, S.erroreAccesso.calmo);
     else if (S.uscito) mostraErrore('Sei uscito da questo dispositivo: entra di nuovo.', true);
+    const zonaCarta = h('div', { class: 'zona-carta' });
+    const piede = !cambiaServer ? h('div', { class: 'riga-server' }, h('span', null, Coll.frase({ casa: st.casa || st.server, google: st.google, ultimoContatto: st.ultimoContatto, ultimaStrada: st.ultimaStrada })),
+      h('button', { type: 'button', class: 'btn collegamento', onclick: () => {
+        // Gli indirizzi si cambiano nel modulo con email e password (anche quello di casa vale per il codice dopo l'accesso).
+        cambiaServer = true;
+        piede.remove();
+        modulo(true);
+      } }, 'Cambia')) : null;
+    aggiungi(pagina, [h('div', { class: 'pagina-accesso' }, h('div', { class: 'colonna-accesso' },
+      h('div', { class: 'marchio-accesso' }, h('span', { class: 'simbolo-accesso', 'aria-hidden': 'true' }, simbolo(56)),
+        h('div', { class: 'titoli-accesso' }, h('h1', null, 'Entra in Wisper'), st.studio ? h('p', { class: 'sotto-titolo' }, st.studio) : null)),
+      zonaErrore, zonaCarta, piede))]);
 
-    const modulo = h('form', { class: 'accesso', novalidate: true, onsubmit: async e => {
-      e.preventDefault();
-      const corpo = { email: v.email.value.trim(), password: v.password.value };
-      if (cambiaServer) {
-        corpo.casa = v.server.value.trim();
-        corpo.google = v.google.value.trim();
-        if (togliGoogle && !corpo.google) corpo.togliGoogle = true;
-      }
-      if (cambiaServer && !corpo.casa && !corpo.google && !(st.google && !togliGoogle)) { mostraErrore('Scrivi l\'indirizzo del server.'); v.server.focus(); return; }
-      if (!corpo.email) { mostraErrore('Scrivi la tua email.'); v.email.focus(); return; }
-      if (!corpo.password) { mostraErrore('Scrivi la password.'); v.password.focus(); return; }
-      entra.disabled = true;
-      entra.textContent = 'Entro…';
-      S.emailAccesso = corpo.email;
-      try {
-        const ris = await Api.post('/locale/accedi', corpo);
+    // ------------------------------------------------------------- col telefono
+    const F = Coll.FRASI_QR;
+    const Qr = window.WisperQr;
+    const codice = () => {
+      fermaQr();
+      S.modoAccesso = 'qr';
+      // Ogni disegno ha il suo giro, coi conti di prima: il giro di un disegno vecchio (la pagina ridisegnata mentre
+      // chiedeva un codice, Riprova, Torna al codice) vede che non è più quello di adesso e si ferma da solo.
+      const prima = QrGiro;
+      const g = QrGiro = Object.assign(giroNuovo(), { testo: prima.testo, creato: prima.creato, codici: prima.codici, fermo: prima.fermo,
+        lontani: prima.lontani, domande: prima.domande, vista: prima.vista });
+      if (g.vista === 'lontano') { lontano(); return; }
+      const box = h('div', { class: 'qr-box' + (g.fermo ? ' scaduto' : ''), role: 'img', 'aria-label': F.descrizioneQr });
+      const disegnaQr = () => {
+        svuota(box);
+        box.classList.toggle('scaduto', g.fermo);
+        if (g.testo) box.insertAdjacentHTML('afterbegin', Qr.svg(Qr.codifica(g.testo), { lato: 298 }));
+        if (g.fermo) {
+          aggiungi(box, [h('div', { class: 'qr-velo' }, h('button', { type: 'button', class: 'btn giallo grande', onclick: () => {
+            Object.assign(g, { codici: 0, fermo: false, testo: '' });
+            codice();
+          } }, F.nuovoCodice))]);
+        }
+      };
+      aggiungi(svuota(zonaCarta), [h('div', { class: 'carta-accesso' }, box,
+        h('div', { class: 'passi-qr' }, h('h2', null, F.titolo),
+          h('ol', null, F.passi.map(p => h('li', null, h('span', null, p[0], p[1] ? h('b', null, p[1]) : null, p[2])))),
+          h('div', { class: 'altro-accesso' }, h('button', { type: 'button', class: 'btn-testo', onclick: () => modulo(false) }, F.altraStrada))))]);
+      disegnaQr();
+      if (g.fermo) return;
+
+      /** Un codice nuovo dal programma (chiavi nuove, che restano nel programma): conta per i 5. */
+      const nuovo = async tieniErrore => {
+        g.testo = '';
+        // Un riquadro rimasto da prima ("Sei uscito", un collegamento rifiutato) vale fino al codice dopo, non per sempre.
+        if (!tieniErrore && g.codici > 0) mostraErrore('');
+        disegnaQr();
+        try {
+          const r = await Api.post('/locale/collega-qr', {});
+          if (g !== QrGiro) return false;
+          g.testo = r.testo;
+          g.creato = Date.now();
+          g.codici++;
+          disegnaQr();
+          return true;
+        } catch (e) {
+          // Un programma che il codice non lo sa fare (o un errore suo): resta il modulo di sempre.
+          if (g === QrGiro && !e.rete) { fermaQr(); modulo(false); }
+          return false;
+        }
+      };
+      /** Ogni 2 secondi, solo con la pagina in vista: il codice scade? Il telefono l'ha collegato? */
+      const giro = async () => {
+        if (g !== QrGiro || !document.body.contains(box)) { if (g === QrGiro) fermaQr(); return; }
+        if (document.visibilityState === 'hidden' || g.occupato) return;
+        g.occupato = true;
+        try {
+          const passo = g.testo ? Coll.codiceDopo(g.creato, g.codici, Date.now()) : 'nuovo';
+          if (passo === 'fermo') { g.fermo = true; fermaQr(); disegnaQr(); return; }
+          if (passo === 'nuovo' && !(await nuovo())) return;
+          let r;
+          try { r = await Api.get('/locale/collega-qr-stato'); } catch (e) { return; }
+          if (g !== QrGiro || !document.body.contains(box)) return;
+          const dopo = Coll.vistaDopo(g, r.stato);
+          g.lontani = dopo.lontani;
+          g.domande++;
+          if (dopo.vista === 'entrato') { fermaQr(); entrato(r); return; }
+          if (dopo.vista === 'lontano') { fermaQr(); g.vista = 'lontano'; lontano(); return; }
+          if (dopo.vista === 'rifiutato') {
+            mostraErrore(F.rifiutato);
+            await nuovo(true);
+          }
+        } finally {
+          g.occupato = false;
+        }
+      };
+      g.tick = giro;
+      g.timer = setInterval(giro, Coll.QR.OGNI_MS);
+      giro();
+    };
+
+    /** Il server di casa non risponde: il computer non è in ufficio (o il server è spento). */
+    const lontano = () => {
+      aggiungi(svuota(zonaCarta), [h('div', { class: 'carta-accesso una' }, h('div', { class: 'esito-accesso' },
+        h('div', { class: 'lontano-icona' }, icona('reteSpenta', 30, 2)),
+        h('h2', null, F.lontanoTitolo), h('p', null, F.lontanoTesto),
+        h('div', { class: 'altro-accesso' },
+          h('button', { type: 'button', class: 'btn giallo grande', onclick: () => { QrGiro = giroNuovo(); codice(); } }, F.riprova),
+          h('button', { type: 'button', class: 'btn grande', onclick: () => modulo(false) }, F.altraStrada))))]);
+    };
+
+    /** Il telefono l'ha collegato: la chiave è già salvata nel programma. La spunta per 1,2 secondi, poi la Dashboard. */
+    const entrato = r => {
+      const nome = (r.utente && r.utente.nome) || '';
+      const spunta = h('div', { class: 'spunta-accesso' }, icona('spunta', 44, 2.6));
+      aggiungi(svuota(zonaCarta), [h('div', { class: 'carta-accesso una' }, h('div', { class: 'esito-accesso', role: 'status' },
+        spunta, h('h2', null, F.entrato(nome)), h('p', null, F.aproDashboard)))]);
+      mostraErrore('');
+      QrGiro = giroNuovo();
+      setTimeout(async () => {
         S.erroreAccesso = '';
         S.uscito = false;
-        S.io = { utente: ris.utente || {}, permessi: ris.permessi || {} };
+        S.modoAccesso = 'qr';
+        S.io = { utente: r.utente || {}, permessi: r.permessi || {} };
         S.entrato = true;
         if (location.hash !== '#dashboard' && location.hash !== '') history.replaceState(null, '', '#dashboard');
         await carica();
-      } catch (x) {
-        entra.disabled = false;
-        entra.textContent = 'Entra';
-        // Senza rete il riquadro è grigio: non è colpa di nessuno.
-        S.erroreAccesso = { testo: Coll.erroreAccesso(x), calmo: !!x.rete };
-        mostraErrore(S.erroreAccesso.testo, S.erroreAccesso.calmo);
-        v.password.select();
+      }, Coll.QR.ENTRATO_MS);
+    };
+
+    // ------------------------------------------------------------- con email e password
+    const modulo = conIndirizzi => {
+      fermaQr();
+      S.modoAccesso = 'password';
+      if (conIndirizzi) cambiaServer = true;
+      let togliGoogle = false;
+      const v = {
+        server: h('input', { type: 'url', value: st.casa || st.server || '', placeholder: 'http://192.168.1.51:8400', autocomplete: 'off', spellcheck: 'false' }),
+        google: h('input', { type: 'url', value: '', placeholder: st.google ? 'Già salvato' : 'https://script.google.com/…/exec', autocomplete: 'off', spellcheck: 'false' }),
+        email: h('input', { type: 'email', value: S.emailAccesso || st.email || '', autocomplete: 'username', spellcheck: 'false' }),
+        password: h('input', { type: 'password', autocomplete: 'current-password' }),
+      };
+      // Il file "Collega Wisper Ufficio.wisper" che il telefono fa mandare per email: porta l'indirizzo Google.
+      const usaFile = async () => {
+        try {
+          await Api.post('/locale/collega-file', {});
+        } catch (x) {
+          if (x.dati && x.dati.annullato) return;
+          mostraErrore(x.message || 'Il file non va bene.');
+          return;
+        }
+        S.erroreAccesso = { testo: 'Collegato col file dell\'email: da fuori casa Wisper passa da Google.', calmo: true };
+        await carica();
+      };
+      const zonaServer = h('div');
+      const occhio = h('button', { type: 'button', class: 'occhio', 'aria-label': 'Mostra la password', title: 'Mostra la password', onclick: () => {
+        const vedi = v.password.type === 'password';
+        v.password.type = vedi ? 'text' : 'password';
+        occhio.setAttribute('aria-label', vedi ? 'Nascondi la password' : 'Mostra la password');
+        occhio.classList.toggle('acceso', vedi);
         v.password.focus();
-      }
-    } },
-    h('div', { class: 'simbolo-accesso', 'aria-hidden': 'true' }, simbolo(64)),
-    h('div', { class: 'titoli-accesso' }, h('h1', null, 'Entra in Wisper'), st.studio ? h('p', { class: 'sotto-titolo' }, st.studio) : null),
-    zonaErrore,
-    zonaServer,
-    campo('Email', v.email),
-    campo('Password', h('div', { class: 'con-occhio' }, v.password, occhio)),
-    entra,
-    !cambiaServer ? h('div', { class: 'riga-server' }, h('span', null, Coll.frase({ casa: st.casa || st.server, google: st.google, ultimoContatto: st.ultimoContatto, ultimaStrada: st.ultimaStrada })),
-      h('button', { type: 'button', class: 'btn collegamento', onclick: e => { cambiaServer = true; disegnaServer(); e.target.parentNode.remove(); v.server.focus(); } }, 'Cambia')) : null);
-    aggiungi(pagina, [h('div', { class: 'pagina-accesso' }, modulo)]);
-    setTimeout(() => (cambiaServer && !v.server.value ? v.server : v.email.value ? v.password : v.email).focus(), 60);
+      } }, icona('occhio', 22, 2.2));
+      const entra = h('button', { type: 'submit', class: 'btn-entra' }, 'Entra');
+
+      const disegnaServer = () => {
+        svuota(zonaServer);
+        if (!cambiaServer) return;
+        aggiungi(zonaServer, [h('div', { class: 'indirizzi-accesso' },
+          campo('In casa', v.server),
+          campo('Da fuori, l\'indirizzo Google', v.google),
+          h('div', { class: 'riga-collega' },
+            h('button', { type: 'button', class: 'btn collegamento', onclick: usaFile }, 'Usa il file dell\'email'),
+            st.google && !togliGoogle ? h('button', { type: 'button', class: 'btn collegamento', onclick: () => {
+              togliGoogle = true;
+              v.google.value = '';
+              v.google.placeholder = 'https://script.google.com/…/exec';
+              disegnaServer();
+            } }, 'Non usare Google') : null))]);
+      };
+      disegnaServer();
+
+      const form = h('form', { class: 'accesso', novalidate: true, onsubmit: async e => {
+        e.preventDefault();
+        const corpo = { email: v.email.value.trim(), password: v.password.value };
+        if (cambiaServer) {
+          corpo.casa = v.server.value.trim();
+          corpo.google = v.google.value.trim();
+          if (togliGoogle && !corpo.google) corpo.togliGoogle = true;
+        }
+        if (cambiaServer && !corpo.casa && !corpo.google && !(st.google && !togliGoogle)) { mostraErrore('Scrivi l\'indirizzo del server.'); v.server.focus(); return; }
+        if (!corpo.email) { mostraErrore('Scrivi la tua email.'); v.email.focus(); return; }
+        if (!corpo.password) { mostraErrore('Scrivi la password.'); v.password.focus(); return; }
+        entra.disabled = true;
+        entra.textContent = 'Entro…';
+        S.emailAccesso = corpo.email;
+        try {
+          const ris = await Api.post('/locale/accedi', corpo);
+          S.erroreAccesso = '';
+          S.uscito = false;
+          S.io = { utente: ris.utente || {}, permessi: ris.permessi || {} };
+          S.entrato = true;
+          QrGiro = giroNuovo();
+          if (location.hash !== '#dashboard' && location.hash !== '') history.replaceState(null, '', '#dashboard');
+          await carica();
+        } catch (x) {
+          entra.disabled = false;
+          entra.textContent = 'Entra';
+          // Senza rete il riquadro è grigio: non è colpa di nessuno.
+          S.erroreAccesso = { testo: Coll.erroreAccesso(x), calmo: !!x.rete };
+          mostraErrore(S.erroreAccesso.testo, S.erroreAccesso.calmo);
+          v.password.select();
+          v.password.focus();
+        }
+      } },
+      zonaServer,
+      campo('Email', v.email),
+      campo('Password', h('div', { class: 'con-occhio' }, v.password, occhio)),
+      entra,
+      conQr ? h('button', { type: 'button', class: 'btn-testo', onclick: () => {
+        // La pagina da capo (anche la riga del server, tolta da Cambia), col codice e un giro nuovo.
+        S.erroreAccesso = '';
+        S.uscito = false;
+        S.modoAccesso = 'qr';
+        QrGiro = giroNuovo();
+        mostra();
+      } }, F.tornaAlCodice) : null);
+      aggiungi(svuota(zonaCarta), [h('div', { class: 'carta-accesso una' }, form)]);
+      setTimeout(() => (cambiaServer && !v.server.value ? v.server : v.email.value ? v.password : v.email).focus(), 60);
+    };
+
+    if (S.modoAccesso === 'password') modulo(false);
+    else codice();
   }
+
+  /**
+   * Entrare col telefono: il giro dei codici (collega-qr.md §6), che resta fra un disegno e l'altro della pagina di
+   * accesso. testo: quello del QR di adesso; codici: quanti se ne sono mostrati (dopo 5 ci si ferma); lontani e
+   * domande per regole-collegamento.js (vistaDopo); vista: 'qr' o 'lontano'.
+   */
+  const giroNuovo = () => ({ testo: '', creato: 0, codici: 0, fermo: false, lontani: 0, domande: 0, vista: 'qr', timer: null, tick: null, occupato: false });
+  let QrGiro = giroNuovo();
+
+  function fermaQr() {
+    if (QrGiro.timer) clearInterval(QrGiro.timer);
+    QrGiro.timer = null;
+    QrGiro.tick = null;
+  }
+
+  // Tornando a vedere la pagina (finestra rimessa su), lo stato si chiede subito invece di aspettare il giro.
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && QrGiro.tick) QrGiro.tick();
+  });
 
   /** Il simbolo di Wisper (lo stesso dell'icona del programma). */
   function simbolo(dim) {
@@ -868,8 +1030,12 @@
     S.rapportini = [];
     S.dash = null;
     S.erroreAccesso = '';
+    // Dopo Esci la pagina di accesso riparte dal codice per il telefono, con un giro nuovo.
+    S.modoAccesso = '';
+    QrGiro = giroNuovo();
     history.replaceState(null, '', '#dashboard');
-    mostra();
+    // Lo stato del programma si rilegge (il nome dello studio sotto il titolo, la riga del server), poi la pagina di accesso.
+    await carica();
   }
 
   function cambiaPassword() {

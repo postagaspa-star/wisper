@@ -301,11 +301,11 @@ private fun rememberSceltaFile(dati: Dati, onScelto: (FileScelto) -> Unit): Pair
     val avvisi = LocalAvvisi.current
     val scope = rememberCoroutineScope()
     var scatto by rememberSaveable { mutableStateOf<String?>(null) }
-    val fotocamera = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
-        val p = scatto ?: return@rememberLauncherForActivityResult
+    val fotocamera = rememberFotoSistema { ok ->
+        val p = scatto ?: return@rememberFotoSistema
         scatto = null
         val f = File(p)
-        if (!ok) { f.delete(); return@rememberLauncherForActivityResult }
+        if (!ok) { f.delete(); return@rememberFotoSistema }
         scope.launch {
             runCatching { dati.preparaFoto(Uri.fromFile(f)) }.onSuccess { r ->
                 onScelto(FileScelto("Foto del " + dataIt(LocalDate.now().toString()).replace('/', '-') + ".jpg", "image/jpeg", withContext(Dispatchers.IO) { r.readBytes() }))

@@ -706,6 +706,55 @@ body.fuori .pagina { max-width: none; width: 100%; }
 /* I due indirizzi (porta Google): casa, Google, e il file dell'email */
 .indirizzi-accesso { display: flex; flex-direction: column; gap: 18px; }
 .riga-collega { display: flex; flex-wrap: wrap; gap: 8px 22px; font-size: 14px; }
+/* Entrare col telefono (prototipo docs/prototipo/Collega-QR.html, collega-qr.md §6): il simbolo e il titolo in alto,
+   la carta larga col codice a sinistra e i tre passi a destra, la riga del server in fondo. Il codice è nero su
+   bianco anche in tema scuro (i lettori leggono meglio scuro su chiaro); il bianco intorno è la zona di silenzio. */
+.colonna-accesso { display: flex; flex-direction: column; align-items: center; gap: 22px; width: 100%; }
+.marchio-accesso { display: flex; align-items: center; gap: 12px; }
+.marchio-accesso .titoli-accesso { text-align: left; gap: 2px; }
+.marchio-accesso .titoli-accesso h1 { margin: 0; font-size: 28px; font-weight: 800; letter-spacing: -0.5px; }
+.marchio-accesso .titoli-accesso p { margin: 0; color: var(--tenue); font-size: 15px; }
+.zona-errore-accesso { width: min(760px, 100%); }
+.zona-errore-accesso:empty { display: none; }
+.carta-accesso {
+  width: 760px; max-width: 100%; min-height: 380px; background: var(--scheda); border: 1px solid var(--bordo-scheda); border-radius: 20px;
+  box-shadow: 0 12px 40px rgba(20, 20, 22, .08); display: grid; grid-template-columns: 300px 1fr; gap: 40px; padding: 40px; align-items: center;
+}
+.carta-accesso.una { grid-template-columns: minmax(0, 1fr); width: 440px; }
+.carta-accesso .accesso { width: 100%; }
+.qr-box { width: 300px; height: 300px; border-radius: 16px; background: #FFFFFF; border: 1px solid var(--bordo-scheda); position: relative; overflow: hidden; }
+.qr-box svg { width: 100%; height: 100%; display: block; transition: filter .25s, opacity .25s; }
+.qr-box.scaduto svg { filter: blur(6px); opacity: .35; }
+.qr-velo { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+.passi-qr h2 { margin: 0 0 18px; font-size: 24px; font-weight: 800; letter-spacing: -0.3px; }
+.passi-qr ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 16px; counter-reset: passo; }
+.passi-qr li { counter-increment: passo; display: grid; grid-template-columns: 34px 1fr; gap: 12px; align-items: center; font-size: 17px; color: var(--testo2); }
+.passi-qr li::before {
+  content: counter(passo); width: 34px; height: 34px; border-radius: 50%; background: var(--superficie); color: var(--testo); font-weight: 800;
+  display: grid; place-items: center; font-size: 15px;
+}
+.passi-qr b { color: var(--testo); }
+.altro-accesso { margin-top: 26px; display: flex; gap: 10px; flex-wrap: wrap; }
+.pagina-accesso .btn-testo {
+  border: none; background: transparent; font-size: 16px; font-weight: 700; text-decoration: underline; text-underline-offset: 3px;
+  min-height: 48px; padding: 0 6px; color: var(--testo2);
+}
+.pagina-accesso .btn-testo:hover { color: var(--testo); }
+.esito-accesso { display: grid; justify-items: center; gap: 14px; text-align: center; }
+.esito-accesso h2 { margin: 0; font-size: 26px; font-weight: 800; }
+.esito-accesso p { margin: 0; color: var(--tenue); font-size: 16px; max-width: 460px; }
+.esito-accesso .altro-accesso { justify-content: center; }
+.lontano-icona { width: 64px; height: 64px; border-radius: 50%; background: var(--superficie); color: var(--testo); display: grid; place-items: center; }
+.spunta-accesso {
+  width: 84px; height: 84px; border-radius: 50%; background: var(--firmato-fondo); color: var(--firmato); display: grid; place-items: center;
+  animation: spunta-entra .35s cubic-bezier(.2, .8, .2, 1);
+}
+.spunta-accesso svg path { stroke-dasharray: 40; stroke-dashoffset: 40; animation: spunta-traccia .4s .15s ease-out forwards; }
+@keyframes spunta-entra { from { transform: scale(.6); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+@keyframes spunta-traccia { to { stroke-dashoffset: 0; } }
+/* Senza movimenti la spunta c'è subito (l'animazione spenta la lascerebbe invisibile). */
+@media (prefers-reduced-motion: reduce) { .spunta-accesso svg path { stroke-dashoffset: 0; } }
+@media (max-width: 860px) { .carta-accesso { grid-template-columns: minmax(0, 1fr); justify-items: center; } }
 
 /* ------------------------------------------------------------ clienti e fornitori */
 .testa-soggetto { display: flex; gap: 14px; align-items: center; flex: 1; min-width: 260px; }

@@ -150,6 +150,15 @@ module.exports = {
     if (u.attivo !== 1) throw new Rifiuto('Il tuo accesso è stato disattivato: chiedi al titolare');
 
     this.db.esegui('DELETE FROM tentativi_accesso WHERE email = ?', email);
+    return this.creaSessione(u, d);
+  },
+
+  /**
+   * La sessione nuova di un utente gia' controllato, e la risposta di accedi: {ok, token, utente, permessi, sessione}.
+   * La usano accedi e il collegamento col QR (azioni/collega.js): stesso token, stessa durata, stessa riga.
+   * d: {disp, dispNome, app}, come li dice il dispositivo.
+   */
+  creaSessione(u, d) {
     const token = crypto.randomBytes(32).toString('base64url');
     const ora = adesso();
     const s = this.db.esegui(

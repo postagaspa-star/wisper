@@ -110,6 +110,13 @@ every 90 days. A checklist of 77 rows tracks the tests before the switch evening
 realistic fake data stay within the agreed times on the NAS (dashboard about 0.4 s, export of
 everything about 10 s).
 
+The office computer can sign in with the phone, the way WhatsApp links devices: the sign-in page
+shows a QR code, the phone (Menu › Connect a computer) scans it, asks for confirmation with the
+computer's name, and the computer is in. The code holds only a random id and the computer's
+public key; the server hands the access key and the Google address to the computer encrypted for
+that key (ECDH P-256, HKDF, AES-GCM), and only on the office network. The QR encoder is written
+by hand and checked with ZXing (`docs/gestionale/collega-qr.md`).
+
 ## What changed
 
 The first Wisper, built for NGN Hacks 2026, was voice only: a wake word, a

@@ -1674,6 +1674,49 @@ class Archivio(private val ctx: Context) : Dati {
         )
     }
 
+    // ------------------------------------------------------------- collegare il computer col QR (collega-qr.md §4, §7)
+
+    /**
+     * Lo stesso id di richiesta per lo stesso QR (IdRichiesta.perOperazione): se la
+     * risposta si perde per strada, o dopo Riprova si inquadra lo stesso codice, il
+     * server ridà la risposta di prima invece di "già usato". Per questo, se la rete
+     * cade, si riprova una volta da soli: sull'emulatore la prima scrittura dopo
+     * qualche secondo fermo cadeva con "unexpected end of stream" (la connessione
+     * tenuta aperta che il server aveva appena chiuso).
+     */
+    override suspend fun autorizzaComputer(codice: eu.stgm.wisper.rapportino.CodiceCollega): Result<String> = inDiretta {
+        IdRichiesta.perOperazione("collega-qr-" + codice.id) {
+            try {
+                ponte.autorizzaComputer(codice)
+            } catch (e: java.io.IOException) {
+                if (e is PonteServer.ServizioNonRaggiunto) throw e
+                try {
+                    ponte.autorizzaComputer(codice)
+                } catch (ancora: java.io.IOException) {
+                    // Sulla pagina piena una frase semplice, senza i dettagli della connessione.
+                    if (ancora is PonteServer.ServizioNonRaggiunto) throw ancora
+                    throw Exception("Il server non risponde: controlla la rete e riprova", ancora)
+                }
+            }
+        }
+    }
+
+    /** La rete che manca per un giro non è un no: torna RETE e la schermata richiede fra 1,5 secondi. */
+    override suspend fun statoComputer(id: String): Result<eu.stgm.wisper.rapportino.StatoComputer> = withContext(Dispatchers.IO) {
+        try {
+            Result.success(ponte.statoComputer(id))
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: PonteServer.AccessoScaduto) {
+            segnaUscito()
+            Result.failure(Exception("Sei uscito da questo dispositivo: entra di nuovo", e))
+        } catch (e: PonteServer.Rifiutato) {
+            Result.failure(Exception(spiegaInDiretta(e), e))
+        } catch (_: Exception) {
+            Result.success(eu.stgm.wisper.rapportino.StatoComputer(eu.stgm.wisper.rapportino.StatoComputer.RETE))
+        }
+    }
+
     /** Gli id dei messaggi nati qui (idLocale → id del server): non sono dati personali, restano anche dopo l'uscita. */
     private val invio7 by lazy { eu.stgm.wisper.rapportino.InvioFase7(ponte, Scaffale(File(ctx.filesDir, "fase7"), prefisso = "f7id-")) }
 

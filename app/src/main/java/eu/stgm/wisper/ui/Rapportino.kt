@@ -247,11 +247,11 @@ fun SchermataRapportino(
 
     // ---- foto ----
     var scattoInCorso by rememberSaveable { mutableStateOf<String?>(null) }
-    val fotocamera = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { riuscito ->
-        val percorso = scattoInCorso ?: return@rememberLauncherForActivityResult
+    val fotocamera = rememberFotoSistema { riuscito ->
+        val percorso = scattoInCorso ?: return@rememberFotoSistema
         scattoInCorso = null
         val scatto = File(percorso)
-        if (!riuscito) { scatto.delete(); return@rememberLauncherForActivityResult }
+        if (!riuscito) { scatto.delete(); return@rememberFotoSistema }
         scope.launch {
             runCatching { dati.preparaFoto(Uri.fromFile(scatto)) }.onSuccess { stato.fotoNuove.add(it); stato.speseAperte = true }
             scatto.delete()
@@ -341,8 +341,8 @@ fun SchermataRapportino(
         }
     }
     var scattoFoglio by rememberSaveable { mutableStateOf<String?>(null) }
-    val fotocameraFoglio = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { riuscito ->
-        val percorso = scattoFoglio ?: return@rememberLauncherForActivityResult
+    val fotocameraFoglio = rememberFotoSistema { riuscito ->
+        val percorso = scattoFoglio ?: return@rememberFotoSistema
         scattoFoglio = null
         val scatto = File(percorso)
         if (riuscito) caricaFoglio(Uri.fromFile(scatto)) { scatto.delete() } else scatto.delete()

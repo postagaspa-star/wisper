@@ -267,6 +267,8 @@ async function main() {
     assert.equal(conf2.server, p.casa);
     assert.ok(conf2.google.length > 60 && !JSON.stringify(conf2).includes(new URL(p.google).host), 'l\'indirizzo Google salvato cifrato');
     assert.match(await w.valuta("document.querySelector('#avvisi').innerText"), /Collegato: da fuori casa Wisper Ufficio passa da Google/);
+    // Dal 02/11/2026 la pagina di accesso si apre sul codice per il telefono: si passa a email e password come una persona.
+    for (let i = 0; i < 25 && !(await w.valuta("!!document.querySelector('.accesso') || (b => { if (b) b.click(); return false; })([...document.querySelectorAll('.pagina-accesso button')].find(x => x.textContent.trim() === 'Entra con email e password'))")); i++) await aspetta(200);
     await w.valuta(`(() => { const f = document.querySelector('.accesso'); f.querySelector('input[type=email]').value = 'laura@esempio.it'; f.querySelector('input[type=password]').value = 'prova'; f.requestSubmit(); return true; })()`);
     await w.aspettaChe("!!document.querySelector('h1') && /Laura/.test(document.querySelector('h1').textContent)", 25000, 'la Dashboard di Laura');
     assert.equal((await w.valuta("fetch('/locale/stato').then(r => r.json())")).strada, 'google');

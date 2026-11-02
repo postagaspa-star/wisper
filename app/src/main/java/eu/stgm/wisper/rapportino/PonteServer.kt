@@ -2,6 +2,7 @@ package eu.stgm.wisper.rapportino
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import okhttp3.ConnectionPool
 import okhttp3.OkHttpClient
 import org.json.JSONArray
 import org.json.JSONObject
@@ -44,6 +45,10 @@ class PonteServer(
     private val client: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
+        // Il server (Node) chiude le connessioni ferme da 5 secondi; OkHttp le controlla solo dopo 10.
+        // In mezzo una scrittura (che non si ripete mai da sola) partiva su una connessione già chiusa
+        // e cadeva ("unexpected end of stream", provato il 02/11/2026): si buttano dopo 4 secondi.
+        .connectionPool(ConnectionPool(5, 4, TimeUnit.SECONDS))
         .build(),
     /** La porta Google: l'indirizzo dello script (quello che finisce con /exec). Vuoto = solo casa. */
     private val google: () -> String = { "" },
@@ -996,6 +1001,33 @@ class PonteServer(
         controllaConfigurazione()
         if (dati.isEmpty()) throw Rifiutato("File vuoto")
         verifica(strade.carica(listOf("nome" to nome, "mime" to mime, "idFile" to idFile, "per" to per), dati, chiSono()))
+    }
+
+    // ------------------------------------------------------------- collegare il computer col QR (docs/gestionale/collega-qr.md §4)
+
+    /**
+     * Il telefono fa entrare il computer del QR come chi è entrato qui, con i suoi
+     * permessi. Passa dalle stesse strade del resto (casa o Google). Torna il nome
+     * del computer come l'ha tenuto il server. Una scrittura: mai ripetuta da sola
+     * (un id già usato risponde "già usato").
+     */
+    suspend fun autorizzaComputer(codice: CodiceCollega): String = withContext(Dispatchers.IO) {
+        val r = scrivi(
+            JSONObject().put("azione", "autorizzaComputer")
+                .put("id", codice.id).put("chiave", codice.chiave).put("nome", codice.nome)
+        )
+        r.testo("nome").ifBlank { codice.nome }
+    }
+
+    /**
+     * A che punto è il computer autorizzato [id]: "autorizzato" (non è ancora
+     * entrato), "entrato" o "scaduto". Una lettura, ma con la POST: vale sia che il
+     * server la tenga fra le letture sia fra le azioni che vogliono la POST, ed è
+     * una domanda che il telefono fa ogni 1,5 secondi, mai per conto della coda.
+     */
+    suspend fun statoComputer(id: String): StatoComputer = withContext(Dispatchers.IO) {
+        val r = scrivi(JSONObject().put("azione", "statoComputer").put("id", id))
+        StatoComputer(r.testo("stato").ifBlank { throw Rifiutato("Il server non ha detto a che punto è il computer") }, r.testo("nome"))
     }
 
     // ------------------------------------------------------------- interno

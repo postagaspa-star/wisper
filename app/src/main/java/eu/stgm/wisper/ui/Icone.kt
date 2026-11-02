@@ -186,4 +186,12 @@ object Icone {
     val pennello = tratto("pennello", 2.2f, "M4 20c3 0 4-2 4-4l9-9-3-3-9 9c-2 0-4 1-4 4", "M14 4l3 3")
     val immagine = tratto("immagine", 2.2f, "M4 5h16v14H4z", "M4 16l5-5 4 4 3-3 4 4", "M15 9h.01")
     val controlli = tratto("controlli", 2.2f, "M9 6h11M9 12h11M9 18h11", "M4 6l1 1 2-2M4 12l1 1 2-2M4 18l1 1 2-2")
+
+    // ---- collegare il computer col QR (docs/prototipo/Collega-QR.html)
+    /** Lo schermo del computer, con gli angoli tondi: la voce del menu e il foglio di conferma. */
+    val pc = tratto("pc", 2f, "M5 4h14a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z", "M8 20h8M12 16v4")
+    /** La fotocamera barrata: "Serve la fotocamera". */
+    val fotocameraNo = tratto("fotocameraNo", 2f, "M4 8h3l2-3h6l2 3h3v11H4z", "M12 9.5a3.5 3.5 0 1 1 0 7a3.5 3.5 0 1 1 0-7z", "M3 3l18 18")
+    /** Il Wi-Fi barrato: "Il computer non ha risposto". */
+    val reteNo = tratto("reteNo", 2f, "M2 9a15 15 0 0 1 20 0M5 12.5a10 10 0 0 1 14 0M8.5 16a5 5 0 0 1 7 0", "M3 3l18 18")
 }

@@ -12,7 +12,9 @@
  *    lettura ripetuta non fa danni e la risposta giusta e' quella di adesso.
  *  - Solo le risposte ok:true: un "no" o un "riprova" si rifanno.
  *  - Mai una risposta con dentro un token o una password (accedi, la password
- *    nuova da dettare): quelle si rifanno, non si tengono nel database.
+ *    nuova da dettare): quelle si rifanno, non si tengono nel database. Nemmeno
+ *    il pacchetto del collegamento col QR (attesaComputer): il token c'e', anche
+ *    se cifrato, e la risposta "pronto" vale una volta sola.
  *  - Vale solo per lo stesso token: con un altro accesso l'id non vale.
  *  - Si tiene un giorno (le code delle app riprovano in pochi minuti).
  * Due richieste con lo stesso id nello stesso momento: la seconda aspetta la prima.
@@ -41,7 +43,7 @@ function preparaRicordo(w) {
  */
 async function conRicordo(w, idRichiesta, token, azione, voce, fn) {
   const id = testo(idRichiesta);
-  if (!RE_ID.test(id) || !voce || !(voce.scrive || voce.soloPost) || azione === 'accedi') return fn();
+  if (!RE_ID.test(id) || !voce || !(voce.scrive || voce.soloPost) || azione === 'accedi' || azione === 'attesaComputer') return fn();
   if (!w.richiesteInCorso) preparaRicordo(w);
   const chiave = sha256(String(token || '')) + ':' + id;
   if (w.richiesteInCorso.has(chiave)) return w.richiesteInCorso.get(chiave);

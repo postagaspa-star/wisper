@@ -19,6 +19,13 @@
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- Collega un computer (docs/gestionale/collega-qr.md §7): la fotocamera dentro l'app legge
+         il QR di Wisper Ufficio. Si chiede solo entrando in quella schermata. Non obbligatoria:
+         un telefono senza fotocamera installa Wisper lo stesso e il computer entra con la password.
+         Attenzione: con questo permesso dichiarato, la fotocamera di sistema (scontrini, foto)
+         parte solo col permesso dato; per questo le foto passano da ui/FotoSistema.kt. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera.any" android:required="false" />
 
     <!-- Fase 7 (fase7.md §3.13): il messaggio pronto si apre nel WhatsApp di Manuel, Business
          o normale. Da Android 11 un'app vede le altre solo se le dichiara qui. -->

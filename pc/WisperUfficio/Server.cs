@@ -191,6 +191,37 @@ public sealed class Server
         }
     }
 
+    /// <summary>
+    /// Il collegamento col QR (docs/gestionale/collega-qr.md §4 e §6): attesaComputer {id} al server di casa, senza
+    /// chiave d'accesso e MAI da Google (prima del collegamento il computer l'indirizzo Google non lo sa, e il server
+    /// da Google la rifiuta), con 1,5 secondi in tutto come la prova di casa. Null = il server di casa non ha risposto
+    /// (o a quell'indirizzo non c'è un server di Wisper): il computer non è in ufficio.
+    /// </summary>
+    public async Task<JsonObject?> AttesaComputerAsync(string id)
+    {
+        var indirizzo = config.Server;
+        if (indirizzo.Length == 0) return null;
+        var o = new JsonObject { ["azione"] = "attesaComputer", ["id"] = id };
+        foreach (var (k, v) in ChiSono()) o[k] = v;
+        try
+        {
+            using var tempo = new CancellationTokenSource(TimeSpan.FromMilliseconds(1500));
+            // Niente idRichiesta: ogni domanda è nuova, e il pacchetto il server lo dà una volta sola.
+            using var rq = new HttpRequestMessage(HttpMethod.Post, indirizzo + "/exec") { Content = new StringContent(o.ToJsonString(), Encoding.UTF8, "application/json") };
+            rq.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+            using var r = await provaCasa.SendAsync(rq, tempo.Token).ConfigureAwait(false);
+            if (r.StatusCode != HttpStatusCode.OK) return null;
+            var risposta = JsonNode.Parse(await r.Content.ReadAsStringAsync(tempo.Token).ConfigureAwait(false)) as JsonObject;
+            if (risposta?["ok"]?.GetValueKind() != JsonValueKind.True) return null;
+            Contatto("casa");
+            return risposta;
+        }
+        catch (Exception e) when (ÈRete(e) || e is JsonException)
+        {
+            return null;
+        }
+    }
+
     /// <summary>esci: il token non vale più neanche sul server. Se il server non risponde, si esce lo stesso.</summary>
     public async Task EsciAsync()
     {

@@ -139,6 +139,7 @@ class MainActivity : ComponentActivity() {
         leggiNotifica(intent)
         leggiPromemoria(intent)
         leggiFileCondivisi(intent)
+        collegaDaProva.value = ProveCollega.testoDallIntent(intent) ?: collegaDaProva.value
         setContent { Wisper(archivio, this) }
     }
 
@@ -147,6 +148,7 @@ class MainActivity : ComponentActivity() {
         leggiNotifica(intent)
         leggiPromemoria(intent)
         leggiFileCondivisi(intent)
+        collegaDaProva.value = ProveCollega.testoDallIntent(intent) ?: collegaDaProva.value
     }
 
     /**
@@ -262,6 +264,9 @@ class MainActivity : ComponentActivity() {
 
         /** Fase 7: il collegamento (JSON) di una notifica toccata, da aprire appena si può. */
         val collegamentoDaAprire = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
+
+        /** Solo nelle build di prova (ProveCollega): il testo di un QR da dare a Collega un computer. Nel rilascio resta null. */
+        val collegaDaProva = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
     }
 
     override fun onResume() {
@@ -280,6 +285,7 @@ class MainActivity : ComponentActivity() {
  *  - "sezioni"       le voci del menu laterale, ognuna con la sua pila; la casa è la Dashboard
  *  - "rapportino"    il rapportino aperto (stato in [modulo], su disco in [BozzaModulo])
  *  - "firma:<id>"    la firma del cliente
+ *  - "collega"       Collega un computer: la fotocamera che legge il QR di Wisper Ufficio (collega-qr.md §7)
  */
 @Composable
 private fun Wisper(archivio: Archivio, attivita: ComponentActivity) {
@@ -516,6 +522,13 @@ private fun Wisper(archivio: Archivio, attivita: ComponentActivity) {
             sezioneNome = Sezione.AMMINISTRAZIONE.name
         }
 
+        // Solo nelle build di prova: il testo di un QR arrivato con l'Intent apre Collega un computer (ProveCollega).
+        val daProva by MainActivity.collegaDaProva.collectAsStateWithLifecycle()
+        LaunchedEffect(daProva, pagina, visita.attiva) {
+            if (daProva == null || visita.attiva || !archivio.configurato) return@LaunchedEffect
+            if (pagina == "sezioni") pagina = "collega"
+        }
+
         // Indietro: prima la pila della voce, poi si torna alla Dashboard; dalla Dashboard esce dall'app.
         BackHandler(enabled = pagina == "sezioni" && (pila(sezione).isNotEmpty() || sezione != Sezione.DASHBOARD)) {
             if (pila(sezione).isNotEmpty()) nav.indietro() else aCasa()
@@ -598,6 +611,8 @@ private fun Wisper(archivio: Archivio, attivita: ComponentActivity) {
                                             onVoce = { s -> scope.launch { cassetto.close() }; nav.sezione(s) },
                                             onRiprova = { dati.aggiorna() },
                                             onEsci = { scope.launch { cassetto.close() }; foglioTu = "esci" },
+                                            // Collega un computer: non nella visita guidata (dati di esempio).
+                                            onCollega = if (dati.esempio) null else ({ scope.launch { cassetto.close() }; pagina = "collega" }),
                                         )
                                     }
                                 },
@@ -649,6 +664,13 @@ private fun Wisper(archivio: Archivio, attivita: ComponentActivity) {
                             }
                             BackHandler(enabled = cassetto.isOpen) { scope.launch { cassetto.close() } }
                         }
+
+                        p == "collega" -> eu.stgm.wisper.ui.SchermataCollegaComputer(
+                            dati = dati,
+                            testoProva = daProva,
+                            onTestoProvaUsato = { MainActivity.collegaDaProva.value = null },
+                            onChiudi = { pagina = "sezioni" },
+                        )
 
                         p == "rapportino" -> modulo?.let { m ->
                             SchermataRapportino(

@@ -128,6 +128,8 @@ async function main() {
     assert.ok(!JSON.stringify(await valuta("fetch('/locale/stato').then(r => r.json())")).includes(dove), 'né a /locale/stato');
     await foto('1-accesso');
     passo('pagina di accesso: "' + riga.split('\n')[0] + '"');
+    // Dal 02/11/2026 la pagina di accesso si apre sul codice per il telefono: si passa a email e password come una persona.
+    for (let i = 0; i < 25 && !(await valuta("!!document.querySelector('.accesso') || (b => { if (b) b.click(); return false; })([...document.querySelectorAll('.pagina-accesso button')].find(x => x.textContent.trim() === 'Entra con email e password'))")); i++) await aspetta(200);
     await valuta(`(() => { const f = document.querySelector('.accesso'); f.querySelector('input[type=email]').value = 'manuel@esempio.it'; f.querySelector('input[type=password]').value = 'prova'; f.requestSubmit(); return true; })()`);
     await aspettaChe("!!document.querySelector('h1') && /Manuel/.test(document.querySelector('h1').textContent)", 20000, 'la Dashboard');
     assert.deepEqual(p.statoCasa.visti.filter(v => v.metodo === 'POST'), [], 'la password non va a casa');

@@ -1378,6 +1378,13 @@ class DatiEsempio(oggi: LocalDate = LocalDate.now(), private val cartella: File?
 
     private fun <T> errore(messaggio: String): Result<T> = Result.failure(Exception(messaggio))
 
+    // Collegare il computer col QR: nella visita la voce del menu non c'è (collega-qr.md §7), e qui non si collega niente.
+    override suspend fun autorizzaComputer(codice: eu.stgm.wisper.rapportino.CodiceCollega): Result<String> =
+        errore("Nella visita non si collega un computer: tocca Salta la visita")
+
+    override suspend fun statoComputer(id: String): Result<eu.stgm.wisper.rapportino.StatoComputer> =
+        errore("Nella visita non si collega un computer: tocca Salta la visita")
+
     init {
         aggiornaDashboard()
     }

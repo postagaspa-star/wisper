@@ -121,6 +121,8 @@ async function main() {
     await aspetta(1200);
 
     // ------------------------------------------------------------ accesso
+    // Dal 02/11/2026 la pagina di accesso si apre sul codice per il telefono: si passa a email e password come una persona.
+    for (let i = 0; i < 25 && !(await valuta("!!document.querySelector('.accesso') || (b => { if (b) b.click(); return false; })([...document.querySelectorAll('.pagina-accesso button')].find(x => x.textContent.trim() === 'Entra con email e password'))")); i++) await aspetta(200);
     await valuta(`(() => { const f = document.querySelector('.accesso'); f.querySelector('input[type=email]').value = 'manuel@esempio.it'; f.querySelector('input[type=password]').value = 'sbagliata'; f.requestSubmit(); return true; })()`);
     await aspetta(1200);
     assert.match(await valuta("document.querySelector('.avviso-errore') ? document.querySelector('.avviso-errore').textContent : ''"), /Email o password sbagliate/);

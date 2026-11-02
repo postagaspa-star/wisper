@@ -517,6 +517,22 @@ interface Dati {
      * voci nascoste), l'amministrazione completa e la lista di controllo. Tutto in diretta.
      */
     val fase8: eu.stgm.wisper.rapportino.ServizioFase8
+
+    // ------------------------------------------------------------- collegare il computer col QR (docs/gestionale/collega-qr.md)
+
+    /**
+     * Fa entrare in Wisper Ufficio il computer del QR inquadrato, come chi è entrato
+     * qui e con i suoi stessi permessi. In diretta, mai ripetuto da solo. Torna il
+     * nome del computer; un no del server ha la sua frase ("già usato", ...).
+     */
+    suspend fun autorizzaComputer(codice: eu.stgm.wisper.rapportino.CodiceCollega): Result<String>
+
+    /**
+     * A che punto è il computer autorizzato [id]. La rete che manca non è un errore:
+     * torna lo stato [eu.stgm.wisper.rapportino.StatoComputer.RETE] e si richiede al
+     * giro dopo. Un errore è solo un no del server (o l'accesso scaduto).
+     */
+    suspend fun statoComputer(id: String): Result<eu.stgm.wisper.rapportino.StatoComputer>
 }
 
 /**

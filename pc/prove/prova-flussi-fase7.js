@@ -118,7 +118,8 @@ async function main() {
     const entra = async email => {
       await valuta("fetch('/locale/esci', { method: 'POST', body: '{}' })");
       await cdp('Page.navigate', { url: BASE + '/?g=' + Date.now() + '#dashboard' });
-      for (let i = 0; i < 25 && !(await valuta("!!document.querySelector('.accesso')")); i++) await aspetta(200);
+      // Dal 02/11/2026 la pagina di accesso si apre sul codice per il telefono: si passa a email e password come una persona.
+      for (let i = 0; i < 25 && !(await valuta("!!document.querySelector('.accesso') || (b => { if (b) b.click(); return false; })([...document.querySelectorAll('.pagina-accesso button')].find(x => x.textContent.trim() === 'Entra con email e password'))")); i++) await aspetta(200);
       await valuta(`(() => { const f = document.querySelector('.accesso'); f.querySelector('input[type=email]').value = ${JSON.stringify(email)}; f.querySelector('input[type=password]').value = 'prova'; f.requestSubmit(); return true; })()`);
       await aspetta(2800);
     };

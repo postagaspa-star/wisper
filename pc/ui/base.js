@@ -106,6 +106,8 @@
     banca: '<path d="M3 10l9-6 9 6M5 10v8M9.5 10v8M14.5 10v8M19 10v8M3 20h18"/>',
     importa: '<path d="M12 21V9M7 14l5-5 5 5M5 3h14"/>',
     copia: '<path d="M9 9h11v11H9zM5 15H4V4h11v1"/>',
+    // La rete che non arriva (il server dell'ufficio non risponde, prototipo Collega-QR).
+    reteSpenta: '<path d="M2 9a15 15 0 0 1 20 0M5 12.5a10 10 0 0 1 14 0M8.5 16a5 5 0 0 1 7 0"/><path d="M3 3l18 18"/>',
     scollegato: '<path d="M9 15l-2 2a3 3 0 0 1-4.2-4.2l2-2M15 9l2-2a3 3 0 0 1 4.2 4.2l-2 2M8 4V2M4 8H2M16 20v2M20 16h2"/>',
     entrata: '<path d="M17 7 7 17M15 17H7V9"/>',
     uscita: '<path d="M7 17 17 7M9 7h8v8"/>',

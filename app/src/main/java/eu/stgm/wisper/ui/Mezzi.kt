@@ -245,11 +245,11 @@ internal fun FoglioKm(dati: Dati, m: Mezzo, onChiudi: () -> Unit) {
     var conferma by remember { mutableStateOf<String?>(null) }
     var foto by remember { mutableStateOf<File?>(null) }
     var scatto by rememberSaveable { mutableStateOf<String?>(null) }
-    val fotocamera = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
-        val p = scatto ?: return@rememberLauncherForActivityResult
+    val fotocamera = rememberFotoSistema { ok ->
+        val p = scatto ?: return@rememberFotoSistema
         scatto = null
         val f = File(p)
-        if (!ok) { f.delete(); return@rememberLauncherForActivityResult }
+        if (!ok) { f.delete(); return@rememberFotoSistema }
         scope.launch { runCatching { dati.preparaFoto(Uri.fromFile(f)) }.onSuccess { foto = it }.onFailure { avvisi.mostra("La foto non si legge: riprova") }; f.delete() }
     }
     fun salva(confermato: Boolean) {
@@ -818,11 +818,11 @@ fun SchermataGuasto(dati: Dati, nav: Navigatore, tipo: String, id: String) {
     var scatto by rememberSaveable { mutableStateOf<String?>(null) }
     var errore by remember { mutableStateOf<String?>(null) }
     if (km.isBlank() && m?.km != null) km = m.km.toString()
-    val fotocamera = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
-        val p = scatto ?: return@rememberLauncherForActivityResult
+    val fotocamera = rememberFotoSistema { ok ->
+        val p = scatto ?: return@rememberFotoSistema
         scatto = null
         val f = File(p)
-        if (!ok) { f.delete(); return@rememberLauncherForActivityResult }
+        if (!ok) { f.delete(); return@rememberFotoSistema }
         scope.launch { runCatching { dati.preparaFoto(Uri.fromFile(f)) }.onSuccess { foto.add(it) }.onFailure { avvisi.mostra("La foto non si legge: riprova") }; f.delete() }
     }
     fun segnala() {
