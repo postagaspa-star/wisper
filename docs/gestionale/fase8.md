@@ -1085,6 +1085,22 @@ precisi glieli si dà in chat quel giorno, con i percorsi veri.
 rapportino e non si sistema in serata; il server fermo più di 4 ore in un giorno di lavoro nella prima settimana; un dato
 perso. La decisione è di Andrea, con Manuel.
 
+**Aggiornamento del 3 novembre 2026: il cambio senza mani.** Da quando lo script del foglio si incolla in un file solo
+e il NAS prende da sé il foglio e i file (porta-google.md §14ter), e da quando Andrea ha chiesto niente prove a metà per
+lui ("la prova la facciamo quando abbiamo tutto, con il prodotto finito"), §10.3 e §10.5 cambiano così:
+- **La prova generale la faccio io, sul NAS**, in un contenitore usa e getta che vede solo la sua cartella
+  (`prova-generale/<data>`, mai `./dati`): `scarica-foglio.js`, `importa.js`, `copia-drive.js --postino`. Niente
+  computer di Andrea, niente OneDrive; la cartella si cancella subito dopo. Fatta il 3/11/2026: **Tutto torna**; tempi
+  foglio 9 s, importazione 2 s, file 43 s. Un solo file non è passato: la firma di una bozza della prima versione, che sta
+  fuori dalla cartella Wisper di Drive (resta su Drive col suo collegamento). I "Da sapere" sono rapportini dei mesi di
+  prova con totale 0 nel foglio: restano com'erano.
+- **I 10 controlli con Manuel** si fanno la sera del cambio, sul prodotto finito.
+- **La sera**, circa mezz'ora: (1) Manuel smette di scrivere, sul telefono niente rapportini in coda; (2) copia dei dati
+  sul NAS (un minuto), server coi dati veri, `ponte.js si`; (3) Manuel scrive la sua password in una finestra aperta sul
+  computer di Andrea (`utente.js --titolare`), Andrea lo stesso per il suo utente (domanda 3); (4) pubblico le app del
+  gestionale: telefono e computer di Manuel si aggiornano da soli; (5) Manuel entra, col telefono con email e password e
+  col computer col QR; (6) i controlli sul prodotto finito. Se qualcosa non torna, il ritorno di §10.6.
+
 ### 10.7 Dopo: le prime quattro settimane
 
 - **Ogni mattina della prima settimana** (Andrea, 2 minuti): Stato del sistema e Integrazioni verdi, la copia della notte
