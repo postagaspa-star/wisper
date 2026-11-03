@@ -11,6 +11,7 @@ mai dati veri di clienti.
 
 | Data | Versione | In breve |
 |------|----------|----------|
+| 03/11/2026 | 1.0.0 | [Il gestionale entra in uso: la sera del cambio](#v1-0-0) |
 | 03/11/2026 | gestionale, server 0.11.2 | [I dati veri sono nel server sul NAS](#dati-veri) |
 | 02/11/2026 | gestionale, server 0.11.2 (non pubblicata) | [Foglio, portale ed email collegati sul Google vero](#collegati) |
 | 02/11/2026 | gestionale, server 0.11.1 (non pubblicata) | [Su Google si incolla un file solo, il resto lo fa il NAS](#senza-mani) |
@@ -39,6 +40,24 @@ mai dati veri di clienti.
 | marzo–giugno 2026 | prima del repository | [Le prime versioni](#prima) |
 
 ---
+
+<a id="v1-0-0"></a>
+## 3 novembre 2026 · 1.0.0 · Il gestionale entra in uso: la sera del cambio
+
+**Perché.** Tutte e nove le fasi erano costruite, i dati veri già sul NAS, Google e il portale collegati. Restava la
+sera in cui Manuel passa davvero dal foglio al server.
+
+**Cosa è successo.**
+
+- Il foglio di stasera confrontato coi dati copiati il giorno prima: zero differenze, nessuna copia da rifare.
+- Gli account: Manuel come titolare, Andrea come secondo titolare con tutti i permessi. Le password le hanno scritte
+  loro, in una finestra sul computer di Andrea.
+- Telefono e computer alla **1.0.0**. Sul telefono di Manuel la versione nuova è entrata via cavo, al posto della
+  0.4.0 e con la stessa firma; Manuel è entrato con email e password.
+- Il ponte acceso: un dispositivo rimasto alla versione vecchia scrive nel server, attraverso lo script del foglio.
+- La release [v1.0.0](https://github.com/postagaspa-star/wisper/releases/tag/v1.0.0) pubblicata: il computer si
+  aggiorna da solo e la prima volta entra inquadrando col telefono il QR che mostra (Menu › Collega un computer), oppure
+  con email e password.
 
 <a id="dati-veri"></a>
 ## 3 novembre 2026 · gestionale, server 0.11.2 · I dati veri sono nel server sul NAS

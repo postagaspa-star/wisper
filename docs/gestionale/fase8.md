@@ -1108,6 +1108,9 @@ lui ("la prova la facciamo quando abbiamo tutto, con il prodotto finito"), §10.
   --confronta` con un foglio scaricato di nuovo; zero differenze, si va avanti; altrimenti si rifà la copia (un minuto).
 - **Andrea è il secondo titolare** (tutti i permessi, sua scelta del 3/11: "developer"): si crea **dopo** Manuel, perché
   `titolare()` è il primo titolare attivo (ponte, avvisi).
+- **La sera del cambio è stata il 3/11/2026**: confronto zero differenze, account (Manuel id 1, Andrea id 2), app 1.0.0
+  sul telefono di Manuel via cavo (stessa firma) ed entrato, `ponte.js si`, release v1.0.0 pubblicata (commit `ea11ca5`).
+  Il computer di Manuel si aggiorna da solo alla prima apertura.
 
 ### 10.7 Dopo: le prime quattro settimane
 

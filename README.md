@@ -1,7 +1,9 @@
 # Wisper
 
 Work reports for a technician who works alone: filled in on the phone at
-the client's, managed on the computer at the office, kept in a Google Sheet.
+the client's, managed on the computer at the office. Since version 1.0.0
+(3 November 2026) Wisper is the studio's whole management system and the data
+lives on a small server at home; up to 0.4.0 it was kept in a Google Sheet.
 
 It is built for one person, my father, a self-employed surveyor who does monthly
 reports for a few clients. Everything in it comes from a recorded conversation
@@ -18,9 +20,11 @@ My father wrote the specification of a complete management system for the studio
 (`docs/specifiche-stgm.md`, in Italian: 18 modules, from clients and jobs to quotes,
 invoices, people and a client portal). Wisper is growing into it phase by phase, on the
 `gestionale` branch, without losing anything it does today. The plan and the decisions
-are in `docs/gestionale/`; every phase has its entry in the diary.
+are in `docs/gestionale/`; every phase has its entry in the diary. All nine phases were
+released together as version 1.0.0 on 3 November 2026, the evening the studio's data moved
+from the sheet to the server.
 
-Phase 1 (October 2026, not released yet) replaces the Google Sheet with a small server on
+Phase 1 (October 2026) replaces the Google Sheet with a small server on
 the home NAS (`server/`: Node.js 24 with its built-in SQLite, no npm dependencies, in
 Docker). It speaks the same protocol as the sheet script, so the phone and the office
 program changed little, but now everyone signs in with their own name and password, and
