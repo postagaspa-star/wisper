@@ -1100,6 +1100,14 @@ lui ("la prova la facciamo quando abbiamo tutto, con il prodotto finito"), §10.
   computer di Andrea (`utente.js --titolare`), Andrea lo stesso per il suo utente (domanda 3); (4) pubblico le app del
   gestionale: telefono e computer di Manuel si aggiornano da soli; (5) Manuel entra, col telefono con email e password e
   col computer col QR; (6) i controlli sul prodotto finito. Se qualcosa non torna, il ritorno di §10.6.
+- **La copia dei dati è già fatta (3/11/2026)**: Andrea ha chiesto di farla subito ("mio padre in questi giorni non lo
+  sta utilizzando; se cambiasse te lo dico io"). Server fermato, `dati` messa da parte come
+  `dati-prima-del-cambio-<data>` (non si cancella), il foglio scaricato in `cambio/` (fuori dal contenitore e da GitHub),
+  importazione **Tutto torna**, file di Drive copiati, server riacceso: postino, porta e portale attivi. Il **ponte resta
+  spento**: se Manuel scrive con la 0.4.0, scrive nel foglio. Quindi la sera, prima del passo (2): `importa.js
+  --confronta` con un foglio scaricato di nuovo; zero differenze, si va avanti; altrimenti si rifà la copia (un minuto).
+- **Andrea è il secondo titolare** (tutti i permessi, sua scelta del 3/11: "developer"): si crea **dopo** Manuel, perché
+  `titolare()` è il primo titolare attivo (ponte, avvisi).
 
 ### 10.7 Dopo: le prime quattro settimane
 

@@ -11,6 +11,7 @@ mai dati veri di clienti.
 
 | Data | Versione | In breve |
 |------|----------|----------|
+| 03/11/2026 | gestionale, server 0.11.2 | [I dati veri sono nel server sul NAS](#dati-veri) |
 | 02/11/2026 | gestionale, server 0.11.2 (non pubblicata) | [Foglio, portale ed email collegati sul Google vero](#collegati) |
 | 02/11/2026 | gestionale, server 0.11.1 (non pubblicata) | [Su Google si incolla un file solo, il resto lo fa il NAS](#senza-mani) |
 | 02/11/2026 | gestionale (non pubblicata) | [Il computer entra col telefono, inquadrando un QR](#gestionale-qr) |
@@ -38,6 +39,27 @@ mai dati veri di clienti.
 | marzo–giugno 2026 | prima del repository | [Le prime versioni](#prima) |
 
 ---
+
+<a id="dati-veri"></a>
+## 3 novembre 2026 · gestionale, server 0.11.2 · I dati veri sono nel server sul NAS
+
+**Perché.** Andrea: "non li puoi inserire tu i dati, prendendo quelli della versione che già usa?". Sì: il NAS prende
+da solo il foglio e i file di Drive. E siccome Manuel in questi giorni non usa Wisper, la copia si è fatta subito invece
+che la sera del cambio.
+
+**Cosa cambia.**
+
+- Prima una prova generale sul NAS, in un contenitore usa e getta che non vede i dati del server: tutto torna, poi la
+  cartella della prova si cancella.
+- Poi la copia vera: server fermato, i dati di prima messi da parte (non si cancellano), il foglio in Excel, i
+  rapportini con le loro firme e foto, clienti, commesse, spese e impostazioni dentro il server, che si riaccende. Il
+  controllo dice **Tutto torna**: ogni rapportino, ora, chilometro ed euro, per mese e per cliente, uguale al foglio.
+  Ci vuole circa un minuto.
+- Un solo file non è passato: la firma di una bozza della prima versione, che su Drive sta fuori dalla cartella di
+  Wisper. Resta su Drive col suo collegamento.
+- Il ponte resta spento: le app di oggi scrivono ancora nel foglio. La sera del cambio, prima di tutto, il server
+  confronta il foglio con i suoi dati; se qualcuno ha scritto nel frattempo, la copia si rifà.
+- Andrea sarà il secondo titolare, con tutti i permessi, creato subito dopo Manuel.
 
 <a id="collegati"></a>
 ## 2 novembre 2026 · gestionale, server 0.11.2 · Foglio, portale ed email collegati sul Google vero
