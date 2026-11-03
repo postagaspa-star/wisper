@@ -178,6 +178,9 @@ internal static class Program
         ponte.Aggiornamenti = aggiornamenti;
         ponte.ArgomentiDiAvvio = daRipetere;
         aggiornamenti.Avvia();
+        // progetti.md §6: il NAS annuncia le versioni in ogni risposta e sul campanello; il controllo parte da lì.
+        server.VersioneAnnunciata += aggiornamenti.Annunciata;
+        server.AvviaCampanello();
 
         Application.Run(new Finestra(ponte, cartellaUi, Path.Combine(locale, "WebView2"), stampaProva));
     }

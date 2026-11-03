@@ -115,6 +115,8 @@ object Icone {
         "M20 19v-1.5a3.5 3.5 0 0 0-2.5-3.35", "M15.5 4.6a3 3 0 0 1 0 5.8",
     )
     val commesse = tratto("commesse", 2.2f, "M3 7.5A1.5 1.5 0 0 1 4.5 6H9l2 2h8.5A1.5 1.5 0 0 1 21 9.5v9a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18.5z")
+    /** I progetti (03/11/2026): due fogli uno sopra l'altro, dentro la commessa. */
+    val progetti = tratto("progetti", 2.2f, "M12 4l8.5 4.5L12 13 3.5 8.5z", "M3.5 12.5L12 17l8.5-4.5", "M3.5 16.5L12 21l8.5-4.5")
     val ore = tratto("ore", 2.2f, "M12 7v5l3 2", "M12 3a9 9 0 1 1 0 18a9 9 0 1 1 0-18z")
     val fatturazione = tratto("fatturazione", 2.2f, "M7 3h10v18l-2.5-1.5L12 21l-2.5-1.5L7 21z", "M10 8h4M10 12h4")
     val amministrazione = tratto(

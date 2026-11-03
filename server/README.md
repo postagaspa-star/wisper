@@ -144,6 +144,17 @@ to the script, the "retry" answers, the home rule) is in [`docs/gestionale/porta
   identical after the migration (proved against the 0.8.0 server, with a frozen clock, in
   `prove/migrazione-006.test.js`).
 
+Since 0.12.0 (3 November 2026, schema 9, `docs/gestionale/progetti.md`): *projects* under each job (client → jobs →
+projects → reports), with a code that is unique per client, an optional "made out to" name and a description. Codes are
+typed by hand the first times; then `src/codici-progetto.js` finds the pattern of the last two or three (fixed parts, the
+job's code inside the code, the year, one counter) and proposes the next; the shared cases in
+`prove/casi-codici-progetto.json` are ported to the phone. A report can point to an existing project (the job comes from
+it) or create one from the phone's offline queue (`progettoNuovo` with its own `idLocale`, never twice). Every module can
+be switched off; `salvaFunzioni` also switches off what depends on it (jobs need clients, projects need jobs) and
+switches on what it needs; the owner always reaches the switches, even with Administration off. The server watches the
+signed version list on GitHub every 10 minutes (`src/versioni.js`) and announces it in every `/exec` answer and on the
+long-polling `/campanello` (home only), so the apps no longer check on their own.
+
 No npm dependencies: only Node 24 built-in modules.
 
 ## Run it
@@ -295,6 +306,8 @@ subscription: the router forwards **one** port, external TCP 443 to the NAS `192
 | `node server/strumenti/importa.js --foglio <copy.xlsx> [--file <dir>] --dati <dir>` | imports the sheet's Excel export (own xlsx reader), applies the pre-0.3.5 transformations, writes `controllo.html`; exits with an error and no database if any total doesn't match |
 | `node server/strumenti/copia-drive.js --da <script url> --dati <dir>` | copies the Drive files cited by the sheet (photos, signatures, job documents) with the script's read-only `file` action |
 | `node server/strumenti/ripristina.js <copy> [--dati <dir>]` | restores a backup (`.db` or `.db.gz`) with the server stopped, keeping the current database aside |
+| `node server/strumenti/svuota.js --dati <dir> [--si]` | starts again from zero: empties every table of work (clients, jobs, projects, reports, invoices, files...) keeping accounts, paired devices, settings and numbering; without `--si` it only counts. Server stopped, after a copy of the data folder |
+| `node server/strumenti/elenco-di-prova.js [--porta 8799]` | a fake version list signed with a test key (accepted only with `--prova` and `WISPER_VERSIONI_CHIAVE`), to try the update doorbell; `/cambia?codice=11&nome=1.1.1&pc=1.1.1` changes it |
 
 ## Tests
 

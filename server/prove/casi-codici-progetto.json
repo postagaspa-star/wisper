@@ -1,0 +1,231 @@
+{
+  "nota": "Il codice proposto per un progetto nuovo (src/codici-progetto.js). Gli stessi casi li deve ritrovare il telefono (Kotlin). progetti: tutti quelli che ci sono; dove: la commessa del progetto nuovo (il suo id e' il suo codice), il cliente, l'anno di oggi.",
+  "casi": [
+    {
+      "nome": "nessun progetto: si scrive a mano",
+      "progetti": [],
+      "dove": { "idCommessa": "26ST001", "idCliente": "C1", "anno": 2026 },
+      "atteso": { "codice": "", "da": "" }
+    },
+    {
+      "nome": "un codice solo non basta",
+      "progetti": [{ "id": 1, "codice": "ED-001", "idCommessa": "26ST001", "idCliente": "C1", "creato": "2026-11-03T10:00:00" }],
+      "dove": { "idCommessa": "26ST001", "idCliente": "C1", "anno": 2026 },
+      "atteso": { "codice": "", "da": "" }
+    },
+    {
+      "nome": "due codici nella stessa commessa",
+      "progetti": [
+        { "id": 1, "codice": "ED-001", "idCommessa": "26ST001", "idCliente": "C1", "creato": "2026-11-03T10:00:00" },
+        { "id": 2, "codice": "ED-002", "idCommessa": "26ST001", "idCliente": "C1", "creato": "2026-11-03T11:00:00" }
+      ],
+      "dove": { "idCommessa": "26ST001", "idCliente": "C1", "anno": 2026 },
+      "atteso": { "codice": "ED-003", "da": "commessa" }
+    },
+    {
+      "nome": "numeri saltati: il piu' alto piu' uno",
+      "progetti": [
+        { "id": 1, "codice": "ED-001", "idCommessa": "26ST001", "idCliente": "C1", "creato": "2026-11-03T10:00:00" },
+        { "id": 2, "codice": "ED-005", "idCommessa": "26ST001", "idCliente": "C1", "creato": "2026-11-03T11:00:00" },
+        { "id": 3, "codice": "ED-007", "idCommessa": "26ST001", "idCliente": "C1", "creato": "2026-11-03T12:00:00" }
+      ],
+      "dove": { "idCommessa": "26ST001", "idCliente": "C1", "anno": 2026 },
+      "atteso": { "codice": "ED-008", "da": "commessa" }
+    },
+    {
+      "nome": "forme diverse: niente proposta",
+      "progetti": [
+        { "id": 1, "codice": "ABC", "idCommessa": "26ST001", "idCliente": "C1", "creato": "2026-11-03T10:00:00" },
+        { "id": 2, "codice": "X-12", "idCommessa": "26ST001", "idCliente": "C1", "creato": "2026-11-03T11:00:00" }
+      ],
+      "dove": { "idCommessa": "26ST001", "idCliente": "C1", "anno": 2026 },
+      "atteso": { "codice": "", "da": "" }
+    },
+    {
+      "nome": "due numeri che cambiano: niente proposta",
+      "progetti": [
+        { "id": 1, "codice": "A1-1", "idCommessa": "26ST001", "idCliente": "C1", "creato": "2026-11-03T10:00:00" },
+        { "id": 2, "codice": "A2-2", "idCommessa": "26ST001", "idCliente": "C1", "creato": "2026-11-03T11:00:00" }
+      ],
+      "dove": { "idCommessa": "26ST001", "idCliente": "C1", "anno": 2026 },
+      "atteso": { "codice": "", "da": "" }
+    },
+    {
+      "nome": "il codice della commessa dentro: nella stessa commessa si continua",
+      "progetti": [
+        { "id": 1, "codice": "26ST001-01", "idCommessa": "26ST001", "idCliente": "C1", "creato": "2026-11-03T10:00:00" },
+        { "id": 2, "codice": "26ST001-02", "idCommessa": "26ST001", "idCliente": "C1", "creato": "2026-11-03T11:00:00" }
+      ],
+      "dove": { "idCommessa": "26ST001", "idCliente": "C1", "anno": 2026 },
+      "atteso": { "codice": "26ST001-03", "da": "commessa" }
+    },
+    {
+      "nome": "il codice della commessa dentro: una commessa nuova riparte da 1",
+      "progetti": [
+        { "id": 1, "codice": "26ST001-01", "idCommessa": "26ST001", "idCliente": "C1", "creato": "2026-11-03T10:00:00" },
+        { "id": 2, "codice": "26ST001-02", "idCommessa": "26ST001", "idCliente": "C1", "creato": "2026-11-03T11:00:00" }
+      ],
+      "dove": { "idCommessa": "26ST002", "idCliente": "C1", "anno": 2026 },
+      "atteso": { "codice": "26ST002-01", "da": "cliente" }
+    },
+    {
+      "nome": "il codice della commessa da commesse diverse dello stesso cliente",
+      "progetti": [
+        { "id": 1, "codice": "26ST001/1", "idCommessa": "26ST001", "idCliente": "C1", "creato": "2026-11-03T10:00:00" },
+        { "id": 2, "codice": "26ST002/1", "idCommessa": "26ST002", "idCliente": "C1", "creato": "2026-11-03T11:00:00" },
+        { "id": 3, "codice": "26ST002/2", "idCommessa": "26ST002", "idCliente": "C1", "creato": "2026-11-03T12:00:00" }
+      ],
+      "dove": { "idCommessa": "26ST003", "idCliente": "C1", "anno": 2026 },
+      "atteso": { "codice": "26ST003/1", "da": "cliente" }
+    },
+    {
+      "nome": "anno a quattro cifre",
+      "progetti": [
+        { "id": 1, "codice": "2026-001", "idCommessa": "26ST001", "idCliente": "C1", "creato": "2026-11-03T10:00:00" },
+        { "id": 2, "codice": "2026-002", "idCommessa": "26ST001", "idCliente": "C1", "creato": "2026-11-03T11:00:00" }
+      ],
+      "dove": { "idCommessa": "26ST001", "idCliente": "C1", "anno": 2026 },
+      "atteso": { "codice": "2026-003", "da": "commessa" }
+    },
+    {
+      "nome": "anno nuovo senza codici dell'anno: si continua a contare",
+      "progetti": [
+        { "id": 1, "codice": "2026-001", "idCommessa": "26ST001", "idCliente": "C1", "creato": "2026-11-03T10:00:00" },
+        { "id": 2, "codice": "2026-002", "idCommessa": "26ST001", "idCliente": "C1", "creato": "2026-12-03T11:00:00" }
+      ],
+      "dove": { "idCommessa": "26ST001", "idCliente": "C1", "anno": 2027 },
+      "atteso": { "codice": "2027-003", "da": "commessa" }
+    },
+    {
+      "nome": "anno nuovo ricominciato a mano da 1: si continua da li'",
+      "progetti": [
+        { "id": 1, "codice": "2026-001", "idCommessa": "26ST001", "idCliente": "C1", "creato": "2026-11-03T10:00:00" },
+        { "id": 2, "codice": "2026-002", "idCommessa": "26ST001", "idCliente": "C1", "creato": "2026-12-03T11:00:00" },
+        { "id": 3, "codice": "2027-001", "idCommessa": "26ST001", "idCliente": "C1", "creato": "2027-01-08T09:00:00" }
+      ],
+      "dove": { "idCommessa": "26ST001", "idCliente": "C1", "anno": 2027 },
+      "atteso": { "codice": "2027-002", "da": "commessa" }
+    },
+    {
+      "nome": "anno a due cifre",
+      "progetti": [
+        { "id": 1, "codice": "P26/015", "idCommessa": "26ST001", "idCliente": "C1", "creato": "2026-11-03T10:00:00" },
+        { "id": 2, "codice": "P26/016", "idCommessa": "26ST001", "idCliente": "C1", "creato": "2026-11-03T11:00:00" }
+      ],
+      "dove": { "idCommessa": "26ST001", "idCliente": "C1", "anno": 2026 },
+      "atteso": { "codice": "P26/017", "da": "commessa" }
+    },
+    {
+      "nome": "anno e contatore cambiano insieme a gennaio",
+      "progetti": [
+        { "id": 1, "codice": "25-099", "idCommessa": "26ST001", "idCliente": "C1", "creato": "2025-12-20T10:00:00" },
+        { "id": 2, "codice": "26-001", "idCommessa": "26ST001", "idCliente": "C1", "creato": "2026-01-10T11:00:00" },
+        { "id": 3, "codice": "26-002", "idCommessa": "26ST001", "idCliente": "C1", "creato": "2026-01-12T11:00:00" }
+      ],
+      "dove": { "idCommessa": "26ST001", "idCliente": "C1", "anno": 2026 },
+      "atteso": { "codice": "26-003", "da": "commessa" }
+    },
+    {
+      "nome": "commessa nuova: la regola del cliente",
+      "progetti": [
+        { "id": 1, "codice": "ED-0100", "idCommessa": "26ST001", "idCliente": "C1", "creato": "2026-11-03T10:00:00" },
+        { "id": 2, "codice": "ED-0101", "idCommessa": "26ST002", "idCliente": "C1", "creato": "2026-11-03T11:00:00" }
+      ],
+      "dove": { "idCommessa": "26ST003", "idCliente": "C1", "anno": 2026 },
+      "atteso": { "codice": "ED-0102", "da": "cliente" }
+    },
+    {
+      "nome": "cliente nuovo: la regola di tutti",
+      "progetti": [
+        { "id": 1, "codice": "PRJ-7", "idCommessa": "26ST001", "idCliente": "C1", "creato": "2026-11-03T10:00:00" },
+        { "id": 2, "codice": "PRJ-8", "idCommessa": "26ST002", "idCliente": "C2", "creato": "2026-11-03T11:00:00" }
+      ],
+      "dove": { "idCommessa": "26ST003", "idCliente": "C3", "anno": 2026 },
+      "atteso": { "codice": "PRJ-9", "da": "tutti" }
+    },
+    {
+      "nome": "gli zeri davanti restano",
+      "progetti": [
+        { "id": 1, "codice": "0098", "idCommessa": "26ST001", "idCliente": "C1", "creato": "2026-11-03T10:00:00" },
+        { "id": 2, "codice": "0099", "idCommessa": "26ST001", "idCliente": "C1", "creato": "2026-11-03T11:00:00" }
+      ],
+      "dove": { "idCommessa": "26ST001", "idCliente": "C1", "anno": 2026 },
+      "atteso": { "codice": "0100", "da": "commessa" }
+    },
+    {
+      "nome": "senza zeri il numero cresce",
+      "progetti": [
+        { "id": 1, "codice": "98", "idCommessa": "26ST001", "idCliente": "C1", "creato": "2026-11-03T10:00:00" },
+        { "id": 2, "codice": "99", "idCommessa": "26ST001", "idCliente": "C1", "creato": "2026-11-03T11:00:00" }
+      ],
+      "dove": { "idCommessa": "26ST001", "idCliente": "C1", "anno": 2026 },
+      "atteso": { "codice": "100", "da": "commessa" }
+    },
+    {
+      "nome": "un codice gia' preso dallo stesso cliente si salta",
+      "progetti": [
+        { "id": 1, "codice": "ED-001", "idCommessa": "26ST001", "idCliente": "C1", "creato": "2026-11-03T10:00:00" },
+        { "id": 2, "codice": "ED-002", "idCommessa": "26ST001", "idCliente": "C1", "creato": "2026-11-03T11:00:00" },
+        { "id": 3, "codice": "ED-003", "idCommessa": "26ST002", "idCliente": "C1", "creato": "2026-11-03T09:00:00" }
+      ],
+      "dove": { "idCommessa": "26ST001", "idCliente": "C1", "anno": 2026 },
+      "atteso": { "codice": "ED-004", "da": "commessa" }
+    },
+    {
+      "nome": "maiuscole e minuscole sono la stessa parte fissa",
+      "progetti": [
+        { "id": 1, "codice": "ed-001", "idCommessa": "26ST001", "idCliente": "C1", "creato": "2026-11-03T10:00:00" },
+        { "id": 2, "codice": "ED-002", "idCommessa": "26ST001", "idCliente": "C1", "creato": "2026-11-03T11:00:00" }
+      ],
+      "dove": { "idCommessa": "26ST001", "idCliente": "C1", "anno": 2026 },
+      "atteso": { "codice": "ED-003", "da": "commessa" }
+    },
+    {
+      "nome": "regola cambiata: bastano due codici nuovi",
+      "progetti": [
+        { "id": 1, "codice": "VECCHIO1", "idCommessa": "26ST001", "idCliente": "C1", "creato": "2026-11-03T10:00:00" },
+        { "id": 2, "codice": "VECCHIO2", "idCommessa": "26ST001", "idCliente": "C1", "creato": "2026-11-03T11:00:00" },
+        { "id": 3, "codice": "N-10", "idCommessa": "26ST001", "idCliente": "C1", "creato": "2026-11-03T12:00:00" },
+        { "id": 4, "codice": "N-11", "idCommessa": "26ST001", "idCliente": "C1", "creato": "2026-11-03T13:00:00" }
+      ],
+      "dove": { "idCommessa": "26ST001", "idCliente": "C1", "anno": 2026 },
+      "atteso": { "codice": "N-12", "da": "commessa" }
+    },
+    {
+      "nome": "solo numeri",
+      "progetti": [
+        { "id": 1, "codice": "1501", "idCommessa": "26ST001", "idCliente": "C1", "creato": "2026-11-03T10:00:00" },
+        { "id": 2, "codice": "1502", "idCommessa": "26ST001", "idCliente": "C1", "creato": "2026-11-03T11:00:00" }
+      ],
+      "dove": { "idCommessa": "26ST001", "idCliente": "C1", "anno": 2026 },
+      "atteso": { "codice": "1503", "da": "commessa" }
+    },
+    {
+      "nome": "stesso istante: conta l'ordine degli id",
+      "progetti": [
+        { "id": 2, "codice": "Q-2", "idCommessa": "26ST001", "idCliente": "C1", "creato": "2026-11-03T10:00:00" },
+        { "id": 1, "codice": "Q-1", "idCommessa": "26ST001", "idCliente": "C1", "creato": "2026-11-03T10:00:00" }
+      ],
+      "dove": { "idCommessa": "26ST001", "idCliente": "C1", "anno": 2026 },
+      "atteso": { "codice": "Q-3", "da": "commessa" }
+    },
+    {
+      "nome": "commessa che nasce col rapportino (senza codice ancora): dal cliente",
+      "progetti": [
+        { "id": 1, "codice": "ED-001", "idCommessa": "26ST001", "idCliente": "C1", "creato": "2026-11-03T10:00:00" },
+        { "id": 2, "codice": "ED-002", "idCommessa": "26ST001", "idCliente": "C1", "creato": "2026-11-03T11:00:00" }
+      ],
+      "dove": { "idCommessa": "", "idCliente": "C1", "anno": 2026 },
+      "atteso": { "codice": "ED-003", "da": "cliente" }
+    },
+    {
+      "nome": "codice della commessa nel codice, ma la commessa non ha ancora il suo: a mano",
+      "progetti": [
+        { "id": 1, "codice": "26ST001-01", "idCommessa": "26ST001", "idCliente": "C1", "creato": "2026-11-03T10:00:00" },
+        { "id": 2, "codice": "26ST001-02", "idCommessa": "26ST001", "idCliente": "C1", "creato": "2026-11-03T11:00:00" }
+      ],
+      "dove": { "idCommessa": "", "idCliente": "C1", "anno": 2026 },
+      "atteso": { "codice": "", "da": "" }
+    }
+  ]
+}

@@ -212,15 +212,21 @@ internal fun PaginaFunzioni(dati: Dati, onIndietro: () -> Unit) {
     val titolare = sessione.utente.ruolo == Ruoli.TITOLARE
     var giro by remember { mutableStateOf(0) }
     val lettura = rememberLettura(Unit, giro + Giri8.amministrazione * 1000) { dati.fase8.funzioni() }
-    var spegni by remember { mutableStateOf<Funzione?>(null) }
+    // 03/11/2026 (progetti.md §5): tutte si spengono; prima di cambiare il foglio dice cosa cambia e cosa si
+    // spegne (o si accende) con lei. La funzione da cambiare e se la si accende.
+    var cambia by remember { mutableStateOf<Pair<Funzione, Boolean>?>(null) }
     var lavoro by remember { mutableStateOf<String?>(null) }
 
     fun salva(f: Funzione, accesa: Boolean) {
         if (lavoro != null) return
         lavoro = f.modulo
         scope.launch {
+            // Dopo il salvataggio l'app rilegge chi sei (io): menu e permessi seguono (ServizioFase8.chiSonoCambiato).
             dati.fase8.salvaFunzioni(f.modulo, accesa)
-                .onSuccess { avvisi.mostra((if (accesa) "Accesa: " else "Spenta: ") + f.nome); giro++; Giri8.amministrazione++ }
+                .onSuccess { anche ->
+                    avvisi.mostra(Funzione.avvisoCambio(f.nome, accesa, anche))
+                    giro++; Giri8.amministrazione++
+                }
                 .onFailure { avvisi.mostra(spiegaErrore2(it, "Non è cambiata: riprova")) }
             lavoro = null
         }
@@ -239,12 +245,17 @@ internal fun PaginaFunzioni(dati: Dati, onIndietro: () -> Unit) {
                     Row(Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                             Text(f.nome, style = Testi.forte, color = c.testo)
-                            if (f.spegnibile) Text(primaFrase(f.cosaCambia), style = Testi.secondario, color = c.tenue)
+                            primaFrase(f.cosaCambia).takeIf { it.isNotBlank() }?.let { Text(it, style = Testi.secondario, color = c.tenue) }
                         }
                         when {
+                            // Un server di prima della 0.12 puo' ancora dire che una funzione non si spegne.
                             !f.spegnibile -> Parola8("Sempre accesa")
                             titolare -> Box(Modifier.bersaglio("funzione-" + f.modulo)) {
-                                Interruttore(f.accesa, { nuova -> if (nuova) salva(f, true) else spegni = f }, f.nome)
+                                // Come il computer: spegnendo il foglio c'e' sempre; accendendo solo se se ne accendono anche altre.
+                                Interruttore(f.accesa, { nuova ->
+                                    val tutte = (lettura as? Lettura.Pronta)?.dato.orEmpty()
+                                    if (lavoro == null) { if (nuova && Funzione.fraseAnche(f, true, tutte).isBlank()) salva(f, true) else cambia = f to nuova }
+                                }, f.nome)
                             }
                             else -> Parola8(f.parola)
                         }
@@ -254,12 +265,19 @@ internal fun PaginaFunzioni(dati: Dati, onIndietro: () -> Unit) {
             else -> StatoLettura(lettura) { giro++ }
         }
     }
-    spegni?.let { f ->
-        FoglioDalBasso({ spegni = null }) {
-            Text("Spegnere ${f.nome}?", style = Testi.titoloScheda, color = c.testo)
-            Text(dopoDomanda(f.cosaCambia).ifBlank { "Sparisce dal menu di tutti. I dati restano." }, style = Testi.testo, color = c.testo2)
-            PulsantePericolo("Spegni", { spegni = null; salva(f, false) }, Modifier.fillMaxWidth().bersaglio("conferma-spegni"))
-            PulsanteTesto("Annulla", { spegni = null }, Modifier.fillMaxWidth(), colore = c.testo)
+    cambia?.let { (f, accendi) ->
+        val tutte = (lettura as? Lettura.Pronta)?.dato.orEmpty()
+        val anche = Funzione.fraseAnche(f, accendi, tutte)
+        FoglioDalBasso({ cambia = null }) {
+            Text((if (accendi) "Accendere " else "Spegnere ") + f.nome + "?", style = Testi.titoloScheda, color = c.testo)
+            // cosaCambia dice cosa succede spegnendo: accendendo si dice la frase del computer.
+            val cosa = if (accendi) "Torna nel menu di chi ha il permesso. I dati sono come prima."
+            else dopoDomanda(f.cosaCambia).ifBlank { "Sparisce dal menu di tutti. I dati restano." }
+            Text(cosa, style = Testi.testo, color = c.testo2)
+            if (anche.isNotBlank()) Text(anche, style = Testi.forte, color = c.testo, modifier = Modifier.bersaglio("funzioni-anche"))
+            if (accendi) PulsantePrincipale("Accendi", { cambia = null; salva(f, true) }, Modifier.bersaglio("conferma-accendi"), icona = Icone.interruttore)
+            else PulsantePericolo("Spegni", { cambia = null; salva(f, false) }, Modifier.fillMaxWidth().bersaglio("conferma-spegni"))
+            PulsanteTesto("Annulla", { cambia = null }, Modifier.fillMaxWidth(), colore = c.testo)
         }
     }
 }

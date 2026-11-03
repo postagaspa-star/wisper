@@ -7,9 +7,11 @@ using System.Text.Json.Nodes;
 namespace WisperUfficio;
 
 /// <summary>
-/// Wisper Ufficio si aggiorna da solo: un controllo all'avvio e poi uno ogni ora.
+/// Wisper Ufficio si aggiorna da solo quando il NAS annuncia una versione nuova (docs/gestionale/progetti.md §6, dal
+/// 03/11/2026): il server mette "versioni" in ogni risposta e sul campanello (Server.cs); se la versione del computer è
+/// più nuova di questa, il controllo parte una volta per versione. Niente più controllo ogni ora; "Controlla" a mano resta.
 ///
-/// Chiede a GitHub, alla pagina delle versioni del progetto, il file
+/// Il controllo chiede a GitHub, alla pagina delle versioni del progetto, il file
 /// aggiornamento.json: dentro c'è l'elenco delle versioni, firmato con la chiave
 /// privata di chi pubblica (in wisper-keys, mai nel repo). Se la firma non torna
 /// non si scarica niente: un account GitHub rubato non basta per mettere un
@@ -25,13 +27,19 @@ public sealed class Aggiornamenti
     /// <summary>La chiave pubblica (wisper-keys/aggiornamenti-pubblica.txt): valgono solo gli elenchi firmati con la sua privata.</summary>
     private const string ChiavePubblica = "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEcytO0JAM8WZdBrGMSdnF211vK29aUdNOIhPaPpG9XOj3qSd0aKRi8GRmLsxNAbvTmgbvJ9uZ6gjI7euYqqfC7Q==";
 
-    private static readonly TimeSpan Ogni = TimeSpan.FromHours(1);
+    /// <summary>Se il controllo di una versione annunciata non è andato (rete, GitHub), lo stesso annuncio lo rifà al più presto dopo un'ora.</summary>
+    private static readonly TimeSpan RiprovaDopo = TimeSpan.FromHours(1);
     private const long DimensioneMassima = 400_000_000;
 
     private readonly string indirizzo;
     private readonly string? exe;
     private readonly HttpClient http = new() { Timeout = TimeSpan.FromMinutes(10) };
     private readonly SemaphoreSlim unoAllaVolta = new(1, 1);
+
+    // L'ultima versione annunciata dal server per cui si è fatto partire il controllo, e quando.
+    private readonly object lucchettoAnnuncio = new();
+    private string versioneAnnunciata = "";
+    private DateTime annunciataIl = DateTime.MinValue;
 
     public Version Attuale { get; } = typeof(Aggiornamenti).Assembly.GetName().Version ?? new Version(0, 0, 0);
 
@@ -57,7 +65,10 @@ public sealed class Aggiornamenti
 
     public string VersioneAttuale => Attuale.ToString(3);
 
-    /// <summary>Il controllo all'avvio (dopo mezzo minuto, a programma aperto) e poi ogni ora.</summary>
+    /// <summary>
+    /// All'avvio solo le pulizie dell'aggiornamento di prima. Il controllo lo fa partire il server (Annunciata) o la
+    /// persona ("Controlla"): il giro di ogni ora non c'è più (progetti.md §6).
+    /// </summary>
     public void Avvia()
     {
         if (exe == null)
@@ -66,15 +77,32 @@ public sealed class Aggiornamenti
             return;
         }
         PulisciAvanzi();
-        _ = Task.Run(async () =>
+    }
+
+    /// <summary>
+    /// Il server ha annunciato la versione del computer (in una risposta o dal campanello). Se è più nuova di questa, il
+    /// controllo (elenco firmato su GitHub, SHA-256, sostituzione) parte una volta per versione, senza mostrare niente; la
+    /// versione nuova parte alla prossima apertura, come prima. Se quella volta non va (rete, GitHub), lo stesso annuncio
+    /// lo rifà al più presto dopo un'ora.
+    /// </summary>
+    public void Annunciata(string versione, string fonte)
+    {
+        if (!Version.TryParse(versione, out var v) || v <= Attuale) return;
+        var chiave = v.ToString();
+        lock (lucchettoAnnuncio)
         {
-            await Task.Delay(TimeSpan.FromSeconds(30)).ConfigureAwait(false);
-            while (Stato != "pronto")
-            {
-                await ControllaAsync().ConfigureAwait(false);
-                await Task.Delay(Ogni).ConfigureAwait(false);
-            }
-        });
+            if (chiave == versioneAnnunciata && (Stato is "pronto" or "controllo" or "scarico" || DateTime.UtcNow - annunciataIl < RiprovaDopo)) return;
+            versioneAnnunciata = chiave;
+            annunciataIl = DateTime.UtcNow;
+        }
+        if (exe == null)
+        {
+            Log.Info("il server annuncia la versione " + chiave + " (" + fonte + "): aggiornamenti spenti, non è il programma in un file solo");
+            return;
+        }
+        if (Stato == "pronto") return;
+        Log.Info("il server annuncia la versione " + chiave + " (" + fonte + "): controllo l'elenco delle versioni");
+        _ = Task.Run(ControllaAsync);
     }
 
     /// <summary>Chiede se c'è una versione nuova e, se c'è, la scarica e la mette al suo posto.</summary>
@@ -120,7 +148,7 @@ public sealed class Aggiornamenti
         }
         catch (Exception e) when (e is HttpRequestException or TaskCanceledException)
         {
-            // Senza rete si riprova fra un'ora, senza disturbare nessuno.
+            // Senza rete si riprova al prossimo annuncio del server (al più presto fra un'ora), senza disturbare nessuno.
             Stato = "nessuno";
             Messaggio = "Non ho raggiunto il server degli aggiornamenti";
             Log.Info("aggiornamenti: server non raggiunto (" + e.Message + ")");
@@ -134,7 +162,7 @@ public sealed class Aggiornamenti
         catch (Exception e)
         {
             Stato = "errore";
-            Messaggio = "L'aggiornamento non è andato: riprovo fra un'ora";
+            Messaggio = "L'aggiornamento non è andato: riprovo più tardi";
             Log.Errore("aggiornamento non riuscito", e);
         }
         finally

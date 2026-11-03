@@ -26,6 +26,7 @@
   const RO = window.WisperRegoleOreSpese;
   const K7 = window.WisperRegoleComunicazioni;
   const Q8 = window.WisperRegoleFase8;
+  const RP = window.WisperRegoleProgetti;
   const { $, h, aggiungi, svuota, icona, tondo, iniziali, stato, avviso, lavora, finestra, conferma, apriMenu, chiudiMenu,
     campo, conSuffisso, selezione, segmenti, cerca, riga, quadrato, segnaposto } = B;
 
@@ -69,13 +70,19 @@
   };
 
   function anaVuota() {
-    return { soggetti: [], clienti: [], fornitori: [], commesse: [], referenti: [], sedi: [], prestazioni: [], utenti: [], numerazioni: [], gruppi: [], impostazioni: {} };
+    return { soggetti: [], clienti: [], fornitori: [], commesse: [], progetti: null, referenti: [], sedi: [], prestazioni: [], utenti: [], numerazioni: [], gruppi: [], impostazioni: {} };
   }
 
   /** I permessi di chi è entrato. */
   const perm = () => (S.io && S.io.permessi) || {};
   const puo = (modulo, minimo) => R.puo(perm(), modulo, minimo);
   const soldi = () => puo('costi');
+  /** Le funzioni spente dello studio (io.interfaccia.funzioniSpente, accordo progetti.md §5): tutte si possono spegnere. */
+  const spente = () => (S.io && S.io.interfaccia && Array.isArray(S.io.interfaccia.funzioniSpente) ? S.io.interfaccia.funzioniSpente : []);
+  const funzioneAccesa = modulo => spente().indexOf(modulo) < 0;
+  const eTitolare = () => !!(S.io && S.io.utente && S.io.utente.ruolo === 'titolare');
+  /** La funzione Progetti è accesa e il server li conosce: il rapportino chiede il progetto (progetti.md §4.6). */
+  const progettiAccesi = () => Array.isArray(S.ana.progetti) && funzioneAccesa('progetti') && funzioneAccesa('commesse');
 
   // ======================================================================= rete
 
@@ -163,6 +170,8 @@
       // Fase 6 (§17.2): i mezzi e i miei strumenti con l'ultima taratura (per il rapportino), solo con mezzi ≥ 1.
       mezzi: a.mezzi || [],
       mieiStrumenti: a.mieiStrumenti || [],
+      // 03/11/2026 (progetti.md): i progetti delle commesse; null = un server che non li conosce ancora.
+      progetti: Array.isArray(a.progetti) ? a.progetti : null,
     };
   }
 
@@ -349,6 +358,8 @@
     if (percorso().split('/')[0] !== 'integrazioni') Integrazioni.chiudiPannello(true);
     if (percorso() !== 'amministrazione/controlli' && W.Sistema8) W.Sistema8.chiudiPannello(true);
     if (modulo5 !== S.moduloPrima && modulo5 === 'integrazioni') Integrazioni.daRileggere();
+    // 03/11/2026: i progetti si rileggono entrando (quanti rapportini e quante ore li conta il server).
+    if (modulo5 !== S.moduloPrima && modulo5 === 'progetti') Progetti.daRileggere();
     S.moduloPrima = modulo5;
     Archivio.M.aperto = null;
     Ticket.M.aperto = null;
@@ -469,17 +480,30 @@
       }
       return;
     }
-    // Fase 8 (§9.5): una funzione spenta lo dice con le parole del server, non come un permesso che manca.
-    const spente8 = (S.io && S.io.interfaccia && S.io.interfaccia.funzioniSpente) || [];
-    if (spente8.indexOf(R.moduloDi(p)) >= 0) {
-      const nomeF = ((Q8.SPEGNIBILI[R.moduloDi(p)]) || {}).nome || R.moduloDi(p);
-      aggiungi(pagina, [h('div', { class: 'calmo grande' }, icona('interruttore', 22, 2.2), h('span', null, 'La funzione ' + nomeF + ' è spenta: si accende in Amministrazione › Funzioni accese.'))]);
+    // 03/11/2026 (progetti.md §5): anche la Dashboard si spegne. Senza Dashboard (spenta o senza permesso) si apre la
+    // prima voce accesa del menu; senza nessuna voce, la pagina "Nessuna funzione accesa".
+    const modulo = R.moduloDi(p);
+    if (modulo === 'dashboard' && !(puo('dashboard') && funzioneAccesa('dashboard'))) {
+      // (L'Amministrazione che il titolare vede spenta, solo per Funzioni, non è una voce accesa.)
+      const prima = vociAccese().find(v => v.modulo !== 'dashboard' && funzioneAccesa(v.modulo));
+      if (prima) { location.replace('#' + prima.modulo); return; }
+      nessunaFunzione(pagina);
       return;
     }
-    if (!R.paginaPermessa(perm(), p)) { senzaPermesso(pagina); return; }
+    // Amministrazione spenta: il titolare la vede lo stesso, con dentro solo Funzioni accese (per riaccenderla).
+    const ammSoloFunzioni = modulo === 'amministrazione' && !funzioneAccesa('amministrazione') && eTitolare();
+    // Fase 8 (§9.5): una funzione spenta lo dice con le parole del server, non come un permesso che manca.
+    if (modulo && !funzioneAccesa(modulo) && !ammSoloFunzioni) {
+      const nomeF = ((Q8.SPEGNIBILI[modulo]) || {}).nome || modulo;
+      aggiungi(pagina, [h('div', { class: 'calmo grande' }, icona('interruttore', 22, 2.2),
+        h('span', null, 'La funzione ' + nomeF + ' è spenta: ' + (eTitolare() ? 'si accende in Amministrazione › Funzioni accese.' : 'per riaccenderla chiedi a ' + titolare() + '.')))]);
+      return;
+    }
+    if (!ammSoloFunzioni && !R.paginaPermessa(perm(), p)) { senzaPermesso(pagina); return; }
 
     if (nome === 'clienti') a1 ? Clienti.scheda(pagina, decodeURIComponent(a1)) : Clienti.vista(pagina);
     else if (nome === 'commesse') a1 ? Commesse.pagina(pagina, decodeURIComponent(a1)) : Commesse.vista(pagina);
+    else if (nome === 'progetti') Progetti.vista(pagina, a1 ? decodeURIComponent(a1) : '');
     else if (nome === 'rapportini') { const f = S.filtroOre; S.filtroOre = null; Ore.vista(pagina, a1 ? decodeURIComponent(a1) : '', f); }
     else if (nome === 'spese') { const f = S.filtroSpese; S.filtroSpese = null; Spese.vista(pagina, a1 ? decodeURIComponent(a1) : '', f); }
     else if (nome === 'fatturazione') { const f = S.filtroFatture; S.filtroFatture = null; Fatture.vista(pagina, a1 || '', a2 || '', f); }
@@ -530,6 +554,28 @@
       h('span', null, 'Non hai il permesso per vedere questa pagina. Chiedi a ' + titolare() + '.'))]);
   }
 
+  /**
+   * Le voci del menu di chi è entrato, senza le funzioni spente (fase 8 §9.5). Accordo progetti.md §5: con Amministrazione
+   * spenta il titolare la vede lo stesso (dentro c'è solo Funzioni accese, per riaccendere quello che ha spento).
+   */
+  function vociAccese() {
+    const voci = Q8.senzaSpente(R.vociMenu(perm(), eEsterno()), spente());
+    if (eTitolare() && !funzioneAccesa('amministrazione') && !voci.some(v => v.modulo === 'amministrazione')) {
+      const amm = R.VOCI_MENU.find(v => v.modulo === 'amministrazione');
+      if (amm) voci.push(amm);
+    }
+    return voci;
+  }
+
+  /** Tutte le funzioni spente (o nessuna permessa): la pagina lo dice, e al titolare dà la strada per riaccenderle. */
+  function nessunaFunzione(pagina) {
+    aggiungi(pagina, [h('div', { class: 'testata' }, h('h1', null, 'Nessuna funzione accesa')),
+      h('div', { class: 'calmo grande' }, icona('interruttore', 22, 2.2),
+        h('span', { class: 'spazio' }, eTitolare() ? 'Lo studio ha spento tutte le funzioni. I dati restano: si riaccendono da Funzioni accese.'
+          : 'Non c\'è niente di acceso per te. I dati restano: chiedi a ' + titolare() + '.'),
+        eTitolare() ? h('button', { type: 'button', class: 'btn giallo', onclick: () => vai('#amministrazione/funzioni') }, 'Funzioni') : null)]);
+  }
+
   // ======================================================================= barra laterale
 
   /** Quanti clienti hanno qualcosa da fatturare nel mese: il numerino giallo su Fatturazione. */
@@ -553,7 +599,7 @@
     const attiva = R.moduloDi(percorso());
     const esterno = eEsterno();
     // Fase 8 (§9.5): le funzioni spente spariscono dal menu di tutti.
-    Q8.senzaSpente(R.vociMenu(perm(), esterno), interf.funzioniSpente).forEach(v => {
+    vociAccese().forEach(v => {
       // Col server della fase 8 i numerini arrivano già fatti con la regola sola (§8.6): S.dash.numerini {modulo: n}.
       const numerini8 = S.dash && S.dash.numerini && typeof S.dash.numerini === 'object' ? S.dash.numerini : null;
       const n0 = numerini8 && S.caricato ? Number(numerini8[v.modulo]) || 0
@@ -700,8 +746,8 @@
   // ======================================================================= aggiornamenti
 
   /**
-   * Il programma controlla da solo ogni ora se c'è una versione nuova, la scarica
-   * e la mette al suo posto. Qui si mostra soltanto: un riquadro tranquillo nella
+   * Il programma scarica da solo la versione nuova quando il server la annuncia (progetti.md §6:
+   * "versioni" in ogni risposta e il campanello) e la mette al suo posto. Qui si mostra soltanto: un riquadro tranquillo nella
    * barra laterale, "Riavvia" per aprirla subito, altrimenti parte alla prossima apertura.
    */
   function mostraAggiornamento() {
@@ -1353,7 +1399,8 @@
         sceglie ? h('span', null, casella) : null,
         // La data e sotto il numero: una colonna in meno, più spazio a commessa e lavoro.
         h('span', { class: 'doppia' }, h('span', { class: 'forte' }, dataBreve(r.data)), h('span', { class: 'num' }, r.id || 'in arrivo')),
-        h('span', { class: 'doppia' }, h('span', null, r.idCommessa || r.commessa || 'Senza commessa'), r.idCommessa && r.commessa ? h('span', null, r.commessa) : null),
+        progettoDi(r) ? h('span', { class: 'doppia', title: [r.idCommessa, r.commessa].filter(Boolean).join(' · ') }, h('span', null, r.idCommessa || r.commessa), h('span', { class: 'progetto-riga' }, progettoDi(r)))
+          : h('span', { class: 'doppia' }, h('span', null, r.idCommessa || r.commessa || 'Senza commessa'), r.idCommessa && r.commessa ? h('span', null, r.commessa) : null),
         h('span', { class: 'taglia t2', title: r.descrizione }, r.descrizione),
         h('span', { class: 'n' }, C.numero(r.oreTotali)),
         h('span', { class: 'n' }, C.numero(r.km)),
@@ -1377,6 +1424,11 @@
         h('button', { type: 'button', class: 'btn piccolo', onclick: () => segnaFatturatiAMano(sel) }, 'Segna fatturati a mano'),
         h('button', { type: 'button', class: 'btn piccolo', onclick: () => { S.scelti.clear(); elencoRapportini(area); } }, 'Deseleziona'))]);
     }
+  }
+
+  /** Il progetto di un rapportino a parole: "ED-003 · Quadro QE1" ('' senza progetto). */
+  function progettoDi(r) {
+    return RP.delRapportino(r, S.ana.progetti || []);
   }
 
   /** La parola dello stato e, sotto, la pillola dell'approvazione (fase 3: "Da approvare", "Respinto: motivo"). */
@@ -1467,7 +1519,11 @@
       approvazione ? h('div', { class: approvazione.colore === 'rosso' ? 'banda' : 'banda calma' }, icona(approvazione.colore === 'rosso' ? 'avviso' : 'orologio', 20),
         h('span', { class: 'spazio' }, approvazione.colore === 'rosso' ? approvazione.testo : 'Da approvare: si manda al cliente e si fattura dopo l\'approvazione')) : null,
       h('div', null, h('div', { style: { fontSize: '18px', fontWeight: '800' } }, r.cliente),
-        h('div', { class: 't2', style: { fontSize: '15px', color: 'var(--testo2)' } }, commessaLunga + ' · ' + dataLunga(r.data))),
+        h('div', { class: 't2', style: { fontSize: '15px', color: 'var(--testo2)' } }, commessaLunga + ' · ' + dataLunga(r.data)),
+        // 03/11/2026: il progetto del rapportino (si apre la sua scheda) e a chi è intestato.
+        progettoDi(r) ? h('div', { class: 'riga-progetto' }, h('span', { class: 'etichetta' }, 'Progetto'),
+          r.idProgetto && puo('progetti') && funzioneAccesa('progetti') ? h('button', { type: 'button', class: 'btn collegamento', onclick: () => { chiudiPannello(true); vai('#progetti/' + encodeURIComponent(r.idProgetto)); } }, progettoDi(r)) : h('span', null, progettoDi(r)),
+          RP.intestatoDelRapportino(r, S.ana.progetti || []) ? h('span', { class: 't2' }, 'Intestato a ' + RP.intestatoDelRapportino(r, S.ana.progetti || [])) : null) : null),
       h('div', { class: 'lavoro' }, r.descrizione || '—'),
       h('div', { class: 'tre-dati' },
         h('span', null, h('em', null, 'Ore'), h('b', null, C.ore(r.oreTotali))),
@@ -1854,6 +1910,8 @@
       tariffa: null, descrizione: '', luogo: p.luogo || '', ticket: '', noteSpese: '', noteInterne: '',
       // Fase 5 (§3.3): dal ticket il rapportino nasce già con cliente, commessa e luogo; il numero lo scrive il server.
       idTicket: p.idTicket || null, numeroTicket: p.numeroTicket || '',
+      // 03/11/2026: dal progetto il rapportino nasce già con cliente, commessa e progetto.
+      idProgetto: p.idProgetto || null,
     };
     if (r.idCliente && !r.cliente) r.cliente = (cliente(r.idCliente) || {}).nome || '';
     if (r.idCommessa && !r.commessa) r.commessa = (commessa(r.idCommessa) || {}).descrizione || '';
@@ -1863,8 +1921,23 @@
       sceltaFatta: !!r.cliente, commessaFatta: !!esistente || !!r.idCommessa || !!r.idTicket,
       oreLavoro: C.num(r.oreLavoro), oreExtra: C.num(r.oreExtra), oreViaggio: C.num(r.oreViaggio),
       extraAperto: C.num(r.oreExtra) > 0, tariffaToccata: !!esistente, nuovoCliente: false,
+      // 03/11/2026 (progetti.md §4.6): il progetto della commessa, scelto (idProgetto) o nuovo (progettoNuovo, per una commessa nuova).
+      idProgetto: r.idProgetto !== undefined && r.idProgetto !== null && r.idProgetto !== '' ? r.idProgetto : null, progettoNuovo: null,
     };
     let errori = {};
+    // Con la funzione Progetti accesa il rapportino non si salva senza progetto; con Commesse spenta non chiede la commessa.
+    const conProgetti = progettiAccesi();
+    const conCommesse = funzioneAccesa('commesse');
+    /** I progetti che si possono scegliere: gli aperti della commessa (e quello già scelto). */
+    const progettiDellaCommessa = () => RP.perRapportino(S.ana.progetti || [], m.idCommessa, m.idProgetto);
+    /** Cambiata la commessa: il progetto di prima non vale più; se la commessa ne ha uno solo aperto, è quello. */
+    function progettoDaCommessa() {
+      m.progettoNuovo = null;
+      const solo = conProgetti && m.idCommessa ? RP.sceltoDaSolo(S.ana.progetti || [], m.idCommessa) : null;
+      m.idProgetto = solo ? solo.id : null;
+      delete errori.progetto;
+    }
+    if (conProgetti && !esistente && !m.idProgetto && m.idCommessa) progettoDaCommessa();
 
     const v = {
       data: h('input', { type: 'date', value: r.data }),
@@ -1919,6 +1992,8 @@
       m.idCommessa = '';
       m.commessa = '';
       m.codiceProposto = '';
+      m.idProgetto = null;
+      m.progettoNuovo = null;
       delete errori.cliente;
       if (!m.tariffaToccata) {
         const proposta = C.tariffaProposta(c, S.rapportini, null);
@@ -1939,10 +2014,11 @@
             type: 'button', class: 'scelta-card', onclick: () => {
               const c = cliente(x.idCliente);
               scegliCliente(c, x.cliente);
-              m.idCommessa = x.idCommessa; m.commessa = x.commessa; m.commessaFatta = true;
+              m.idCommessa = conCommesse ? x.idCommessa : ''; m.commessa = conCommesse ? x.commessa : ''; m.commessaFatta = true;
+              progettoDaCommessa();
               proponiTariffa(); disegnaPerChi(); disegnaKm(); disegnaTariffa(); aggiornaConto();
             },
-          }, iniziali(x.cliente, true), h('span', { class: 'testi' }, h('b', null, x.cliente), h('span', null, x.commessa || 'Senza commessa')))))]);
+          }, iniziali(x.cliente, true), h('span', { class: 'testi' }, h('b', null, x.cliente), conCommesse ? h('span', null, x.commessa || 'Senza commessa') : null))))]);
         }
         aggiungi(zonaPerChi, [h('label', { class: 'cerca' }, icona('cerca', 18), v.ricerca)]);
         const testo = v.ricerca.value.trim();
@@ -1962,19 +2038,59 @@
       aggiungi(zonaPerChi, [h('div', { class: 'scelta-card scelta' }, iniziali(m.cliente, true),
         h('span', { class: 'testi' }, h('b', null, m.cliente), h('span', null, m.idCliente ? sottoCliente(clienteScelto()) : 'Cliente nuovo · tariffa libera')),
         h('button', { type: 'button', class: 'btn collegamento', onclick: () => { m.sceltaFatta = false; disegnaPerChi(); } }, 'Cambia'))]);
+      // Commesse spenta (progetti.md §5): il rapportino non chiede la commessa (né il progetto).
+      if (!conCommesse) return;
       const aperte = m.idCliente ? S.ana.commesse.filter(x => x.idCliente === m.idCliente && !x.modello && ((x.stato === 'APERTA' && !x.archiviata) || x.id === m.idCommessa)) : [];
-      const pill = (testo, scelta, fn) => h('button', { type: 'button', class: 'pillola' + (scelta ? ' scelta' : ''), onclick: fn }, testo);
+      const pill = (testo, scelta, fn, attr) => h('button', Object.assign({ type: 'button', class: 'pillola' + (scelta ? ' scelta' : ''), onclick: fn }, attr || {}), testo);
+      const commessaScelta = () => { progettoDaCommessa(); proponiTariffa(); disegnaPerChi(); disegnaKm(); disegnaTariffa(); aggiornaConto(); };
       aggiungi(zonaPerChi, [h('div', { class: 'etichetta' }, 'Commessa'),
         h('div', { class: 'pillole' },
-          aperte.map(x => pill(x.id + ' · ' + x.descrizione, m.idCommessa === x.id, () => { m.idCommessa = x.id; m.commessa = x.descrizione; m.codiceProposto = ''; m.commessaFatta = true; proponiTariffa(); disegnaPerChi(); disegnaKm(); disegnaTariffa(); aggiornaConto(); })),
+          aperte.map(x => pill(x.id + ' · ' + x.descrizione, m.idCommessa === x.id, () => { m.idCommessa = x.id; m.commessa = x.descrizione; m.codiceProposto = ''; m.commessaFatta = true; commessaScelta(); })),
           m.commessa && !m.idCommessa ? pill(m.codiceProposto + ' · ' + m.commessa + ' (nuova)', true, () => {}) : null,
-          pill('Senza commessa', m.commessaFatta && !m.commessa, () => { m.idCommessa = ''; m.commessa = ''; m.codiceProposto = ''; m.commessaFatta = true; disegnaPerChi(); disegnaKm(); aggiornaConto(); })),
+          // Con i progetti accesi un rapportino ha sempre commessa e progetto (§4.6): niente "Senza commessa".
+          conProgetti ? null : pill('Senza commessa', m.commessaFatta && !m.commessa, () => { m.idCommessa = ''; m.commessa = ''; m.codiceProposto = ''; m.commessaFatta = true; disegnaPerChi(); disegnaKm(); aggiornaConto(); })),
         h('div', { style: { display: 'flex', gap: '8px' } }, h('div', { style: { flex: '1' } }, campo(null, v.nuovaCommessa)),
           h('button', { type: 'button', class: 'btn', onclick: () => {
             const n = v.nuovaCommessa.value.trim();
             if (!n) { v.nuovaCommessa.focus(); return; }
-            m.idCommessa = ''; m.commessa = n; m.codiceProposto = codiceNuovo(); m.commessaFatta = true; v.nuovaCommessa.value = ''; disegnaPerChi(); disegnaKm(); aggiornaConto();
+            m.idCommessa = ''; m.commessa = n; m.codiceProposto = codiceNuovo(); m.commessaFatta = true; v.nuovaCommessa.value = ''; progettoDaCommessa(); disegnaPerChi(); disegnaKm(); aggiornaConto();
           } }, 'Commessa nuova'))]);
+      if (!conProgetti) return;
+      const commessaNuova = !!(m.commessa && !m.idCommessa);
+      if (!m.idCommessa && !commessaNuova) {
+        if (errori.progetto) aggiungi(zonaPerChi, [h('div', { class: 'campo' }, h('div', { class: 'errore' }, errori.progetto))]);
+        return;
+      }
+      // Il progetto (progetti.md §4.6): gli aperti della commessa e "Nuovo progetto"; uno solo aperto è già scelto.
+      const scelti = commessaNuova ? [] : progettiDellaCommessa();
+      const puoCreare = puo('progetti', 2);
+      const nuovo = m.progettoNuovo;
+      aggiungi(zonaPerChi, [h('div', { class: 'etichetta' }, 'Progetto'),
+        h('div', { class: 'pillole', 'data-campo': 'progetto' },
+          scelti.map(x => pill(RP.etichetta(x), String(m.idProgetto) === String(x.id), () => { m.idProgetto = x.id; m.progettoNuovo = null; delete errori.progetto; disegnaPerChi(); },
+            { title: x.intestatoA ? 'Intestato a ' + x.intestatoA : '' })),
+          nuovo ? pill((nuovo.codice || nuovo.codiceVisto ? (nuovo.codice || nuovo.codiceVisto) + ' · ' : '') + (nuovo.descrizione || 'Progetto') + ' (nuovo)', true, () => nuovoProgetto()) : null,
+          puoCreare && !nuovo ? h('button', { type: 'button', class: 'pillola tratteggiata', onclick: () => nuovoProgetto() }, '+ Nuovo progetto') : null),
+        !scelti.length && !nuovo && !puoCreare ? h('p', { class: 'vuoto sinistra' }, 'Nessun progetto aperto in questa commessa.') : null,
+        errori.progetto ? h('div', { class: 'campo' }, h('div', { class: 'errore' }, errori.progetto)) : null]);
+    }
+
+    /**
+     * "Nuovo progetto" dal rapportino. Su una commessa che c'è già: il modulo dei progetti col codice proposto, il progetto
+     * si crea subito (creaProgetto) e resta scelto. Su una commessa nuova: i dati restano nel rapportino (progettoNuovo) e
+     * il server crea commessa e progetto insieme al rapportino (il codice, se vuoto, lo propone lui).
+     */
+    function nuovoProgetto() {
+      if (m.idCommessa) {
+        Progetti.modulo(null, { idCommessa: m.idCommessa, fissa: true, dopo: x => { m.idProgetto = x.id; m.progettoNuovo = null; delete errori.progetto; disegnaPerChi(); } });
+        return;
+      }
+      Progetti.modulo(null, { senzaServer: true, nomeCommessa: (m.codiceProposto ? m.codiceProposto + ' · ' : '') + m.commessa + ' (nuova)', idCliente: m.idCliente, codiceCommessa: m.codiceProposto, dati: m.progettoNuovo,
+        dopo: d => {
+          // Il codice proposto e non toccato va vuoto: il server lo propone di nuovo con la commessa vera.
+          m.progettoNuovo = { idLocale: (m.progettoNuovo && m.progettoNuovo.idLocale) || 'P-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), codice: d.proposto ? '' : d.codice, codiceVisto: d.codice, codiceProposto: false, intestatoA: d.intestatoA, descrizione: d.descrizione };
+          m.idProgetto = null; delete errori.progetto; disegnaPerChi();
+        } });
     }
 
     function stepper(nome, chiave, sotto) {
@@ -2156,6 +2272,10 @@
         ...(r.idTicket && !esistente ? { idTicket: r.idTicket } : {}),
         // Fase 6: l'elenco intero degli strumenti (il server congela lo stato della taratura di quel giorno).
         ...(conStrumenti ? { strumenti: strumentiScelti.map(s => ({ idAttrezzatura: s.idAttrezzatura, confermato: !!s.confermato })) } : {}),
+        // 03/11/2026: il progetto. Con la funzione spenta un rapportino già scritto tiene il suo (se resta sulla stessa commessa):
+        // senza idProgetto il server lo staccherebbe.
+        ...(conProgetti ? (m.progettoNuovo && !m.idProgetto ? { idProgetto: null, progettoNuovo: m.progettoNuovo } : { idProgetto: m.idProgetto || null })
+          : esistente && esistente.idProgetto && String(esistente.idCommessa || '').toUpperCase() === String(m.idCommessa || '').toUpperCase() ? { idProgetto: esistente.idProgetto } : {}),
       };
     }
 
@@ -2183,6 +2303,11 @@
       });
       if (dati.oreLavoro + dati.oreExtra + dati.oreViaggio <= 0) e.oreLavoro = 'Mancano le ore';
       if (soldi() && regoleAttuali().tariffaFissa === null && !(dati.tariffa > 0) && !e.tariffa) e.tariffa = 'Scrivi la tariffa';
+      if (conProgetti && dati.cliente) {
+        const manca = RP.mancaProgetto({ accesi: true, idCommessa: m.idCommessa, commessaNuova: !!(m.commessa && !m.idCommessa), idProgetto: m.idProgetto, progettoNuovo: m.progettoNuovo,
+          aperti: m.idCommessa ? progettiDellaCommessa().length : 0, puoCreare: puo('progetti', 2), titolare: titolare() });
+        if (manca) e.progetto = manca;
+      }
       return e;
     }
 
@@ -2200,11 +2325,16 @@
         avviso('Mancano dei dati: sono segnati in rosso', true);
         return;
       }
-      const nuovaAnagrafica = !dati.idCliente || (dati.commessa && !dati.idCommessa);
+      const nuovaAnagrafica = !dati.idCliente || (dati.commessa && !dati.idCommessa) || !!dati.progettoNuovo;
       const ris = await lavora('Salvo il rapportino', () => Rete.post('/server/salvaRapportino', { rapportino: dati }));
       if (!ris) return;
       accogli([ris.rapportino]);
       if (nuovaAnagrafica) await ricaricaAnagrafiche().catch(() => null);
+      // I progetti contano rapportini e ore: si rileggono (la pagina e la scheda commessa li mostrano).
+      if (conProgetti && puo('progetti')) {
+        Progetti.daRileggere();
+        Progetti.leggi().then(() => { const dove = percorso().split('/')[0]; if (dove === 'progetti' || dove === 'commesse') ridisegna(); }).catch(() => null);
+      }
       chiudi();
       avviso('Salvato: ' + ris.rapportino.id + (soldi() ? ' · ' + C.euro(ris.rapportino.totale) : ''));
       // Fase 5: un rapportino del ticket chiede "Il lavoro è finito?" (il ticket si rilegge col rapportino nuovo).
@@ -2241,7 +2371,7 @@
       const chiave = r.id || r.idLocale;
       aggiungi(tab, [h('div', { class: 'r cliccabile' + (S.aperto === chiave ? ' scelta' : ''), style: { gridTemplateColumns: colonne }, role: 'button', tabindex: '0', 'data-chiave': chiave, onclick: () => apriPannello(chiave) },
         h('span', { class: 'doppia' }, h('span', { class: 'forte' }, dataBreve(r.data)), h('span', { class: 'num' }, r.id)),
-        h('span', { class: 'doppia' }, h('span', null, r.cliente), h('span', null, r.idCommessa)),
+        h('span', { class: 'doppia' }, h('span', null, r.cliente), h('span', null, [r.idCommessa, progettoDi(r)].filter(Boolean).join(' · '))),
         h('span', { class: 'taglia t2', title: r.descrizione }, r.descrizione),
         h('span', { class: 'n' }, C.numero(r.oreTotali)), h('span', { class: 'n' }, C.numero(r.km)),
         soldi() ? h('span', { class: 'n t2' }, C.num(r.spese) ? C.euro(r.spese) : '') : null, soldi() ? h('span', { class: 'n forte' }, C.euro(r.totale)) : null, statoRapportino(r))]);
@@ -2275,8 +2405,13 @@
     bloccoStrumenti,
     // fase 8
     leggiTutto, richiudiLato, rileggiIo: async () => { await caricaIo(); disegnaLato(); },
+    // 03/11/2026 (progetti.md): progetti e funzioni che si spengono tutte
+    funzioneAccesa, progettiAccesi, eTitolare, vociAccese,
   };
   const Clienti = window.WisperClienti(W);
+  // I progetti (cliente -> commessa -> progetto -> rapportino): la loro pagina, la parte nella scheda commessa, il modulo.
+  const Progetti = window.WisperProgetti(W);
+  W.Progetti = Progetti;
   const Commesse = window.WisperCommesse(W);
   const Amministrazione = window.WisperAmministrazione(W);
   const Preventivi = window.WisperPreventivi(W);

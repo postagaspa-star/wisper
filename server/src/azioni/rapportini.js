@@ -88,6 +88,17 @@ module.exports = {
     let commessa = !codiceScelto ? null : commesse.filter(m =>
       // Anche col codice di prima dei 26ST: un rapportino rimasto in coda su un telefono.
       m.id.toUpperCase() === codiceScelto || m.codicePrecedente.toUpperCase() === codiceScelto)[0] || null;
+    // 03/11/2026: il progetto (cliente -> commessa -> progetto -> rapportino). Scelto: la commessa e' la sua (se il
+    // rapportino non la dice, la si prende dal progetto); nuovo (nato sul telefono): si crea dopo la commessa.
+    const sceltaProgetto = this.progettoPerRapportino(r, commessa);
+    if (sceltaProgetto.riga && !commessa) {
+      if (testo(r.commessa)) throw new Rifiuto('Il progetto ' + sceltaProgetto.riga.codice + ' è della commessa ' + sceltaProgetto.riga.commessa_id);
+      commessa = commesse.filter(m => m.id.toUpperCase() === testo(sceltaProgetto.riga.commessa_id).toUpperCase())[0] || null;
+    }
+    if (sceltaProgetto.riga && commessa && commessa.idCliente && (!cliente || cliente.id !== commessa.idCliente)) {
+      throw new Rifiuto('Il progetto ' + sceltaProgetto.riga.codice + ' è di un altro cliente');
+    }
+    if (sceltaProgetto.nuovo && !commessa && !testo(r.commessa)) throw new Rifiuto('Per un progetto nuovo scegli prima la commessa');
     this.serveCrearePerRapportino(cliente, commessa, r);
     // Fase 6: il rapportino di un esterno e' sulla commessa di un suo incarico affidato (si lega da solo).
     let incarico = null;
@@ -142,6 +153,7 @@ module.exports = {
       commessa = this.creaCommessa({ idCliente: cliente.id, descrizione: r.commessa, id: testo(r.codiceProposto), idProposto: true });
       regole = regoleDi(cliente, this.leggiGruppi(), impostazioni, commessa);
     }
+    const progetto = sceltaProgetto.riga || (sceltaProgetto.nuovo ? this.creaProgettoPerRapportino(sceltaProgetto.nuovo, commessa) : null);
 
     // Le tariffe di un rapportino gia' scritto non cambiano se cambiano le
     // impostazioni: aggiornare l'ACI a gennaio non deve riscrivere luglio.
@@ -179,6 +191,8 @@ module.exports = {
       id_commessa: commessa ? commessa.id : '',
       // Nella colonna COMMESSA il codice: e' quello che si cerca.
       commessa: commessa ? commessa.id : '',
+      id_progetto: progetto ? progetto.id : null,
+      progetto: progetto ? testo(progetto.codice) : '',
       // Fase 5: col ticket e il campo vuoto, il server ci scrive il numero ("TK/2026/0014 · rif. 4471").
       ticket: testo(r.ticket) || (ticketRiga ? (esistente && testo(esistente.ticket) ? testo(esistente.ticket) : this.testoTicketRapportino(ticketRiga)) : ''),
       luogo: testo(r.luogo),
@@ -287,6 +301,9 @@ module.exports = {
     for (const f of righe) (foto[f.rapportino_id] = foto[f.rapportino_id] || []).push({ id: f.id, url: urlFile(f.id) });
     const descrizioni = {};
     for (const m of this.db.righe('SELECT id, descrizione FROM commesse')) descrizioni[m.id.toUpperCase()] = m.descrizione;
+    // 03/11/2026: codice, descrizione e intestatario dei progetti.
+    const progetti = {};
+    for (const p of this.db.righe('SELECT id, codice, descrizione, intestato_a FROM progetti')) progetti[p.id] = p;
     // Fase 3: le righe di spese del rapportino (anche quelle spostate allo studio o "Mia").
     const spese = {};
     const righeSpese = id
@@ -312,7 +329,7 @@ module.exports = {
     for (const t of this.db.righe('SELECT t.id, t.numero, t.stato, t.fatturazione, c.numero contratto FROM ticket t LEFT JOIN contratti c ON c.id = t.contratto_id')) ticket[t.id] = t;
     // Fase 6: gli strumenti usati (stato della taratura di quel giorno).
     const strumenti = this.strumentiDeiRapportini(id ? [id] : this.db.righe('SELECT DISTINCT rapportino_id r FROM strumenti_usati WHERE rapportino_id IS NOT NULL').map(x => x.r));
-    return { foto, descrizioni, spese, fatture, ticket, strumenti };
+    return { foto, descrizioni, spese, fatture, ticket, strumenti, progetti };
   },
 
   /** La riga come la mandava rapportinoDaRiga() dello script, piu' chi l'ha scritto. */
@@ -330,6 +347,11 @@ module.exports = {
       idCommessa: testo(r.id_commessa),
       // Nella riga c'e' il codice; qui si manda la descrizione.
       commessa: descrizione || testo(r.commessa),
+      // 03/11/2026: il progetto (id, codice, descrizione, a chi e' intestato).
+      idProgetto: r.id_progetto === null || r.id_progetto === undefined ? null : r.id_progetto,
+      progetto: testo(r.progetto),
+      progettoDescrizione: r.id_progetto && (aiuti.progetti || {})[r.id_progetto] ? testo(aiuti.progetti[r.id_progetto].descrizione) : '',
+      progettoIntestatoA: r.id_progetto && (aiuti.progetti || {})[r.id_progetto] ? testo(aiuti.progetti[r.id_progetto].intestato_a) : '',
       ticket: testo(r.ticket),
       luogo: testo(r.luogo),
       descrizione: testo(r.descrizione),
@@ -410,6 +432,7 @@ module.exports = {
     if (testo(a)) { condizioni.push("(data IS NULL OR data = '' OR data <= ?)"); parametri.push(testo(a)); }
     if (testo(f.idCliente)) { condizioni.push('id_cliente = ?'); parametri.push(testo(f.idCliente)); }
     if (testo(f.idCommessa)) { condizioni.push('id_commessa = ?'); parametri.push(testo(f.idCommessa)); }
+    if (testo(f.idProgetto)) { condizioni.push('id_progetto = ?'); parametri.push(Number(f.idProgetto)); }
     if (testo(f.idTicket)) { condizioni.push('ticket_id = ?'); parametri.push(this.idTicketDa(f.idTicket)); }
     if (testo(f.statoApprovazione)) { condizioni.push('stato_approvazione = ?'); parametri.push(testo(f.statoApprovazione) === 'nessuno' ? '' : testo(f.statoApprovazione)); }
     const sql = 'SELECT * FROM rapportini' + (condizioni.length ? ' WHERE ' + condizioni.join(' AND ') : '');

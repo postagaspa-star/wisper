@@ -35,6 +35,7 @@ const ELENCHI = [
   ['referenti', 'referenti', {}],
   ['sedi', 'sedi', {}],
   ['commesse', 'commesse', {}],
+  ['progetti', 'progetti', {}],
   ['prestazioni', 'prestazioni', {}],
   ['preventivi', 'preventivi', {}],
   ['attivita', 'attivita', { da: '2000-01-01', a: '2999-12-31', stato: 'tutte' }],
@@ -299,7 +300,7 @@ module.exports = {
   leggimiEsportazione(quando, righe) {
     const descr = {
       rapportini: 'i rapportini, tutti gli anni', clienti: 'i clienti (anche gli archiviati)', fornitori: 'i fornitori (anche gli archiviati)', referenti: 'i referenti di clienti e fornitori',
-      sedi: 'sedi e impianti', commesse: 'le commesse (anche archiviate e modelli)', prestazioni: 'le prestazioni delle commesse', preventivi: 'i preventivi',
+      sedi: 'sedi e impianti', commesse: 'le commesse (anche archiviate e modelli)', progetti: 'i progetti delle commesse', prestazioni: 'le prestazioni delle commesse', preventivi: 'i preventivi',
       attivita: 'attività, appuntamenti, sopralluoghi e interventi', ore: 'le ore registrate', spese: 'le spese', trasferte: 'le trasferte', rimborsi: 'i rimborsi da fare',
       fatture: 'le fatture', ricevute: 'le fatture ricevute', movimenti: 'incassi e pagamenti', impegni: 'tributi e scadenze di pagamento', documenti: 'l\'elenco dei documenti',
       scadenze: 'le scadenze', ticket: 'i ticket', contratti: 'i contratti di assistenza', persone: 'le persone', assenze: 'ferie, permessi e assenze', mezzi: 'i mezzi',

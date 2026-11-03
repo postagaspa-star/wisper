@@ -426,23 +426,31 @@
           if (!f.spegnibile) return h('div', { class: 'riga riga-int', 'data-modulo': f.modulo }, h('span', { class: 'corpo' }, h('span', { class: 't1' }, f.nome)), pill('Sempre accesa', 'grigio'));
           const frase = String(f.cosaCambia || (Q.SPEGNIBILI[f.modulo] || {}).cosaCambia || '').split('. ')[0];
           if (!t) return h('div', { class: 'riga riga-int', 'data-modulo': f.modulo }, h('span', { class: 'corpo' }, h('span', { class: 't1' }, f.nome), h('span', { class: 't2' }, frase)), pill(f.accesa ? 'Accesa' : 'Spenta', f.accesa ? 'verde' : 'grigio'));
-          const r = interruttore(f.nome, frase, f.accesa !== false, v => cambiaFunzione(f, v));
+          const r = interruttore(f.nome, frase, f.accesa !== false, v => cambiaFunzione(f, v, ris.funzioni || []));
           r.setAttribute('data-modulo', f.modulo);
           return r;
         }))]);
       });
     }
 
-    async function cambiaFunzione(f, accesa) {
-      if (!accesa) {
-        const d = Q.domandaSpegni(f);
+    /**
+     * Accendere o spegnere una funzione (accordo progetti.md §5). Spegnendo, il foglio di conferma dice cosa cambia e quali
+     * funzioni si spengono con lei ("Si spengono anche: …", dalle serveA ancora accese); accendendo, il foglio c'è solo se se
+     * ne accendono anche altre ("Si accendono anche: …", dalle richiede spente). Dopo si rileggono io (menu e permessi),
+     * anagrafiche e rapportini: una funzione riaccesa riporta dati che prima non si leggevano.
+     */
+    async function cambiaFunzione(f, accesa, funzioni) {
+      const d = Q.domandaCambio(f, accesa, funzioni);
+      if (!accesa || d.anche.length) {
         const ok = await new Promise(risolvi => {
           let detto = false;
           const rispondi = v => { if (!detto) { detto = true; risolvi(v); } };
           let chiudi;
-          chiudi = finestra({ titolo: d.titolo, corpo: h('p', { class: 'testo-forte', style: { margin: 0 } }, d.testo), fuoco: false, allaChiusura: () => rispondi(false),
+          chiudi = finestra({ titolo: d.titolo, fuoco: false, allaChiusura: () => rispondi(false),
+            corpo: h('div', { class: 'foglio-funzione' }, h('p', { class: 'testo-forte', style: { margin: 0 } }, d.testo),
+              d.fraseAnche ? h('p', { class: 'anche', style: { margin: '12px 0 0', fontWeight: '800' } }, d.fraseAnche) : null),
             pulsanti: ['spazio', h('button', { type: 'button', class: 'btn testo grande', onclick: () => { rispondi(false); chiudi(); } }, 'Annulla'),
-              h('button', { type: 'button', class: 'btn grande bordo-rosso', onclick: () => { rispondi(true); chiudi(); } }, 'Spegni')] });
+              h('button', { type: 'button', class: 'btn grande ' + (accesa ? 'giallo' : 'bordo-rosso'), onclick: () => { rispondi(true); chiudi(); } }, d.pulsante)] });
         });
         if (!ok) return;
       }
@@ -450,8 +458,10 @@
       if (!r) return;
       M.funzioni = null;
       await W.rileggiIo();
+      await Promise.all([W.ricaricaAnagrafiche().catch(() => null), W.rileggiRapportini()]);
+      if (W.Progetti) W.Progetti.daRileggere();
       W.caricaDashboard();
-      avviso(accesa ? f.nome + ' riaccesa: i dati sono come prima' : f.nome + ' spenta: i dati restano');
+      avviso(Q.avvisoCambio(f.nome, accesa, r.anche || []));
       W.disegnaPagina();
     }
 

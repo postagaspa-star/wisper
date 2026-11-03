@@ -485,6 +485,7 @@ private val SPIEGA_MODULI = mapOf(
     Moduli.DASHBOARD to "La pagina iniziale",
     Moduli.CLIENTI to "Anagrafiche, referenti, sedi",
     Moduli.COMMESSE to "Commesse e prestazioni",
+    Moduli.PROGETTI to "I progetti dentro le commesse",
     Moduli.PREVENTIVI to "Preventivi, listino, incarichi",
     Moduli.ATTIVITA to "Le attività di tutti o solo le sue",
     Moduli.RAPPORTINI to "I rapportini di tutti o solo i suoi",

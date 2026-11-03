@@ -16,21 +16,51 @@ const G = require('../impostazioni-generali');
 const K = require('../cifra');
 const { passwordGiusta } = require('./accesso');
 
-/** Le funzioni che si spengono (§9.5) e cosa cambia, con le parole del foglio di conferma. */
+/**
+ * Le funzioni e cosa cambia se si spengono (§9.5). Dal 03/11/2026 si spengono tutte (Manuel: "nessuna obbligatoria").
+ * richiede: senza quelle funzioni questa non lavora (una commessa vuole un cliente, un progetto una commessa): spegnere
+ * Clienti spegne anche Commesse e Progetti, accendere Progetti accende anche Commesse e Clienti.
+ */
 const FUNZIONI = [
-  { modulo: 'portale', nome: 'Portale clienti', cosaCambia: 'Sparisce dal menu di tutti e il portale si spegne subito per i clienti. I dati restano.' },
-  { modulo: 'comunicazioni', nome: 'WhatsApp e comunicazioni', cosaCambia: 'Sparisce dal menu di tutti; niente proposte di messaggi. La campanella apre lo stesso le notifiche. I dati restano.' },
-  { modulo: 'collaboratori', nome: 'Collaboratori esterni', cosaCambia: 'Sparisce dal menu di tutti; gli esterni non vedono più le loro cose. I dati restano.' },
-  { modulo: 'mezzi', nome: 'Mezzi e attrezzature', cosaCambia: 'Sparisce dal menu di tutti. Nei rapportini non si scelgono più gli strumenti. I dati restano.' },
-  { modulo: 'banche', nome: 'Banche e scadenze', cosaCambia: 'Sparisce dal menu di tutti. Segnare un incasso da una fattura funziona lo stesso. I dati restano.' },
+  { modulo: 'dashboard', nome: 'Dashboard', richiede: [], cosaCambia: 'Sparisce dal menu di tutti: Wisper si apre sulla prima voce accesa. I dati restano.' },
+  { modulo: 'clienti', nome: 'Clienti e fornitori', richiede: [], cosaCambia: 'Sparisce dal menu di tutti; non si creano clienti nuovi. I dati restano.' },
+  { modulo: 'commesse', nome: 'Commesse', richiede: ['clienti'], cosaCambia: 'Sparisce dal menu di tutti; i rapportini non chiedono più la commessa. I dati restano.' },
+  { modulo: 'progetti', nome: 'Progetti', richiede: ['commesse'], cosaCambia: 'Sparisce dal menu di tutti; i rapportini non chiedono più il progetto. I dati restano.' },
+  { modulo: 'preventivi', nome: 'Preventivi', richiede: ['clienti'], cosaCambia: 'Sparisce dal menu di tutti. I dati restano.' },
+  { modulo: 'attivita', nome: 'Attività e calendario', richiede: [], cosaCambia: 'Sparisce dal menu di tutti; niente promemoria delle attività. I dati restano.' },
+  { modulo: 'rapportini', nome: 'Ore e rapportini', richiede: ['clienti'], cosaCambia: 'Sparisce dal menu di tutti; non si scrivono rapportini né ore. I dati restano.' },
+  { modulo: 'spese', nome: 'Spese e trasferte', richiede: [], cosaCambia: 'Sparisce dal menu di tutti. I dati restano.' },
+  { modulo: 'fatturazione', nome: 'Fatturazione', richiede: ['clienti'], cosaCambia: 'Sparisce dal menu di tutti. I dati restano.' },
+  { modulo: 'banche', nome: 'Banche e scadenze', richiede: [], cosaCambia: 'Sparisce dal menu di tutti. Segnare un incasso da una fattura funziona lo stesso. I dati restano.' },
+  { modulo: 'persone', nome: 'Persone', richiede: [], cosaCambia: 'Sparisce dal menu di tutti. I dati restano.' },
+  { modulo: 'documenti', nome: 'Documenti', richiede: [], cosaCambia: 'Sparisce dal menu di tutti. I dati restano.' },
+  { modulo: 'ticket', nome: 'Ticket e assistenza', richiede: ['clienti'], cosaCambia: 'Sparisce dal menu di tutti. I dati restano.' },
+  { modulo: 'mezzi', nome: 'Mezzi e attrezzature', richiede: [], cosaCambia: 'Sparisce dal menu di tutti. Nei rapportini non si scelgono più gli strumenti. I dati restano.' },
+  { modulo: 'comunicazioni', nome: 'WhatsApp e comunicazioni', richiede: ['clienti'], cosaCambia: 'Sparisce dal menu di tutti; niente proposte di messaggi. La campanella apre lo stesso le notifiche. I dati restano.' },
+  { modulo: 'portale', nome: 'Portale clienti', richiede: ['clienti'], cosaCambia: 'Sparisce dal menu di tutti e il portale si spegne subito per i clienti. I dati restano.' },
+  { modulo: 'collaboratori', nome: 'Collaboratori esterni', richiede: ['commesse'], cosaCambia: 'Sparisce dal menu di tutti; gli esterni non vedono più le loro cose. I dati restano.' },
+  { modulo: 'integrazioni', nome: 'Integrazioni', richiede: [], cosaCambia: 'Sparisce dal menu di tutti; i collegamenti già fatti continuano a lavorare. I dati restano.' },
+  { modulo: 'amministrazione', nome: 'Amministrazione', richiede: [], cosaCambia: 'Sparisce dal menu di tutti; al titolare resta Funzioni, per riaccenderla. I dati restano.' },
 ];
-const NOMI_MODULI = {
-  dashboard: 'Dashboard', clienti: 'Clienti e fornitori', commesse: 'Commesse', preventivi: 'Preventivi', attivita: 'Attività e calendario',
-  rapportini: 'Ore e rapportini', spese: 'Spese e trasferte', fatturazione: 'Fatturazione', banche: 'Banche e scadenze', persone: 'Persone',
-  documenti: 'Documenti', ticket: 'Ticket e assistenza', mezzi: 'Mezzi e attrezzature', comunicazioni: 'WhatsApp e comunicazioni',
-  portale: 'Portale clienti', collaboratori: 'Collaboratori esterni', integrazioni: 'Integrazioni', amministrazione: 'Amministrazione',
-};
+const NOMI_MODULI = {};
+for (const f of FUNZIONI) NOMI_MODULI[f.modulo] = f.nome;
 const SPEGNIBILI = FUNZIONI.map(f => f.modulo);
+
+/** Le funzioni che hanno bisogno di questa (anche passando da un'altra): si spengono con lei. */
+function chiLaUsa(modulo) {
+  const out = [];
+  const giro = m => FUNZIONI.forEach(f => { if (f.richiede.indexOf(m) >= 0 && out.indexOf(f.modulo) < 0) { out.push(f.modulo); giro(f.modulo); } });
+  giro(modulo);
+  return SPEGNIBILI.filter(m => out.indexOf(m) >= 0);
+}
+
+/** Le funzioni di cui questa ha bisogno (anche passando da un'altra): si accendono con lei. */
+function diCosaHaBisogno(modulo) {
+  const out = [];
+  const giro = m => { const f = FUNZIONI.find(x => x.modulo === m); (f ? f.richiede : []).forEach(r => { if (out.indexOf(r) < 0) { out.push(r); giro(r); } }); };
+  giro(modulo);
+  return SPEGNIBILI.filter(m => out.indexOf(m) >= 0);
+}
 
 /** I tipi di notifica per gruppo (§9.7). */
 const GRUPPI_NOTIFICHE = [
@@ -52,7 +82,7 @@ const mascheraEmail = e => { const s = String(e || ''); const i = s.indexOf('@')
 module.exports = {
   // ------------------------------------------------------------------ funzioni accese (§9.5)
 
-  /** Le funzioni spente (MODULI_SPENTI), solo fra le cinque che si spengono. */
+  /** Le funzioni spente (MODULI_SPENTI). */
   moduliSpenti() {
     // Una riga sola, letta a ogni richiesta (la usa permessiDi): niente memoria da tenere d'accordo col database.
     let r = null;
@@ -61,33 +91,46 @@ module.exports = {
     return Array.isArray(l) ? l.filter(m => SPEGNIBILI.indexOf(m) >= 0) : [];
   },
 
-  /** funzioni {} (amministrazione 1). */
+  /**
+   * funzioni {} (amministrazione 1, il titolare sempre). Per ognuna: richiede (le funzioni che si accendono con lei) e
+   * serveA (quelle che si spengono con lei), cosi' il foglio di conferma dice tutto prima.
+   */
   funzioni() {
     const spenti = new Set(this.moduliSpenti());
     const out = [];
     for (const m of P.MODULI) {
       const f = FUNZIONI.find(x => x.modulo === m);
-      if (f) out.push({ modulo: m, nome: f.nome, accesa: !spenti.has(m), spegnibile: true, cosaCambia: f.cosaCambia });
-      else out.push({ modulo: m, nome: NOMI_MODULI[m] || m, accesa: true, spegnibile: false });
+      if (!f) continue;
+      out.push({ modulo: m, nome: f.nome, accesa: !spenti.has(m), spegnibile: true, cosaCambia: f.cosaCambia, richiede: diCosaHaBisogno(m), serveA: chiLaUsa(m) });
     }
     return { ok: true, funzioni: out, accese: out.filter(x => x.accesa).length, totale: out.length };
   },
 
-  /** salvaFunzioni {modulo, accesa} (titolare). Spegnere il portale fa anche Spegni il portale adesso. */
+  /**
+   * salvaFunzioni {modulo, accesa} (titolare). Spegnere una funzione spegne anche quelle che la usano; accenderla accende
+   * anche quelle di cui ha bisogno. anche: le altre che sono cambiate. Spegnere il portale fa anche Spegni il portale adesso.
+   */
   salvaFunzioni(d) {
     if (!this.eTitolare()) throw senzaPermesso('accendere e spegnere le funzioni (lo fa solo il titolare)');
     const modulo = testo(d.modulo);
     const f = FUNZIONI.find(x => x.modulo === modulo);
-    if (!f) throw new Rifiuto(NOMI_MODULI[modulo] ? NOMI_MODULI[modulo] + ' resta sempre accesa' : 'Funzione sconosciuta: ' + modulo);
+    if (!f) throw new Rifiuto('Funzione sconosciuta: ' + modulo);
     const accesa = d.accesa === true || d.accesa === 'true' || d.accesa === 1;
     const spenti = new Set(this.moduliSpenti());
-    if (accesa === !spenti.has(modulo)) return { ok: true };
-    if (accesa) spenti.delete(modulo); else spenti.add(modulo);
+    const prima = new Set(spenti);
+    if (accesa) [modulo].concat(diCosaHaBisogno(modulo)).forEach(m => spenti.delete(m));
+    else [modulo].concat(chiLaUsa(modulo)).forEach(m => spenti.add(m));
+    const cambiate = SPEGNIBILI.filter(m => prima.has(m) !== spenti.has(m));
+    if (!cambiate.length) return { ok: true, anche: [] };
     this.salvaImpostazioni({ MODULI_SPENTI: SPEGNIBILI.filter(m => spenti.has(m)) });
-    this.annota('impostazioni', 'MODULI_SPENTI', null, { modulo, accesa }, (accesa ? 'funzione accesa: ' : 'funzione spenta: ') + f.nome);
+    for (const m of cambiate) {
+      this.annota('impostazioni', 'MODULI_SPENTI', null, { modulo: m, accesa }, (accesa ? 'funzione accesa: ' : 'funzione spenta: ') + NOMI_MODULI[m] +
+        (m === modulo ? '' : ' (con ' + f.nome + ')'));
+    }
     // Spegnere la funzione e' gia' la conferma: il portale si spegne per tutti (sessioni chiuse, link annullati).
-    if (!accesa && modulo === 'portale' && this.impPortale().attivo) this.spegniPortale({ conferma: true });
-    return { ok: true };
+    if (!accesa && cambiate.indexOf('portale') >= 0 && this.impPortale().attivo) this.spegniPortale({ conferma: true });
+    const anche = cambiate.filter(m => m !== modulo).map(m => ({ modulo: m, nome: NOMI_MODULI[m] }));
+    return { ok: true, anche };
   },
 
   // ------------------------------------------------------------------ impostazioni generali (§9.4)
@@ -631,6 +674,7 @@ Object.defineProperties(module.exports, {
   FUNZIONI: { value: FUNZIONI },
   SPEGNIBILI: { value: SPEGNIBILI },
   NOMI_MODULI: { value: NOMI_MODULI },
+  FUNZIONI: { value: FUNZIONI },
   GRUPPI_NOTIFICHE: { value: GRUPPI_NOTIFICHE },
   TABELLE_CONTATE: { value: TABELLE_CONTATE },
 });

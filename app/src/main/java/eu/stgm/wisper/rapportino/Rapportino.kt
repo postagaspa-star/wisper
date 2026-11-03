@@ -33,6 +33,16 @@ data class Rapportino(
      * le da' il primo libero e lo rimanda in idCommessa.
      */
     val codiceProposto: String = "",
+    /**
+     * Dal 03/11/2026 (progetti.md §2): il progetto della commessa. [idProgetto] l'id del server (vuoto se nessuno, o se e'
+     * nato qui e non e' ancora arrivato: allora c'e' [progettoNuovo]); [progetto] il codice, [progettoDescrizione] e
+     * [progettoIntestatoA] per mostrarlo ("ED-003 · Quadro QE1") e per il PDF.
+     */
+    val idProgetto: String = "",
+    val progetto: String = "",
+    val progettoDescrizione: String = "",
+    val progettoIntestatoA: String = "",
+    val progettoNuovo: ProgettoNuovo? = null,
     val ticket: String = "",
     val luogo: String = "",
     val descrizione: String = "",
@@ -104,6 +114,14 @@ data class Rapportino(
     val portaleVistoIl: String = "",
     val portaleId: String = "",
 ) {
+    /** Ha un progetto (scelto, o nato qui e ancora in coda). */
+    val conProgetto: Boolean get() = idProgetto.isNotBlank() || progettoNuovo != null
+
+    /** "ED-003 · Quadro QE1", o vuoto senza progetto. */
+    val etichettaProgetto: String
+        get() = progettoNuovo?.takeIf { idProgetto.isBlank() }?.let { Progetto.etichetta(it.codice, it.descrizione) }
+            ?: Progetto.etichetta(progetto, progettoDescrizione)
+
     /** Il rapportino e' di un ticket (anche nato senza rete). */
     val conTicket: Boolean get() = idTicket.isNotBlank() || idLocaleTicket.isNotBlank()
 
@@ -126,7 +144,8 @@ data class Rapportino(
     /** I campi che si compilano, senza quello che aggiunge il foglio: per capire se e' cambiato qualcosa. */
     fun soloCompilato(): Rapportino = Rapportino(
         idLocale = idLocale, data = data, tecnico = tecnico, idCliente = idCliente,
-        cliente = cliente, idCommessa = idCommessa, commessa = commessa, codiceProposto = codiceProposto, ticket = ticket,
+        cliente = cliente, idCommessa = idCommessa, commessa = commessa, codiceProposto = codiceProposto,
+        idProgetto = idProgetto, progettoNuovo = progettoNuovo?.takeIf { idProgetto.isBlank() }, ticket = ticket,
         luogo = luogo, descrizione = descrizione, oreLavoro = oreLavoro, oreExtra = oreExtra,
         oreViaggio = oreViaggio, km = km, spese = spese, noteSpese = noteSpese,
         tariffa = tariffa, noteInterne = noteInterne,
@@ -162,6 +181,10 @@ data class Rapportino(
             else if (idLocaleTicket.isNotBlank()) put("idLocaleTicket", idLocaleTicket)
             // Fase 6: l'elenco intero degli strumenti, solo se è stato toccato (§17.13).
             strumenti?.let { l -> put("strumenti", JSONArray().apply { l.forEach { put(it.perServer()) } }) }
+            // 03/11/2026: il progetto scelto, o quello nato qui (progettoNuovo). Il server toglie il progetto a un rapportino
+            // salvato senza: per questo l'id parte sempre, anche con la funzione Progetti spenta.
+            if (idProgetto.isNotBlank()) put("idProgetto", PonteServer.idJson(idProgetto))
+            else progettoNuovo?.let { put("progettoNuovo", it.aJson()) }
         }
 
     /** Tutto, per le copie sul telefono (coda e ultimo elenco letto). */
@@ -185,7 +208,10 @@ data class Rapportino(
         .put("firmaModo", firmaModo)
         .put("firmaReferente", firmaReferente)
         .put("portale", JSONObject().put("pubblicato", portalePubblicato).put("daFirmare", portaleDaFirmare).put("vistoIl", portaleVistoIl).put("pubblicazione", portaleId))
+        .put("progetto", progetto).put("progettoDescrizione", progettoDescrizione).put("progettoIntestatoA", progettoIntestatoA)
         .apply {
+            // Sul telefono il progetto nato qui resta anche dopo che il server l'ha creato (finché non arriva la risposta).
+            progettoNuovo?.let { if (!has("progettoNuovo")) put("progettoNuovo", it.aJson()) }
             // Sul telefono gli strumenti restano interi (nome, matricola, stato di quel giorno).
             strumenti?.let { l -> put("strumenti", JSONArray().apply { l.forEach { put(it.aJson()) } }) }
             if (idTicket.isNotBlank() && !has("idTicket")) put("idTicket", PonteServer.idJson(idTicket))
@@ -249,6 +275,11 @@ data class Rapportino(
                 idCommessa = o.testo("idCommessa"),
                 commessa = o.testo("commessa"),
                 codiceProposto = o.testo("codiceProposto"),
+                idProgetto = o.testo("idProgetto"),
+                progetto = o.testo("progetto"),
+                progettoDescrizione = o.testo("progettoDescrizione"),
+                progettoIntestatoA = o.testo("progettoIntestatoA"),
+                progettoNuovo = ProgettoNuovo.daJson(o.optJSONObject("progettoNuovo")),
                 ticket = o.testo("ticket"),
                 luogo = o.testo("luogo"),
                 descrizione = o.testo("descrizione"),
@@ -318,6 +349,11 @@ data class Rapportino(
         .put("gruppo", gruppo)
         .put("idCommessa", idCommessa)
         .put("commessa", commessa)
+        // 03/11/2026 (progetti.md §4.7): la riga Progetto del PDF (codice e descrizione) e, se c'è, Intestato a.
+        .put("idProgetto", idProgetto.takeIf { it.isNotBlank() }?.let { PonteServer.idJson(it) } ?: JSONObject.NULL)
+        .put("progetto", progetto.ifBlank { progettoNuovo?.codice.orEmpty() })
+        .put("progettoDescrizione", progettoDescrizione.ifBlank { progettoNuovo?.descrizione.orEmpty() })
+        .put("progettoIntestatoA", progettoIntestatoA.ifBlank { progettoNuovo?.intestatoA.orEmpty() })
         .put("ticket", ticket)
         .put("luogo", luogo)
         .put("descrizione", descrizione)

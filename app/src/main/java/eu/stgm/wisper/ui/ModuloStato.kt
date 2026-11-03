@@ -6,6 +6,8 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import eu.stgm.wisper.rapportino.Numeri
+import eu.stgm.wisper.rapportino.Progetto
+import eu.stgm.wisper.rapportino.ProgettoNuovo
 import eu.stgm.wisper.rapportino.Rapportino
 import eu.stgm.wisper.rapportino.Regole
 import org.json.JSONArray
@@ -33,6 +35,13 @@ class ModuloStato(
     var tornaAlRiepilogo by mutableStateOf(false)
     /** Al passo 1, dopo aver cercato un cliente: si sceglie la sua commessa. */
     var sceltaCommessa by mutableStateOf(false)
+    /** Al passo 1, dopo la commessa: si sceglie il suo progetto (progetti.md §4.5). */
+    var sceltaProgetto by mutableStateOf(false)
+    /**
+     * La funzione Progetti e' accesa: il rapportino vuole il progetto. La mette la schermata a ogni composizione (dalla
+     * sessione): un valore semplice, non uno stato, cosi' scriverlo mentre si disegna non fa ridisegnare niente.
+     */
+    var progettiAttivi = false
     var ricerca by mutableStateOf("")
     var extraAperto by mutableStateOf(base.oreExtra > 0)
     var speseAperte by mutableStateOf(base.spese > 0 || base.noteSpese.isNotBlank())
@@ -46,6 +55,12 @@ class ModuloStato(
     var idCommessa by mutableStateOf(base.idCommessa)
     /** Il codice di una commessa nuova scritta qui (26ST047): si vede subito. */
     var codiceProposto by mutableStateOf(base.codiceProposto)
+    /** Il progetto scelto (id del server) oppure quello nato qui ([progettoNuovo]), con codice, descrizione e intestatario. */
+    var idProgetto by mutableStateOf(base.idProgetto)
+    var progetto by mutableStateOf(base.progetto)
+    var progettoDescrizione by mutableStateOf(base.progettoDescrizione)
+    var progettoIntestatoA by mutableStateOf(base.progettoIntestatoA)
+    var progettoNuovo by mutableStateOf(base.progettoNuovo)
     var ticket by mutableStateOf(base.ticket)
     var luogo by mutableStateOf(base.luogo)
     var descrizione by mutableStateOf(base.descrizione)
@@ -69,6 +84,32 @@ class ModuloStato(
 
     var errori by mutableStateOf(emptyMap<String, String>())
 
+    /** "ED-003 · Quadro QE1", vuoto se non c'e' progetto. */
+    val etichettaProgetto: String get() = Progetto.etichetta(progetto, progettoDescrizione)
+
+    /** Un progetto scelto dall'elenco (anche uno nato sul telefono e ancora in coda: allora resta "nuovo", con lo stesso idLocale). */
+    fun scegliProgetto(p: Progetto) {
+        if (p.inAttesa) {
+            idProgetto = ""; progettoNuovo = ProgettoNuovo.da(p, codiceProposto = true)
+        } else {
+            idProgetto = p.id; progettoNuovo = null
+        }
+        progetto = p.codice; progettoDescrizione = p.descrizione; progettoIntestatoA = p.intestatoA
+        errori = errori - "progetto"
+    }
+
+    /** Il progetto nato qui, anche senza rete: parte col rapportino. */
+    fun nuovoProgetto(n: ProgettoNuovo) {
+        idProgetto = ""; progettoNuovo = n
+        progetto = n.codice; progettoDescrizione = n.descrizione; progettoIntestatoA = n.intestatoA
+        errori = errori - "progetto"
+    }
+
+    /** Cambiata la commessa (o il cliente), il progetto di prima non vale piu'. */
+    fun togliProgetto() {
+        idProgetto = ""; progettoNuovo = null; progetto = ""; progettoDescrizione = ""; progettoIntestatoA = ""
+    }
+
     /** Il cliente e' nuovo se non ha ancora un codice del foglio. */
     val clienteNuovo: Boolean get() = idCliente.isBlank() && cliente.isNotBlank()
 
@@ -79,6 +120,11 @@ class ModuloStato(
         commessa = commessa.trim(),
         idCommessa = idCommessa,
         codiceProposto = if (idCommessa.isBlank() && commessa.isNotBlank()) codiceProposto else "",
+        idProgetto = idProgetto,
+        progetto = progetto,
+        progettoDescrizione = progettoDescrizione,
+        progettoIntestatoA = progettoIntestatoA,
+        progettoNuovo = if (idProgetto.isBlank()) progettoNuovo else null,
         ticket = ticket.trim(),
         luogo = luogo.trim(),
         descrizione = descrizione.trim(),
@@ -101,7 +147,7 @@ class ModuloStato(
     fun validaPasso(n: Int, regole: Regole, chiediTariffa: Boolean = true): Boolean {
         val tutti = valida(regole, chiediTariffa)
         val delPasso = when (n) {
-            1 -> setOf("cliente")
+            1 -> setOf("cliente", "progetto")
             2 -> setOf("oreLavoro", "oreExtra", "oreViaggio", "km", "tariffa")
             3 -> setOf("descrizione", "spese")
             else -> errori.keys
@@ -131,6 +177,10 @@ class ModuloStato(
     fun valida(regole: Regole, chiediTariffa: Boolean = true): Boolean {
         val e = mutableMapOf<String, String>()
         if (cliente.isBlank()) e["cliente"] = "Scegli il cliente"
+        // Progetti accesi (progetti.md §4.5): senza progetto il rapportino non si salva. Il progetto vuole la commessa.
+        else if (progettiAttivi && idProgetto.isBlank() && progettoNuovo == null) {
+            if (idCommessa.isBlank() && codiceProposto.isBlank()) e["cliente"] = "Scegli la commessa" else e["progetto"] = "Scegli il progetto"
+        }
         if (descrizione.isBlank()) e["descrizione"] = "Scrivi che lavoro hai fatto"
         listOf("oreLavoro" to oreLavoro, "oreExtra" to oreExtra, "oreViaggio" to oreViaggio, "km" to km, "spese" to spese)
             .forEach { (campo, testo) ->

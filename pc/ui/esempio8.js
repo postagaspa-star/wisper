@@ -11,6 +11,8 @@
   'use strict';
 
   const R = radice.WisperRegole || (typeof require === 'function' ? require('./regole.js') : null);
+  // 03/11/2026: le 19 funzioni con le dipendenze (come server/src/azioni/amministrazione8.js).
+  const Q8 = radice.WisperRegoleFase8 || (typeof require === 'function' ? require('./regole-fase8.js') : null);
   const copia = o => JSON.parse(JSON.stringify(o));
   const due = n => String(n).padStart(2, '0');
   const iso = d => d.getFullYear() + '-' + due(d.getMonth() + 1) + '-' + due(d.getDate());
@@ -28,7 +30,7 @@
     esportaTutto: 'titolare', esportazioni: 'titolare',
     leggiImport: ['clienti', 2], controllaImport: ['clienti', 2], importaSoggetti: ['clienti', 2], archiviaImportati: ['clienti', 2], importazioni: ['clienti', 1],
     salvaRiquadri: null, nascondiVoce: null, mostraNascoste: null,
-    impostazioniGenerali: ['amministrazione', 1], funzioni: ['amministrazione', 1], salvaFunzioni: 'titolare',
+    impostazioniGenerali: ['amministrazione', 1], funzioni: null, salvaFunzioni: 'titolare',
     notifichePreferenze: null, salvaNotifichePreferenze: null, provaAvvisi: ['amministrazione', 2],
     sicurezza: ['amministrazione', 1], scollegaTutti: 'titolare', accendiCifratura: 'titolare', spegniCifratura: 'titolare',
     provaCopia: ['amministrazione', 2], segnaRipristino: ['amministrazione', 2], statoSistema: ['amministrazione', 1],
@@ -515,23 +517,23 @@
       // --------------------------------------------------------------- amministrazione
       case 'impostazioniGenerali': return { ok: true, gruppi: gruppiImpostazioni(imp) };
       case 'funzioni': {
-        const nomi = [['dashboard', 'Dashboard'], ['clienti', 'Clienti e fornitori'], ['commesse', 'Progetti e commesse'], ['preventivi', 'Preventivi e contratti'], ['attivita', 'Attività e calendario'],
-          ['rapportini', 'Ore e rapportini'], ['spese', 'Spese e trasferte'], ['fatturazione', 'Fatturazione'], ['banche', 'Banche e scadenze'], ['persone', 'Persone e risorse umane'], ['documenti', 'Documenti'],
-          ['ticket', 'Ticket e assistenza'], ['mezzi', 'Mezzi e attrezzature'], ['comunicazioni', 'WhatsApp e comunicazioni'], ['portale', 'Portale clienti'], ['collaboratori', 'Collaboratori esterni'],
-          ['integrazioni', 'Integrazioni'], ['amministrazione', 'Amministrazione']];
-        const sp = ['portale', 'comunicazioni', 'collaboratori', 'mezzi', 'banche'];
-        const frasi = { portale: 'Sparisce dal menu di tutti e il portale si spegne per i clienti, come Spegni il portale adesso. I dati restano.', comunicazioni: 'Sparisce dal menu di tutti e Da mandare non prepara più messaggi. La campanella resta. I dati restano.',
-          collaboratori: 'Sparisce dal menu di tutti; gli esterni non entrano più. I costi già scritti nelle commesse restano. I dati restano.', mezzi: 'Sparisce dal menu di tutti. Nei rapportini non si scelgono più gli strumenti. I dati restano.',
-          banche: 'Sparisce dal menu di tutti e dalla Dashboard. Gli incassi segnati dalle fatture scrivono ancora il movimento. I dati restano.' };
-        return { ok: true, funzioni: nomi.map(([modulo, nome]) => Object.assign({ modulo, nome, accesa: f8.funzioniSpente.indexOf(modulo) < 0, spegnibile: sp.indexOf(modulo) >= 0 }, sp.indexOf(modulo) >= 0 ? { cosaCambia: frasi[modulo] } : {})) };
+        // 03/11/2026 (progetti.md §5): si spengono tutte e 19; il titolare le vede sempre, gli altri con amministrazione 1.
+        if (!titolare(dati) && !R.puo(dati.permessiIo, 'amministrazione', 1)) return NONPERMESSO('vedere questa pagina');
+        return { ok: true, funzioni: Q8.FUNZIONI.map(x => ({ modulo: x.modulo, nome: x.nome, accesa: f8.funzioniSpente.indexOf(x.modulo) < 0, spegnibile: true,
+          cosaCambia: x.cosaCambia, richiede: Q8.diCosaHaBisogno(x.modulo), serveA: Q8.chiLaUsa(x.modulo) })) };
       }
       case 'salvaFunzioni': {
-        const sp = ['portale', 'comunicazioni', 'collaboratori', 'mezzi', 'banche'];
-        if (sp.indexOf(b.modulo) < 0) return { ok: false, errore: 'Questa funzione resta sempre accesa' };
-        f8.funzioniSpente = f8.funzioniSpente.filter(m => m !== b.modulo).concat(b.accesa ? [] : [b.modulo]);
+        const x = Q8.SPEGNIBILI[b.modulo];
+        if (!x) return { ok: false, errore: 'Funzione sconosciuta: ' + b.modulo };
+        const accesa = b.accesa === true || b.accesa === 'true';
+        // Spegnendo si spengono anche quelle che ne hanno bisogno; accendendo si accendono quelle di cui ha bisogno.
+        const altre = (accesa ? Q8.diCosaHaBisogno(b.modulo).filter(m => f8.funzioniSpente.indexOf(m) >= 0)
+          : Q8.chiLaUsa(b.modulo).filter(m => f8.funzioniSpente.indexOf(m) < 0));
+        const tocca = [b.modulo].concat(altre);
+        f8.funzioniSpente = f8.funzioniSpente.filter(m => tocca.indexOf(m) < 0).concat(accesa ? [] : tocca);
         imp.MODULI_SPENTI = f8.funzioniSpente.slice();
-        if (b.modulo === 'portale' && !b.accesa) imp.PORTALE_ATTIVO = false;
-        return { ok: true };
+        if (tocca.indexOf('portale') >= 0 && !accesa) imp.PORTALE_ATTIVO = false;
+        return { ok: true, modulo: b.modulo, accesa, anche: altre.map(m => ({ modulo: m, nome: Q8.SPEGNIBILI[m].nome })) };
       }
       case 'notifichePreferenze': {
         const mie = f8.notifiche[dati.io.id] || {};

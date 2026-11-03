@@ -90,8 +90,10 @@ class DatiEsempioFase8Test {
         assertEquals("undici schede", 11, g.size)
         assertTrue(g.first { it.chiave == "lavoro" }.voci.any { it.chiave == "APPROVAZIONE" && it.scelte.size == 3 })
         val f = dati.fase8.funzioni().getOrThrow()
-        assertEquals(18, f.size)
-        assertEquals(setOf("banche", "mezzi", "comunicazioni", "portale", "collaboratori"), f.filter { it.spegnibile }.map { it.modulo }.toSet())
+        // Dal 03/11/2026 (progetti.md §5): tutte e 19 come sul server, Progetti compresa, e si spengono tutte.
+        assertEquals(19, f.size)
+        assertTrue(f.all { it.spegnibile })
+        assertEquals("Si spengono anche: Progetti, Collaboratori esterni.", eu.stgm.wisper.rapportino.Funzione.fraseAnche(f.first { it.modulo == "commesse" }, false, f))
         assertTrue("spegnere è un esempio", dati.fase8.salvaFunzioni("mezzi", false).isFailure)
         val s = dati.fase8.sicurezza().getOrThrow()
         assertFalse(s.copiaCifrata)

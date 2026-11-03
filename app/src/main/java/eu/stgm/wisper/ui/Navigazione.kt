@@ -57,12 +57,15 @@ import java.time.YearMonth
 /**
  * Le voci del menu laterale (docs/gestionale/fase1-schermate.md §1), nell'ordine
  * delle specifiche e solo quelle che funzionano: ognuna con la sua pila di pagine.
- * La Dashboard e' la casa.
+ * La casa e' la prima voce accesa (di solito la Dashboard: dal 03/11/2026 si spegne
+ * anche lei, progetti.md §5).
  */
 enum class Sezione(val nome: String, val icona: ImageVector, val modulo: String) {
     DASHBOARD("Dashboard", Icone.dashboard, Moduli.DASHBOARD),
     CLIENTI("Clienti e fornitori", Icone.clienti, Moduli.CLIENTI),
-    COMMESSE("Progetti e commesse", Icone.commesse, Moduli.COMMESSE),
+    // 03/11/2026 (progetti.md §4): i progetti hanno la loro voce subito sotto, e la voce di sopra torna "Commesse".
+    COMMESSE("Commesse", Icone.commesse, Moduli.COMMESSE),
+    PROGETTI("Progetti", Icone.progetti, Moduli.PROGETTI),
     PREVENTIVI("Preventivi e contratti", Icone.preventivo, Moduli.PREVENTIVI),
     ATTIVITA("Attività e calendario", Icone.calendario, Moduli.ATTIVITA),
     RAPPORTINI("Ore e rapportini", Icone.ore, Moduli.RAPPORTINI),
@@ -107,6 +110,7 @@ class Navigatore(
     private val onNuovoRapportino: (LocalDate, String?, String?) -> Unit,
     private val onFirmaPreventivo: (String) -> Unit = {},
     private val onRapportinoDaTicket: (eu.stgm.wisper.rapportino.Rapportino) -> Unit = {},
+    private val onNuovoRapportinoProgetto: (String) -> Unit = {},
 ) {
     fun vai(rotta: String) = onVai(rotta)
     fun indietro() = onIndietro()
@@ -121,6 +125,9 @@ class Navigatore(
     fun nuovoRapportino(giorno: LocalDate = LocalDate.now(), idCliente: String? = null, idCommessa: String? = null) =
         onNuovoRapportino(giorno, idCliente, idCommessa)
 
+    /** Un rapportino nuovo dalla scheda di un progetto: cliente, commessa e progetto già messi (progetti.md §4.4). */
+    fun nuovoRapportinoProgetto(idProgetto: String) = onNuovoRapportinoProgetto(idProgetto)
+
     /** La firma del cliente per accettare un preventivo, a tutto schermo come quella del rapportino. */
     fun firmaPreventivo(id: String) = onFirmaPreventivo(id)
 
@@ -131,6 +138,7 @@ class Navigatore(
 /** Le rotte "compito" (moduli, invio): a tutto schermo, niente menu, si esce con la ×. */
 fun rottaCompito(rotta: String?): Boolean =
     rotta != null && (rotta.startsWith("invio/") || rotta.startsWith("commessa-modifica/") || rotta.startsWith("commessa-nuova") ||
+        rotta.startsWith("progetto-nuovo") || rotta.startsWith("progetto-modifica/") ||
         rotta.startsWith("cliente-modifica/") || rotta.startsWith("cliente-nuovo") || rotta.startsWith("fornitore-nuovo") ||
         rotta.startsWith("preventivo-modifica/") || rotta.startsWith("preventivo-nuovo") ||
         rotta.startsWith("attivita-modifica/") || rotta.startsWith("attivita-nuova") ||
@@ -158,6 +166,7 @@ fun sezioneDiRotta(rotta: String?, base: Sezione): Sezione = when {
     rotta.startsWith("integrazion") -> Sezione.INTEGRAZIONI
     rotta.startsWith("client") || rotta.startsWith("fornitor") || rotta.startsWith("soggett") -> Sezione.CLIENTI
     rotta.startsWith("commess") -> Sezione.COMMESSE
+    rotta.startsWith("progett") -> Sezione.PROGETTI
     rotta.startsWith("preventiv") || rotta == "listino" || rotta == "contratti" || rotta.startsWith("invio/preventivo") -> Sezione.PREVENTIVI
     rotta.startsWith("attivita") || rotta.startsWith("calendario") -> Sezione.ATTIVITA
     rotta.startsWith("ore-") -> Sezione.RAPPORTINI

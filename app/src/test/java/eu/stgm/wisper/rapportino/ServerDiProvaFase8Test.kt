@@ -166,7 +166,10 @@ class ServerDiProvaFase8Test {
         val oggetti = (d.urgenti + d.settimana + d.pianificare).map { it.oggetto }.filter { it.isNotBlank() }
         assertEquals("una cosa, una voce", oggetti.size, oggetti.toSet().size)
         val tutto = f.dashboardTutto()
-        assertEquals(d.quante["urgenti"] ?: d.urgenti.size, tutto.urgenti.size)
+        // "Tutto quello che c'è da fare" non raggruppa (dashboard8.js): ha almeno tante voci quante la Dashboard, di piu'
+        // quando ci sono 3 cose della stessa famiglia ("3 attività") o cose da approvare. Uguale solo senza gruppi: dopo
+        // mezzanotte, con le attivita' scadute delle prove di prima, non lo e' (04/11/2026, 13 contro 15).
+        assertTrue(tutto.urgenti.size >= (d.quante["urgenti"] ?: d.urgenti.size))
 
         val prima = d.riquadri!!.map { it.chiave }
         val possibili = d.riquadriPossibili.ifEmpty { prima }
@@ -220,8 +223,12 @@ class ServerDiProvaFase8Test {
         val p = entra("manuel@esempio.it")
         val f = Fase8(p)
         val l = f.funzioni()
-        assertEquals(setOf("portale", "comunicazioni", "collaboratori", "mezzi", "banche"), l.filter { it.spegnibile }.map { it.modulo }.toSet())
-        assertTrue(l.first { it.modulo == "rapportini" }.parola == "Sempre accesa")
+        // Dal 03/11/2026 (progetti.md §5) si spengono tutte e 19, con richiede e serveA.
+        assertEquals(19, l.size)
+        assertTrue(l.all { it.spegnibile })
+        assertEquals("Accesa", l.first { it.modulo == "rapportini" }.parola)
+        assertEquals(setOf("commesse", "clienti"), l.first { it.modulo == "progetti" }.richiede.toSet())
+        assertTrue(l.first { it.modulo == "commesse" }.serveA.containsAll(listOf("progetti", "collaboratori")))
         rifiutato("Marco che spegne") { Fase8(entra("marco@esempio.it")).salvaFunzioni("mezzi", false) }
         val primaMezzi = p.leggiAzione("mezzi").toString().length
         try {
@@ -236,6 +243,41 @@ class ServerDiProvaFase8Test {
         }
         assertFalse(p.io().interfaccia.funzioniSpente.contains("mezzi"))
         assertEquals("i dati tornano uguali", primaMezzi, p.leggiAzione("mezzi").toString().length)
+    }
+
+    @Test
+    fun `spegnere Commesse spegne anche Progetti e Collaboratori, accendere Progetti riaccende Commesse`() = runBlocking<Unit> {
+        val p = entra("manuel@esempio.it")
+        val f = Fase8(p)
+        try {
+            val anche = f.salvaFunzioni("commesse", false)
+            assertTrue(anche.toString(), anche.containsAll(listOf("Progetti", "Collaboratori esterni")))
+            val spente = p.io().interfaccia.funzioniSpente
+            assertTrue(spente.containsAll(listOf("commesse", "progetti", "collaboratori")))
+            // La frase del foglio di conferma, dalle funzioni come le manda il server.
+            val tutte = f.funzioni()
+            assertEquals("Si accendono anche: Commesse.", Funzione.fraseAnche(tutte.first { it.modulo == "progetti" }, true, tutte))
+            assertEquals(listOf("Commesse"), f.salvaFunzioni("progetti", true))
+            assertTrue(p.io().interfaccia.funzioniSpente.none { it == "progetti" || it == "commesse" })
+        } finally {
+            f.salvaFunzioni("collaboratori", true)
+            f.salvaFunzioni("progetti", true)
+        }
+        assertTrue(p.io().interfaccia.funzioniSpente.none { it in setOf("commesse", "progetti", "collaboratori") })
+    }
+
+    @Test
+    fun `l'Amministrazione spenta lascia al titolare Funzioni, per riaccenderla`() = runBlocking<Unit> {
+        val p = entra("manuel@esempio.it")
+        val f = Fase8(p)
+        try {
+            f.salvaFunzioni("amministrazione", false)
+            assertEquals(0, p.io().permessi.livello(Moduli.AMMINISTRAZIONE))
+            assertTrue(f.funzioni().isNotEmpty())
+        } finally {
+            f.salvaFunzioni("amministrazione", true)
+        }
+        assertEquals(2, p.io().permessi.livello(Moduli.AMMINISTRAZIONE))
     }
 
     @Test

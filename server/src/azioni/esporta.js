@@ -43,7 +43,8 @@ function csv(colonne, righe) {
 const COLONNE = {
   rapportini: [
     ['Numero', r => r.id], ['Data', r => data(r.data)], ['Tecnico', r => r.tecnico], ['Codice cliente', r => r.idCliente],
-    ['Cliente', r => r.cliente], ['Codice commessa', r => r.idCommessa], ['Commessa', r => r.commessa], ['Ticket', r => r.ticket],
+    ['Cliente', r => r.cliente], ['Codice commessa', r => r.idCommessa], ['Commessa', r => r.commessa],
+    ['Codice progetto', r => r.progetto], ['Progetto', r => r.progettoDescrizione], ['Intestato a', r => r.progettoIntestatoA], ['Ticket', r => r.ticket],
     ['Luogo', r => r.luogo], ['Descrizione', r => r.descrizione], ['Ore lavoro', r => r.oreLavoro], ['Ore extra', r => r.oreExtra],
     ['Ore viaggio', r => r.oreViaggio], ['Ore totali', r => r.oreTotali], ['Km', r => r.km], ['Spese', r => r.spese],
     ['Note spese', r => r.noteSpese], ['Tariffa', r => r.tariffa, true], ['Compenso ore', r => r.compensoOre, true],
@@ -66,6 +67,12 @@ const COLONNE = {
     ['Costo orario', m => m.costoOrario, true], ['Euro al km', m => m.euroKm, true], ['Importo del contratto', m => m.importoContratto, true],
     ['Responsabile', m => m.nomeResponsabile], ['Codice precedente', m => m.codicePrecedente], ['Note', m => m.note],
     ['Archiviata', m => m.archiviata], ['Modello', m => m.modello],
+  ],
+  // 03/11/2026: i progetti delle commesse.
+  progetti: [
+    ['Codice', p => p.codice], ['Codice commessa', p => p.idCommessa], ['Codice cliente', p => p.idCliente], ['Cliente', p => p.nomeCliente],
+    ['Intestato a', p => p.intestatoA], ['Descrizione', p => p.descrizione], ['Stato', p => p.stato], ['Rapportini', p => p.rapportini],
+    ['Ore', p => p.ore], ['Ultimo rapportino', p => data(p.ultimoRapportino)], ['Creato il', p => dataOra(p.creato)],
   ],
   registro: [
     ['Quando', r => dataOra(r.quando)], ['Chi', r => r.utente], ['Dispositivo', r => r.disp], ['Azione', r => r.azione],
@@ -229,7 +236,7 @@ const COLONNE_FASE8 = {
 const MODULO = {
   fatture: 'fatturazione', ricevute: 'fatturazione', daFatturare: 'fatturazione', riepilogo: 'fatturazione',
   movimenti: 'banche', scadenziario: 'banche', impegni: 'banche',
-  rapportini: 'rapportini', clienti: 'clienti', fornitori: 'clienti', commesse: 'commesse', registro: 'amministrazione',
+  rapportini: 'rapportini', clienti: 'clienti', fornitori: 'clienti', commesse: 'commesse', progetti: 'progetti', registro: 'amministrazione',
   preventivi: 'preventivi', attivita: 'attivita',
   ore: 'rapportini', spese: 'spese', trasferte: 'spese', rimborsi: 'spese',
   // Fase 5 (le scadenze: documenti o ticket, lo controlla esporta)
@@ -249,7 +256,7 @@ const NOMI_RAPPORTO = { titolare: 'Titolare', socio: 'Socio', dipendente: 'Dipen
 module.exports = {
   esporta(d) {
     const cosa = testo(d.cosa);
-    if (!MODULO[cosa]) throw new Rifiuto('Cosa esportare? referenti, sedi, prestazioni, comunicazioni, rapportini, clienti, fornitori, commesse, registro, preventivi, attivita, ore, spese, trasferte, rimborsi, fatture, ricevute, daFatturare, riepilogo, movimenti, scadenziario, impegni, documenti, scadenze, ticket, contratti, persone, qualifiche, assenze, presenze, mezzi, attrezzature, tarature, manutenzioni, assegnazioni, km, collaboratori, incarichi o compensi');
+    if (!MODULO[cosa]) throw new Rifiuto('Cosa esportare? referenti, sedi, prestazioni, comunicazioni, rapportini, clienti, fornitori, commesse, progetti, registro, preventivi, attivita, ore, spese, trasferte, rimborsi, fatture, ricevute, daFatturare, riepilogo, movimenti, scadenziario, impegni, documenti, scadenze, ticket, contratti, persone, qualifiche, assenze, presenze, mezzi, attrezzature, tarature, manutenzioni, assegnazioni, km, collaboratori, incarichi o compensi');
     const puo = cosa === 'scadenze' ? ['documenti', 'ticket', 'persone', 'mezzi', 'collaboratori'].some(m => this.livello(m) >= 1) : this.livello(MODULO[cosa]) >= 1;
     if (!puo || (this.eEsterno() && ESTERNO_ESPORTA.indexOf(cosa) < 0)) throw senzaPermesso('esportare ' + cosa);
     if (cosa === 'compensi' && !this.vedeCosti()) throw senzaPermesso('esportare i compensi (serve il permesso dei soldi)');
@@ -276,7 +283,7 @@ module.exports = {
     let righe;
     if (cosa === 'rapportini') {
       colonne = scegli(COLONNE.rapportini);
-      righe = this.leggiRapportini(d.da, d.a, d.tutti === true || d.tutti === '1', { idCliente: d.idCliente, idCommessa: d.idCommessa })
+      righe = this.leggiRapportini(d.da, d.a, d.tutti === true || d.tutti === '1', { idCliente: d.idCliente, idCommessa: d.idCommessa, idProgetto: d.idProgetto })
         .sort((x, y) => (x.data < y.data ? -1 : x.data > y.data ? 1 : (x.id < y.id ? -1 : 1)));
     } else if (cosa === 'clienti' || cosa === 'fornitori') {
       colonne = scegli(COLONNE.soggetti);
@@ -291,6 +298,11 @@ module.exports = {
       righe = this.leggiCommesse({ archiviati: true, modelli: true }).map(m => Object.assign({}, m, {
         nomeCliente: nomi[m.idCliente] || '', nomeResponsabile: m.responsabileId ? utenti[m.responsabileId] || '' : '',
       }));
+    } else if (cosa === 'progetti') {
+      colonne = scegli(COLONNE.progetti);
+      const nomi = {};
+      this.soggettiAttivi().forEach(s => { nomi[s.id] = s.nome; });
+      righe = this.leggiProgetti({ idCommessa: d.idCommessa, idCliente: d.idCliente }).reverse().map(p => Object.assign({}, p, { nomeCliente: nomi[p.idCliente] || '' }));
     } else if (cosa === 'preventivi') {
       colonne = scegli(COLONNE.preventivi);
       righe = this.elencoPreventivi(d).map(p => Object.assign(p, {

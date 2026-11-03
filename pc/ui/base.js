@@ -146,6 +146,8 @@
     immagine: '<path d="M4 5h16v14H4zM4 16l5-5 4 4 3-3 4 4M15 9h.01"/>',
     interruttore: '<path d="M7 7h10a5 5 0 0 1 0 10H7A5 5 0 0 1 7 7zM16 12h.01"/>',
     pennello: '<path d="M4 20c3 0 4-2 4-4l9-9-3-3-9 9c-2 0-4 1-4 4M14 4l3 3"/>',
+    // 03/11/2026: i progetti, strati dentro la commessa.
+    progetti: '<path d="M12 3l9 5-9 5-9-5zM3 12.5l9 5 9-5M3 17l9 5 9-5"/>',
   };
 
   function icona(nome, dim, spessore) {
@@ -181,7 +183,7 @@
   }
 
   function stato(st, grande) {
-    const nomi = { BOZZA: 'Da firmare', FIRMATO: 'Firmato', INVIATO: 'Inviato', FATTURATO: 'Fatturato', APERTA: 'Aperta', SOSPESA: 'Sospesa', CHIUSA: 'Chiusa' };
+    const nomi = { BOZZA: 'Da firmare', FIRMATO: 'Firmato', INVIATO: 'Inviato', FATTURATO: 'Fatturato', APERTA: 'Aperta', SOSPESA: 'Sospesa', CHIUSA: 'Chiusa', APERTO: 'Aperto', CHIUSO: 'Chiuso' };
     return h('span', { class: 'stato ' + st + (grande ? ' grande' : '') }, nomi[st] || st);
   }
 

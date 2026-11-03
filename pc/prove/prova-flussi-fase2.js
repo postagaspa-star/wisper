@@ -120,7 +120,8 @@ async function main() {
     await entra('manuel@esempio.it');
     assert.match(await valuta("document.querySelector('h1').textContent"), /Manuel/);
     const voci = await valuta("[...document.querySelectorAll('#voci .voce')].map(x => x.dataset.nome)");
-    assert.deepEqual(voci.slice(0, 5), ['Dashboard', 'Clienti e fornitori', 'Progetti e commesse', 'Preventivi e contratti', 'Attività e calendario']);
+    // Dal 03/11/2026 (progetti.md §4) Commesse e Progetti sono due voci.
+    assert.deepEqual(voci.slice(0, 6), ['Dashboard', 'Clienti e fornitori', 'Commesse', 'Progetti', 'Preventivi e contratti', 'Attività e calendario']);
     passo('menu: Preventivi e contratti e Attività e calendario al loro posto');
 
     // ------------------------------------------------------------ preventivo nuovo, dal listino

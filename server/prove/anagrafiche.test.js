@@ -241,7 +241,7 @@ test('esporta: CSV per Excel con punto e virgola, BOM, virgola nei decimali', as
   assert.ok(m.includes('26ST001;C001;Elettrodinamica;Nuovo magazzino automatico Batokyo'));
   const reg = await manuel('esporta', { cosa: 'registro' });
   assert.ok(reg.righe > 10);
-  assert.equal((await manuel('esporta', { cosa: 'boh' })).errore, 'Cosa esportare? referenti, sedi, prestazioni, comunicazioni, rapportini, clienti, fornitori, commesse, registro, preventivi, attivita, ore, spese, trasferte, rimborsi, fatture, ricevute, daFatturare, riepilogo, movimenti, scadenziario, impegni, documenti, scadenze, ticket, contratti, persone, qualifiche, assenze, presenze, mezzi, attrezzature, tarature, manutenzioni, assegnazioni, km, collaboratori, incarichi o compensi');
+  assert.equal((await manuel('esporta', { cosa: 'boh' })).errore, 'Cosa esportare? referenti, sedi, prestazioni, comunicazioni, rapportini, clienti, fornitori, commesse, progetti, registro, preventivi, attivita, ore, spese, trasferte, rimborsi, fatture, ricevute, daFatturare, riepilogo, movimenti, scadenziario, impegni, documenti, scadenze, ticket, contratti, persone, qualifiche, assenze, presenze, mezzi, attrezzature, tarature, manutenzioni, assegnazioni, km, collaboratori, incarichi o compensi');
 });
 
 // ------------------------------------------------------------------ dashboard

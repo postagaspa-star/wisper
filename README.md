@@ -24,6 +24,17 @@ are in `docs/gestionale/`; every phase has its entry in the diary. All nine phas
 released together as version 1.0.0 on 3 November 2026, the evening the studio's data moved
 from the sheet to the server.
 
+Version 1.1.0 (same night, after my father's first evening with it) added what he asked for
+(`docs/gestionale/progetti.md`): the data started again from zero (`server/strumenti/svuota.js`
+keeps accounts, paired devices and settings, after a full copy of the data folder); every module
+can be switched off, none is compulsory (switching off Clients also switches off what needs it,
+like Jobs and Projects); and a new level under each job, **projects** (*progetti*): client → jobs
+→ projects → reports. A project has a code, an optional "made out to" name (for the clients he
+works for under another company's name) and a description. Codes are typed by hand the first
+times; after two or three Wisper finds the pattern by itself (fixed parts, the job's code, the
+year, one counter) and proposes the next one (`server/src/codici-progetto.js`, the same cases
+ported to the phone so it proposes the same code offline).
+
 Phase 1 (October 2026) replaces the Google Sheet with a small server on
 the home NAS (`server/`: Node.js 24 with its built-in SQLite, no npm dependencies, in
 Docker). It speaks the same protocol as the sheet script, so the phone and the office
@@ -319,8 +330,16 @@ and how many emails are left for the day. It changes nothing in the sheet.
 
 ## Updates
 
-Both apps update themselves. Once an hour (and at start) they fetch
-`aggiornamento.json` from the latest GitHub release of this repository: the
+Both apps update themselves, and since 1.1.0 (3 November 2026) **the NAS tells
+them when**: they no longer check on their own every hour. The server reads
+`aggiornamento.json` from the latest GitHub release every 10 minutes
+(`server/src/versioni.js`), verifies its signature with the same public key the
+apps carry, and announces the versions in two silent ways: every `/exec` answer
+carries a small `versioni` field (also through the Google door and in error
+answers), and while an app is open at home it keeps a long request open on
+`/campanello`, which the server answers the moment the list changes. An app
+that sees it is behind downloads the new version from GitHub exactly as before.
+The list (`aggiornamento.json` in the latest GitHub release) gives the
 versions, where to download them, their size and SHA-256, **signed** with an
 ECDSA key whose private half lives only in `wisper-keys`
 (`aggiornamenti-privata.pem`). The apps carry the public half and ignore any
@@ -341,7 +360,8 @@ program onto my father's phone or computer.
 **Publishing a version.** Raise `versionCode`/`versionName` in
 `app/build.gradle.kts` and `Version` in the `.csproj`, then
 `powershell -ExecutionPolicy Bypass -File strumenti\rilascio.ps1` builds the signed APK, the exe and the signed list in `dist/rilascio/vX.Y.Z/`; add
-`-Pubblica` to create the GitHub release. Within an hour both apps have it.
+`-Pubblica` to create the GitHub release. Within ten minutes the NAS notices and
+tells both apps.
 
 **Keys.** `wisper-keys\wisper-release.jks` signs the APK: if it is lost, the
 next version cannot be installed over the old one (uninstall and reinstall,

@@ -159,7 +159,7 @@ test('la cifratura: la chiave una volta sola (mai nel registro); la copia fuori 
   const scritta = a.chiave.toLowerCase().replace(/-/g, ' ');
   const r = ripristina(cifrata, dati, { chiave: scritta });
   assert.equal(r.cifrata, true);
-  assert.match(r.descrizione, /^Copia del \d{2}\/\d{2}\/\d{4} · cifrata · versione dello schema 8$/);
+  assert.match(r.descrizione, /^Copia del \d{2}\/\d{2}\/\d{4} · cifrata · versione dello schema 9$/);
   assert.equal(r.rapportini, conteggi.rapportini);
   assert.equal(r.soggetti, conteggi.soggetti);
   assert.ok(r.messoDaParte && fs.readFileSync(r.messoDaParte, 'utf8') === 'il database di prima', 'quello di prima messo da parte');

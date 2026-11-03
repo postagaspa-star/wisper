@@ -518,6 +518,14 @@ interface Dati {
      */
     val fase8: eu.stgm.wisper.rapportino.ServizioFase8
 
+    // ------------------------------------------------------------- progetti (docs/gestionale/progetti.md, 03/11/2026)
+
+    /**
+     * Nuovo, modifica, chiudi, riapri e togli dei progetti, in diretta. I progetti da mostrare stanno in
+     * [anagrafiche] (anche senza rete); quelli nati in un rapportino senza rete viaggiano col rapportino.
+     */
+    val progetti: eu.stgm.wisper.rapportino.ServizioProgetti
+
     // ------------------------------------------------------------- collegare il computer col QR (docs/gestionale/collega-qr.md)
 
     /**

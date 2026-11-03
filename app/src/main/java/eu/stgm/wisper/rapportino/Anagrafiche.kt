@@ -288,6 +288,8 @@ data class Anagrafiche(
     /** Fase 6 (§17.2): con mezzi >= 1 i mezzi e i miei strumenti, per il telefono senza rete. */
     val mezzi: List<MezzoBreve> = emptyList(),
     val mieiStrumenti: List<StrumentoMio> = emptyList(),
+    /** Dal 03/11/2026 (progetti.md §2): i progetti, per sceglierli nel rapportino anche senza rete. */
+    val progetti: List<Progetto> = emptyList(),
 ) {
     val euroKm: Double get() = Numeri.leggi(impostazioni[EURO_KM]) ?: 0.0
     val ticketAttivo: Boolean get() = impostazioni[TICKET_ATTIVO].equals("SI", ignoreCase = true)
@@ -330,6 +332,13 @@ data class Anagrafiche(
     fun prestazioniDi(idCommessa: String): List<Prestazione> =
         prestazioni.filter { it.idCommessa.equals(idCommessa, ignoreCase = true) }.sortedWith(compareBy({ it.ordine }, { it.id }))
     fun utente(id: String): Utente? = if (id.isBlank()) null else utenti.firstOrNull { it.id == id }
+
+    /** Un progetto per id (o per l'idLocale di uno nato sul telefono). */
+    fun progetto(id: String): Progetto? = if (id.isBlank()) null else progetti.firstOrNull { it.id == id } ?: progetti.firstOrNull { it.idLocale == id }
+
+    /** Tutti i progetti di una commessa, i piu' recenti prima. */
+    fun progettiDi(idCommessa: String): List<Progetto> =
+        progetti.filter { it.idCommessa.equals(idCommessa, ignoreCase = true) }.sortedWith(compareByDescending<Progetto> { it.creato }.thenByDescending { it.id.toLongOrNull() ?: 0L })
     fun numerazione(tipo: String): Numerazione? = numerazioni.firstOrNull { it.tipo == tipo }
 
     /** Il nome del titolare per "Chiedi a Manuel": il primo titolare attivo. */
@@ -466,6 +475,7 @@ data class Anagrafiche(
             impostazioni = impostazioniDaJson(o.optJSONObject("impostazioni")),
             mezzi = o.optJSONArray("mezzi").oggetti().map(MezzoBreve::daJson).filter { it.id.isNotBlank() },
             mieiStrumenti = o.optJSONArray("mieiStrumenti").oggetti().map(StrumentoMio::daJson).filter { it.id.isNotBlank() },
+            progetti = o.optJSONArray("progetti").oggetti().map(Progetto::daJson).filter { it.id.isNotBlank() },
         )
 
         /** { EURO_KM: 0.76, AUTO: "Volvo XC40" } -> mappa di testi. Un numero intero resta senza ",0". */
@@ -502,4 +512,5 @@ data class Anagrafiche(
         .put("numerazioni", JSONArray().apply { numerazioni.forEach { put(it.aJson()) } })
         .put("mezzi", JSONArray().apply { mezzi.forEach { put(it.aJson()) } })
         .put("mieiStrumenti", JSONArray().apply { mieiStrumenti.forEach { put(it.aJson()) } })
+        .put("progetti", JSONArray().apply { progetti.forEach { put(it.aJson()) } })
 }

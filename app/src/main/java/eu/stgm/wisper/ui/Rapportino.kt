@@ -81,6 +81,9 @@ import eu.stgm.wisper.rapportino.Calcolo
 import eu.stgm.wisper.rapportino.Cliente
 import eu.stgm.wisper.rapportino.Immagini
 import eu.stgm.wisper.rapportino.Numeri
+import eu.stgm.wisper.rapportino.Progetto
+import eu.stgm.wisper.rapportino.ProgettoNuovo
+import eu.stgm.wisper.rapportino.RegoleProgetti
 import eu.stgm.wisper.rapportino.Stampa
 import eu.stgm.wisper.rapportino.Stato
 import kotlinx.coroutines.CancellationException
@@ -168,6 +171,12 @@ fun SchermataRapportino(
     val fattura = LocalPermessi.current.modifica(eu.stgm.wisper.rapportino.Moduli.FATTURAZIONE)
     val clienteScelto: Cliente? = ana.cliente(stato.idCliente, if (stato.idCliente.isBlank()) stato.cliente else "")
     val regole = ana.regoleDi(clienteScelto, ana.commessa(stato.idCommessa))
+    // I progetti (progetti.md §4.6): con la funzione accesa il rapportino vuole il progetto; spenta, tutto come prima.
+    val sessione by dati.sessione.collectAsStateWithLifecycle()
+    val progettiAttivi = RegoleProgetti.attivi(sessione)
+    stato.progettiAttivi = progettiAttivi
+    // Commesse spenta (progetti.md §5, "i rapportini non chiedono più la commessa"): si sceglie solo il cliente.
+    val commesseAccese = eu.stgm.wisper.rapportino.Moduli.COMMESSE !in sessione.interfaccia.funzioniSpente
     // La tariffa da proporre: il prezzo della commessa, se ce l'ha; altrimenti l'ultima del cliente.
     val prezzoCommessa = ana.commessa(stato.idCommessa)?.prezzoOrario?.takeIf { it > 0 }
     val proposta = prezzoCommessa ?: dati.tariffaProposta(clienteScelto, stato.cliente)
@@ -203,7 +212,8 @@ fun SchermataRapportino(
 
     fun indietro() {
         when {
-            stato.tornaAlRiepilogo -> { stato.tornaAlRiepilogo = false; vaiA(4) }
+            stato.passo == 1 && stato.sceltaProgetto && !stato.tornaAlRiepilogo -> stato.sceltaProgetto = false
+            stato.tornaAlRiepilogo -> { stato.tornaAlRiepilogo = false; stato.sceltaProgetto = false; vaiA(4) }
             stato.passo == 1 || (stato.passo == 4 && !stato.nuovo) -> uscita()
             else -> vaiA(stato.passo - 1)
         }
@@ -217,7 +227,13 @@ fun SchermataRapportino(
 
     fun cambiaDa(n: Int) {
         stato.tornaAlRiepilogo = true
-        if (n == 1) stato.sceltaCommessa = false
+        if (n == PASSO_PROGETTO) {
+            // "Cambia" sulla riga del progetto: si torna ai progetti della commessa.
+            stato.sceltaCommessa = true; stato.sceltaProgetto = true
+            vaiA(1)
+            return
+        }
+        if (n == 1) { stato.sceltaCommessa = false; stato.sceltaProgetto = false }
         vaiA(n)
     }
 
@@ -228,8 +244,10 @@ fun SchermataRapportino(
         val r = stato.rapportino()
         if (!bloccato) {
             if (!stato.valida(regole, costi)) {
+                if ("progetto" in stato.errori) { stato.sceltaCommessa = true; stato.sceltaProgetto = true }
+                else if ("cliente" in stato.errori && stato.cliente.isNotBlank()) { stato.sceltaCommessa = true; stato.sceltaProgetto = false }
                 val passoConErrore = when {
-                    "cliente" in stato.errori -> 1
+                    "cliente" in stato.errori || "progetto" in stato.errori -> 1
                     stato.errori.keys.any { it in setOf("oreLavoro", "oreExtra", "oreViaggio", "km", "tariffa") } -> 2
                     else -> 3
                 }
@@ -404,10 +422,13 @@ fun SchermataRapportino(
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
                         when (passo) {
-                            1 -> PassoPerChi(stato, dati, viste, ana, regole, onScelto = { visita?.azione(it); vaiA(if (stato.tornaAlRiepilogo) 4 else 2); stato.tornaAlRiepilogo = false })
+                            1 -> PassoPerChi(stato, dati, viste, ana, regole, progettiAttivi, commesseAccese, onScelto = {
+                                visita?.azione(it); stato.sceltaProgetto = false
+                                vaiA(if (stato.tornaAlRiepilogo) 4 else 2); stato.tornaAlRiepilogo = false
+                            })
                             2 -> PassoOre(stato, regole, proposta, ultimiKm, clienteScelto, prezzoCommessa != null)
                             3 -> PassoLavoro(stato, ana.ticketAttivo, vista, onScatta = { scatta() }, onGalleria = { dallaGalleria() }, dati = dati)
-                            else -> PassoRiepilogo(stato, vista, conto, regole, dati, onCambia = { cambiaDa(it) }, solaLettura = !scrive)
+                            else -> PassoRiepilogo(stato, vista, conto, regole, dati, onCambia = { cambiaDa(it) }, solaLettura = !scrive, commesseAccese = commesseAccese)
                         }
                     }
                 }
@@ -606,27 +627,51 @@ private fun ColumnScope.PassoPerChi(
     viste: List<Vista>,
     ana: eu.stgm.wisper.rapportino.Anagrafiche,
     regole: eu.stgm.wisper.rapportino.Regole,
+    progettiAttivi: Boolean,
+    commesseAccese: Boolean,
     onScelto: (String) -> Unit,
 ) {
     val c = W.colori
+    val altri = viste.filterNot { it.rapportino.idLocale == stato.base.idLocale }.map { it.rapportino }
+
+    /** Scelto il cliente: si sceglie la commessa; con Commesse spenta si va avanti senza. */
+    fun dopoCliente(azione: String) {
+        stato.commessa = ""; stato.idCommessa = ""; stato.codiceProposto = ""
+        stato.togliProgetto()
+        stato.errori = stato.errori - "cliente"
+        if (commesseAccese) stato.sceltaCommessa = true else onScelto(azione)
+    }
+
+    /** Scelta la commessa: con i progetti accesi si sceglie il progetto (uno solo aperto: e' gia' scelto). */
+    fun dopoCommessa(azione: String) {
+        stato.togliProgetto()
+        if (!progettiAttivi) { onScelto(azione); return }
+        val aperti = RegoleProgetti.apertiDi(ana, altri, stato.idCommessa.ifBlank { stato.codiceProposto })
+        if (aperti.size == 1) { stato.scegliProgetto(aperti.first()); onScelto(azione); return }
+        stato.sceltaCommessa = true
+        stato.sceltaProgetto = true
+    }
+
     Text("Per chi?", style = Testi.titoloPagina, color = c.testo)
     RigaData(stato)
 
-    if (!stato.sceltaCommessa) {
-        val recenti = Riepiloghi.recenti(viste.filterNot { it.rapportino.idLocale == stato.base.idLocale }, ana)
+    if (!stato.sceltaCommessa || !commesseAccese) {
+        val recenti = Riepiloghi.recenti(viste.filterNot { it.rapportino.idLocale == stato.base.idLocale }, ana, conProgetti = progettiAttivi, soloClienti = !commesseAccese)
         if (recenti.isNotEmpty()) Etichetta("Recenti", Modifier.padding(top = 4.dp))
         recenti.forEachIndexed { i, rc ->
+            val pr = rc.progetto
             SchedaScelta(
                 nome = rc.cliente,
                 titolo = rc.cliente,
-                sotto = rc.commessa.ifBlank { "Senza commessa" },
-                piccolo = rc.idCommessa,
+                sotto = pr?.etichetta ?: rc.commessa.ifBlank { if (commesseAccese) "Senza commessa" else "" },
+                piccolo = if (pr != null) listOf(rc.idCommessa, rc.commessa).filter { it.isNotBlank() }.joinToString(" · ") else rc.idCommessa,
                 modifier = Modifier.bersaglio("recente-$i"),
             ) {
                 stato.cliente = rc.cliente; stato.idCliente = rc.idCliente
+                if (!commesseAccese) { dopoCliente("recente-$i"); return@SchedaScelta }
                 stato.commessa = rc.commessa; stato.idCommessa = rc.idCommessa; stato.codiceProposto = ""
                 stato.errori = stato.errori - "cliente"
-                onScelto("recente-$i")
+                if (pr != null) { stato.scegliProgetto(pr); onScelto("recente-$i") } else dopoCommessa("recente-$i")
             }
         }
         CampoTesto(
@@ -640,9 +685,8 @@ private fun ColumnScope.PassoPerChi(
             }.sortedBy { it.nome.lowercase() }.take(6)
             trovati.forEach { cl ->
                 SchedaScelta(nome = cl.nome, titolo = cl.nome, sotto = if (cl.tariffaFissa != null) "Tariffa fissa" else "", piccolo = "", compatta = true) {
-                    stato.cliente = cl.nome; stato.idCliente = cl.id; stato.commessa = ""; stato.idCommessa = ""; stato.codiceProposto = ""
-                    stato.errori = stato.errori - "cliente"
-                    stato.sceltaCommessa = true
+                    stato.cliente = cl.nome; stato.idCliente = cl.id
+                    dopoCliente("cliente")
                 }
             }
             // Fase 6 (§8.4): l'esterno scrive solo sulle commesse dei suoi incarichi (cliente o commessa nuovi no).
@@ -650,12 +694,12 @@ private fun ColumnScope.PassoPerChi(
                 // Un cliente nuovo ha la tariffa libera: Elettrodinamica, l'unica fissa, c'è già.
                 PulsanteBordo("Cliente nuovo «$testo»", {
                     stato.cliente = testo; stato.idCliente = ""
-                    stato.commessa = ""; stato.idCommessa = ""; stato.codiceProposto = ""
-                    stato.errori = stato.errori - "cliente"
-                    stato.sceltaCommessa = true
+                    dopoCliente("cliente")
                 }, Modifier.fillMaxWidth(), icona = Icone.piu, tratteggiato = true)
             }
         }
+    } else if (stato.sceltaProgetto) {
+        SceltaProgetto(stato, dati, ana, altri, onIndietro = { stato.sceltaProgetto = false }, onScelto = { onScelto("progetto") })
     } else {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
             Iniziali(stato.cliente, dimensione = 44.dp)
@@ -667,15 +711,18 @@ private fun ColumnScope.PassoPerChi(
             PulsanteTesto("Cambia", { stato.sceltaCommessa = false })
         }
         Etichetta("Commessa", Modifier.padding(top = 6.dp))
+        stato.errori["cliente"]?.let { Text(it, style = Testi.secondario, color = c.rossoTesto) }
         val commesse = if (stato.idCliente.isBlank()) emptyList() else ana.commesseAperteDi(stato.idCliente)
         commesse.forEach { m ->
             SchedaScelta(nome = stato.cliente, titolo = m.descrizione, sotto = m.indirizzo, piccolo = m.id, compatta = true) {
                 stato.commessa = m.descrizione; stato.idCommessa = m.id; stato.codiceProposto = ""
-                onScelto("commessa")
+                stato.errori = stato.errori - "cliente"
+                dopoCommessa("commessa")
             }
         }
         val esterno = dati.sessione.value.esterno
-        if (!esterno) PulsanteBordo("Senza commessa", { stato.commessa = ""; stato.idCommessa = ""; stato.codiceProposto = ""; onScelto("commessa") }, Modifier.fillMaxWidth())
+        // Con i progetti accesi la commessa serve (il progetto sta sotto la commessa): "Senza commessa" non c'e'.
+        if (!esterno && !progettiAttivi) PulsanteBordo("Senza commessa", { stato.commessa = ""; stato.idCommessa = ""; stato.codiceProposto = ""; stato.togliProgetto(); onScelto("commessa") }, Modifier.fillMaxWidth())
         var nuova by remember { mutableStateOf("") }
         if (!esterno) CampoTesto(nuova, { nuova = it }, "Commessa nuova", segnaposto = "Come la chiami tu")
         if (nuova.isNotBlank() && !esterno) {
@@ -683,7 +730,8 @@ private fun ColumnScope.PassoPerChi(
             val codice = ana.prossimoCodiceCommessa(stato.data.year)
             PulsanteBordo("Usa «${nuova.trim()}» · $codice", {
                 stato.commessa = nuova.trim(); stato.idCommessa = ""; stato.codiceProposto = codice
-                onScelto("commessa")
+                stato.errori = stato.errori - "cliente"
+                dopoCommessa("commessa")
             }, Modifier.fillMaxWidth(), icona = Icone.piu)
         }
     }
@@ -729,6 +777,8 @@ private fun SchedaScelta(
     piccolo: String,
     modifier: Modifier = Modifier,
     compatta: Boolean = false,
+    /** Al posto delle iniziali (i progetti: tutti dello stesso cliente). */
+    icona: androidx.compose.ui.graphics.vector.ImageVector? = null,
     onClick: () -> Unit,
 ) {
     val c = W.colori
@@ -738,7 +788,9 @@ private fun SchedaScelta(
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Iniziali(nome, dimensione = if (compatta) 40.dp else 48.dp)
+        if (icona != null) Box(Modifier.size(40.dp).clip(RoundedCornerShape(20.dp)).background(c.superficie2), contentAlignment = Alignment.Center) {
+            Icon(icona, null, tint = c.testo, modifier = Modifier.size(20.dp))
+        } else Iniziali(nome, dimensione = if (compatta) 40.dp else 48.dp)
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(titolo, style = Testi.forteGrande, color = c.testo, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -764,7 +816,7 @@ private fun ColumnScope.PassoOre(
     val c = W.colori
     val visita = LocalVisita.current
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Text(listOf(stato.cliente, stato.idCommessa.ifBlank { stato.codiceProposto }.ifBlank { stato.commessa }.takeIf { it.isNotBlank() }).filterNotNull().joinToString(" · "),
+        Text(listOf(stato.cliente, stato.idCommessa.ifBlank { stato.codiceProposto }.ifBlank { stato.commessa }, stato.progetto).filter { it.isNotBlank() }.joinToString(" · "),
             style = Testi.secondarioGrande, color = c.tenue, maxLines = 1, overflow = TextOverflow.Ellipsis)
         // Fase 5 (§3.3): il rapportino del ticket lo dice con la pillola grigia.
         if (stato.base.numeroTicket.isNotBlank()) Parola5("Ticket ${stato.base.numeroTicket}", Modifier.padding(vertical = 4.dp), colore = eu.stgm.wisper.rapportino.ColoreFase5.GRIGIO)
@@ -987,6 +1039,8 @@ private fun ColumnScope.PassoRiepilogo(
     onCambia: (Int) -> Unit,
     /** Chi vede i rapportini solo in lettura: niente "Cambia". */
     solaLettura: Boolean = false,
+    /** Commesse spenta: sotto il cliente non si scrive "Senza commessa" (una commessa gia' messa resta). */
+    commesseAccese: Boolean = true,
 ) {
     val c = W.colori
     val ctx = LocalContext.current
@@ -1010,8 +1064,17 @@ private fun ColumnScope.PassoRiepilogo(
 
     Scheda(verticale = 4.dp, spazio = 0.dp) {
         // La commessa col suo codice (26ST047), non con la descrizione: come la conosce lo studio.
-        RigaRiepilogo(r.cliente.ifBlank { "Manca il cliente" }, r.idCommessa.ifBlank { r.codiceProposto }.ifBlank { r.commessa }.ifBlank { "Senza commessa" }, bloccato) { onCambia(1) }
+        RigaRiepilogo(r.cliente.ifBlank { "Manca il cliente" }, r.idCommessa.ifBlank { r.codiceProposto }.ifBlank { r.commessa }.ifBlank { if (commesseAccese) "Senza commessa" else "Cliente" }, bloccato) { onCambia(1) }
         Box(Modifier.fillMaxWidth().height(1.dp).background(c.riga))
+        // I progetti (progetti.md §4.6-7): la riga Progetto, "ED-003 · Quadro QE1" e a chi e' intestato.
+        if (stato.progettiAttivi || r.conProgetto) {
+            RigaRiepilogo(
+                r.etichettaProgetto.ifBlank { "Manca il progetto" },
+                r.progettoIntestatoA.takeIf { it.isNotBlank() }?.let { "Intestato a $it" } ?: "Progetto",
+                bloccato || !stato.progettiAttivi,
+            ) { onCambia(PASSO_PROGETTO) }
+            Box(Modifier.fillMaxWidth().height(1.dp).background(c.riga))
+        }
         RigaRiepilogo(
             listOf("${Numeri.ore(r.oreLavoro)} di lavoro", r.oreViaggio.takeIf { it > 0 }?.let { "${Numeri.ore(it)} di viaggio" },
                 r.oreExtra.takeIf { it > 0 }?.let { "${Numeri.ore(it)} extra" }).filterNotNull().joinToString(" · "),
@@ -1120,5 +1183,116 @@ private fun RigaRiepilogo(titolo: String, sotto: String, bloccato: Boolean, onCa
             Text(sotto, style = Testi.secondario.copy(fontWeight = FontWeight.Medium), color = c.tenue, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         if (!bloccato) PulsanteTesto("Cambia", onCambia)
+    }
+}
+
+/** "Cambia" sulla riga del progetto del riepilogo: non e' un passo, e' la scelta del progetto dentro il passo 1. */
+private const val PASSO_PROGETTO = 11
+
+/**
+ * Il campo Progetto del rapportino (progetti.md §4.6): i progetti aperti della commessa scelta (anche quelli nati sul
+ * telefono e ancora in coda) e, per chi puo' crearli, **Nuovo progetto** dentro il rapportino stesso: codice gia'
+ * proposto (cambiabile), intestato a, descrizione. Il progetto nuovo parte col rapportino, anche senza rete.
+ */
+@Composable
+private fun ColumnScope.SceltaProgetto(
+    stato: ModuloStato,
+    dati: Dati,
+    ana: eu.stgm.wisper.rapportino.Anagrafiche,
+    altri: List<eu.stgm.wisper.rapportino.Rapportino>,
+    onIndietro: () -> Unit,
+    onScelto: () -> Unit,
+) {
+    val c = W.colori
+    val commessa = stato.idCommessa.ifBlank { stato.codiceProposto }
+    val aperti = RegoleProgetti.apertiDi(ana, altri, commessa)
+    val puoCrearlo = LocalPermessi.current.modifica(eu.stgm.wisper.rapportino.Moduli.PROGETTI)
+    val idCliente = stato.idCliente.ifBlank { ana.commessa(commessa)?.idCliente.orEmpty() }
+
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
+        Iniziali(stato.cliente, dimensione = 44.dp)
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(stato.cliente, style = Testi.forteGrande, color = c.testo, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(listOf(commessa, stato.commessa).filter { it.isNotBlank() }.joinToString(" · "), style = Testi.secondario, color = c.tenue,
+                maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        PulsanteTesto("Cambia", onIndietro)
+    }
+    Etichetta("Progetto", Modifier.padding(top = 6.dp))
+    stato.errori["progetto"]?.let { Text(it, style = Testi.secondario, color = c.rossoTesto) }
+    aperti.forEachIndexed { i, p ->
+        SchedaScelta(
+            nome = p.codice, titolo = p.etichetta,
+            sotto = p.intestatoA.takeIf { it.isNotBlank() }?.let { "Intestato a $it" } ?: "",
+            piccolo = if (p.inAttesa) "Nuovo, parte col rapportino" else "", compatta = true, icona = Icone.progetti,
+            modifier = Modifier.bersaglio("progetto-$i"),
+        ) {
+            stato.scegliProgetto(p)
+            onScelto()
+        }
+    }
+    if (aperti.isEmpty() && !puoCrearlo) {
+        Text("Questa commessa non ha progetti aperti. Chiedi all'ufficio di aprirne uno.", style = Testi.testo, color = c.testo2)
+    }
+    if (puoCrearlo) NuovoProgettoNelRapportino(stato, dati, ana, altri, commessa, idCliente, onScelto)
+}
+
+@Composable
+private fun NuovoProgettoNelRapportino(
+    stato: ModuloStato,
+    dati: Dati,
+    ana: eu.stgm.wisper.rapportino.Anagrafiche,
+    altri: List<eu.stgm.wisper.rapportino.Rapportino>,
+    commessa: String,
+    idCliente: String,
+    onScelto: () -> Unit,
+) {
+    var aperto by remember(commessa) { mutableStateOf(false) }
+    // Il codice proposto, come lo proporrebbe il server: la stessa regola, anche senza rete.
+    val propostoQui = remember(commessa, ana.progetti, altri.size) {
+        RegoleProgetti.codiceProposto(ana, altri, commessa, idCliente, stato.data)
+    }
+    // Con la rete lo si chiede anche al server (vede tutti i progetti, anche per una commessa che nasce col rapportino).
+    var propostoServer by remember(commessa) { mutableStateOf<String?>(null) }
+    val proposto = propostoServer?.takeIf { it.isNotBlank() } ?: propostoQui
+    var codice by remember(commessa) { mutableStateOf(proposto) }
+    LaunchedEffect(aperto, commessa) {
+        if (!aperto || propostoServer != null) return@LaunchedEffect
+        val prima = codice
+        dati.progetti.codice(commessa, idCliente).onSuccess { p ->
+            propostoServer = p.codice
+            // Si scrive nel campo solo se non lo si e' gia' cambiato a mano.
+            if (p.codice.isNotBlank() && (prima.isBlank() || prima == propostoQui) && codice == prima) codice = p.codice
+        }
+    }
+    var intestatoA by remember(commessa) { mutableStateOf("") }
+    var descrizione by remember(commessa) { mutableStateOf("") }
+    var errori by remember(commessa) { mutableStateOf(emptyMap<String, String>()) }
+
+    if (!aperto) {
+        PulsanteBordo("Nuovo progetto", { aperto = true; codice = proposto }, Modifier.fillMaxWidth().bersaglio("progetto-nuovo"), icona = Icone.piu, tratteggiato = true)
+        return
+    }
+    Scheda {
+        Text("Nuovo progetto", style = Testi.titoloScheda, color = W.colori.testo)
+        CampoTesto(codice, { codice = it; errori = errori - "codice" }, "Codice", segnaposto = "Per esempio ED-001", errore = errori["codice"])
+        CampoTesto(intestatoA, { intestatoA = it }, "Intestato a", segnaposto = "Facoltativo")
+        CampoTesto(descrizione, { descrizione = it; errori = errori - "descrizione" }, "Descrizione", segnaposto = "Per esempio Quadro QE1", errore = errori["descrizione"])
+        PulsanteBordo("Usa questo progetto", {
+            val e = mutableMapOf<String, String>()
+            val cod = codice.trim()
+            // Finche' Wisper non ha imparato la regola (meno di due codici) il codice si scrive a mano: senza, il server
+            // rifiuterebbe il rapportino solo al salvataggio.
+            if (cod.isBlank()) e["codice"] = "Scrivi il codice del progetto: dopo i primi due Wisper lo propone da solo"
+            else if (RegoleProgetti.codiceGiaPreso(ana, altri, cod, idCliente) != null) e["codice"] = "Il codice $cod è già di un altro progetto di questo cliente"
+            if (descrizione.isBlank()) e["descrizione"] = "Scrivi la descrizione del progetto"
+            errori = e
+            if (e.isEmpty()) {
+                stato.nuovoProgetto(ProgettoNuovo(ProgettoNuovo.nuovoIdLocale(), cod, proposto.isNotBlank() && cod.equals(proposto, ignoreCase = true), intestatoA.trim(), descrizione.trim()))
+                onScelto()
+            }
+        }, Modifier.fillMaxWidth(), icona = Icone.spunta)
+        PulsanteTesto("Annulla", { aperto = false; errori = emptyMap() }, Modifier.fillMaxWidth(), colore = W.colori.testo)
     }
 }

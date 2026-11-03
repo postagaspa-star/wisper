@@ -62,6 +62,10 @@
         if (sotto) { A8.daRileggere(); S8.daRileggere(); }
         S8.chiudiPannello(true);
       }
+      // 03/11/2026 (progetti.md §5): con Amministrazione spenta il titolare vede solo Funzioni accese, per riaccenderla.
+      const soloFunzioni = W.funzioneAccesa && !W.funzioneAccesa('amministrazione') && W.eTitolare && W.eTitolare();
+      if (soloFunzioni && sotto !== 'app' && sotto !== 'notifiche' && sotto !== 'funzioni') { location.replace('#amministrazione/funzioni'); return; }
+      if (soloFunzioni && sotto === 'funzioni') { A8.funzioni(pagina); return; }
       if (sotto && sotto !== 'app' && sotto !== 'notifiche' && !puo('amministrazione')) { aggiungi(pagina, [h('div', { class: 'calmo grande' }, icona('scudo', 22, 2.2), 'Non hai il permesso per vedere questa pagina. Chiedi a ' + W.titolare() + '.')]); return; }
       if (((sotto === 'tariffe' || sotto === 'fisco' || sotto === 'fiscale') && !soldi()) || (sotto === 'cestino' && !scrive()) || (sotto === 'veicoli' && !puo('spese')) || (sotto === 'categorie' && !puo('documenti'))) { aggiungi(pagina, [h('div', { class: 'calmo grande' }, icona('scudo', 22, 2.2), 'Non hai il permesso per vedere questa pagina. Chiedi a ' + W.titolare() + '.')]); return; }
       if ((sotto === 'persone' || sotto === 'formazione') && !puo('persone')) { aggiungi(pagina, [h('div', { class: 'calmo grande' }, icona('scudo', 22, 2.2), 'Non hai il permesso per vedere questa pagina. Chiedi a ' + W.titolare() + '.')]); return; }
@@ -996,7 +1000,7 @@
 
     // ===================================================================== registro attività
 
-    const TABELLE = [['', 'Tutto'], ['soggetti', 'Clienti e fornitori'], ['commesse', 'Commesse'], ['prestazioni', 'Prestazioni'], ['rapportini', 'Rapportini'],
+    const TABELLE = [['', 'Tutto'], ['soggetti', 'Clienti e fornitori'], ['commesse', 'Commesse'], ['progetti', 'Progetti'], ['prestazioni', 'Prestazioni'], ['rapportini', 'Rapportini'],
       ['ore', 'Ore'], ['spese', 'Spese'], ['trasferte', 'Trasferte'], ['veicoli', 'Veicoli'],
       ['utenti', 'Utenti'], ['permessi', 'Permessi'], ['impostazioni', 'Impostazioni'],
       // Fase 7 (§12.6): il filtro Portale (pubblicazioni, file dal cliente, accessi dati, da guardare).
@@ -1093,6 +1097,7 @@
       switch (v.tabella) {
         case 'soggetti': return trova(S.ana.soggetti) || x.nome || id;
         case 'commesse': case 'commessa_persone': { const m = W.commessa(id); return m ? m.descrizione + ' (' + m.id + ')' : x.descrizione || id; }
+        case 'progetti': { const p = (S.ana.progetti || []).find(r => String(r.id) === id); return p ? p.codice + ' · ' + p.descrizione : x.codice || id; }
         case 'prestazioni': return trova(S.ana.prestazioni) || x.nome || id;
         case 'referenti': return trova(S.ana.referenti) || x.nome || id;
         case 'sedi': return trova(S.ana.sedi) || x.nome || id;

@@ -36,7 +36,9 @@
   const VOCI_MENU = [
     { modulo: 'dashboard', nome: 'Dashboard', spiega: 'La pagina iniziale', icona: 'dashboard' },
     { modulo: 'clienti', nome: 'Clienti e fornitori', spiega: 'Anagrafiche, referenti, sedi', icona: 'clienti' },
-    { modulo: 'commesse', nome: 'Progetti e commesse', spiega: 'Commesse e prestazioni', icona: 'commesse' },
+    // 03/11/2026 (docs/gestionale/progetti.md §4): i progetti hanno la loro voce, subito sotto le Commesse.
+    { modulo: 'commesse', nome: 'Commesse', spiega: 'Commesse e prestazioni', icona: 'commesse' },
+    { modulo: 'progetti', nome: 'Progetti', spiega: 'I progetti dentro le commesse', icona: 'progetti' },
     // Fase 2 (docs/gestionale/fase2.md §5): voci 4 e 5 del menu.
     { modulo: 'preventivi', nome: 'Preventivi e contratti', spiega: 'Preventivi, listino, incarichi', icona: 'preventivo' },
     { modulo: 'attivita', nome: 'Attività e calendario', spiega: 'Le attività di tutti o solo le sue', icona: 'calendario' },
@@ -97,7 +99,7 @@
   const vede = (permessi, modulo) => puo(permessi, modulo, 1) && (CON_SOLDI.indexOf(modulo) < 0 || puo(permessi, 'costi', 1));
 
   /** Per l'esterno il menu ridotto, nel suo ordine (fase6.md §12.7): Ore e rapportini prima di Attività. */
-  const ORDINE_ESTERNO = ['dashboard', 'commesse', 'rapportini', 'attivita', 'spese', 'documenti', 'ticket', 'collaboratori'];
+  const ORDINE_ESTERNO = ['dashboard', 'commesse', 'progetti', 'rapportini', 'attivita', 'spese', 'documenti', 'ticket', 'collaboratori'];
   function vociMenu(permessi, esterno) {
     const voci = VOCI_MENU.filter(v => vede(permessi, v.modulo));
     if (!esterno) return voci;
@@ -570,6 +572,9 @@
     switch (c.pagina) {
       case 'commessa': return { hash: '#commesse/' + id, filtro: c.filtro || null };
       case 'commesse': return { hash: '#commesse', filtro: c.filtro || null };
+      // 03/11/2026: i progetti.
+      case 'progetto': return { hash: '#progetti/' + id, filtro: null };
+      case 'progetti': return { hash: '#progetti', filtro: c.filtro || null };
       case 'cliente': case 'soggetto': case 'fornitore': return { hash: '#clienti/' + id, filtro: null };
       case 'clienti': return { hash: '#clienti', filtro: c.filtro || null };
       case 'rapportini': return { hash: '#rapportini', filtro: c.filtro || null };
@@ -661,7 +666,7 @@
     if (p === 'spese' && seg === 'rimborsi') return 'Apri i rimborsi';
     if (p === 'amministrazione' && collegamento.filtro && collegamento.filtro.sezione === 'veicoli') return 'Apri i veicoli';
     return {
-      fatturazione: 'Apri Da fatturare', commessa: 'Apri la commessa', commesse: 'Apri le commesse',
+      fatturazione: 'Apri Da fatturare', commessa: 'Apri la commessa', commesse: 'Apri le commesse', progetto: 'Apri il progetto', progetti: 'Apri i progetti',
       cliente: 'Apri la scheda', soggetto: 'Apri la scheda', clienti: 'Apri i clienti',
       rapportini: 'Apri i rapportini', rapportino: 'Apri il rapportino', amministrazione: 'Apri',
       preventivi: 'Apri i preventivi', preventivo: 'Apri il preventivo', attivita: 'Apri le attività', calendario: 'Apri il calendario',
@@ -701,7 +706,7 @@
     tariffa: 'la tariffa', costo_fisso: 'il costo orario', costoFisso: 'il costo orario', paga_viaggio: 'il viaggio pagato', pagaViaggio: 'il viaggio pagato',
     km_rimborsati: 'i km rimborsati', kmRimborsati: 'i km rimborsati', magg_extra: 'la maggiorazione delle ore extra', note: 'le note',
     archiviato: 'l\'archiviazione', archiviata: 'l\'archiviazione', cliente: 'il cliente', fornitore: 'il fornitore',
-    descrizione: 'la descrizione', stato: 'lo stato', budget_ore: 'le ore previste', budgetOre: 'le ore previste',
+    descrizione: 'la descrizione', intestato_a: 'a chi è intestato', intestatoA: 'a chi è intestato', stato: 'lo stato', budget_ore: 'le ore previste', budgetOre: 'le ore previste',
     budget_euro: 'il budget', budgetEuro: 'il budget', prezzo_orario: 'il prezzo orario', prezzoOrario: 'il prezzo orario',
     costo_orario: 'il costo orario', costoOrario: 'il costo orario', euro_km: 'il rimborso km', euroKm: 'il rimborso km',
     fine_prevista: 'la fine prevista', finePrevista: 'la fine prevista', inizio: 'l\'inizio', cliente_id: 'il cliente',
@@ -726,7 +731,7 @@
 
   /** Cosa è una riga di una tabella, per la frase ("ha archiviato il cliente ..."). */
   const COSA = {
-    soggetti: 'il cliente', clienti: 'il cliente', fornitori: 'il fornitore', commesse: 'la commessa',
+    soggetti: 'il cliente', clienti: 'il cliente', fornitori: 'il fornitore', commesse: 'la commessa', progetti: 'il progetto',
     rapportini: 'il rapportino', prestazioni: 'la prestazione', referenti: 'il referente', sedi: 'la sede',
     utenti: 'l\'utente', permessi: 'i permessi', impostazioni: 'le impostazioni', numerazioni: 'la numerazione', file: 'il file',
     sessioni: 'il dispositivo', commessa_persone: 'le persone della commessa', tentativi_accesso: 'l\'accesso',

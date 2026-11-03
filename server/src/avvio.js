@@ -44,6 +44,10 @@
  * (in prova, senza, VIES e GitHub restano Da configurare: niente internet). WISPER_INDIRIZZO_CASA: l'indirizzo del server
  * in casa (http://192.168.x.y:8400) per gli indirizzi del calendario creati da fuori casa. WISPER_SENZA_FTS5=si: solo con
  * --prova, la ricerca come se il database non avesse FTS5 (la prova di §16).
+ *
+ * Gli aggiornamenti (03/11/2026, versioni.js): il server legge l'elenco firmato delle versioni ogni WISPER_VERSIONI_MINUTI
+ * minuti (di base 10; WISPER_AGGIORNAMENTI_URL al posto di GitHub, in prova obbligatorio) e lo annuncia a telefoni e
+ * computer in ogni risposta e su /campanello. WISPER_VERSIONI=no lo spegne.
  */
 'use strict';
 
@@ -58,6 +62,7 @@ const { PortaGoogle } = require('./porta');
 const { creaServer, creaServerIngresso, creaServerCondivisione } = require('./http');
 const { creaServerPortale } = require('./portale/ascolto');
 const { semina } = require('./prova');
+const { Vedetta } = require('./versioni');
 const { accendiOrologioDiProva, orologioDiProva, testo } = require('./utili');
 
 /**
@@ -148,6 +153,12 @@ function avvia(o) {
   // lettura dei file dei dati di esempio.
   if (o.pianifica !== false) wisper.pianificaIntegrazioni(o.prova ? 1500 : 5000);
   if (o.prova) setImmediate(() => wisper.letturaNotturna(5).catch(() => null));
+  // 03/11/2026: il NAS guarda le versioni nuove e le annuncia alle app (versioni.js). In prova solo con un elenco finto.
+  if (o.pianifica !== false && String(env.WISPER_VERSIONI || '').toLowerCase() !== 'no' && (!o.prova || env.WISPER_AGGIORNAMENTI_URL)) {
+    // WISPER_VERSIONI_CHIAVE (solo in prova): la chiave pubblica di un elenco firmato per le prove, al posto di quella vera.
+    wisper.vedetta = new Vedetta({ url: env.WISPER_AGGIORNAMENTI_URL || '', minuti: env.WISPER_VERSIONI_MINUTI, w: wisper,
+      chiavePubblica: o.prova ? env.WISPER_VERSIONI_CHIAVE : undefined }).avvia(o.prova ? 500 : 3000);
+  }
   const server = creaServer(wisper, { segretoPonte: env.SEGRETO_SERVER || '' });
   // Fase 5: la seconda porta, solo per i link per i clienti (Non collegato finche' CONDIVISIONE_INDIRIZZO e' vuoto).
   const condivisione = o.portaCondivisione ? creaServerCondivisione(wisper) : null;
@@ -184,6 +195,7 @@ if (require.main === module) {
     console.log('Porta Google: ' + (wisper.porta.acceso ? 'il server va a prendere il lavoro dallo script del foglio' : wisper.porta.stato().frase));
     console.log('Portale clienti: ' + (wisper.portaPortale.acceso ? 'il server va a prendere le richieste dallo script del portale' : wisper.portaPortale.stato().frase));
     if (indirizzoPortale) console.log('Portale clienti: indirizzo della pagina scritto nelle impostazioni (da WISPER_PORTALE_INDIRIZZO)');
+    console.log('Aggiornamenti: ' + (wisper.vedetta ? 'il NAS guarda le versioni ogni ' + wisper.vedetta.minuti + ' minuti e avvisa telefoni e computer' : 'spenti (nessun avviso alle app)'));
     if (orologioDiProva()) console.log('Orologio di prova: per il server oggi e\' ' + orologioDiProva() + ' (WISPER_OGGI_PROVA; le ore sono quelle vere)');
     // Il postino risponde? Lo si dice subito, invece di scoprirlo alla prima email o stanotte.
     if (wisper.postino.configurato() && !wisper.postino.cartella) {
@@ -196,6 +208,7 @@ if (require.main === module) {
     }
   });
   const ferma = () => {
+    if (wisper.vedetta) wisper.vedetta.ferma();
     server.close();
     if (condivisione) condivisione.close();
     if (ingresso) ingresso.close();

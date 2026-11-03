@@ -5,7 +5,17 @@ import android.app.Application
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.os.Bundle
+import eu.stgm.wisper.rapportino.AnnuncioVersioni
+import eu.stgm.wisper.rapportino.Strade
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
@@ -52,10 +62,24 @@ class WisperApp : Application() {
                 .apply { setShowBadge(true) }
         )
 
-        // Le versioni nuove: lo stato salvato, e il controllo di ogni ora.
+        // Le versioni nuove (03/11/2026, progetti.md §6): lo stato salvato; niente piu' controllo di ogni ora (il lavoro
+        // di prima si toglie), le annuncia il NAS in ogni risposta e col campanello.
         NuoveVersioni.carica(this)
-        NuoveVersioni.programma(this)
+        NuoveVersioni.togliControlloOrario(this)
+        AnnuncioVersioni.quandoArriva = { v -> NuoveVersioni.annunciata(this, v) }
+        // Una versione scaricata prima e non ancora installata: si installa al momento giusto.
+        NuoveVersioni.installaAlMomentoGiusto(this)
+        // Il campanello: con l'app davanti e il server di casa resta aperto; dietro, o via Google, si ferma.
+        ambito.launch {
+            davanti.first { it }
+            val a = archivio
+            combine(davanti, a.dove) { d, dove -> d && dove == Strade.Dove.CASA }
+                .distinctUntilChanged()
+                .collectLatest { suona -> if (suona) a.campanello.suona() }
+        }
     }
+
+    private val ambito = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     companion object {
         const val CANALE_SALVATAGGI = "salvataggi"

@@ -98,7 +98,7 @@ import kotlin.math.roundToInt
 private val IT = Locale.ITALY
 
 /** Le schede della pagina di una commessa. */
-internal enum class SchedaDiCommessa { PANORAMICA, PRESTAZIONI, RAPPORTINI, DOCUMENTI, INCARICHI, COMUNICAZIONI, COSTI, FATTURARE }
+internal enum class SchedaDiCommessa { PANORAMICA, PROGETTI, PRESTAZIONI, RAPPORTINI, DOCUMENTI, INCARICHI, COMUNICAZIONI, COSTI, FATTURARE }
 
 /**
  * Quello che resta scelto mentre si va e si torna, come sul computer: il segmento,
@@ -141,7 +141,7 @@ private var storicoLettoAlle = 0L
 
 /** Il cruscotto vuole tutti i rapportini, non solo gli ultimi mesi: si chiedono entrando. */
 @Composable
-private fun ChiediStorico(dati: Dati) {
+internal fun ChiediStorico(dati: Dati) {
     LaunchedEffect(Unit) {
         val adesso = System.currentTimeMillis()
         if (adesso - storicoLettoAlle > 5 * 60_000L) {
@@ -293,9 +293,13 @@ fun SchermataCommessa(dati: Dati, nav: Navigatore, id: String) {
         (rememberLettura("com-idCommessa-${m.id}", Giri7.comunicazioni) { dati.fase7.storicoDi("idCommessa", m.id) } as? Lettura.Pronta)?.dato?.let { it.quante.takeIf { q -> q > 0 } ?: it.comunicazioni.size }
     else null
 
+    val progettiAttivi = eu.stgm.wisper.rapportino.RegoleProgetti.attivi(dati.sessione.collectAsStateWithLifecycle().value)
+    val quantiProgetti = quantiProgetti(dati, m.id)
     // Si apre su Prestazioni se ce ne sono, altrimenti su Panoramica; Costi e Da fatturare solo con i soldi.
     val schede = buildList {
         add(SchedaDiCommessa.PANORAMICA to "Panoramica")
+        // I progetti (progetti.md §4.5): con la funzione accesa e il permesso di vederli.
+        if (progettiAttivi && perm.vede(Moduli.PROGETTI)) add(SchedaDiCommessa.PROGETTI to "Progetti · $quantiProgetti")
         add(SchedaDiCommessa.PRESTAZIONI to "Prestazioni · ${prestazioni.size}")
         add(SchedaDiCommessa.RAPPORTINI to "Rapportini · ${k.rapportini.size}")
         add(SchedaDiCommessa.DOCUMENTI to "Documenti")
@@ -397,6 +401,7 @@ fun SchermataCommessa(dati: Dati, nav: Navigatore, id: String) {
                     InPrestitoAllaCommessa(dati, m.id, nav)
                 }
                 SchedaDiCommessa.INCARICHI -> IncarichiDellaCommessa(incarichi, nav)
+                SchedaDiCommessa.PROGETTI -> ProgettiDellaCommessa(dati, nav, m)
                 SchedaDiCommessa.PRESTAZIONI -> PrestazioniCommessa(dati, m, prestazioni, costi, puo)
                 SchedaDiCommessa.RAPPORTINI -> RapportiniCommessa(k, viste, nav, costi)
                 SchedaDiCommessa.COSTI -> {
@@ -968,7 +973,7 @@ private fun RapportiniCommessa(k: Cruscotto, viste: Map<String, Vista>, nav: Nav
 
 /** I rapportini in una scheda, come nel Mese: giorno, lavoro, ore e codice, importo e stato. */
 @Composable
-private fun ElencoRapportini(rr: List<Rapportino>, viste: Map<String, Vista>, nav: Navigatore, costi: Boolean = true) {
+internal fun ElencoRapportini(rr: List<Rapportino>, viste: Map<String, Vista>, nav: Navigatore, costi: Boolean = true) {
     SchedaElenco {
         rr.forEachIndexed { i, r ->
             RigaRapportinoCommessa(r, viste[r.idLocale], costi) { nav.apriRapportino(r.idLocale) }
@@ -978,7 +983,7 @@ private fun ElencoRapportini(rr: List<Rapportino>, viste: Map<String, Vista>, na
 }
 
 @Composable
-private fun RigaRapportinoCommessa(r: Rapportino, v: Vista?, costi: Boolean, onClick: () -> Unit) {
+internal fun RigaRapportinoCommessa(r: Rapportino, v: Vista?, costi: Boolean, onClick: () -> Unit) {
     val c = W.colori
     val totale = r.conto?.totale?.takeIf { costi }
     Row(
@@ -1004,6 +1009,10 @@ private fun RigaRapportinoCommessa(r: Rapportino, v: Vista?, costi: Boolean, onC
                     Icon(Icone.nuvola, null, tint = c.tenue, modifier = Modifier.size(16.dp).semantics { contentDescription = "Ancora sul telefono" })
                 }
             }
+            // I progetti (progetti.md §4.7): "ED-003 · Quadro QE1".
+            if (r.etichettaProgetto.isNotBlank()) Text(
+                r.etichettaProgetto, style = Testi.secondario.copy(fontWeight = FontWeight.Medium), color = c.testo2, maxLines = 1, overflow = TextOverflow.Ellipsis,
+            )
             Text(
                 listOfNotNull(Testo.ore(r.oreTotali), r.id.takeIf { it.isNotBlank() }).joinToString(" · "),
                 style = Testi.secondario.copy(fontWeight = FontWeight.Medium), color = c.tenue, maxLines = 1, overflow = TextOverflow.Ellipsis,
@@ -1588,7 +1597,7 @@ private fun RigaMarginePrevisto(margine: Double?, margineOrario: Double?, costoP
 
 /** Un campo che si sceglie da un elenco (sede, responsabile, persone): il valore e "Cambia". */
 @Composable
-private fun CampoScelta(etichetta: String, valore: String, vuoto: Boolean, vuotoGiallo: Boolean = false, onClick: () -> Unit) {
+internal fun CampoScelta(etichetta: String, valore: String, vuoto: Boolean, vuotoGiallo: Boolean = false, onClick: () -> Unit) {
     val c = W.colori
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(etichetta, style = Testi.secondarioGrande.copy(fontWeight = FontWeight.Bold), color = c.testo)
@@ -1683,7 +1692,7 @@ private fun SceltaCliente(ana: Anagrafiche, scelto: String, onScelto: (Cliente) 
 
 /** Un campo che non si cambia (il codice di una commessa che c'è già): grigio, col lucchetto. */
 @Composable
-private fun CampoBloccato(etichetta: String, valore: String) {
+internal fun CampoBloccato(etichetta: String, valore: String) {
     val c = W.colori
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(etichetta, style = Testi.secondarioGrande.copy(fontWeight = FontWeight.Bold), color = c.testo)
@@ -1784,7 +1793,7 @@ private fun messaggioErrore(e: Throwable, altrimenti: String): String = e.messag
 
 /** La riga degli elenchi vuoti e dei caricamenti. */
 @Composable
-private fun TestoVuoto(testo: String) {
+internal fun TestoVuoto(testo: String) {
     Text(
         testo, style = Testi.secondarioGrande, color = W.colori.tenue, textAlign = TextAlign.Center,
         modifier = Modifier.fillMaxWidth().padding(vertical = 28.dp, horizontal = 12.dp),

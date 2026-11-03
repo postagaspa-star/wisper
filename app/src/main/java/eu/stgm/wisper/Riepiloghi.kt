@@ -1,6 +1,8 @@
 package eu.stgm.wisper
 
 import eu.stgm.wisper.rapportino.Anagrafiche
+import eu.stgm.wisper.rapportino.Progetto
+import eu.stgm.wisper.rapportino.RegoleProgetti
 import eu.stgm.wisper.rapportino.Rapportino
 import eu.stgm.wisper.rapportino.Stato
 import java.time.DayOfWeek
@@ -21,21 +23,40 @@ object Riepiloghi {
         val gruppo: String,
         val idCommessa: String,
         val commessa: String,
+        /** Il progetto dell'ultimo rapportino di quella commessa, se e' ancora aperto (progetti.md §4.5). */
+        val progetto: Progetto? = null,
     )
 
     /**
      * Le ultime commesse usate, la più recente prima, poi le altre commesse
      * aperte se non bastano. Una commessa chiusa non si propone più.
+     *
+     * @param conProgetti la funzione Progetti e' accesa: ogni progetto usato e' un recente a se' (la stessa commessa
+     *        puo' tornare con due progetti) e i rapportini senza commessa non si propongono (il progetto la vuole).
+     * @param soloClienti la funzione Commesse e' spenta (progetti.md §5): i recenti sono i clienti, uno per cliente,
+     *        senza commessa.
      */
-    fun recenti(viste: List<Vista>, ana: Anagrafiche, quante: Int = 4): List<Recente> {
+    fun recenti(viste: List<Vista>, ana: Anagrafiche, quante: Int = 4, conProgetti: Boolean = false, soloClienti: Boolean = false): List<Recente> {
+        if (soloClienti) return recentiClienti(viste, ana, quante)
         val chiuse = ana.commesse.filterNot { it.aperta }.map { it.id }.toSet()
-        val usate = viste.map { it.rapportino }
-            .filter { it.cliente.isNotBlank() && it.idCommessa !in chiuse }
+        val tutti = viste.map { it.rapportino }
+        val progetti = if (conProgetti) RegoleProgetti.tutti(ana, tutti) else emptyList()
+        fun progettoDi(r: Rapportino): Progetto? = if (!conProgetti) null else when {
+            r.idProgetto.isNotBlank() -> progetti.firstOrNull { it.id == r.idProgetto }
+            r.progettoNuovo != null -> progetti.firstOrNull { it.idLocale.isNotBlank() && it.idLocale == r.progettoNuovo.idLocale }
+            else -> null
+        }?.takeIf { it.aperto }
+        val usate = tutti
+            .filter { it.cliente.isNotBlank() && it.idCommessa !in chiuse && (!conProgetti || it.idCommessa.isNotBlank()) }
             .sortedWith(compareByDescending<Rapportino> { it.data }.thenByDescending { it.modificato })
-            .distinctBy { if (it.idCommessa.isNotBlank()) it.idCommessa else "cliente:" + Anagrafiche.normalizza(it.cliente) }
-            .map { r ->
+            .map { r -> r to progettoDi(r) }
+            .distinctBy { (r, p) ->
+                (if (r.idCommessa.isNotBlank()) r.idCommessa else "cliente:" + Anagrafiche.normalizza(r.cliente)) +
+                    (if (conProgetti) "|" + (p?.id?.ifBlank { p.idLocale } ?: "") else "")
+            }
+            .map { (r, p) ->
                 val cliente = ana.cliente(r.idCliente, r.cliente)
-                Recente(r.idCliente, r.cliente, cliente?.gruppo ?: r.gruppo, r.idCommessa, r.commessa)
+                Recente(r.idCliente, r.cliente, cliente?.gruppo ?: r.gruppo, r.idCommessa, r.commessa, p)
             }
         val altre = ana.commesse.filter { it.aperta && usate.none { u -> u.idCommessa == it.id } }
             .mapNotNull { m ->
@@ -43,6 +64,24 @@ object Riepiloghi {
                 Recente(c.id, c.nome, c.gruppo, m.id, m.descrizione)
             }
         return (usate + altre).take(quante)
+    }
+
+    /** Commesse spenta: gli ultimi clienti dei rapportini, poi quelli delle commesse aperte se non bastano. */
+    private fun recentiClienti(viste: List<Vista>, ana: Anagrafiche, quante: Int): List<Recente> {
+        fun chiave(id: String, nome: String) = id.ifBlank { "nome:" + Anagrafiche.normalizza(nome) }
+        val usati = viste.map { it.rapportino }
+            .filter { it.cliente.isNotBlank() }
+            .sortedWith(compareByDescending<Rapportino> { it.data }.thenByDescending { it.modificato })
+            .map { r ->
+                val cliente = ana.cliente(r.idCliente, r.cliente)
+                Recente(cliente?.id ?: r.idCliente, cliente?.nome ?: r.cliente, cliente?.gruppo ?: r.gruppo, "", "")
+            }
+            .distinctBy { chiave(it.idCliente, it.cliente) }
+        val visti = usati.map { chiave(it.idCliente, it.cliente) }.toSet()
+        val altri = ana.commesse.filter { it.aperta }.mapNotNull { m -> ana.clienti.firstOrNull { it.id == m.idCliente } }
+            .distinctBy { it.id }.filter { chiave(it.id, it.nome) !in visti }
+            .map { Recente(it.id, it.nome, it.gruppo, "", "") }
+        return (usati + altri).take(quante)
     }
 
     /** I km dell'ultimo rapportino di quella commessa, o di quel cliente. */

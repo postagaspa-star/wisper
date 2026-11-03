@@ -6,8 +6,8 @@
  */
 'use strict';
 
-/** Le 18 voci del menu, nell'ordine delle specifiche. */
-const MODULI = ['dashboard', 'clienti', 'commesse', 'preventivi', 'attivita', 'rapportini', 'spese',
+/** Le voci del menu, nell'ordine delle specifiche; dal 03/11/2026 anche i progetti, sotto le commesse. */
+const MODULI = ['dashboard', 'clienti', 'commesse', 'progetti', 'preventivi', 'attivita', 'rapportini', 'spese',
   'fatturazione', 'banche', 'persone', 'documenti', 'ticket', 'mezzi', 'comunicazioni', 'portale',
   'collaboratori', 'integrazioni', 'amministrazione'];
 
@@ -42,7 +42,7 @@ function iniziali(ruolo) {
   } else if (ruolo === 'collaboratore') {
     // Fase 6: persone 1 (l'organico come una rubrica, e la propria scheda).
     // Fase 7: comunicazioni 2 (solo le sue: le sue attivita', i ticket e i rapportini che vede; mai i pagamenti), portale 0.
-    Object.assign(p, { dashboard: 1, clienti: 1, commesse: 1, rapportini: 2, attivita: 2, spese: 2,
+    Object.assign(p, { dashboard: 1, clienti: 1, commesse: 1, progetti: 1, rapportini: 2, attivita: 2, spese: 2,
       documenti: 1, ticket: 2, mezzi: 1, persone: 1, comunicazioni: 2 });
   } else if (ruolo === 'lettura') {
     MODULI.forEach(m => { p[m] = 1; });
@@ -50,7 +50,7 @@ function iniziali(ruolo) {
     p.costi = 1;
   } else if (ruolo === 'esterno') {
     // Fase 6: solo le sue commesse, i suoi rapportini, le sue spese, le sue attivita', i suoi ticket e documenti, la sua scheda.
-    Object.assign(p, { dashboard: 1, commesse: 1, rapportini: 2, attivita: 2, spese: 2, ticket: 2, documenti: 1, collaboratori: 1 });
+    Object.assign(p, { dashboard: 1, commesse: 1, progetti: 1, rapportini: 2, attivita: 2, spese: 2, ticket: 2, documenti: 1, collaboratori: 1 });
   }
   return p;
 }

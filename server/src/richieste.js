@@ -49,7 +49,7 @@ const AZIONI = {
   anagrafiche: { libera: 'ognuno i clienti e le commesse che vede (lo decide rispostaAnagrafiche)', fn: (w, d) => w.rispostaAnagrafiche(d) },
   rapportini: legge('rapportini', 'vedere i rapportini', (w, d) => ({
     ok: true,
-    rapportini: w.leggiRapportini(d.da, d.a, siVuole(d.tutti), { idCliente: d.idCliente, idCommessa: d.idCommessa, statoApprovazione: d.statoApprovazione, idTicket: d.idTicket }),
+    rapportini: w.leggiRapportini(d.da, d.a, siVuole(d.tutti), { idCliente: d.idCliente, idCommessa: d.idCommessa, idProgetto: d.idProgetto, statoApprovazione: d.statoApprovazione, idTicket: d.idTicket }),
   })),
   file: { libera: 'chi puo\' leggere il file lo decide puoLeggereFile', fn: (w, d) => ({ ok: true, file: w.leggiFile(d.id) }) },
   // Il nome di Code.gs: con solo idCommessa risponde come prima (cartella e file della commessa, per le versioni vecchie);
@@ -75,6 +75,13 @@ const AZIONI = {
   aggiornaCliente: scrive('clienti', 'cambiare i clienti', (w, d) => ({ ok: true, cliente: w.aggiornaCliente(d.id, d.campi || {}) })),
   creaCommessa: scrive('commesse', 'creare commesse', (w, d) => ({ ok: true, commessa: w.creaCommessa(d) })),
   aggiornaCommessa: scrive('commesse', 'cambiare le commesse', (w, d) => ({ ok: true, commessa: w.aggiornaCommessa(d.id, d.campi || {}) })),
+  // 03/11/2026: i progetti, sotto le commesse (azioni/progetti.js).
+  progetti: legge('progetti', 'vedere i progetti', (w, d) => ({ ok: true, progetti: w.leggiProgetti(d) })),
+  progetto: legge('progetti', 'vedere i progetti', (w, d) => w.schedaProgetto(d)),
+  codiceProgetto: legge('progetti', 'vedere i progetti', (w, d) => w.codiceProgetto(d)),
+  creaProgetto: scrive('progetti', 'creare progetti', (w, d) => ({ ok: true, progetto: w.creaProgetto(d) })),
+  aggiornaProgetto: scrive('progetti', 'cambiare i progetti', (w, d) => ({ ok: true, progetto: w.aggiornaProgetto(d.id, d.campi || {}) })),
+  togliProgetto: scrive('progetti', 'togliere i progetti', (w, d) => w.togliProgetto(d.id)),
   // Il nome che usava il primo Wisper: resta valido.
   statoCommessa: scrive('commesse', 'cambiare le commesse', (w, d) => ({ ok: true, commessa: w.aggiornaCommessa(d.idCommessa, { stato: d.stato }) })),
   salvaImpostazioni: scrive('amministrazione', 'cambiare le impostazioni', (w, d) => ({ ok: true, impostazioni: w.salvaImpostazioni(d.valori || {}) })),
@@ -431,8 +438,9 @@ const AZIONI = {
 
   // --- amministrazione (fase 8, §13.6): funzioni accese, Scollega tutti, cifratura e cambio solo il titolare (lo controllano le azioni)
   impostazioniGenerali: legge('amministrazione', 'vedere le impostazioni', w => w.impostazioniGenerali()),
-  funzioni: legge('amministrazione', 'vedere le funzioni accese', w => w.funzioni()),
-  salvaFunzioni: scrive('amministrazione', 'accendere e spegnere le funzioni', (w, d) => w.salvaFunzioni(d)),
+  // 03/11/2026: anche Amministrazione si spegne; il titolare raggiunge sempre le funzioni, per riaccenderla.
+  funzioni: { controllo: (d, u) => (u && u.ruolo === 'titolare' ? null : ['amministrazione', 1, 'vedere le funzioni accese']), fn: w => w.funzioni() },
+  salvaFunzioni: { scrive: true, controllo: (d, u) => (u && u.ruolo === 'titolare' ? null : ['amministrazione', 2, 'accendere e spegnere le funzioni']), fn: (w, d) => w.salvaFunzioni(d) },
   notifichePreferenze: { libera: 'ognuno le sue', fn: w => w.notifichePreferenze() },
   salvaNotifichePreferenze: { scrive: true, libera: 'ognuno le sue', fn: (w, d) => w.salvaNotifichePreferenze(d) },
   provaAvvisi: { modulo: 'amministrazione', livello: 2, cosa: 'mandare la prova degli avvisi', asincrona: true, soloPost: true, fn: w => w.provaAvvisi() },
@@ -449,7 +457,7 @@ const AZIONI = {
 };
 
 /** Fase 8 (§9.5): il nome della funzione spenta per la frase "La funzione ... e' spenta". */
-const NOMI_FUNZIONI = { portale: 'Portale clienti', comunicazioni: 'WhatsApp e comunicazioni', collaboratori: 'Collaboratori esterni', mezzi: 'Mezzi e attrezzature', banche: 'Banche e scadenze' };
+const NOMI_FUNZIONI = require('./azioni/amministrazione8').NOMI_MODULI;
 
 /**
  * Fase 6: le sole azioni che un esterno puo' chiamare (fase6.md §8.4). Tutto il resto risponde permesso:false prima di
@@ -461,6 +469,8 @@ const AZIONI_ESTERNO = new Set([
   // Collegare il proprio computer col QR: come entrare con email e password, che un esterno puo' fare.
   'autorizzaComputer', 'statoComputer',
   'rapportini', 'file', 'documenti', 'salvaRapportino', 'caricaFile', 'togliFile', 'stato', 'inviaEmail', 'legaRapportino',
+  // 03/11/2026: i progetti delle commesse dei suoi incarichi, solo da leggere.
+  'progetti', 'progetto', 'codiceProgetto',
   'ore', 'salvaOre', 'togliOre', 'timer', 'avviaTimer', 'fermaTimer', 'statisticheOre',
   'spese', 'salvaSpesa', 'togliSpesa', 'togliFotoSpesa', 'trasferte', 'rimborsi', 'riepilogoSpese', 'veicoli',
   'attivita', 'salvaAttivita', 'faiAttivita', 'togliAttivita', 'spuntaChecklist', 'togliAllegato',

@@ -146,11 +146,34 @@ async function main() {
     passo('lette le pagine da Google: rapportini, clienti, commesse, copie');
 
     // ------------------------------------------------------------ 3. salva un rapportino
+    // Dal 03/11/2026 (progetti.md §4.6) un rapportino ha sempre commessa e progetto: un progetto su ogni commessa aperta
+    // (anche questo passa da Google), che nel rapportino si sceglie da solo. Poi la pagina si riapre e li legge.
+    const anaP = await valuta("fetch('/server/anagrafiche').then(r => r.json())");
+    for (const c of (anaP.commesse || []).filter(x => x.stato === 'APERTA' && !x.modello && !x.archiviata)) {
+      const r = await valuta(`fetch('/server/creaProgetto', { method: 'POST', body: JSON.stringify(${JSON.stringify({ idCommessa: c.id, codiceProgetto: 'P-' + c.id, descrizione: 'Lavori ' + c.id })}) }).then(r => r.json())`);
+      assert.equal(r.ok, true, 'progetto su ' + c.id + ': ' + JSON.stringify(r));
+    }
+    await cdp('Page.navigate', { url: BASE + '/?g=2#rapportini/elenco' });
+    await aspettaChe("!!document.querySelector('#principale') && [...document.querySelectorAll('#principale button')].some(b => /Nuovo rapportino/.test(b.textContent))", 20000, 'la pagina dei rapportini riaperta');
+    /** Se la scheda recente non porta una commessa (col suo progetto), si tocca la prima commessa aperta. */
+    const conProgetto = async () => {
+      await valuta(`(() => {
+        const f = [...document.querySelectorAll('.finestra')].pop();
+        if (f.querySelector('[data-campo=progetto] .pillola.scelta')) return true;
+        const et = [...f.querySelectorAll('.etichetta')].find(e => e.textContent.trim() === 'Commessa');
+        const b = et && et.nextElementSibling && et.nextElementSibling.querySelector('.pillola');
+        if (b) b.click();
+        return true;
+      })()`);
+      await aspetta(400);
+      assert.ok(await valuta("!!document.querySelector('.finestra [data-campo=progetto] .pillola.scelta')"), 'il progetto della commessa è già scelto');
+    };
     const descrizione = 'Fuori casa ' + GIRO;
     await vai('#rapportini/elenco');
     await clicca('Nuovo rapportino', '#principale', 900);
     await valuta("document.querySelector('.finestra .scelta-card').click(); true");
     await aspetta(500);
+    await conProgetto();
     await clicca('4 h', '.finestra', 300);
     await scrivi('Cosa hai fatto', descrizione);
     await clicca('Salva', '.finestra', 500);
@@ -221,6 +244,7 @@ async function main() {
     await clicca('Nuovo rapportino', '#principale', 900);
     await valuta("document.querySelector('.finestra .scelta-card').click(); true");
     await aspetta(500);
+    await conProgetto();
     await clicca('6 h', '.finestra', 300);
     await scrivi('Cosa hai fatto', descr2);
     await clicca('Salva', '.finestra', 500);

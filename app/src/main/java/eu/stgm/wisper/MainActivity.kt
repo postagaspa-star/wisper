@@ -344,9 +344,13 @@ private fun Wisper(archivio: Archivio, attivita: ComponentActivity) {
         // Fase 5: dopo la firma di un rapportino col ticket, "Il lavoro è finito?".
         var lavoroFinito by remember { mutableStateOf<Rapportino?>(null) }
 
+        // 03/11/2026 (progetti.md §5): tutte le funzioni si spengono. La casa e' la prima voce accesa del menu (di solito la
+        // Dashboard); se non ce n'e' nessuna, la pagina "Nessuna funzione accesa" (nella voce Dashboard, che non si vede).
+        fun casa(): Sezione = vociVere(sessione).firstOrNull() ?: Sezione.DASHBOARD
         fun aCasa() {
-            sezioneNome = Sezione.DASHBOARD.name
-            mettiPila(Sezione.DASHBOARD, emptyList())
+            val s = casa()
+            sezioneNome = s.name
+            mettiPila(s, emptyList())
             pagina = "sezioni"
         }
 
@@ -428,7 +432,7 @@ private fun Wisper(archivio: Archivio, attivita: ComponentActivity) {
         // Una voce che il ruolo non vede (dopo un cambio di permessi) riporta alla Dashboard.
         // Fase 8 (§9.5): anche una funzione spenta dal titolare.
         LaunchedEffect(permessi, sessione.interfaccia.funzioniSpente) {
-            if (permessi.livelli.isNotEmpty() && (!permessi.vede(sezione.modulo) || sezione.modulo in sessione.interfaccia.funzioniSpente)) aCasa()
+            if (permessi.livelli.isNotEmpty() && sezione !in vociMenu(sessione)) aCasa()
         }
 
         fun nuovo(giorno: LocalDate, idCliente: String? = null, idCommessa: String? = null) {
@@ -438,7 +442,24 @@ private fun Wisper(archivio: Archivio, attivita: ComponentActivity) {
             var r = Rapportino.nuovo(dati.tecnico, giorno)
             if (cli != null) r = r.copy(idCliente = cli.id, cliente = cli.nome)
             if (com != null) r = r.copy(idCommessa = com.id, commessa = com.descrizione)
-            modulo = ModuloStato(r, nuovo = true)
+            // Dalla commessa coi progetti accesi (progetti.md §4.6): un solo progetto aperto e' gia' scelto; con piu'
+            // progetti il rapportino si apre sulla scelta del progetto.
+            val aperti = if (com != null && eu.stgm.wisper.rapportino.RegoleProgetti.attivi(dati.sessione.value))
+                eu.stgm.wisper.rapportino.RegoleProgetti.apertiDi(anag, dati.viste.value.map { it.rapportino }, com.id) else null
+            if (aperti?.size == 1) r = eu.stgm.wisper.ui.rapportinoDelProgetto(r, anag, aperti.first())
+            modulo = ModuloStato(r, nuovo = true).also { m ->
+                if (aperti != null && aperti.size != 1) { m.sceltaCommessa = true; m.sceltaProgetto = true }
+            }
+            pagina = "rapportino"
+        }
+
+        /** Dalla scheda di un progetto: cliente, commessa e progetto gia' messi, si parte dalle ore (progetti.md §4.4). */
+        fun nuovoDaProgetto(idProgetto: String) {
+            val anag = dati.anagrafiche.value
+            val p = eu.stgm.wisper.rapportino.RegoleProgetti.tutti(anag, dati.viste.value.map { it.rapportino })
+                .firstOrNull { it.id == idProgetto || (it.idLocale.isNotBlank() && it.idLocale == idProgetto) } ?: return
+            val r = eu.stgm.wisper.ui.rapportinoDelProgetto(Rapportino.nuovo(dati.tecnico, LocalDate.now()), anag, p)
+            modulo = ModuloStato(r, nuovo = true, passoIniziale = 2)
             pagina = "rapportino"
         }
 
@@ -468,6 +489,7 @@ private fun Wisper(archivio: Archivio, attivita: ComponentActivity) {
                 modulo = ModuloStato(r, nuovo = true, passoIniziale = 2)
                 pagina = "rapportino"
             },
+            onNuovoRapportinoProgetto = ::nuovoDaProgetto,
         )
 
         // Da un promemoria: la voce Attività, sull'attività.
@@ -530,7 +552,7 @@ private fun Wisper(archivio: Archivio, attivita: ComponentActivity) {
         }
 
         // Indietro: prima la pila della voce, poi si torna alla Dashboard; dalla Dashboard esce dall'app.
-        BackHandler(enabled = pagina == "sezioni" && (pila(sezione).isNotEmpty() || sezione != Sezione.DASHBOARD)) {
+        BackHandler(enabled = pagina == "sezioni" && (pila(sezione).isNotEmpty() || sezione != casa())) {
             if (pila(sezione).isNotEmpty()) nav.indietro() else aCasa()
         }
 
@@ -566,7 +588,8 @@ private fun Wisper(archivio: Archivio, attivita: ComponentActivity) {
                             val cima = pila(sezione).lastOrNull()
                             val compito = rottaCompito(cima)
                             // Fase 8 (§9.5): una funzione spenta sparisce dal menu di tutti (il server mette anche il permesso a 0).
-                            val voci = Sezione.entries.filter { permessi.vede(it.modulo) && it.modulo !in sessione.interfaccia.funzioniSpente }
+                            // Dal 03/11/2026 al titolare resta Amministrazione anche spenta, con la sola pagina Funzioni (vociMenu).
+                            val voci = vociMenu(sessione)
                             ModalNavigationDrawer(
                                 drawerState = cassetto,
                                 // Si apre dal pulsante Menu e dal bordo; aperto, si chiude anche scorrendo a sinistra.
@@ -647,6 +670,8 @@ private fun Wisper(archivio: Archivio, attivita: ComponentActivity) {
                                             ) {
                                                 PaginaSezione(
                                                     s, rotta, dati, archivio, nav, filtro, { filtro = it }, tema,
+                                                    nessunaFunzione = vociVere(sessione).isEmpty() && permessi.livelli.isNotEmpty(),
+                                                    titolare = sessione.utente.ruolo == eu.stgm.wisper.rapportino.Ruoli.TITOLARE,
                                                     onTema = { tema = it; config.tema = it },
                                                     onVisita = { visita.inizia() },
                                                     onNuovo = { g -> nuovo(g) },
@@ -763,12 +788,25 @@ private fun PaginaSezione(
     filtro: FiltroRapportini,
     onFiltro: (FiltroRapportini) -> Unit,
     tema: String,
+    /** Tutte le funzioni spente (progetti.md §5): la pagina vuota, col pulsante Funzioni per il titolare. */
+    nessunaFunzione: Boolean,
+    titolare: Boolean,
     onTema: (String) -> Unit,
     onVisita: () -> Unit,
     onNuovo: (LocalDate) -> Unit,
     onComeIeri: (Rapportino) -> Unit,
 ) {
     val permessi = LocalPermessi.current
+    if (rotta == null && nessunaFunzione && sezione == Sezione.DASHBOARD) {
+        PaginaNessunaFunzione(titolare) { nav.sezione(Sezione.AMMINISTRAZIONE) }
+        return
+    }
+    // Amministrazione spenta (progetti.md §5): al titolare resta la sola pagina Funzioni, per riaccenderla.
+    val ammRidotta = titolare && sezioneDiRotta(rotta, sezione) == Sezione.AMMINISTRAZIONE && !permessi.vede(eu.stgm.wisper.rapportino.Moduli.AMMINISTRAZIONE)
+    if (ammRidotta && (rotta == null || rotta == "amm/funzioni")) {
+        eu.stgm.wisper.ui.PaginaFunzioni(dati) { nav.indietro() }
+        return
+    }
     // Una pagina del modulo che il ruolo non vede: la scheda calma "Non hai il permesso".
     // L'app (tema, visita, versione) è di tutti.
     val modulo = sezioneDiRotta(rotta, sezione).modulo
@@ -781,6 +819,7 @@ private fun PaginaSezione(
             Sezione.DASHBOARD -> SchermataDashboard(dati, nav, onNuovo, onComeIeri)
             Sezione.CLIENTI -> SchermataClienti(dati, nav)
             Sezione.COMMESSE -> SchermataCommesse(dati, nav)
+            Sezione.PROGETTI -> eu.stgm.wisper.ui.SchermataProgetti(dati, nav)
             Sezione.PREVENTIVI -> SchermataPreventivi(dati, nav)
             Sezione.ATTIVITA -> SchermataAttivita(dati, nav)
             Sezione.RAPPORTINI -> SchermataOreERapportini(dati, nav, filtro, onFiltro)
@@ -859,6 +898,11 @@ private fun PaginaSezione(
         rotta.startsWith("attivita-nuova") || rotta.startsWith("attivita-modifica/") -> SchermataModificaAttivita(dati, nav, rotta)
         rotta.startsWith("calendario") -> SchermataCalendario(dati, nav, rotta.removePrefix("calendario").removePrefix("/"))
         rotta == "commesse" -> SchermataCommesse(dati, nav)
+        // I progetti (docs/gestionale/progetti.md §4)
+        rotta == "progetti" -> eu.stgm.wisper.ui.SchermataProgetti(dati, nav)
+        rotta.startsWith("progetto/") -> eu.stgm.wisper.ui.SchermataProgetto(dati, nav, rotta.removePrefix("progetto/"))
+        rotta.startsWith("progetto-modifica/") -> eu.stgm.wisper.ui.SchermataModificaProgetto(dati, nav, rotta.removePrefix("progetto-modifica/"), null)
+        rotta.startsWith("progetto-nuovo") -> eu.stgm.wisper.ui.SchermataModificaProgetto(dati, nav, null, rotta.removePrefix("progetto-nuovo").removePrefix("/").ifBlank { null })
         rotta.startsWith("commessa/") -> SchermataCommessa(dati, nav, rotta.removePrefix("commessa/"))
         rotta.startsWith("commessa-modifica/") -> SchermataModificaCommessa(dati, nav, rotta.removePrefix("commessa-modifica/"), null)
         rotta.startsWith("commessa-nuova") -> SchermataModificaCommessa(dati, nav, null, rotta.removePrefix("commessa-nuova").removePrefix("/").ifBlank { null })
@@ -884,5 +928,37 @@ private fun PaginaSezione(
         rotta.startsWith("cliente-modifica/") -> SchermataModificaCliente(dati, nav, rotta.removePrefix("cliente-modifica/"), fornitore = false)
         rotta == "cliente-nuovo" -> SchermataModificaCliente(dati, nav, null, fornitore = false)
         rotta == "fornitore-nuovo" -> SchermataModificaCliente(dati, nav, null, fornitore = true)
+    }
+}
+
+/**
+ * Le voci vere del menu: le funzioni accese che il ruolo vede (progetti.md §5). La prima e' la casa.
+ */
+private fun vociVere(s: eu.stgm.wisper.rapportino.Sessione): List<Sezione> =
+    Sezione.entries.filter { s.permessi.vede(it.modulo) && it.modulo !in s.interfaccia.funzioniSpente }
+
+/** Le voci del menu: quelle vere, piu' Amministrazione per il titolare quando e' spenta (con la sola pagina Funzioni). */
+private fun vociMenu(s: eu.stgm.wisper.rapportino.Sessione): List<Sezione> {
+    val vere = vociVere(s)
+    val titolare = s.utente.ruolo == eu.stgm.wisper.rapportino.Ruoli.TITOLARE
+    return if (titolare && Sezione.AMMINISTRAZIONE !in vere) vere + Sezione.AMMINISTRAZIONE else vere
+}
+
+/** Tutte le funzioni spente (progetti.md §5): una pagina vuota e, per il titolare, il pulsante Funzioni. */
+@Composable
+private fun PaginaNessunaFunzione(titolare: Boolean, onFunzioni: () -> Unit) {
+    val c = W.colori
+    androidx.compose.foundation.layout.Column(
+        Modifier.fillMaxSize().background(c.fondo).padding(eu.stgm.wisper.ui.MarginePagina),
+        verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(14.dp),
+    ) {
+        eu.stgm.wisper.ui.TestataMenu()
+        eu.stgm.wisper.ui.TitoloPagina("Nessuna funzione accesa")
+        androidx.compose.material3.Text(
+            if (titolare) "Lo studio ha spento tutte le parti di Wisper. Riaccendi quelle che usate da Funzioni."
+            else "Lo studio ha spento tutte le parti di Wisper. Chiedi al titolare di riaccenderle.",
+            style = eu.stgm.wisper.ui.Testi.testo, color = c.testo2,
+        )
+        if (titolare) eu.stgm.wisper.ui.PulsantePrincipale("Funzioni", onFunzioni, icona = eu.stgm.wisper.ui.Icone.interruttore)
     }
 }

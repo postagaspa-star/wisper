@@ -572,23 +572,65 @@ data class PezzoDaApprovare(val titolo: String, val dove: String, val collegamen
 // ---------------------------------------------------------------------------------- amministrazione (§9)
 
 /** Una funzione (§9.5): solo cinque si spengono. */
-data class Funzione(val modulo: String, val nome: String, val accesa: Boolean, val spegnibile: Boolean, val cosaCambia: String = "") {
-    /** La parola: Accesa, Spenta, Sempre accesa (§15). */
+data class Funzione(
+    val modulo: String,
+    val nome: String,
+    val accesa: Boolean,
+    val spegnibile: Boolean,
+    val cosaCambia: String = "",
+    /** Dal 03/11/2026 (progetti.md §5): le funzioni di cui questa ha bisogno, che si accendono con lei. */
+    val richiede: List<String> = emptyList(),
+    /** Le funzioni che hanno bisogno di questa, che si spengono con lei. */
+    val serveA: List<String> = emptyList(),
+) {
+    /** La parola: Accesa, Spenta, Sempre accesa (§15; dal 03/11/2026 si spengono tutte, "Sempre accesa" resta per i server di prima). */
     val parola: String get() = if (!spegnibile) "Sempre accesa" else if (accesa) "Accesa" else "Spenta"
 
     companion object {
-        fun daJson(o: JSONObject) = Funzione(o.testo("modulo"), o.testo("nome"), o.vero("accesa"), o.vero("spegnibile"), o.testo("cosaCambia"))
+        fun daJson(o: JSONObject) = Funzione(
+            o.testo("modulo"), o.testo("nome"), o.vero("accesa"), o.vero("spegnibile"), o.testo("cosaCambia"),
+            richiede = o.optJSONArray("richiede")?.stringhe().orEmpty(),
+            serveA = o.optJSONArray("serveA")?.stringhe().orEmpty(),
+        )
 
         fun elenco(o: JSONObject): List<Funzione> = o.optJSONArray("funzioni").oggetti().map(::daJson)
 
-        /** Le cinque che si spengono (§9.5), coi moduli del server. */
-        val SPEGNIBILI = setOf(Moduli.PORTALE, Moduli.COMUNICAZIONI, Moduli.COLLABORATORI, Moduli.MEZZI, Moduli.BANCHE)
-
-        /** "13 di 18 · Portale clienti spento". */
+        /** "13 di 19 · spente: Portale clienti". */
         fun riassunto(l: List<Funzione>): String {
             if (l.isEmpty()) return ""
             val spente = l.filter { !it.accesa }
             return "${l.size - spente.size} di ${l.size} accese" + if (spente.isEmpty()) "" else " · spente: " + spente.joinToString(", ") { it.nome }
+        }
+
+        /**
+         * Le altre che cambiano insieme (progetti.md §5): spegnendo [f], quelle accese che hanno bisogno di lei
+         * ("Si spengono anche: …"); accendendola, quelle spente di cui ha bisogno ("Si accendono anche: …"). I nomi
+         * nell'ordine del menu, come li dà [tutte].
+         */
+        fun anche(f: Funzione, accendi: Boolean, tutte: List<Funzione>): List<Funzione> {
+            val quali = if (accendi) f.richiede else f.serveA
+            return tutte.filter { it.modulo in quali && it.accesa != accendi }
+        }
+
+        /** La frase del foglio di conferma: "Si spengono anche: Progetti, Collaboratori esterni." (vuota se nessuna). */
+        fun fraseAnche(f: Funzione, accendi: Boolean, tutte: List<Funzione>): String {
+            val altre = anche(f, accendi, tutte)
+            if (altre.isEmpty()) return ""
+            return (if (accendi) "Si accendono anche: " else "Si spengono anche: ") + altre.joinToString(", ") { it.nome } + "."
+        }
+
+        /**
+         * L'avviso dopo il salvataggio, con le parole del computer (pc/ui/regole-fase8.js, avvisoCambio):
+         * "Commesse spenta, e anche Progetti e Collaboratori esterni: i dati restano".
+         */
+        fun avvisoCambio(nome: String, accesa: Boolean, anche: List<String>): String {
+            val altri = anche.filter { it.isNotBlank() }
+            val con = when (altri.size) {
+                0 -> ""
+                1 -> ", e anche " + altri[0]
+                else -> ", e anche " + altri.dropLast(1).joinToString(", ") + " e " + altri.last()
+            }
+            return if (accesa) "$nome riaccesa$con: i dati sono come prima" else "$nome spenta$con: i dati restano"
         }
     }
 }

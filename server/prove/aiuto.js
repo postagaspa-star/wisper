@@ -195,13 +195,18 @@ const COLONNE_008 = {
   sessioni: { da_fuori: '' },
 };
 
+/** Le colonne nuove della 009 (i progetti, 03/11/2026), col loro valore di base. */
+const COLONNE_009 = {
+  rapportini: { id_progetto: null, progetto: '' },
+};
+
 /** Le colonne nuove dalla 007 in poi, insieme: le prove delle migrazioni di prima (003-007) le tolgono prima di confrontare. */
 const COLONNE_DOPO_007 = {};
-for (const gruppo of [COLONNE_007, COLONNE_008]) {
+for (const gruppo of [COLONNE_007, COLONNE_008, COLONNE_009]) {
   for (const [t, c] of Object.entries(gruppo)) COLONNE_DOPO_007[t] = Object.assign({}, COLONNE_DOPO_007[t] || {}, c);
 }
 
 module.exports = {
   serverDiProva, postinoFinto, viesFinto, cartellaNuova, ascolta, chiudi, SEGRETO, PNG, giornoDeiPrototipi, GIORNO_DEI_PROTOTIPI, COLONNE_007,
-  COLONNE_008, COLONNE_DOPO_007,
+  COLONNE_008, COLONNE_009, COLONNE_DOPO_007,
 };

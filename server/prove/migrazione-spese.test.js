@@ -40,6 +40,19 @@ const ponte = (azione, dati) => esegui(w, Object.assign({ azione }, dati || {}),
 const spese = id => w.db.righe('SELECT * FROM spese WHERE rapportino_id = ? ORDER BY id', id);
 const rapportino = id => w.db.riga('SELECT * FROM rapportini WHERE id = ?', id);
 
+/**
+ * 03/11/2026 (server 0.12.0): il CSV dei rapportini ha tre colonne in piu' subito dopo la commessa (Codice progetto,
+ * Progetto, Intestato a), vuote per i rapportini di prima. Controllate vuote e tolte, il resto deve essere identico.
+ */
+function senzaProgetti(csv) {
+  return csv.split('\r\n').map((riga, n) => {
+    if (!riga) return riga;
+    const c = riga.split(';');
+    assert.deepEqual(c.slice(7, 10), n === 0 ? ['Codice progetto', 'Progetto', 'Intestato a'] : ['', '', ''], 'colonne dei progetti, riga ' + n);
+    return c.slice(0, 7).concat(c.slice(10)).join(';');
+  }).join('\r\n');
+}
+
 /** Ogni campo che c'era prima ha lo stesso identico valore (i campi nuovi si aggiungono e basta). */
 function stessiCampi(ora, prima, chi) {
   for (const k of Object.keys(prima)) assert.deepEqual(ora[k], prima[k], chi + ' · ' + k);
@@ -47,7 +60,7 @@ function stessiCampi(ora, prima, chi) {
 
 test('migrazione 003: versione 3, la copia wisper.db.prima-3, i rapportini non si toccano', () => {
   // Dalla fase 4 (e dalla 5 e dalla 6) il database va avanti fino all'ultima migrazione: la 003 c'e' (la sua copia prima-3 anche).
-  assert.equal(w.db.versione(), 8);
+  assert.equal(w.db.versione(), 9);
   assert.ok(fs.existsSync(path.join(cartella, 'wisper.db.prima-3')), 'la copia prima della migrazione');
   const dopo = w.db.righe('SELECT * FROM rapportini ORDER BY id');
   assert.equal(dopo.length, righePrima.length);
@@ -80,7 +93,7 @@ test('i rapportini gia\' scritti danno gli stessi identici numeri del server 0.5
     // Tutti i campi di prima, uno per uno: spese, totale, compenso, rimborso km, foto, firma, stato, date...
     stessiCampi(nuovo, vecchio, vecchio.id);
   }
-  assert.equal(ora.csv, PRIMA.csv, 'il CSV per Excel e\' uguale carattere per carattere');
+  assert.equal(senzaProgetti(ora.csv), PRIMA.csv, 'il CSV per Excel e\' uguale carattere per carattere');
   assert.deepEqual(ora.soldi, PRIMA.soldi, 'da fatturare e in bozza');
   assert.deepEqual(ora.contiRapportini, PRIMA.contiRapportini);
   // I casi limite, con le parole: vuote, zero, testo con la virgola, tre decimali, negativo.
@@ -133,12 +146,12 @@ test('riaperto il server: la migrazione non si rifa\' e i numeri restano quelli 
   const quante = w.db.riga('SELECT COUNT(*) n FROM spese').n;
   w.chiudi();
   w = new Wisper({ dati: cartella });
-  assert.equal(w.db.versione(), 8);
+  assert.equal(w.db.versione(), 9);
   assert.equal(w.db.riga('SELECT COUNT(*) n FROM spese').n, quante);
   assert.equal(w.db.riga('SELECT COUNT(*) n FROM veicoli').n, 1);
   const ora = numeri(w);
   for (const vecchio of PRIMA.rapportini) stessiCampi(ora.rapportini.find(r => r.id === vecchio.id), vecchio, vecchio.id);
-  assert.equal(ora.csv, PRIMA.csv);
+  assert.equal(senzaProgetti(ora.csv), PRIMA.csv);
 });
 
 test('versioni vecchie (ponte): le stesse spese non cambiano niente; spese nuove spostano la riga del passo 3', async () => {

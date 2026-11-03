@@ -258,8 +258,9 @@ test('Dashboard nei dati di esempio: tetti 7 · 7 · 5, quante, campi nuovi, voc
 
 // ------------------------------------------------------------------ funzioni accese (§9.5)
 
-test('funzioni accese: le cinque che si spengono, la frase, la riga dell\'elenco, il menu senza le spente', () => {
-  assert.deepEqual(Object.keys(Q.SPEGNIBILI), ['portale', 'comunicazioni', 'collaboratori', 'mezzi', 'banche']);
+test('funzioni accese: si spengono tutte e 19 (progetti.md §5), la frase, la riga dell\'elenco, il menu senza le spente', () => {
+  assert.deepEqual(Object.keys(Q.SPEGNIBILI), ['dashboard', 'clienti', 'commesse', 'progetti', 'preventivi', 'attivita', 'rapportini', 'spese', 'fatturazione', 'banche',
+    'persone', 'documenti', 'ticket', 'mezzi', 'comunicazioni', 'portale', 'collaboratori', 'integrazioni', 'amministrazione']);
   assert.deepEqual(Q.domandaSpegni({ modulo: 'mezzi', nome: 'Mezzi e attrezzature' }),
     { titolo: 'Spegnere Mezzi e attrezzature?', testo: 'Sparisce dal menu di tutti. Nei rapportini non si scelgono più gli strumenti. I dati restano.' });
   assert.equal(Q.rigaFunzioni([{ nome: 'A', accesa: true }, { nome: 'Portale clienti', accesa: false }, { nome: 'C' }]), '2 di 3 · Portale clienti spento');
@@ -271,7 +272,9 @@ test('funzioni accese: le cinque che si spengono, la frase, la riga dell\'elenco
 test('funzioni accese nei dati di esempio: solo il titolare spegne; spenta = livello 0 e via dal menu; riaccesa uguale', () => {
   const dati = E.crea({ chi: 'manuel', oggi: '2026-10-22' });
   assert.equal(E.gestisci(E.crea({ chi: 'laura', oggi: '2026-10-22' }), 'POST', '/server/salvaFunzioni', { modulo: 'mezzi', accesa: false }).permesso, false);
-  assert.equal(E.gestisci(dati, 'POST', '/server/salvaFunzioni', { modulo: 'rapportini', accesa: false }).errore, 'Questa funzione resta sempre accesa');
+  // Dal 03/11/2026 si spegne anche Ore e rapportini (nessuna funzione è obbligatoria); si riaccende uguale.
+  assert.deepEqual(E.gestisci(dati, 'POST', '/server/salvaFunzioni', { modulo: 'rapportini', accesa: false }).anche, []);
+  E.gestisci(dati, 'POST', '/server/salvaFunzioni', { modulo: 'rapportini', accesa: true });
   E.gestisci(dati, 'POST', '/server/salvaFunzioni', { modulo: 'mezzi', accesa: false });
   const io = E.gestisci(dati, 'GET', '/server/io', {});
   assert.deepEqual(io.interfaccia.funzioniSpente, ['mezzi']);
@@ -280,8 +283,8 @@ test('funzioni accese nei dati di esempio: solo il titolare spegne; spenta = liv
   E.gestisci(dati, 'POST', '/server/salvaFunzioni', { modulo: 'mezzi', accesa: true });
   assert.deepEqual(E.gestisci(dati, 'GET', '/server/io', {}).interfaccia.funzioniSpente, []);
   const f = E.gestisci(dati, 'GET', '/server/funzioni', {}).funzioni;
-  assert.equal(f.length, 18);
-  assert.equal(f.filter(x => x.spegnibile).length, 5);
+  assert.equal(f.length, 19);
+  assert.equal(f.filter(x => x.spegnibile).length, 19);
 });
 
 // ------------------------------------------------------------------ numerazioni e il codice commessa (§9.6)

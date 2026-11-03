@@ -174,6 +174,11 @@ class Archivio(private val ctx: Context) : Dati {
     /** Da dove è arrivata l'ultima risposta del server: in ufficio (casa) o attraverso Google. */
     val dove: StateFlow<Strade.Dove?> get() = ponte.strade.dove
 
+    /** Il campanello degli aggiornamenti (progetti.md §6): lo suona WisperApp con l'app davanti e il server di casa. */
+    val campanello: eu.stgm.wisper.rapportino.Campanello by lazy {
+        eu.stgm.wisper.rapportino.Campanello(ponte.strade::indirizzoCampanello, ponte.strade.clientCampanello, traccia = { android.util.Log.d("Campanello", it) })
+    }
+
     private val _anagrafiche = MutableStateFlow(copia.anagrafiche())
     override val anagrafiche: StateFlow<Anagrafiche> = _anagrafiche.asStateFlow()
 
@@ -394,7 +399,10 @@ class Archivio(private val ctx: Context) : Dati {
             // leggono solo quando li si sfoglia, o quando l'ufficio li vuole tutti.
             val oggi = LocalDate.now()
             val inizio = contatore.get()
-            if (tutti) {
+            // Dal 03/11/2026 ogni funzione si spegne (progetti.md §5): con Ore e rapportini spenta (o senza il permesso)
+            // i rapportini non si chiedono, il server direbbe di no. Restano quelli già sul telefono.
+            val leggeRapportini = _sessione.value.permessi.let { it.livelli.isEmpty() || it.vede(Moduli.RAPPORTINI) }
+            if (leggeRapportini && tutti) {
                 val letti = ponte.rapportiniTutti()
                 _storicoFoglio.update { vecchi -> applica(vecchi, letti, inizio) { false } }
                 copia.scriviStorico(_storicoFoglio.value)
@@ -407,7 +415,7 @@ class Archivio(private val ctx: Context) : Dati {
                     applica(vecchi, letti.filter { (!it.data.isBefore(da) && !it.data.isAfter(a)) || it.dentro(gia) }, inizio) { false }
                 }
                 copia.scriviRapportini(_dalFoglio.value)
-            } else {
+            } else if (leggeRapportini) {
                 val da = mese?.atDay(1) ?: oggi.withDayOfMonth(1).minusMonths(5)
                 val a = mese?.atEndOfMonth() ?: YearMonth.from(oggi).plusMonths(1).atEndOfMonth()
                 val letti = ponte.rapportini(da, a)
@@ -420,7 +428,8 @@ class Archivio(private val ctx: Context) : Dati {
                 }
             }
             _aggiornamento.value = Aggiornamento(ultimo = LocalDateTime.now())
-            if (!tutti) provaONull { leggiDashboard() }
+            // La Dashboard spenta non si chiede (progetti.md §5): l'app si apre sulla prima voce accesa.
+            if (!tutti && _sessione.value.permessi.let { it.livelli.isEmpty() || it.vede(Moduli.DASHBOARD) }) provaONull { leggiDashboard() }
             // Fase 2: preventivi e attività, se il ruolo li vede. Senza rete resta l'ultima lettura.
             if (!tutti) {
                 provaONull { leggiPreventivi() }
@@ -1244,7 +1253,11 @@ class Archivio(private val ctx: Context) : Dati {
     }
 
     private suspend fun leggiAttivita() {
-        if (!_sessione.value.permessi.vede(Moduli.ATTIVITA)) return
+        if (!_sessione.value.permessi.vede(Moduli.ATTIVITA)) {
+            // Attivita' spenta (progetti.md §5, "niente promemoria delle attività"): via quelli gia' messi.
+            Promemoria.programma(ctx, emptyList(), "")
+            return
+        }
         // Due letture (§13.6): le aperte di ogni giorno, senza data comprese, per l'elenco;
         // quelle del periodo in ogni stato, per il calendario. Insieme, una volta sola ciascuna.
         val aperte = ponte.attivita(null, null)
@@ -1669,8 +1682,22 @@ class Archivio(private val ctx: Context) : Dati {
             },
             dopoScrittura = { aggiornaDashboard() },
             impostazioniCambiate = { provaONull { rileggiAnagrafiche() } },
-            chiSonoCambiato = { provaONull { aggiornaIo() }; aggiornaDashboard() },
+            // Accendere o spegnere una funzione cambia menu, permessi e quello che si legge: si rilegge tutto.
+            chiSonoCambiato = { provaONull { aggiornaIo() }; aggiorna() },
             scaricaEsportazione = { id -> ponte.esportazione(id) },
+        )
+    }
+
+    // ------------------------------------------------------------- progetti (progetti.md, 03/11/2026)
+
+    /** In diretta; dopo ogni scrittura si rileggono le anagrafiche (portano i progetti per il rapportino) e la Dashboard. */
+    override val progetti: eu.stgm.wisper.rapportino.ServizioProgetti by lazy {
+        eu.stgm.wisper.rapportino.ServizioProgetti(
+            ponte,
+            object : EsecutoreFase4 {
+                override suspend fun <T> esegui(lavoro: suspend () -> T): Result<T> = inDiretta { lavoro() }
+            },
+            dopoScrittura = { provaONull { rileggiAnagrafiche() }; aggiornaDashboard() },
         )
     }
 

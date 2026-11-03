@@ -1,5 +1,6 @@
 /*
- * Wisper Ufficio: Progetti e commesse (guida della fase 1, §5).
+ * Wisper Ufficio: le Commesse (guida della fase 1, §5). Dal 03/11/2026 i progetti hanno la loro voce (progetti.js) e una
+ * scheda Progetti dentro la commessa.
  *
  * L'elenco con Aperte, Sospese, Chiuse e Archivio; la pagina della commessa con
  * chi la segue, le prestazioni (valore, avanzamento, +10%, Segna fatta, ordine
@@ -45,7 +46,7 @@
       const chip = (testo, togli) => h('span', { class: 'filtro-attivo' }, testo,
         h('button', { type: 'button', 'aria-label': 'Togli il filtro ' + testo, onclick: togli }, icona('chiudi', 14, 2.6)));
       aggiungi(pagina, [
-        h('div', { class: 'testata' }, h('div', { class: 'titoli' }, h('span', { class: 'dove' }, 'Progetti e commesse'), h('h1', null, 'Commesse')),
+        h('div', { class: 'testata' }, h('div', { class: 'titoli' }, h('h1', null, 'Commesse')),
           puo('commesse', 2) ? h('button', { type: 'button', class: 'btn giallo', onclick: () => modulo(null) }, icona('piu', 18, 2.6), 'Nuova commessa') : null),
         h('div', { class: 'filtri' },
           segmenti([['APERTA', 'Aperte · ' + n.aperte], ['SOSPESA', 'Sospese · ' + n.sospese], ['CHIUSA', 'Chiuse · ' + n.chiuse], ['ARCHIVIO', 'Archivio · ' + n.archivio]],
@@ -104,7 +105,7 @@
       const altro = scrive ? h('button', { type: 'button', class: 'tondo', 'aria-label': 'Altre azioni', title: 'Altre azioni' }, icona('altro', 20)) : null;
       if (altro) altro.addEventListener('click', () => apriMenu(altro, vociMenu(m)));
       aggiungi(contenitore, [
-        h('div', { class: 'indietro-riga' }, tondo('indietro', 'Torna alle commesse', () => W.vai('#commesse')), h('span', { class: 'dove' }, 'Progetti e commesse')),
+        h('div', { class: 'indietro-riga' }, tondo('indietro', 'Torna alle commesse', () => W.vai('#commesse')), h('span', { class: 'dove' }, 'Commesse')),
         h('div', { class: 'testata in-alto' },
           h('div', { class: 'titoli' },
             h('div', { class: 'pillole-testa' }, h('span', { class: 'codice' }, m.id), stato(m.stato, true),
@@ -117,7 +118,8 @@
           altro,
           scrive ? h('button', { type: 'button', class: 'btn giallo', onclick: () => modulo(m) }, 'Modifica') : null),
         schedaPersone(m),
-        segmenti([['panoramica', 'Panoramica'], ['prestazioni', 'Prestazioni · ' + prestazioni.length], ['rapportini', 'Rapportini']].concat(puoDocumenti(1) ? [['documenti', 'Documenti']] : [])
+        segmenti([['panoramica', 'Panoramica']].concat(conProgetti() ? [['progetti', 'Progetti · ' + progettiDi(m).length]] : [])
+          .concat([['prestazioni', 'Prestazioni · ' + prestazioni.length], ['rapportini', 'Rapportini']]).concat(puoDocumenti(1) ? [['documenti', 'Documenti']] : [])
           .concat(soldi() ? [['costi', 'Costi'], ['dafatturare', 'Da fatturare']] : [])
           // Fase 6 (§12.8): gli incarichi ai collaboratori esterni sulla commessa (con collaboratori 1).
           .concat(puo('collaboratori') && !(W.eEsterno && W.eEsterno()) ? [['incarichi', 'Incarichi' + (S.conteIncarichi && typeof S.conteIncarichi[m.id] === 'number' ? ' · ' + S.conteIncarichi[m.id] : ''), { 'data-conta': 'incarichi' }]] : [])
@@ -128,6 +130,8 @@
 
       const scheda = schedaDi(m);
       if (scheda === 'prestazioni') prestazioniCommessa(area, m);
+      // 03/11/2026 (progetti.md §4): i progetti della commessa, con "Nuovo progetto".
+      else if (scheda === 'progetti' && conProgetti()) W.Progetti.schedaCommessa(area, m);
       else if (scheda === 'rapportini') {
         if (puo('rapportini', 2)) {
           aggiungi(area, [h('div', { class: 'testata' }, h('span', { class: 'spazio' }),
@@ -191,10 +195,14 @@
       }).catch(() => null);
     }
 
+    /** La scheda Progetti c'è con la funzione accesa e il permesso di vederli. */
+    const conProgetti = () => !!(W.progettiAccesi && W.progettiAccesi() && puo('progetti') && W.Progetti);
+    const progettiDi = m => (S.ana.progetti || []).filter(p => String(p.idCommessa).toUpperCase() === String(m.id).toUpperCase());
+
     /** Si apre su Prestazioni se ce ne sono, altrimenti su Panoramica. */
     function schedaDi(m) {
       const scelta = S.schedaCommessa[m.id];
-      const valide = ['panoramica', 'prestazioni', 'rapportini', 'documenti'].concat(soldi() ? ['costi', 'dafatturare'] : [])
+      const valide = ['panoramica', 'prestazioni', 'rapportini', 'documenti'].concat(conProgetti() ? ['progetti'] : []).concat(soldi() ? ['costi', 'dafatturare'] : [])
         // Fase 7: Comunicazioni; con lei anche Incarichi (fase 6), che qui mancava e riportava alla panoramica.
         .concat(puo('collaboratori') ? ['incarichi'] : []).concat(puo('comunicazioni') ? ['comunicazioni'] : []);
       if (scelta && valide.indexOf(scelta) >= 0) return scelta;

@@ -130,6 +130,14 @@ async function main() {
     await aspetta(400);
     await valuta("localStorage.setItem('wisper-visita-2', '1'); true");
 
+    // Dal 03/11/2026 (progetti.md §4.6) un rapportino ha sempre commessa e progetto: un progetto su ogni commessa aperta,
+    // che nel rapportino si sceglie da solo (si rientra perché la pagina li legga).
+    await entra('manuel@esempio.it');
+    for (const c of (await server('anagrafiche')).commesse.filter(x => x.stato === 'APERTA' && !x.modello && !x.archiviata)) {
+      const r = await server('creaProgetto', { idCommessa: c.id, codiceProgetto: 'P-' + c.id, descrizione: 'Lavori ' + c.id });
+      assert.equal(r.ok, true, 'progetto su ' + c.id + ': ' + JSON.stringify(r));
+    }
+
     // ------------------------------------------------------------- 1. nuovo ticket urgente
     await entra('manuel@esempio.it');
     let testo = await testoPagina();
@@ -223,6 +231,17 @@ async function main() {
     testo = await testoFinestra();
     assert.match(testo, new RegExp('Ticket ' + nuovo.numero.replace(/\//g, '\\/')), 'il rapportino ha la pillola del ticket');
     assert.match(testo, /Rossi Impianti Srl/, 'già col cliente del ticket');
+    // Il ticket senza commessa: la prima commessa aperta del cliente, col suo progetto che si sceglie da solo.
+    await valuta(`(() => {
+      const f = [...document.querySelectorAll('.finestra')].pop();
+      if (f.querySelector('[data-campo=progetto] .pillola.scelta')) return true;
+      const et = [...f.querySelectorAll('.etichetta')].find(e => e.textContent.trim() === 'Commessa');
+      const b = et && et.nextElementSibling && et.nextElementSibling.querySelector('.pillola');
+      if (b) b.click();
+      return true;
+    })()`);
+    await aspetta(400);
+    assert.ok(await valuta("!!document.querySelector('.finestra [data-campo=progetto] .pillola.scelta')"), 'il progetto della commessa è già scelto');
     await clicca('4 h', '.finestra', 300);
     await scrivi('Cosa hai fatto', 'Sostituiti i fusibili del quadro, linea ripartita');
     const tariffa = await valuta("(() => { const c = [...document.querySelectorAll('.finestra .riga-stepper')].find(x => /Tariffa oraria/.test(x.textContent)); return c ? c.querySelector('input').value : 'fissa'; })()");

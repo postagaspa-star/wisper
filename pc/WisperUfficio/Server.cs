@@ -28,6 +28,11 @@ namespace WisperUfficio;
 ///
 /// Se il server dice accesso:false la chiave non vale più: si butta, e l'interfaccia
 /// torna alla pagina di accesso.
+///
+/// Gli aggiornamenti annunciati dal NAS (docs/gestionale/progetti.md §6): ogni risposta del server (da casa e dalla
+/// porta Google, anche gli errori) porta "versioni"; qui si leggono tutte e la versione del computer va a chi ascolta
+/// (VersioneAnnunciata, cioè Aggiornamenti). In casa resta aperto anche il campanello (GET /campanello?giro=n), che
+/// risponde appena l'elenco delle versioni cambia.
 /// </summary>
 public sealed class Server
 {
@@ -113,6 +118,20 @@ public sealed class Server
     /// </summary>
     private readonly Dictionary<string, (string Id, DateTime Quando)> daRiprovare = new();
 
+    /// <summary>La versione del computer annunciata dal server ("1.1.1") e da dove ("risposta" o "campanello").</summary>
+    public event Action<string, string>? VersioneAnnunciata;
+
+    /// <summary>Il campanello (progetti.md §6): il server risponde al più dopo 50 s; qui si aspetta 65 s, poi si riapre.</summary>
+    private static readonly TimeSpan TempoCampanello = TimeSpan.FromSeconds(65);
+
+    /// <summary>Se il campanello cade (o non si è in casa) si riprova dopo 30 secondi.</summary>
+    private static readonly TimeSpan PausaCampanello = TimeSpan.FromSeconds(30);
+
+    // L'ultimo giro dell'elenco delle versioni visto (0 = nessuno) e quante volte si è aperto il campanello.
+    private long giroVersioni;
+    private long apertureCampanello;
+    private int campanelloAvviato;
+
     public Server(Configurazione config)
     {
         this.config = config;
@@ -148,6 +167,7 @@ public sealed class Server
                 ["strada"] = soloUna.Length > 0 ? soloUna : valida ? scelta : "",
                 ["ultimaStrada"] = ultimaStrada,
                 ["ultimoContatto"] = ultimoContatto?.ToString("yyyy-MM-dd'T'HH:mm:ss") ?? "",
+                ["campanello"] = new JsonObject { ["giro"] = Interlocked.Read(ref giroVersioni), ["aperture"] = Interlocked.Read(ref apertureCampanello) },
             };
         }
     }
@@ -212,6 +232,7 @@ public sealed class Server
             using var r = await provaCasa.SendAsync(rq, tempo.Token).ConfigureAwait(false);
             if (r.StatusCode != HttpStatusCode.OK) return null;
             var risposta = JsonNode.Parse(await r.Content.ReadAsStringAsync(tempo.Token).ConfigureAwait(false)) as JsonObject;
+            if (risposta?["versioni"] is JsonObject v) Annuncio(v, "risposta");
             if (risposta?["ok"]?.GetValueKind() != JsonValueKind.True) return null;
             Contatto("casa");
             return risposta;
@@ -491,6 +512,7 @@ public sealed class Server
             using var r = await casa.SendAsync(rq, tempo.Token).ConfigureAwait(false);
             var testo = await r.Content.ReadAsStringAsync(tempo.Token).ConfigureAwait(false);
             if (!testo.TrimStart().StartsWith('{')) return new DaCasa(false, false, Errore($"Il server ha risposto {(int)r.StatusCode}", rete: true).ToJsonString());
+            LeggiVersioni(testo);
             return new DaCasa(true, r.StatusCode == HttpStatusCode.OK, testo);
         }
         catch (Exception e) when (ÈRete(e))
@@ -580,7 +602,11 @@ public sealed class Server
             using var tempo = new CancellationTokenSource(tempoMassimo);
             using var r = await casa.SendAsync(rq, tempo.Token).ConfigureAwait(false);
             var testo = await r.Content.ReadAsStringAsync(tempo.Token).ConfigureAwait(false);
-            if (testo.TrimStart().StartsWith('{')) return new DaCasa(true, r.StatusCode == HttpStatusCode.OK, testo);
+            if (testo.TrimStart().StartsWith('{'))
+            {
+                LeggiVersioni(testo);
+                return new DaCasa(true, r.StatusCode == HttpStatusCode.OK, testo);
+            }
             return new DaCasa(false, false, r.StatusCode == HttpStatusCode.NotFound
                 ? Errore("A questo indirizzo non risponde un server di Wisper: controlla che sia scritto giusto").ToJsonString()
                 : Errore($"Il server ha risposto {(int)r.StatusCode}", rete: true).ToJsonString());
@@ -691,6 +717,123 @@ public sealed class Server
         }
     }
 
+    // ------------------------------------------------------------------ le versioni annunciate dal NAS (progetti.md §6)
+
+    /// <summary>
+    /// "versioni" in una risposta del server: sta in cima all'oggetto (il server la aggiunge per ultima). Le risposte possono
+    /// essere grandi (anagrafiche, rapportini): si scorre il primo livello senza costruire tutto l'albero.
+    /// </summary>
+    private void LeggiVersioni(string testo)
+    {
+        if (VersioniDi(testo) is { } v) Annuncio(v, "risposta");
+    }
+
+    internal static JsonObject? VersioniDi(string testo)
+    {
+        if (testo.IndexOf("\"versioni\"", StringComparison.Ordinal) < 0) return null;
+        try
+        {
+            var lettore = new Utf8JsonReader(Encoding.UTF8.GetBytes(testo));
+            if (!lettore.Read() || lettore.TokenType != JsonTokenType.StartObject) return null;
+            while (lettore.Read() && lettore.TokenType == JsonTokenType.PropertyName)
+            {
+                var questa = lettore.ValueTextEquals("versioni");
+                if (!lettore.Read()) return null;
+                if (questa && lettore.TokenType == JsonTokenType.StartObject)
+                {
+                    using var d = JsonDocument.ParseValue(ref lettore);
+                    return JsonNode.Parse(d.RootElement.GetRawText()) as JsonObject;
+                }
+                lettore.Skip();
+            }
+        }
+        catch (JsonException)
+        {
+        }
+        return null;
+    }
+
+    /// <summary>{giro, android, computer: {versione}}: il giro per il campanello, la versione del computer a chi ascolta.</summary>
+    private void Annuncio(JsonObject v, string fonte)
+    {
+        if (v["giro"] is JsonValue g && g.TryGetValue<long>(out var giro)) Interlocked.Exchange(ref giroVersioni, giro);
+        var computer = v["computer"] is JsonObject c ? Testo(c["versione"]) : "";
+        if (computer.Length == 0) return;
+        try
+        {
+            VersioneAnnunciata?.Invoke(computer, fonte);
+        }
+        catch (Exception e)
+        {
+            Log.Errore("versione annunciata non gestita", e);
+        }
+    }
+
+    /// <summary>
+    /// Il campanello (progetti.md §6): finché il programma è aperto, si è entrati e si parla col server di casa (non dalla
+    /// porta Google), GET &lt;casa&gt;/campanello?giro=n resta aperta: il server risponde appena l'elenco delle versioni
+    /// cambia, o dopo 50 secondi; si riapre subito. Se cade, o se non si è in casa, si riprova dopo 30 secondi. Senza
+    /// chiave d'accesso: non dice niente di riservato.
+    /// </summary>
+    public void AvviaCampanello()
+    {
+        if (Interlocked.Exchange(ref campanelloAvviato, 1) == 1) return;
+        _ = Task.Run(async () =>
+        {
+            var caduto = false;
+            var inCasa = false;
+            while (true)
+            {
+                var pausa = PausaCampanello;
+                try
+                {
+                    var adessoInCasa = config.Entrato && config.Server.Length > 0 && await StradaAsync().ConfigureAwait(false) == "casa";
+                    if (adessoInCasa != inCasa)
+                    {
+                        Log.Info(adessoInCasa ? "campanello degli aggiornamenti: aperto col server di casa" : "campanello degli aggiornamenti: fermo (non si è in casa)");
+                        inCasa = adessoInCasa;
+                    }
+                    if (adessoInCasa)
+                    {
+                        var giro = Interlocked.Read(ref giroVersioni);
+                        var orologio = Stopwatch.StartNew();
+                        using var rq = new HttpRequestMessage(HttpMethod.Get, config.Server + "/campanello?giro=" + giro.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                        rq.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+                        rq.Headers.Add("X-Wisper-App", "ufficio " + Versione);
+                        using var tempo = new CancellationTokenSource(TempoCampanello);
+                        Interlocked.Increment(ref apertureCampanello);
+                        using var r = await casa.SendAsync(rq, tempo.Token).ConfigureAwait(false);
+                        var testo = await r.Content.ReadAsStringAsync(tempo.Token).ConfigureAwait(false);
+                        var o = r.StatusCode == HttpStatusCode.OK ? JsonNode.Parse(testo) as JsonObject : null;
+                        if (o?["ok"]?.GetValueKind() == JsonValueKind.True && o["spento"]?.GetValueKind() != JsonValueKind.True)
+                        {
+                            if (caduto) Log.Info("campanello degli aggiornamenti: di nuovo aperto");
+                            caduto = false;
+                            var nuovo = o["giro"] is JsonValue g && g.TryGetValue<long>(out var n) ? n : 0;
+                            if (nuovo != giro && giro != 0) Log.Info("campanello: l'elenco delle versioni è cambiato (giro " + nuovo + ")");
+                            if (o["versioni"] is JsonObject v) Annuncio(v, "campanello");
+                            if (nuovo > 0) Interlocked.Exchange(ref giroVersioni, nuovo);
+                            // Si riapre subito; solo se il server ha risposto all'istante con lo stesso giro (non aspetta) si fa la pausa.
+                            if (nuovo > 0 && (nuovo != giro || orologio.Elapsed > TimeSpan.FromSeconds(2))) pausa = TimeSpan.Zero;
+                        }
+                        else if (!caduto)
+                        {
+                            // Un server senza elenco delle versioni (spento: true) o una risposta strana: si riprova con calma.
+                            Log.Info("campanello degli aggiornamenti: il server non lo tiene aperto (" + (int)r.StatusCode + "), riprovo fra 30 secondi");
+                            caduto = true;
+                        }
+                    }
+                }
+                catch (Exception e) when (ÈRete(e) || e is JsonException)
+                {
+                    if (!caduto) Log.Info("campanello degli aggiornamenti caduto (" + e.GetType().Name + "): riprovo fra 30 secondi");
+                    caduto = true;
+                }
+                if (pausa > TimeSpan.Zero) await Task.Delay(pausa).ConfigureAwait(false);
+            }
+        });
+    }
+
     // ------------------------------------------------------------------ la porta Google (§3, §4)
 
     private enum Ripeti { SoloAttesa, Tutto }
@@ -738,6 +881,7 @@ public sealed class Server
             }
             // Una pagina HTML (lo script si è fermato, una quota di Google) o un altro codice: rete anche questa (§4).
             if (o == null) return (true, Errore("Google non ha risposto come doveva: riprova fra poco", rete: true).ToJsonString(), "pagina");
+            if (o["versioni"] is JsonObject versioni) Annuncio(versioni, "risposta");
             if (o["rete"]?.GetValueKind() == JsonValueKind.True)
             {
                 o["ok"] = false;

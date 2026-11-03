@@ -454,6 +454,8 @@ for (const parte of ['anagrafiche', 'rapportini', 'file', 'accesso', 'amministra
   // Fase 8: integrazioni, calendario in altre app, ricerca dentro i file, importa ed esporta, Dashboard di tutte le fasi, amministrazione completa.
   'integrazioni', 'calendario', 'ricerca', 'importa', 'dashboard8', 'amministrazione8',
   // Collegare il computer col QR (docs/gestionale/collega-qr.md).
-  'collega']) {
+  'collega',
+  // 03/11/2026: i progetti (cliente -> commessa -> progetto -> rapportino).
+  'progetti']) {
   Object.assign(Wisper.prototype, require('./azioni/' + parte));
 }

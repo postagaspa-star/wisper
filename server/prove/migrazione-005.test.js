@@ -90,7 +90,7 @@ const comeTitolare = fn => w.come({ utente: w.titolare(), permessi: w.permessiDi
 
 test('migrazione 005: versione 5, la copia wisper.db.prima-5 com\'era, le tabelle di prima riga per riga uguali', () => {
   // Fase 6: il server apre il database fino alla versione 6 (la 006 parte dopo la 005); la copia della 005 resta.
-  assert.equal(w.db.versione(), 8);
+  assert.equal(w.db.versione(), 9);
   const copia = new Database(path.join(cartella, 'wisper.db.prima-5'));
   assert.equal(copia.versione(), 4, 'la copia e\' com\'era prima');
   copia.chiudi();
@@ -100,7 +100,8 @@ test('migrazione 005: versione 5, la copia wisper.db.prima-5 com\'era, le tabell
     // Fase 6: la 006 aggiunge le righe del ruolo esterno e da' al collaboratore l'organico come rubrica (persone 0 -> 1,
     // scritto nel registro); il resto dei permessi resta com'era.
     if (t === 'permessi') {
-      dopo = dopo.filter(r => r.ruolo !== 'esterno');
+      // 03/11/2026: la 009 aggiunge il modulo progetti a ogni ruolo.
+      dopo = dopo.filter(r => r.ruolo !== 'esterno' && r.modulo !== 'progetti');
       const prima = righePrima.permessi.find(r => r.ruolo === 'collaboratore' && r.modulo === 'persone');
       if (prima) dopo.filter(r => r.ruolo === 'collaboratore' && r.modulo === 'persone').forEach(r => { assert.equal(r.livello, Math.max(prima.livello, 1)); r.livello = prima.livello; });
       // Fase 7: la 007 da' al collaboratore le sue comunicazioni (comunicazioni 0 -> 2, scritto nel registro).
@@ -221,7 +222,7 @@ test('riaperto il server: la migrazione non si rifa\'', () => {
   const documenti = w.db.riga('SELECT COUNT(*) n FROM documenti').n;
   w.chiudi();
   w = new Wisper({ dati: cartella });
-  assert.equal(w.db.versione(), 8);
+  assert.equal(w.db.versione(), 9);
   assert.equal(w.db.riga('SELECT COUNT(*) n FROM documenti').n, documenti);
   assert.equal(w.db.riga('SELECT COUNT(*) n FROM documento_categorie').n, 25);
 });

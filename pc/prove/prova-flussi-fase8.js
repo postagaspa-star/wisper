@@ -272,7 +272,9 @@ async function main() {
     // ------------------------------------------------------------- 6. Spegne e riaccende Mezzi e attrezzature
     await vai('#amministrazione/funzioni');
     testo = await testoPagina();
-    assert.match(testo, /Sempre accesa/);
+    // Dal 03/11/2026 (progetti.md §5) si spengono tutte e 19: nessuna "Sempre accesa".
+    assert.ok(!/Sempre accesa/.test(testo), 'nessuna funzione "Sempre accesa"');
+    assert.equal(await valuta("document.querySelectorAll('[data-modulo] .interruttore').length"), 19, 'un interruttore per ognuna delle 19 funzioni');
     await valuta("document.querySelector('[data-modulo=\"mezzi\"] .interruttore').click(); true");
     await aspetta(600);
     testo = await testoFinestra();

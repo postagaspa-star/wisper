@@ -201,7 +201,24 @@ async function gestisci(w, req, res, opzioni) {
     const voce = Object.prototype.hasOwnProperty.call(AZIONI, azione) ? AZIONI[azione] : null;
     // Fase 8 (§0.3): schema e Host, per l'indirizzo del calendario "in casa" (dalla porta Google non valgono).
     const richiesta = { host: testo(req.headers.host), schema: testo(req.headers['x-forwarded-proto']) === 'https' ? 'https' : 'http', daGoogle: provenienza().ip === 'google' };
-    return rispondiJson(res, 200, await conRicordo(w, idRichiesta, token, azione, voce, () => esegui(w, d, { token, get: req.method === 'GET', richiesta })));
+    const risposta = await conRicordo(w, idRichiesta, token, azione, voce, () => esegui(w, d, { token, get: req.method === 'GET', richiesta }));
+    // 03/11/2026: in ogni risposta le ultime versioni lette dal NAS (versioni.js): l'app se ne accorge da sola, senza chiedere.
+    // Non copre un campo "versioni" che la risposta ha gia' (statoSistema: "Dispositivi e versioni" di Amministrazione ›
+    // Sistema): li' l'annuncio salta, arriva con la risposta dopo o col campanello. Le app leggono solo un "versioni" col giro.
+    const versioni = w.vedetta ? w.vedetta.perRisposta() : null;
+    if (versioni && risposta && typeof risposta === 'object' && !Array.isArray(risposta) && !('versioni' in risposta)) risposta.versioni = versioni;
+    return rispondiJson(res, 200, risposta);
+  }
+
+  // 03/11/2026, il campanello degli aggiornamenti (versioni.js): resta aperto finche' le versioni non cambiano (al massimo
+  // 50 secondi). Solo in casa: dalla porta Google risponde subito (non deve tenere fermo il giro), da internet non passa.
+  if (percorso === '/campanello') {
+    if (req.method !== 'GET') return rispondiJson(res, 405, { ok: false, errore: 'Il campanello vuole una GET' });
+    const v = w.vedetta;
+    if (!v) return rispondiJson(res, 200, { ok: true, giro: 0, versioni: null, spento: true });
+    const giro = url.searchParams.get('giro');
+    if (provenienza().ip !== 'google' && giro !== null && giro !== '') await v.attendi(Number(giro), Number(url.searchParams.get('ms')) || undefined);
+    return rispondiJson(res, 200, { ok: true, giro: v.giro, versioni: v.perRisposta() });
   }
 
   return rispondiJson(res, 404, { ok: false, errore: 'Indirizzo sconosciuto: ' + percorso });

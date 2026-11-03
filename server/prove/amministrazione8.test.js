@@ -79,11 +79,29 @@ test('i limiti si controllano quando si salva (con errori che cominciano col nom
 
 test('le funzioni accese: solo il titolare; spenta = via dal menu (permessi 0), dalla Dashboard e dalle azioni ("spenta"); i dati restano; le eccezioni', async () => {
   const f = ok(await manuel('funzioni'));
-  assert.deepEqual(f.funzioni.filter(x => x.spegnibile).map(x => x.modulo), ['banche', 'mezzi', 'comunicazioni', 'portale', 'collaboratori']);
-  assert.equal(f.funzioni.find(x => x.modulo === 'rapportini').spegnibile, false);
+  // 03/11/2026: si spengono tutte (Manuel: "nessuna obbligatoria"), progetti compresi.
+  assert.deepEqual(f.funzioni.filter(x => x.spegnibile).map(x => x.modulo), ['dashboard', 'clienti', 'commesse', 'progetti', 'preventivi', 'attivita',
+    'rapportini', 'spese', 'fatturazione', 'banche', 'persone', 'documenti', 'ticket', 'mezzi', 'comunicazioni', 'portale', 'collaboratori', 'integrazioni', 'amministrazione']);
+  assert.deepEqual(f.funzioni.find(x => x.modulo === 'progetti').richiede, ['clienti', 'commesse']);
+  assert.deepEqual(f.funzioni.find(x => x.modulo === 'clienti').serveA, ['commesse', 'progetti', 'preventivi', 'rapportini', 'fatturazione', 'ticket', 'comunicazioni', 'portale', 'collaboratori']);
   const laura = await s.come('laura@esempio.it');
   assert.equal((await laura('salvaFunzioni', { modulo: 'mezzi', accesa: false })).permesso, false);
-  assert.equal((await manuel('salvaFunzioni', { modulo: 'rapportini', accesa: false })).errore, 'Ore e rapportini resta sempre accesa');
+  // Spegnere Commesse spegne anche quelle che la usano (Progetti, Collaboratori); riaccendere Progetti riaccende Commesse.
+  const giu = ok(await manuel('salvaFunzioni', { modulo: 'commesse', accesa: false }));
+  assert.deepEqual(giu.anche.map(x => x.modulo), ['progetti', 'collaboratori']);
+  assert.deepEqual(ok(await manuel('io')).interfaccia.funzioniSpente, ['commesse', 'progetti', 'collaboratori']);
+  assert.equal((await manuel('progetti', {})).spenta, true);
+  const su = ok(await manuel('salvaFunzioni', { modulo: 'progetti', accesa: true }));
+  assert.deepEqual(su.anche.map(x => x.modulo), ['commesse']);
+  assert.ok(s.wisper.db.riga("SELECT id FROM registro WHERE nota = 'funzione accesa: Commesse (con Progetti)'"));
+  ok(await manuel('salvaFunzioni', { modulo: 'collaboratori', accesa: true }));
+  // Anche Amministrazione si spegne: il titolare raggiunge lo stesso le funzioni, per riaccenderla; gli altri no.
+  ok(await manuel('salvaFunzioni', { modulo: 'amministrazione', accesa: false }));
+  assert.equal((await manuel('utenti', {})).spenta, true);
+  ok(await manuel('funzioni'));
+  assert.equal((await laura('funzioni')).spenta, true);
+  ok(await manuel('salvaFunzioni', { modulo: 'amministrazione', accesa: true }));
+  assert.deepEqual(ok(await manuel('io')).interfaccia.funzioniSpente, []);
   const prima = ok(await manuel('mezzi', {}));
   ok(await manuel('salvaFunzioni', { modulo: 'mezzi', accesa: false }));
   assert.ok(s.wisper.db.riga("SELECT id FROM registro WHERE nota = 'funzione spenta: Mezzi e attrezzature'"));
@@ -238,7 +256,7 @@ test('SESSIONE_GIORNI: da 30 a 365; un dispositivo fermo da piu\' giorni esce', 
 
 test('stato del sistema: server, database, disco, lavori, collegamenti, versioni; l\'ora del NAS confrontata con quella del dispositivo', async () => {
   const st = ok(await manuel('statoSistema', { oraDispositivo: new Date(Date.now() - 6 * 60000).toISOString() }));
-  assert.deepEqual([st.server.versione, st.server.schema, st.server.node], ['0.11.2', 8, process.versions.node]);
+  assert.deepEqual([st.server.versione, st.server.schema, st.server.node], ['0.12.0', 9, process.versions.node]);
   assert.match(st.server.avvisoOra, /^L'ora del NAS è avanti di 6 minuti: i rapportini prendono l'ora del NAS$/);
   assert.ok(st.database.righe.rapportini > 0);
   assert.ok(Array.isArray(st.lavori) && st.lavori.some(l => l.nome === 'Copia'));
@@ -260,7 +278,7 @@ test('la lista di controllo: le righe dal server verdi o rosse da sole; Segna (N
   assert.equal((await manuel('segnaControllo', { chiave: 'M17.1', stato: 'fatto' })).errore, 'Questa riga la controlla il server da solo');
   assert.equal((await manuel('segnaControllo', { chiave: 'T03', stato: 'non_va' })).errore, 'Nota: scrivi cosa non va');
   const r = ok(await manuel('segnaControllo', { chiave: 'M01.1', stato: 'fatto', nota: 'controlli-finali.html: 1.204 prove, 0 fallite' }));
-  assert.deepEqual([r.riga.stato, r.riga.versione, r.riga.utente], ['fatto', '0.11.2', 'Manuel Gasparotto']);
+  assert.deepEqual([r.riga.stato, r.riga.versione, r.riga.utente], ['fatto', '0.12.0', 'Manuel Gasparotto']);
   // Il server cambia versione: la riga automatica torna "da rifare".
   s.wisper.db.esegui("UPDATE controlli_finali SET versione = '0.10.9' WHERE chiave = 'M01.1'");
   const dopo = ok(await manuel('controlliFinali'));

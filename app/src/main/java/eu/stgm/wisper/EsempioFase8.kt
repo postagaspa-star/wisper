@@ -205,20 +205,40 @@ class EsempioFase8(private val oggi: LocalDate = LocalDate.now(), private val vo
         )),
     )
 
-    private fun funz(modulo: String, nome: String, spegnibile: Boolean = false, cosa: String = "") =
-        JSONObject().put("modulo", modulo).put("nome", nome).put("accesa", true).put("spegnibile", spegnibile).put("cosaCambia", cosa)
+    /** Come FUNZIONI di server/src/azioni/amministrazione8.js (03/11/2026: si spengono tutte, con le dipendenze). */
+    private fun funz(modulo: String, nome: String, richiede: List<String>, cosa: String) =
+        JSONObject().put("modulo", modulo).put("nome", nome).put("accesa", true).put("spegnibile", true).put("cosaCambia", cosa)
+            .put("richiede", JSONArray(richiede))
 
-    private val funzioni = listOf(
-        funz("dashboard", "Dashboard"), funz("clienti", "Clienti e fornitori"), funz("commesse", "Progetti e commesse"), funz("preventivi", "Preventivi e contratti"),
-        funz("attivita", "Attività e calendario"), funz("rapportini", "Ore e rapportini"), funz("spese", "Spese e trasferte"), funz("fatturazione", "Fatturazione"),
-        funz("banche", "Banche e scadenze", true, "Spegnere Banche e scadenze? Sparisce dal menu di tutti e dalla Dashboard. Gli incassi segnati dalle fatture scrivono ancora il movimento. I dati restano."),
-        funz("persone", "Persone e risorse umane"), funz("documenti", "Documenti"), funz("ticket", "Ticket e assistenza"),
-        funz("mezzi", "Mezzi e attrezzature", true, "Spegnere Mezzi e attrezzature? Sparisce dal menu di tutti. Nei rapportini non si scelgono più gli strumenti. I dati restano."),
-        funz("comunicazioni", "WhatsApp e comunicazioni", true, "Spegnere WhatsApp e comunicazioni? Sparisce dal menu di tutti e Da mandare non prepara più messaggi. La campanella resta. I dati restano."),
-        funz("portale", "Portale clienti", true, "Spegnere Portale clienti? Sparisce dal menu di tutti e il portale si spegne per i clienti, come Spegni il portale adesso. I dati restano."),
-        funz("collaboratori", "Collaboratori esterni", true, "Spegnere Collaboratori esterni? Sparisce dal menu di tutti; gli esterni non entrano più. I dati restano."),
-        funz("integrazioni", "Integrazioni"), funz("amministrazione", "Amministrazione"),
-    )
+    private val funzioni: List<JSONObject> by lazy {
+        val l = listOf(
+            funz("dashboard", "Dashboard", emptyList(), "Sparisce dal menu di tutti: Wisper si apre sulla prima voce accesa. I dati restano."),
+            funz("clienti", "Clienti e fornitori", emptyList(), "Sparisce dal menu di tutti; non si creano clienti nuovi. I dati restano."),
+            funz("commesse", "Commesse", listOf("clienti"), "Sparisce dal menu di tutti; i rapportini non chiedono più la commessa. I dati restano."),
+            funz("progetti", "Progetti", listOf("commesse", "clienti"), "Sparisce dal menu di tutti; i rapportini non chiedono più il progetto. I dati restano."),
+            funz("preventivi", "Preventivi", listOf("clienti"), "Sparisce dal menu di tutti. I dati restano."),
+            funz("attivita", "Attività e calendario", emptyList(), "Sparisce dal menu di tutti; niente promemoria delle attività. I dati restano."),
+            funz("rapportini", "Ore e rapportini", listOf("clienti"), "Sparisce dal menu di tutti; non si scrivono rapportini né ore. I dati restano."),
+            funz("spese", "Spese e trasferte", emptyList(), "Sparisce dal menu di tutti. I dati restano."),
+            funz("fatturazione", "Fatturazione", listOf("clienti"), "Sparisce dal menu di tutti. I dati restano."),
+            funz("banche", "Banche e scadenze", emptyList(), "Sparisce dal menu di tutti. Segnare un incasso da una fattura funziona lo stesso. I dati restano."),
+            funz("persone", "Persone", emptyList(), "Sparisce dal menu di tutti. I dati restano."),
+            funz("documenti", "Documenti", emptyList(), "Sparisce dal menu di tutti. I dati restano."),
+            funz("ticket", "Ticket e assistenza", listOf("clienti"), "Sparisce dal menu di tutti. I dati restano."),
+            funz("mezzi", "Mezzi e attrezzature", emptyList(), "Sparisce dal menu di tutti. Nei rapportini non si scelgono più gli strumenti. I dati restano."),
+            funz("comunicazioni", "WhatsApp e comunicazioni", listOf("clienti"), "Sparisce dal menu di tutti; niente proposte di messaggi. La campanella apre lo stesso le notifiche. I dati restano."),
+            funz("portale", "Portale clienti", listOf("clienti"), "Sparisce dal menu di tutti e il portale si spegne subito per i clienti. I dati restano."),
+            funz("collaboratori", "Collaboratori esterni", listOf("commesse", "clienti"), "Sparisce dal menu di tutti; gli esterni non vedono più le loro cose. I dati restano."),
+            funz("integrazioni", "Integrazioni", emptyList(), "Sparisce dal menu di tutti; i collegamenti già fatti continuano a lavorare. I dati restano."),
+            funz("amministrazione", "Amministrazione", emptyList(), "Sparisce dal menu di tutti; al titolare resta Funzioni, per riaccenderla. I dati restano."),
+        )
+        // serveA: chi ha bisogno di questa (anche passando da un'altra), come chiLaUsa() del server.
+        l.forEach { f ->
+            val m = f.getString("modulo")
+            f.put("serveA", JSONArray(l.filter { g -> (0 until g.getJSONArray("richiede").length()).any { g.getJSONArray("richiede").getString(it) == m } }.map { it.getString("modulo") }))
+        }
+        l
+    }
 
     private fun disp(persona: String, nome: String, app: String, ultimo: String, vecchio: Boolean = false) =
         JSONObject().put("persona", persona).put("nome", nome).put("app", app).put("ultimoUso", ultimo).put("vecchio", vecchio)

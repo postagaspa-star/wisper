@@ -50,15 +50,15 @@
   /** I permessi iniziali dei quattro ruoli (architettura §3), per i moduli che ci sono. */
   function permessiDi(ruolo) {
     const p = {};
-    const tutti = ['dashboard', 'clienti', 'commesse', 'preventivi', 'attivita', 'rapportini', 'spese', 'fatturazione', 'banche', 'persone', 'documenti', 'ticket', 'mezzi', 'comunicazioni', 'portale', 'collaboratori', 'integrazioni', 'amministrazione', 'costi', 'riservati'];
+    const tutti = ['dashboard', 'clienti', 'commesse', 'progetti', 'preventivi', 'attivita', 'rapportini', 'spese', 'fatturazione', 'banche', 'persone', 'documenti', 'ticket', 'mezzi', 'comunicazioni', 'portale', 'collaboratori', 'integrazioni', 'amministrazione', 'costi', 'riservati'];
     tutti.forEach(m => { p[m] = 0; });
     if (ruolo === 'titolare') tutti.forEach(m => { p[m] = 2; });
     // Fase 6 (architettura §17.18): persone, mezzi e collaboratori; i dati riservati solo al titolare.
-    if (ruolo === 'amministrazione') Object.assign(p, { dashboard: 2, clienti: 2, commesse: 2, preventivi: 2, attivita: 2, rapportini: 2, spese: 2, fatturazione: 2, banche: 2, documenti: 2, ticket: 2, amministrazione: 1, costi: 2, persone: 2, mezzi: 2, collaboratori: 2, comunicazioni: 2, portale: 2, integrazioni: 1 });
+    if (ruolo === 'amministrazione') Object.assign(p, { dashboard: 2, clienti: 2, commesse: 2, progetti: 2, preventivi: 2, attivita: 2, rapportini: 2, spese: 2, fatturazione: 2, banche: 2, documenti: 2, ticket: 2, amministrazione: 1, costi: 2, persone: 2, mezzi: 2, collaboratori: 2, comunicazioni: 2, portale: 2, integrazioni: 1 });
     // Fase 5: il collaboratore legge i documenti e lavora i ticket (architettura §16.1). Fase 6: l'organico e i mezzi in lettura.
     // Fase 7 (§11.2): comunicazioni 2 per tutti tranne la lettura (1); il portale a titolare e amministrazione, in lettura alla lettura.
-    if (ruolo === 'collaboratore') Object.assign(p, { dashboard: 1, clienti: 1, commesse: 1, attivita: 2, rapportini: 2, spese: 2, documenti: 1, ticket: 2, persone: 1, mezzi: 1, comunicazioni: 2 });
-    if (ruolo === 'lettura') Object.assign(p, { dashboard: 1, clienti: 1, commesse: 1, preventivi: 1, attivita: 1, rapportini: 1, spese: 1, fatturazione: 1, banche: 1, documenti: 1, ticket: 1, costi: 1, persone: 1, mezzi: 1, collaboratori: 1, comunicazioni: 1, portale: 1, integrazioni: 1 });
+    if (ruolo === 'collaboratore') Object.assign(p, { dashboard: 1, clienti: 1, commesse: 1, progetti: 1, attivita: 2, rapportini: 2, spese: 2, documenti: 1, ticket: 2, persone: 1, mezzi: 1, comunicazioni: 2 });
+    if (ruolo === 'lettura') Object.assign(p, { dashboard: 1, clienti: 1, commesse: 1, progetti: 1, preventivi: 1, attivita: 1, rapportini: 1, spese: 1, fatturazione: 1, banche: 1, documenti: 1, ticket: 1, costi: 1, persone: 1, mezzi: 1, collaboratori: 1, comunicazioni: 1, portale: 1, integrazioni: 1 });
     return p;
   }
 
@@ -188,7 +188,15 @@
       { tipo: 'rapportino', formato: 'RAP/{AAAA}/{NNNN}', annuale: true, ultimo: 0 },
       { tipo: 'preventivo', formato: 'PR/{AAAA}/{NNN}', annuale: true, ultimo: 13 },
     ];
-    const ana = { clienti: [], fornitori: [], soggetti, commesse, referenti, sedi, prestazioni, utenti, numerazioni, gruppi: [], impostazioni };
+    // 03/11/2026 (progetti.md): cliente -> commessa -> progetto -> rapportino. Il codice lo propone Wisper dopo i primi due.
+    const progetto = (id, idCommessa, codice, intestatoA, descrizione, stato, creato) => ({ id, idLocale: '', idCommessa, idCliente: commesse.find(x => x.id === idCommessa).idCliente,
+      codice, intestatoA, descrizione, stato, codiceAutomatico: id > 2, creato, modificato: creato });
+    const progetti = [
+      progetto(1, aa + 'ST044', 'ED-001', 'Batokyo Srl', 'Rilievo del magazzino', 'CHIUSO', istante(oggi, -45, '09:00')),
+      progetto(2, aa + 'ST044', 'ED-002', 'Batokyo Srl', 'Quadri di zona del magazzino', 'APERTO', istante(oggi, -40, '09:00')),
+      progetto(3, aa + 'ST046', 'ED-003', 'Acme Spa', 'Quadro QE1', 'APERTO', istante(oggi, -30, '09:00')),
+    ];
+    const ana = { clienti: [], fornitori: [], soggetti, commesse, progetti, referenti, sedi, prestazioni, utenti, numerazioni, gruppi: [], impostazioni };
 
     // ------------------------------------------------------------- rapportini
     let n = 0;
@@ -238,6 +246,11 @@
     if (ultimoDiMarco) ultimoDiMarco.statoApprovazione = 'da_approvare';
 
     numerazioni[1].ultimo = rapportini.filter(x => x.data.slice(0, 4) === String(anno)).length;
+    // Il magazzino: il mese prima il rilievo (ED-001), questo mese i quadri (ED-002); la Linea 3 è tutta ED-003.
+    rapportini.forEach(x => {
+      const p = x.idCommessa === c46 ? progetti[2] : x.idCommessa === c44 ? (x.data.slice(0, 7) < oggi.slice(0, 7) ? progetti[0] : progetti[1]) : null;
+      Object.assign(x, p ? { idProgetto: p.id, progetto: p.codice, progettoDescrizione: p.descrizione, progettoIntestatoA: p.intestatoA } : { idProgetto: null, progetto: '', progettoDescrizione: '', progettoIntestatoA: '' });
+    });
     const fase3 = creaFase3(oggi, anno, aa, impostazioni);
 
     // ------------------------------------------------------------- registro
@@ -517,6 +530,8 @@
   /** Il modulo e il livello che servono a ogni azione (come nel server). */
   const SERVE = {
     io: null, anagrafiche: null, rapportini: ['rapportini', 1], dashboard: ['dashboard', 1],
+    // 03/11/2026: i progetti
+    progetti: ['progetti', 1], progetto: ['progetti', 1], codiceProgetto: ['progetti', 1], creaProgetto: ['progetti', 2], aggiornaProgetto: ['progetti', 2], togliProgetto: ['progetti', 2],
     salvaRapportino: ['rapportini', 2], stato: ['rapportini', 2], ripristinaRapportino: ['rapportini', 2], caricaFile: ['rapportini', 2], togliFile: ['rapportini', 2], inviaEmail: ['rapportini', 2], documenti: ['documenti', 1],
     salvaSoggetto: ['clienti', 2], archiviaSoggetto: ['clienti', 2], ripristinaSoggetto: ['clienti', 2], controllaPartitaIva: ['clienti', 1],
     salvaReferente: ['clienti', 2], togliReferente: ['clienti', 2], salvaSede: ['clienti', 2], archiviaSede: ['clienti', 2],
@@ -584,7 +599,46 @@
       numerazioni: a.numerazioni.map(n => Object.assign({}, n, { prossimo: R.formattaNumero(n.formato, n.ultimo + 1, Number(dati.oggi.slice(0, 4))) })),
       impostazioni: a.impostazioni,
       gruppi: [],
+      // 03/11/2026: i progetti con quanti rapportini e quante ore (come leggiProgetti del server).
+      progetti: R.puo(dati.permessiIo, 'progetti', 1) || R.puo(dati.permessiIo, 'rapportini', 1) ? progettiConConti(dati) : [],
     };
+  }
+
+  /** I progetti coi conti (rapportini non annullati, ore, l'ultimo); il collaboratore conta solo i suoi. I più recenti prima. */
+  function progettiConConti(dati, filtro) {
+    const f = filtro || {};
+    const mio = dati.io.ruolo === 'collaboratore';
+    return (dati.ana.progetti || []).filter(p => (!f.idCommessa || String(p.idCommessa).toUpperCase() === String(f.idCommessa).toUpperCase()) &&
+      (!f.idCliente || p.idCliente === f.idCliente) && (!f.stato || p.stato === String(f.stato).toUpperCase()) &&
+      (!f.cerca || [p.codice, p.intestatoA, p.descrizione, p.idCommessa].join(' ').toLowerCase().indexOf(String(f.cerca).toLowerCase()) >= 0)).map(p => {
+      const suoi = dati.rapportini.filter(r => String(r.idProgetto) === String(p.id) && r.stato !== 'ANNULLATO' && (!mio || r.idUtente === dati.io.id));
+      return Object.assign({}, p, { rapportini: suoi.length, ore: Math.round(suoi.reduce((t, r) => t + C.num(r.oreTotali), 0) * 100) / 100,
+        ultimoRapportino: suoi.map(r => r.data).sort().pop() || '' });
+    }).sort((x, y) => (x.creato < y.creato ? 1 : x.creato > y.creato ? -1 : y.id - x.id));
+  }
+
+  /**
+   * Il codice proposto (semplificato dalla regola del server, src/codici-progetto.js): guarda i progetti della stessa
+   * commessa, poi dello stesso cliente, poi tutti; nel primo gruppo con almeno due codici prende l'ultimo, col numero in
+   * fondo più uno e le stesse cifre. Prima dei primi due, niente: il codice si scrive a mano.
+   */
+  function codiceProposto(dati, idCliente, idCommessa) {
+    const tutti = (dati.ana.progetti || []).slice().sort((x, y) => (x.creato < y.creato ? -1 : x.creato > y.creato ? 1 : x.id - y.id));
+    const gruppo = [tutti.filter(p => String(p.idCommessa) === String(idCommessa)), tutti.filter(p => p.idCliente === idCliente), tutti].find(g => g.length >= 2);
+    if (!gruppo) return '';
+    const m = String(gruppo[gruppo.length - 1].codice).match(/^(.*?)(\d+)$/);
+    if (!m) return '';
+    let n = Number(m[2]) + 1;
+    const preso = c => tutti.some(p => p.idCliente === idCliente && p.codice.toUpperCase() === c.toUpperCase());
+    let codice = m[1] + String(n).padStart(m[2].length, '0');
+    while (preso(codice)) { n += 1; codice = m[1] + String(n).padStart(m[2].length, '0'); }
+    return codice;
+  }
+
+  /** Il progetto nel rapportino: codice, descrizione e a chi è intestato vengono dal progetto. */
+  function conProgetto(dati, r) {
+    const p = (dati.ana.progetti || []).find(x => String(x.id) === String(r.idProgetto));
+    return Object.assign(r, p ? { idProgetto: p.id, progetto: p.codice, progettoDescrizione: p.descrizione, progettoIntestatoA: p.intestatoA } : { idProgetto: null, progetto: '', progettoDescrizione: '', progettoIntestatoA: '' });
   }
 
   function prossimoCodice(dati) {
@@ -649,7 +703,74 @@
       case 'anagrafiche':
         return anagrafiche(dati, b.archiviati === '1' || b.archiviati === true || b.archiviati === 'true');
       case 'rapportini':
-        return { ok: true, rapportini: dati.rapportini.filter(r => r.stato !== 'ANNULLATO' && (!mio || r.idUtente === dati.io.id)) };
+        return { ok: true, rapportini: dati.rapportini.filter(r => r.stato !== 'ANNULLATO' && (!mio || r.idUtente === dati.io.id) && (!b.idProgetto || String(r.idProgetto) === String(b.idProgetto))) };
+
+      // ------------------------------------------------- progetti (03/11/2026, come server/src/azioni/progetti.js)
+      case 'progetti':
+        return { ok: true, progetti: progettiConConti(dati, b) };
+      case 'progetto': {
+        const p = progettiConConti(dati).find(x => String(x.id) === String(b.id));
+        if (!p) return { ok: false, errore: 'Progetto non trovato' };
+        return { ok: true, progetto: p, rapportini: R.puo(dati.permessiIo, 'rapportini', 1) ? dati.rapportini.filter(r => String(r.idProgetto) === String(p.id) && r.stato !== 'ANNULLATO' && (!mio || r.idUtente === dati.io.id)) : [] };
+      }
+      case 'codiceProgetto': {
+        // Come il server: per una commessa che nasce col rapportino valgono idCliente e il codice che avrà; non rifiuta.
+        const m = trova(a.commesse, b.idCommessa);
+        const codice = m ? codiceProposto(dati, m.idCliente, m.id) : codiceProposto(dati, b.idCliente || '', b.idCommessa || '');
+        return { ok: true, codice, da: codice ? 'regola' : '' };
+      }
+      case 'creaProgetto': {
+        if (b.idLocale) { const gia = a.progetti.find(p => p.idLocale && p.idLocale === b.idLocale); if (gia) return { ok: true, progetto: Object.assign({ giaEsisteva: true }, progettiConConti(dati).find(x => x.id === gia.id)) }; }
+        const m = trova(a.commesse, b.idCommessa);
+        if (!m) return { ok: false, errore: b.idCommessa ? 'Commessa ' + b.idCommessa + ' non trovata' : 'Scegli la commessa del progetto' };
+        const descrizione = String(b.descrizione || '').trim();
+        if (!descrizione) return { ok: false, errore: 'Scrivi la descrizione del progetto' };
+        const proposto = codiceProposto(dati, m.idCliente, m.id);
+        let codice = String(b.codiceProgetto !== undefined ? b.codiceProgetto : (b.codice || '')).trim();
+        if (!codice) { if (!proposto) return { ok: false, errore: 'Scrivi il codice del progetto: dopo i primi due Wisper lo propone da solo' }; codice = proposto; }
+        if (a.progetti.some(p => p.idCliente === m.idCliente && p.codice.toUpperCase() === codice.toUpperCase())) return { ok: false, errore: 'Il codice ' + codice + ' è già di un altro progetto di questo cliente' };
+        const p = { id: a.progetti.reduce((x, y) => Math.max(x, y.id), 0) + 1, idLocale: b.idLocale || '', idCommessa: m.id, idCliente: m.idCliente, codice, intestatoA: String(b.intestatoA || '').trim(),
+          descrizione, stato: 'APERTO', codiceAutomatico: !!proposto && codice.toUpperCase() === proposto.toUpperCase(), creato: adesso, modificato: adesso };
+        a.progetti.push(p);
+        scrivi(dati, 'creaProgetto', 'progetti', p.id, p.codice, null, { codice: p.codice, descrizione: p.descrizione });
+        return { ok: true, progetto: Object.assign({ giaEsisteva: false }, progettiConConti(dati).find(x => x.id === p.id)) };
+      }
+      case 'aggiornaProgetto': {
+        const p = trova(a.progetti, b.id);
+        if (!p) return { ok: false, errore: 'Progetto non trovato' };
+        const k = b.campi || {};
+        const conRapportini = dati.rapportini.some(r => String(r.idProgetto) === String(p.id));
+        const prima = { codice: p.codice, intestatoA: p.intestatoA, descrizione: p.descrizione, stato: p.stato, idCommessa: p.idCommessa };
+        let idCliente = p.idCliente;
+        if (k.idCommessa !== undefined && String(k.idCommessa).toUpperCase() !== String(p.idCommessa).toUpperCase()) {
+          const nuova = trova(a.commesse, k.idCommessa);
+          if (!nuova) return { ok: false, errore: 'Commessa ' + k.idCommessa + ' non trovata' };
+          if (conRapportini) return { ok: false, errore: 'Il progetto ha già dei rapportini: la commessa non si cambia' };
+          idCliente = nuova.idCliente;
+        }
+        const codice = k.codice !== undefined ? String(k.codice).trim() : p.codice;
+        if (!codice) return { ok: false, errore: 'Il codice del progetto non può essere vuoto' };
+        if (a.progetti.some(x => x.id !== p.id && x.idCliente === idCliente && x.codice.toUpperCase() === codice.toUpperCase())) return { ok: false, errore: 'Il codice ' + codice + ' è già di un altro progetto di questo cliente' };
+        if (k.descrizione !== undefined && !String(k.descrizione).trim()) return { ok: false, errore: 'La descrizione del progetto non può essere vuota' };
+        if (k.stato !== undefined && ['APERTO', 'CHIUSO'].indexOf(String(k.stato).toUpperCase()) < 0) return { ok: false, errore: 'Stato del progetto non valido: ' + k.stato };
+        if (k.idCommessa !== undefined) { const nuova = trova(a.commesse, k.idCommessa); p.idCommessa = nuova.id; p.idCliente = nuova.idCliente; }
+        p.codice = codice;
+        if (k.intestatoA !== undefined) p.intestatoA = String(k.intestatoA).trim();
+        if (k.descrizione !== undefined) p.descrizione = String(k.descrizione).trim();
+        if (k.stato !== undefined) p.stato = String(k.stato).toUpperCase();
+        p.modificato = adesso;
+        dati.rapportini.filter(r => String(r.idProgetto) === String(p.id)).forEach(r => conProgetto(dati, r));
+        scrivi(dati, 'aggiornaProgetto', 'progetti', p.id, p.codice, ...differenze(prima, { codice: p.codice, intestatoA: p.intestatoA, descrizione: p.descrizione, stato: p.stato, idCommessa: p.idCommessa }));
+        return { ok: true, progetto: progettiConConti(dati).find(x => x.id === p.id) };
+      }
+      case 'togliProgetto': {
+        const p = trova(a.progetti, b.id);
+        if (!p) return { ok: false, errore: 'Progetto non trovato' };
+        if (dati.rapportini.some(r => String(r.idProgetto) === String(p.id))) return { ok: false, errore: 'Il progetto ha dei rapportini: non si toglie, si chiude' };
+        a.progetti.splice(a.progetti.indexOf(p), 1);
+        scrivi(dati, 'togliProgetto', 'progetti', p.id, p.codice, { codice: p.codice, descrizione: p.descrizione }, null, 'progetto tolto');
+        return { ok: true };
+      }
       case 'dashboard':
         return dashboard(dati);
       case 'documenti':
@@ -692,7 +813,7 @@
         const regole = C.regoleDi(c, [], a.impostazioni, m);
         if (nuovo.tariffa === null || nuovo.tariffa === undefined) nuovo.tariffa = regole.tariffaFissa !== null ? regole.tariffaFissa : (c && c.ultimaTariffa) || 0;
         Object.assign(nuovo, regole.tariffaFissa !== null ? { tariffa: regole.tariffaFissa } : {}, C.calcola(nuovo, regole));
-        if (i >= 0) { Object.assign(dati.rapportini[i], nuovo); scrivi(dati, 'salvaRapportino', 'rapportini', nuovo.id, nuovo.id, {}, { descrizione: nuovo.descrizione }); return { ok: true, rapportino: dati.rapportini[i] }; }
+        if (i >= 0) { delete nuovo.progettoNuovo; conProgetto(dati, nuovo); Object.assign(dati.rapportini[i], nuovo); scrivi(dati, 'salvaRapportino', 'rapportini', nuovo.id, nuovo.id, {}, { descrizione: nuovo.descrizione }); return { ok: true, rapportino: dati.rapportini[i] }; }
         dati.contatori.r += 1;
         nuovo.id = 'RAP/' + nuovo.data.slice(0, 4) + '/' + String(dati.rapportini.length + 1).padStart(4, '0');
         nuovo.stato = 'BOZZA'; nuovo.foto = []; nuovo.firma = null; nuovo.idUtente = dati.io.id;
@@ -706,6 +827,14 @@
           a.commesse.push({ id, idCliente: nuovo.idCliente, descrizione: nuovo.commessa, stato: 'APERTA', persone: [dati.io.id], archiviata: false, modello: false });
           nuovo.idCommessa = id;
         }
+        if (!nuovo.idProgetto && nuovo.progettoNuovo && nuovo.idCommessa) {
+          const pn = nuovo.progettoNuovo;
+          const fatto = esegui(dati, 'creaProgetto', { idCommessa: nuovo.idCommessa, codiceProgetto: pn.codice || '', intestatoA: pn.intestatoA, descrizione: pn.descrizione || pn.codice, idLocale: pn.idLocale });
+          if (!fatto.ok) return fatto;
+          nuovo.idProgetto = fatto.progetto.id;
+        }
+        delete nuovo.progettoNuovo;
+        conProgetto(dati, nuovo);
         dati.rapportini.unshift(nuovo);
         scrivi(dati, 'salvaRapportino', 'rapportini', nuovo.id, nuovo.id, null, { oreLavoro: nuovo.oreLavoro });
         return { ok: true, rapportino: nuovo };

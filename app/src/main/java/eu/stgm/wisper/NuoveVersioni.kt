@@ -10,14 +10,18 @@ import android.content.Intent
 import android.content.pm.PackageInstaller
 import android.os.Build
 import android.util.Log
-import androidx.work.Constraints
 import androidx.work.CoroutineWorker
-import androidx.work.ExistingPeriodicWorkPolicy
-import androidx.work.NetworkType
-import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
+import eu.stgm.wisper.rapportino.UnaVoltaPerCodice
+import eu.stgm.wisper.rapportino.Versioni
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -36,7 +40,9 @@ import java.security.spec.X509EncodedKeySpec
 import java.util.concurrent.TimeUnit
 
 /**
- * Wisper si aggiorna da solo: un controllo ogni ora (WorkManager, quando c'è rete).
+ * Wisper si aggiorna da solo. Dal 03/11/2026 (1.1.0, progetti.md §6) non controlla piu' ogni ora: e' il NAS ad
+ * annunciare le versioni nuove, in ogni risposta e col campanello (AnnuncioVersioni). Quando il server dice un codice
+ * piu' alto di questo, il controllo qui sotto parte una volta sola per quel codice; "Controlla" nelle Impostazioni resta.
  *
  * Chiede a GitHub, alla pagina delle versioni del progetto, aggiornamento.json:
  * l'elenco delle versioni firmato con la chiave privata di chi pubblica (in
@@ -58,8 +64,12 @@ object NuoveVersioni {
 
     private const val TAG = "NuoveVersioni"
     const val CANALE = "versioni"
+    /** Il controllo di ogni ora delle versioni di prima: dalla 1.1.0 si toglie all'avvio. */
     private const val LAVORO = "controllo-versioni"
     private const val DIMENSIONE_MASSIMA = 200_000_000L
+
+    /** Quanto deve restare dietro l'app prima di installare: una foto o un'altra app di passaggio non chiudono Wisper. */
+    private const val DIETRO_DA_MS = 60_000L
 
     data class Stato(
         /** Il codice della versione scaricata e pronta da installare, o null. */
@@ -101,12 +111,53 @@ object NuoveVersioni {
         )
     }
 
-    /** Il controllo ogni ora. KEEP: un'app aggiornata non rimette in coda un secondo controllo. */
-    fun programma(ctx: Context) {
-        val richiesta = PeriodicWorkRequestBuilder<ControllaVersioni>(1, TimeUnit.HOURS)
-            .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
-            .build()
-        WorkManager.getInstance(ctx).enqueueUniquePeriodicWork(LAVORO, ExistingPeriodicWorkPolicy.KEEP, richiesta)
+    /** Il controllo ogni ora delle versioni di prima: dalla 1.1.0 lo annuncia il NAS, il lavoro si toglie all'avvio. */
+    fun togliControlloOrario(ctx: Context) {
+        runCatching { WorkManager.getInstance(ctx).cancelUniqueWork(LAVORO) }
+    }
+
+    private val ambito = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val unaVolta = UnaVoltaPerCodice(BuildConfig.VERSION_CODE)
+    private var attesa: Job? = null
+
+    /** L'ultimo controllo e' arrivato fino in fondo (elenco letto e firma buona): per lo stesso codice non si rifa'. */
+    @Volatile
+    private var ultimoRiuscito = false
+
+    /**
+     * Il NAS ha detto le versioni (in una risposta o dal campanello). Se il telefono e' indietro, il controllo parte una
+     * volta sola per quel codice; la versione scaricata si installa al momento giusto. Nessun avviso a schermo.
+     */
+    fun annunciata(ctx: Context, v: Versioni) {
+        val codice = v.codiceAndroid
+        if (codice <= BuildConfig.VERSION_CODE) return
+        if (_stato.value.pronta == codice) { installaAlMomentoGiusto(ctx); return }
+        if (!unaVolta.daFare(codice)) return
+        Log.i(TAG, "il NAS annuncia la versione ${v.nomeAndroid} ($codice): controllo, una volta sola")
+        ambito.launch {
+            val pronta = controlla(ctx)
+            unaVolta.esito(codice, ultimoRiuscito)
+            if (pronta) installaAlMomentoGiusto(ctx)
+        }
+    }
+
+    /**
+     * Installa la versione pronta quando l'app e' dietro da un minuto e non c'e' un rapportino a meta' ([momentoGiusto]):
+     * l'installazione chiude l'app. Se Android vuole un tocco, arriva la sua notifica (serveConferma).
+     */
+    @Synchronized
+    fun installaAlMomentoGiusto(ctx: Context) {
+        if (_stato.value.pronta == null || attesa?.isActive == true) return
+        attesa = ambito.launch {
+            WisperApp.davanti.collectLatest { davanti ->
+                if (davanti) return@collectLatest
+                delay(DIETRO_DA_MS)
+                if (_stato.value.pronta != null && momentoGiusto(ctx)) {
+                    installa(ctx)
+                    attesa?.cancel()
+                }
+            }
+        }
     }
 
     /** Chiede se c'è una versione nuova e, se c'è, la scarica. Vero se ce n'è una pronta. */
@@ -119,6 +170,7 @@ object NuoveVersioni {
                 if (!firmaValida(manifesto, firma)) error("l'elenco delle versioni non ha una firma valida")
                 val adesso = System.currentTimeMillis()
                 prefs(ctx).edit().putLong("controllato", adesso).apply()
+                ultimoRiuscito = true
 
                 val android = JSONObject(manifesto).optJSONObject("android")
                 val codice = android?.optInt("codice", 0) ?: 0
@@ -148,12 +200,14 @@ object NuoveVersioni {
                 Log.i(TAG, "versione $nome ($codice) scaricata")
                 true
             } catch (e: java.io.IOException) {
-                // Senza rete si riprova fra un'ora, senza disturbare.
+                // Senza rete si riprova al prossimo annuncio del NAS (dopo un'ora per lo stesso codice), senza disturbare.
+                ultimoRiuscito = false
                 _stato.value = _stato.value.copy(inCorso = false, messaggio = "Non ho raggiunto il server degli aggiornamenti")
                 _stato.value.pronta != null
             } catch (e: Exception) {
+                ultimoRiuscito = false
                 Log.w(TAG, "controllo versioni non riuscito", e)
-                _stato.value = _stato.value.copy(inCorso = false, messaggio = "L'aggiornamento non è andato: riprovo fra un'ora")
+                _stato.value = _stato.value.copy(inCorso = false, messaggio = "L'aggiornamento non è andato: riprovo più tardi")
                 _stato.value.pronta != null
             }
         }
@@ -291,11 +345,13 @@ object NuoveVersioni {
     }
 }
 
-/** Il controllo di ogni ora. Se c'è una versione pronta e il momento è giusto, la installa. */
+/**
+ * Il controllo di ogni ora delle versioni di prima della 1.1.0. Resta la classe perche' WorkManager puo' ancora avere in
+ * coda il lavoro salvato: se parte prima che l'avvio lo tolga, non fa niente e si toglie (progetti.md §6).
+ */
 class ControllaVersioni(ctx: Context, parametri: WorkerParameters) : CoroutineWorker(ctx, parametri) {
     override suspend fun doWork(): Result {
-        val pronta = NuoveVersioni.controlla(applicationContext)
-        if (pronta && NuoveVersioni.momentoGiusto(applicationContext)) NuoveVersioni.installa(applicationContext)
+        NuoveVersioni.togliControlloOrario(applicationContext)
         return Result.success()
     }
 }

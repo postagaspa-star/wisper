@@ -8,7 +8,8 @@
     3. aggiornamento.json: versioni, indirizzi, impronte SHA-256, firmato con
        wisper-keys\aggiornamenti-privata.pem (strumenti\firma-aggiornamento.js).
     4. Con -Pubblica: una release "vX.Y.Z" su GitHub con i tre file. Da lì,
-       entro un'ora, telefono e computer la trovano e si aggiornano da soli.
+       entro 10 minuti il NAS se ne accorge (server/src/versioni.js) e lo dice
+       a telefono e computer, che si aggiornano da soli (dalla 1.1.0).
 
     Prima di lanciarlo: alzare versionCode/versionName in app\build.gradle.kts e
     Version in pc\WisperUfficio\WisperUfficio.csproj. Una versione già pubblicata

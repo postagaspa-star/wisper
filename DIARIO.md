@@ -11,6 +11,7 @@ mai dati veri di clienti.
 
 | Data | Versione | In breve |
 |------|----------|----------|
+| 04/11/2026 | 1.1.0, server 0.12.0 | [Si riparte da zero: progetti, funzioni tutte spegnibili, aggiornamenti annunciati dal NAS](#v1-1-0) |
 | 03/11/2026 | 1.0.0 | [Il gestionale entra in uso: la sera del cambio](#v1-0-0) |
 | 03/11/2026 | gestionale, server 0.11.2 | [I dati veri sono nel server sul NAS](#dati-veri) |
 | 02/11/2026 | gestionale, server 0.11.2 (non pubblicata) | [Foglio, portale ed email collegati sul Google vero](#collegati) |
@@ -40,6 +41,59 @@ mai dati veri di clienti.
 | marzo–giugno 2026 | prima del repository | [Le prime versioni](#prima) |
 
 ---
+
+<a id="v1-1-0"></a>
+## 4 novembre 2026 · 1.1.0, server 0.12.0 · Si riparte da zero: progetti, funzioni tutte spegnibili, aggiornamenti annunciati dal NAS
+
+**Perché.** A Manuel il gestionale è piaciuto, e la sera stessa ha chiesto quattro cose: ripartire con il database
+vuoto; poter spegnere ogni funzione, senza nessuna obbligatoria; un livello in più sotto le commesse, i progetti (quando
+lavora per un cliente, in realtà lavora per altri sotto il suo nome); e che le app si aggiornino da sole perché è il
+NAS ad avvisarle, non loro a chiedere di continuo. L'accordo è `docs/gestionale/progetti.md`.
+
+**Cosa cambia.**
+
+- **Database vuoto.** Sul NAS è stato tolto tutto il lavoro: clienti, commesse, rapportini, fatture, file, registro
+  (559 righe). Restano gli account, i telefoni e computer collegati, le impostazioni e le numerazioni: nessuno deve
+  rientrare, e la prima commessa nuova continua dall'ultimo codice già dato, così non ripete un codice dei documenti
+  vecchi. Prima, una copia intera della cartella dei dati, che resta sul NAS. Lo strumento è `server/strumenti/svuota.js`:
+  senza `--si` conta e basta.
+- **Progetti.** Cliente → commessa → progetto → rapportino. Ogni progetto ha un codice, **Intestato a** (facoltativo
+  ma sempre visibile, per tutti i clienti) e una descrizione. Nel menu laterale c'è la voce Progetti, subito sotto
+  Commesse: elenco con aperti e chiusi, scheda con i suoi rapportini e le ore, Chiudi e Riapri, Togli solo se non ha
+  rapportini. Nel rapportino, scelta la commessa, si sceglie il progetto (se ce n'è uno solo aperto è già scelto) o se
+  ne crea uno nuovo lì dentro. Il PDF del rapportino ha la riga Progetto · Intestato a.
+- **Il codice del progetto si impara.** Le prime volte si scrive a mano; dopo due o tre codici Wisper capisce la forma
+  da solo e propone il successivo (ED-001, ED-002 → ED-003; riconosce anche il codice della commessa e l'anno dentro il
+  codice), sempre cambiabile. Due progetti dello stesso cliente non possono avere lo stesso codice. Col database vuoto,
+  il primo progetto nato insieme a una commessa nuova chiede il codice subito, non al salvataggio del rapportino.
+- **Tutte le funzioni si spengono**, anche Clienti, Commesse, Ore e rapportini e Amministrazione. Quelle che dipendono
+  da altre le seguono e il foglio di conferma lo dice prima ("Si spengono anche: Progetti, Collaboratori esterni");
+  riaccendendo Progetti si riaccende anche Commesse. Con Amministrazione spenta al titolare resta la pagina Funzioni per
+  riaccenderla; con tutto spento l'app dice "Nessuna funzione accesa". I dati restano sempre.
+- **Aggiornamenti annunciati dal NAS.** Ogni 10 minuti il NAS legge l'elenco firmato delle versioni su GitHub e, quando
+  cambia, lo dice alle app in silenzio: in ogni risposta (anche dalla porta Google) e su un "campanello" che l'app tiene
+  aperto finché è aperta e in ufficio, e che suona appena c'è la versione nuova. Le app non controllano più da sole ogni
+  ora: scaricano solo quando il NAS lo dice, con gli stessi controlli di prima (firma dell'elenco, impronta, firma
+  dell'APK). Il telefono installa quando l'app è dietro da un minuto e non c'è un rapportino a metà. Un'app chiusa e
+  fuori casa lo sa al primo contatto col server. Chi ha la 1.0.0 arriva alla 1.1.0 col controllo di prima, una volta.
+- **Trovato strada facendo**: la risposta di Amministrazione › Sistema ha già un suo campo "versioni" (i dispositivi e
+  le loro versioni), e l'annuncio lo copriva; ora no, e le app considerano annuncio solo quello col giro.
+
+**Prove.** Server 640 (nuove: progetti, regola dei codici con 25 casi uguali per server e telefono, pulizia, avvisi):
+636 passano; 4 (ricorrenze, Nascondi per 30 giorni, da approvare, Dashboard del titolare) falliscono solo fra mezzanotte
+e l'una, uguali sul codice della 1.0.0: dipendono dall'ora della prova, non da questa versione;
+computer 316, giro dei progetti in Edge senza finestra 14 passi su 14 (anche il primo giorno col database vuoto), gli
+altri 11 giri cliccati tutti passati, `dotnet build` senza avvisi; telefono 403, anche col server di prova acceso.
+Il campanello provato con l'exe vero e sull'emulatore: una versione nuova annunciata, un controllo solo. Sul NAS: server
+0.12.0 acceso, migrazione 9 fatta (con la sua copia), "ultime versioni: telefono 1.0.0 (9), computer 1.0.0". Non
+provato: l'installazione vera di un aggiornamento annunciato (si vedrà con la prossima versione dopo questa).
+
+![Wisper Ufficio: la pagina Progetti](docs/diario/1-1-0/computer-progetti.png)
+![Il rapportino sul computer: commessa e progetto](docs/diario/1-1-0/computer-rapportino-progetto.png)
+![Spegnere Commesse: il foglio dice cosa si spegne con lei](docs/diario/1-1-0/computer-funzioni-spegni.png)
+![Sul telefono: il progetto nel rapportino](docs/diario/1-1-0/telefono-rapportino-progetto.png)
+![Sul telefono: nuovo progetto col codice proposto](docs/diario/1-1-0/telefono-progetto-nuovo.png)
+![Sul telefono: la scheda del progetto](docs/diario/1-1-0/telefono-progetto-scheda.png)
 
 <a id="v1-0-0"></a>
 ## 3 novembre 2026 · 1.0.0 · Il gestionale entra in uso: la sera del cambio

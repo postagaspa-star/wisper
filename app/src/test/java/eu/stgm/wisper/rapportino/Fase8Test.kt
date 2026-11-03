@@ -260,7 +260,22 @@ class Fase8Test {
             {"modulo": "rapportini", "nome": "Ore e rapportini", "accesa": true, "spegnibile": false}, {"modulo": "mezzi", "nome": "Mezzi e attrezzature", "accesa": true, "spegnibile": true}]}"""))
         assertEquals(listOf("Spenta", "Sempre accesa", "Accesa"), f.map { it.parola })
         assertEquals("2 di 3 accese · spente: Portale clienti", Funzione.riassunto(f))
-        assertEquals(setOf(Moduli.PORTALE, Moduli.COMUNICAZIONI, Moduli.COLLABORATORI, Moduli.MEZZI, Moduli.BANCHE), Funzione.SPEGNIBILI)
+        // Dal 03/11/2026 si spengono tutte, con le dipendenze (progetti.md §5): il foglio di conferma dice le altre.
+        val tutte = Funzione.elenco(JSONObject("""{"funzioni": [
+            {"modulo": "clienti", "nome": "Clienti e fornitori", "accesa": false, "spegnibile": true, "richiede": [], "serveA": ["commesse", "progetti"]},
+            {"modulo": "commesse", "nome": "Commesse", "accesa": false, "spegnibile": true, "richiede": ["clienti"], "serveA": ["progetti"]},
+            {"modulo": "progetti", "nome": "Progetti", "accesa": false, "spegnibile": true, "richiede": ["clienti", "commesse"], "serveA": []}]}"""))
+        val progetti = tutte.last()
+        assertEquals(listOf("clienti", "commesse"), progetti.richiede)
+        assertEquals("Si accendono anche: Clienti e fornitori, Commesse.", Funzione.fraseAnche(progetti, true, tutte))
+        val accese = tutte.map { it.copy(accesa = true) }
+        assertEquals("Si spengono anche: Commesse, Progetti.", Funzione.fraseAnche(accese.first(), false, accese))
+        assertEquals("", Funzione.fraseAnche(accese.last(), false, accese))
+        // L'avviso dopo il salvataggio, con le parole del computer (regole-fase8.js, avvisoCambio).
+        assertEquals("Commesse spenta, e anche Progetti e Collaboratori esterni: i dati restano",
+            Funzione.avvisoCambio("Commesse", false, listOf("Progetti", "Collaboratori esterni")))
+        assertEquals("Progetti riaccesa, e anche Commesse: i dati sono come prima", Funzione.avvisoCambio("Progetti", true, listOf("Commesse")))
+        assertEquals("Mezzi e attrezzature spenta: i dati restano", Funzione.avvisoCambio("Mezzi e attrezzature", false, emptyList()))
 
         val n = PreferenzeNotifiche.daJson(JSONObject("""{"telefono": true, "silenzioSera": false, "tipi": {"assegnato": true, "file_portale": false, "esportazione_pronta": true}}"""))
         assertFalse(n.silenzioSera)

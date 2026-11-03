@@ -316,7 +316,7 @@ fun PaginaApp(
         SchedaElenco {
             RigaVoce("Rifai la visita guidata", sotto = "Da capo, coi dati di esempio", onClick = onVisita)
             LineaElenco()
-            // Si aggiorna da sola ogni ora; qui si vede a che punto è e si può controllare subito.
+            // Si aggiorna da sola quando il NAS annuncia una versione nuova (dalla 1.1.0); qui si vede a che punto è e si può controllare subito.
             RigaVoce(
                 "Versione ${BuildConfig.VERSION_NAME}",
                 sotto = when {

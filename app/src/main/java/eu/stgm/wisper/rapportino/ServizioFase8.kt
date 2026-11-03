@@ -120,7 +120,9 @@ class Fase8(private val t: TrasportoFase5) {
 
     suspend fun funzioni(): List<Funzione> = Funzione.elenco(t.leggiAzione("funzioni"))
 
-    suspend fun salvaFunzioni(modulo: String, accesa: Boolean) { t.scriviAzione(corpo("salvaFunzioni").put("modulo", modulo).put("accesa", accesa)) }
+    /** Torna i nomi delle altre funzioni cambiate insieme (le dipendenze, progetti.md §5). */
+    suspend fun salvaFunzioni(modulo: String, accesa: Boolean): List<String> =
+        t.scriviAzione(corpo("salvaFunzioni").put("modulo", modulo).put("accesa", accesa)).optJSONArray("anche").oggetti().map { it.testo("nome").ifBlank { it.testo("modulo") } }
 
     suspend fun notifichePreferenze(): PreferenzeNotifiche = PreferenzeNotifiche.daJson(t.leggiAzione("notifichePreferenze"))
 

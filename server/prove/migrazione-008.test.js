@@ -12,7 +12,11 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { cartellaNuova, COLONNE_008 } = require('./aiuto');
+const { cartellaNuova, COLONNE_008: SOLO_008, COLONNE_009 } = require('./aiuto');
+
+// 03/11/2026: la prova arriva fino all'ultima migrazione: anche le colonne della 009 (i progetti) partono col valore di base.
+const COLONNE_008 = {};
+for (const g of [SOLO_008, COLONNE_009]) for (const [t, c] of Object.entries(g)) COLONNE_008[t] = Object.assign({}, COLONNE_008[t] || {}, c);
 const { Database } = require('../src/db');
 const { Wisper } = require('../src/wisper');
 const PRIMA = require('./migrazione-008/prima.json');
@@ -87,7 +91,7 @@ const comeTitolare = fn => w.come({ utente: w.titolare(), permessi: w.permessiDi
 
 test('migrazione 008: versione 8, la copia wisper.db.prima-8 com\'era; le tabelle di prima riga per riga uguali (le colonne nuove col valore di base)', () => {
   assert.equal(PRIMA.versione, '0.10.0');
-  assert.equal(w.db.versione(), 8);
+  assert.equal(w.db.versione(), 9);
   const copia = new Database(path.join(cartella, 'wisper.db.prima-8'));
   assert.equal(copia.versione(), 7, 'la copia e\' com\'era prima');
   copia.chiudi();
@@ -95,7 +99,9 @@ test('migrazione 008: versione 8, la copia wisper.db.prima-8 com\'era; le tabell
     const colonneDopo = w.db.righe('PRAGMA table_info(' + t + ')').map(c => c.name);
     for (const c of colonnePrima[t]) assert.ok(colonneDopo.includes(c), t + ': la colonna ' + c + ' c\'e\' ancora');
     const nuove = colonneDopo.filter(c => !colonnePrima[t].includes(c));
-    const dopo = w.db.righe('SELECT * FROM ' + t + ' ORDER BY rowid').map(r => Object.assign({}, r));
+    let dopo = w.db.righe('SELECT * FROM ' + t + ' ORDER BY rowid').map(r => Object.assign({}, r));
+    // 03/11/2026: la 009 aggiunge il modulo progetti a ogni ruolo.
+    if (t === 'permessi') dopo = dopo.filter(r => r.modulo !== 'progetti');
     if (CON_RIGHE_NUOVE.includes(t)) assert.ok(dopo.length >= righePrima[t].length, t);
     else assert.equal(dopo.length, righePrima[t].length, t + ': quante righe');
     const ordina = l => l.slice().sort((a, b) => (String(a.id) < String(b.id) ? -1 : String(a.id) > String(b.id) ? 1 : 0));
@@ -226,7 +232,7 @@ test('riaperto il server: la migrazione non si rifa\'', () => {
   const r = w.db.riga('SELECT COUNT(*) n FROM registro').n;
   w.chiudi();
   w = new Wisper({ dati: cartella });
-  assert.equal(w.db.versione(), 8);
+  assert.equal(w.db.versione(), 9);
   assert.equal(w.db.riga('SELECT COUNT(*) n FROM controlli_finali').n, n);
   assert.equal(w.db.riga('SELECT COUNT(*) n FROM registro').n, r);
 });

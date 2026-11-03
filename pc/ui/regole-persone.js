@@ -533,8 +533,8 @@
     return voce.nome;
   }
 
-  /** Il menu dell'esterno: Dashboard · Commesse · Ore e rapportini · Attività e calendario · Spese e trasferte · Documenti · Ticket e assistenza · La tua scheda. */
-  const MENU_ESTERNO = ['dashboard', 'commesse', 'rapportini', 'attivita', 'spese', 'documenti', 'ticket', 'collaboratori'];
+  /** Il menu dell'esterno: Dashboard · Commesse · Progetti · Ore e rapportini · Attività e calendario · Spese e trasferte · Documenti · Ticket e assistenza · La tua scheda. */
+  const MENU_ESTERNO = ['dashboard', 'commesse', 'progetti', 'rapportini', 'attivita', 'spese', 'documenti', 'ticket', 'collaboratori'];
 
   /** Dove porta un collegamento a una persona: la propria scheda è "Io". */
   function hashPersona(id, idPersonaIo) {

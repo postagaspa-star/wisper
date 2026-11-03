@@ -44,6 +44,7 @@ import eu.stgm.wisper.rapportino.PaginaRegistro
 import eu.stgm.wisper.rapportino.PartitaIva
 import eu.stgm.wisper.rapportino.Permessi
 import eu.stgm.wisper.rapportino.Prestazione
+import eu.stgm.wisper.rapportino.Progetto
 import eu.stgm.wisper.rapportino.Rapportino
 import eu.stgm.wisper.rapportino.Referente
 import eu.stgm.wisper.rapportino.Ruoli
@@ -208,6 +209,16 @@ class DatiEsempio(oggi: LocalDate = LocalDate.now(), private val cartella: File?
                 Prestazione("P7", "26ST030", "Progetto", valore = 800.0, ordine = 1),
                 Prestazione("P8", "26ST030", "Collaudo", valore = 400.0, ordine = 2),
             ),
+            // I progetti (03/11/2026, progetti.md §2): due sotto la commessa di Elettrodinamica, uno sotto quella di Rossi.
+            // I conti (rapportini, ore) si fanno dai rapportini d'esempio, in [contaProgetti].
+            progetti = listOf(
+                Progetto("1", idCommessa = "26ST044", idCliente = "C001", codice = "ED-001", intestatoA = "Batokyo Srl",
+                    descrizione = "Quadro di linea QL1", creato = oggi.minusMonths(3).atTime(9, 0).toString()),
+                Progetto("2", idCommessa = "26ST044", idCliente = "C001", codice = "ED-002", intestatoA = "Batokyo Srl",
+                    descrizione = "Nastro trasportatore", creato = oggi.minusMonths(2).atTime(9, 0).toString()),
+                Progetto("3", idCommessa = "26ST045", idCliente = "C002", codice = "RS-01",
+                    descrizione = "Quadro generale QG2", creato = oggi.minusMonths(2).atTime(10, 0).toString()),
+            ),
             utenti = utentiEsempio,
             numerazioni = listOf(
                 Numerazione("commessa", "{AA}ST{NNN}", 47, annuale = false),
@@ -233,6 +244,17 @@ class DatiEsempio(oggi: LocalDate = LocalDate.now(), private val cartella: File?
 
     private val _viste = MutableStateFlow(iniziali(oggi))
     override val viste: StateFlow<List<Vista>> = _viste.asStateFlow()
+
+    init { contaProgetti() }
+
+    /** Rapportini, ore e ultimo rapportino di ogni progetto, come li conta il server per le anagrafiche. */
+    private fun contaProgetti() {
+        val perProgetto = _viste.value.map { it.rapportino }.filter { it.idProgetto.isNotBlank() }.groupBy { it.idProgetto }
+        _ana.value = ana.copy(progetti = ana.progetti.map { p ->
+            val r = perProgetto[p.id].orEmpty()
+            p.copy(rapportini = r.size, ore = r.sumOf { it.oreLavoro }, ultimoRapportino = r.maxOfOrNull { it.data }?.toString() ?: "")
+        })
+    }
 
     /** Nella visita i rapportini sono pochi: lo storico e' lo stesso elenco. */
     override val storico: StateFlow<List<Vista>> = _viste.asStateFlow()
@@ -309,6 +331,23 @@ class DatiEsempio(oggi: LocalDate = LocalDate.now(), private val cartella: File?
                     Result.failure(Exception(e.message ?: "È un esempio", e))
                 }
             },
+        )
+    }
+
+    /** I progetti di esempio (progetti.md), in memoria nelle anagrafiche di esempio (EsempioProgetti). */
+    override val progetti: eu.stgm.wisper.rapportino.ServizioProgetti by lazy {
+        eu.stgm.wisper.rapportino.ServizioProgetti(
+            EsempioProgetti(oggi, { _ana.value }, { _ana.value = it }, { _viste.value.map { it.rapportino } }),
+            object : eu.stgm.wisper.rapportino.EsecutoreFase4 {
+                override suspend fun <T> esegui(lavoro: suspend () -> T): Result<T> = try {
+                    Result.success(lavoro())
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Result.failure(Exception(e.message ?: "È un esempio", e))
+                }
+            },
+            dopoScrittura = { contaProgetti(); aggiornaDashboard() },
         )
     }
 
@@ -410,6 +449,7 @@ class DatiEsempio(oggi: LocalDate = LocalDate.now(), private val cartella: File?
             Rapportino(
                 idLocale = "esempio-s$i", data = d, tecnico = tecnico, idCliente = "C001", cliente = "Elettrodinamica",
                 idCommessa = "26ST044", commessa = "Nuovo magazzino automatico",
+                idProgetto = "1", progetto = "ED-001", progettoDescrizione = "Quadro di linea QL1", progettoIntestatoA = "Batokyo Srl",
                 descrizione = if (i % 2 == 0) "Cablaggio quadro di linea" else "Collaudo sensori del nastro",
                 oreLavoro = if (i % 2 == 0) 6.5 else 8.0, oreViaggio = 1.0, km = 96.0, id = "RAP/${d.year}/01${30 + i}",
                 stato = Stato.INVIATO, costoOrario = 22.0, inviatoIl = d.atTime(18, 0).format(ISO_ORA),
@@ -419,7 +459,8 @@ class DatiEsempio(oggi: LocalDate = LocalDate.now(), private val cartella: File?
             Rapportino(
                 idLocale = "esempio-b1", data = feriale(oggi.minusDays(9)), tecnico = tecnico, idCliente = "C002",
                 cliente = "Rossi Impianti Srl", idCommessa = "26ST045",
-                commessa = "Quadro capannone", descrizione = "Sostituzione interruttore generale",
+                commessa = "Quadro capannone", idProgetto = "3", progetto = "RS-01", progettoDescrizione = "Quadro generale QG2",
+                descrizione = "Sostituzione interruttore generale",
                 oreLavoro = 3.5, km = 22.0, tariffa = 42.0, id = "RAP/${oggi.year}/0128", costoOrario = 25.0,
             ),
             Rapportino(
@@ -433,10 +474,11 @@ class DatiEsempio(oggi: LocalDate = LocalDate.now(), private val cartella: File?
         val dueMesiPrima = YearMonth.from(oggi).minusMonths(2)
         fun ufficio(
             n: Int, data: LocalDate, cliente: String, commessa: String, lavoro: String, ore: Double, stato: Stato,
-            viaggio: Double = 1.0, km: Double = 0.0, spese: Double = 0.0, noteSpese: String = "",
+            viaggio: Double = 1.0, km: Double = 0.0, spese: Double = 0.0, noteSpese: String = "", progetto: String = "",
         ): Rapportino {
             val c = ana.cliente(cliente)!!
             val m = ana.commessa(commessa)!!
+            val p = if (progetto.isBlank()) null else ana.progetto(progetto)
             val d = feriale(data)
             val firmato = stato != Stato.BOZZA
             return Rapportino(
@@ -449,27 +491,28 @@ class DatiEsempio(oggi: LocalDate = LocalDate.now(), private val cartella: File?
                 inviatoIl = if (stato == Stato.INVIATO || stato == Stato.FATTURATO) d.plusDays(1).atTime(9, 0).format(ISO_ORA) else "",
                 fatturatoIl = if (stato == Stato.FATTURATO) d.plusDays(10).atTime(9, 0).format(ISO_ORA) else "",
                 costoOrario = c.costoFisso ?: m.costoOrario ?: 22.0,
+                idProgetto = p?.id ?: "", progetto = p?.codice ?: "", progettoDescrizione = p?.descrizione ?: "", progettoIntestatoA = p?.intestatoA ?: "",
             )
         }
         val giorniMese = YearMonth.from(oggi).atDay(1)
         fun questoMese(giorniFa: Long): LocalDate = oggi.minusDays(giorniFa).let { if (it.isBefore(giorniMese)) giorniMese else it }
         val perUfficio = listOf(
             // Questo mese: firmati e inviati da fatturare.
-            ufficio(1, questoMese(14), "C001", "26ST044", "Posa canaline e passerelle", 8.0, Stato.FIRMATO, km = 96.0),
-            ufficio(2, questoMese(13), "C002", "26ST045", "Montaggio quadro di distribuzione", 6.0, Stato.FIRMATO, km = 30.0),
+            ufficio(1, questoMese(14), "C001", "26ST044", "Posa canaline e passerelle", 8.0, Stato.FIRMATO, km = 96.0, progetto = "2"),
+            ufficio(2, questoMese(13), "C002", "26ST045", "Montaggio quadro di distribuzione", 6.0, Stato.FIRMATO, km = 30.0, progetto = "3"),
             ufficio(3, questoMese(15), "C003", "26ST047", "Posa staffe dei pannelli", 3.5, Stato.FIRMATO, km = 12.0,
                 spese = 24.5, noteSpese = "Raccordi"),
             ufficio(4, questoMese(16), "C002", "26ST045", "Cablaggio quadro di distribuzione", 6.0, Stato.INVIATO, km = 30.0),
-            ufficio(5, questoMese(17), "C001", "26ST044", "Tracciamento linee e sopralluogo", 7.5, Stato.INVIATO, km = 96.0),
+            ufficio(5, questoMese(17), "C001", "26ST044", "Tracciamento linee e sopralluogo", 7.5, Stato.INVIATO, km = 96.0, progetto = "2"),
             ufficio(6, questoMese(12), "C001", "26ST046", "Cablaggio cabina", 6.0, Stato.FIRMATO, km = 40.0),
             // Il mese prima: Rossi ancora da fatturare (la cosa piu' urgente), il resto fatturato.
             ufficio(7, mesePrima.atDay(8), "C002", "26ST045", "Progetto del quadro", 8.0, Stato.INVIATO, viaggio = 0.0),
             ufficio(8, mesePrima.atDay(15), "C002", "26ST045", "Disegno dei fronti quadro", 8.0, Stato.INVIATO, viaggio = 0.0),
             ufficio(9, mesePrima.atDay(22), "C002", "26ST045", "Sopralluogo e misure", 7.5, Stato.FIRMATO, km = 30.0),
             ufficio(10, mesePrima.atDay(6), "C001", "26ST044", "Sopralluogo e rilievi", 6.0, Stato.FATTURATO, km = 96.0),
-            ufficio(11, mesePrima.atDay(13), "C001", "26ST044", "Progetto quadro di linea", 8.0, Stato.FATTURATO, viaggio = 0.0),
+            ufficio(11, mesePrima.atDay(13), "C001", "26ST044", "Progetto quadro di linea", 8.0, Stato.FATTURATO, viaggio = 0.0, progetto = "1"),
             ufficio(12, mesePrima.atDay(20), "C001", "26ST044", "Preparazione materiali", 8.0, Stato.FATTURATO, viaggio = 0.0),
-            ufficio(13, mesePrima.atDay(27), "C001", "26ST044", "Progetto esecutivo", 8.0, Stato.FATTURATO, viaggio = 0.0),
+            ufficio(13, mesePrima.atDay(27), "C001", "26ST044", "Progetto esecutivo", 8.0, Stato.FATTURATO, viaggio = 0.0, progetto = "1"),
             ufficio(14, mesePrima.atDay(9), "C001", "26ST046", "Sopralluogo in cabina", 8.0, Stato.FATTURATO, km = 40.0),
             ufficio(15, mesePrima.atDay(16), "C001", "26ST046", "Schema della cabina", 6.0, Stato.FATTURATO, viaggio = 0.0),
             ufficio(16, mesePrima.atDay(23), "C002", "26ST043", "Verifica cabina MT", 4.0, Stato.FATTURATO, km = 30.0),
@@ -601,9 +644,26 @@ class DatiEsempio(oggi: LocalDate = LocalDate.now(), private val cartella: File?
     override fun tariffaProposta(cliente: Cliente?, nomeCliente: String): Double? = cliente?.ultimaTariffa
 
     override fun salva(r: Rapportino) {
-        val v = conConto(r)
+        val v = conConto(conProgettoCreato(r))
         _viste.value = (_viste.value.filterNot { it.rapportino.idLocale == r.idLocale } + v)
             .sortedByDescending { it.rapportino.data }
+        contaProgetti()
+    }
+
+    /** Un progetto nato nel rapportino diventa un progetto vero, come quando il server riceve il rapportino (progetti.md §2). */
+    private fun conProgettoCreato(r: Rapportino): Rapportino {
+        val nuovo = r.progettoNuovo ?: return r
+        if (r.idProgetto.isNotBlank() || r.idCommessa.isBlank()) return r
+        val p = ana.progetti.firstOrNull { it.idLocale.isNotBlank() && it.idLocale == nuovo.idLocale } ?: run {
+            val id = ((ana.progetti.mapNotNull { it.id.toIntOrNull() }.maxOrNull() ?: 0) + 1).toString()
+            val c = ana.commessa(r.idCommessa)
+            Progetto(id, idLocale = nuovo.idLocale, idCommessa = r.idCommessa, idCliente = c?.idCliente ?: r.idCliente,
+                codice = nuovo.codice.ifBlank { "P-" + id }, intestatoA = nuovo.intestatoA, descrizione = nuovo.descrizione,
+                codiceAutomatico = nuovo.codiceProposto, creato = LocalDateTime.now().toString()).also {
+                _ana.value = ana.copy(progetti = ana.progetti + it)
+            }
+        }
+        return r.copy(idProgetto = p.id, progetto = p.codice, progettoDescrizione = p.descrizione, progettoIntestatoA = p.intestatoA, progettoNuovo = null)
     }
 
     override fun accodaFoto(idLocale: String, file: File) = Unit
@@ -1398,7 +1458,8 @@ class DatiEsempio(oggi: LocalDate = LocalDate.now(), private val cartella: File?
 internal fun nomeModulo(modulo: String): String = when (modulo) {
     Moduli.DASHBOARD -> "Dashboard"
     Moduli.CLIENTI -> "Clienti e fornitori"
-    Moduli.COMMESSE -> "Progetti e commesse"
+    Moduli.COMMESSE -> "Commesse"
+    Moduli.PROGETTI -> "Progetti"
     Moduli.PREVENTIVI -> "Preventivi e contratti"
     Moduli.ATTIVITA -> "Attività e calendario"
     Moduli.RAPPORTINI -> "Ore e rapportini"

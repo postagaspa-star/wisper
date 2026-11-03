@@ -261,11 +261,29 @@ async function main() {
     assert.equal(pinza.fuoriUso, 'non_conforme', 'la pinza è fuori uso: non conforme');
     passo('Manuel registra la Pinza amperometrica non conforme: fuori uso');
 
+    // Dal 03/11/2026 (progetti.md §4.6) un rapportino ha sempre commessa e progetto, e Marco (collaboratore) i progetti non li
+    // crea: Manuel ne mette uno su ogni commessa aperta, che nel rapportino si sceglie da solo.
+    for (const c of (await server('anagrafiche')).commesse.filter(x => x.stato === 'APERTA' && !x.modello && !x.archiviata)) {
+      const r = await server('creaProgetto', { idCommessa: c.id, codiceProgetto: 'P-' + c.id, descrizione: 'Lavori ' + c.id });
+      assert.equal(r.ok, true, 'progetto su ' + c.id + ': ' + JSON.stringify(r));
+    }
+
     await entra('marco@esempio.it');
     await vai('#rapportini/elenco');
     await clicca('Nuovo rapportino', '#principale', 700);
     await valuta("document.querySelector('.finestra .scelta-card').click(); true");
     await aspetta(500);
+    // Se la scheda recente non porta una commessa (col suo progetto), si tocca la prima commessa aperta.
+    await valuta(`(() => {
+      const f = [...document.querySelectorAll('.finestra')].pop();
+      if (f.querySelector('[data-campo=progetto] .pillola.scelta')) return true;
+      const et = [...f.querySelectorAll('.etichetta')].find(e => e.textContent.trim() === 'Commessa');
+      const b = et && et.nextElementSibling && et.nextElementSibling.querySelector('.pillola');
+      if (b) b.click();
+      return true;
+    })()`);
+    await aspetta(400);
+    assert.ok(await valuta("!!document.querySelector('.finestra [data-campo=progetto] .pillola.scelta')"), 'il progetto della commessa è già scelto');
     await clicca('4 h', '.finestra', 300);
     await scrivi('Cosa hai fatto', 'Misure di terra di prova');
     await clicca('+ Strumenti usati', '.finestra', 500);
@@ -359,7 +377,7 @@ async function main() {
     // ------------------------------------------------------------- 8. Luca, esterno: vede solo il suo
     await entra('luca@esempio.it');
     const menuLuca = await valuta("[...document.querySelectorAll('#voci .voce')].map(v => v.dataset.nome)");
-    assert.deepEqual(menuLuca, ['Dashboard', 'Progetti e commesse', 'Ore e rapportini', 'Attività e calendario', 'Spese e trasferte', 'Documenti', 'Ticket e assistenza', 'La tua scheda'], 'il menu ridotto dell\'esterno');
+    assert.deepEqual(menuLuca, ['Dashboard', 'Commesse', 'Progetti', 'Ore e rapportini', 'Attività e calendario', 'Spese e trasferte', 'Documenti', 'Ticket e assistenza', 'La tua scheda'], 'il menu ridotto dell\'esterno');
     testo = await testoPagina();
     assert.match(testo, /Esterno · Impianti Veneti di Sartori Luca/, 'la pillola dell\'esterno');
     assert.match(testo, /Scrivi il rapportino/);

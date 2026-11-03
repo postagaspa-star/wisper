@@ -109,6 +109,16 @@ class Strade(
         scelta = null
     }
 
+    /**
+     * Il campanello degli aggiornamenti ([Campanello]): `<server di casa>/campanello`, solo mentre si parla col server di
+     * casa (dalla porta Google no). Il token non parte.
+     */
+    fun indirizzoCampanello(): HttpUrl? =
+        if (_dove.value == Dove.CASA) base(casa()).takeIf { it.isNotBlank() }?.let { (it + "/campanello").toHttpUrlOrNull() } else null
+
+    /** Il client per il campanello (le stesse impostazioni di rete delle letture; i tempi li mette [Campanello]). */
+    val clientCampanello: OkHttpClient = client
+
     /** Quale strada si userebbe adesso, senza provare niente (le prove). */
     internal fun sceltaAttuale(): Dove? = synchronized(lucchetto) { scelta?.takeIf { orologio() < sceltaFinoA } }
 
@@ -370,7 +380,8 @@ class Strade(
                 val testo = r.body?.string().orEmpty()
                 if (!r.isSuccessful) throw IOException("HTTP ${r.code}")
                 return try {
-                    JSONObject(testo)
+                    // 03/11/2026: in ogni risposta le versioni annunciate dal NAS (AnnuncioVersioni), lette in silenzio.
+                    JSONObject(testo).also { AnnuncioVersioni.leggi(it) }
                 } catch (_: Exception) {
                     if (doppia) throw IOException("risposta non JSON")
                     throw PonteServer.Rifiutato("Risposta non valida dal server: controlla l'indirizzo")
@@ -399,6 +410,8 @@ class Strade(
             } catch (_: Exception) {
                 throw PonteServer.ServizioNonRaggiunto("Google non ha risposto come doveva: riprova fra poco", "google")
             }
+            // Anche dalla porta Google (e quando dice di no) il server mette le versioni: l'app le legge lo stesso.
+            AnnuncioVersioni.leggi(j)
             // Lo script ha già detto che oltre il limite non passa (senza rete): si tiene per l'ufficio.
             if (!j.optBoolean("ok") && !j.optBoolean("rete", false) && j.optString("errore").contains("troppo grande per passare da Google")) {
                 throw PonteServer.SoloInUfficio(TROPPO_GRANDE)

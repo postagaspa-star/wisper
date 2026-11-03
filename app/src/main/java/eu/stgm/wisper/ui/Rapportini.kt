@@ -349,7 +349,8 @@ internal fun filtraRapportini(viste: List<Vista>, f: FiltroRapportini): List<Vis
                 Quali.FIRMARE -> r.stato == Stato.BOZZA
             } &&
             (testo.isEmpty() || Anagrafiche.normalizza(
-                listOf(r.id, r.cliente, r.commessa, r.idCommessa, r.codiceProposto, r.descrizione, r.luogo, r.ticket).joinToString(" "),
+                listOf(r.id, r.cliente, r.commessa, r.idCommessa, r.codiceProposto, r.descrizione, r.luogo, r.ticket,
+                    r.progetto, r.progettoDescrizione, r.progettoIntestatoA, r.progettoNuovo?.codice.orEmpty(), r.progettoNuovo?.descrizione.orEmpty()).joinToString(" "),
             ).contains(testo))
     }.sortedWith(compareByDescending<Vista> { it.rapportino.data }.thenByDescending { it.rapportino.id })
 }
@@ -363,7 +364,8 @@ internal fun filtraRapportini(viste: List<Vista>, f: FiltroRapportini): List<Vis
 private fun RigaElencoRapportini(v: Vista, perLavoro: Boolean, conMese: Boolean, scelto: Boolean?, costi: Boolean = true, onClick: () -> Unit) {
     val c = W.colori
     val r = v.rapportino
-    val codice = r.idCommessa.ifBlank { r.codiceProposto }.ifBlank { r.commessa }.takeIf { it.isNotBlank() }
+    // Col progetto (progetti.md §4.7) "ED-003 · Quadro QE1" al posto del codice della commessa, che il progetto gia' dice.
+    val codice = r.etichettaProgetto.ifBlank { r.idCommessa.ifBlank { r.codiceProposto }.ifBlank { r.commessa } }.takeIf { it.isNotBlank() }
     val titolo = if (perLavoro) r.descrizione.ifBlank { r.commessa }.ifBlank { r.cliente } else r.cliente.ifBlank { "Senza cliente" }
     // Prima le ore: il lavoro può essere lungo e si taglia lui.
     val sotto = listOfNotNull(Numeri.ore(r.oreTotali), codice, r.descrizione.takeIf { !perLavoro && it.isNotBlank() }).joinToString(" · ")

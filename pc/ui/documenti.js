@@ -68,7 +68,7 @@
    * Il formato: A4, Figtree, i grigi di docs/aspetto.md. Niente giallo pieno:
    * si stampa anche in bianco e nero.
    */
-  function stile(imp) {
+  function stile(imp, extra) {
     const piede = [imp.RAGIONE_SOCIALE, imp.PARTITA_IVA ? 'P.IVA ' + imp.PARTITA_IVA : ''].filter(Boolean).join(' · ');
     const carattere = '"Figtree", "Segoe UI", Arial, sans-serif';
     // Fase 8: con la riga in fondo ai PDF il piè ha due righe; senza, la regola di prima com'era.
@@ -121,7 +121,20 @@
       '.articolo .testo { white-space: pre-wrap; font-size: 10.5px; }' +
       '.due-blocchi { display: flex; gap: 12px; } .due-blocchi .blocco { flex: 1; }' +
       (logoDi(imp) ? STILE_LOGO : '') +
+      (extra || '') +
       '</style>';
+  }
+
+  // 03/11/2026 (progetti.md §4): la riga del progetto sotto la commessa, solo nei rapportini che ne hanno uno (gli altri restano identici).
+  const STILE_PROGETTO = '.riga-progetto { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; margin-bottom: 12px; }';
+
+  /** Il progetto di un rapportino: {codice, descrizione, intestatoA} o null (dal rapportino, altrimenti dall'elenco dei progetti). */
+  function progettoDi(r, ana) {
+    const id = r.idProgetto;
+    const p = id !== undefined && id !== null && id !== '' ? ((ana && ana.progetti) || []).find(x => String(x.id) === String(id)) : null;
+    const codice = String(r.progetto || (p && p.codice) || '').trim();
+    if (!codice && !p) return null;
+    return { codice, descrizione: String(r.progettoDescrizione || (p && p.descrizione) || '').trim(), intestatoA: String(r.progettoIntestatoA || (p && p.intestatoA) || '').trim() };
   }
 
   // Fase 8: il logo a sinistra, alto 14 mm, accanto alla ragione sociale (solo quando c'è).
@@ -164,9 +177,9 @@
     return '<div class="cella"><div class="etichetta">' + esc(etichetta) + '</div><div class="valore">' + esc(valore) + '</div></div>';
   }
 
-  function pagina(imp, titolo, corpo) {
+  function pagina(imp, titolo, corpo, extra) {
     return '<!doctype html><html lang="it"><head><meta charset="utf-8"><title>' + esc(titolo) + '</title>' +
-      stile(imp) + '</head><body>' + corpo + '</body></html>';
+      stile(imp, extra) + '</head><body>' + corpo + '</body></html>';
   }
 
   function righeConto(r) {
@@ -221,6 +234,12 @@
     ]) + '</div>';
     // La commessa si indica col suo codice (26ST001), come vuole lo studio: la descrizione no.
     corpo += '<div class="barra">' + (r.idCommessa ? '<span class="cod">' + esc(r.idCommessa) + '</span>' : 'Senza commessa') + '</div>';
+    // 03/11/2026: il progetto (codice e descrizione) e, se c'è, a chi è intestato.
+    const progetto = progettoDi(r, ana);
+    if (progetto) {
+      corpo += '<div class="riga-progetto">' + cella('Progetto', [progetto.codice, progetto.descrizione].filter(Boolean).join(' · ')) +
+        (progetto.intestatoA ? cella('Intestato a', progetto.intestatoA) : '') + '</div>';
+    }
     corpo += '<div class="griglia">' +
       cella('Data', C.data(r.data)) +
       cella('Tecnico', r.tecnico || imp.TECNICO || '') +
@@ -264,7 +283,7 @@
           (r.noteSpese ? ' · ' + esc(r.noteSpese) : '') + '</figcaption></figure>').join('') +
         '</div></div>';
     }
-    return pagina(imp, 'Rapportino ' + (r.id || ''), corpo);
+    return pagina(imp, 'Rapportino ' + (r.id || ''), corpo, progetto ? STILE_PROGETTO : '');
   }
 
   /**

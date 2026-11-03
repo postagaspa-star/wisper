@@ -398,20 +398,91 @@
 
   // ======================================================================= funzioni accese (§9.5)
 
-  /** Le cinque che si spengono, con la frase su cosa cambia (§9.5, uguale al telefono). */
-  const SPEGNIBILI = {
-    portale: { nome: 'Portale clienti', cosaCambia: 'Sparisce dal menu di tutti e il portale si spegne per i clienti, come Spegni il portale adesso. I dati restano.' },
-    comunicazioni: { nome: 'WhatsApp e comunicazioni', cosaCambia: 'Sparisce dal menu di tutti e Da mandare non prepara più messaggi. La campanella resta. I dati restano.' },
-    collaboratori: { nome: 'Collaboratori esterni', cosaCambia: 'Sparisce dal menu di tutti; gli esterni non entrano più. I costi già scritti nelle commesse restano. I dati restano.' },
-    mezzi: { nome: 'Mezzi e attrezzature', cosaCambia: 'Sparisce dal menu di tutti. Nei rapportini non si scelgono più gli strumenti. I dati restano.' },
-    banche: { nome: 'Banche e scadenze', cosaCambia: 'Sparisce dal menu di tutti e dalla Dashboard. Gli incassi segnati dalle fatture scrivono ancora il movimento. I dati restano.' },
-  };
+  /**
+   * Le funzioni e cosa cambia se si spengono (§9.5). Dal 03/11/2026 si spengono tutte e 19 (Manuel: "nessuna obbligatoria"),
+   * con le dipendenze del server (amministrazione8.js): richiede = senza quelle non lavora (una commessa vuole un cliente, un
+   * progetto una commessa). Le frasi le manda il server (cosaCambia); queste servono solo se non le manda.
+   */
+  const FUNZIONI = [
+    { modulo: 'dashboard', nome: 'Dashboard', richiede: [], cosaCambia: 'Sparisce dal menu di tutti: Wisper si apre sulla prima voce accesa. I dati restano.' },
+    { modulo: 'clienti', nome: 'Clienti e fornitori', richiede: [], cosaCambia: 'Sparisce dal menu di tutti; non si creano clienti nuovi. I dati restano.' },
+    { modulo: 'commesse', nome: 'Commesse', richiede: ['clienti'], cosaCambia: 'Sparisce dal menu di tutti; i rapportini non chiedono più la commessa. I dati restano.' },
+    { modulo: 'progetti', nome: 'Progetti', richiede: ['commesse'], cosaCambia: 'Sparisce dal menu di tutti; i rapportini non chiedono più il progetto. I dati restano.' },
+    { modulo: 'preventivi', nome: 'Preventivi', richiede: ['clienti'], cosaCambia: 'Sparisce dal menu di tutti. I dati restano.' },
+    { modulo: 'attivita', nome: 'Attività e calendario', richiede: [], cosaCambia: 'Sparisce dal menu di tutti; niente promemoria delle attività. I dati restano.' },
+    { modulo: 'rapportini', nome: 'Ore e rapportini', richiede: ['clienti'], cosaCambia: 'Sparisce dal menu di tutti; non si scrivono rapportini né ore. I dati restano.' },
+    { modulo: 'spese', nome: 'Spese e trasferte', richiede: [], cosaCambia: 'Sparisce dal menu di tutti. I dati restano.' },
+    { modulo: 'fatturazione', nome: 'Fatturazione', richiede: ['clienti'], cosaCambia: 'Sparisce dal menu di tutti. I dati restano.' },
+    { modulo: 'banche', nome: 'Banche e scadenze', richiede: [], cosaCambia: 'Sparisce dal menu di tutti. Segnare un incasso da una fattura funziona lo stesso. I dati restano.' },
+    { modulo: 'persone', nome: 'Persone', richiede: [], cosaCambia: 'Sparisce dal menu di tutti. I dati restano.' },
+    { modulo: 'documenti', nome: 'Documenti', richiede: [], cosaCambia: 'Sparisce dal menu di tutti. I dati restano.' },
+    { modulo: 'ticket', nome: 'Ticket e assistenza', richiede: ['clienti'], cosaCambia: 'Sparisce dal menu di tutti. I dati restano.' },
+    { modulo: 'mezzi', nome: 'Mezzi e attrezzature', richiede: [], cosaCambia: 'Sparisce dal menu di tutti. Nei rapportini non si scelgono più gli strumenti. I dati restano.' },
+    { modulo: 'comunicazioni', nome: 'WhatsApp e comunicazioni', richiede: ['clienti'], cosaCambia: 'Sparisce dal menu di tutti; niente proposte di messaggi. La campanella apre lo stesso le notifiche. I dati restano.' },
+    { modulo: 'portale', nome: 'Portale clienti', richiede: ['clienti'], cosaCambia: 'Sparisce dal menu di tutti e il portale si spegne subito per i clienti. I dati restano.' },
+    { modulo: 'collaboratori', nome: 'Collaboratori esterni', richiede: ['commesse'], cosaCambia: 'Sparisce dal menu di tutti; gli esterni non vedono più le loro cose. I dati restano.' },
+    { modulo: 'integrazioni', nome: 'Integrazioni', richiede: [], cosaCambia: 'Sparisce dal menu di tutti; i collegamenti già fatti continuano a lavorare. I dati restano.' },
+    { modulo: 'amministrazione', nome: 'Amministrazione', richiede: [], cosaCambia: 'Sparisce dal menu di tutti; al titolare resta Funzioni, per riaccenderla. I dati restano.' },
+  ];
+  /** Le funzioni per modulo: {nome, cosaCambia, richiede}. */
+  const SPEGNIBILI = {};
+  FUNZIONI.forEach(f => { SPEGNIBILI[f.modulo] = { nome: f.nome, cosaCambia: f.cosaCambia, richiede: f.richiede.slice() }; });
+  const ORDINE_FUNZIONI = FUNZIONI.map(f => f.modulo);
+  const nelleFunzioni = lista => ORDINE_FUNZIONI.filter(m => lista.indexOf(m) >= 0);
+
+  /** Le funzioni che hanno bisogno di questa (anche passando da un'altra): si spengono con lei (come serveA del server). */
+  function chiLaUsa(modulo) {
+    const out = [];
+    const giro = m => FUNZIONI.forEach(f => { if (f.richiede.indexOf(m) >= 0 && out.indexOf(f.modulo) < 0) { out.push(f.modulo); giro(f.modulo); } });
+    giro(modulo);
+    return nelleFunzioni(out);
+  }
+
+  /** Le funzioni di cui questa ha bisogno (anche passando da un'altra): si accendono con lei (come richiede del server). */
+  function diCosaHaBisogno(modulo) {
+    const out = [];
+    const giro = m => { const f = FUNZIONI.find(x => x.modulo === m); (f ? f.richiede : []).forEach(r => { if (out.indexOf(r) < 0) { out.push(r); giro(r); } }); };
+    giro(modulo);
+    return nelleFunzioni(out);
+  }
 
   function domandaSpegni(f) {
     const x = f || {};
     const s = SPEGNIBILI[x.modulo] || {};
     const nome = x.nome || s.nome || x.modulo;
     return { titolo: 'Spegnere ' + nome + '?', testo: x.cosaCambia || s.cosaCambia || 'Sparisce dal menu di tutti. I dati restano.' };
+  }
+
+  /**
+   * Il foglio di conferma prima di cambiare una funzione (accordo §5): spegnendo, cosaCambia e "Si spengono anche: …" (le
+   * serveA ancora accese); accendendo, "Si accendono anche: …" (le richiede ancora spente). funzioni: l'elenco del server
+   * (accesa, serveA, richiede, nome); senza serveA/richiede valgono le dipendenze scritte qui.
+   * -> {titolo, testo, anche: [nomi], fraseAnche, pulsante}
+   */
+  function domandaCambio(f, accesa, funzioni) {
+    const x = f || {};
+    const l = funzioni || [];
+    const s = SPEGNIBILI[x.modulo] || {};
+    const nome = x.nome || s.nome || x.modulo;
+    const nomeDi = m => { const y = l.find(z => z.modulo === m); return (y && y.nome) || (SPEGNIBILI[m] || {}).nome || m; };
+    const accesaOra = m => { const y = l.find(z => z.modulo === m); return !y || y.accesa !== false; };
+    if (accesa) {
+      const servono = (Array.isArray(x.richiede) ? x.richiede : diCosaHaBisogno(x.modulo)).filter(m => !accesaOra(m));
+      const anche = servono.map(nomeDi);
+      return { titolo: 'Accendere ' + nome + '?', testo: 'Torna nel menu di chi ha il permesso. I dati sono come prima.', anche,
+        fraseAnche: anche.length ? 'Si accendono anche: ' + anche.join(', ') : '', pulsante: 'Accendi' };
+    }
+    const usano = (Array.isArray(x.serveA) ? x.serveA : chiLaUsa(x.modulo)).filter(accesaOra);
+    const anche = usano.map(nomeDi);
+    return { titolo: 'Spegnere ' + nome + '?', testo: x.cosaCambia || s.cosaCambia || 'Sparisce dal menu di tutti. I dati restano.', anche,
+      fraseAnche: anche.length ? 'Si spengono anche: ' + anche.join(', ') : '', pulsante: 'Spegni' };
+  }
+
+  /** L'avviso dopo il salvataggio: "Commesse spenta, e anche Progetti e Collaboratori esterni: i dati restano". */
+  function avvisoCambio(nome, accesa, anche) {
+    const altri = (anche || []).map(a => (typeof a === 'string' ? a : a.nome || a.modulo)).filter(Boolean);
+    const con = altri.length ? ', e anche ' + (altri.length === 1 ? altri[0] : altri.slice(0, -1).join(', ') + ' e ' + altri[altri.length - 1]) : '';
+    return accesa ? nome + ' riaccesa' + con + ': i dati sono come prima' : nome + ' spenta' + con + ': i dati restano';
   }
 
   /** "13 di 18 · Portale clienti spento" (§9.2). */
@@ -767,7 +838,7 @@
     pezziEstratto, doveTrovato, statoLettura,
     CAMPI_IMPORT, TIPI_IMPORT, testoImporta, esitoImport, erroreColonne, campiDaCompletare,
     TETTI, SEZIONI, AREE, altre, RIQUADRI, ORDINE_RIQUADRI, RIQUADRI_BASE, riquadriPossibili, numeroRiquadro, rossoRiquadro, erroreRiquadri, toccaRiquadro, numerino, righeApprovare,
-    SPEGNIBILI, domandaSpegni, rigaFunzioni, senzaSpente,
+    SPEGNIBILI, FUNZIONI, ORDINE_FUNZIONI, chiLaUsa, diCosaHaBisogno, domandaSpegni, domandaCambio, avvisoCambio, rigaFunzioni, senzaSpente,
     codiceDa, numeroDa, prossimoNumero, formatoCommessa, pezziCommessa, frasePrima, comeContinua, NOMI_NUMERAZIONI, ORDINE_NUMERAZIONI,
     numeroScritto, numeroCampo, erroreVoce, PRIORITA, erroreTempi, filtraGruppi, rigaImpostazioni,
     NOMI_NOTIFICHE, GRUPPI_NOTIFICHE, gruppiNotifiche, erroreEmailAvvisi, erroreOra, MESI_ANNO, giornoMeseDa, erroreGiornoMese,

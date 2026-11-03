@@ -19,6 +19,8 @@ object Moduli {
     const val DASHBOARD = "dashboard"
     const val CLIENTI = "clienti"
     const val COMMESSE = "commesse"
+    /** I progetti delle commesse (03/11/2026, docs/gestionale/progetti.md): nel menu subito dopo le commesse. */
+    const val PROGETTI = "progetti"
     const val PREVENTIVI = "preventivi"
     const val ATTIVITA = "attivita"
     const val RAPPORTINI = "rapportini"
@@ -54,8 +56,11 @@ object Moduli {
     /** Quelli che funzionano nella fase 1, nell'ordine del menu. */
     val FASE1 = listOf(DASHBOARD, CLIENTI, COMMESSE, RAPPORTINI, FATTURAZIONE, AMMINISTRAZIONE)
 
-    /** Quelli che funzionano dalla fase 6, nell'ordine del menu (Persone dopo Banche, Mezzi dopo Ticket, Collaboratori dopo Mezzi). */
-    val FUNZIONANTI = listOf(DASHBOARD, CLIENTI, COMMESSE, PREVENTIVI, ATTIVITA, RAPPORTINI, SPESE, FATTURAZIONE, BANCHE, PERSONE, DOCUMENTI, TICKET, MEZZI, COMUNICAZIONI, PORTALE, COLLABORATORI, INTEGRAZIONI, AMMINISTRAZIONE)
+    /**
+     * Quelli che funzionano, nell'ordine del menu (Persone dopo Banche, Mezzi dopo Ticket, Collaboratori dopo Mezzi; dal
+     * 03/11/2026 Progetti dopo Commesse).
+     */
+    val FUNZIONANTI = listOf(DASHBOARD, CLIENTI, COMMESSE, PROGETTI, PREVENTIVI, ATTIVITA, RAPPORTINI, SPESE, FATTURAZIONE, BANCHE, PERSONE, DOCUMENTI, TICKET, MEZZI, COMUNICAZIONI, PORTALE, COLLABORATORI, INTEGRAZIONI, AMMINISTRAZIONE)
 
     /** Fatturazione e Banche si vedono solo col modulo e col permesso dei soldi (§15.1). */
     val CON_SOLDI = setOf(FATTURAZIONE, BANCHE)
@@ -161,7 +166,7 @@ data class Permessi(val livelli: Map<String, Int>) {
                     p[Moduli.COSTI] = 2
                 }
                 Ruoli.COLLABORATORE -> {
-                    p[Moduli.DASHBOARD] = 1; p[Moduli.CLIENTI] = 1; p[Moduli.COMMESSE] = 1; p[Moduli.RAPPORTINI] = 2
+                    p[Moduli.DASHBOARD] = 1; p[Moduli.CLIENTI] = 1; p[Moduli.COMMESSE] = 1; p[Moduli.PROGETTI] = 1; p[Moduli.RAPPORTINI] = 2
                     p[Moduli.ATTIVITA] = 2; p[Moduli.SPESE] = 2
                     // Fase 5 (architettura.md §16.1): i documenti in lettura, i ticket in scrittura.
                     p[Moduli.DOCUMENTI] = 1; p[Moduli.TICKET] = 2
@@ -177,7 +182,7 @@ data class Permessi(val livelli: Map<String, Int>) {
                 }
                 // Fase 6 (§17.18): solo le sue cose; mai persone, mezzi, clienti, soldi, amministrazione.
                 Ruoli.ESTERNO -> {
-                    p[Moduli.DASHBOARD] = 1; p[Moduli.COMMESSE] = 1; p[Moduli.RAPPORTINI] = 2; p[Moduli.ATTIVITA] = 2
+                    p[Moduli.DASHBOARD] = 1; p[Moduli.COMMESSE] = 1; p[Moduli.PROGETTI] = 1; p[Moduli.RAPPORTINI] = 2; p[Moduli.ATTIVITA] = 2
                     p[Moduli.SPESE] = 2; p[Moduli.TICKET] = 2; p[Moduli.DOCUMENTI] = 1; p[Moduli.COLLABORATORI] = 1
                 }
             }

@@ -335,6 +335,8 @@ module.exports = {
       referenti: vedeClienti ? this.leggiReferenti() : [],
       sedi: vedeClienti || vedeCommesse ? this.leggiSedi({ archiviati }) : [],
       prestazioni: vedeCommesse ? this.leggiPrestazioni() : [],
+      // 03/11/2026: i progetti, per scegliere quello del rapportino anche senza rete (e proporre il codice di uno nuovo).
+      progetti: this.livello('progetti') > 0 || this.livello('rapportini') > 0 ? this.leggiProgetti({}) : [],
       utenti: this.db.righe('SELECT id, nome, ruolo, attivo, soggetto_id FROM utenti ORDER BY nome')
         .map(u => Object.assign({ id: u.id, nome: u.nome, ruolo: u.ruolo, attivo: u.attivo === 1, idPersona: persone[u.id] || null },
           u.ruolo === 'esterno' ? { idSoggetto: u.soggetto_id } : {})),
@@ -374,6 +376,8 @@ module.exports = {
       referenti: [],
       sedi: this.leggiSedi({ archiviati: true }).filter(s => idSedi.has(s.id) || (idClienti.has(s.idSoggetto) && s.tipo === 'impianto' && commesse.some(m => m.sedeId === s.id))),
       prestazioni: this.leggiPrestazioni().filter(p => mie.has(String(p.idCommessa).toUpperCase())),
+      // 03/11/2026: i progetti delle commesse dei suoi incarichi (leggiProgetti filtra gia').
+      progetti: this.leggiProgetti({}),
       utenti: c.utente ? [{ id: c.utente.id, nome: c.utente.nome, ruolo: 'esterno', attivo: true, idPersona: null }] : [],
       numerazioni: this.leggiNumerazioni().filter(n => n.tipo === 'rapportino'),
     };
