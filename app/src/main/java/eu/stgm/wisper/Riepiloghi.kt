@@ -68,15 +68,16 @@ object Riepiloghi {
         noteInterne = "",
     )
 
-    enum class TipoGiorno { FATTO, MANCA, OGGI, OGGI_FATTO, FUTURO }
+    /** LIBERO (fase 6): un giorno di ferie, festa o chiusura dello studio, in grigio con la parola. */
+    enum class TipoGiorno { FATTO, MANCA, OGGI, OGGI_FATTO, FUTURO, LIBERO }
 
-    data class Giorno(val data: LocalDate, val ore: Double, val tipo: TipoGiorno)
+    data class Giorno(val data: LocalDate, val ore: Double, val tipo: TipoGiorno, val parola: String = "")
 
     /**
      * La settimana di oggi: lunedì-venerdì, più sabato e domenica solo se hanno
      * un rapportino. Un giorno passato senza rapportino è MANCA: si vede.
      */
-    fun settimana(viste: List<Vista>, oggi: LocalDate = LocalDate.now()): List<Giorno> {
+    fun settimana(viste: List<Vista>, oggi: LocalDate = LocalDate.now(), liberi: Map<LocalDate, String> = emptyMap()): List<Giorno> {
         val lunedi = oggi.with(DayOfWeek.MONDAY)
         val orePerGiorno = viste.map { it.rapportino }
             .filter { !it.data.isBefore(lunedi) && it.data.isBefore(lunedi.plusDays(7)) }
@@ -90,11 +91,13 @@ object Riepiloghi {
                 val tipo = when {
                     d == oggi && fatto -> TipoGiorno.OGGI_FATTO
                     d == oggi -> TipoGiorno.OGGI
-                    d.isAfter(oggi) -> TipoGiorno.FUTURO
+                    d.isAfter(oggi) -> if (liberi.containsKey(d)) TipoGiorno.LIBERO else TipoGiorno.FUTURO
                     fatto -> TipoGiorno.FATTO
+                    // Fase 6 (§6.5): ferie, festa o studio chiuso non sono giorni che mancano.
+                    liberi.containsKey(d) -> TipoGiorno.LIBERO
                     else -> TipoGiorno.MANCA
                 }
-                Giorno(d, ore, tipo)
+                Giorno(d, ore, tipo, liberi[d].orEmpty())
             }
     }
 

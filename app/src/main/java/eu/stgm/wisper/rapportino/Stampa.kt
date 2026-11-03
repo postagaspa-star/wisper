@@ -119,6 +119,60 @@ object Stampa {
         )
     }
 
+    /**
+     * Il PDF del preventivo (fase2.md §5), dal modello preventivo() di pc/ui/documenti.js:
+     * [preventivo] nella forma della risposta `preventivo` del server (§13.4), [scelte]
+     * idVoce -> scelta per mostrare il conto con le scelte del cliente.
+     */
+    suspend fun preventivo(
+        ctx: Context,
+        preventivo: JSONObject,
+        anagrafiche: JSONObject,
+        scelte: Map<String, Boolean>? = null,
+        immagine: suspend (String) -> Pair<ByteArray, String>?,
+    ): File {
+        val o = JSONObject()
+        if (scelte != null) o.put("scelte", JSONObject().apply { scelte.forEach { (k, v) -> put(k, v) } })
+        return stampa(
+            ctx,
+            "(typeof WisperDocumenti.preventivo === 'function' ? WisperDocumenti.preventivo($preventivo,$anagrafiche,$o) : '')",
+            nomePreventivo("Preventivo", preventivo, anagrafiche), immagine,
+        )
+    }
+
+    /** L'incarico professionale dal preventivo accettato (incarico() di pc/ui/documenti.js). */
+    suspend fun incarico(
+        ctx: Context,
+        preventivo: JSONObject,
+        anagrafiche: JSONObject,
+        immagine: suspend (String) -> Pair<ByteArray, String>?,
+    ): File = stampa(
+        ctx,
+        "(typeof WisperDocumenti.incarico === 'function' ? WisperDocumenti.incarico($preventivo,$anagrafiche,{}) : '')",
+        nomePreventivo("Incarico", preventivo, anagrafiche), immagine,
+    )
+
+    /**
+     * Un documento della fase 4 (fase4.md §8.3): il prospetto per il programma delle
+     * fatture o l'avviso di parcella. Dal modello di pc/ui/documenti.js quando c'è
+     * ([funzione]: prospettoFattura, avvisoParcella, col modello del pacchetto); finché
+     * il computer non l'ha, dalla pagina [riserva] scritta dal telefono (ProspettoPdf).
+     */
+    suspend fun documentoFase4(ctx: Context, funzione: String, modello: JSONObject, riserva: String, nome: String, opzioni: JSONObject = JSONObject()): File = stampa(
+        ctx,
+        "(typeof WisperDocumenti.$funzione === 'function' ? WisperDocumenti.$funzione($modello,$opzioni) : ${JSONObject.quote(riserva)})",
+        nome,
+    ) { null }
+
+    /** "Preventivo PR-2026-012 rev. 1 Rossi Impianti Srl". */
+    fun nomePreventivo(prefisso: String, p: JSONObject, anagrafiche: JSONObject): String {
+        val numero = testo(p, "numero").ifEmpty { "bozza" } + (testo(p, "revisione").toIntOrNull()?.takeIf { it > 0 }?.let { " rev. $it" } ?: "")
+        val id = testo(p, "idCliente")
+        val cliente = oggetti(anagrafiche.optJSONArray("clienti") ?: JSONArray()).firstOrNull { id.isNotEmpty() && testo(it, "id") == id }
+            ?.let { testo(it, "nome") } ?: testo(p, "cliente")
+        return nomeFile(prefisso, "$numero $cliente")
+    }
+
     private fun opzioni(conImporti: Boolean, conFoto: Boolean) =
         JSONObject().put("conImporti", conImporti).put("conFoto", conFoto)
 
@@ -128,9 +182,9 @@ object Stampa {
      * Apre il PDF con l'app del telefono che legge i PDF. Falso se non ce n'è una
      * (Android mostra comunque "Nessuna app": chi chiama può suggerire Condividi).
      */
-    fun apri(ctx: Context, pdf: File): Boolean {
+    fun apri(ctx: Context, pdf: File, tipo: String = "application/pdf"): Boolean {
         val vedi = Intent(Intent.ACTION_VIEW)
-            .setDataAndType(indirizzo(ctx, pdf), "application/pdf")
+            .setDataAndType(indirizzo(ctx, pdf), tipo)
             .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         return try {
             avvia(ctx, vedi)
@@ -144,11 +198,12 @@ object Stampa {
     /**
      * Il foglio "Condividi" di Android col PDF allegato. [titolo] è il documento
      * ("Rapportino RAP/2026/0003 del 05/07/2026"): fa da oggetto se si sceglie l'email.
+     * [tipo] per i file che non sono PDF (i CSV per Excel di Amministrazione).
      */
-    fun condividi(ctx: Context, pdf: File, titolo: String) {
+    fun condividi(ctx: Context, pdf: File, titolo: String, tipo: String = "application/pdf") {
         val uri = indirizzo(ctx, pdf)
         val manda = Intent(Intent.ACTION_SEND)
-            .setType("application/pdf")
+            .setType(tipo)
             .putExtra(Intent.EXTRA_STREAM, uri)
             .putExtra(Intent.EXTRA_SUBJECT, titolo)
             .putExtra(Intent.EXTRA_TITLE, titolo)

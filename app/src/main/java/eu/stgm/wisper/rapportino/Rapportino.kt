@@ -68,7 +68,56 @@ data class Rapportino(
      * delle commesse). Null = non scritto: vale quello di oggi.
      */
     val costoOrario: Double? = null,
+    /**
+     * Dalla fase 3 (§14.7): "" (non serve) | "da_approvare" | "approvato" |
+     * "respinto". Gli stati di sempre non cambiano; uno da approvare non si manda
+     * al cliente finche' non e' approvato.
+     */
+    val statoApprovazione: String = "",
+    /** Il motivo del rifiuto, se e' respinto. */
+    val motivoRifiuto: String = "",
+    /**
+     * Fase 5 (§16.2): il ticket di cui e' il rapportino. [idTicket] e' l'id interno
+     * del server; [idLocaleTicket] quello di un ticket nato sul telefono e non ancora
+     * partito. [numeroTicket] il numero (TK/2026/0014) per la pillola: il campo
+     * [ticket] resta il testo di sempre, stampato nel PDF (lo riempie il server).
+     */
+    val idTicket: String = "",
+    val idLocaleTicket: String = "",
+    val numeroTicket: String = "",
+    /** "Nel contratto CA/2026/002" o "Non si fattura" per un ticket chiuso così, se no vuoto. */
+    val nonSiFattura: String = "",
+    /**
+     * Fase 6 (§3.9, §7.8): gli strumenti usati, con lo stato della taratura del giorno
+     * del rapportino. Null = non toccati (non si mandano: il server non cambia niente);
+     * una lista (anche vuota) si manda intera.
+     */
+    val strumenti: List<StrumentoUsato>? = null,
+    /** Fase 6: l'incarico dell'esterno (lo mette il server). */
+    val idIncarico: String = "",
+    /** Fase 7 (fase7.md §10.4): "" firmato sul telefono o col foglio, "portale" firmato nel portale, e da chi. */
+    val firmaModo: String = "",
+    val firmaReferente: String = "",
+    /** Fase 7: pubblicato nel portale, da firmare là, visto dal cliente (e l'id della pubblicazione, se il server lo manda). */
+    val portalePubblicato: Boolean = false,
+    val portaleDaFirmare: Boolean = false,
+    val portaleVistoIl: String = "",
+    val portaleId: String = "",
 ) {
+    /** Il rapportino e' di un ticket (anche nato senza rete). */
+    val conTicket: Boolean get() = idTicket.isNotBlank() || idLocaleTicket.isNotBlank()
+
+    /** La chiave del ticket per le azioni del server: l'id, o l'idLocale di uno nato senza rete. */
+    val chiaveTicket: String get() = idTicket.ifBlank { idLocaleTicket }
+
+    /** La pillola dell'elenco: "Da approvare", "Respinto: motivo", o null. */
+    val pillolaApprovazione: String?
+        get() = when (statoApprovazione) {
+            "da_approvare" -> "Da approvare"
+            "respinto" -> if (motivoRifiuto.isBlank()) "Respinto" else "Respinto: $motivoRifiuto"
+            else -> null
+        }
+
     /** Firmato, inviato o fatturato: il lavoro non si tocca piu', si riporta in bozza. */
     val bloccato: Boolean get() = stato in Stato.BLOCCATI
 
@@ -81,6 +130,8 @@ data class Rapportino(
         luogo = luogo, descrizione = descrizione, oreLavoro = oreLavoro, oreExtra = oreExtra,
         oreViaggio = oreViaggio, km = km, spese = spese, noteSpese = noteSpese,
         tariffa = tariffa, noteInterne = noteInterne,
+        idTicket = idTicket, idLocaleTicket = idLocaleTicket, numeroTicket = numeroTicket,
+        strumenti = strumenti,
     )
 
     /** Quello che si manda allo script con "salvaRapportino". */
@@ -105,6 +156,13 @@ data class Rapportino(
         .put("noteSpese", noteSpese)
         .put("tariffa", tariffa ?: JSONObject.NULL)
         .put("noteInterne", noteInterne)
+        .apply {
+            // Fase 5: l'id del ticket se il server lo conosce, se no l'idLocale del ticket nato qui.
+            if (idTicket.isNotBlank()) put("idTicket", PonteServer.idJson(idTicket))
+            else if (idLocaleTicket.isNotBlank()) put("idLocaleTicket", idLocaleTicket)
+            // Fase 6: l'elenco intero degli strumenti, solo se è stato toccato (§17.13).
+            strumenti?.let { l -> put("strumenti", JSONArray().apply { l.forEach { put(it.perServer()) } }) }
+        }
 
     /** Tutto, per le copie sul telefono (coda e ultimo elenco letto). */
     fun aJson(): JSONObject = perIlFoglio()
@@ -118,7 +176,19 @@ data class Rapportino(
         .put("fatturatoIl", fatturatoIl)
         .put("creato", creato)
         .put("costoOrario", costoOrario ?: JSONObject.NULL)
+        .put("statoApprovazione", statoApprovazione)
+        .put("motivoRifiuto", motivoRifiuto)
+        .put("idLocaleTicket", idLocaleTicket)
+        .put("numeroTicket", numeroTicket)
+        .put("nonSiFattura", nonSiFattura)
+        .put("idIncarico", idIncarico)
+        .put("firmaModo", firmaModo)
+        .put("firmaReferente", firmaReferente)
+        .put("portale", JSONObject().put("pubblicato", portalePubblicato).put("daFirmare", portaleDaFirmare).put("vistoIl", portaleVistoIl).put("pubblicazione", portaleId))
         .apply {
+            // Sul telefono gli strumenti restano interi (nome, matricola, stato di quel giorno).
+            strumenti?.let { l -> put("strumenti", JSONArray().apply { l.forEach { put(it.aJson()) } }) }
+            if (idTicket.isNotBlank() && !has("idTicket")) put("idTicket", PonteServer.idJson(idTicket))
             conto?.let {
                 put("oreTotali", it.oreTotali)
                 put("compensoOre", it.compensoOre)
@@ -205,6 +275,20 @@ data class Rapportino(
                 fatturatoIl = o.testo("fatturatoIl"),
                 creato = o.testo("creato"),
                 costoOrario = o.numero("costoOrario"),
+                statoApprovazione = o.testo("statoApprovazione"),
+                motivoRifiuto = o.testo("motivoRifiuto"),
+                idTicket = o.testo("idTicket"),
+                idLocaleTicket = o.testo("idLocaleTicket"),
+                numeroTicket = o.testo("numeroTicket"),
+                nonSiFattura = o.testo("nonSiFattura"),
+                strumenti = if (o.has("strumenti") && !o.isNull("strumenti")) StrumentoUsato.lista(o.optJSONArray("strumenti")) else null,
+                idIncarico = o.testo("idIncarico"),
+                firmaModo = o.testo("firmaModo"),
+                firmaReferente = o.testo("firmaReferente"),
+                portalePubblicato = o.optJSONObject("portale")?.vero("pubblicato") == true,
+                portaleDaFirmare = o.optJSONObject("portale")?.vero("daFirmare") == true,
+                portaleVistoIl = o.optJSONObject("portale")?.testo("vistoIl").orEmpty(),
+                portaleId = o.optJSONObject("portale")?.primoTesto("pubblicazione", "id", "idPubblicazione").orEmpty(),
             )
         }
     }
@@ -266,6 +350,8 @@ data class Rapportino(
         .put("fatturatoIl", fatturatoIl)
         .put("creato", creato)
         .put("modificato", modificato)
+        // Fase 6 (§3.9): la riga Strumenti del PDF la fa pc/ui/documenti.js, solo quando ce ne sono.
+        .put("strumenti", JSONArray().apply { strumenti.orEmpty().forEach { put(it.aJson()) } })
 }
 
 /** I conti di un rapportino, come li ha fatti il foglio o [Calcolo] sul telefono. */
@@ -288,10 +374,14 @@ data class FileRemoto(val id: String, val url: String) {
     companion object {
         fun daJson(o: JSONObject) = FileRemoto(o.testo("id"), o.testo("url"))
 
-        /** L'id di un file di Drive dal suo indirizzo (.../d/<id>/view), come idDaUrl() nello script. */
+        /**
+         * L'id di un file dal suo indirizzo: quello del server ("/file/<id>") o
+         * quello di Drive dei rapportini di prima (.../d/<id>/view), come idDaUrl() nello script.
+         */
         fun idDaUrl(url: String?): String {
             val u = url.orEmpty()
-            return (Regex("""/d/([A-Za-z0-9_-]{10,})""").find(u) ?: Regex("""[?&]id=([A-Za-z0-9_-]{10,})""").find(u))
+            return (Regex("""/file/([A-Za-z0-9_-]+)""").find(u) ?: Regex("""/d/([A-Za-z0-9_-]{10,})""").find(u)
+                ?: Regex("""[?&]id=([A-Za-z0-9_-]{10,})""").find(u))
                 ?.groupValues?.get(1).orEmpty()
         }
     }

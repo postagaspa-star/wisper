@@ -31,6 +31,9 @@ public sealed class Finestra : Form, Ponte.IFinestra
     /// <summary>--stampa-prova: il documento da stampare e dove, poi si esce.</summary>
     private readonly (string Html, string Pdf)? stampaProva;
 
+    /// <summary>L'icona accanto all'orologio, solo per le notifiche dei promemoria: creata alla prima.</summary>
+    private NotifyIcon? avvisi;
+
     public Finestra(Ponte ponte, string cartellaUi, string cartellaDatiWebView, (string Html, string Pdf)? stampaProva = null)
     {
         this.stampaProva = stampaProva;
@@ -51,6 +54,12 @@ public sealed class Finestra : Form, Ponte.IFinestra
         vista = new WebView2 { Dock = DockStyle.Fill, DefaultBackgroundColor = BackColor };
         Controls.Add(vista);
         Load += async (_, _) => await InizializzaAsync();
+        // Fase 7 (§3.13): la finestra torna attiva (per esempio dopo WhatsApp nel browser): la pagina chiede "L'hai mandato?".
+        Activated += (_, _) =>
+        {
+            try { vista.CoreWebView2?.PostWebMessageAsJson("{\"tipo\":\"attiva\"}"); }
+            catch (Exception ex) { Log.Errore("avviso di finestra attiva non mandato", ex); }
+        };
     }
 
     private async Task InizializzaAsync()
@@ -111,6 +120,46 @@ public sealed class Finestra : Form, Ponte.IFinestra
 
     public void Riavvia() => BeginInvoke(() => ponte.Aggiornamenti?.Riavvia(ponte.ArgomentiDiAvvio));
 
+    /// <summary>
+    /// Un promemoria come notifica di Windows (fase 2). Si usa l'icona accanto all'orologio, che
+    /// Windows 10 e 11 mostrano come notifica nell'angolo; un clic riporta qui Wisper Ufficio.
+    /// Solo mentre il programma è aperto: chiuso, i promemoria li dà il telefono.
+    /// </summary>
+    public void Notifica(string titolo, string testo)
+    {
+        if (IsDisposed) return;
+        BeginInvoke(() =>
+        {
+            try
+            {
+                if (avvisi == null)
+                {
+                    avvisi = new NotifyIcon { Icon = Icon ?? SystemIcons.Information, Text = "Wisper Ufficio", Visible = true };
+                    avvisi.BalloonTipClicked += (_, _) => Davanti();
+                    avvisi.Click += (_, _) => Davanti();
+                }
+                avvisi.ShowBalloonTip(10000, titolo.Length > 0 ? titolo : "Wisper", testo, ToolTipIcon.None);
+            }
+            catch (Exception e)
+            {
+                Log.Errore("notifica non mostrata", e);
+            }
+        });
+    }
+
+    private void Davanti()
+    {
+        if (WindowState == FormWindowState.Minimized) WindowState = FormWindowState.Normal;
+        Activate();
+    }
+
+    protected override void OnFormClosed(FormClosedEventArgs e)
+    {
+        // L'icona accanto all'orologio va tolta, se no resta lì fino al passaggio del mouse.
+        if (avvisi != null) { avvisi.Visible = false; avvisi.Dispose(); avvisi = null; }
+        base.OnFormClosed(e);
+    }
+
     private async void SuRichiesta(object? mittente, CoreWebView2WebResourceRequestedEventArgs e)
     {
         var rinvio = e.GetDeferral();
@@ -138,6 +187,13 @@ public sealed class Finestra : Form, Ponte.IFinestra
                 e.Response = dati != null
                     ? Risposta(200, Ponte.TipoContenuto(uri.AbsolutePath == "/" ? "index.html" : uri.AbsolutePath), dati)
                     : Risposta(404, "text/plain", Encoding.UTF8.GetBytes("non trovato"));
+                return;
+            }
+            // Fase 5: un file trascinato sulla pagina arriva in byte: va al server così com'è, senza diventare testo.
+            if (metodo == "POST" && uri.AbsolutePath == "/locale/carica-corpo")
+            {
+                var (s5, json5) = await ponte.CaricaCorpoAsync(uri, e.Request.Content);
+                e.Response = Risposta(s5, "application/json; charset=utf-8", Encoding.UTF8.GetBytes(json5));
                 return;
             }
             string? corpo = null;
@@ -258,9 +314,11 @@ public sealed class Finestra : Form, Ponte.IFinestra
     {
         using var finestra = new OpenFileDialog
         {
-            Title = filtro == "immagini" ? "Scegli un'immagine" : "Scegli un file",
+            Title = filtro == "immagini" ? "Scegli un'immagine" : filtro == "importa" ? "Scegli il file dei clienti o dei fornitori" : "Scegli un file",
             Filter = filtro == "immagini"
                 ? "Immagini (*.png;*.jpg;*.jpeg)|*.png;*.jpg;*.jpeg"
+                // Fase 8 (§7.2): Importa clienti e fornitori legge un CSV (; o ,) o un file di Excel.
+                : filtro == "importa" ? "Clienti e fornitori (*.csv;*.xlsx)|*.csv;*.xlsx|Tutti i file|*.*"
                 : "Documenti e immagini|*.pdf;*.png;*.jpg;*.jpeg;*.doc;*.docx;*.xls;*.xlsx|Tutti i file|*.*",
             Multiselect = false,
         };
@@ -268,17 +326,77 @@ public sealed class Finestra : Form, Ponte.IFinestra
         return (Path.GetFileName(finestra.FileName), File.ReadAllBytes(finestra.FileName));
     }
 
-    /// <summary>Il percorso di un file scelto a mano (qui: il file di collegamento dell'email).</summary>
+    /// <summary>
+    /// Fase 5: un documento da caricare nell'archivio (o la foto di un ticket): solo il percorso, il ponte lo
+    /// legge mentre lo manda al server. Si apre sul filo della finestra, come la finestra Salva.
+    /// </summary>
     public string? ScegliPercorso(string filtro)
     {
-        using var finestra = new OpenFileDialog
+        string? scelto = null;
+        Invoke(() =>
         {
-            Title = "Scegli il file dell'email",
-            Filter = "Collegamento a Wisper (*.wisper)|*.wisper|Tutti i file|*.*",
-            InitialDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads"),
-            Multiselect = false,
-        };
-        return finestra.ShowDialog(this) == DialogResult.OK ? finestra.FileName : null;
+            using var finestra = new OpenFileDialog
+            {
+                Title = filtro == "immagini" ? "Scegli una foto" : filtro == "collegamento" ? "Scegli il file dell'email" : "Scegli il documento",
+                Filter = filtro == "immagini"
+                    ? "Foto (*.png;*.jpg;*.jpeg;*.heic;*.webp)|*.png;*.jpg;*.jpeg;*.heic;*.webp|Tutti i file|*.*"
+                    // Il file "Collega Wisper Ufficio.wisper" che il telefono fa mandare per email.
+                    : filtro == "collegamento" ? "Collegamento a Wisper (*.wisper)|*.wisper|Tutti i file|*.*"
+                    : "Documenti|*.pdf;*.png;*.jpg;*.jpeg;*.doc;*.docx;*.xls;*.xlsx;*.dwg;*.dxf;*.zip;*.txt;*.csv;*.p7m|Tutti i file|*.*",
+                InitialDirectory = filtro == "collegamento" ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads") : "",
+                Multiselect = false,
+            };
+            scelto = finestra.ShowDialog(this) == DialogResult.OK ? finestra.FileName : null;
+        });
+        return scelto;
+    }
+
+    /// <summary>
+    /// Fase 4: i file delle fatture elettroniche da importare (.xml, .p7m, .zip), anche più insieme.
+    /// Come la finestra Salva, si apre sul filo della finestra.
+    /// </summary>
+    public IReadOnlyList<(string Nome, byte[] Dati)>? ScegliPiuFile(string filtro)
+    {
+        List<(string Nome, byte[] Dati)>? scelti = null;
+        Invoke(() =>
+        {
+            using var finestra = new OpenFileDialog
+            {
+                Title = "Scegli i file delle fatture",
+                Filter = "Fatture elettroniche (*.xml;*.p7m;*.zip)|*.xml;*.p7m;*.zip|Tutti i file|*.*",
+                Multiselect = true,
+            };
+            if (finestra.ShowDialog(this) != DialogResult.OK) return;
+            scelti = finestra.FileNames.Select(f => (Path.GetFileName(f), File.ReadAllBytes(f))).ToList();
+        });
+        return scelti;
+    }
+
+    /// <summary>Dove salvare un file (un'esportazione per Excel, un documento): la finestra Salva di Windows.</summary>
+    public string? SalvaFile(string nomeProposto)
+    {
+        var estensione = Path.GetExtension(nomeProposto).TrimStart('.').ToLowerInvariant();
+        string? scelto = null;
+        // Le richieste dell'interfaccia arrivano su un altro filo: la finestra di Windows va aperta sul suo.
+        Invoke(() =>
+        {
+            using var finestra = new SaveFileDialog
+            {
+                Title = "Salva",
+                FileName = nomeProposto,
+                Filter = estensione == "csv" ? "File per Excel (*.csv)|*.csv|Tutti i file|*.*"
+                    : estensione == "xml" ? "File XML (*.xml)|*.xml|Tutti i file|*.*"
+                    // Fase 8: il calendario da importare in Outlook (§5.4) e il file con tutti i dati (§7.1).
+                    : estensione == "ics" ? "Calendario (*.ics)|*.ics|Tutti i file|*.*"
+                    : estensione == "zip" ? "Cartella compressa (*.zip)|*.zip|Tutti i file|*.*" : "Tutti i file|*.*",
+                DefaultExt = estensione,
+                AddExtension = true,
+                OverwritePrompt = true,
+                InitialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+            };
+            scelto = finestra.ShowDialog(this) == DialogResult.OK ? finestra.FileName : null;
+        });
+        return scelto;
     }
 
     private void MostraMessaggio(string testo)

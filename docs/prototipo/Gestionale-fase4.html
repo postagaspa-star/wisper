@@ -1,0 +1,1506 @@
+<!doctype html>
+<html lang="it">
+<meta charset="utf-8">
+<title>Wisper Gestionale fase 4</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap">
+<style>
+/* Prototipo della fase 4 del gestionale (fatturazione, banche e scadenze): telefono (390x844) e computer (1280x800)
+   con gli stessi dati, anche affiancati. Impalcatura e stili dal prototipo della fase 3; colori, caratteri e misure da
+   docs/aspetto.md. Solo dati di esempio. Accordo: docs/gestionale/fase4.md. */
+:root {
+  --fondo: #F4F4F2; --scheda: #FFFFFF; --sup: #E7E6E2; --bordo: #E6E5E1; --bordo-campo: #CFCEC9; --riga: #EFEEEB;
+  --testo: #1B1B1F; --testo2: #3F3F46; --tenue: #5F5F67; --tenuissimo: #8A8A92;
+  --giallo: #FFC53D; --giallo-premuto: #F2B21E; --giallo-tenue: #FFF4D6; --giallo-testo: #8A5A00; --giallo-tratteggio: #B98300;
+  --firmato: #1F6A30; --firmato-f: #EBF7EE; --inviato: #1E4FA8; --inviato-f: #EAF1FD; --fatturato: #3F3F46; --fatturato-f: #E7E6E2;
+  --rosso: #C92A2A; --rosso-f: #FDEEEC; --rosso-t: #9B1C1C; --ambra: #E59F00; --binario: #E2E1DD;
+  --nero: #1B1B1F; --su-nero: #FFFFFF; --velo: rgba(20,20,22,.45); --scelta: #FFF8E5; --cornice: #D9D8D3; --palco: #ECEBE7;
+  --blu-f: #EAF1FD; --blu-t: #1E4FA8; --verde-f: #EBF7EE; --verde-t: #1F6A30; --viola-f: #F1ECFE; --viola-t: #5532C9; --ambra-f: #FBF3E3; --ambra-t: #8A5A12;
+  --font: 'Figtree', system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --fondo: #121214; --scheda: #1C1C1F; --sup: #2A2A2E; --bordo: #2C2C30; --bordo-campo: #46464D; --riga: #2A2A2E;
+  --testo: #F2F2F3; --testo2: #D4D4D8; --tenue: #A1A1AA; --tenuissimo: #71717A;
+  --giallo-tenue: #3A2F14; --giallo-testo: #FFD76A; --giallo-tratteggio: #C99A2A;
+  --firmato: #8CE0A4; --firmato-f: #1E3326; --inviato: #9EC1FF; --inviato-f: #1C2A44; --fatturato: #D4D4D8; --fatturato-f: #2A2A2E;
+  --rosso: #E03131; --rosso-f: #3A1C1C; --rosso-t: #FFA8A8; --binario: #2C2C30;
+  --nero: #F2F2F3; --su-nero: #1B1B1F; --velo: rgba(0,0,0,.6); --scelta: #2A2414; --cornice: #2C2C30; --palco: #0B0B0C;
+  --blu-f: #1C2A44; --blu-t: #9EC1FF; --verde-f: #1E3326; --verde-t: #8CE0A4; --viola-f: #2A2340; --viola-t: #C4B5FD; --ambra-f: #33281A; --ambra-t: #F2C27A;
+  color-scheme: dark;
+} }
+:root[data-theme="dark"] {
+  --fondo: #121214; --scheda: #1C1C1F; --sup: #2A2A2E; --bordo: #2C2C30; --bordo-campo: #46464D; --riga: #2A2A2E;
+  --testo: #F2F2F3; --testo2: #D4D4D8; --tenue: #A1A1AA; --tenuissimo: #71717A;
+  --giallo-tenue: #3A2F14; --giallo-testo: #FFD76A; --giallo-tratteggio: #C99A2A;
+  --firmato: #8CE0A4; --firmato-f: #1E3326; --inviato: #9EC1FF; --inviato-f: #1C2A44; --fatturato: #D4D4D8; --fatturato-f: #2A2A2E;
+  --rosso: #E03131; --rosso-f: #3A1C1C; --rosso-t: #FFA8A8; --binario: #2C2C30;
+  --nero: #F2F2F3; --su-nero: #1B1B1F; --velo: rgba(0,0,0,.6); --scelta: #2A2414; --cornice: #2C2C30; --palco: #0B0B0C;
+  --blu-f: #1C2A44; --blu-t: #9EC1FF; --verde-f: #1E3326; --verde-t: #8CE0A4; --viola-f: #2A2340; --viola-t: #C4B5FD; --ambra-f: #33281A; --ambra-t: #F2C27A;
+  color-scheme: dark;
+}
+html, body { height: 100%; margin: 0; }
+body { background: var(--palco); color: var(--testo); font-family: var(--font); -webkit-tap-highlight-color: transparent; }
+* { box-sizing: border-box; }
+button, input { font-family: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 3px solid var(--giallo); outline-offset: 2px; }
+
+/* ---------- palco e commutatore ---------- */
+.barra-proto { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: center; padding-block: 14px 0;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.barra-proto .pill-proto { font-size: 12px; font-weight: 800; letter-spacing: .08em; background: var(--giallo); color: #1B1B1F; border-radius: 999px; padding: 5px 11px; }
+.seg { display: inline-flex; background: var(--sup); border-radius: 999px; padding: 4px; gap: 2px; }
+.seg button { border: none; background: transparent; border-radius: 999px; min-height: 40px; padding: 0 16px; font-size: 15px; font-weight: 700; color: var(--testo2); }
+.seg button[aria-pressed="true"] { background: var(--scheda); color: var(--testo); box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+.palco { display: flex; align-items: flex-start; justify-content: center; gap: 36px; padding-block: 18px 32px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.telefono { width: 390px; height: 844px; position: relative; overflow: hidden; background: var(--fondo); border-radius: 44px;
+  border: 10px solid var(--cornice); box-shadow: 0 30px 80px rgba(20,20,22,.18); flex: none; }
+.computer-scala { flex: none; overflow: hidden; }
+.computer { transform-origin: top left; }
+.computer { width: 1280px; height: 800px; position: relative; overflow: hidden; background: var(--fondo); border-radius: 14px;
+  border: 1px solid var(--cornice); box-shadow: 0 30px 80px rgba(20,20,22,.18); display: flex; }
+.accanto { max-width: 300px; display: flex; flex-direction: column; gap: 12px; color: var(--testo2); font-size: 15px; line-height: 1.45; padding-top: 30px; }
+.accanto h1 { margin: 0; font-size: 26px; font-weight: 800; letter-spacing: -0.5px; color: var(--testo); text-wrap: balance; }
+.accanto ol { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; }
+.accanto .ruolo-scelta { display: flex; flex-direction: column; gap: 6px; }
+.accanto .ruolo-scelta label { font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--tenue); }
+@media (max-width: 1100px) { .accanto { display: none; } }
+@media (max-width: 520px) {
+  .palco.modo-tel { padding: 0; display: block; }
+  .modo-tel .telefono { width: 100%; height: calc(100vh - 70px); border: none; border-radius: 0; box-shadow: none; }
+}
+
+/* ---------- elementi comuni ---------- */
+.schermo { position: absolute; inset: 0; overflow-y: auto; overflow-x: hidden; padding: 10px 20px 120px; display: flex; flex-direction: column; gap: 14px; scrollbar-width: none; }
+.schermo::-webkit-scrollbar { display: none; }
+.schermo > * { flex-shrink: 0; }
+.entra-avanti { animation: avanti 260ms cubic-bezier(.2,.8,.2,1); }
+.entra-indietro { animation: indietro 260ms cubic-bezier(.2,.8,.2,1); }
+.entra-sfuma { animation: sfuma 200ms ease-out; }
+@keyframes avanti { from { opacity: 0; transform: translateX(28px); } }
+@keyframes indietro { from { opacity: 0; transform: translateX(-28px); } }
+@keyframes sfuma { from { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .entra-avanti, .entra-indietro, .entra-sfuma { animation: none; } * { transition: none !important; } }
+
+.testa { display: flex; align-items: center; justify-content: space-between; min-height: 52px; gap: 8px; }
+.testa .sx, .testa .dx { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.btn-menu { display: inline-flex; align-items: center; gap: 8px; height: 44px; padding: 0 14px 0 10px; border-radius: 22px; border: none; background: var(--sup); font-size: 15px; font-weight: 800; }
+.tondo { width: 44px; height: 44px; border-radius: 22px; border: none; background: var(--sup); display: flex; align-items: center; justify-content: center; flex: none; }
+.dove { font-size: 13px; font-weight: 700; color: var(--tenue); letter-spacing: .02em; }
+.titolo { font-size: 30px; font-weight: 800; letter-spacing: -0.6px; margin: 0; line-height: 1.12; text-wrap: balance; }
+.sottotitolo { font-size: 15px; font-weight: 600; color: var(--tenue); margin: 0; }
+.etichetta { font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--tenue); }
+.scheda { background: var(--scheda); border: 1px solid var(--bordo); border-radius: 22px; padding: 18px; }
+.scheda.righe { padding: 0 18px; }
+.riga { display: flex; align-items: center; gap: 12px; min-height: 64px; padding: 12px 0; border-top: 1px solid var(--riga); text-align: left; background: none; border-left: none; border-right: none; border-bottom: none; width: 100%; font-size: inherit; }
+.riga:first-child { border-top: none; }
+.riga .corpo { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.riga .t1 { font-size: 16px; font-weight: 800; }
+.riga .t2 { font-size: 14px; font-weight: 600; color: var(--tenue); }
+.riga .quanto { font-size: 15px; font-weight: 800; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.riga .freccia { color: var(--tenuissimo); flex: none; }
+.ico-riga { width: 40px; height: 40px; border-radius: 12px; display: flex; align-items: center; justify-content: center; flex: none; }
+.ico-rosso { background: var(--rosso-f); color: var(--rosso-t); }
+.ico-giallo { background: var(--giallo-tenue); color: var(--giallo-testo); }
+.ico-grigio { background: var(--sup); color: var(--testo2); }
+.ico-blu { background: var(--blu-f); color: var(--blu-t); }
+.cerchio { width: 40px; height: 40px; border-radius: 20px; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 14px; flex: none; }
+.c-blu { background: var(--blu-f); color: var(--blu-t); } .c-verde { background: var(--verde-f); color: var(--verde-t); }
+.c-viola { background: var(--viola-f); color: var(--viola-t); } .c-ambra { background: var(--ambra-f); color: var(--ambra-t); }
+.pill { display: inline-flex; align-items: center; height: 26px; padding: 0 10px; border-radius: 999px; font-size: 13px; font-weight: 800; white-space: nowrap; }
+.p-grigio { background: var(--sup); color: var(--testo2); } .p-verde { background: var(--firmato-f); color: var(--firmato); }
+.p-blu { background: var(--inviato-f); color: var(--inviato); } .p-giallo { background: var(--giallo-tenue); color: var(--giallo-testo); }
+.p-rosso { background: var(--rosso-f); color: var(--rosso-t); }
+.codice { display: inline-flex; align-items: center; height: 26px; padding: 0 9px; border-radius: 8px; background: var(--nero); color: var(--giallo); font-size: 13px; font-weight: 800; letter-spacing: .02em; }
+.principale { height: 64px; border-radius: 18px; border: none; background: var(--giallo); color: #1B1B1F; font-size: 18px; font-weight: 800; width: 100%; display: flex; align-items: center; justify-content: center; gap: 10px; }
+.principale:active { background: var(--giallo-premuto); }
+.secondario { height: 48px; border-radius: 14px; border: 1.5px solid var(--bordo-campo); background: var(--scheda); font-size: 16px; font-weight: 700; padding: 0 16px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+.testo-link { background: none; border: none; color: var(--giallo-testo); font-size: 15px; font-weight: 700; padding: 8px 0; }
+.in-basso { position: absolute; left: 0; right: 0; bottom: 0; padding: 18px 20px 26px; background: linear-gradient(to bottom, transparent, var(--fondo) 30%); }
+.segmenti { display: flex; background: var(--sup); border-radius: 14px; padding: 4px; gap: 4px; overflow-x: auto; scrollbar-width: none; }
+.segmenti button { flex: 1 0 auto; border: none; background: transparent; border-radius: 10px; min-height: 40px; padding: 0 12px; font-size: 14px; font-weight: 700; color: var(--testo2); white-space: nowrap; }
+.segmenti button[aria-pressed="true"] { background: var(--scheda); color: var(--testo); box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+.cerca { display: flex; align-items: center; gap: 10px; height: 52px; border-radius: 16px; border: 1.5px solid var(--bordo-campo); background: var(--scheda); padding: 0 14px; color: var(--tenue); font-size: 16px; font-weight: 600; }
+.cerca input { border: none; outline: none; background: transparent; font-size: 16px; font-weight: 600; flex: 1; min-width: 0; }
+.campo { display: flex; flex-direction: column; gap: 6px; }
+.campo label { font-size: 13px; font-weight: 700; color: var(--testo2); }
+.campo input { height: 56px; border-radius: 16px; border: 1.5px solid var(--bordo-campo); background: var(--scheda); padding: 0 16px; font-size: 17px; font-weight: 600; outline: none; width: 100%; }
+.campo input:focus { border-color: var(--testo); }
+.avviso-errore { background: var(--rosso-f); color: var(--rosso-t); border-radius: 14px; padding: 12px 14px; font-size: 15px; font-weight: 700; }
+.coppie { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 14px 16px; }
+.coppia { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.coppia .k { font-size: 13px; font-weight: 600; color: var(--tenue); }
+.coppia .v { font-size: 16px; font-weight: 700; overflow-wrap: anywhere; }
+.barra-av { height: 8px; background: var(--binario); border-radius: 4px; overflow: hidden; }
+.barra-av i { display: block; height: 100%; background: var(--nero); border-radius: 4px; transition: width 400ms cubic-bezier(.2,.8,.2,1); }
+.barra-av i.sforato { background: var(--rosso); } .barra-av i.attenzione { background: var(--ambra); }
+.tre-num { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.num-box { background: var(--scheda); border: 1px solid var(--bordo); border-radius: 18px; padding: 12px; display: flex; flex-direction: column; gap: 2px; text-align: left; }
+.num-box b { font-size: 26px; font-weight: 800; letter-spacing: -0.5px; font-variant-numeric: tabular-nums; }
+.num-box span { font-size: 13px; font-weight: 700; color: var(--tenue); }
+.num-box.rosso b { color: var(--rosso); }
+.vuoto { font-size: 15px; color: var(--tenue); font-weight: 600; padding: 14px 0; }
+
+/* il tuo giorno */
+.settimana { display: flex; justify-content: space-between; gap: 4px; }
+.giorno { display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 12px; font-weight: 700; color: var(--tenue); min-width: 44px; background: none; border: none; }
+.giorno .c { width: 40px; height: 40px; border-radius: 20px; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 800; }
+.giorno.fatto .c { background: var(--nero); color: var(--su-nero); }
+.giorno.manca .c { border: 2px dashed var(--giallo-tratteggio); color: var(--giallo-testo); }
+.giorno.oggi .c { background: var(--giallo); color: #1B1B1F; }
+.giorno.futuro .c { background: var(--sup); color: var(--tenuissimo); }
+.giorno .sotto { color: var(--giallo-testo); }
+
+/* menu laterale del telefono */
+.velo { position: absolute; inset: 0; background: var(--velo); opacity: 0; pointer-events: none; transition: opacity 260ms ease; z-index: 20; }
+.velo.aperto { opacity: 1; pointer-events: auto; }
+.cassetto { position: absolute; top: 0; bottom: 0; left: 0; width: 312px; background: var(--scheda); z-index: 21; transform: translateX(-100%); transition: transform 300ms cubic-bezier(.2,.8,.2,1); display: flex; flex-direction: column; padding: 16px 12px 18px; gap: 6px; border-radius: 0 24px 24px 0; }
+.cassetto.aperto { transform: none; }
+.cassetto .chi { display: flex; align-items: center; gap: 12px; padding: 10px 8px 16px; border-bottom: 1px solid var(--riga); margin-bottom: 6px; }
+.voce { display: flex; align-items: center; gap: 14px; min-height: 52px; padding: 0 14px; border-radius: 16px; border: none; background: none; font-size: 16px; font-weight: 700; text-align: left; width: 100%; color: var(--testo2); }
+.voce.attiva { background: var(--giallo-tenue); color: var(--testo); font-weight: 800; }
+.voce .num-v { margin-left: auto; min-width: 24px; height: 24px; border-radius: 12px; background: var(--giallo); color: #1B1B1F; font-size: 13px; font-weight: 800; display: flex; align-items: center; justify-content: center; padding: 0 7px; }
+.voce .n-spec { font-size: 12px; color: var(--tenuissimo); font-weight: 700; width: 18px; font-variant-numeric: tabular-nums; }
+.cassetto .piede { margin-top: auto; border-top: 1px solid var(--riga); padding: 12px 8px 0; display: flex; flex-direction: column; gap: 4px; font-size: 13px; font-weight: 600; color: var(--tenue); }
+.stato-ok { display: flex; align-items: center; gap: 6px; } .stato-ok i { width: 8px; height: 8px; border-radius: 4px; background: var(--firmato); }
+
+/* foglio dal basso */
+.foglio { position: absolute; left: 0; right: 0; bottom: 0; background: var(--scheda); border-radius: 26px 26px 0 0; z-index: 31; padding: 10px 20px 26px; transform: translateY(100%); transition: transform 320ms cubic-bezier(.2,.8,.2,1); display: flex; flex-direction: column; gap: 12px; max-height: 88%; overflow-y: auto; }
+.foglio.aperto { transform: none; }
+.foglio .maniglia { width: 40px; height: 5px; border-radius: 3px; background: var(--bordo-campo); align-self: center; margin-bottom: 6px; }
+.velo-foglio { z-index: 30; }
+.scelta-ruolo { display: flex; gap: 12px; align-items: flex-start; border: 1.5px solid var(--bordo); border-radius: 16px; padding: 14px; text-align: left; background: var(--scheda); width: 100%; }
+.scelta-ruolo.scelto { border: 2px solid var(--nero); background: var(--scelta); }
+.scelta-ruolo b { font-size: 16px; } .scelta-ruolo span { font-size: 14px; color: var(--tenue); font-weight: 600; }
+.pallino { width: 22px; height: 22px; border-radius: 11px; border: 2px solid var(--bordo-campo); flex: none; margin-top: 1px; display: flex; align-items: center; justify-content: center; }
+.scelto .pallino { border-color: var(--nero); } .scelto .pallino::after { content: ""; width: 10px; height: 10px; border-radius: 5px; background: var(--nero); }
+
+/* permessi */
+.liv { display: flex; background: var(--sup); border-radius: 12px; padding: 3px; gap: 2px; }
+.liv button { border: none; background: none; border-radius: 9px; min-height: 36px; padding: 0 10px; font-size: 13px; font-weight: 800; color: var(--tenue); }
+.liv button[aria-pressed="true"].l0 { background: var(--scheda); color: var(--testo2); }
+.liv button[aria-pressed="true"].l1 { background: var(--inviato-f); color: var(--inviato); }
+.liv button[aria-pressed="true"].l2 { background: var(--firmato-f); color: var(--firmato); }
+.liv.bloccato { opacity: .55; pointer-events: none; }
+.riga-perm { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 60px; border-top: 1px solid var(--riga); padding: 8px 0; }
+.riga-perm:first-child { border-top: none; }
+.riga-perm .nome-m { font-size: 15px; font-weight: 800; } .riga-perm .spiega { font-size: 13px; font-weight: 600; color: var(--tenue); }
+
+/* registro */
+.voce-reg { display: flex; gap: 12px; padding: 12px 0; border-top: 1px solid var(--riga); }
+.voce-reg:first-child { border-top: none; }
+.voce-reg .frase { font-size: 15px; font-weight: 600; color: var(--testo2); line-height: 1.4; }
+.voce-reg .frase b { color: var(--testo); font-weight: 800; }
+.voce-reg .quando { font-size: 13px; font-weight: 600; color: var(--tenue); margin-top: 2px; }
+.prima-dopo { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 6px; font-size: 14px; font-weight: 700; }
+.prima-dopo s { color: var(--tenue); background: var(--sup); border-radius: 6px; padding: 1px 6px; }
+.prima-dopo ins { text-decoration: none; background: var(--firmato-f); color: var(--firmato); border-radius: 6px; padding: 1px 6px; }
+
+.avviso { position: absolute; left: 20px; right: 20px; bottom: 28px; background: #1B1B1F; color: #fff; border-radius: 16px; padding: 14px 16px; font-size: 15px; font-weight: 700; display: flex; justify-content: space-between; align-items: center; z-index: 40; opacity: 0; transform: translateY(10px); transition: all 220ms ease; pointer-events: none; }
+.avviso.visto { opacity: 1; transform: none; pointer-events: auto; }
+.avviso button { background: none; border: none; color: var(--giallo); font-weight: 800; font-size: 15px; }
+
+/* ---------- computer ---------- */
+.lato { width: 248px; flex: none; background: var(--scheda); border-right: 1px solid var(--bordo); display: flex; flex-direction: column; padding: 18px 14px; gap: 4px; transition: width 260ms ease-in-out; overflow: hidden; }
+.lato.chiuso { width: 76px; }
+.lato .marchio-pc { display: flex; align-items: center; gap: 10px; padding: 4px 6px 18px; white-space: nowrap; }
+.lato .marchio-pc div { display: flex; flex-direction: column; line-height: 1.1; } .lato .marchio-pc b { font-size: 17px; font-weight: 800; } .lato .marchio-pc span { font-size: 13px; color: var(--tenue); font-weight: 600; }
+.lato .voce { white-space: nowrap; min-height: 46px; font-size: 15px; }
+.lato.chiuso .voce span.lab, .lato.chiuso .voce .num-v, .lato.chiuso .marchio-pc div, .lato.chiuso .piede-pc .lab, .lato.chiuso .voce .n-spec { display: none; }
+.lato .piede-pc { margin-top: auto; display: flex; flex-direction: column; gap: 8px; border-top: 1px solid var(--riga); padding-top: 12px; font-size: 13px; color: var(--tenue); font-weight: 600; white-space: nowrap; }
+.contenuto-pc { flex: 1; min-width: 0; overflow-y: auto; padding: 28px 40px 60px; display: flex; flex-direction: column; gap: 18px; position: relative; }
+.contenuto-pc .titolo { font-size: 34px; letter-spacing: -0.8px; }
+.pc-griglia { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 18px; align-items: start; }
+.pc-tre { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 14px; align-items: start; }
+.tabella { background: var(--scheda); border: 1px solid var(--bordo); border-radius: 20px; overflow: hidden; }
+.tabella .tr { display: grid; align-items: center; gap: 12px; padding: 0 18px; min-height: 56px; border-top: 1px solid var(--riga); font-size: 15px; }
+.tabella .tr:first-child { border-top: none; }
+.tabella .th { font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--tenue); min-height: 44px; }
+.tabella .tr.cl { cursor: pointer; } .tabella .tr.cl:hover { background: var(--scelta); }
+.n { text-align: right; font-variant-numeric: tabular-nums; }
+.btn-giallo { height: 48px; border-radius: 14px; border: none; background: var(--giallo); color: #1B1B1F; font-size: 16px; font-weight: 800; padding: 0 20px; display: inline-flex; align-items: center; gap: 8px; }
+
+/* ---------- fase 4 ---------- */
+.p-ambra { background: var(--ambra-f); color: var(--ambra-t); }
+.p-scollegato { background: transparent; color: var(--tenue); border: 1.5px dashed var(--bordo-campo); gap: 6px; height: 28px; }
+.p-proposta { background: var(--giallo-tenue); color: var(--giallo-testo); }
+.fascia { display: flex; align-items: center; gap: 10px; background: var(--giallo-tenue); color: var(--giallo-testo); border-radius: 16px; padding: 8px 8px 8px 14px; font-size: 14px; font-weight: 800; line-height: 1.3; }
+.fascia button { margin-left: auto; flex: none; height: 40px; border-radius: 12px; border: 1.5px solid var(--giallo-tratteggio); background: transparent; color: var(--giallo-testo); font-weight: 800; font-size: 14px; padding: 0 12px; }
+.fascia.rossa { background: var(--rosso-f); color: var(--rosso-t); }
+.casella { width: 28px; height: 28px; border-radius: 8px; flex: none; border: 2px solid var(--bordo-campo); background: transparent; display: flex; align-items: center; justify-content: center; padding: 0; color: var(--su-nero); }
+.casella.si { border-color: var(--nero); background: var(--nero); }
+.tocco { min-width: 48px; min-height: 48px; display: inline-flex; align-items: center; justify-content: center; background: none; border: none; padding: 0; flex: none; }
+.conti-r { display: flex; justify-content: space-between; align-items: center; gap: 10px; min-height: 34px; font-size: 15px; font-weight: 600; color: var(--testo2); }
+.conti-r .et { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.conti-r b { color: var(--testo); font-variant-numeric: tabular-nums; font-weight: 800; white-space: nowrap; }
+.conti-r.tot { border-top: 1px solid var(--riga); padding-top: 10px; margin-top: 4px; color: var(--testo); font-weight: 800; }
+.conti-r.tot b { font-size: 24px; letter-spacing: -0.4px; }
+.conti-r.netto { background: var(--fondo); border-radius: 14px; padding: 10px 12px; color: var(--testo); font-weight: 800; margin-top: 6px; }
+.conti-r.netto b { font-size: 26px; letter-spacing: -0.5px; }
+.passi { display: flex; gap: 6px; }
+.passi span { flex: 1; display: flex; flex-direction: column; gap: 6px; font-size: 12px; font-weight: 700; color: var(--tenue); }
+.passi span::before { content: ""; height: 6px; border-radius: 3px; background: var(--binario); }
+.passi span.fatto { color: var(--testo); } .passi span.fatto::before { background: var(--nero); }
+.giorno-scad { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 14px 4px 6px; font-size: 15px; font-weight: 800; }
+.giorno-scad .saldo { font-variant-numeric: tabular-nums; display: flex; align-items: center; gap: 8px; }
+.giorno-scad.sotto { color: var(--rosso-t); }
+.segno-piu { color: var(--firmato); } .segno-meno { color: var(--testo); }
+.riga.sotto { background: var(--rosso-f); margin: 0 -18px; padding-left: 18px; padding-right: 18px; }
+.finestra-velo { position: absolute; inset: 0; background: var(--velo); z-index: 50; display: none; align-items: center; justify-content: center; }
+.finestra-velo.aperta { display: flex; }
+.finestra { background: var(--scheda); border-radius: 22px; width: 900px; max-height: 740px; overflow-y: auto; padding: 24px 28px 28px; box-shadow: 0 30px 80px rgba(20,20,22,.25); display: flex; flex-direction: column; gap: 14px; }
+.finestra.stretta { width: 520px; }
+.finestra.larga { width: 1060px; }
+.finestra .testa-f { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.finestra h2 { margin: 0; font-size: 24px; font-weight: 800; letter-spacing: -0.3px; }
+.pannello { position: absolute; top: 0; right: 0; bottom: 0; width: 440px; background: var(--scheda); border-left: 1px solid var(--bordo); box-shadow: -18px 0 40px rgba(20,20,22,.10); overflow-y: auto; padding: 20px 24px 30px; display: none; flex-direction: column; gap: 14px; z-index: 10; }
+.pannello.aperto { display: flex; }
+.avviso-pc { position: absolute; left: 50%; bottom: 26px; transform: translate(-50%, 10px); background: #1B1B1F; color: #fff; border-radius: 14px; padding: 12px 16px; font-size: 15px; font-weight: 700; z-index: 60; opacity: 0; transition: all 220ms ease; pointer-events: none; display: flex; gap: 16px; align-items: center; }
+.avviso-pc.visto { opacity: 1; transform: translate(-50%, 0); }
+.avviso-pc button { background: none; border: none; color: var(--giallo); font-weight: 800; font-size: 15px; }
+.campo-copia { display: grid; grid-template-columns: 190px minmax(0,1fr) auto; align-items: center; gap: 12px; min-height: 48px; border-top: 1px solid var(--riga); font-size: 15px; }
+.campo-copia:first-child { border-top: none; }
+.campo-copia .k { color: var(--tenue); font-weight: 600; } .campo-copia .v { font-weight: 700; overflow-wrap: anywhere; }
+.btn-copia { height: 40px; border-radius: 12px; border: 1.5px solid var(--bordo-campo); background: var(--scheda); font-size: 14px; font-weight: 700; padding: 0 12px; display: inline-flex; align-items: center; gap: 6px; }
+.btn-copia.fatto { border-color: var(--firmato); color: var(--firmato); }
+.btn-piccolo { height: 40px; border-radius: 12px; border: 1.5px solid var(--bordo-campo); background: var(--scheda); font-size: 14px; font-weight: 700; padding: 0 12px; display: inline-flex; align-items: center; gap: 6px; }
+.mancano { background: var(--giallo-tenue); color: var(--giallo-testo); border-radius: 12px; padding: 8px 12px; font-size: 14px; font-weight: 700; }
+.barre { display: flex; align-items: flex-end; gap: 10px; height: 190px; position: relative; padding-top: 10px; }
+.barre .col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; height: 100%; justify-content: flex-end; font-size: 12px; font-weight: 700; color: var(--tenue); }
+.barre .coppia-b { display: flex; gap: 3px; align-items: flex-end; height: 100%; width: 100%; justify-content: center; }
+.barre i { display: block; width: 42%; border-radius: 6px 6px 2px 2px; background: var(--nero); }
+.barre i.b2 { background: var(--firmato); }
+.barre i.uscita { background: var(--rosso); }
+.legenda { display: flex; gap: 16px; font-size: 13px; font-weight: 700; color: var(--tenue); align-items: center; flex-wrap: wrap; }
+.legenda i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+.palco.modo-due { justify-content: flex-start; }
+.zona-file { border: 2px dashed var(--bordo-campo); border-radius: 18px; background: var(--scelta); min-height: 150px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; font-weight: 800; font-size: 16px; color: var(--testo2); }
+details.chiuso { background: var(--scheda); border: 1px solid var(--bordo); border-radius: 22px; padding: 0 18px; }
+details.chiuso summary { min-height: 56px; display: flex; align-items: center; justify-content: space-between; font-size: 15px; font-weight: 800; cursor: pointer; list-style: none; }
+details.chiuso summary::-webkit-details-marker { display: none; }
+.voce-df { display: flex; align-items: center; gap: 4px; min-height: 64px; padding: 6px 0; border-top: 1px solid var(--riga); }
+.voce-df:first-child { border-top: none; }
+.voce-df .corpo { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; padding-left: 4px; }
+.voce-df .t1 { font-size: 15px; font-weight: 800; } .voce-df .t2 { font-size: 13px; font-weight: 600; color: var(--tenue); }
+.voce-df .quanto { font-size: 15px; font-weight: 800; white-space: nowrap; font-variant-numeric: tabular-nums; text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+.contenuto-pc > * { flex-shrink: 0; }
+.accanto[hidden] { display: none; }
+.segmenti.stretti button { padding: 0 8px; font-size: 13.5px; }
+.num-box.euro-tel b { font-size: 15px !important; white-space: nowrap; letter-spacing: -0.3px; }
+.prova-esito { position: fixed; left: 8px; bottom: 8px; background: #1B1B1F; color: #fff; font: 12px/1.4 monospace; padding: 8px 10px; border-radius: 8px; z-index: 99; max-width: 60vw; white-space: pre-wrap; }
+</style>
+
+<div class="barra-proto">
+  <span class="pill-proto">PROTOTIPO</span>
+  <div class="seg" role="group" aria-label="Dispositivo">
+    <button type="button" id="b-tel" aria-pressed="true">Telefono</button>
+    <button type="button" id="b-pc" aria-pressed="false">Computer</button>
+    <button type="button" id="b-due" aria-pressed="false">Tutti e due</button>
+  </div>
+  <div class="seg" role="group" aria-label="Chi entra">
+    <button type="button" id="b-manuel" aria-pressed="true">Manuel, titolare</button>
+    <button type="button" id="b-marco" aria-pressed="false">Marco, collaboratore</button>
+  </div>
+  <div class="seg" role="group" aria-label="Tema">
+    <button type="button" id="b-chiaro" aria-pressed="false">Chiaro</button>
+    <button type="button" id="b-scuro" aria-pressed="false">Scuro</button>
+  </div>
+</div>
+
+<div class="palco modo-tel" id="palco">
+  <div class="telefono" id="telefono">
+    <div class="schermo" id="schermo"></div>
+    <div class="velo" id="velo"></div>
+    <nav class="cassetto" id="cassetto" aria-label="Menu"></nav>
+    <div class="velo velo-foglio" id="velo-foglio"></div>
+    <div class="foglio" id="foglio" role="dialog" aria-modal="true"></div>
+    <div class="avviso" id="avviso"><span id="avviso-testo"></span><button type="button" id="avviso-annulla">Annulla</button></div>
+  </div>
+  <div class="computer-scala" id="computer-scala" hidden>
+    <div class="computer" id="computer">
+      <nav class="lato" id="lato" aria-label="Menu"></nav>
+      <div class="contenuto-pc" id="contenuto-pc"></div>
+      <aside class="pannello" id="pannello-pc" aria-label="Fattura"></aside>
+      <div class="finestra-velo" id="finestra-velo"><div class="finestra" id="finestra" role="dialog" aria-modal="true"></div></div>
+      <div class="avviso-pc" id="avviso-pc"><span id="avviso-pc-testo"></span><button type="button" id="avviso-pc-annulla">Annulla</button></div>
+    </div>
+  </div>
+  <aside class="accanto" id="accanto">
+    <h1>Fase 4: fatture, banche e scadenze</h1>
+    <p>Wisper prepara la fattura, il programma di Manuel la emette, l'XML torna in Wisper. La banca è uno scadenziario scritto a mano.</p>
+    <ol>
+      <li>Apri <b>Fatturazione</b>: le cose pronte per cliente. Scegli e tocca <b>Prepara la bozza</b>.</li>
+      <li>Nella bozza guarda i conti e le pillole <b>Da confermare</b>, poi <b>Passa al programma</b>: prospetto, XML da completare, SDI non collegato.</li>
+      <li>In <b>Fatture</b> tocca <b>Importa l'XML</b>: una bozza ritrovata, una fattura fatta fuori che si collega ai rapportini, una ricevuta, un doppione.</li>
+      <li>Apri la <b>39/2026</b> scaduta e segna un incasso in parte.</li>
+      <li><b>Banche e scadenze</b>: il saldo previsto va sotto soglia lunedì 30 novembre.</li>
+      <li><b>Amministrazione › Impostazioni fiscali</b>: segna le regole confermate e le pillole spariscono.</li>
+      <li>Passa a <b>Marco</b>: niente Fatturazione né Banche.</li>
+    </ol>
+  </aside>
+</div>
+
+<script>
+window.addEventListener('error', function (e) { document.documentElement.setAttribute('data-errore', String(e.message)); });
+(function () {
+'use strict';
+
+// ------------------------------------------------------------------ icone
+const P = {
+  menu: 'M4 6h16M4 12h16M4 18h10',
+  dashboard: 'M4 4h7v7H4zM13 4h7v4h-7zM13 10h7v10h-7zM4 13h7v7H4z',
+  clienti: 'M16 19v-1.5a3.5 3.5 0 0 0-3.5-3.5h-5A3.5 3.5 0 0 0 4 17.5V19M10 10.5a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM20 19v-1.5a3.5 3.5 0 0 0-2.5-3.35M15.5 4.6a3 3 0 0 1 0 5.8',
+  commesse: 'M3 7.5A1.5 1.5 0 0 1 4.5 6H9l2 2h8.5A1.5 1.5 0 0 1 21 9.5v9a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18.5z',
+  rapportini: 'M12 7v5l3 2M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z',
+  fatturazione: 'M7 3h10v18l-2.5-1.5L12 21l-2.5-1.5L7 21zM10 8h4M10 12h4',
+  banca: 'M3 10l9-6 9 6M5 10v8M9.5 10v8M14.5 10v8M19 10v8M3 20h18',
+  amministrazione: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68 1.65 1.65 0 0 0 10 3.17V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z',
+  indietro: 'M15 18l-6-6 6-6', freccia: 'M9 18l6-6-6-6', piu: 'M12 5v14M5 12h14', cerca: 'M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM20 20l-4-4',
+  allarme: 'M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z',
+  calendario: 'M4 6.5A1.5 1.5 0 0 1 5.5 5h13A1.5 1.5 0 0 1 20 6.5v12a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 18.5zM4 10h16M8 3v4M16 3v4',
+  lista: 'M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01', firma: 'M3 17c3-2 5-8 7-8s-1 8 2 8 3-4 5-4 2 3 4 3',
+  piuvoci: 'M5 12h.01M12 12h.01M19 12h.01', chiudi: 'M6 6l12 12M18 6 6 18', scudo: 'M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z',
+  scarica: 'M12 3v12M7 10l5 5 5-5M5 21h14', importa: 'M12 21V9M7 14l5-5 5 5M5 3h14', esci: 'M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 17l5-5-5-5M15 12H3',
+  lato: 'M4 5h16v14H4zM9 5v14', numero: 'M5 9h14M5 15h14M10 3 8 21M16 3l-2 18', cestino: 'M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13',
+  preventivo: 'M7 3h7l4 4v14H7zM14 3v4h4M10 12h5M10 16h5', spunta: 'M5 12l5 5L19 7', scontrino: 'M6 3h12v18l-2-1.4-2 1.4-2-1.4-2 1.4-2-1.4L6 21zM9 8h6M9 12h6M9 16h3',
+  duplica: 'M9 9h11v11H9zM5 15H4V4h11v1', condividi: 'M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7M16 6l-4-4-4 4M12 2v13',
+  scollegato: 'M9 15l-2 2a3 3 0 0 1-4.2-4.2l2-2M15 9l2-2a3 3 0 0 1 4.2 4.2l-2 2M8 4V2M4 8H2M16 20v2M20 16h2',
+  entrata: 'M17 7 7 17M15 17H7V9', uscita: 'M7 17 17 7M9 7h8v8', grafico: 'M4 19V5M4 19h16M8 15v-4M12 15V8M16 15v-6',
+  euro: 'M17 6.5A7 7 0 1 0 17 17.5M4 10h10M4 14h10', ripeti: 'M17 2l3 3-3 3M3 11V9a4 4 0 0 1 4-4h13M7 22l-3-3 3-3M21 13v2a4 4 0 0 1-4 4H4', file: 'M7 3h7l4 4v14H7zM14 3v4h4',
+};
+function ico(nome, dim, spess) {
+  dim = dim || 22;
+  return '<svg width="' + dim + '" height="' + dim + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="' + (spess || 2.2) + '" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="' + P[nome] + '"/></svg>';
+}
+const marchio = '<svg width="30" height="30" viewBox="0 0 30 30" aria-hidden="true"><rect width="30" height="30" rx="8" fill="#1B1B1F"/><circle cx="9" cy="15" r="2.2" fill="#FFC53D"/><circle cx="15" cy="15" r="2.2" fill="#FFC53D"/><circle cx="21" cy="15" r="2.2" fill="#FFC53D"/><circle cx="12" cy="9.5" r="1.6" fill="#FFC53D" opacity=".6"/><circle cx="18" cy="20.5" r="1.6" fill="#FFC53D" opacity=".6"/></svg>';
+
+// ------------------------------------------------------------------ formati e date
+const OGGI = '2026-10-22';
+const c2 = n => Math.round(n * 100) / 100;
+const euro = n => (n < 0 ? '−' : '') + Math.abs(n).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: 'always' }) + ' €';
+const segnato = (v, n) => (v > 0 ? '+ ' : '− ') + euro(n);
+const numIt = n => n.toLocaleString('it-IT', { maximumFractionDigits: 2 });
+const campoEuro = n => n.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: false });
+const GG = ['domenica', 'lunedì', 'martedì', 'mercoledì', 'giovedì', 'venerdì', 'sabato'];
+const MM = ['gennaio', 'febbraio', 'marzo', 'aprile', 'maggio', 'giugno', 'luglio', 'agosto', 'settembre', 'ottobre', 'novembre', 'dicembre'];
+const dt = iso => new Date(iso + 'T12:00:00');
+const isoDi = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+const piuGiorni = (iso, n) => { const d = dt(iso); d.setDate(d.getDate() + n); return isoDi(d); };
+const giorniTra = (a, b) => Math.round((dt(b) - dt(a)) / 86400000);
+const dBreve = iso => iso.slice(8, 10) + '/' + iso.slice(5, 7);
+const dIt = iso => dBreve(iso) + '/' + iso.slice(0, 4);
+const dLunga = iso => { const d = dt(iso); return GG[d.getDay()] + ' ' + d.getDate() + ' ' + MM[d.getMonth()]; };
+const Maiusc = s => s.charAt(0).toUpperCase() + s.slice(1);
+
+// ------------------------------------------------------------------ i conti (fase4.md §6, gli stessi casi di casi-fattura.json)
+function contiFattura(f) {
+  const forf = f.regime === 'forfettario';
+  let compenso = 0, anticipazioni = 0, perBollo = 0;
+  const righe = (f.righe || []).map(r => {
+    const imp = r.importo !== undefined && r.importo !== null ? c2(r.importo) : c2((r.quantita === undefined ? 1 : r.quantita) * r.prezzo);
+    if (r.tipo === 'anticipazione') { anticipazioni = c2(anticipazioni + imp); if (!r.tributoCliente) perBollo = c2(perBollo + imp); }
+    else compenso = c2(compenso + imp);
+    return imp;
+  });
+  const contributo = c2(compenso * f.eppiPercentuale / 100);
+  const baseIva = forf ? 0 : c2(compenso + contributo);
+  const iva = forf ? 0 : c2(baseIva * f.ivaPercentuale / 100);
+  const parteSenzaIva = forf ? c2(compenso + contributo + perBollo) : perBollo;
+  const bollo = parteSenzaIva > f.bolloSoglia ? c2(f.bolloImporto) : 0;
+  const bolloAddebitato = f.bolloRivalsa ? bollo : 0;
+  const totale = forf ? c2(compenso + contributo + anticipazioni + bolloAddebitato) : c2(baseIva + iva + anticipazioni + bolloAddebitato);
+  const ritenuta = !forf && f.ritenuta ? c2(compenso * f.ritenutaPercentuale / 100) : 0;
+  return { righe, compenso, contributo, baseIva, iva, anticipazioni, parteSenzaIva, bollo, bolloAddebitato, totale, ritenuta, netto: c2(totale - ritenuta) };
+}
+const REGOLE = { confermate: null };
+const conti = f => contiFattura({ regime: 'ordinario', ivaPercentuale: 22, eppiPercentuale: 5, ritenutaPercentuale: 20, ritenuta: CLI[f.cli].sostituto,
+  bolloSoglia: 77.47, bolloImporto: 2, bolloRivalsa: true, righe: f.righe.map(r => ({ tipo: r.ant ? 'anticipazione' : 'compenso', importo: r.imp })) });
+
+// ------------------------------------------------------------------ dati di esempio
+const CLI = {
+  C001: { id: 'C001', nome: 'Elettrodinamica', citta: 'Thiene', piva: '01234567897', sostituto: true, colore: 'c-blu', dest: 'Codice AB12CD3', ind: 'Via dell\'Industria 12, 36016 Thiene (VI)', pagamento: '30 giorni' },
+  C002: { id: 'C002', nome: 'Rossi Impianti Srl', citta: 'Bassano del Grappa', piva: '04455667788', sostituto: true, colore: 'c-verde', dest: 'PEC rossiimpianti@pec.esempio.it', ind: 'Via Nuova 3, 36061 Bassano del Grappa (VI)', pagamento: '30 giorni' },
+  C003: { id: 'C003', nome: 'Mario Bianchi', citta: 'Marostica', piva: '', cf: 'BNCMRA…', sostituto: false, colore: 'c-viola', dest: 'Privato (0000000)', ind: 'Via Montegrappa 8, 36063 Marostica (VI)', pagamento: '30 giorni' },
+};
+const FORN = { F001: 'Comel Forniture Elettriche', F002: 'Verifiche Nord Snc', F003: 'Ing. Paolo Verdi', F004: 'Luce e Gas Esempio Spa' };
+const RAP_SET = [['RAP/2026/0118', '2026-09-03', 6, 8.4], ['RAP/2026/0121', '2026-09-08', 7, 0], ['RAP/2026/0124', '2026-09-11', 5, 8.4], ['RAP/2026/0127', '2026-09-16', 8, 0], ['RAP/2026/0129', '2026-09-21', 6, 0], ['RAP/2026/0133', '2026-09-24', 6, 0]];
+let VOCI = [
+  { k: 's8', cli: 'C002', tipo: 'scadenza', titolo: '40% a fine progetto', det: '26ST003 · contratto PR/2026/012 rev. 1', quando: 'a fine progetto', imp: 1520,
+    righe: [{ d: '40% a fine progetto: Adeguamento impianto elettrico capannone (commessa 26ST003, contratto PR/2026/012 rev. 1)', imp: 1520 }] },
+  { k: 'sp31', cli: 'C002', tipo: 'spesa', titolo: 'Pratica di connessione al distributore', det: '26ST003 · 14/10 · intestata al cliente', imp: 120, ant: true,
+    righe: [{ d: 'Spesa anticipata per conto del cliente: Pratica di connessione al distributore del 14/10/2026', imp: 120, ant: true }] },
+  { k: 'r142', cli: 'C002', tipo: 'rapportino', titolo: 'Collaudo quadro', det: 'RAP/2026/0142 · 21/10 · 6,5 ore · 48 km · pedaggio', imp: 317.88,
+    righe: [{ d: 'Rapportino RAP/2026/0142 del 21/10/2026: Collaudo quadro (6,5 ore, 48 km, spese 8,40 €)', imp: 317.88 }] },
+  { k: 'o57', cli: 'C002', tipo: 'ore', titolo: 'Collaudo quadro: preparazione verbali', det: '26ST045 · 21/10 · 4 ore × 42,00 €', imp: 168,
+    righe: [{ d: 'Ore di lavoro su 26ST045 Quadro capannone di ottobre 2026', q: 4, u: 'ore', p: 42, imp: 168 }] },
+  { k: 'm09', cli: 'C001', tipo: 'mese', titolo: 'Settembre 2026 · 6 rapportini', det: '38 ore · 312 km · pedaggi 16,80 €', imp: 1393.92, riepilogo: '2026-09-30',
+    righe: [{ d: 'Prestazioni professionali di settembre 2026 (6 rapportini)', q: 38, u: 'ore', p: 30, imp: 1140 }, { d: 'Rimborso chilometrico di settembre 2026', q: 312, u: 'km', p: 0.76, imp: 237.12 }, { d: 'Spese di viaggio e materiale di settembre 2026', imp: 16.8 }] },
+  { k: 's12', cli: 'C003', tipo: 'scadenza', titolo: 'Saldo alla consegna del progetto', det: '26ST047 · contratto PR/2026/010', quando: 'alla consegna', imp: 600,
+    righe: [{ d: 'Saldo alla consegna del progetto: Impianto fotovoltaico (commessa 26ST047, contratto PR/2026/010)', imp: 600 }] },
+];
+const PIU_AVANTI = [{ k: 's9', cli: 'C002', titolo: 'Saldo a fine lavori', det: '26ST003 · a fine lavori · la commessa è aperta', imp: 1140 }];
+const DA_FIRMARE = [['RAP/2026/0146', 'Mario Bianchi', '20/10 · 3 ore'], ['RAP/2026/0148', 'Elettrodinamica', '21/10 · 7 ore · Magazzino automatico Batokyo']];
+let FATTURE = [
+  { id: 14, tipo: 'fattura', num: '', cli: 'C003', dataIso: '2026-10-15', commessa: '26ST047', causale: 'Sopralluogo e rilievo, impianto fotovoltaico', stato: 'pronta', prontaIl: '2026-10-15', scadIso: '2026-11-14',
+    righe: [{ d: 'Sopralluogo e rilievo: Impianto fotovoltaico (commessa 26ST047)', imp: 250 }], incassi: [{ dataIso: '2026-10-20', imp: 320.25, ver: true }] },
+  { id: 13, tipo: 'fattura', num: '45/2026', cli: 'C002', dataIso: '2026-10-19', commessa: '26ST003', causale: 'Acconto 30% alla firma, commessa 26ST003', stato: 'emessa', prontaIl: '2026-10-16', scadIso: '2026-11-18', file: 'IT00000000000_00045.xml.p7m', esito: 'Consegnata',
+    righe: [{ d: 'Acconto 30% alla firma: Adeguamento impianto elettrico capannone (commessa 26ST003, contratto PR/2026/012 rev. 1)', imp: 1140 }], incassi: [] },
+  { id: 12, tipo: 'fattura', num: '39/2026', cli: 'C002', dataIso: '2026-09-10', commessa: '26ST045', causale: 'Progetto quadro, commessa 26ST045', stato: 'emessa', scadIso: '2026-10-10', file: 'IT00000000000_00039.xml', esito: 'Consegnata',
+    righe: [{ d: 'Progetto quadro: Quadro capannone (commessa 26ST045)', imp: 900 }], incassi: [{ dataIso: '2026-10-12', imp: 500, ver: false }] },
+  { id: 11, tipo: 'fattura', num: '38/2026', cli: 'C001', dataIso: '2026-08-31', commessa: '', causale: 'Prestazioni di agosto 2026', stato: 'emessa', scadIso: '2026-09-30', file: 'IT00000000000_00038.xml.p7m', esito: 'Consegnata',
+    righe: [{ d: 'Prestazioni professionali di agosto 2026 (4 rapportini)', q: 26, u: 'ore', p: 30, imp: 780 }, { d: 'Rimborso chilometrico di agosto 2026', q: 208, u: 'km', p: 0.76, imp: 158.08 }, { d: 'Spese di viaggio e materiale di agosto 2026', imp: 21.92 }],
+    incassi: [{ dataIso: '2026-09-29', imp: 1037.76, ver: true }] },
+  { id: 9, tipo: 'nota', num: '2/2026', cli: 'C001', dataIso: '2026-09-18', commessa: '', causale: 'Storno di un rapportino contato due volte nella 37/2026', stato: 'emessa', collegata: '37/2026', scadIso: '2026-09-18',
+    righe: [{ d: 'Storno: Rapportino RAP/2026/0098 del 14/07/2026', imp: 200 }], incassi: [] },
+];
+let prossimoId = 15;
+let RICEVUTE = [
+  { id: 4, forn: 'F001', num: '1287', dataIso: '2026-10-16', cat: 'Materiale', comm: '26ST045', imp: 398.36, iva: 87.64, rit: 0, netto: 486, scadIso: '2026-11-16', pagata: false },
+  { id: 3, forn: 'F002', num: '77', dataIso: '2026-09-28', cat: 'Consulenze', comm: '', imp: 600, iva: 132, rit: 0, netto: 732, scadIso: '2026-10-28', pagata: false },
+  { id: 2, forn: 'F003', num: '12', dataIso: '2026-10-05', cat: 'Consulenze', comm: '26ST044', imp: 520, iva: 114.4, rit: 100, netto: 534.4, scadIso: '2026-10-12', pagata: true, pagIl: '2026-10-12' },
+  { id: 1, forn: 'F004', num: '2026/88412', dataIso: '2026-09-25', cat: 'Utenze', comm: '', imp: 116.64, iva: 25.66, rit: 0, netto: 142.3, scadIso: '2026-10-05', pagata: true, pagIl: '2026-10-05' },
+];
+const CONTO = { nome: 'Conto studio', banca: 'Banca di esempio', cifre: '4521', saldoScritto: 9850, saldoAl: '2026-10-01', soglia: 3000 };
+let MOVIMENTI = [
+  { id: 7, dataIso: '2026-10-20', verso: 1, imp: 320.25, desc: 'Incasso Mario Bianchi · W-14', chi: 'Mario Bianchi', ver: true },
+  { id: 6, dataIso: '2026-10-16', verso: -1, imp: 1250, desc: 'F24 del 16 ottobre', chi: 'Agenzia delle Entrate', ver: true },
+  { id: 5, dataIso: '2026-10-12', verso: 1, imp: 500, desc: 'Incasso Rossi Impianti Srl · fattura 39/2026, in parte', chi: 'Rossi Impianti Srl', ver: false },
+  { id: 4, dataIso: '2026-10-12', verso: -1, imp: 534.4, desc: 'Pagamento Ing. Paolo Verdi · fattura 12', chi: 'Ing. Paolo Verdi', ver: true },
+  { id: 3, dataIso: '2026-10-05', verso: -1, imp: 142.3, desc: 'Luce e Gas Esempio Spa · bolletta di settembre', chi: 'Luce e Gas Esempio Spa', ver: true },
+  { id: 2, dataIso: '2026-09-29', verso: 1, imp: 1037.76, desc: 'Incasso Elettrodinamica · fattura 38/2026', chi: 'Elettrodinamica', ver: true },
+  { id: 1, dataIso: '2026-09-26', verso: -1, imp: 850, desc: 'Affitto ufficio · settembre', chi: '', ver: true },
+];
+let IMPEGNI = [
+  { id: 1, scadIso: '2026-10-26', desc: 'Affitto ufficio', codice: '', imp: 850, ric: 'ogni mese' },
+  { id: 2, scadIso: '2026-11-05', desc: 'Luce e gas dell\'ufficio', codice: '', imp: 142.3, ric: 'ogni mese' },
+  { id: 3, scadIso: '2026-11-16', desc: 'IVA del 3° trimestre', codice: '6033', imp: 2380, ric: '' },
+  { id: 4, scadIso: '2026-11-16', desc: 'Ritenute sui compensi pagati a ottobre', codice: '1040', imp: 100, ric: '', proposta: true },
+  { id: 5, scadIso: '2026-11-26', desc: 'Affitto ufficio', codice: '', imp: 850, ric: 'ogni mese' },
+  { id: 6, scadIso: '2026-11-30', desc: 'Secondo acconto IRPEF', codice: '4034', imp: 3400, ric: '' },
+  { id: 7, scadIso: '2026-11-30', desc: 'Bollo delle fatture del 3° trimestre (stima: controlla nel portale)', codice: '2523', imp: 4, ric: '', proposta: true },
+  { id: 8, scadIso: '2026-12-05', desc: 'Luce e gas dell\'ufficio', codice: '', imp: 142.3, ric: 'ogni mese' },
+  { id: 9, scadIso: '2026-12-16', desc: 'Ritenute e contributi di novembre', codice: '', imp: null, ric: 'ogni mese' },
+];
+const PAGATI = [{ dataIso: '2026-10-16', desc: 'F24 del 16 ottobre', codice: '', imp: 1250 }];
+const ANNO = { mesi: ['gen', 'feb', 'mar', 'apr', 'mag', 'giu', 'lug', 'ago', 'set', 'ott'], fatt: [2140, 1980, 3250, 2410, 2890, 3120, 2760, 1830, 2900, 1140], inc: [1900, 2200, 2800, 2650, 2700, 3000, 2900, 1500, 2600, 820.25] };
+const XML_DOCS = () => [
+  { k: 'x1', file: 'IT00000000000_00046.xml.p7m', cosa: 'Fattura 46/2026', chi: 'Mario Bianchi', tot: 320.25, prop: 'abbina', cert: 'Sicura', msg: 'È la bozza W-14: ho trovato «Rif. Wisper W-14» nella causale', scelta: 'abbina' },
+  { k: 'x2', file: 'IT00000000000_00047.xml', cosa: 'Fattura 47/2026', chi: 'Elettrodinamica', tot: 1785.62, prop: 'senza', cert: 'Senza bozza', msg: 'Fatta fuori da Wisper: nessuna bozza combacia', scelta: 'senza', collega: VOCI.some(v => v.k === 'm09' && !v.inBozza) },
+  { k: 'x3', file: 'IT09988776655_0A1B2.xml.p7m', cosa: 'Fattura ricevuta 1301', chi: 'Comel Forniture Elettriche', tot: 117.58, prop: 'nuova', cert: 'Ricevuta', msg: 'La aggiungo alle fatture ricevute, da pagare entro il 21/11', scelta: 'nuova' },
+  { k: 'x4', file: 'IT00000000000_00045.xml.p7m', cosa: 'Fattura 45/2026', chi: 'Rossi Impianti Srl', tot: 1460.34, prop: 'gia', cert: 'Già importata', msg: 'Già importata il 20/10: la salto', scelta: 'salta' },
+];
+
+// ------------------------------------------------------------------ chi entra, permessi
+const perm = {
+  titolare: { dashboard: 2, clienti: 2, commesse: 2, preventivi: 2, attivita: 2, rapportini: 2, spese: 2, fatturazione: 2, banche: 2, amministrazione: 2, costi: 2 },
+  collaboratore: { dashboard: 1, clienti: 1, commesse: 1, preventivi: 0, attivita: 2, rapportini: 2, spese: 2, fatturazione: 0, banche: 0, amministrazione: 0, costi: 0 },
+};
+const S = { vista: 'tel', modo: 'tel', chi: 'manuel', pila: [['dashboard']], segF: 'dafatturare', segB: 'scadenziario', segFatt: 'tutte', segMov: 'tutti', segFattPc: 'fatture',
+  sel: new Set(['s8', 'sp31']), raggruppaE: 'mese', latoChiuso: false, cercaMov: '', cercaF: '', xml: null, passaConferma: false, ultimo: {} };
+let DISP = 'tel';
+const io = () => S.chi === 'manuel' ? { nome: 'Manuel Gasparotto', iniz: 'MG', ruolo: 'titolare', ruoloNome: 'Titolare' } : { nome: 'Marco Rossato', iniz: 'MR', ruolo: 'collaboratore', ruoloNome: 'Collaboratore' };
+const puo = (m, l) => (perm[io().ruolo][m] || 0) >= (l || 1) && (m !== 'fatturazione' && m !== 'banche' || (perm[io().ruolo].costi || 0) >= 1);
+const iniz = n => n.split(' ').filter(x => x.length > 1 || /[A-Z]/.test(x)).map(x => x[0]).slice(0, 2).join('').toUpperCase();
+const pc = () => S.modo === 'pc';
+const giallo = (testo, azione, extra) => '<button type="button" class="' + (pc() ? 'btn-giallo' : 'principale') + '" ' + azione + (extra || '') + '>' + testo + '</button>';
+
+function vociMenu() {
+  return [
+    ['dashboard', 1, 'Dashboard', 'dashboard'], ['clienti', 2, 'Clienti e fornitori', 'clienti'], ['commesse', 3, 'Progetti e commesse', 'commesse'],
+    ['preventivi', 4, 'Preventivi e contratti', 'preventivo'], ['attivita', 5, 'Attività e calendario', 'calendario'], ['rapportini', 6, 'Ore e rapportini', 'rapportini'],
+    ['spese', 7, 'Spese e trasferte', 'scontrino'], ['fatturazione', 8, 'Fatturazione', 'fatturazione'], ['banche', 9, 'Banche e scadenze', 'banca'],
+    ['amministrazione', 18, 'Amministrazione', 'amministrazione'],
+  ].filter(v => puo(v[0]));
+}
+const sezioneDi = pag => ({ dashboard: 'dashboard', clienti: 'clienti', cliente: 'clienti', commesse: 'commesse', commessa: 'commesse', preventivi: 'preventivi', attivita: 'attivita',
+  rapportini: 'rapportini', spese: 'spese', fatturazione: 'fatturazione', bozza: 'fatturazione', fattura: 'fatturazione', importa: 'fatturazione', banche: 'banche',
+  amministrazione: 'amministrazione', fiscale: 'amministrazione' })[pag] || 'dashboard';
+
+// ------------------------------------------------------------------ calcoli sulle fatture
+const fatt = id => FATTURE.find(f => f.id === Number(id));
+const incassato = f => c2(f.incassi.reduce((a, i) => a + i.imp, 0));
+const residuo = f => c2(conti(f).netto - incassato(f));
+function statoVisto(f) {
+  if (f.tipo === 'nota') return ['Nota di credito', 'p-grigio'];
+  if (f.stato === 'scartata') return ['Scartata', 'p-grigio'];
+  if (f.stato === 'annullata') return ['Annullata', 'p-grigio'];
+  if (f.stato === 'bozza') return ['Bozza', 'p-grigio'];
+  if (f.stato === 'pronta') return ['Pronta', 'p-blu'];
+  const r = residuo(f);
+  if (r > 0.005 && f.scadIso < OGGI) return ['Scaduta', 'p-rosso'];
+  if (r <= 0.005) return ['Pagata', 'p-verde'];
+  if (incassato(f) > 0) return ['Pagata in parte', 'p-ambra'];
+  return ['Emessa', 'p-blu'];
+}
+const etichetta = f => f.tipo === 'nota' ? 'Nota di credito ' + f.num : f.stato === 'bozza' ? 'Bozza W-' + f.id : f.stato === 'pronta' ? 'Pronta W-' + f.id : f.num;
+const pillStato = f => { const s = statoVisto(f); return '<span class="pill ' + s[1] + '">' + s[0] + '</span>'; };
+const daEmettereEntro = f => (f.stato === 'pronta' || f.stato === 'bozza') && f.incassi.length && residuo(f) <= 0.005 ? piuGiorni(f.incassi[f.incassi.length - 1].dataIso, 12) : '';
+const scadutaGiorni = f => f.stato === 'emessa' && f.tipo !== 'nota' && residuo(f) > 0.005 && f.scadIso < OGGI ? giorniTra(f.scadIso, OGGI) : 0;
+const vociLibere = () => VOCI.filter(v => !v.inBozza);
+const nonConfermate = () => !REGOLE.confermate;
+const daConf = () => nonConfermate() ? ' <span class="pill p-giallo" style="height:22px;font-size:12px">Da confermare</span>' : '';
+const contoTxt = () => 'Conto studio <span style="white-space:nowrap">…' + CONTO.cifre + '</span>';
+const pillNonCollegato = '<span class="pill p-scollegato">' + ico('scollegato', 15) + 'Non collegato</span>';
+
+// ------------------------------------------------------------------ banca: saldo e scadenziario
+const saldoOggi = () => c2(MOVIMENTI.filter(m => m.dataIso > CONTO.saldoAl).reduce((a, m) => a + m.verso * m.imp, CONTO.saldoScritto));
+function righeScadenziario() {
+  const r = [];
+  FATTURE.forEach(f => {
+    if (f.tipo === 'nota') return;
+    const res = residuo(f);
+    if (res <= 0.005) return;
+    if (f.stato === 'emessa') r.push({ k: 'f' + f.id, iso: f.scadIso, verso: 1, imp: res, titolo: etichetta(f) + ' · ' + CLI[f.cli].nome, det: incassato(f) > 0 ? 'pagata in parte' : 'fattura emessa', stato: incassato(f) > 0 ? 'In parte' : 'Previsto', fid: f.id });
+    else if (f.stato === 'pronta') r.push({ k: 'f' + f.id, iso: f.scadIso, verso: 1, imp: res, titolo: 'W-' + f.id + ' · ' + CLI[f.cli].nome, det: 'pronta, non ancora emessa', stato: 'Da emettere', fid: f.id });
+  });
+  RICEVUTE.filter(x => !x.pagata).forEach(x => r.push({ k: 'r' + x.id, iso: x.scadIso, verso: -1, imp: x.netto, titolo: FORN[x.forn] + ' · n. ' + x.num, det: 'fattura ricevuta', stato: 'Previsto', rid: x.id }));
+  IMPEGNI.filter(x => !x.pagato).forEach(x => r.push({ k: 'i' + x.id, iso: x.scadIso, verso: -1, imp: x.imp, titolo: x.desc, det: (x.codice ? 'F24 ' + x.codice : x.ric ? 'si ripete ' + x.ric : 'una volta'), stato: x.proposta ? 'Proposta' : 'Previsto', iid: x.id }));
+  return r.sort((a, b) => a.iso < b.iso ? -1 : a.iso > b.iso ? 1 : a.verso - b.verso);
+}
+function scadenziario() {
+  const tutte = righeScadenziario();
+  const scaduti = tutte.filter(x => x.iso < OGGI);
+  let saldo = saldoOggi();
+  scaduti.forEach(x => { if (x.verso < 0 && x.imp) saldo = c2(saldo - x.imp); });
+  const giorni = [];
+  tutte.filter(x => x.iso >= OGGI).forEach(x => {
+    let g = giorni[giorni.length - 1];
+    if (!g || g.iso !== x.iso) { g = { iso: x.iso, righe: [] }; giorni.push(g); }
+    g.righe.push(x);
+    if (x.imp) saldo = c2(saldo + x.verso * x.imp);
+    g.saldo = saldo; g.sotto = saldo < CONTO.soglia;
+  });
+  const primo = giorni.find(g => g.sotto);
+  return { scaduti, giorni, primoSotto: primo ? primo.iso : '' };
+}
+function saldoAl(iso) { const s = scadenziario(); let v = saldoOggi(); s.giorni.forEach(g => { if (g.iso <= iso) v = g.saldo; }); return v; }
+function situazione() {
+  const emesse = FATTURE.filter(f => f.tipo !== 'nota' && f.stato === 'emessa');
+  const daIncassare = c2(emesse.reduce((a, f) => a + Math.max(0, residuo(f)), 0));
+  const scaduto = c2(emesse.filter(f => scadutaGiorni(f) > 0).reduce((a, f) => a + residuo(f), 0));
+  const lim = piuGiorni(OGGI, 30);
+  const daPagare = c2(RICEVUTE.filter(x => !x.pagata && x.scadIso <= lim).reduce((a, x) => a + x.netto, 0) + IMPEGNI.filter(x => !x.pagato && x.scadIso <= lim).reduce((a, x) => a + (x.imp || 0), 0));
+  return { oggi: saldoOggi(), daIncassare, scaduto, daPagare, p30: saldoAl(piuGiorni(OGGI, 30)), p60: saldoAl(piuGiorni(OGGI, 60)), p90: saldoAl(piuGiorni(OGGI, 90)) };
+}
+
+// ------------------------------------------------------------------ pezzi comuni
+function testaTel(dove, conIndietro) {
+  const sx = conIndietro
+    ? '<button type="button" class="tondo" data-azione="indietro" aria-label="Indietro">' + ico('indietro') + '</button>'
+    : '<button type="button" class="btn-menu" data-azione="menu" aria-label="Apri il menu">' + ico('menu') + 'Menu</button>';
+  return '<div class="testa"><div class="sx">' + sx + (dove ? '<span class="dove">' + dove + '</span>' : '') + '</div><div class="dx"><span class="cerchio c-ambra" aria-label="' + io().nome + '">' + io().iniz + '</span></div></div>';
+}
+const testaPc = dove => '<div style="display:flex;align-items:center;gap:12px"><button type="button" class="tondo" data-azione="indietro" aria-label="Indietro">' + ico('indietro') + '</button><span class="dove">' + dove + '</span></div>';
+const titoloPc = (dove, titolo, destra) => '<div style="display:flex;justify-content:space-between;align-items:flex-end;gap:16px"><div><span class="dove">' + dove + '</span><h1 class="titolo">' + titolo + '</h1></div><div style="display:flex;gap:10px;align-items:center">' + (destra || '') + '</div></div>';
+const segmenti = (chiave, voci, attivo, stile, classe) => '<div class="segmenti' + (classe ? ' ' + classe : '') + '" role="group"' + (stile ? ' style="' + stile + '"' : '') + '>' + voci.map(v => '<button type="button" data-seg="' + chiave + '|' + v[0] + '" aria-pressed="' + (attivo === v[0]) + '">' + v[1] + '</button>').join('') + '</div>';
+const casella = (si, attr, etichetta) => '<button type="button" class="tocco" ' + attr + ' aria-pressed="' + si + '" aria-label="' + etichetta + '"><span class="casella' + (si ? ' si' : '') + '">' + (si ? ico('spunta', 15, 3) : '') + '</span></button>';
+const fasciaRegole = () => nonConfermate() ? '<div class="fascia">' + ico('allarme', 20) + '<span>Regole delle fatture da confermare col commercialista</span><button type="button" data-vai="fiscale">Apri</button></div>' : '';
+const riquadri = lista => '<div class="tre-num" style="grid-template-columns:repeat(' + (!pc() && lista.length > 3 ? 2 : lista.length) + ',minmax(0,1fr))">' + lista.map(n => '<button type="button" class="num-box' + (n[3] ? ' ' + n[3] : '') + (pc() ? '' : ' euro-tel') + '"' + (n[2] ? ' ' + n[2] : '') + '><b style="font-size:' + (pc() ? 24 : 18) + 'px">' + n[0] + '</b><span>' + n[1] + '</span></button>').join('') + '</div>';
+const cerchioCli = id => '<span class="cerchio ' + CLI[id].colore + '">' + iniz(CLI[id].nome) + '</span>';
+
+function contiHtml(f) {
+  const k = conti(f);
+  const priv = !CLI[f.cli].sostituto;
+  const r = (et, v, cl, extra) => '<div class="conti-r' + (cl ? ' ' + cl : '') + '"><span class="et">' + et + (extra || '') + '</span><b>' + v + '</b></div>';
+  return '<div style="display:flex;flex-direction:column">' +
+    r('Compenso', euro(k.compenso)) +
+    r('Contributo integrativo EPPI 5%', euro(k.contributo), '', daConf()) +
+    r('IVA 22%', euro(k.iva)) +
+    (k.anticipazioni ? r('Spese anticipate (senza IVA)', euro(k.anticipazioni)) : '') +
+    (k.bolloAddebitato ? r('Marca da bollo', euro(k.bolloAddebitato), '', daConf()) : '') +
+    r(f.tipo === 'nota' ? 'Totale della nota' : 'Totale della fattura', euro(k.totale), 'tot') +
+    (priv ? r('Ritenuta: no, è un privato', '—') : r('Ritenuta 20% (la trattiene il cliente)', '− ' + euro(k.ritenuta), '', daConf())) +
+    r(f.tipo === 'nota' ? 'Netto stornato' : 'Netto da incassare', euro(k.netto), 'netto') + '</div>';
+}
+
+// ------------------------------------------------------------------ dashboard
+function righeDashboard() {
+  const soldi = puo('costi') && puo('fatturazione');
+  const urgenti = [], settimana = [], pianificare = [];
+  if (soldi) {
+    FATTURE.filter(f => scadutaGiorni(f) > 0).forEach(f => urgenti.push({ ico: 'allarme', col: 'ico-rosso', t1: 'Fattura ' + f.num + ' scaduta da ' + scadutaGiorni(f) + ' giorni', t2: CLI[f.cli].nome + ' · restano ' + euro(residuo(f)) + ' di ' + euro(conti(f).netto), quanto: euro(residuo(f)), vai: ['fattura', f.id] }));
+    FATTURE.filter(f => daEmettereEntro(f)).forEach(f => urgenti.unshift({ ico: 'fatturazione', col: 'ico-rosso', t1: 'Emetti la fattura per ' + CLI[f.cli].nome + ' entro ' + dLunga(daEmettereEntro(f)), t2: 'Ha già pagato il ' + dBreve(f.incassi[f.incassi.length - 1].dataIso) + ' · W-' + f.id, quanto: euro(conti(f).netto), vai: ['fattura', f.id] }));
+    if (VOCI.some(v => v.k === 'm09' && !v.inBozza)) urgenti.push({ ico: 'fatturazione', col: 'ico-giallo', t1: 'Da fatturare dei mesi scorsi', t2: 'Elettrodinamica · settembre · 6 rapportini', quanto: euro(1393.92), vai: ['fatturazione'] });
+  }
+  urgenti.push({ ico: 'allarme', col: 'ico-rosso', t1: 'Quadro capannone è oltre il budget', t2: '46 ore su 40 · Rossi Impianti Srl', vai: ['commesse'] });
+  if (soldi) {
+    const lib = vociLibere();
+    const clienti = Array.from(new Set(lib.map(v => v.cli)));
+    if (lib.length) settimana.push({ ico: 'fatturazione', col: 'ico-blu', t1: 'Da fatturare', t2: clienti.length + (clienti.length === 1 ? ' cliente · ' : ' clienti · ') + clienti.map(c => CLI[c].nome).join(', '), quanto: euro(lib.reduce((a, v) => a + v.imp, 0)), vai: ['fatturazione'] });
+    const sett = righeScadenziario().filter(x => x.verso < 0 && x.iso >= OGGI && x.iso <= piuGiorni(OGGI, 7));
+    if (sett.length) settimana.push({ ico: 'calendario', col: 'ico-giallo', t1: 'Pagamenti in scadenza entro 7 giorni', t2: sett.map(x => x.titolo.split(' · ')[0] + ' ' + dLunga(x.iso).split(' ').slice(0, 2).join(' ')).join(', '), quanto: euro(sett.reduce((a, x) => a + (x.imp || 0), 0)), vai: ['banche'] });
+    FATTURE.filter(f => f.stato === 'pronta' && !daEmettereEntro(f) && giorniTra(f.prontaIl, OGGI) > 3).forEach(f => settimana.push({ ico: 'importa', col: 'ico-grigio', t1: 'W-' + f.id + ' passata al programma: manca l\'XML di ritorno', t2: CLI[f.cli].nome + ' · dal ' + dBreve(f.prontaIl), vai: ['fattura', f.id] }));
+    if (nonConfermate()) pianificare.push({ ico: 'scudo', col: 'ico-giallo', t1: 'Le regole delle fatture non sono confermate dal commercialista', t2: 'Contributo EPPI, ritenuta e bollo', vai: ['fiscale'] });
+    const sc = scadenziario();
+    if (sc.primoSotto) pianificare.push({ ico: 'banca', col: 'ico-rosso', t1: 'Il saldo previsto scende sotto ' + euro(CONTO.soglia).replace(',00', '') + ' ' + dLunga(sc.primoSotto), t2: contoTxt(), vai: ['banche'] });
+    const prop = IMPEGNI.filter(x => x.proposta && !x.pagato).length;
+    if (prop) pianificare.push({ ico: 'preventivo', col: 'ico-grigio', t1: prop + ' tributi proposti da confermare', t2: 'Ritenute di ottobre (1040), bollo del 3° trimestre', vai: ['banche', 'tributi'] });
+    pianificare.push({ ico: 'banca', col: 'ico-grigio', t1: 'Aggiorna il saldo del Conto studio', t2: 'L\'ultimo scritto è del 01/10', vai: ['banche', 'conti'] });
+  } else {
+    settimana.push({ ico: 'calendario', col: 'ico-giallo', t1: 'Sopralluogo cabina MT Acme oggi alle 14:30', t2: 'Zanè', vai: ['attivita'] });
+    pianificare.push({ ico: 'firma', col: 'ico-giallo', t1: 'RAP/2026/0148 da far firmare', t2: 'Elettrodinamica · 21/10', vai: ['rapportini'] });
+  }
+  return { urgenti, settimana, pianificare };
+}
+function rigaDash(r) {
+  return '<button type="button" class="riga" data-vai="' + r.vai.join('|') + '"><span class="ico-riga ' + r.col + '">' + ico(r.ico, 20) + '</span><span class="corpo"><span class="t1">' + r.t1 + '</span><span class="t2">' + r.t2 + '</span></span>' +
+    (r.quanto ? '<span class="quanto">' + r.quanto + '</span>' : '') + '<span class="freccia">' + ico('freccia', 18) + '</span></button>';
+}
+function pagDashboard() {
+  const r = righeDashboard();
+  const sez = (nome, lista) => lista.length ? '<div style="display:flex;flex-direction:column;gap:8px"><span class="etichetta">' + nome + ' · ' + lista.length + '</span><div class="scheda righe">' + lista.map(rigaDash).join('') + '</div></div>' : '';
+  const urgentiElenco = r.urgenti[0] && puo('fatturazione') ? r.urgenti.slice(1) : r.urgenti;
+  const saluto = '<div style="display:flex;flex-direction:column;gap:4px"><span class="sottotitolo">' + Maiusc(dLunga(OGGI)) + '</span><h1 class="titolo">Buongiorno, ' + io().nome.split(' ')[0] + '</h1></div>';
+  const prima = r.urgenti[0] && puo('fatturazione') ? '<div class="scheda" style="background:var(--scelta);border-color:var(--giallo);display:flex;flex-direction:column;gap:10px"><span class="etichetta" style="color:var(--giallo-testo)">La cosa più urgente</span>' +
+    '<div style="font-size:19px;font-weight:800;line-height:1.25">' + r.urgenti[0].t1 + '</div><div class="sottotitolo">' + r.urgenti[0].t2 + '</div><button type="button" class="secondario" data-vai="' + r.urgenti[0].vai.join('|') + '" style="align-self:flex-start">Apri</button></div>' : '';
+  const numeri = puo('fatturazione') ? (() => { const s = situazione(); return riquadri([[euro(vociLibere().reduce((a, v) => a + v.imp, 0)), 'da fatturare', 'data-vai="fatturazione"'], [euro(s.daIncassare), 'da incassare', 'data-vai="fatturazione|fatture"'], [euro(s.scaduto), 'scaduto', 'data-vai="fatturazione|fatture"', 'rosso'], [euro(s.oggi), 'nel conto', 'data-vai="banche"']]); })() : '';
+  if (pc()) return '<div style="display:flex;justify-content:space-between;align-items:flex-end;gap:16px">' + saluto + '</div>' + numeri +
+    '<div class="pc-griglia"><div style="display:flex;flex-direction:column;gap:18px">' + prima + sez('Urgenti', urgentiElenco) + sez('Questa settimana', r.settimana) + '</div><div style="display:flex;flex-direction:column;gap:18px">' + sez('Da pianificare', r.pianificare) + '</div></div>';
+  return testaTel('', false) + saluto + prima + sez('Urgenti', urgentiElenco) + sez('Questa settimana', r.settimana) + numeri + sez('Da pianificare', r.pianificare);
+}
+
+// ------------------------------------------------------------------ clienti e commesse (solo quello che serve alla fase 4)
+function pagClienti() {
+  const righe = Object.values(CLI).map(c => '<button type="button" class="riga" data-vai="cliente|' + c.id + '">' + cerchioCli(c.id) + '<span class="corpo"><span class="t1">' + c.nome + '</span><span class="t2">' + c.citta + ' · ' + (c.piva ? 'P.IVA ' + c.piva : 'privato') + '</span></span><span class="freccia">' + ico('freccia', 18) + '</span></button>').join('') +
+    Object.keys(FORN).map(id => '<div class="riga"><span class="cerchio c-ambra">' + iniz(FORN[id]) + '</span><span class="corpo"><span class="t1">' + FORN[id] + '</span><span class="t2">Fornitore</span></span></div>').join('');
+  return (pc() ? titoloPc('2 · Clienti e fornitori', 'Clienti e fornitori') + '<div class="scheda righe" style="max-width:820px">' : testaTel('', false) + '<h1 class="titolo">Clienti e fornitori</h1><div class="scheda righe">') + righe + '</div>';
+}
+function pagCliente(id) {
+  const c = CLI[id];
+  const lista = FATTURE.filter(f => f.cli === id);
+  const dati = '<div class="scheda"><div class="coppie">' + [['Partita IVA', c.piva || '—'], ['Codice fiscale', c.cf || c.piva || '—'], ['Dove arrivano le fatture', c.dest], ['Indirizzo', c.ind],
+    ['Sostituto d\'imposta', 'Automatico: ' + (c.sostituto ? 'sì, ha la partita IVA' : 'no, è un privato')], ['Pagamento', c.pagamento + ', fine mese no']].map(x => '<div class="coppia"><span class="k">' + x[0] + '</span><span class="v">' + x[1] + '</span></div>').join('') + '</div></div>';
+  const fatture = '<div style="display:flex;flex-direction:column;gap:8px"><span class="etichetta">Fatture · ' + lista.length + '</span><div class="scheda righe">' + (lista.length ? lista.map(rigaFattura).join('') : '<div class="vuoto">Nessuna fattura.</div>') + '</div></div>';
+  return (pc() ? testaPc('Clienti e fornitori') + '<h1 class="titolo">' + c.nome + '</h1><div class="pc-griglia">' + dati + fatture + '</div>' : testaTel('Clienti', true) + '<h1 class="titolo">' + c.nome + '</h1>' + dati + fatture);
+}
+function pagCommesse() {
+  const l = [['26ST003', 'Adeguamento impianto elettrico capannone', 'Rossi Impianti Srl · a corpo'], ['26ST044', 'Nuovo magazzino automatico', 'Elettrodinamica · a ore'], ['26ST045', 'Quadro capannone', 'Rossi Impianti Srl · a ore'], ['26ST047', 'Impianto fotovoltaico', 'Mario Bianchi · a corpo']];
+  const righe = l.map(x => '<button type="button" class="riga" ' + (x[0] === '26ST003' ? 'data-vai="commessa|26ST003"' : 'data-azione="avviso" data-testo="Come nella fase 1"') + '><span class="codice">' + x[0] + '</span><span class="corpo"><span class="t1">' + x[1] + '</span><span class="t2">' + x[2] + '</span></span><span class="freccia">' + ico('freccia', 18) + '</span></button>').join('');
+  return (pc() ? titoloPc('3 · Progetti e commesse', 'Commesse') + '<div class="scheda righe" style="max-width:820px">' : testaTel('', false) + '<h1 class="titolo">Commesse</h1><div class="scheda righe">') + righe + '</div>';
+}
+function pagCommessa() {
+  const inBozza = VOCI.find(v => v.k === 's8').inBozza;
+  const fatta = !VOCI.find(v => v.k === 's8');
+  const scad = [['Acconto 30% alla firma', 'alla firma', 1140, '<span class="pill p-verde">Fatturata 45/2026</span>'],
+    ['40% a fine progetto', 'a fine progetto', 1520, inBozza ? '<span class="pill p-grigio">In bozza W-' + inBozza + '</span>' : fatta ? '<span class="pill p-verde">Fatturata</span>' : '<span class="pill p-giallo">Da fatturare</span>'],
+    ['Saldo a fine lavori', 'a fine lavori', 1140, '<span class="pill p-grigio">Prevista</span>']];
+  const barra = puo('fatturazione') ? '<div class="scheda" style="display:flex;flex-direction:column;gap:12px"><div style="display:flex;justify-content:space-between;align-items:baseline"><span class="etichetta">Fatturazione</span><b>' + euro(3800) + ' di contratto</b></div>' +
+    '<div style="display:flex;height:12px;border-radius:6px;overflow:hidden;background:var(--binario)"><i style="width:30%;background:var(--nero)"></i><i style="width:40%;background:var(--giallo)"></i></div>' +
+    '<div class="legenda"><span><i style="background:var(--nero)"></i>Fatturato ' + euro(1140) + '</span><span><i style="background:var(--giallo)"></i>' + (inBozza ? 'In bozza ' : 'Da fatturare ') + euro(1520) + '</span><span><i style="background:var(--binario)"></i>Previsto ' + euro(1140) + '</span></div></div>' : '';
+  const tab = '<div style="display:flex;flex-direction:column;gap:8px"><span class="etichetta">Scadenze di pagamento</span><div class="scheda righe">' + scad.map(s => '<div class="riga"><span class="corpo"><span class="t1">' + s[0] + '</span><span class="t2">' + s[1] + (puo('costi') ? ' · ' + euro(s[2]) : '') + '</span></span>' + (puo('fatturazione') ? s[3] : '') + '</div>').join('') + '</div></div>';
+  const testa = '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span class="codice">26ST003</span><span class="pill p-verde">Aperta</span><span class="pill p-grigio">A corpo</span></div><h1 class="titolo">Adeguamento impianto elettrico capannone</h1><p class="sottotitolo">Rossi Impianti Srl · dal preventivo PR/2026/012 rev. 1</p>';
+  return pc() ? testaPc('Progetti e commesse') + testa + '<div class="pc-griglia">' + barra + tab + '</div>' : testaTel('Commesse', true) + testa + barra + tab;
+}
+function pagSegnaposto(nome, fase) {
+  const t = '<div class="scheda"><div class="vuoto">Com\'era nella fase ' + fase + ': apri docs/prototipo/Gestionale-fase' + fase + '.html. Qui conta la fatturazione.</div></div>';
+  return pc() ? titoloPc(nome, nome) + '<div style="max-width:720px">' + t + '</div>' : testaTel('', false) + '<h1 class="titolo">' + nome + '</h1>' + t;
+}
+
+// ------------------------------------------------------------------ fatturazione
+function segFatt() {
+  const voci = [['dafatturare', 'Da fatturare'], ['fatture', 'Fatture'], ['ricevute', 'Ricevute']].concat(pc() ? [['scadenze', 'Scadenze di pagamento']] : []).concat([['riepilogo', 'Riepilogo']]);
+  return segmenti('segF', voci, S.segF, pc() ? 'max-width:760px' : '', pc() ? '' : 'stretti');
+}
+function pagFatturazione() {
+  if (!['dafatturare', 'fatture', 'ricevute', 'scadenze', 'riepilogo'].includes(S.segF) || (!pc() && S.segF === 'scadenze')) S.segF = 'dafatturare';
+  const corpo = { dafatturare: corpoDaFatturare, fatture: corpoFatture, ricevute: corpoRicevute, scadenze: corpoScadenzePag, riepilogo: corpoRiepilogo }[S.segF]();
+  const titolo = { dafatturare: 'Da fatturare', fatture: 'Fatture', ricevute: 'Fatture ricevute', scadenze: 'Scadenze di pagamento', riepilogo: 'Riepilogo del 2026' }[S.segF];
+  if (pc()) return titoloPc('8 · Fatturazione', titolo, corpo.destra) + fasciaRegole() + segFatt() + corpo.html;
+  return testaTel('', false) + '<h1 class="titolo">Fatturazione</h1>' + segFatt() + fasciaRegole() + corpo.html;
+}
+function selezione() {
+  const scelte = VOCI.filter(v => S.sel.has(v.k) && !v.inBozza);
+  return { voci: scelte, tot: c2(scelte.reduce((a, v) => a + v.imp, 0)), cli: scelte.length ? scelte[0].cli : null };
+}
+function corpoDaFatturare() {
+  const lib = vociLibere();
+  const inBozza = FATTURE.filter(f => f.tipo === 'fattura' && (f.stato === 'bozza' || f.stato === 'pronta'));
+  const sit = situazione();
+  const tre = riquadri([[euro(lib.reduce((a, v) => a + v.imp, 0)), 'da fatturare'], [euro(inBozza.reduce((a, f) => a + conti(f).totale, 0)), inBozza.length + (inBozza.length === 1 ? ' in bozza o pronta' : ' in bozza o pronte'), 'data-seg="segF|fatture"'], [euro(sit.daIncassare), 'da incassare', 'data-seg="segF|fatture"']]);
+  const clienti = ['C002', 'C001', 'C003'].filter(c => lib.some(v => v.cli === c));
+  const sel = selezione();
+  const schede = clienti.map(c => {
+    const voci = lib.filter(v => v.cli === c);
+    const tot = c2(voci.reduce((a, v) => a + v.imp, 0));
+    const tutte = voci.every(v => S.sel.has(v.k));
+    return '<div class="scheda" style="display:flex;flex-direction:column;gap:6px;padding-bottom:8px">' +
+      '<div style="display:flex;align-items:center;gap:12px">' + cerchioCli(c) + '<div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px"><b style="font-size:17px">' + CLI[c].nome + '</b><span class="sottotitolo" style="font-size:13px">' + voci.length + (voci.length === 1 ? ' cosa pronta' : ' cose pronte') + ' · ' + (CLI[c].sostituto ? 'ritenuta sì' : 'ritenuta no, privato') + '</span></div><b style="font-size:' + (pc() ? 24 : 19) + 'px;font-variant-numeric:tabular-nums">' + euro(tot) + '</b></div>' +
+      (pc() ? '<div style="display:flex;justify-content:space-between;align-items:center"><button type="button" class="testo-link" data-sceglitutto="' + c + '">' + (tutte ? 'Togli la scelta' : 'Scegli tutto') + '</button>' + (c === 'C001' ? segmenti('raggruppaE', [['rapportino', 'Una riga per rapportino'], ['mese', 'Una riga per il mese']], S.raggruppaE, 'max-width:420px') : '') + '</div>' : '') +
+      '<div>' + voci.map(v => voceDf(v)).join('') + '</div></div>';
+  }).join('');
+  const piu = '<details class="chiuso"><summary><span>Più avanti · ' + PIU_AVANTI.length + '</span>' + ico('freccia', 18) + '</summary><div style="padding-bottom:8px">' + PIU_AVANTI.map(v => '<div class="voce-df"><span class="corpo"><span class="t1">' + v.titolo + ' · ' + CLI[v.cli].nome + '</span><span class="t2">' + v.det + '</span></span><span class="quanto">' + euro(v.imp) + '</span></div>').join('') + '</div></details>';
+  const bozze = inBozza.length ? '<div style="display:flex;flex-direction:column;gap:8px"><span class="etichetta">In bozza · ' + inBozza.length + '</span><div class="scheda righe">' + inBozza.map(rigaFattura).join('') + '</div></div>' : '';
+  const firmare = '<div style="display:flex;flex-direction:column;gap:8px"><span class="etichetta">Da far firmare · non si fatturano finché non sono firmati</span><div class="scheda righe">' + DA_FIRMARE.map(x => '<div class="riga"><span class="ico-riga ico-giallo">' + ico('firma', 20) + '</span><span class="corpo"><span class="t1">' + x[1] + '</span><span class="t2">' + x[0] + ' · ' + x[2] + '</span></span></div>').join('') + '</div></div>';
+  const vuoto = !clienti.length ? '<div class="scheda"><div class="vuoto" style="display:flex;gap:8px;align-items:center"><span style="color:var(--firmato)">' + ico('spunta', 20) + '</span>Niente da fatturare.</div></div>' : '';
+  const testoBtn = (pc() ? 'Prepara la bozza (' + sel.voci.length + ')' : 'Prepara la bozza') + (sel.voci.length ? ' · ' + euro(sel.tot) : '');
+  const btn = '<button type="button" class="' + (pc() ? 'btn-giallo' : 'principale') + '" data-azione="prepara"' + (sel.voci.length ? '' : ' disabled style="opacity:.45"') + '>' + testoBtn + '</button>';
+  if (pc()) return { destra: btn, html: tre + vuoto + schede + '<div class="pc-griglia">' + '<div style="display:flex;flex-direction:column;gap:18px">' + piu + bozze + '</div>' + firmare + '</div>' };
+  return { html: tre + vuoto + schede + piu + bozze + firmare + '<div style="height:80px"></div><div class="in-basso">' + btn + '</div>' };
+}
+function voceDf(v) {
+  const si = S.sel.has(v.k);
+  const tipo = { scadenza: v.quando, spesa: 'spesa', rapportino: 'rapportino', ore: 'ore registrate', mese: 'rapportini del mese' }[v.tipo];
+  let extra = '';
+  if (v.tipo === 'mese') extra = '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:2px 0 8px 52px"><span style="display:flex;gap:6px;align-items:center;font-size:13px;font-weight:700;color:var(--firmato)">' + ico('spunta', 16, 2.8) + 'Riepilogo inviato il ' + dBreve(v.riepilogo) + '</span><button type="button" class="btn-piccolo" data-azione="avviso" data-testo="Si apre Prepara riepilogo, come oggi">Prepara riepilogo</button></div>' +
+    (pc() ? '<div style="padding:0 0 8px 52px;display:flex;flex-direction:column;gap:2px;font-size:13px;color:var(--tenue);font-weight:600">' + RAP_SET.map(r => '<span>' + r[0] + ' · ' + dBreve(r[1]) + ' · ' + numIt(r[2]) + ' ore · 52 km' + (r[3] ? ' · pedaggio ' + euro(r[3]) : '') + '</span>').join('') + '</div>' : '');
+  return '<div class="voce-df">' + casella(si, 'data-scegli="' + v.k + '"', 'Scegli ' + v.titolo) + '<span class="corpo"><span class="t1">' + v.titolo + '</span><span class="t2">' + Maiusc(tipo) + ' · ' + v.det + '</span></span><span class="quanto">' + euro(v.imp) + (v.ant ? '<span class="pill p-grigio" style="height:22px;font-size:12px">Senza IVA</span>' : '') + '</span></div>' + extra;
+}
+function rigaFattura(f) {
+  const k = conti(f);
+  const sotto = f.stato === 'pronta' ? (daEmettereEntro(f) ? 'già pagata · va emessa entro il ' + dBreve(daEmettereEntro(f)) : 'passata al programma il ' + dBreve(f.prontaIl)) : f.stato === 'bozza' ? 'bozza del ' + dBreve(f.dataIso) : 'del ' + dIt(f.dataIso) + (scadutaGiorni(f) ? ' · scaduta da ' + scadutaGiorni(f) + ' giorni' : f.tipo !== 'nota' && residuo(f) > 0.005 ? ' · scade il ' + dBreve(f.scadIso) : '');
+  return '<button type="button" class="riga" data-vai="' + (f.stato === 'bozza' ? 'bozza' : 'fattura') + '|' + f.id + '"><span class="corpo"><span class="t1">' + (f.num ? f.num + ' · ' : '<span style="color:var(--tenue)">Rif. W-' + f.id + '</span> · ') + CLI[f.cli].nome + '</span><span class="t2">' + sotto + '</span></span><span style="display:flex;flex-direction:column;align-items:flex-end;gap:4px"><span class="quanto">' + euro(f.tipo === 'nota' ? k.totale : k.netto) + '</span>' + pillStato(f) + '</span></button>';
+}
+function filtraFatture(seg) {
+  let l = FATTURE.slice();
+  if (seg === 'emettere') l = l.filter(f => f.stato === 'bozza' || f.stato === 'pronta');
+  if (seg === 'incassare') l = l.filter(f => f.tipo !== 'nota' && f.stato === 'emessa' && residuo(f) > 0.005);
+  if (seg === 'scadute') l = l.filter(f => scadutaGiorni(f) > 0);
+  if (seg === 'note') l = l.filter(f => f.tipo === 'nota');
+  if (seg !== 'note' && pc() && S.segFattPc === 'fatture') l = l.filter(f => f.tipo !== 'nota');
+  if (pc() && S.segFattPc === 'note') l = l.filter(f => f.tipo === 'nota');
+  const t = S.cercaF.trim().toLowerCase();
+  if (t) l = l.filter(f => (f.num + ' w-' + f.id + ' ' + CLI[f.cli].nome + ' ' + f.causale).toLowerCase().includes(t));
+  const peso = f => f.stato === 'bozza' ? 0 : f.stato === 'pronta' ? 1 : 2;
+  return l.sort((a, b) => peso(a) - peso(b) || (a.dataIso < b.dataIso ? 1 : -1));
+}
+function corpoFatture() {
+  const emesse = FATTURE.filter(f => f.tipo !== 'nota' && f.stato === 'emessa');
+  const daEm = FATTURE.filter(f => f.stato === 'bozza' || f.stato === 'pronta');
+  const sit = situazione();
+  const incOtt = c2(FATTURE.reduce((a, f) => a + f.incassi.filter(i => i.dataIso.slice(0, 7) === '2026-10').reduce((b, i) => b + i.imp, 0), 0));
+  const pill = '<div style="display:flex;gap:8px;flex-wrap:wrap">' + [['tutte', 'Tutte'], ['emettere', 'Da emettere'], ['incassare', 'Da incassare'], ['scadute', 'Scadute']].map(p => '<button type="button" class="pill ' + (S.segFatt === p[0] ? 'p-giallo' : 'p-grigio') + '" style="height:40px;padding:0 14px;border:none;font-size:14px" data-seg="segFatt|' + p[0] + '">' + p[1] + '</button>').join('') + '</div>';
+  const cerca = '<label class="cerca">' + ico('cerca', 20) + '<input data-cerca="fatture" value="' + S.cercaF + '" placeholder="Numero, cliente, causale" aria-label="Cerca le fatture"></label>';
+  const lista = filtraFatture(S.segFatt);
+  // Col pannello della fattura aperto il giallo è quello del pannello: qui il pulsante diventa col bordo.
+  const pannelloAperto = pc() && S.pila[S.pila.length - 1][0] === 'fattura';
+  const btn = pannelloAperto ? '<button type="button" class="secondario" data-azione="importa">' + ico('importa', 18) + 'Importa XML</button>' : giallo(ico('importa', 18) + 'Importa ' + (pc() ? 'XML' : 'l\'XML'), 'data-azione="importa"');
+  if (pc()) {
+    const tre = riquadri([[String(daEm.length), 'da emettere · ' + euro(daEm.reduce((a, f) => a + conti(f).netto, 0)), 'data-seg="segFatt|emettere"'], [euro(sit.daIncassare), 'da incassare', 'data-seg="segFatt|incassare"'], [euro(sit.scaduto), 'scadute', 'data-seg="segFatt|scadute"', 'rosso'], [euro(incOtt), 'incassato a ottobre']]);
+    const col = 'grid-template-columns:128px 96px 52px minmax(0,1fr) minmax(0,1.1fr) 104px 52px 104px';
+    const corto = 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+    const tab = '<div class="tabella"><div class="tr th" style="' + col + '"><span>Stato</span><span>Numero</span><span>Data</span><span>Cliente</span><span>Causale</span><span class="n">Netto</span><span>Scade</span><span class="n">Residuo</span></div>' +
+      (lista.length ? lista.map(f => { const k = conti(f); const sel = S.pila[S.pila.length - 1][0] === 'fattura' && Number(S.pila[S.pila.length - 1][1]) === f.id;
+        return '<div class="tr cl" data-vai="' + (f.stato === 'bozza' ? 'bozza' : 'fattura') + '|' + f.id + '" style="' + col + (sel ? ';background:var(--scelta)' : '') + '"><span>' + pillStato(f) + '</span><b>' + (f.num || '<span style="color:var(--tenue)">W-' + f.id + '</span>') + '</b><span>' + dBreve(f.dataIso) + '</span><span style="' + corto + '">' + CLI[f.cli].nome + '</span><span style="color:var(--testo2);' + corto + '">' + f.causale + '</span><span class="n">' + euro(f.tipo === 'nota' ? k.totale : k.netto) + '</span><span>' + (f.tipo === 'nota' ? '—' : dBreve(f.scadIso)) + '</span><span class="n" style="font-weight:800' + (scadutaGiorni(f) ? ';color:var(--rosso-t)' : '') + '">' + (f.tipo === 'nota' ? '—' : euro(Math.max(0, residuo(f)))) + '</span></div>'; }).join('') : '<div class="tr"><span class="vuoto">Nessuna fattura con questo filtro.</span></div>') + '</div>';
+    return { destra: '<button type="button" class="secondario" data-azione="nuova-fattura">' + ico('piu', 18) + 'Nuova fattura</button>' + btn,
+      html: tre + '<div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">' + segmenti('segFattPc', [['fatture', 'Fatture'], ['note', 'Note di credito']], S.segFattPc, 'width:300px') + '<div style="flex:1;min-width:260px">' + cerca + '</div></div>' + pill + tab + '<div style="height:40px"></div>' };
+  }
+  return { html: cerca + pill + '<div class="scheda righe">' + (lista.length ? lista.map(rigaFattura).join('') : '<div class="vuoto">Nessuna fattura con questo filtro.</div>') + '</div><div style="height:80px"></div><div class="in-basso">' + btn + '</div>' };
+}
+function corpoRicevute() {
+  const st = x => x.pagata ? ['Pagata', 'p-verde'] : x.scadIso < OGGI ? ['Scaduta', 'p-rosso'] : ['Da pagare', 'p-blu'];
+  const btn = giallo(ico('importa', 18) + 'Importa ' + (pc() ? 'XML' : 'l\'XML'), 'data-azione="importa"');
+  if (pc()) {
+    const col = 'grid-template-columns:minmax(0,1fr) 100px 52px 104px 90px 104px 52px 104px';
+    return { destra: '<button type="button" class="secondario" data-azione="avviso" data-testo="Si apre il modulo della ricevuta senza XML">Nuova ricevuta senza XML</button>' + btn,
+      html: '<div class="tabella"><div class="tr th" style="' + col + '"><span>Fornitore</span><span>Numero</span><span>Data</span><span class="n">Totale</span><span class="n">Ritenuta</span><span class="n">Da pagare</span><span>Scade</span><span>Stato</span></div>' +
+        RICEVUTE.map(x => '<div class="tr cl" data-ricevuta="' + x.id + '" style="' + col + '"><span style="display:flex;flex-direction:column;min-width:0"><b style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + FORN[x.forn] + '</b><span style="font-size:13px;color:var(--tenue)">' + x.cat + (x.comm ? ' · ' + x.comm : '') + '</span></span><span>' + x.num + '</span><span>' + dBreve(x.dataIso) + '</span><span class="n">' + euro(c2(x.imp + x.iva)) + '</span><span class="n">' + (x.rit ? euro(x.rit) : '—') + '</span><span class="n" style="font-weight:800">' + euro(x.pagata ? 0 : x.netto) + '</span><span>' + dBreve(x.scadIso) + '</span><span><span class="pill ' + st(x)[1] + '">' + st(x)[0] + '</span></span></div>').join('') + '</div>' };
+  }
+  return { html: '<div class="scheda righe">' + RICEVUTE.map(x => '<button type="button" class="riga" data-ricevuta="' + x.id + '"><span class="corpo"><span class="t1">' + FORN[x.forn] + '</span><span class="t2">n. ' + x.num + ' del ' + dBreve(x.dataIso) + ' · ' + x.cat + (x.pagata ? ' · pagata il ' + dBreve(x.pagIl) : ' · scade il ' + dBreve(x.scadIso)) + '</span></span><span style="display:flex;flex-direction:column;align-items:flex-end;gap:4px"><span class="quanto">' + euro(x.netto) + '</span><span class="pill ' + st(x)[1] + '">' + st(x)[0] + '</span></span></button>').join('') + '</div><div style="height:80px"></div><div class="in-basso">' + btn + '</div>' };
+}
+function corpoScadenzePag() {
+  const s8 = VOCI.find(v => v.k === 's8');
+  const stato8 = s8 ? (s8.inBozza ? ['In bozza W-' + s8.inBozza, 'p-grigio'] : ['Prevista · da fatturare', 'p-giallo']) : ['Fatturata', 'p-blu'];
+  const s12 = VOCI.find(v => v.k === 's12');
+  const comm = [
+    ['26ST003', 'Adeguamento impianto elettrico capannone · Rossi Impianti Srl', 3800, [['Acconto 30% alla firma', 'alla firma', 1140, ['Fatturata 45/2026', 'p-blu']], ['40% a fine progetto', 'a fine progetto', 1520, stato8], ['Saldo a fine lavori', 'a fine lavori', 1140, ['Prevista', 'p-grigio']]]],
+    ['26ST047', 'Impianto fotovoltaico · Mario Bianchi', 600, [['Saldo alla consegna del progetto', 'alla consegna', 600, s12 && s12.inBozza ? ['In bozza W-' + s12.inBozza, 'p-grigio'] : s12 ? ['Prevista · da fatturare', 'p-giallo'] : ['Fatturata', 'p-blu']]]],
+  ];
+  const col = 'grid-template-columns:minmax(0,1.6fr) 160px 120px 220px';
+  return { html: comm.map(c => { const fatt = c[3].filter(x => /Fatturata|Incassata/.test(x[3][0])).reduce((a, x) => a + x[2], 0);
+    return '<div class="tabella"><div class="tr" style="' + col + ';background:var(--fondo)"><span style="display:flex;gap:10px;align-items:center"><span class="codice">' + c[0] + '</span><b>' + c[1] + '</b></span><span></span><span></span><b class="n">' + euro(fatt) + ' fatturati su ' + euro(c[2]) + '</b></div>' +
+      c[3].map(x => '<div class="tr" style="' + col + '"><span>' + x[0] + '</span><span style="color:var(--tenue)">' + x[1] + '</span><span class="n">' + euro(x[2]) + '</span><span><span class="pill ' + x[3][1] + '">' + x[3][0] + '</span></span></div>').join('') + '</div>'; }).join('') };
+}
+function corpoRiepilogo() {
+  const totF = c2(ANNO.fatt.reduce((a, b) => a + b, 0)), totI = c2(ANNO.inc.reduce((a, b) => a + b, 0));
+  const max = Math.max(...ANNO.fatt, ...ANNO.inc);
+  if (pc()) {
+    const barre = '<div class="scheda" style="display:flex;flex-direction:column;gap:12px"><div class="legenda"><span><i style="background:var(--nero)"></i>Fatturato (compenso)</span><span><i style="background:var(--firmato)"></i>Incassato</span></div><div class="barre">' +
+      ANNO.mesi.map((m, i) => '<div class="col"><div class="coppia-b"><i style="height:' + Math.round(ANNO.fatt[i] / max * 150) + 'px" title="' + euro(ANNO.fatt[i]) + '"></i><i class="b2" style="height:' + Math.round(ANNO.inc[i] / max * 150) + 'px" title="' + euro(ANNO.inc[i]) + '"></i></div><span>' + m + '</span></div>').join('') + '</div></div>';
+    const cli = [['Elettrodinamica', 12, 14260, 13400], ['Rossi Impianti Srl', 7, 9180, 7900], ['Mario Bianchi', 2, 980, 980]];
+    const col = 'grid-template-columns:minmax(0,1.5fr) 90px 140px 140px';
+    const tab = '<div class="tabella"><div class="tr th" style="' + col + '"><span>Cliente</span><span class="n">Fatture</span><span class="n">Fatturato</span><span class="n">Incassato</span></div>' + cli.map(x => '<div class="tr" style="' + col + '"><b>' + x[0] + '</b><span class="n">' + x[1] + '</span><span class="n">' + euro(x[2]) + '</span><span class="n">' + euro(x[3]) + '</span></div>').join('') + '</div>';
+    return { destra: '<button type="button" class="secondario" data-azione="avviso" data-testo="wisper-riepilogo-2026.csv salvato">' + ico('scarica', 18) + 'Esporta</button>',
+      html: riquadri([[euro(totF), 'fatturato nel 2026 (compenso)'], [euro(totI), 'incassato nel 2026'], ['23', 'fatture emesse']]) + '<div class="pc-griglia">' + barre + tab + '</div>' };
+  }
+  return { html: riquadri([[euro(totF), 'fatturato nel 2026'], [euro(totI), 'incassato']]) + '<div class="scheda righe">' + ANNO.mesi.map((m, i) => '<div class="riga" style="min-height:52px"><span class="corpo"><span class="t1">' + Maiusc(MM[i]) + '</span><span class="t2">incassato ' + euro(ANNO.inc[i]) + '</span></span><span class="quanto">' + euro(ANNO.fatt[i]) + '</span></div>').reverse().join('') + '</div><div class="vuoto">Per cliente e per commessa, con l\'esportazione, da Wisper Ufficio.</div>' };
+}
+
+// ------------------------------------------------------------------ la bozza
+function pagBozza(id) {
+  const f = fatt(id);
+  if (!f) return pagFatturazione();
+  if (f.stato !== 'bozza') return pagFattura(id);
+  const c = CLI[f.cli];
+  const scad = 'Scadenza ' + dBreve(f.scadIso) + ' · bonifico su ' + contoTxt();
+  if (pc()) {
+    const col = 'grid-template-columns:minmax(0,1fr) 80px 92px 100px 44px';
+    const righe = '<div class="tabella"><div class="tr th" style="' + col + '"><span>Descrizione</span><span class="n">Quantità</span><span class="n">Prezzo</span><span class="n">Importo</span><span></span></div>' +
+      f.righe.map((r, i) => '<div class="tr" style="' + col + ';min-height:72px"><span style="display:flex;flex-direction:column;gap:4px;padding:8px 0"><span style="font-weight:700;line-height:1.35">' + r.d + '</span><span>' + (r.ant ? '<span class="pill p-grigio" style="height:22px;font-size:12px">Spesa anticipata, senza IVA</span>' : '<span class="pill p-blu" style="height:22px;font-size:12px">Compenso</span>') + (r.g && f.righe.filter(y => y.g === r.g).length > 1 ? ' <span class="pill p-grigio" style="height:22px;font-size:12px">gruppo di ' + f.righe.filter(y => y.g === r.g).length + '</span>' : '') + '</span></span><span class="n">' + numIt(r.q || 1) + (r.u ? ' ' + r.u : '') + '</span><span class="n">' + euro(r.p || r.imp) + '</span><b class="n">' + euro(r.imp) + '</b><button type="button" class="tondo" style="background:none" data-riga="' + f.id + '|' + i + '" aria-label="Togli la riga">' + ico('chiudi', 18) + '</button></div>').join('') +
+      (conti(f).bolloAddebitato ? '<div class="tr" style="' + col + ';color:var(--tenue)"><span>Imposta di bollo · la mette Wisper · senza IVA</span><span class="n">1</span><span class="n">' + euro(2) + '</span><b class="n">' + euro(2) + '</b><span></span></div>' : '') + '</div>' +
+      '<div style="display:flex;gap:10px"><button type="button" class="secondario" data-azione="avviso" data-testo="Riga libera aggiunta in fondo">' + ico('piu', 18) + 'Aggiungi una riga</button><button type="button" class="secondario" data-azione="avviso" data-testo="Si aprono le cose da fatturare di ' + c.nome + '">Aggiungi da fatturare</button></div>';
+    const lato = '<div class="scheda" style="display:flex;flex-direction:column;gap:12px"><span class="etichetta">I conti</span>' + contiHtml(f) + '</div>' +
+      '<div class="scheda"><div class="coppie">' + [['Data proposta', dIt(f.dataIso)], ['Scadenza', dIt(f.scadIso) + ' · 30 giorni'], ['Pagamento', 'Bonifico · ' + contoTxt()], ['Ritenuta', c.sostituto ? 'Sì: ' + c.nome + ' è sostituto d\'imposta' : 'No: è un privato']].map(x => '<div class="coppia"><span class="k">' + x[0] + '</span><span class="v">' + x[1] + '</span></div>').join('') + '</div></div>';
+    return testaPc('Fatturazione') + '<div style="display:flex;justify-content:space-between;align-items:flex-end;gap:16px"><div style="display:flex;flex-direction:column;gap:6px"><div style="display:flex;gap:8px;align-items:center"><span class="pill p-grigio">Bozza</span><span class="sottotitolo">Rif. W-' + f.id + ' · non è ancora una fattura</span></div><h1 class="titolo">Bozza per ' + c.nome + '</h1></div><div style="display:flex;gap:10px"><button type="button" class="secondario" data-azione="menu-bozza" data-id="' + f.id + '">' + ico('piuvoci', 20) + '</button>' + giallo('Passa al programma', 'data-azione="passa" data-id="' + f.id + '"') + '</div></div>' +
+      fasciaRegole() + '<div class="pc-griglia" style="grid-template-columns:minmax(0,1.9fr) minmax(0,1fr)"><div style="display:flex;flex-direction:column;gap:14px">' + righe + '</div><div style="display:flex;flex-direction:column;gap:14px">' + lato + '</div></div>';
+  }
+  return testaTel('Fatturazione', true) + '<div style="display:flex;gap:8px;align-items:center"><span class="pill p-grigio">Bozza</span><span class="sottotitolo" style="font-size:14px">Rif. W-' + f.id + ' · ' + dLunga(f.dataIso).split(' ').slice(1).join(' ') + '</span><button type="button" class="tondo" style="margin-left:auto" data-azione="menu-bozza" data-id="' + f.id + '" aria-label="Altre azioni">' + ico('piuvoci', 20) + '</button></div>' +
+    '<h1 class="titolo" style="font-size:26px">Bozza per ' + c.nome + '</h1>' + fasciaRegole() +
+    '<div class="scheda righe">' + f.righe.map((r, i) => '<button type="button" class="riga" data-riga="' + f.id + '|' + i + '"><span class="corpo"><span class="t1" style="font-size:15px;line-height:1.3">' + r.d + '</span><span class="t2">' + (r.ant ? 'Spesa anticipata, senza IVA' : r.q ? numIt(r.q) + ' ' + (r.u || '') + ' × ' + euro(r.p) : 'Compenso') + '</span></span><span class="quanto">' + euro(r.imp) + '</span></button>').join('') + '</div>' +
+    '<div class="scheda">' + contiHtml(f) + '</div>' +
+    '<button type="button" class="riga" style="background:var(--scheda);border:1px solid var(--bordo);border-radius:18px;padding:12px 16px" data-azione="avviso" data-testo="Si apre la scelta della data e della scadenza"><span class="ico-riga ico-grigio">' + ico('calendario', 20) + '</span><span class="corpo"><span class="t1" style="font-size:15px">' + scad + '</span></span><span class="freccia">' + ico('freccia', 18) + '</span></button>' +
+    '<div class="vuoto" style="padding:0 4px">Righe libere e prezzi si cambiano da Wisper Ufficio.</div><div style="height:80px"></div><div class="in-basso">' + giallo('Passa al programma', 'data-azione="passa" data-id="' + f.id + '"') + '</div>';
+}
+
+// ------------------------------------------------------------------ la fattura
+function passiFattura(f) {
+  const n = { bozza: 1, pronta: 2, emessa: 3 }[f.stato] + (f.stato === 'emessa' && residuo(f) <= 0.005 ? 1 : 0);
+  return '<div class="passi">' + ['Bozza', 'Pronta', 'Emessa', 'Pagata'].map((p, i) => '<span class="' + (i < n ? 'fatto' : '') + '">' + p + '</span>').join('') + '</div>';
+}
+function corpoFattura(f) {
+  const c = CLI[f.cli];
+  const k = conti(f);
+  const sv = statoVisto(f);
+  const entro = daEmettereEntro(f);
+  const avvisi = (entro ? '<div class="fascia">' + ico('allarme', 20) + '<span>Va emessa entro ' + dLunga(entro) + ': ha pagato il ' + dBreve(f.incassi[f.incassi.length - 1].dataIso) + '</span></div>' : '') +
+    (scadutaGiorni(f) ? '<div class="fascia rossa">' + ico('allarme', 20) + '<span>Scaduta da ' + scadutaGiorni(f) + ' giorni: restano ' + euro(residuo(f)) + '</span></div>' : '');
+  const testa = '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span class="pill ' + sv[1] + '">' + sv[0] + '</span>' + (f.stato === 'pronta' ? '<span class="sottotitolo" style="font-size:14px">passata al programma il ' + dBreve(f.prontaIl) + '</span>' : '') + '</div>' +
+    '<h1 class="titolo" style="font-size:' + (pc() ? 28 : 26) + 'px">' + (f.num ? (f.tipo === 'nota' ? 'Nota di credito ' : 'Fattura ') + f.num : 'Rif. W-' + f.id) + '</h1><p class="sottotitolo">' + c.nome + ' · ' + (f.num ? 'del ' + dIt(f.dataIso) : 'data proposta ' + dIt(f.dataIso)) + (f.tipo !== 'nota' ? ' · scade il ' + dIt(f.scadIso) : ' · corregge la ' + f.collegata) + '</p>';
+  const righe = '<div class="scheda righe">' + f.righe.map(r => '<div class="riga" style="min-height:56px"><span class="corpo"><span class="t1" style="font-size:15px;line-height:1.3">' + r.d + '</span>' + (r.q ? '<span class="t2">' + numIt(r.q) + ' ' + (r.u || '') + ' × ' + euro(r.p) + '</span>' : '') + '</span><span class="quanto">' + euro(r.imp) + '</span></div>').join('') + '</div>';
+  const inc = f.tipo === 'nota' ? '' : '<div style="display:flex;flex-direction:column;gap:8px"><span class="etichetta">Incassi</span><div class="scheda righe">' + (f.incassi.length ? f.incassi.map(i => '<div class="riga" style="min-height:56px"><span class="ico-riga ico-blu">' + ico('entrata', 20) + '</span><span class="corpo"><span class="t1">' + euro(i.imp) + '</span><span class="t2">' + dIt(i.dataIso) + ' · ' + contoTxt() + '</span></span><span class="pill ' + (i.ver ? 'p-verde' : 'p-blu') + '">' + (i.ver ? 'Verificato in banca' : 'Registrato') + '</span></div>').join('') : '<div class="vuoto">Nessun incasso.</div>') +
+    (residuo(f) > 0.005 ? '<div class="riga" style="min-height:48px"><span class="corpo"><span class="t1" style="color:var(--testo2)">Restano</span></span><span class="quanto">' + euro(residuo(f)) + '</span></div>' : '') + '</div></div>';
+  const sdi = '<div class="riga" style="min-height:52px;border:1px solid var(--bordo);border-radius:16px;padding:8px 14px;background:var(--scheda)"><span class="corpo"><span class="t1" style="font-size:15px">Invio allo SDI</span><span class="t2">' + (f.esito ? 'Esito importato: ' + f.esito : 'Lo fa il tuo programma') + '</span></span>' + pillNonCollegato + '</div>';
+  const file = f.file ? '<button type="button" class="riga" style="min-height:52px;border:1px solid var(--bordo);border-radius:16px;padding:8px 14px;background:var(--scheda)" data-azione="avviso" data-testo="Si apre l\'XML emesso"><span class="ico-riga ico-grigio">' + ico('file', 20) + '</span><span class="corpo"><span class="t1" style="font-size:15px">XML emesso</span><span class="t2">' + f.file + '</span></span></button>' : '';
+  let btn = '';
+  if (f.tipo !== 'nota') {
+    if (f.stato === 'pronta') btn = giallo(ico('importa', 18) + 'Importa l\'XML emesso', 'data-azione="importa"');
+    else if (f.stato === 'emessa' && residuo(f) > 0.005) btn = giallo('Segna un incasso', 'data-azione="incasso" data-id="' + f.id + '"');
+  }
+  return { testa: testa + avvisi + passiFattura(f), righe, conti: '<div class="scheda">' + contiHtml(f) + '</div>', inc, sdi: sdi + file, btn, menu: '<button type="button" class="tondo" data-azione="menu-fattura" data-id="' + f.id + '" aria-label="Altre azioni">' + ico('piuvoci', 20) + '</button>' };
+}
+function pagFattura(id) {
+  const f = fatt(id);
+  if (!f) return pagFatturazione();
+  if (f.stato === 'bozza') return pagBozza(id);
+  if (pc()) { S.segF = 'fatture'; return pagFatturazione(); }
+  const p = corpoFattura(f);
+  return testaTel('Fatture', true).replace('</div><div class="dx">', '</div><div class="dx">' + p.menu) + p.testa + p.conti + p.inc + p.righe + p.sdi + (p.btn ? '<div style="height:80px"></div><div class="in-basso">' + p.btn + '</div>' : '');
+}
+function pannelloFattura(id) {
+  const f = fatt(id);
+  if (!f) return '';
+  const p = corpoFattura(f);
+  return '<div style="display:flex;justify-content:space-between;align-items:center"><span class="dove">Fattura</span><div style="display:flex;gap:8px">' + p.menu + '<button type="button" class="tondo" data-azione="chiudi-pannello" aria-label="Chiudi">' + ico('chiudi', 20) + '</button></div></div>' + p.testa + p.conti + p.inc + p.righe + p.sdi + (p.btn ? '<div style="position:sticky;bottom:0;padding-top:8px;background:linear-gradient(to bottom, transparent, var(--scheda) 30%)">' + p.btn.replace('class="btn-giallo"', 'class="btn-giallo" style="width:100%;justify-content:center;height:56px"') + '</div>' : '');
+}
+
+// ------------------------------------------------------------------ importa l'XML
+function pagImporta(inFinestra) {
+  if (pc() && !inFinestra) return titoloPc('8 · Fatturazione', 'Cosa ho trovato') + pagImporta(true);
+  const docs = S.xml || XML_DOCS();
+  const n = docs.filter(d => d.scelta !== 'salta').length;
+  const pillCert = d => '<span class="pill ' + ({ Sicura: 'p-verde', 'Senza bozza': 'p-giallo', Ricevuta: 'p-blu', 'Già importata': 'p-grigio' }[d.cert]) + '">' + d.cert + '</span>';
+  const azioneTesto = d => ({ abbina: 'Abbina alla bozza', senza: 'Registra senza bozza', nuova: 'Aggiungi alle ricevute', salta: 'Salta' }[d.scelta]);
+  const coll = d => d.k === 'x2' && d.scelta === 'senza' ? '<div style="border-top:1px solid var(--riga);padding-top:8px;display:flex;flex-direction:column;gap:4px"><span class="etichetta">Era da fatturare in Wisper?</span><div class="voce-df" style="min-height:56px">' + casella(!!d.collega, 'data-collega="x2"', 'Collega i rapportini di settembre') + '<span class="corpo"><span class="t1">Settembre 2026 · 6 rapportini</span><span class="t2">Stessi importi: 1.393,92 € di compenso. Spuntato, esce da Da fatturare</span></span></div></div>' : '';
+  if (pc()) {
+    const col = 'grid-template-columns:minmax(0,1.15fr) 104px minmax(0,1.6fr) 116px 196px';
+    return '<div class="tabella"><div class="tr th" style="' + col + '"><span>Cosa</span><span class="n">Totale</span><span>Cosa propongo</span><span>Certezza</span><span>Cosa faccio</span></div>' +
+      docs.map(d => '<div class="tr" style="' + col + ';min-height:68px;align-items:start;padding-top:12px;padding-bottom:12px"><span style="display:flex;flex-direction:column;gap:2px;min-width:0"><b>' + d.cosa + '</b><span style="font-weight:700;color:var(--testo2)">' + d.chi + '</span><span style="font-size:12px;color:var(--tenue);overflow-wrap:anywhere">' + d.file + '</span></span><span class="n">' + euro(d.tot) + '</span><span style="display:flex;flex-direction:column;gap:6px"><span style="font-weight:700">' + d.msg + '</span>' + coll(d) + '</span><span>' + pillCert(d) + '</span><span><button type="button" class="btn-piccolo" data-cambia="' + d.k + '">' + azioneTesto(d) + '</button></span></div>').join('') + '</div>' +
+      '<div class="vuoto" style="padding:0">Scartato: scontrino.jpg (non è un file di fattura: servono .xml, .p7m o .zip).</div>' +
+      '<div style="display:flex;justify-content:flex-end;gap:10px"><button type="button" class="secondario" data-azione="chiudi-foglio">Annulla</button>' + giallo('Conferma (' + n + ')', 'data-azione="conferma-xml"') + '</div>';
+  }
+  return testaTel('Fatture', true) + '<h1 class="titolo" style="font-size:26px">Cosa ho trovato</h1><p class="sottotitolo">4 documenti in 5 file · niente cambia finché non confermi</p>' +
+    docs.map(d => '<div class="scheda" style="display:flex;flex-direction:column;gap:10px"><div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start"><div style="display:flex;flex-direction:column;gap:2px;min-width:0"><b style="font-size:16px">' + d.cosa + ' · ' + d.chi + '</b><span class="sottotitolo" style="font-size:13px;overflow-wrap:anywhere">' + d.file + '</span></div><b style="white-space:nowrap">' + euro(d.tot) + '</b></div>' +
+      '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">' + pillCert(d) + '<span style="font-size:14px;font-weight:700;color:var(--testo2)">' + d.msg + '</span></div>' + coll(d) +
+      '<div style="display:flex;justify-content:space-between;align-items:center"><span class="sottotitolo" style="font-size:14px">' + azioneTesto(d) + '</span><button type="button" class="btn-piccolo" data-cambia="' + d.k + '">Cambia</button></div></div>').join('') +
+    '<div class="vuoto">Scartato: scontrino.jpg (non è un file di fattura).</div><div style="height:80px"></div><div class="in-basso">' + giallo('Conferma (' + n + ')', 'data-azione="conferma-xml"') + '</div>';
+}
+
+// ------------------------------------------------------------------ banche e scadenze
+function pagBanche() {
+  const voci = [['scadenziario', 'Scadenziario'], ['movimenti', 'Movimenti'], ['tributi', pc() ? 'Tributi e F24' : 'Tributi'], ['conti', 'Conti']].concat(pc() ? [['situazione', 'Situazione']] : []);
+  if (!voci.some(v => v[0] === S.segB)) S.segB = 'scadenziario';
+  const c = { scadenziario: corpoScadenziario, movimenti: corpoMovimenti, tributi: corpoTributi, conti: corpoConti, situazione: corpoSituazione }[S.segB]();
+  const titolo = { scadenziario: 'Scadenziario', movimenti: 'Movimenti', tributi: 'Tributi, F24 e rate', conti: 'Conti', situazione: 'Situazione finanziaria' }[S.segB];
+  if (pc()) return titoloPc('9 · Banche e scadenze', titolo, c.destra) + segmenti('segB', voci, S.segB, 'max-width:720px') + c.html;
+  return testaTel('', false) + '<h1 class="titolo">Banche e scadenze</h1>' + segmenti('segB', voci, S.segB, '', 'stretti') + c.html;
+}
+function corpoScadenziario() {
+  const s = scadenziario();
+  const sit = situazione();
+  const tre = pc() ? riquadri([[euro(sit.oggi), 'nel conto oggi · registrato'], [euro(sit.daIncassare), 'da incassare'], [euro(sit.daPagare), 'da pagare in 30 giorni'], [euro(sit.p30), 'previsto fra 30 giorni', '', sit.p30 < CONTO.soglia ? 'rosso' : '']])
+    : riquadri([[euro(sit.oggi), 'nel conto oggi'], [euro(sit.daIncassare), 'da incassare'], [euro(sit.daPagare), 'da pagare in 30 gg']]) + '<div class="conti-r" style="padding:0 4px"><span class="et">Saldo previsto fra 30 giorni</span><b style="' + (sit.p30 < CONTO.soglia ? 'color:var(--rosso-t)' : '') + '">' + euro(sit.p30) + '</b></div>';
+  const nota = '<div class="vuoto" style="padding:0 4px">Parte dal saldo di oggi del Conto studio, ' + euro(saldoOggi()) + '. Gli incassi scaduti non entrano nel saldo previsto.</div>';
+  const pillR = x => '<span class="pill ' + ({ Previsto: 'p-grigio', Proposta: 'p-proposta', 'Da emettere': 'p-blu', 'In parte': 'p-ambra', Scaduto: 'p-rosso' }[x.stato] || 'p-grigio') + '" style="height:22px;font-size:12px">' + x.stato + '</span>';
+  const imp = x => x.imp ? '<span class="' + (x.verso > 0 ? 'segno-piu' : 'segno-meno') + '">' + segnato(x.verso, x.imp) + '</span>' : '<span style="color:var(--tenue)">da scrivere</span>';
+  if (pc()) {
+    const col = 'grid-template-columns:64px minmax(0,1fr) 116px 116px 124px 112px';
+    const riga = (x, g, scad) => '<div class="tr' + (x.k ? ' cl' : '') + '" data-scad="' + x.k + '" style="' + col + (g && g.sotto ? ';background:var(--rosso-f)' : '') + '"><span>' + (scad ? '<span style="color:var(--rosso-t);font-weight:800">' + dBreve(x.iso) + '</span>' : '') + '</span><span style="display:flex;flex-direction:column;min-width:0"><b style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + x.titolo + '</b><span style="font-size:13px;color:var(--tenue)">' + x.det + '</span></span><span class="n">' + (x.verso > 0 ? imp(x) : '') + '</span><span class="n">' + (x.verso < 0 ? imp(x) : '') + '</span><span class="n"></span><span>' + (scad ? '<span class="pill p-rosso" style="height:22px;font-size:12px">Scaduto</span>' : pillR(x)) + '</span></div>';
+    const tab = '<div class="tabella"><div class="tr th" style="' + col + '"><span>Giorno</span><span>Cosa</span><span class="n">Entrata</span><span class="n">Uscita</span><span class="n">Saldo previsto</span><span>Stato</span></div>' +
+      (s.scaduti.length ? '<div class="tr" style="display:flex;background:var(--rosso-f);min-height:40px"><b style="color:var(--rosso-t)">Scaduti · gli incassi non entrano nel saldo</b></div>' + s.scaduti.map(x => riga(x, null, true)).join('') : '') +
+      s.giorni.map(g => '<div class="tr" style="display:flex;justify-content:space-between;background:' + (g.sotto ? 'var(--rosso-f)' : 'var(--fondo)') + ';min-height:44px"><b style="' + (g.sotto ? 'color:var(--rosso-t)' : '') + '">' + Maiusc(dLunga(g.iso)) + '</b><span style="display:flex;gap:10px;align-items:center">' + (g.sotto ? '<span class="pill p-rosso" style="height:22px;font-size:12px">Sotto soglia</span>' : '') + '<b class="n" style="font-variant-numeric:tabular-nums;' + (g.sotto ? 'color:var(--rosso-t)' : '') + '">saldo previsto ' + euro(g.saldo) + '</b></span></div>' + g.righe.map(x => riga(x, g, false)).join('')).join('') + '</div>';
+    return { destra: '<div class="segmenti" style="width:260px"><button type="button" aria-pressed="false" data-azione="avviso" data-testo="30 giorni">30 giorni</button><button type="button" aria-pressed="true">60 giorni</button><button type="button" aria-pressed="false" data-azione="avviso" data-testo="90 giorni">90 giorni</button></div>' + giallo(ico('piu', 18) + 'Registra un movimento', 'data-azione="movimento"'),
+      html: tre + nota + tab + '<div class="vuoto">Dal contratto, senza data: ' + euro(2660) + ' (2 scadenze di 26ST003): non contano nel saldo.</div>' };
+  }
+  const rigaT = (x, g, scad) => '<button type="button" class="riga' + (g && g.sotto ? ' sotto' : '') + '" data-scad="' + x.k + '"><span class="ico-riga ' + (x.verso > 0 ? 'ico-blu' : 'ico-grigio') + '">' + ico(x.verso > 0 ? 'entrata' : 'uscita', 20) + '</span><span class="corpo"><span class="t1" style="font-size:15px">' + x.titolo + '</span><span class="t2">' + (scad ? 'scaduto il ' + dBreve(x.iso) + ' · ' : '') + x.det + '</span></span><span style="display:flex;flex-direction:column;align-items:flex-end;gap:4px"><span class="quanto">' + imp(x) + '</span>' + (scad ? '<span class="pill p-rosso" style="height:22px;font-size:12px">Scaduto</span>' : pillR(x)) + '</span></button>';
+  return { html: tre +
+    (s.scaduti.length ? '<div style="display:flex;flex-direction:column;gap:4px"><span class="etichetta" style="color:var(--rosso-t)">Scaduti · ' + s.scaduti.length + '</span><div class="scheda righe">' + s.scaduti.map(x => rigaT(x, null, true)).join('') + '</div></div>' : '') +
+    nota + s.giorni.map(g => '<div><div class="giorno-scad' + (g.sotto ? ' sotto' : '') + '"><span>' + Maiusc(dLunga(g.iso)) + '</span><span class="saldo">' + (g.sotto ? '<span class="pill p-rosso" style="height:22px;font-size:12px">Sotto soglia</span>' : '') + euro(g.saldo) + '</span></div><div class="scheda righe">' + g.righe.map(x => rigaT(x, g, false)).join('') + '</div></div>').join('') };
+}
+function corpoMovimenti() {
+  const t = S.cercaMov.trim().toLowerCase();
+  let l = MOVIMENTI.slice();
+  if (S.segMov === 'incassi') l = l.filter(m => m.verso > 0);
+  if (S.segMov === 'pagamenti') l = l.filter(m => m.verso < 0);
+  if (S.segMov === 'verificare') l = l.filter(m => !m.ver);
+  if (t) l = l.filter(m => (m.desc + ' ' + m.chi + ' ' + numIt(m.imp) + ' ' + euro(m.imp)).toLowerCase().includes(t));
+  const cerca = '<label class="cerca">' + ico('cerca', 20) + '<input data-cerca="mov" value="' + S.cercaMov + '" placeholder="Descrizione, chi, importo" aria-label="Cerca i movimenti"></label>';
+  const pill = '<div style="display:flex;gap:8px;flex-wrap:wrap">' + [['tutti', 'Tutti'], ['incassi', 'Incassi'], ['pagamenti', 'Pagamenti'], ['verificare', 'Da verificare']].map(p => '<button type="button" class="pill ' + (S.segMov === p[0] ? 'p-giallo' : 'p-grigio') + '" style="height:40px;padding:0 14px;border:none;font-size:14px" data-seg="segMov|' + p[0] + '">' + p[1] + '</button>').join('') + '</div>';
+  const estratto = '<div class="riga" style="min-height:60px;border:1px solid var(--bordo);border-radius:18px;padding:8px 16px;background:var(--scheda)"><span class="ico-riga ico-grigio">' + ico('importa', 20) + '</span><span class="corpo"><span class="t1" style="font-size:15px">Importa estratto conto</span><span class="t2">CSV o OFX della banca</span></span>' + pillNonCollegato + '</div>';
+  const stPill = m => '<span class="pill ' + (m.ver ? 'p-verde' : 'p-blu') + '" style="height:22px;font-size:12px">' + (m.ver ? 'Verificato in banca' : 'Registrato') + '</span>';
+  const btn = giallo(ico('piu', 18) + 'Nuovo movimento', 'data-azione="movimento"');
+  if (pc()) {
+    const col = 'grid-template-columns:48px 100px minmax(0,1.8fr) minmax(0,1fr) 140px 170px';
+    return { destra: '<button type="button" class="secondario" data-azione="avviso" data-testo="wisper-movimenti-2026-10-22.csv salvato">' + ico('scarica', 18) + 'Esporta</button>' + btn,
+      html: '<div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap"><div style="flex:1;min-width:280px">' + cerca + '</div>' + pill + '</div>' +
+        '<div class="tabella"><div class="tr th" style="' + col + '"><span></span><span>Data</span><span>Descrizione</span><span>Chi</span><span class="n">Importo</span><span>Stato</span></div>' + (l.length ? l.map(m => '<div class="tr" style="' + col + '"><span>' + casella(m.ver, 'data-verifica="' + m.id + '"', 'Verificato in banca') + '</span><span>' + dBreve(m.dataIso) + '</span><b>' + m.desc + '</b><span>' + (m.chi || '—') + '</span><span class="n ' + (m.verso > 0 ? 'segno-piu' : '') + '" style="font-weight:800">' + segnato(m.verso, m.imp) + '</span><span>' + stPill(m) + '</span></div>').join('') : '<div class="tr"><span class="vuoto">Nessun movimento trovato.</span></div>') + '</div>' + estratto };
+  }
+  return { html: cerca + pill + '<div class="scheda righe">' + (l.length ? l.map(m => '<div class="riga"><span class="ico-riga ' + (m.verso > 0 ? 'ico-blu' : 'ico-grigio') + '">' + ico(m.verso > 0 ? 'entrata' : 'uscita', 20) + '</span><span class="corpo"><span class="t1" style="font-size:15px">' + m.desc + '</span><span class="t2">' + dBreve(m.dataIso) + ' · ' + contoTxt() + '</span></span><span style="display:flex;flex-direction:column;align-items:flex-end;gap:4px"><span class="quanto ' + (m.verso > 0 ? 'segno-piu' : '') + '">' + segnato(m.verso, m.imp) + '</span>' + stPill(m) + '</span></div>').join('') : '<div class="vuoto">Nessun movimento trovato.</div>') + '</div>' + estratto + '<div style="height:80px"></div><div class="in-basso">' + btn + '</div>' };
+}
+function corpoTributi() {
+  const aperti = IMPEGNI.filter(x => !x.pagato);
+  const pillT = x => x.proposta ? '<span class="pill p-proposta" style="height:22px;font-size:12px">Proposta</span>' : '<span class="pill p-grigio" style="height:22px;font-size:12px">Previsto</span>';
+  const btn = giallo(ico('piu', 18) + 'Nuovo tributo', 'data-azione="nuovo-tributo"');
+  if (pc()) {
+    const col = 'grid-template-columns:64px minmax(0,1fr) 64px 110px 100px 200px';
+    return { destra: btn, html: '<div class="tabella"><div class="tr th" style="' + col + '"><span>Scadenza</span><span>Descrizione</span><span>Codice</span><span class="n">Importo</span><span>Ripete</span><span>Stato</span></div>' +
+      aperti.map(x => '<div class="tr cl" data-impegno="' + x.id + '" style="' + col + '"><span>' + dBreve(x.scadIso) + '</span><b>' + x.desc + '</b><span>' + (x.codice || '—') + '</span><span class="n" style="font-weight:800">' + (x.imp ? euro(x.imp) : '<span style="color:var(--tenue)">da scrivere</span>') + '</span><span>' + (x.ric || '—') + '</span><span style="display:flex;gap:8px;align-items:center">' + pillT(x) + (x.proposta ? '<button type="button" class="btn-piccolo" data-conferma-imp="' + x.id + '">Conferma</button>' : '') + '</span></div>').join('') +
+      PAGATI.map(x => '<div class="tr" style="' + col + ';color:var(--tenue)"><span>' + dBreve(x.dataIso) + '</span><span>' + x.desc + '</span><span>—</span><span class="n">' + euro(x.imp) + '</span><span>—</span><span><span class="pill p-verde" style="height:22px;font-size:12px">Pagato · verificato</span></span></div>').join('') + '</div>' +
+      '<div class="vuoto">Wisper non calcola IVA, IRPEF e contributi: si scrivono come li dice il commercialista. Le proposte (ritenute 1040, bollo) si aggiornano da sole finché non le confermi.</div>' };
+  }
+  return { html: '<div class="scheda righe">' + aperti.map(x => '<button type="button" class="riga" data-impegno="' + x.id + '"><span class="ico-riga ico-grigio">' + ico(x.ric ? 'ripeti' : 'preventivo', 20) + '</span><span class="corpo"><span class="t1" style="font-size:15px">' + x.desc + '</span><span class="t2">' + dBreve(x.scadIso) + (x.codice ? ' · F24 ' + x.codice : '') + (x.ric ? ' · ' + x.ric : '') + '</span></span><span style="display:flex;flex-direction:column;align-items:flex-end;gap:4px"><span class="quanto">' + (x.imp ? euro(x.imp) : '<span style="color:var(--tenue);font-size:13px">da scrivere</span>') + '</span>' + pillT(x) + '</span></button>').join('') + '</div>' +
+    '<div style="display:flex;flex-direction:column;gap:8px"><span class="etichetta">Pagati</span><div class="scheda righe">' + PAGATI.map(x => '<div class="riga"><span class="corpo"><span class="t1" style="font-size:15px">' + x.desc + '</span><span class="t2">' + dBreve(x.dataIso) + '</span></span><span style="display:flex;flex-direction:column;align-items:flex-end;gap:4px"><span class="quanto">' + euro(x.imp) + '</span><span class="pill p-verde" style="height:22px;font-size:12px">Verificato in banca</span></span></div>').join('') + '</div></div><div style="height:80px"></div><div class="in-basso">' + btn + '</div>' };
+}
+function corpoConti() {
+  const dopo = MOVIMENTI.filter(m => m.dataIso > CONTO.saldoAl);
+  const scheda = '<div class="scheda" style="display:flex;flex-direction:column;gap:8px"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><div style="display:flex;align-items:center;gap:12px"><span class="ico-riga ico-blu">' + ico('banca', 20) + '</span><div style="display:flex;flex-direction:column"><b style="font-size:17px">' + CONTO.nome + ' …' + CONTO.cifre + '</b><span class="sottotitolo" style="font-size:13px">' + CONTO.banca + ' · predefinito · soglia ' + euro(CONTO.soglia) + '</span></div></div></div>' +
+    '<b style="font-size:30px;letter-spacing:-0.6px;font-variant-numeric:tabular-nums">' + euro(saldoOggi()) + '</b><span class="sottotitolo" style="font-size:14px">dall\'ultimo saldo scritto il ' + dBreve(CONTO.saldoAl) + ' (' + euro(CONTO.saldoScritto) + ') · ' + dopo.length + ' movimenti dopo, ' + dopo.filter(m => m.ver).length + ' verificati in banca</span></div>';
+  const coll = '<div class="riga" style="min-height:60px;border:1px solid var(--bordo);border-radius:18px;padding:8px 16px;background:var(--scheda)"><span class="ico-riga ico-grigio">' + ico('scollegato', 20) + '</span><span class="corpo"><span class="t1" style="font-size:15px">Collegamento alla banca</span><span class="t2">I movimenti si scrivono a mano</span></span>' + pillNonCollegato + '</div>';
+  const btn = giallo('Aggiorna il saldo', 'data-azione="saldo"');
+  if (pc()) return { destra: '<button type="button" class="secondario" data-azione="avviso" data-testo="Si apre il modulo del conto: nome, banca, IBAN intero, soglia">' + ico('piu', 18) + 'Nuovo conto</button>' + btn, html: '<div style="max-width:720px;display:flex;flex-direction:column;gap:14px">' + scheda + coll + '</div>' };
+  return { html: scheda + coll + '<div class="vuoto">Nuovo conto e IBAN si scrivono da Wisper Ufficio.</div><div style="height:80px"></div><div class="in-basso">' + btn + '</div>' };
+}
+function corpoSituazione() {
+  const sit = situazione();
+  const s = scadenziario();
+  const sett = [];
+  let saldo = saldoOggi();
+  let inizio = '2026-10-19';
+  for (let i = 0; i < 13; i++) {
+    const fine = piuGiorni(inizio, 6);
+    const righe = righeScadenziario().filter(x => x.iso >= inizio && x.iso <= fine && x.iso >= OGGI && x.imp);
+    const ent = c2(righe.filter(x => x.verso > 0).reduce((a, x) => a + x.imp, 0));
+    const usc = c2(righe.filter(x => x.verso < 0).reduce((a, x) => a + x.imp, 0));
+    saldo = c2(saldo + ent - usc);
+    sett.push({ inizio, ent, usc, saldo });
+    inizio = piuGiorni(inizio, 7);
+  }
+  // Barre = saldo previsto a fine settimana (rosse sotto soglia); la linea tratteggiata è la soglia. Entrate e uscite nel titolo della barra.
+  const max = Math.max(...sett.map(x => x.saldo), CONTO.soglia);
+  const h = v => Math.max(2, Math.round(Math.max(0, v) / max * 150));
+  const tondo = v => Math.round(v).toLocaleString('it-IT', { useGrouping: 'always' }) + ' €';
+  const barre = '<div class="scheda" style="display:flex;flex-direction:column;gap:12px"><div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap"><span class="etichetta">Saldo previsto nelle prossime 13 settimane</span><div class="legenda"><span><i style="background:var(--nero)"></i>Sopra la soglia</span><span><i style="background:var(--rosso)"></i>Sotto soglia</span><span><i style="background:transparent;border-top:2px dashed var(--rosso);height:0;width:16px;border-radius:0"></i>Soglia ' + tondo(CONTO.soglia) + '</span></div></div>' +
+    '<div class="barre" style="height:200px"><div style="position:absolute;left:0;right:0;bottom:' + (h(CONTO.soglia) + 22) + 'px;border-top:2px dashed var(--rosso);opacity:.85"></div>' +
+    sett.map(x => '<div class="col" title="Entrate ' + euro(x.ent) + ' · uscite ' + euro(x.usc) + '"><span style="font-variant-numeric:tabular-nums;color:' + (x.saldo < CONTO.soglia ? 'var(--rosso-t)' : 'var(--testo)') + ';font-weight:800;font-size:11px;white-space:nowrap">' + tondo(x.saldo) + '</span><div class="coppia-b" style="height:150px"><i class="' + (x.saldo < CONTO.soglia ? 'uscita' : '') + '" style="height:' + h(x.saldo) + 'px;width:70%"></i></div><span>' + dBreve(x.inizio) + '</span></div>').join('') + '</div></div>';
+  return { html: riquadri([[euro(sit.oggi), 'nel conto oggi'], [euro(sit.daIncassare), 'da incassare · di cui scaduti ' + euro(sit.scaduto)], [euro(sit.daPagare), 'da pagare in 30 giorni'], [euro(sit.p30), 'previsto fra 30 giorni · fra 60: ' + euro(sit.p60), '', sit.p30 < CONTO.soglia ? 'rosso' : '']]) +
+    (s.primoSotto ? '<div class="fascia rossa">' + ico('allarme', 20) + '<span>Primo giorno sotto soglia: ' + dLunga(s.primoSotto) + '</span></div>' : '') + barre +
+    riquadri([[euro(ANNO.fatt.reduce((a, b) => a + b, 0)), 'fatturato nel 2026'], [euro(ANNO.inc.reduce((a, b) => a + b, 0)), 'incassato nel 2026']]) };
+}
+
+// ------------------------------------------------------------------ amministrazione
+function pagAmministrazione() {
+  const voci = [['Dati dello studio', 'Intestazione, partita IVA, codice fiscale, albo', 'scudo', null], ['Utenti', '4 persone · 3 attive', 'clienti', null], ['Ruoli e permessi', 'Titolare, Amministrazione, Collaboratore, Lettura', 'scudo', null],
+    ['Numerazioni', 'Commesse 26ST048 · Rapportini RAP/2026/0149 · le fatture le numera il tuo programma', 'numero', null], ['Impostazioni fiscali', nonConfermate() ? 'Regole da confermare col commercialista' : 'Regole confermate il ' + REGOLE.confermate.data, 'fatturazione', 'fiscale'],
+    ['Tariffe e rimborsi', 'Rimborso km 0,76 €, costo orario', 'euro', null], ['Registro attività', 'Chi ha cambiato cosa', 'lista', null], ['Copie ed esportazioni', 'Copia di stanotte fatta alle 2:30', 'scarica', null]];
+  const lista = '<div class="scheda righe">' + voci.map(v => '<button type="button" class="riga" ' + (v[3] ? 'data-vai="' + v[3] + '"' : 'data-azione="avviso" data-testo="' + v[0] + ': come nelle fasi prima"') + '><span class="ico-riga ' + (v[3] && nonConfermate() ? 'ico-giallo' : 'ico-grigio') + '">' + ico(v[2], 20) + '</span><span class="corpo"><span class="t1">' + v[0] + '</span><span class="t2">' + v[1] + '</span></span><span class="freccia">' + ico('freccia', 18) + '</span></button>').join('') + '</div>';
+  return pc() ? titoloPc('18 · Amministrazione', 'Amministrazione') + '<div style="max-width:720px">' + lista + '</div>' : testaTel('', false) + '<h1 class="titolo">Amministrazione</h1>' + lista;
+}
+function pagFiscale() {
+  const conf = REGOLE.confermate;
+  const titolare = io().ruolo === 'titolare';
+  const scheda = '<div class="scheda" style="display:flex;flex-direction:column;gap:10px;' + (conf ? '' : 'background:var(--scelta);border-color:var(--giallo)') + '"><span class="etichetta">Regole confermate dal commercialista</span>' +
+    (conf ? '<div style="display:flex;gap:8px;align-items:center"><span class="pill p-verde">Confermate</span><b>il ' + conf.data + ' da ' + conf.nome + '</b></div><button type="button" class="testo-link" style="align-self:flex-start" data-azione="togli-conferma">Togli la conferma</button>'
+      : '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span class="pill p-giallo">Non ancora</span><b style="font-size:17px">Contributo EPPI, ritenuta e bollo vanno confermati</b></div>' + (titolare ? '' : '<span class="sottotitolo">Le conferma il titolare.</span>')) + '</div>';
+  const card = (titolo, coppie) => '<div class="scheda" style="display:flex;flex-direction:column;gap:12px"><span class="etichetta">' + titolo + '</span><div class="coppie">' + coppie.map(x => '<div class="coppia"><span class="k">' + x[0] + '</span><span class="v">' + x[1] + '</span></div>').join('') + '</div><button type="button" class="secondario" style="align-self:flex-start" data-azione="avviso" data-testo="Fatto. La conferma del commercialista va rifatta">Salva</button></div>';
+  const schede = card('Aliquote', [['IVA', '22%'], ['Contributo integrativo EPPI', '5%'], ['Ritenuta', '20% · RT01 · causale A'], ['Cassa nella fattura', 'EPPI · TC17']]) +
+    card('Bollo', [['Scatta sopra', '77,47 € senza IVA'], ['Importo', '2,00 €'], ['Lo riaddebito al cliente', 'Sì']]) +
+    card('Documento', [['Tipo', 'Fattura (TD01)'], ['Regime', 'Ordinario (RF01)']]) +
+    card('Pagamento', [['Giorni', '30'], ['Fine mese', 'No'], ['Modo', 'Bonifico']]);
+  const btn = !conf && titolare ? giallo('Segna confermate', 'data-azione="conferma-regole"') : '';
+  if (pc()) return testaPc('Amministrazione') + '<div style="display:flex;justify-content:space-between;align-items:flex-end"><h1 class="titolo">Impostazioni fiscali</h1>' + btn + '</div><div class="pc-griglia"><div style="display:flex;flex-direction:column;gap:14px">' + scheda + card('Aliquote', [['IVA', '22%'], ['Contributo integrativo EPPI', '5%'], ['Ritenuta', '20% · RT01 · causale A'], ['Cassa nella fattura', 'EPPI · TC17']]) + '</div><div style="display:flex;flex-direction:column;gap:14px">' + card('Bollo', [['Scatta sopra', '77,47 € senza IVA'], ['Importo', '2,00 €'], ['Lo riaddebito al cliente', 'Sì']]) + card('Documento', [['Tipo', 'Fattura (TD01)'], ['Regime', 'Ordinario (RF01)']]) + card('Pagamento', [['Giorni', '30'], ['Fine mese', 'No'], ['Modo', 'Bonifico']]) + '</div></div>';
+  return testaTel('Amministrazione', true) + '<h1 class="titolo">Impostazioni fiscali</h1>' + scheda + schede + (btn ? '<div style="height:80px"></div><div class="in-basso">' + btn + '</div>' : '');
+}
+
+const PAGINE = { dashboard: pagDashboard, clienti: pagClienti, cliente: pagCliente, commesse: pagCommesse, commessa: pagCommessa,
+  preventivi: () => pagSegnaposto('Preventivi e contratti', 2), attivita: () => pagSegnaposto('Attività e calendario', 2), rapportini: () => pagSegnaposto('Ore e rapportini', 3), spese: () => pagSegnaposto('Spese e trasferte', 3),
+  fatturazione: pagFatturazione, bozza: pagBozza, fattura: pagFattura, importa: pagImporta, banche: pagBanche, amministrazione: pagAmministrazione, fiscale: pagFiscale,
+  accesso: () => '<div style="padding-top:120px;text-align:center"><h1 class="titolo">Entra in Wisper</h1><p class="sottotitolo">Studio Tecnico GM</p><div style="height:20px"></div><button type="button" class="principale" data-azione="entra">Entra</button></div>' };
+
+// ------------------------------------------------------------------ fogli (telefono) e finestre (computer)
+function foglio(html, stretta) {
+  if (DISP === 'pc') {
+    const f = document.getElementById('finestra'); f.className = 'finestra' + (stretta === true ? ' stretta' : stretta ? ' ' + stretta : ''); f.innerHTML = html;
+    document.getElementById('finestra-velo').classList.add('aperta');
+  } else {
+    const f = document.getElementById('foglio'); f.innerHTML = '<div class="maniglia"></div>' + html; f.classList.add('aperto'); document.getElementById('velo-foglio').classList.add('aperto');
+  }
+}
+function chiudiFoglio() {
+  document.getElementById('foglio').classList.remove('aperto'); document.getElementById('velo-foglio').classList.remove('aperto');
+  document.getElementById('finestra-velo').classList.remove('aperta');
+}
+const titoloF = t => DISP === 'pc' ? '<div class="testa-f"><h2>' + t + '</h2><button type="button" class="tondo" data-azione="chiudi-foglio" aria-label="Chiudi">' + ico('chiudi', 20) + '</button></div>' : '<h2 style="margin:0;font-size:22px;font-weight:800">' + t + '</h2>';
+const gialloF = (t, a) => '<button type="button" class="' + (DISP === 'pc' ? 'btn-giallo' : 'principale') + '" ' + a + (DISP === 'pc' ? ' style="align-self:flex-end"' : '') + '>' + t + '</button>';
+function prospetto(f) {
+  const c = CLI[f.cli]; const k = conti(f);
+  const ivaR = r => r.ant ? 'Senza IVA (N1, art. 15)' : '22%';
+  return [
+    ['Cliente', [['Denominazione', c.nome], ['Partita IVA', c.piva || '—'], ['Codice fiscale', c.cf || c.piva], ['Indirizzo', c.ind], ['Codice destinatario', c.dest]]],
+    ['Documento', [['Tipo', 'Fattura (TD01)'], ['Data proposta', dIt(f.dataIso)], ['Numero', 'lo dà il programma'], ['Causale', f.causale + '. Rif. Wisper W-' + f.id]]],
+    ['Righe', f.righe.map((r, i) => [(i + 1) + '. ' + (r.q ? numIt(r.q) + ' ' + (r.u || '') + ' × ' + euro(r.p) : '1 × ' + euro(r.imp)) + ' · IVA ' + ivaR(r) + ' · ritenuta ' + (r.ant || !c.sostituto ? 'no' : 'sì'), r.d]).concat(k.bolloAddebitato ? [[(f.righe.length + 1) + '. 1 × 2,00 € · Senza IVA (N1)', 'Imposta di bollo']] : [])],
+    ['Cassa previdenziale', [['Cassa', 'EPPI (TC17) · 5%'], ['Imponibile', euro(k.compenso)], ['Contributo', euro(k.contributo) + ' · IVA 22%']]],
+    ['Ritenuta', c.sostituto ? [['Tipo', 'RT01 · 20% · causale A'], ['Importo', euro(k.ritenuta)]] : [['Ritenuta', 'no, è un privato']]],
+    ['Bollo', k.bollo ? [['Bollo virtuale', euro(k.bollo)]] : [['Bollo', 'no']]],
+    ['Totali', [['Imponibile IVA 22%', euro(k.baseIva) + ' · IVA ' + euro(k.iva)], ['Senza IVA (N1)', euro(c2(k.anticipazioni + k.bolloAddebitato))], ['Totale della fattura', euro(k.totale)], ['Netto da incassare', euro(k.netto)]]],
+    ['Pagamento', [['Modo', 'Bonifico (MP05)'], ['Scadenza', dIt(f.scadIso)], ['Importo', euro(k.netto)], ['IBAN', 'IT·· ···· ···· ···· ···· ···4 521 (intero nel prospetto vero)'], ['Banca', CONTO.banca]]],
+  ];
+}
+function foglioPassa(id) {
+  const f = fatt(id); const k = conti(f); const c = CLI[f.cli];
+  const conferma = S.passaConferma && nonConfermate();
+  const avvisoRegole = nonConfermate() ? '<div class="fascia">' + ico('allarme', 20) + '<span>' + (conferma ? 'Le regole non sono confermate: passala lo stesso? Prospetto e XML diranno «conti da verificare».' : 'Regole non ancora confermate dal commercialista: controlla i conti prima di emetterla') + '</span></div>' : '';
+  const sdi = '<div class="riga" style="min-height:52px;border-top:1px solid var(--riga)"><span class="corpo"><span class="t1" style="font-size:15px">Invio allo SDI</span><span class="t2">Lo fa il tuo programma</span></span>' + pillNonCollegato + '</div>';
+  const btn = gialloF(conferma ? 'Passala lo stesso' : 'Segna come passata al programma', 'data-azione="segna-passata" data-id="' + id + '"');
+  if (DISP === 'pc') {
+    const sez = prospetto(f).map(s => '<div style="display:flex;flex-direction:column;gap:2px"><span class="etichetta" style="padding-top:8px">' + s[0] + '</span>' + s[1].map((x, i) => '<div class="campo-copia"><span class="k">' + x[0] + '</span><span class="v">' + x[1] + '</span><button type="button" class="btn-copia" data-copia="' + s[0] + i + '">' + ico('duplica', 16) + 'Copia</button></div>').join('') + '</div>').join('');
+    return foglio(titoloF('Passa al programma: ' + c.nome) + '<p class="sottotitolo" style="margin-top:-6px">Copia i campi nel programma delle fatture, oppure importa l\'XML se il programma lo accetta. Rif. W-' + id + '.</p>' + avvisoRegole +
+      '<div style="display:grid;grid-template-columns:minmax(0,1.7fr) minmax(0,1fr);gap:22px;align-items:start"><div>' + sez + '</div><div style="display:flex;flex-direction:column;gap:10px;position:sticky;top:0"><span class="etichetta">Prospetto per il programma</span>' +
+      '<button type="button" class="secondario" data-azione="avviso" data-testo="Prospetto W-' + id + ' ' + c.nome + '.pdf salvato">' + ico('scarica', 18) + 'Scarica il prospetto (PDF)</button><button type="button" class="secondario" data-azione="avviso" data-testo="Bozza W-' + id + ' ' + c.nome + ' - non inviare.xml salvato">' + ico('file', 18) + 'Scarica l\'XML da completare</button><button type="button" class="secondario" data-azione="avviso" data-testo="Copiato tutto il prospetto">' + ico('duplica', 18) + 'Copia tutto</button>' +
+      '<div class="scheda" style="padding:12px 14px;display:flex;flex-direction:column;gap:4px"><div class="conti-r"><span class="et">Totale della fattura</span><b>' + euro(k.totale) + '</b></div><div class="conti-r"><span class="et">Netto da incassare</span><b>' + euro(k.netto) + '</b></div></div>' + sdi + btn + '</div></div>', 'larga');
+  }
+  return foglio(titoloF('Cosa passi al programma') + avvisoRegole +
+    '<div class="scheda" style="padding:14px 16px;display:flex;flex-direction:column;gap:2px"><b>' + c.nome + '</b><span class="sottotitolo" style="font-size:14px">' + f.righe.length + (f.righe.length === 1 ? ' riga' : ' righe') + ' · scade il ' + dBreve(f.scadIso) + ' · Rif. W-' + id + '</span><div class="conti-r" style="margin-top:6px"><span class="et">Totale della fattura</span><b>' + euro(k.totale) + '</b></div><div class="conti-r"><span class="et">Netto da incassare</span><b>' + euro(k.netto) + '</b></div></div>' +
+    '<button type="button" class="secondario" data-azione="avviso" data-testo="Si apre Condividi: scegli dove mandarlo">' + ico('condividi', 18) + 'Condividi il prospetto (PDF)</button>' +
+    '<button type="button" class="secondario" data-azione="avviso" data-testo="Si apre Condividi con l\'XML da completare">' + ico('file', 18) + 'Condividi l\'XML da completare</button>' +
+    '<button type="button" class="secondario" data-azione="avviso" data-testo="Dati copiati: incollali nel programma">' + ico('duplica', 18) + 'Copia i dati</button>' + sdi + btn);
+}
+function foglioIncasso(id) {
+  const f = fatt(id); const r = residuo(f);
+  const parte = S.incParte;
+  return foglio(titoloF('Segna un incasso') + '<p class="sottotitolo" style="margin-top:-4px">' + etichetta(f) + ' · ' + CLI[f.cli].nome + ' · restano ' + euro(r) + '</p>' +
+    '<div class="segmenti"><button type="button" data-inc-parte="0" aria-pressed="' + !parte + '">Tutto</button><button type="button" data-inc-parte="1" aria-pressed="' + !!parte + '">In parte</button></div>' +
+    '<div class="campo"><label for="inc-imp">Importo</label><input id="inc-imp" inputmode="decimal" value="' + campoEuro(parte ? c2(Math.floor(r / 2)) : r) + '" style="font-size:26px;font-weight:800"' + (parte ? '' : ' readonly') + '></div>' +
+    '<div class="coppie"><div class="coppia"><span class="k">Data</span><span class="v">Oggi, ' + dIt(OGGI) + '</span></div><div class="coppia"><span class="k">Conto</span><span class="v">' + contoTxt() + '</span></div></div>' +
+    '<button type="button" class="scelta-ruolo' + (S.incVer ? ' scelto' : '') + '" data-azione="inc-ver"><span class="pallino" style="border-radius:6px"></span><span style="display:flex;flex-direction:column"><b>L\'ho visto sull\'estratto conto</b></span></button>' +
+    gialloF('Segna l\'incasso', 'data-azione="salva-incasso" data-id="' + id + '"'), true);
+}
+function foglioRiga(id, i) {
+  const f = fatt(id); const r = f.righe[i];
+  const v = r.g ? VOCI.find(x => x.k === r.g) : null;
+  const nGruppo = r.g ? f.righe.filter(y => y.g === r.g).length : 1;
+  const torna = v ? (v.tipo === 'mese' ? 'Tornano da fatturare 6 rapportini di settembre' : 'Torna da fatturare: ' + v.titolo) : 'È una riga libera: si toglie e basta';
+  const gruppo = nGruppo > 1 ? '<div class="mancano">Fa parte di un gruppo di ' + nGruppo + ' righe: si tolgono tutte insieme</div>' : '';
+  return foglio(titoloF('Togli dalla bozza') + '<div class="scheda" style="padding:14px 16px"><b style="line-height:1.35">' + r.d + '</b><div class="sottotitolo" style="margin-top:4px">' + euro(r.imp) + '</div></div>' + gruppo + '<p class="sottotitolo">' + torna + '.</p>' +
+    '<div style="display:flex;gap:10px' + (DISP === 'pc' ? ';justify-content:flex-end' : ';flex-direction:column') + '"><button type="button" class="secondario" data-azione="chiudi-foglio">Lascia</button><button type="button" class="secondario" style="border-color:var(--rosso);color:var(--rosso-t)" data-azione="togli-riga" data-id="' + id + '" data-i="' + i + '">Togli</button></div>', true);
+}
+function foglioMenu(f) {
+  const v = [];
+  if (f.stato === 'bozza') v.push(['Avviso di parcella per il cliente', 'Avviso di parcella W-' + f.id + '.pdf pronto: si manda per email'], ['Scarta la bozza', 'scarta']);
+  if (f.stato === 'pronta') v.push(['Prospetto (PDF)', 'Prospetto salvato'], ['Torna in bozza', 'torna'], ['Segna emessa senza XML', 'Si apre: numero e data che ha dato il programma'], ['Avviso di parcella per il cliente', 'Avviso di parcella pronto'], ['Scarta', 'scarta']);
+  if (f.stato === 'emessa') v.push(['Prospetto (PDF)', 'Prospetto salvato'], ['XML emesso', 'Si apre l\'XML emesso']);
+  if (f.stato === 'emessa' && f.tipo !== 'nota') v.push(DISP === 'pc' ? ['Prepara una nota di credito', 'nota'] : ['Le note di credito si preparano da Wisper Ufficio', '']);
+  return foglio(titoloF('Altre azioni') + '<div class="scheda righe">' + v.map(x => x[1] ? '<button type="button" class="riga" data-voce-menu="' + x[1] + '" data-id="' + f.id + '"><span class="corpo"><span class="t1" style="font-size:15px' + (x[1] === 'scarta' ? ';color:var(--rosso-t)' : '') + '">' + x[0] + '</span></span></button>' : '<div class="riga" style="min-height:52px"><span class="corpo"><span class="t2">' + x[0] + '.</span></span></div>').join('') + '</div>', true);
+}
+function foglioNota(id) {
+  const f = fatt(id);
+  return foglio(titoloF('Nota di credito per la ' + f.num) + '<p class="sottotitolo" style="margin-top:-4px">Si passa al programma come una fattura. Le cose stornate per intero tornano da fatturare.</p>' +
+    '<div class="segmenti"><button type="button" aria-pressed="true">Tutta la fattura</button><button type="button" aria-pressed="false" data-azione="avviso" data-testo="Si scelgono le righe e l\'importo da stornare">Righe scelte</button></div>' +
+    '<div class="scheda righe">' + f.righe.map(r => '<div class="riga"><span class="corpo"><span class="t1" style="font-size:15px">' + r.d + '</span></span><span class="quanto">' + euro(r.imp) + '</span></div>').join('') + '</div>' +
+    '<div class="campo"><label for="motivo-nc">Motivo</label><input id="motivo-nc" value="Acconto fatturato due volte"></div><div class="mancano">Torna da fatturare: Acconto 30% alla firma (26ST003)</div>' +
+    gialloF('Prepara la nota di credito', 'data-azione="chiudi-avviso" data-testo="Bozza della nota di credito pronta: passala al programma"'), true);
+}
+function foglioFile() {
+  const files = ['IT00000000000_00046.xml.p7m', 'IT00000000000_00047.xml', 'IT09988776655_0A1B2.xml.p7m', 'IT00000000000_00045.xml.p7m', 'scontrino.jpg'];
+  if (DISP === 'pc') {
+    if (S.xmlLetto) { S.modo = 'pc'; return foglio(titoloF('Importa XML: cosa ho trovato') + '<p class="sottotitolo" style="margin-top:-6px">4 documenti in 5 file · niente cambia finché non confermi</p>' + pagImporta(true), 'larga'); }
+    return foglio(titoloF('Importa XML') + '<div class="zona-file">' + ico('importa', 30) + 'Trascina qui i file o una cartella<span class="sottotitolo">.xml, .p7m, .zip · fino a 300 file</span><button type="button" class="secondario" data-azione="leggi-file">Scegli i file</button></div><p class="sottotitolo">Fatture emesse dal tuo programma, note di credito, fatture ricevute dai fornitori ed esiti dello SDI.</p>');
+  }
+  return foglio(titoloF('Scegli i file') + '<p class="sottotitolo" style="margin-top:-4px">Download · anche da un\'email con Condividi → Wisper</p><div class="scheda righe">' + files.map(n => '<div class="riga" style="min-height:56px"><span class="ico-riga ico-grigio">' + ico('file', 20) + '</span><span class="corpo"><span class="t1" style="font-size:14px;overflow-wrap:anywhere">' + n + '</span></span>' + casella(true, '', 'Scelto') + '</div>').join('') + '</div>' + gialloF('Apri (5)', 'data-azione="leggi-file"'));
+}
+function foglioScad(k) {
+  const x = righeScadenziario().find(r => r.k === k);
+  if (!x) return;
+  const entrata = x.verso > 0;
+  if (x.fid && fatt(x.fid).stato === 'pronta') return foglio(titoloF(x.titolo) + '<p class="sottotitolo">Pronta, non ancora emessa: l\'incasso si segna dalla fattura.</p><button type="button" class="secondario" data-vai="fattura|' + x.fid + '">Apri la fattura</button>', true);
+  return foglio(titoloF(x.titolo) + '<p class="sottotitolo" style="margin-top:-4px">' + (x.iso < OGGI ? 'Scaduto il ' : 'Scade ') + dLunga(x.iso) + ' · ' + x.det + '</p>' +
+    '<div class="campo"><label for="scad-imp">Importo</label><input id="scad-imp" inputmode="decimal" value="' + (x.imp ? campoEuro(x.imp) : '') + '" placeholder="da scrivere" style="font-size:26px;font-weight:800"></div>' +
+    '<div class="coppie"><div class="coppia"><span class="k">Data</span><span class="v">Oggi, ' + dIt(OGGI) + '</span></div><div class="coppia"><span class="k">Conto</span><span class="v">' + contoTxt() + '</span></div></div>' +
+    gialloF(entrata ? 'Segna incassato' : 'Segna pagato', 'data-azione="paga-scad" data-k="' + k + '"'), true);
+}
+function foglioMovimento() {
+  return foglio(titoloF('Nuovo movimento') + '<div class="segmenti"><button type="button" aria-pressed="true">Entrata</button><button type="button" aria-pressed="false" data-azione="avviso" data-testo="Uscita">Uscita</button></div>' +
+    '<div class="campo"><label for="mov-imp">Importo</label><input id="mov-imp" inputmode="decimal" value="472,90" style="font-size:26px;font-weight:800"></div>' +
+    '<div class="campo"><label for="mov-desc">Descrizione</label><input id="mov-desc" value="Bonifico Rossi Impianti Srl, saldo fattura 39/2026"></div>' +
+    '<span class="etichetta">Abbina a</span><div class="scheda righe"><div class="voce-df">' + casella(true, '', 'Abbina') + '<span class="corpo"><span class="t1">39/2026 · Rossi Impianti Srl</span><span class="t2">restano 472,90 €</span></span><span class="quanto">472,90 €</span></div><div class="voce-df">' + casella(false, '', 'Abbina') + '<span class="corpo"><span class="t1">45/2026 · Rossi Impianti Srl</span><span class="t2">restano 1.232,34 €</span></span><span class="quanto">0,00 €</span></div></div>' +
+    '<button type="button" class="scelta-ruolo"><span class="pallino" style="border-radius:6px"></span><span style="display:flex;flex-direction:column"><b>L\'ho visto sull\'estratto conto</b></span></button>' +
+    gialloF('Salva il movimento', 'data-azione="salva-movimento"'), true);
+}
+function foglioImpegno(id) {
+  const x = IMPEGNI.find(i => i.id === Number(id));
+  return foglio(titoloF(x.desc) + '<p class="sottotitolo" style="margin-top:-4px">' + Maiusc(dLunga(x.scadIso)) + (x.codice ? ' · F24 codice ' + x.codice : '') + (x.ric ? ' · si ripete ' + x.ric : '') + '</p>' +
+    (x.proposta ? '<div class="mancano">Proposta di Wisper: ' + (x.codice === '1040' ? 'la ritenuta trattenuta all\'Ing. Paolo Verdi (fattura 12, pagata il 12/10)' : '2 € per ognuna delle 2 fatture con bollo del 3° trimestre') + '</div><button type="button" class="secondario" data-conferma-imp="' + x.id + '">Conferma la proposta</button>' : '') +
+    '<div class="campo"><label for="imp-imp">Importo</label><input id="imp-imp" inputmode="decimal" value="' + (x.imp ? campoEuro(x.imp) : '') + '" placeholder="da scrivere" style="font-size:24px;font-weight:800"></div>' +
+    gialloF('Segna pagato', 'data-azione="paga-impegno" data-id="' + x.id + '"'), true);
+}
+function foglioTributo() {
+  return foglio(titoloF('Nuovo tributo') + '<div class="campo"><label for="tr-desc">Descrizione</label><input id="tr-desc" value="Contributi EPPI, saldo"></div><div class="coppie"><div class="campo"><label for="tr-cod">Codice</label><input id="tr-cod" value="E068"></div><div class="campo"><label for="tr-imp">Importo</label><input id="tr-imp" inputmode="decimal" placeholder="da scrivere"></div></div>' +
+    '<div class="campo"><label for="tr-scad">Scadenza</label><input id="tr-scad" value="16/12/2026"></div><span class="etichetta">Ripeti</span><div class="segmenti"><button type="button" aria-pressed="true">Mai</button><button type="button" aria-pressed="false">Ogni mese</button><button type="button" aria-pressed="false">Ogni 3 mesi</button><button type="button" aria-pressed="false">Ogni anno</button></div>' +
+    gialloF('Salva il tributo', 'data-azione="chiudi-avviso" data-testo="Tributo salvato: è nello scadenziario"'), true);
+}
+function foglioSaldo() {
+  return foglio(titoloF('Aggiorna il saldo') + '<p class="sottotitolo" style="margin-top:-4px">Il saldo che leggi oggi sull\'estratto conto del ' + contoTxt() + '</p><div class="campo"><label for="saldo-imp">Saldo</label><input id="saldo-imp" inputmode="decimal" value="' + campoEuro(saldoOggi()) + '" style="font-size:26px;font-weight:800"></div>' +
+    '<div class="coppie"><div class="coppia"><span class="k">Data</span><span class="v">Oggi, ' + dIt(OGGI) + '</span></div></div>' + gialloF('Salva il saldo', 'data-azione="salva-saldo"'), true);
+}
+function foglioRicevuta(id) {
+  const x = RICEVUTE.find(r => r.id === Number(id));
+  return foglio(titoloF(FORN[x.forn] + ' · n. ' + x.num) + '<p class="sottotitolo" style="margin-top:-4px">del ' + dIt(x.dataIso) + ' · ' + (x.pagata ? 'pagata il ' + dIt(x.pagIl) : 'scade il ' + dIt(x.scadIso)) + '</p>' +
+    '<div class="scheda" style="padding:12px 16px">' + [['Imponibile', euro(x.imp)], ['IVA', euro(x.iva)], ['Totale', euro(c2(x.imp + x.iva))]].concat(x.rit ? [['Ritenuta che versi tu (1040)', '− ' + euro(x.rit)]] : []).concat([['Da pagare', euro(x.netto)]]).map((r, i, a) => '<div class="conti-r' + (i === a.length - 1 ? ' tot' : '') + '"><span class="et">' + r[0] + '</span><b>' + r[1] + '</b></div>').join('') + '</div>' +
+    '<div class="coppie"><div class="coppia"><span class="k">Categoria</span><span class="v">' + x.cat + '</span></div><div class="coppia"><span class="k">Commessa</span><span class="v">' + (x.comm || 'nessuna') + '</span></div></div>' +
+    (x.pagata ? '<div class="mancano" style="background:var(--firmato-f);color:var(--firmato)">Pagata · verificata in banca</div>' : gialloF('Segna pagata', 'data-azione="paga-ricevuta" data-id="' + x.id + '"')), true);
+}
+function foglioConfermaRegole() {
+  return foglio(titoloF('Regole confermate') + '<p class="sottotitolo" style="margin-top:-4px">Contributo EPPI 5%, ritenuta 20% sul compenso, bollo oltre 77,47 € senza IVA, fattura TD01.</p><div class="campo"><label for="rc-nome">Commercialista</label><input id="rc-nome" value="Studio Conti Esempio"></div><div class="campo"><label for="rc-data">Data</label><input id="rc-data" value="' + dIt(OGGI) + '"></div>' + gialloF('Segna confermate', 'data-azione="salva-conferma"'), true);
+}
+
+// ------------------------------------------------------------------ azioni sui dati
+function preparaBozza() {
+  const sel = selezione();
+  if (!sel.voci.length) return avviso('Scegli almeno una cosa da fatturare');
+  const id = prossimoId++;
+  const righe = [];
+  sel.voci.forEach(v => {
+    v.inBozza = id;
+    if (v.tipo === 'mese' && S.raggruppaE === 'rapportino') RAP_SET.forEach(r => righe.push({ d: 'Rapportino ' + r[0] + ' del ' + dIt(r[1]) + ': Magazzino automatico Batokyo (' + numIt(r[2]) + ' ore, 52 km' + (r[3] ? ', spese ' + euro(r[3]) : '') + ')', imp: c2(r[2] * 30 + 39.52 + r[3]), g: v.k }));
+    else v.righe.forEach(r => righe.push(Object.assign({}, r, { g: v.k })));
+  });
+  const commesse = Array.from(new Set(sel.voci.map(v => (v.det.match(/26ST\d{3}/) || [''])[0])));
+  FATTURE.unshift({ id, tipo: 'fattura', num: '', cli: sel.cli, dataIso: OGGI, commessa: commesse.length === 1 ? commesse[0] : '', causale: sel.voci.map(v => v.titolo).join(', '), stato: 'bozza', scadIso: piuGiorni(OGGI, 30), righe, incassi: [] });
+  S.sel = new Set();
+  vai('bozza', id);
+  avviso('Bozza W-' + id + ' pronta: controlla i conti');
+}
+function confermaXml() {
+  const docs = S.xml || XML_DOCS();
+  let ab = 0, nuove = 0, ric = 0, salt = 0;
+  docs.forEach(d => {
+    if (d.scelta === 'salta') { salt++; return; }
+    if (d.k === 'x1' && d.scelta === 'abbina') { const f = fatt(14); if (f && f.stato !== 'emessa') { f.stato = 'emessa'; f.num = '46/2026'; f.dataIso = '2026-10-21'; f.file = d.file; f.esito = 'Consegnata'; } ab++; }
+    if (d.k === 'x2' && d.scelta !== 'salta') {
+      if (!FATTURE.some(f => f.num === '47/2026')) FATTURE.unshift({ id: prossimoId++, tipo: 'fattura', num: '47/2026', cli: 'C001', dataIso: OGGI, commessa: '26ST044', causale: 'Prestazioni di settembre 2026', stato: 'emessa', scadIso: '2026-11-21', file: d.file,
+        righe: [{ d: 'Prestazioni professionali di settembre 2026 (6 rapportini)', q: 38, u: 'ore', p: 30, imp: 1140 }, { d: 'Rimborso chilometrico di settembre 2026', q: 312, u: 'km', p: 0.76, imp: 237.12 }, { d: 'Spese di viaggio e materiale di settembre 2026', imp: 16.8 }], incassi: [] });
+      if (d.collega) VOCI = VOCI.filter(v => v.k !== 'm09');
+      nuove++;
+    }
+    if (d.k === 'x3' && d.scelta === 'nuova') { if (!RICEVUTE.some(r => r.num === '1301')) RICEVUTE.unshift({ id: 5, forn: 'F001', num: '1301', dataIso: '2026-10-21', cat: 'Materiale', comm: '', imp: 96.38, iva: 21.2, rit: 0, netto: 117.58, scadIso: '2026-11-21', pagata: false }); ric++; }
+  });
+  S.xml = null; S.xmlLetto = false;
+  chiudiFoglio();
+  S.segF = 'fatture'; S.segFatt = 'tutte';
+  S.pila = [['fatturazione']]; ultimoVerso = 'sfuma';
+  disegna();
+  avviso('Fatto: ' + ab + ' abbinata, ' + nuove + ' senza bozza, ' + ric + ' ricevuta, ' + salt + ' saltata');
+}
+
+// ------------------------------------------------------------------ disegno
+function cassetto() {
+  const attiva = sezioneDi(S.pila[S.pila.length - 1][0]);
+  const n = Array.from(new Set(vociLibere().map(v => v.cli))).length;
+  return '<div class="chi"><span class="cerchio c-ambra" style="width:48px;height:48px;border-radius:24px;font-size:16px">' + io().iniz + '</span><div style="display:flex;flex-direction:column;gap:2px;min-width:0"><b style="font-size:17px">' + io().nome + '</b><span class="sottotitolo" style="font-size:14px">' + io().ruoloNome + '</span></div></div>' +
+    '<div style="overflow-y:auto;display:flex;flex-direction:column;gap:2px">' + vociMenu().map(v => '<button type="button" class="voce' + (attiva === v[0] ? ' attiva' : '') + '" data-sezione="' + v[0] + '"' + (attiva === v[0] ? ' aria-current="page"' : '') + '>' + ico(v[3]) + '<span class="lab">' + v[2] + '</span>' + (v[0] === 'fatturazione' && n ? '<span class="num-v">' + n + '</span>' : '') + '</button>').join('') + '</div>' +
+    '<div class="piede"><span class="stato-ok"><i></i>Collegato · letto alle 16:52</span><button type="button" class="voce" data-azione="esci" style="padding:0;min-height:44px">' + ico('esci', 20) + 'Esci</button></div>';
+}
+function lato() {
+  const attiva = sezioneDi(S.pila[S.pila.length - 1][0]);
+  const n = Array.from(new Set(vociLibere().map(v => v.cli))).length;
+  return '<div class="marchio-pc">' + marchio + '<div><b>Wisper</b><span>Studio Tecnico GM</span></div></div>' +
+    vociMenu().map(v => '<button type="button" class="voce' + (attiva === v[0] ? ' attiva' : '') + '" data-sezione="' + v[0] + '" title="' + v[2] + '"' + (attiva === v[0] ? ' aria-current="page"' : '') + '>' + ico(v[3]) + '<span class="lab">' + v[2] + '</span>' + (v[0] === 'fatturazione' && n ? '<span class="num-v">' + n + '</span>' : '') + '</button>').join('') +
+    '<div class="piede-pc"><span class="stato-ok"><i></i><span class="lab">Collegato · 16:52</span></span><span style="display:flex;align-items:center;gap:10px"><span class="cerchio c-ambra" style="width:36px;height:36px;font-size:13px">' + io().iniz + '</span><span class="lab">' + io().nome + '</span></span>' +
+    '<button type="button" class="voce" data-azione="richiudi" title="Richiudi il menu" style="min-height:40px">' + ico('lato', 20) + '<span class="lab">' + (S.latoChiuso ? 'Apri il menu' : 'Richiudi il menu') + '</span></button></div>';
+}
+let ultimoVerso = 'sfuma';
+function disegna() {
+  const [pag, arg] = S.pila[S.pila.length - 1];
+  const chiave = JSON.stringify(S.pila);
+  if (S.vista !== 'pc') {
+    S.modo = 'tel';
+    const sc = document.getElementById('schermo');
+    const stessa = S.ultimo.tel === chiave;
+    const top = sc.scrollTop;
+    sc.innerHTML = PAGINE[pag](arg);
+    sc.scrollTop = stessa ? top : 0;
+    if (!stessa) sc.className = 'schermo entra-' + ultimoVerso;
+    document.getElementById('cassetto').innerHTML = pag === 'accesso' ? '' : cassetto();
+    S.ultimo.tel = chiave;
+  }
+  if (S.vista !== 'tel') {
+    S.modo = 'pc';
+    const c = document.getElementById('contenuto-pc');
+    const p = pag === 'accesso' ? 'dashboard' : pag;
+    const stessa = S.ultimo.pc === chiave;
+    const top = c.scrollTop;
+    c.innerHTML = PAGINE[p](arg);
+    c.scrollTop = stessa ? top : 0;
+    if (!stessa) c.className = 'contenuto-pc entra-' + ultimoVerso;
+    const pan = document.getElementById('pannello-pc');
+    if (p === 'fattura' && fatt(arg) && fatt(arg).stato !== 'bozza') { pan.innerHTML = pannelloFattura(arg); pan.classList.add('aperto'); } else pan.classList.remove('aperto');
+    const l = document.getElementById('lato'); l.innerHTML = lato(); l.classList.toggle('chiuso', S.latoChiuso);
+    S.ultimo.pc = chiave;
+    adattaComputer();
+  }
+  S.modo = DISP;
+  ultimoVerso = 'sfuma';
+}
+function adattaComputer() {
+  const sc = document.getElementById('computer-scala');
+  const posto = window.innerWidth - 32 - (S.vista === 'due' ? 390 + 20 + 36 : 0);
+  const largo = Math.max(0.3, Math.min(1, posto / 1282));
+  document.getElementById('computer').style.transform = 'scale(' + largo + ')';
+  sc.style.height = Math.ceil(802 * largo) + 'px'; sc.style.width = Math.ceil(1282 * largo) + 'px';
+}
+function vai(pag, arg) { S.pila.push([pag, arg]); ultimoVerso = 'avanti'; chiudiCassetto(); disegna(); }
+function sezione(nome) { S.pila = [[nome]]; ultimoVerso = 'sfuma'; chiudiCassetto(); disegna(); }
+function indietro() { if (S.pila.length > 1) { S.pila.pop(); ultimoVerso = 'indietro'; disegna(); } }
+function apriCassetto() { document.getElementById('cassetto').classList.add('aperto'); document.getElementById('velo').classList.add('aperto'); }
+function chiudiCassetto() { document.getElementById('cassetto').classList.remove('aperto'); document.getElementById('velo').classList.remove('aperto'); }
+let timerAvviso;
+function avviso(t) {
+  if (S.silenzio) return;
+  const pcx = DISP === 'pc';
+  const a = document.getElementById(pcx ? 'avviso-pc' : 'avviso');
+  document.getElementById(pcx ? 'avviso-pc-testo' : 'avviso-testo').textContent = t;
+  a.classList.add('visto'); clearTimeout(timerAvviso); timerAvviso = setTimeout(() => a.classList.remove('visto'), 3500);
+}
+
+// ------------------------------------------------------------------ tocchi
+document.addEventListener('click', e => {
+  const b = e.target.closest('button, [data-vai], [data-ricevuta], [data-scad], [data-impegno]');
+  if (!b || b.disabled) return;
+  if (e.target.closest('#telefono')) DISP = 'tel'; else if (e.target.closest('#computer')) DISP = 'pc';
+  S.modo = DISP;
+  const d = b.dataset;
+  if (d.vai) { chiudiFoglio(); const [p, a] = d.vai.split('|'); if (p === 'fatturazione' && a) { S.segF = a; return sezione('fatturazione'); } if (p === 'banche' && a) { S.segB = a; return sezione('banche'); } if (['fatturazione', 'banche', 'dashboard', 'commesse', 'rapportini', 'attivita'].includes(p)) return sezione(p); return vai(p, a); }
+  if (d.sezione) { chiudiFoglio(); return sezione(d.sezione); }
+  if (d.seg) { const [k, v] = d.seg.split('|'); S[k] = v; if (k === 'segF' && sezioneDi(S.pila[S.pila.length - 1][0]) === 'fatturazione' && S.pila[S.pila.length - 1][0] !== 'fatturazione') S.pila = [['fatturazione']]; return disegna(); }
+  if (d.scegli) {
+    const v = VOCI.find(x => x.k === d.scegli);
+    if (S.sel.has(v.k)) S.sel.delete(v.k);
+    else { const altri = Array.from(S.sel).some(k => { const x = VOCI.find(y => y.k === k); return x && x.cli !== v.cli; }); if (altri) { S.sel = new Set(); avviso('Una fattura è per un cliente solo: ho tolto le altre'); } S.sel.add(v.k); }
+    return disegna();
+  }
+  if (d.sceglitutto) { const voci = vociLibere().filter(v => v.cli === d.sceglitutto); const tutte = voci.every(v => S.sel.has(v.k)); S.sel = new Set(tutte ? [] : voci.map(v => v.k)); return disegna(); }
+  if (d.riga) { const [id, i] = d.riga.split('|'); return foglioRiga(Number(id), Number(i)); }
+  if (d.ricevuta) return foglioRicevuta(d.ricevuta);
+  if (d.scad) return foglioScad(d.scad);
+  if (d.impegno && !d.confermaImp) return foglioImpegno(d.impegno);
+  if (d.confermaImp) { e.stopPropagation(); const x = IMPEGNI.find(i => i.id === Number(d.confermaImp)); x.proposta = false; chiudiFoglio(); disegna(); return avviso('Tributo confermato: ' + x.desc); }
+  if (d.copia) { b.classList.add('fatto'); b.innerHTML = ico('spunta', 16, 2.8) + 'Copiato'; setTimeout(() => { b.classList.remove('fatto'); b.innerHTML = ico('duplica', 16) + 'Copia'; }, 2000); return; }
+  if (d.cambia) { if (!S.xml) S.xml = XML_DOCS(); const x = S.xml.find(y => y.k === d.cambia); const giro = x.k === 'x3' ? ['nuova', 'salta'] : x.k === 'x4' ? ['salta'] : ['abbina', 'senza', 'salta']; if (x.k === 'x2') giro.shift(); x.scelta = giro[(giro.indexOf(x.scelta) + 1) % giro.length]; return DISP === 'pc' ? foglioFile() : disegna(); }
+  if (d.collega) { if (!S.xml) S.xml = XML_DOCS(); const x = S.xml.find(y => y.k === 'x2'); x.collega = !x.collega; return DISP === 'pc' ? foglioFile() : disegna(); }
+  if (d.incParte !== undefined) { S.incParte = d.incParte === '1'; return foglioIncasso(S.incId); }
+  if (d.verifica) { const m = MOVIMENTI.find(x => x.id === Number(d.verifica)); m.ver = !m.ver; disegna(); return avviso(m.ver ? 'Verificato in banca' : 'Tolta la spunta'); }
+  if (d.voceMenu) {
+    const f = fatt(d.id); const v = d.voceMenu;
+    if (v === 'scarta') { f.stato = 'scartata'; VOCI.forEach(x => { if (x.inBozza === f.id) x.inBozza = null; }); chiudiFoglio(); S.pila = [['fatturazione']]; S.segF = 'dafatturare'; disegna(); return avviso('W-' + f.id + ' scartata: le sue cose tornano da fatturare'); }
+    if (v === 'torna') { f.stato = 'bozza'; chiudiFoglio(); S.pila[S.pila.length - 1] = ['bozza', f.id]; disegna(); return avviso('W-' + f.id + ' è tornata in bozza'); }
+    if (v === 'nota') return foglioNota(f.id);
+    chiudiFoglio(); return avviso(v);
+  }
+  switch (d.azione) {
+    case 'menu': return apriCassetto();
+    case 'indietro': chiudiFoglio(); return indietro();
+    case 'entra': S.pila = [['dashboard']]; ultimoVerso = 'avanti'; return disegna();
+    case 'esci': chiudiCassetto(); S.pila = [['accesso']]; return disegna();
+    case 'avviso': return avviso(d.testo);
+    case 'chiudi-avviso': chiudiFoglio(); return avviso(d.testo);
+    case 'chiudi-foglio': S.xmlLetto = false; return chiudiFoglio();
+    case 'chiudi-pannello': S.pila = [['fatturazione']]; S.segF = 'fatture'; return disegna();
+    case 'richiudi': S.latoChiuso = !S.latoChiuso; return disegna();
+    case 'prepara': return preparaBozza();
+    case 'nuova-fattura': return avviso('Si apre una bozza vuota: scegli il cliente');
+    case 'menu-bozza': case 'menu-fattura': return foglioMenu(fatt(d.id));
+    case 'passa': S.passaConferma = false; return foglioPassa(Number(d.id));
+    case 'segna-passata': {
+      if (nonConfermate() && !S.passaConferma) { S.passaConferma = true; return foglioPassa(Number(d.id)); }
+      const f = fatt(d.id); f.stato = 'pronta'; f.prontaIl = OGGI; S.passaConferma = false; chiudiFoglio();
+      S.pila[S.pila.length - 1] = ['fattura', f.id]; disegna(); return avviso('Pronta: emettila nel programma, poi importa l\'XML');
+    }
+    case 'togli-riga': {
+      const f = fatt(d.id); const r = f.righe[Number(d.i)];
+      const v = r.g ? VOCI.find(x => x.k === r.g) : null;
+      if (v) v.inBozza = null;
+      if (r.g) f.righe = f.righe.filter(y => y.g !== r.g); else f.righe.splice(Number(d.i), 1);
+      chiudiFoglio(); disegna(); return avviso(v ? 'Torna da fatturare: ' + v.titolo : 'Riga tolta');
+    }
+    case 'importa': S.xml = XML_DOCS(); S.xmlLetto = false; return foglioFile();
+    case 'leggi-file': if (DISP === 'pc') { S.xmlLetto = true; return foglioFile(); } chiudiFoglio(); return vai('importa');
+    case 'conferma-xml': return confermaXml();
+    case 'incasso': S.incId = Number(d.id); S.incParte = false; S.incVer = false; return foglioIncasso(S.incId);
+    case 'inc-ver': S.incVer = !S.incVer; return foglioIncasso(S.incId);
+    case 'salva-incasso': {
+      const f = fatt(d.id); const v = Number(String(document.querySelector((DISP === 'pc' ? '#finestra' : '#foglio') + ' #inc-imp').value).replace(/\./g, '').replace(',', '.'));
+      if (!(v > 0)) return avviso('Importo: scrivi quanto');
+      if (v > residuo(f) + 0.005) return avviso('Restano ' + euro(residuo(f)) + ': non puoi segnarne di più');
+      f.incassi.push({ dataIso: OGGI, imp: c2(v), ver: !!S.incVer });
+      MOVIMENTI.unshift({ id: MOVIMENTI.length + 10, dataIso: OGGI, verso: 1, imp: c2(v), desc: 'Incasso ' + CLI[f.cli].nome + ' · fattura ' + f.num + (residuo(f) > 0.005 ? ', in parte' : ''), chi: CLI[f.cli].nome, ver: !!S.incVer });
+      chiudiFoglio(); disegna(); return avviso('Incasso segnato: ' + statoVisto(f)[0].toLowerCase());
+    }
+    case 'paga-scad': {
+      const x = righeScadenziario().find(r => r.k === d.k);
+      if (x.rid) { const r = RICEVUTE.find(y => y.id === x.rid); r.pagata = true; r.pagIl = OGGI; }
+      if (x.iid) IMPEGNI.find(y => y.id === x.iid).pagato = true;
+      if (x.fid) fatt(x.fid).incassi.push({ dataIso: OGGI, imp: x.imp, ver: false });
+      MOVIMENTI.unshift({ id: MOVIMENTI.length + 10, dataIso: OGGI, verso: x.verso, imp: x.imp || 0, desc: x.titolo, chi: '', ver: false });
+      chiudiFoglio(); disegna(); return avviso(x.verso > 0 ? 'Segnato incassato' : 'Segnato pagato');
+    }
+    case 'paga-impegno': { IMPEGNI.find(y => y.id === Number(d.id)).pagato = true; chiudiFoglio(); disegna(); return avviso('Segnato pagato'); }
+    case 'paga-ricevuta': { const r = RICEVUTE.find(y => y.id === Number(d.id)); r.pagata = true; r.pagIl = OGGI; MOVIMENTI.unshift({ id: MOVIMENTI.length + 10, dataIso: OGGI, verso: -1, imp: r.netto, desc: 'Pagamento ' + FORN[r.forn] + ' · fattura ' + r.num, chi: FORN[r.forn], ver: false }); chiudiFoglio(); disegna(); return avviso('Ricevuta segnata pagata'); }
+    case 'movimento': return foglioMovimento();
+    case 'salva-movimento': { const f = fatt(12); if (residuo(f) > 0.005) { f.incassi.push({ dataIso: OGGI, imp: residuo(f), ver: false }); MOVIMENTI.unshift({ id: 99, dataIso: OGGI, verso: 1, imp: 472.9, desc: 'Bonifico Rossi Impianti Srl, saldo fattura 39/2026', chi: 'Rossi Impianti Srl', ver: false }); } chiudiFoglio(); disegna(); return avviso('Movimento salvato e abbinato alla 39/2026'); }
+    case 'nuovo-tributo': return foglioTributo();
+    case 'saldo': return foglioSaldo();
+    case 'salva-saldo': chiudiFoglio(); return avviso('Saldo scritto: da qui si contano i movimenti');
+    case 'conferma-regole': return foglioConfermaRegole();
+    case 'salva-conferma': REGOLE.confermate = { data: dIt(OGGI), nome: 'Studio Conti Esempio' }; chiudiFoglio(); disegna(); return avviso('Regole confermate: le pillole «Da confermare» spariscono');
+    case 'togli-conferma': REGOLE.confermate = null; disegna(); return avviso('Conferma tolta');
+  }
+});
+document.addEventListener('input', e => {
+  const t = e.target.closest('[data-cerca]');
+  if (!t) return;
+  DISP = e.target.closest('#computer') ? 'pc' : 'tel';
+  const pos = t.selectionStart;
+  if (t.dataset.cerca === 'mov') S.cercaMov = t.value; else S.cercaF = t.value;
+  disegna();
+  const radice = document.getElementById(DISP === 'pc' ? 'computer' : 'telefono');
+  const n = radice.querySelector('[data-cerca="' + t.dataset.cerca + '"]');
+  if (n) { n.focus(); n.setSelectionRange(pos, pos); }
+});
+document.getElementById('velo').addEventListener('click', chiudiCassetto);
+document.getElementById('velo-foglio').addEventListener('click', chiudiFoglio);
+document.getElementById('finestra-velo').addEventListener('click', e => { if (e.target.id === 'finestra-velo') { S.xmlLetto = false; chiudiFoglio(); } });
+document.getElementById('avviso-annulla').addEventListener('click', () => document.getElementById('avviso').classList.remove('visto'));
+document.getElementById('avviso-pc-annulla').addEventListener('click', () => document.getElementById('avviso-pc').classList.remove('visto'));
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { chiudiFoglio(); chiudiCassetto(); } });
+(function () {
+  const t = document.getElementById('telefono'); let x0 = null, daBordo = false;
+  t.addEventListener('pointerdown', e => { const r = t.getBoundingClientRect(); x0 = e.clientX; daBordo = e.clientX - r.left < 24; });
+  t.addEventListener('pointerup', e => { if (x0 === null) return; const dx = e.clientX - x0; if (daBordo && dx > 50 && S.pila[S.pila.length - 1][0] !== 'accesso') apriCassetto(); if (dx < -50) chiudiCassetto(); x0 = null; });
+})();
+function scegliVista(v) {
+  S.vista = v; DISP = v === 'pc' ? 'pc' : 'tel';
+  ['tel', 'pc', 'due'].forEach(x => document.getElementById('b-' + x).setAttribute('aria-pressed', x === v));
+  document.getElementById('telefono').hidden = v === 'pc';
+  document.getElementById('computer-scala').hidden = v === 'tel';
+  document.getElementById('accanto').hidden = v === 'due' || (v === 'pc' && window.innerWidth < 1660);
+  document.getElementById('palco').className = 'palco modo-' + v;
+  chiudiFoglio(); S.ultimo = {};
+  disegna();
+}
+function scegliChi(c) {
+  S.chi = c;
+  document.getElementById('b-manuel').setAttribute('aria-pressed', c === 'manuel');
+  document.getElementById('b-marco').setAttribute('aria-pressed', c === 'marco');
+  const [pag] = S.pila[S.pila.length - 1];
+  if (pag !== 'accesso' && !puo(sezioneDi(pag))) S.pila = [['dashboard']];
+  chiudiFoglio(); disegna();
+}
+function scegliTema(t) {
+  document.documentElement.setAttribute('data-theme', t);
+  document.getElementById('b-chiaro').setAttribute('aria-pressed', t === 'light');
+  document.getElementById('b-scuro').setAttribute('aria-pressed', t === 'dark');
+}
+document.getElementById('b-tel').addEventListener('click', () => scegliVista('tel'));
+document.getElementById('b-pc').addEventListener('click', () => scegliVista('pc'));
+document.getElementById('b-due').addEventListener('click', () => scegliVista('due'));
+document.getElementById('b-manuel').addEventListener('click', () => scegliChi('manuel'));
+document.getElementById('b-marco').addEventListener('click', () => scegliChi('marco'));
+document.getElementById('b-chiaro').addEventListener('click', () => scegliTema('light'));
+document.getElementById('b-scuro').addEventListener('click', () => scegliTema('dark'));
+window.addEventListener('resize', () => { if (S.vista !== 'tel') adattaComputer(); document.getElementById('accanto').hidden = S.vista === 'due' || (S.vista === 'pc' && window.innerWidth < 1660); });
+const scuroDiSistema = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+document.getElementById(scuroDiSistema ? 'b-scuro' : 'b-chiaro').setAttribute('aria-pressed', 'true');
+
+// ------------------------------------------------------------------ stato dall'indirizzo (per le schermate di controllo):
+// #pc&scuro&marco&p=fattura&a=12&segF=fatture&segB=movimenti&f=incasso:12  (f = un foglio da aprire)
+const H = location.hash.slice(1).split('&').filter(Boolean);
+S.silenzio = true;
+const val = k => { const x = H.find(h => h.startsWith(k + '=')); return x ? decodeURIComponent(x.slice(k.length + 1)) : null; };
+if (H.includes('scuro')) scegliTema('dark');
+if (H.includes('chiaro')) scegliTema('light');
+if (H.includes('marco')) S.chi = 'marco', scegliChi('marco');
+if (val('segF')) S.segF = val('segF');
+if (val('segB')) S.segB = val('segB');
+if (val('segFatt')) S.segFatt = val('segFatt');
+if (H.includes('confermate')) REGOLE.confermate = { data: dIt(OGGI), nome: 'Studio Conti Esempio' };
+if (H.includes('bozza')) { DISP = 'tel'; S.sel = new Set(['s8', 'sp31']); preparaBozza(); }
+if (val('p')) S.pila = [['dashboard'], [val('p'), val('a')]];
+const vistaIniziale = H.includes('pc') ? 'pc' : H.includes('due') ? 'due' : 'tel';
+scegliVista(vistaIniziale);
+if (val('f')) {
+  const [quale, arg] = val('f').split(':');
+  DISP = vistaIniziale === 'pc' ? 'pc' : 'tel'; S.modo = DISP;
+  if (quale === 'incasso') { S.incId = Number(arg); foglioIncasso(S.incId); }
+  if (quale === 'passa') foglioPassa(Number(arg));
+  if (quale === 'file') { S.xml = XML_DOCS(); S.xmlLetto = DISP === 'pc'; foglioFile(); }
+  if (quale === 'scad') foglioScad(arg);
+  if (quale === 'menu') apriCassetto();
+}
+
+S.silenzio = false;
+
+// ------------------------------------------------------------------ prova automatica: #prova tocca ogni pagina e ogni foglio, e scrive l'esito
+if (H.includes('prova')) {
+  const esito = [];
+  const tocca = (sel, radice) => { const r = document.getElementById(radice || (DISP === 'pc' ? 'computer' : 'telefono')); const el = r.querySelector(sel); if (!el) throw new Error('manca ' + sel); el.click(); };
+  const passi = [];
+  ['tel', 'pc'].forEach(v => {
+    passi.push(['vista ' + v, () => scegliVista(v)]);
+    const R = v === 'pc' ? 'computer' : 'telefono';
+    ['dashboard', 'clienti', 'commesse', 'preventivi', 'attivita', 'rapportini', 'spese', 'fatturazione', 'banche', 'amministrazione'].forEach(s => passi.push([v + ' sezione ' + s, () => tocca('[data-sezione="' + s + '"]', R)]));
+    ['dafatturare', 'fatture', 'ricevute', 'riepilogo'].concat(v === 'pc' ? ['scadenze'] : []).forEach(s => passi.push([v + ' fatturazione ' + s, () => { tocca('[data-sezione="fatturazione"]', R); tocca('[data-seg="segF|' + s + '"]', R); }]));
+    passi.push([v + ' prepara bozza', () => { tocca('[data-sezione="fatturazione"]', R); tocca('[data-seg="segF|dafatturare"]', R); tocca('[data-scegli="s8"]', R); tocca('[data-azione="prepara"]', R); }]);
+    passi.push([v + ' togli riga', () => { tocca('[data-riga]', R); tocca('[data-azione="chiudi-foglio"]', R); }]);
+    passi.push([v + ' passa', () => { tocca('[data-azione="passa"]', R); tocca('[data-azione="segna-passata"]', R); tocca('[data-azione="segna-passata"]', R); }]);
+    passi.push([v + ' importa', () => { tocca('[data-azione="importa"]', R); tocca('[data-azione="leggi-file"]', R); tocca('[data-cambia="x1"]', R); tocca('[data-cambia="x1"]', R); tocca('[data-cambia="x1"]', R); tocca('[data-azione="conferma-xml"]', R); }]);
+    passi.push([v + ' fattura e incasso', () => { tocca('[data-sezione="fatturazione"]', R); tocca('[data-seg="segF|fatture"]', R); tocca('[data-vai="fattura|' + (v === 'pc' ? 13 : 12) + '"]', R); tocca('[data-azione="incasso"]', R); tocca('[data-inc-parte="1"]', R); tocca('[data-azione="salva-incasso"]', R); }]);
+    passi.push([v + ' menu fattura', () => { tocca('[data-sezione="fatturazione"]', R); tocca('[data-seg="segF|fatture"]', R); tocca('[data-vai="fattura|13"]', R); tocca('[data-azione="menu-fattura"]', R); tocca(v === 'pc' ? '[data-voce-menu="nota"]' : '[data-azione="chiudi-foglio"], .velo-foglio', R); chiudiFoglio(); }]);
+    passi.push([v + ' ricevuta', () => { tocca('[data-sezione="fatturazione"]', R); tocca('[data-seg="segF|ricevute"]', R); tocca('[data-ricevuta="4"]', R); chiudiFoglio(); }]);
+    ['scadenziario', 'movimenti', 'tributi', 'conti'].concat(v === 'pc' ? ['situazione'] : []).forEach(s => passi.push([v + ' banche ' + s, () => { tocca('[data-sezione="banche"]', R); tocca('[data-seg="segB|' + s + '"]', R); }]));
+    passi.push([v + ' scadenziario riga', () => { tocca('[data-sezione="banche"]', R); tocca('[data-seg="segB|scadenziario"]', R); tocca('[data-scad^="r"]', R); tocca('[data-azione="paga-scad"]', R); }]);
+    passi.push([v + ' movimento', () => { tocca('[data-seg="segB|movimenti"]', R); tocca('[data-azione="movimento"]', R); tocca('[data-azione="salva-movimento"]', R); }]);
+    passi.push([v + ' tributi', () => { tocca('[data-seg="segB|tributi"]', R); tocca('[data-impegno="3"]', R); chiudiFoglio(); tocca('[data-azione="nuovo-tributo"]', R); chiudiFoglio(); }]);
+    passi.push([v + ' saldo', () => { tocca('[data-seg="segB|conti"]', R); tocca('[data-azione="saldo"]', R); tocca('[data-azione="salva-saldo"]', R); }]);
+    passi.push([v + ' fiscale', () => { tocca('[data-sezione="amministrazione"]', R); tocca('[data-vai="fiscale"]', R); if (REGOLE.confermate) tocca('[data-azione="togli-conferma"]', R); tocca('[data-azione="conferma-regole"]', R); tocca('[data-azione="salva-conferma"]', R); tocca('[data-azione="togli-conferma"]', R); }]);
+    passi.push([v + ' commessa', () => { tocca('[data-sezione="commesse"]', R); tocca('[data-vai="commessa|26ST003"]', R); }]);
+    passi.push([v + ' cliente', () => { tocca('[data-sezione="clienti"]', R); tocca('[data-vai="cliente|C002"]', R); }]);
+    passi.push([v + ' marco', () => { scegliChi('marco'); if (document.getElementById(R).querySelector('[data-sezione="fatturazione"]')) throw new Error('Marco vede Fatturazione'); scegliChi('manuel'); }]);
+  });
+  passi.push(['due', () => scegliVista('due')]);
+  passi.forEach(p => { try { p[1](); esito.push('ok ' + p[0]); } catch (err) { esito.push('ERRORE ' + p[0] + ': ' + err.message); } });
+  const errori = esito.filter(x => x.startsWith('ERRORE'));
+  document.documentElement.setAttribute('data-prova', errori.length ? 'errori:' + errori.length : 'ok:' + esito.length);
+  const box = document.createElement('div'); box.className = 'prova-esito'; box.id = 'prova-esito'; box.textContent = (errori.length ? errori.join('\n') : 'Prova: ' + esito.length + ' passi, nessun errore'); document.body.appendChild(box);
+}
+})();
+</script>

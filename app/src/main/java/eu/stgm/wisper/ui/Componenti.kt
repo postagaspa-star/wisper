@@ -22,7 +22,9 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -260,6 +262,10 @@ fun CampoTesto(
     abilitato: Boolean = true,
     stile: TextStyle = Testi.testoGrande,
     iconaInizio: ImageVector? = null,
+    /** Il tasto della tastiera (Avanti, Fatto) e cosa fa: nella schermata di accesso. */
+    azione: ImeAction = ImeAction.Default,
+    onAzione: (() -> Unit)? = null,
+    campoModifier: Modifier = Modifier,
 ) {
     val c = W.colori
     Column(modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -275,7 +281,10 @@ fun CampoTesto(
             keyboardOptions = KeyboardOptions(
                 keyboardType = tastiera,
                 capitalization = if (tastiera == KeyboardType.Text) KeyboardCapitalization.Sentences else KeyboardCapitalization.None,
+                imeAction = azione,
             ),
+            keyboardActions = KeyboardActions(onAny = { onAzione?.invoke() ?: defaultKeyboardAction(azione) }),
+            modifier = campoModifier,
             decorationBox = { campo ->
                 Row(
                     Modifier

@@ -17,9 +17,10 @@
     Dove mettere l'exe (predefinito: pc\dist).
 
 .PARAMETER ConIndirizzo
-    Mette nell'exe l'indirizzo del foglio (da wisper-keys), così alla prima apertura
-    basta il codice. SOLO per un exe da usare in casa: quello che si pubblica su
-    GitHub non deve averlo, e strumenti\rilascio.ps1 si ferma se lo trova.
+    Mette nell'exe l'indirizzo del server di Wisper (riga serverUrl= di wisper-keys),
+    così alla prima apertura bastano email e password. SOLO per un exe da usare in
+    casa: quello che si pubblica su GitHub non deve averlo, e strumenti\rilascio.ps1
+    si ferma se lo trova (WisperUfficio.exe --indirizzo-incluso).
 
 .ESEMPIO
     powershell -ExecutionPolicy Bypass -File pc\prove\crea-pacchetto.ps1
@@ -50,12 +51,13 @@ $env:DOTNET_NOLOGO = '1'
 
 $extra = @()
 if ($Versione) { $extra += "-p:Version=$Versione"; $extra += "-p:FileVersion=$Versione.0" }
-# L'indirizzo del foglio (wisper-keys), solo se chiesto: un exe pubblicato lo
-# mostrerebbe a chiunque lo scarica.
+# L'indirizzo del server (wisper-keys, riga serverUrl=), solo se chiesto: un exe
+# pubblicato lo mostrerebbe a chiunque lo scarica.
 $chiavi = 'C:\Users\andre\wisper-keys\wisper.properties'
-if ($ConIndirizzo -and (Test-Path $chiavi)) {
-    $riga = Get-Content $chiavi | Where-Object { $_ -match '^sheetUrl=' } | Select-Object -First 1
-    if ($riga) { $extra += "-p:IndirizzoFoglio=$(($riga -replace '^sheetUrl=', '').Trim())" }
+if ($ConIndirizzo) {
+    $riga = if (Test-Path $chiavi) { Get-Content $chiavi | Where-Object { $_ -match '^serverUrl=' } | Select-Object -First 1 }
+    if ($riga) { $extra += "-p:IndirizzoServer=$(($riga -replace '^serverUrl=', '').Trim())" }
+    else { Write-Warning "In wisper-keys non c'e' la riga serverUrl=: l'exe chiedera' l'indirizzo del server al primo accesso." }
 }
 
 Write-Host "Pubblicazione (un file solo)..." -ForegroundColor Cyan

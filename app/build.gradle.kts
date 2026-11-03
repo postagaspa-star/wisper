@@ -26,8 +26,8 @@ android {
         targetSdk = 35
         // Il codice decide gli aggiornamenti: quello pubblicato deve essere più alto di quello installato.
         // (-PcodiceVersione=4 -PnomeVersione=0.4.0 solo per provare gli aggiornamenti sull'emulatore.)
-        versionCode = (project.findProperty("codiceVersione") as String?)?.toInt() ?: 8
-        versionName = (project.findProperty("nomeVersione") as String?) ?: "0.4.0"
+        versionCode = (project.findProperty("codiceVersione") as String?)?.toInt() ?: 9
+        versionName = (project.findProperty("nomeVersione") as String?) ?: "1.0.0"
 
         // Indirizzo dell'Apps Script che fa da ponte col foglio Google, e il
         // codice senza il quale lo script non risponde (lo crea preparaFoglio()).
@@ -42,6 +42,8 @@ android {
         val conIndirizzo = project.hasProperty("conIndirizzo")
         buildConfigField("String", "SHEET_URL", "\"${if (conIndirizzo) chiave("sheetUrl") else ""}\"")
         buildConfigField("String", "SHEET_CODICE", "\"${if (conIndirizzo) chiave("sheetCodice") else ""}\"")
+        // L'indirizzo del server del gestionale (fase 1): come quello del foglio, solo nelle build di casa.
+        buildConfigField("String", "SERVER_URL", "\"${if (conIndirizzo) chiave("serverUrl") else ""}\"")
 
         // L'elenco firmato delle versioni (NuoveVersioni.kt). Per le prove se ne usa
         // un altro: ./gradlew assembleDebug -PaggiornamentiUrl=http://10.0.2.2:8767/aggiornamento.json
@@ -64,8 +66,16 @@ android {
 
     buildTypes {
         debug {
-            buildConfigField("String", "SHEET_URL", "\"${chiave("sheetUrl")}\"")
+            // La porta Google (docs/gestionale/porta-google.md) e' l'indirizzo dello script del foglio.
+            // Per provarla sull'emulatore SENZA il Google vero: -PportaGoogle=http://10.0.2.2:<porta>/exec
+            // (il finto Google): l'APK di prova allora non contiene l'indirizzo vero.
+            val portaGoogle = project.findProperty("portaGoogle") as String?
+            buildConfigField("String", "SHEET_URL", "\"${portaGoogle ?: chiave("sheetUrl")}\"")
             buildConfigField("String", "SHEET_CODICE", "\"${chiave("sheetCodice")}\"")
+            // Senza serverUrl in wisper-keys, il server di prova sul computer visto dall'emulatore.
+            // Per le prove anche il server di casa: -PserverCasa=http://10.0.2.2:<porta> (mai il NAS vero).
+            val serverCasa = project.findProperty("serverCasa") as String?
+            buildConfigField("String", "SERVER_URL", "\"${serverCasa ?: chiave("serverUrl").ifBlank { "http://10.0.2.2:8400" }}\"")
         }
         release {
             // R8 rompe le cose in modi che scopri solo sull'APK finale, e non
@@ -138,9 +148,16 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.okhttp)
     implementation(libs.androidx.work.runtime)
+    // Collega un computer (collega-qr.md §7): la fotocamera nell'app e il lettore dei QR.
+    implementation(libs.androidx.camera.camera2)
+    implementation(libs.androidx.camera.lifecycle)
+    implementation(libs.androidx.camera.view)
+    implementation(libs.zxing.core)
 
     debugImplementation(libs.androidx.compose.ui.tooling)
 
     testImplementation(libs.junit)
     testImplementation(libs.org.json)
+    // Un server finto vero (HTTP su una porta locale) per le prove delle azioni della fase 2.
+    testImplementation("com.squareup.okhttp3:mockwebserver:${libs.versions.okhttp.get()}")
 }

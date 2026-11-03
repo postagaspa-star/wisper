@@ -38,3 +38,4 @@ google-services.json
 
 # I rilasci preparati da strumenti/rilascio.ps1 (si pubblicano su GitHub, non nel repo)
 /dist/
+/portale/config.js

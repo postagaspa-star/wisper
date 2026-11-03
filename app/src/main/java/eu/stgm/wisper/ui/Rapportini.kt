@@ -69,9 +69,21 @@ private var storicoLettoDa: Dati? = null
  * rapportino si ritrova l'elenco com'era. La selezione no: è di un momento.
  */
 @Composable
-fun SchermataRapportini(dati: Dati, nav: Navigatore, filtro: FiltroRapportini, onFiltro: (FiltroRapportini) -> Unit) {
+fun SchermataRapportini(
+    dati: Dati,
+    nav: Navigatore,
+    filtro: FiltroRapportini,
+    onFiltro: (FiltroRapportini) -> Unit,
+    /** Dalla fase 3: il titolo "Ore e rapportini" e i segmenti, sopra l'elenco. Il mese diventa più piccolo. */
+    sopra: (@Composable () -> Unit)? = null,
+) {
     val c = W.colori
     val avvisi = LocalAvvisi.current
+    val perm = LocalPermessi.current
+    val costi = perm.costi
+    // Chi vede i rapportini solo in lettura non ha i pulsanti per scrivere; segnare e riepiloghi sono della fatturazione.
+    val scrive = perm.modifica(eu.stgm.wisper.rapportino.Moduli.RAPPORTINI)
+    val fattura = perm.modifica(eu.stgm.wisper.rapportino.Moduli.FATTURAZIONE) && costi
     val storico by dati.storico.collectAsStateWithLifecycle()
     val viste by dati.viste.collectAsStateWithLifecycle()
     val ana by dati.anagrafiche.collectAsStateWithLifecycle()
@@ -128,7 +140,22 @@ fun SchermataRapportini(dati: Dati, nav: Navigatore, filtro: FiltroRapportini, o
                 .padding(horizontal = 20.dp).padding(top = 10.dp, bottom = 120.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
+            Testata(onIndietro = { nav.indietro() }) {
+                if (fattura) PulsanteTesto(if (scelti != null) "Fine" else "Seleziona", { scelti = if (scelti == null) emptyList() else null }, colore = c.testo)
+            }
+            sopra?.invoke()
+
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    Modifier.weight(1f, fill = false).clip(RoundedCornerShape(12.dp)).clickable { chiediStorico(); foglioMese = true }
+                        .semantics(mergeDescendants = true) { role = Role.Button; contentDescription = "Scegli il mese" },
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Text(filtro.mese?.let { nomeMese(it) } ?: "Tutti i mesi", style = if (sopra != null) Testi.titoloScheda else Testi.titoloPagina, color = c.testo)
+                    Icon(Icone.giu, null, tint = c.testo, modifier = Modifier.size(22.dp))
+                }
+                Spacer(Modifier.weight(1f))
                 filtro.mese?.let { m ->
                     PulsanteTondo(Icone.frecciaSinistra, "Mese prima", {
                         val prima = m.minusMonths(1)
@@ -138,18 +165,6 @@ fun SchermataRapportini(dati: Dati, nav: Navigatore, filtro: FiltroRapportini, o
                     Spacer(Modifier.width(8.dp))
                     PulsanteTondo(Icone.freccia, "Mese dopo", { meseDopo(m) })
                 }
-                Spacer(Modifier.weight(1f))
-                PulsanteTesto(if (scelti != null) "Fine" else "Seleziona", { scelti = if (scelti == null) emptyList() else null }, colore = c.testo)
-            }
-
-            Row(
-                Modifier.clip(RoundedCornerShape(12.dp)).clickable { chiediStorico(); foglioMese = true }
-                    .semantics(mergeDescendants = true) { role = Role.Button; contentDescription = "Scegli il mese" },
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                Text(filtro.mese?.let { nomeMese(it) } ?: "Tutti i mesi", style = Testi.titoloPagina, color = c.testo)
-                Icon(Icone.giu, null, tint = c.testo, modifier = Modifier.size(22.dp))
             }
 
             CampoCerca(filtro.testo, { onFiltro(filtro.copy(testo = it)) }, "Cliente, commessa, lavoro, numero")
@@ -165,7 +180,8 @@ fun SchermataRapportini(dati: Dati, nav: Navigatore, filtro: FiltroRapportini, o
             if (chip != null) ChipFiltro(chip, { onFiltro(filtro.copy(idCliente = null, idCommessa = null)) })
 
             Text(
-                "${Testo.quanti(lista.size, "rapportino", "rapportini")} · ${Numeri.ore(lista.sumOf { it.rapportino.oreTotali })} · ${Numeri.euro(lista.sumOf { it.conto?.totale ?: 0.0 })}",
+                "${Testo.quanti(lista.size, "rapportino", "rapportini")} · ${Numeri.ore(lista.sumOf { it.rapportino.oreTotali })}" +
+                    if (costi) " · ${Numeri.euro(lista.sumOf { it.conto?.totale ?: 0.0 })}" else "",
                 style = Testi.secondario, color = c.tenue,
             )
 
@@ -192,13 +208,13 @@ fun SchermataRapportini(dati: Dati, nav: Navigatore, filtro: FiltroRapportini, o
 
             // Per cliente (chi paga, come il computer), nell'ordine dell'ultimo rapportino.
             lista.groupBy { Riepiloghi.chiPaga(it.rapportino, ana) }.forEach { (chi, vv) ->
-                TitoloSezione(chi, Numeri.euro(vv.sumOf { it.conto?.totale ?: 0.0 }))
+                TitoloSezione(chi, if (costi) Numeri.euro(vv.sumOf { it.conto?.totale ?: 0.0 }) else null)
                 SchedaElenco {
                     vv.forEachIndexed { i, v ->
                         if (i > 0) LineaElenco()
                         val id = v.rapportino.idLocale
                         RigaElencoRapportini(
-                            v, perLavoro = perLavoro, conMese = piuMesi,
+                            v, perLavoro = perLavoro, conMese = piuMesi, costi = costi,
                             scelto = scelti?.let { id in it },
                             onClick = {
                                 val s = scelti
@@ -212,9 +228,9 @@ fun SchermataRapportini(dati: Dati, nav: Navigatore, filtro: FiltroRapportini, o
 
         if (scelti != null) {
             BarraScelti(selezionati, { foglioAzioni = true }, Modifier.align(Alignment.BottomCenter))
-        } else {
+        } else if (scrive) {
             FondoConPulsante(Modifier.align(Alignment.BottomCenter)) {
-                PulsantePrincipale("Nuovo rapportino", { nav.nuovoRapportino() }, icona = Icone.piu)
+                PulsantePrincipale("Nuovo rapportino", { nav.nuovoRapportino() }, Modifier.bersaglio("azione-gialla"), icona = Icone.piu)
             }
         }
     }
@@ -307,8 +323,8 @@ internal fun avvisaCambio(avvisi: Avvisi, dati: Dati, cambio: CambioStato, testo
             // Dopo Annulla l'avviso si chiude: questo va mostrato subito dopo.
             android.os.Handler(android.os.Looper.getMainLooper()).post {
                 avvisi.mostra(
-                    if (tornati == 0) "Non si torna indietro: sul foglio è già cambiato"
-                    else "Tornati com'erano $tornati su $n: gli altri sul foglio sono già cambiati",
+                    if (tornati == 0) "Non si torna indietro: sul server è già cambiato"
+                    else "Tornati com'erano $tornati su $n: gli altri sul server sono già cambiati",
                 )
             }
         }
@@ -344,7 +360,7 @@ internal fun filtraRapportini(viste: List<Vista>, f: FiltroRapportini): List<Vis
  * rifiutato dal foglio: il bordo rosso. In selezione, la casella a sinistra.
  */
 @Composable
-private fun RigaElencoRapportini(v: Vista, perLavoro: Boolean, conMese: Boolean, scelto: Boolean?, onClick: () -> Unit) {
+private fun RigaElencoRapportini(v: Vista, perLavoro: Boolean, conMese: Boolean, scelto: Boolean?, costi: Boolean = true, onClick: () -> Unit) {
     val c = W.colori
     val r = v.rapportino
     val codice = r.idCommessa.ifBlank { r.codiceProposto }.ifBlank { r.commessa }.takeIf { it.isNotBlank() }
@@ -384,10 +400,15 @@ private fun RigaElencoRapportini(v: Vista, perLavoro: Boolean, conMese: Boolean,
                 }
             }
             Text(sotto, style = Testi.secondario.copy(fontWeight = FontWeight.Medium), color = c.tenue, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            // Fase 3 (§14.7): "Da approvare" o "Respinto: motivo", dove serve.
+            r.pillolaApprovazione?.let { p ->
+                val respinto = r.statoApprovazione == "respinto"
+                PillolaParola(p, if (respinto) c.rossoTesto else c.gialloTesto, if (respinto) c.rossoTenue else c.gialloTenue, Modifier.padding(top = 4.dp), righe = 2)
+            }
         }
         Spacer(Modifier.width(8.dp))
         Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(v.conto?.let { Numeri.euro(it.totale) } ?: "", style = Testi.forte, color = c.testo)
+            if (costi) Text(v.conto?.let { Numeri.euro(it.totale) } ?: "", style = Testi.forte, color = c.testo)
             ParolaStato(r.stato)
         }
     }

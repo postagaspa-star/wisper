@@ -1,0 +1,35 @@
+{
+  "nota": "Il collegamento col QR (docs/gestionale/collega-qr.md §5): chiavi fisse, solo dati di esempio. Il server cifra inChiaro con privataServer e iv e deve ritrovare risultato (server/prove/collega.test.js); il computer decifra risultato con privataComputer (WisperUfficio.exe --prova-collega, pc/prove/collega-exe.test.js). Tutto in base64url senza =; chiaveQr e' la chiave pubblica compressa del computer come sta nel QR.",
+  "casi": [
+    {
+      "nome": "Manuel col Google",
+      "privataComputer": "xOF3J8VsWXJhCiKGaXnkj18U--llqWpuOs9P4Ptj698",
+      "pubblicaComputer": "BJ1pUoMUCK9srHCmm9ih3tT6Q5ygBc8YetQmqaWOpAWlFbeFGvAgbXZrCCoLcrCxKvQUeocT1Lk8TBaRcMud3HE",
+      "chiaveQr": "A51pUoMUCK9srHCmm9ih3tT6Q5ygBc8YetQmqaWOpAWl",
+      "privataServer": "7uo_rrkADM072xbVX1_tFpXNorSZ4TweRCpgka-l-xs",
+      "id": "48SC38oDxrzXe_ZvF4IRPg",
+      "iv": "A7ynnPtIU1AAMXOo",
+      "inChiaro": "{\"ok\":true,\"token\":\"tokenDiProvaNonVero-0123456789abcdefghijklmnopq\",\"utente\":{\"id\":1,\"nome\":\"Manuel Gasparotto\",\"email\":\"manuel@esempio.it\",\"ruolo\":\"titolare\"},\"permessi\":{\"dashboard\":2,\"clienti\":2,\"commesse\":2,\"rapportini\":2,\"costi\":2,\"amministrazione\":2},\"sessione\":7,\"google\":\"https://script.google.com/macros/s/ESEMPIO-NON-VERO/exec\"}",
+      "risultato": {
+        "chiave": "BKNG51tW0Jgi4t-mab4twkc25Se9VxPsKKnp0L5C31tVvV7WalZ_BqAMnUrOfV7OLTlWuLM2N6aw056Ej2VtC38",
+        "iv": "A7ynnPtIU1AAMXOo",
+        "dati": "Gy_x3fSYAzXeFI6GhoBpSi35pcUA3DtHXWioX9t4QrTBAHl-eRxQD7VFX76wmWzZpjXJ9Sk-I9-QHZNHdM3jpdZOe8QaiJwAuWxOv-h3kJIlOW42G-bEdOgInLJ4mNRXb4-shETDTLF53348jWHMaZPUWV0Xj1Yu1nEttHmY3ZMrMyiAnlBFr8LbHS-X6V6tOlouQygpoWjosr-B6bYjgPIG0D6QwIMvxnihNbRQ_eH1HFlhnjRsIUgDeGH3AJHmSvT6YnWo1S2DsAHGDU1L1hkVRpOfQNsjXEOG81daQSyWo4CpZ0TWdUrsQkXe3dZK5lQtCJS9K1BwUD8UFLUA2kyN1zRpCyF5S-Hx19kkV7V9z6PDtnIB97SsYqqzvHE9lzA1IvuX3azdB7-J_rLjgz8qStehh3L3YV5D4eeXXF8soa5zemGpBo9JlaamKO5qiZCnjMLoRd45d3TleseIpQjHXQ"
+      }
+    },
+    {
+      "nome": "Laura senza Google, con le lettere accentate",
+      "privataComputer": "y1ACzOzPzaR6N4jPz1ujYUVp8TsjZx6f605CDHgcq74",
+      "pubblicaComputer": "BFwhu4udyu9BNRNaxJJJvGDyWRfd-iw4L4w2Ch4bkmZkBCJiPHAszr8nTv4BuNb1vxu2D7KG5QbqJ9JU09FO85w",
+      "chiaveQr": "Alwhu4udyu9BNRNaxJJJvGDyWRfd-iw4L4w2Ch4bkmZk",
+      "privataServer": "8cOoOuDjYfgSIlbOM3PdGb23Y9PWlb8ybZ9KapH0uv4",
+      "id": "KYnFjgIoyacaCNAx2tbb4Q",
+      "iv": "ZaZKRQ94Plt3JVis",
+      "inChiaro": "{\"ok\":true,\"token\":\"altroTokenDiProva-ZYXWVUTSRQPONMLKJIHGFEDCBA98\",\"utente\":{\"id\":2,\"nome\":\"Laura Dalla Valle · Città\",\"email\":\"laura@esempio.it\",\"ruolo\":\"amministrazione\"},\"permessi\":{\"dashboard\":2,\"clienti\":1,\"costi\":0},\"sessione\":12}",
+      "risultato": {
+        "chiave": "BN2cKU-i5xjQPtTR-qAz3p9WacH7lN5hSK_LIZRc4z5bn3qRCbKfCde-H51fT4BeD7qlnJWSQIwKZEi1QOUi998",
+        "iv": "ZaZKRQ94Plt3JVis",
+        "dati": "6rmLDTIz7EXmZOxpGsEcDrVkUSGmyMNT4b_52Ls8qcNHsGmjJvHl-XN_ZWTq6A4oHKArGdFLdCGdQsJNQku8UFD_LCZVREZkTgKkzf4HnwD3Gz71BNML94bxwR1MJeMt4OLjqm6JnTT6ISsjO3wkWPVtooPW6xXqO284dWzrt9irJ9gBESyRvJB85ooEA1NM_LFoHmeyd2lHVqDIAFLOBpciJQuGKsob369E9eFCstKaUchwCM8AjBb878Xaz8seHpXTuBLEK7jiQd8c-IvXujwtoegN7PUiH69JMeHX8HiYvBuMzscH5il51nIu-TwmD3zoP1OfOOxXnpoCldtc"
+      }
+    }
+  ]
+}

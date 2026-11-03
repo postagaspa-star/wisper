@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<p:FatturaElettronica versione="FPR12" xmlns:ds="http://www.w3.org/2000/09/xmldsig#" xmlns:p="http://ivaservizi.agenziaentrate.gov.it/docs/xsd/fatture/v1.2" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <FatturaElettronicaHeader>
+    <DatiTrasmissione>
+      <IdTrasmittente>
+        <IdPaese>IT</IdPaese>
+        <IdCodice>00000000000</IdCodice>
+      </IdTrasmittente>
+      <ProgressivoInvio>00045</ProgressivoInvio>
+      <FormatoTrasmissione>FPR12</FormatoTrasmissione>
+      <CodiceDestinatario>0000000</CodiceDestinatario>
+      <PECDestinatario>rossiimpianti@pec.esempio.it</PECDestinatario>
+    </DatiTrasmissione>
+    <CedentePrestatore>
+      <DatiAnagrafici>
+        <IdFiscaleIVA>
+          <IdPaese>IT</IdPaese>
+          <IdCodice>00000000000</IdCodice>
+        </IdFiscaleIVA>
+        <CodiceFiscale>00000000000</CodiceFiscale>
+        <Anagrafica>
+          <Denominazione>Studio Tecnico GM</Denominazione>
+        </Anagrafica>
+        <AlboProfessionale>Periti industriali</AlboProfessionale>
+        <ProvinciaAlbo>VI</ProvinciaAlbo>
+        <NumeroIscrizioneAlbo>000</NumeroIscrizioneAlbo>
+        <RegimeFiscale>RF01</RegimeFiscale>
+      </DatiAnagrafici>
+      <Sede>
+        <Indirizzo>Via dell&apos;Esempio 1</Indirizzo>
+        <CAP>36016</CAP>
+        <Comune>Thiene</Comune>
+        <Provincia>VI</Provincia>
+        <Nazione>IT</Nazione>
+      </Sede>
+      <Contatti>
+        <Email>studio@example.com</Email>
+      </Contatti>
+    </CedentePrestatore>
+    <CessionarioCommittente>
+      <DatiAnagrafici>
+        <IdFiscaleIVA>
+          <IdPaese>IT</IdPaese>
+          <IdCodice>04455667784</IdCodice>
+        </IdFiscaleIVA>
+        <Anagrafica>
+          <Denominazione>Rossi Impianti Srl</Denominazione>
+        </Anagrafica>
+      </DatiAnagrafici>
+      <Sede>
+        <Indirizzo>Via Nuova 3</Indirizzo>
+        <CAP>36061</CAP>
+        <Comune>Bassano del Grappa</Comune>
+        <Provincia>VI</Provincia>
+        <Nazione>IT</Nazione>
+      </Sede>
+    </CessionarioCommittente>
+  </FatturaElettronicaHeader>
+  <FatturaElettronicaBody>
+    <DatiGenerali>
+      <DatiGeneraliDocumento>
+        <TipoDocumento>TD01</TipoDocumento>
+        <Divisa>EUR</Divisa>
+        <Data>2026-10-19</Data>
+        <Numero>45/2026</Numero>
+        <DatiRitenuta>
+          <TipoRitenuta>RT01</TipoRitenuta>
+          <ImportoRitenuta>228.00</ImportoRitenuta>
+          <AliquotaRitenuta>20.00</AliquotaRitenuta>
+          <CausalePagamento>A</CausalePagamento>
+        </DatiRitenuta>
+        <DatiCassaPrevidenziale>
+          <TipoCassa>TC17</TipoCassa>
+          <AlCassa>5.00</AlCassa>
+          <ImportoContributoCassa>57.00</ImportoContributoCassa>
+          <ImponibileCassa>1140.00</ImponibileCassa>
+          <AliquotaIVA>22.00</AliquotaIVA>
+        </DatiCassaPrevidenziale>
+        <ImportoTotaleDocumento>1460.34</ImportoTotaleDocumento>
+        <Causale>Acconto 30% alla firma, commessa 26ST003. Rif. Wisper W-13</Causale>
+      </DatiGeneraliDocumento>
+    </DatiGenerali>
+    <DatiBeniServizi>
+      <DettaglioLinee>
+        <NumeroLinea>1</NumeroLinea>
+        <Descrizione>30% alla firma: Adeguamento impianto elettrico capannone (commessa 26ST003, contratto PR/2026/012 rev. 1)</Descrizione>
+        <Quantita>1.00</Quantita>
+        <PrezzoUnitario>1140.00</PrezzoUnitario>
+        <PrezzoTotale>1140.00</PrezzoTotale>
+        <AliquotaIVA>22.00</AliquotaIVA>
+        <Ritenuta>SI</Ritenuta>
+        <AltriDatiGestionali>
+          <TipoDato>RIFWISPER</TipoDato>
+          <RiferimentoTesto>W-13</RiferimentoTesto>
+        </AltriDatiGestionali>
+      </DettaglioLinee>
+      <DatiRiepilogo>
+        <AliquotaIVA>22.00</AliquotaIVA>
+        <ImponibileImporto>1197.00</ImponibileImporto>
+        <Imposta>263.34</Imposta>
+        <EsigibilitaIVA>I</EsigibilitaIVA>
+      </DatiRiepilogo>
+    </DatiBeniServizi>
+    <DatiPagamento>
+      <CondizioniPagamento>TP02</CondizioniPagamento>
+      <DettaglioPagamento>
+        <ModalitaPagamento>MP05</ModalitaPagamento>
+        <DataScadenzaPagamento>2026-11-18</DataScadenzaPagamento>
+        <ImportoPagamento>1232.34</ImportoPagamento>
+        <IstitutoFinanziario>Banca di esempio</IstitutoFinanziario>
+        <IBAN>IT60X0542811101000000123456</IBAN>
+      </DettaglioPagamento>
+    </DatiPagamento>
+  </FatturaElettronicaBody>
+</p:FatturaElettronica>

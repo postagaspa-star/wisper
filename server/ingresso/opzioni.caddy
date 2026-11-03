@@ -1,0 +1,14 @@
+# Le opzioni del server HTTPS dell'ingresso, dentro il blocco globale di Caddyfile e Caddyfile.prova.
+servers {
+	timeouts {
+		# Le intestazioni arrivano subito, o la connessione si chiude (chi apre e non manda niente).
+		read_header 10s
+		# Un documento di 50 MB da un telefono in cantiere: fino a 10 minuti, come il server (requestTimeout).
+		read_body 10m
+		write 10m
+		idle 2m
+	}
+	max_header_size 32KB
+	# Solo HTTP/1.1 e HTTP/2: HTTP/3 vorrebbe la UDP 443, che il router non inoltra.
+	protocols h1 h2
+}

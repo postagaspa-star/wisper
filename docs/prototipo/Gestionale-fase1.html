@@ -1,0 +1,736 @@
+<title>Wisper Gestionale fase 1</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap">
+<style>
+/* Prototipo della fase 1 del gestionale: telefono (390x844) e computer (1280x800) con gli stessi dati.
+   Colori, caratteri e misure da docs/aspetto.md. Solo dati di esempio. */
+:root {
+  --fondo: #F4F4F2; --scheda: #FFFFFF; --sup: #E7E6E2; --bordo: #E6E5E1; --bordo-campo: #CFCEC9; --riga: #EFEEEB;
+  --testo: #1B1B1F; --testo2: #3F3F46; --tenue: #5F5F67; --tenuissimo: #8A8A92;
+  --giallo: #FFC53D; --giallo-premuto: #F2B21E; --giallo-tenue: #FFF4D6; --giallo-testo: #8A5A00; --giallo-tratteggio: #B98300;
+  --firmato: #1F6A30; --firmato-f: #EBF7EE; --inviato: #1E4FA8; --inviato-f: #EAF1FD; --fatturato: #3F3F46; --fatturato-f: #E7E6E2;
+  --rosso: #C92A2A; --rosso-f: #FDEEEC; --rosso-t: #9B1C1C; --ambra: #E59F00; --binario: #E2E1DD;
+  --nero: #1B1B1F; --su-nero: #FFFFFF; --velo: rgba(20,20,22,.45); --scelta: #FFF8E5; --cornice: #D9D8D3; --palco: #ECEBE7;
+  --blu-f: #EAF1FD; --blu-t: #1E4FA8; --verde-f: #EBF7EE; --verde-t: #1F6A30; --viola-f: #F1ECFE; --viola-t: #5532C9; --ambra-f: #FBF3E3; --ambra-t: #8A5A12;
+  --font: 'Figtree', system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --fondo: #121214; --scheda: #1C1C1F; --sup: #2A2A2E; --bordo: #2C2C30; --bordo-campo: #46464D; --riga: #2A2A2E;
+  --testo: #F2F2F3; --testo2: #D4D4D8; --tenue: #A1A1AA; --tenuissimo: #71717A;
+  --giallo-tenue: #3A2F14; --giallo-testo: #FFD76A; --giallo-tratteggio: #C99A2A;
+  --firmato: #8CE0A4; --firmato-f: #1E3326; --inviato: #9EC1FF; --inviato-f: #1C2A44; --fatturato: #D4D4D8; --fatturato-f: #2A2A2E;
+  --rosso: #E03131; --rosso-f: #3A1C1C; --rosso-t: #FFA8A8; --binario: #2C2C30;
+  --nero: #F2F2F3; --su-nero: #1B1B1F; --velo: rgba(0,0,0,.6); --scelta: #2A2414; --cornice: #2C2C30; --palco: #0B0B0C;
+  --blu-f: #1C2A44; --blu-t: #9EC1FF; --verde-f: #1E3326; --verde-t: #8CE0A4; --viola-f: #2A2340; --viola-t: #C4B5FD; --ambra-f: #33281A; --ambra-t: #F2C27A;
+  color-scheme: dark;
+} }
+:root[data-theme="dark"] {
+  --fondo: #121214; --scheda: #1C1C1F; --sup: #2A2A2E; --bordo: #2C2C30; --bordo-campo: #46464D; --riga: #2A2A2E;
+  --testo: #F2F2F3; --testo2: #D4D4D8; --tenue: #A1A1AA; --tenuissimo: #71717A;
+  --giallo-tenue: #3A2F14; --giallo-testo: #FFD76A; --giallo-tratteggio: #C99A2A;
+  --firmato: #8CE0A4; --firmato-f: #1E3326; --inviato: #9EC1FF; --inviato-f: #1C2A44; --fatturato: #D4D4D8; --fatturato-f: #2A2A2E;
+  --rosso: #E03131; --rosso-f: #3A1C1C; --rosso-t: #FFA8A8; --binario: #2C2C30;
+  --nero: #F2F2F3; --su-nero: #1B1B1F; --velo: rgba(0,0,0,.6); --scelta: #2A2414; --cornice: #2C2C30; --palco: #0B0B0C;
+  --blu-f: #1C2A44; --blu-t: #9EC1FF; --verde-f: #1E3326; --verde-t: #8CE0A4; --viola-f: #2A2340; --viola-t: #C4B5FD; --ambra-f: #33281A; --ambra-t: #F2C27A;
+  color-scheme: dark;
+}
+html, body { height: 100%; margin: 0; }
+body { background: var(--palco); color: var(--testo); font-family: var(--font); -webkit-tap-highlight-color: transparent; }
+* { box-sizing: border-box; }
+button, input { font-family: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 3px solid var(--giallo); outline-offset: 2px; }
+
+/* ---------- palco e commutatore ---------- */
+.barra-proto { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: center; padding-block: 14px 0;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.barra-proto .pill-proto { font-size: 12px; font-weight: 800; letter-spacing: .08em; background: var(--giallo); color: #1B1B1F; border-radius: 999px; padding: 5px 11px; }
+.seg { display: inline-flex; background: var(--sup); border-radius: 999px; padding: 4px; gap: 2px; }
+.seg button { border: none; background: transparent; border-radius: 999px; min-height: 40px; padding: 0 16px; font-size: 15px; font-weight: 700; color: var(--testo2); }
+.seg button[aria-pressed="true"] { background: var(--scheda); color: var(--testo); box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+.palco { display: flex; align-items: flex-start; justify-content: center; gap: 36px; padding-block: 18px 32px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.telefono { width: 390px; height: 844px; position: relative; overflow: hidden; background: var(--fondo); border-radius: 44px;
+  border: 10px solid var(--cornice); box-shadow: 0 30px 80px rgba(20,20,22,.18); flex: none; }
+.computer-scala { flex: none; overflow: hidden; }
+.computer { transform-origin: top left; }
+.computer { width: 1280px; height: 800px; position: relative; overflow: hidden; background: var(--fondo); border-radius: 14px;
+  border: 1px solid var(--cornice); box-shadow: 0 30px 80px rgba(20,20,22,.18); display: flex; }
+.accanto { max-width: 300px; display: flex; flex-direction: column; gap: 12px; color: var(--testo2); font-size: 15px; line-height: 1.45; padding-top: 30px; }
+.accanto h1 { margin: 0; font-size: 26px; font-weight: 800; letter-spacing: -0.5px; color: var(--testo); text-wrap: balance; }
+.accanto ol { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; }
+.accanto .ruolo-scelta { display: flex; flex-direction: column; gap: 6px; }
+.accanto .ruolo-scelta label { font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--tenue); }
+@media (max-width: 1100px) { .accanto { display: none; } }
+@media (max-width: 520px) {
+  .palco.modo-tel { padding: 0; display: block; }
+  .modo-tel .telefono { width: 100%; height: calc(100vh - 70px); border: none; border-radius: 0; box-shadow: none; }
+}
+
+/* ---------- elementi comuni ---------- */
+.schermo { position: absolute; inset: 0; overflow-y: auto; overflow-x: hidden; padding: 10px 20px 120px; display: flex; flex-direction: column; gap: 14px; scrollbar-width: none; }
+.schermo::-webkit-scrollbar { display: none; }
+.schermo > * { flex-shrink: 0; }
+.entra-avanti { animation: avanti 260ms cubic-bezier(.2,.8,.2,1); }
+.entra-indietro { animation: indietro 260ms cubic-bezier(.2,.8,.2,1); }
+.entra-sfuma { animation: sfuma 200ms ease-out; }
+@keyframes avanti { from { opacity: 0; transform: translateX(28px); } }
+@keyframes indietro { from { opacity: 0; transform: translateX(-28px); } }
+@keyframes sfuma { from { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .entra-avanti, .entra-indietro, .entra-sfuma { animation: none; } * { transition: none !important; } }
+
+.testa { display: flex; align-items: center; justify-content: space-between; min-height: 52px; gap: 8px; }
+.testa .sx, .testa .dx { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.btn-menu { display: inline-flex; align-items: center; gap: 8px; height: 44px; padding: 0 14px 0 10px; border-radius: 22px; border: none; background: var(--sup); font-size: 15px; font-weight: 800; }
+.tondo { width: 44px; height: 44px; border-radius: 22px; border: none; background: var(--sup); display: flex; align-items: center; justify-content: center; flex: none; }
+.dove { font-size: 13px; font-weight: 700; color: var(--tenue); letter-spacing: .02em; }
+.titolo { font-size: 30px; font-weight: 800; letter-spacing: -0.6px; margin: 0; line-height: 1.12; text-wrap: balance; }
+.sottotitolo { font-size: 15px; font-weight: 600; color: var(--tenue); margin: 0; }
+.etichetta { font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--tenue); }
+.scheda { background: var(--scheda); border: 1px solid var(--bordo); border-radius: 22px; padding: 18px; }
+.scheda.righe { padding: 0 18px; }
+.riga { display: flex; align-items: center; gap: 12px; min-height: 64px; padding: 12px 0; border-top: 1px solid var(--riga); text-align: left; background: none; border-left: none; border-right: none; border-bottom: none; width: 100%; font-size: inherit; }
+.riga:first-child { border-top: none; }
+.riga .corpo { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.riga .t1 { font-size: 16px; font-weight: 800; }
+.riga .t2 { font-size: 14px; font-weight: 600; color: var(--tenue); }
+.riga .quanto { font-size: 15px; font-weight: 800; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.riga .freccia { color: var(--tenuissimo); flex: none; }
+.ico-riga { width: 40px; height: 40px; border-radius: 12px; display: flex; align-items: center; justify-content: center; flex: none; }
+.ico-rosso { background: var(--rosso-f); color: var(--rosso-t); }
+.ico-giallo { background: var(--giallo-tenue); color: var(--giallo-testo); }
+.ico-grigio { background: var(--sup); color: var(--testo2); }
+.ico-blu { background: var(--blu-f); color: var(--blu-t); }
+.cerchio { width: 40px; height: 40px; border-radius: 20px; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 14px; flex: none; }
+.c-blu { background: var(--blu-f); color: var(--blu-t); } .c-verde { background: var(--verde-f); color: var(--verde-t); }
+.c-viola { background: var(--viola-f); color: var(--viola-t); } .c-ambra { background: var(--ambra-f); color: var(--ambra-t); }
+.pill { display: inline-flex; align-items: center; height: 26px; padding: 0 10px; border-radius: 999px; font-size: 13px; font-weight: 800; white-space: nowrap; }
+.p-grigio { background: var(--sup); color: var(--testo2); } .p-verde { background: var(--firmato-f); color: var(--firmato); }
+.p-blu { background: var(--inviato-f); color: var(--inviato); } .p-giallo { background: var(--giallo-tenue); color: var(--giallo-testo); }
+.p-rosso { background: var(--rosso-f); color: var(--rosso-t); }
+.codice { display: inline-flex; align-items: center; height: 26px; padding: 0 9px; border-radius: 8px; background: var(--nero); color: var(--giallo); font-size: 13px; font-weight: 800; letter-spacing: .02em; }
+.principale { height: 64px; border-radius: 18px; border: none; background: var(--giallo); color: #1B1B1F; font-size: 18px; font-weight: 800; width: 100%; display: flex; align-items: center; justify-content: center; gap: 10px; }
+.principale:active { background: var(--giallo-premuto); }
+.secondario { height: 48px; border-radius: 14px; border: 1.5px solid var(--bordo-campo); background: var(--scheda); font-size: 16px; font-weight: 700; padding: 0 16px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+.testo-link { background: none; border: none; color: var(--giallo-testo); font-size: 15px; font-weight: 700; padding: 8px 0; }
+.in-basso { position: absolute; left: 0; right: 0; bottom: 0; padding: 18px 20px 26px; background: linear-gradient(to bottom, transparent, var(--fondo) 30%); }
+.segmenti { display: flex; background: var(--sup); border-radius: 14px; padding: 4px; gap: 4px; overflow-x: auto; scrollbar-width: none; }
+.segmenti button { flex: 1 0 auto; border: none; background: transparent; border-radius: 10px; min-height: 40px; padding: 0 12px; font-size: 14px; font-weight: 700; color: var(--testo2); white-space: nowrap; }
+.segmenti button[aria-pressed="true"] { background: var(--scheda); color: var(--testo); box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+.cerca { display: flex; align-items: center; gap: 10px; height: 52px; border-radius: 16px; border: 1.5px solid var(--bordo-campo); background: var(--scheda); padding: 0 14px; color: var(--tenue); font-size: 16px; font-weight: 600; }
+.cerca input { border: none; outline: none; background: transparent; font-size: 16px; font-weight: 600; flex: 1; min-width: 0; }
+.campo { display: flex; flex-direction: column; gap: 6px; }
+.campo label { font-size: 13px; font-weight: 700; color: var(--testo2); }
+.campo input { height: 56px; border-radius: 16px; border: 1.5px solid var(--bordo-campo); background: var(--scheda); padding: 0 16px; font-size: 17px; font-weight: 600; outline: none; width: 100%; }
+.campo input:focus { border-color: var(--testo); }
+.avviso-errore { background: var(--rosso-f); color: var(--rosso-t); border-radius: 14px; padding: 12px 14px; font-size: 15px; font-weight: 700; }
+.coppie { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 14px 16px; }
+.coppia { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.coppia .k { font-size: 13px; font-weight: 600; color: var(--tenue); }
+.coppia .v { font-size: 16px; font-weight: 700; overflow-wrap: anywhere; }
+.barra-av { height: 8px; background: var(--binario); border-radius: 4px; overflow: hidden; }
+.barra-av i { display: block; height: 100%; background: var(--nero); border-radius: 4px; transition: width 400ms cubic-bezier(.2,.8,.2,1); }
+.barra-av i.sforato { background: var(--rosso); } .barra-av i.attenzione { background: var(--ambra); }
+.tre-num { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.num-box { background: var(--scheda); border: 1px solid var(--bordo); border-radius: 18px; padding: 12px; display: flex; flex-direction: column; gap: 2px; text-align: left; }
+.num-box b { font-size: 26px; font-weight: 800; letter-spacing: -0.5px; font-variant-numeric: tabular-nums; }
+.num-box span { font-size: 13px; font-weight: 700; color: var(--tenue); }
+.num-box.rosso b { color: var(--rosso); }
+.vuoto { font-size: 15px; color: var(--tenue); font-weight: 600; padding: 14px 0; }
+
+/* il tuo giorno */
+.settimana { display: flex; justify-content: space-between; gap: 4px; }
+.giorno { display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 12px; font-weight: 700; color: var(--tenue); min-width: 44px; background: none; border: none; }
+.giorno .c { width: 40px; height: 40px; border-radius: 20px; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 800; }
+.giorno.fatto .c { background: var(--nero); color: var(--su-nero); }
+.giorno.manca .c { border: 2px dashed var(--giallo-tratteggio); color: var(--giallo-testo); }
+.giorno.oggi .c { background: var(--giallo); color: #1B1B1F; }
+.giorno.futuro .c { background: var(--sup); color: var(--tenuissimo); }
+.giorno .sotto { color: var(--giallo-testo); }
+
+/* menu laterale del telefono */
+.velo { position: absolute; inset: 0; background: var(--velo); opacity: 0; pointer-events: none; transition: opacity 260ms ease; z-index: 20; }
+.velo.aperto { opacity: 1; pointer-events: auto; }
+.cassetto { position: absolute; top: 0; bottom: 0; left: 0; width: 312px; background: var(--scheda); z-index: 21; transform: translateX(-100%); transition: transform 300ms cubic-bezier(.2,.8,.2,1); display: flex; flex-direction: column; padding: 16px 12px 18px; gap: 6px; border-radius: 0 24px 24px 0; }
+.cassetto.aperto { transform: none; }
+.cassetto .chi { display: flex; align-items: center; gap: 12px; padding: 10px 8px 16px; border-bottom: 1px solid var(--riga); margin-bottom: 6px; }
+.voce { display: flex; align-items: center; gap: 14px; min-height: 52px; padding: 0 14px; border-radius: 16px; border: none; background: none; font-size: 16px; font-weight: 700; text-align: left; width: 100%; color: var(--testo2); }
+.voce.attiva { background: var(--giallo-tenue); color: var(--testo); font-weight: 800; }
+.voce .num-v { margin-left: auto; min-width: 24px; height: 24px; border-radius: 12px; background: var(--giallo); color: #1B1B1F; font-size: 13px; font-weight: 800; display: flex; align-items: center; justify-content: center; padding: 0 7px; }
+.voce .n-spec { font-size: 12px; color: var(--tenuissimo); font-weight: 700; width: 18px; font-variant-numeric: tabular-nums; }
+.cassetto .piede { margin-top: auto; border-top: 1px solid var(--riga); padding: 12px 8px 0; display: flex; flex-direction: column; gap: 4px; font-size: 13px; font-weight: 600; color: var(--tenue); }
+.stato-ok { display: flex; align-items: center; gap: 6px; } .stato-ok i { width: 8px; height: 8px; border-radius: 4px; background: var(--firmato); }
+
+/* foglio dal basso */
+.foglio { position: absolute; left: 0; right: 0; bottom: 0; background: var(--scheda); border-radius: 26px 26px 0 0; z-index: 31; padding: 10px 20px 26px; transform: translateY(100%); transition: transform 320ms cubic-bezier(.2,.8,.2,1); display: flex; flex-direction: column; gap: 12px; max-height: 88%; overflow-y: auto; }
+.foglio.aperto { transform: none; }
+.foglio .maniglia { width: 40px; height: 5px; border-radius: 3px; background: var(--bordo-campo); align-self: center; margin-bottom: 6px; }
+.velo-foglio { z-index: 30; }
+.scelta-ruolo { display: flex; gap: 12px; align-items: flex-start; border: 1.5px solid var(--bordo); border-radius: 16px; padding: 14px; text-align: left; background: var(--scheda); width: 100%; }
+.scelta-ruolo.scelto { border: 2px solid var(--nero); background: var(--scelta); }
+.scelta-ruolo b { font-size: 16px; } .scelta-ruolo span { font-size: 14px; color: var(--tenue); font-weight: 600; }
+.pallino { width: 22px; height: 22px; border-radius: 11px; border: 2px solid var(--bordo-campo); flex: none; margin-top: 1px; display: flex; align-items: center; justify-content: center; }
+.scelto .pallino { border-color: var(--nero); } .scelto .pallino::after { content: ""; width: 10px; height: 10px; border-radius: 5px; background: var(--nero); }
+
+/* permessi */
+.liv { display: flex; background: var(--sup); border-radius: 12px; padding: 3px; gap: 2px; }
+.liv button { border: none; background: none; border-radius: 9px; min-height: 36px; padding: 0 10px; font-size: 13px; font-weight: 800; color: var(--tenue); }
+.liv button[aria-pressed="true"].l0 { background: var(--scheda); color: var(--testo2); }
+.liv button[aria-pressed="true"].l1 { background: var(--inviato-f); color: var(--inviato); }
+.liv button[aria-pressed="true"].l2 { background: var(--firmato-f); color: var(--firmato); }
+.liv.bloccato { opacity: .55; pointer-events: none; }
+.riga-perm { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 60px; border-top: 1px solid var(--riga); padding: 8px 0; }
+.riga-perm:first-child { border-top: none; }
+.riga-perm .nome-m { font-size: 15px; font-weight: 800; } .riga-perm .spiega { font-size: 13px; font-weight: 600; color: var(--tenue); }
+
+/* registro */
+.voce-reg { display: flex; gap: 12px; padding: 12px 0; border-top: 1px solid var(--riga); }
+.voce-reg:first-child { border-top: none; }
+.voce-reg .frase { font-size: 15px; font-weight: 600; color: var(--testo2); line-height: 1.4; }
+.voce-reg .frase b { color: var(--testo); font-weight: 800; }
+.voce-reg .quando { font-size: 13px; font-weight: 600; color: var(--tenue); margin-top: 2px; }
+.prima-dopo { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 6px; font-size: 14px; font-weight: 700; }
+.prima-dopo s { color: var(--tenue); background: var(--sup); border-radius: 6px; padding: 1px 6px; }
+.prima-dopo ins { text-decoration: none; background: var(--firmato-f); color: var(--firmato); border-radius: 6px; padding: 1px 6px; }
+
+.avviso { position: absolute; left: 20px; right: 20px; bottom: 28px; background: #1B1B1F; color: #fff; border-radius: 16px; padding: 14px 16px; font-size: 15px; font-weight: 700; display: flex; justify-content: space-between; align-items: center; z-index: 40; opacity: 0; transform: translateY(10px); transition: all 220ms ease; pointer-events: none; }
+.avviso.visto { opacity: 1; transform: none; pointer-events: auto; }
+.avviso button { background: none; border: none; color: var(--giallo); font-weight: 800; font-size: 15px; }
+
+/* ---------- computer ---------- */
+.lato { width: 248px; flex: none; background: var(--scheda); border-right: 1px solid var(--bordo); display: flex; flex-direction: column; padding: 18px 14px; gap: 4px; transition: width 260ms ease-in-out; overflow: hidden; }
+.lato.chiuso { width: 76px; }
+.lato .marchio-pc { display: flex; align-items: center; gap: 10px; padding: 4px 6px 18px; white-space: nowrap; }
+.lato .marchio-pc div { display: flex; flex-direction: column; line-height: 1.1; } .lato .marchio-pc b { font-size: 17px; font-weight: 800; } .lato .marchio-pc span { font-size: 13px; color: var(--tenue); font-weight: 600; }
+.lato .voce { white-space: nowrap; min-height: 46px; font-size: 15px; }
+.lato.chiuso .voce span.lab, .lato.chiuso .voce .num-v, .lato.chiuso .marchio-pc div, .lato.chiuso .piede-pc .lab, .lato.chiuso .voce .n-spec { display: none; }
+.lato .piede-pc { margin-top: auto; display: flex; flex-direction: column; gap: 8px; border-top: 1px solid var(--riga); padding-top: 12px; font-size: 13px; color: var(--tenue); font-weight: 600; white-space: nowrap; }
+.contenuto-pc { flex: 1; min-width: 0; overflow-y: auto; padding: 28px 40px 60px; display: flex; flex-direction: column; gap: 18px; position: relative; }
+.contenuto-pc .titolo { font-size: 34px; letter-spacing: -0.8px; }
+.pc-griglia { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 18px; align-items: start; }
+.pc-tre { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 14px; align-items: start; }
+.tabella { background: var(--scheda); border: 1px solid var(--bordo); border-radius: 20px; overflow: hidden; }
+.tabella .tr { display: grid; align-items: center; gap: 12px; padding: 0 18px; min-height: 56px; border-top: 1px solid var(--riga); font-size: 15px; }
+.tabella .tr:first-child { border-top: none; }
+.tabella .th { font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--tenue); min-height: 44px; }
+.tabella .tr.cl { cursor: pointer; } .tabella .tr.cl:hover { background: var(--scelta); }
+.n { text-align: right; font-variant-numeric: tabular-nums; }
+.btn-giallo { height: 48px; border-radius: 14px; border: none; background: var(--giallo); color: #1B1B1F; font-size: 16px; font-weight: 800; padding: 0 20px; display: inline-flex; align-items: center; gap: 8px; }
+</style>
+
+<div class="barra-proto">
+  <span class="pill-proto">PROTOTIPO</span>
+  <div class="seg" role="group" aria-label="Dispositivo">
+    <button type="button" id="b-tel" aria-pressed="true">Telefono</button>
+    <button type="button" id="b-pc" aria-pressed="false">Computer</button>
+  </div>
+  <div class="seg" role="group" aria-label="Chi entra">
+    <button type="button" id="b-manuel" aria-pressed="true">Manuel, titolare</button>
+    <button type="button" id="b-marco" aria-pressed="false">Marco, collaboratore</button>
+  </div>
+</div>
+
+<div class="palco modo-tel" id="palco">
+  <div class="telefono" id="telefono">
+    <div class="schermo" id="schermo"></div>
+    <div class="velo" id="velo"></div>
+    <nav class="cassetto" id="cassetto" aria-label="Menu"></nav>
+    <div class="velo velo-foglio" id="velo-foglio"></div>
+    <div class="foglio" id="foglio"></div>
+    <div class="avviso" id="avviso"><span id="avviso-testo"></span><button type="button" id="avviso-annulla">Annulla</button></div>
+  </div>
+  <div class="computer-scala" id="computer-scala" hidden>
+    <div class="computer" id="computer">
+      <nav class="lato" id="lato" aria-label="Menu"></nav>
+      <div class="contenuto-pc" id="contenuto-pc"></div>
+    </div>
+  </div>
+  <aside class="accanto">
+    <h1>Fase 1: il nucleo del gestionale</h1>
+    <p>Si entra con nome e password. La pagina iniziale è la Dashboard: cosa fare adesso, diviso in urgenti, questa settimana e da pianificare.</p>
+    <ol>
+      <li>Tocca <b>Menu</b> o scorri dal bordo sinistro: le voci seguono l'ordine delle specifiche e ci sono solo quelle che funzionano.</li>
+      <li>Ogni riga della Dashboard porta dove si sistema.</li>
+      <li>Apri un cliente: referenti, sedi e impianti, commesse.</li>
+      <li>Apri una commessa: le prestazioni con valore e avanzamento.</li>
+      <li>Amministrazione: utenti, permessi con tre parole, registro scritto come frasi.</li>
+      <li>In alto passa a <b>Marco, collaboratore</b>: spariscono soldi, fatturazione e amministrazione.</li>
+    </ol>
+  </aside>
+</div>
+
+<script>
+(function () {
+'use strict';
+
+// ------------------------------------------------------------------ icone
+const P = {
+  menu: 'M4 6h16M4 12h16M4 18h10',
+  dashboard: 'M4 4h7v7H4zM13 4h7v4h-7zM13 10h7v10h-7zM4 13h7v7H4z',
+  clienti: 'M16 19v-1.5a3.5 3.5 0 0 0-3.5-3.5h-5A3.5 3.5 0 0 0 4 17.5V19M10 10.5a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM20 19v-1.5a3.5 3.5 0 0 0-2.5-3.35M15.5 4.6a3 3 0 0 1 0 5.8',
+  commesse: 'M3 7.5A1.5 1.5 0 0 1 4.5 6H9l2 2h8.5A1.5 1.5 0 0 1 21 9.5v9a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18.5z',
+  rapportini: 'M12 7v5l3 2M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z',
+  fatturazione: 'M7 3h10v18l-2.5-1.5L12 21l-2.5-1.5L7 21zM10 8h4M10 12h4',
+  amministrazione: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68 1.65 1.65 0 0 0 10 3.17V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z',
+  indietro: 'M15 18l-6-6 6-6', freccia: 'M9 18l6-6-6-6', piu: 'M12 5v14M5 12h14', cerca: 'M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM20 20l-4-4',
+  allarme: 'M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z',
+  calendario: 'M4 6.5A1.5 1.5 0 0 1 5.5 5h13A1.5 1.5 0 0 1 20 6.5v12a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 18.5zM4 10h16M8 3v4M16 3v4',
+  lista: 'M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01', firma: 'M3 17c3-2 5-8 7-8s-1 8 2 8 3-4 5-4 2 3 4 3',
+  telefono: 'M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2',
+  email: 'M4 6h16v12H4zM4 7l8 6 8-6', luogo: 'M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21zM12 12a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z',
+  piuvoci: 'M5 12h.01M12 12h.01M19 12h.01', chiudi: 'M6 6l12 12M18 6 6 18', scudo: 'M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z',
+  copia: 'M12 3v12M7 10l5 5 5-5M5 21h14', esci: 'M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 17l5-5-5-5M15 12H3',
+  occhio: 'M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z', lato: 'M4 5h16v14H4zM9 5v14',
+  numero: 'M5 9h14M5 15h14M10 3 8 21M16 3l-2 18', cestino: 'M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13',
+};
+function ico(nome, dim, spess) {
+  dim = dim || 22;
+  return '<svg width="' + dim + '" height="' + dim + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="' + (spess || 2.2) + '" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="' + P[nome] + '"/></svg>';
+}
+const marchio = '<svg width="30" height="30" viewBox="0 0 30 30" aria-hidden="true"><rect width="30" height="30" rx="8" fill="#1B1B1F"/><circle cx="9" cy="15" r="2.2" fill="#FFC53D"/><circle cx="15" cy="15" r="2.2" fill="#FFC53D"/><circle cx="21" cy="15" r="2.2" fill="#FFC53D"/><circle cx="12" cy="9.5" r="1.6" fill="#FFC53D" opacity=".6"/><circle cx="18" cy="20.5" r="1.6" fill="#FFC53D" opacity=".6"/></svg>';
+
+// ------------------------------------------------------------------ dati di esempio
+const D = {
+  utenti: [
+    { id: 1, nome: 'Manuel Gasparotto', email: 'manuel@esempio.it', ruolo: 'titolare', attivo: true, ultimo: 'oggi alle 8:12' },
+    { id: 2, nome: 'Laura Bianchi', email: 'laura@esempio.it', ruolo: 'amministrazione', attivo: true, ultimo: 'ieri alle 17:40' },
+    { id: 3, nome: 'Marco Rossato', email: 'marco@esempio.it', ruolo: 'collaboratore', attivo: true, ultimo: 'oggi alle 7:55' },
+    { id: 4, nome: 'Studio Conti', email: 'commercialista@esempio.it', ruolo: 'lettura', attivo: false, ultimo: 'mai' },
+  ],
+  soggetti: [
+    { id: 'C001', nome: 'Elettrodinamica', cliente: true, citta: 'Thiene', piva: '01234567890', sdi: 'M5UXCR1', pec: 'elettrodinamica@pec.esempio.it', email: 'rapportini@elettrodinamica.esempio', tel: '0445 123456', tariffa: '30 €/h fissa', colore: 'c-blu', aperte: 3,
+      referenti: [{ nome: 'Giulia Dal Santo', ruolo: 'Ufficio tecnico', tel: '0445 123456 int. 4', email: 'g.dalsanto@elettrodinamica.esempio' }, { nome: 'Paolo Zordan', ruolo: 'Amministrazione', tel: '0445 123456 int. 2', email: 'amministrazione@elettrodinamica.esempio' }],
+      sedi: [{ tipo: 'Sede', nome: 'Sede legale', ind: 'Via dell\'Industria 12, Thiene' }, { tipo: 'Impianto', nome: 'Magazzino automatico Batokyo', ind: 'Zona industriale, Schio' }, { tipo: 'Impianto', nome: 'Cabina MT Acme', ind: 'Via Roma 40, Zanè' }] },
+    { id: 'C002', nome: 'Rossi Impianti Srl', cliente: true, citta: 'Bassano del Grappa', piva: '04455667788', sdi: '', pec: '', email: 'rossi@esempio.com', tel: '0424 555 010', tariffa: 'libera · ultima 42 €/h', colore: 'c-verde', aperte: 1,
+      referenti: [{ nome: 'Andrea Rossi', ruolo: 'Titolare', tel: '333 123 4567', email: 'rossi@esempio.com' }], sedi: [{ tipo: 'Sede', nome: 'Capannone', ind: 'Via Nuova 3, Bassano del Grappa' }] },
+    { id: 'C003', nome: 'Mario Bianchi', cliente: true, citta: 'Marostica', piva: '', sdi: '', pec: '', email: 'mario.bianchi@esempio.it', tel: '347 000 1122', tariffa: 'libera · ultima 38 €/h', colore: 'c-viola', aperte: 1, referenti: [], sedi: [{ tipo: 'Impianto', nome: 'Fotovoltaico casa', ind: 'Via Montegrappa 8, Marostica' }] },
+    { id: 'F001', nome: 'Comel Forniture Elettriche', fornitore: true, citta: 'Vicenza', piva: '09988776655', sdi: 'KRRH6B9', pec: 'comel@pec.esempio.it', email: 'ordini@comel.esempio', tel: '0444 900 100', colore: 'c-ambra', aperte: 0, referenti: [{ nome: 'Sara Comel', ruolo: 'Ordini', tel: '0444 900 101', email: 'ordini@comel.esempio' }], sedi: [] },
+    { id: 'F002', nome: 'Verifiche Nord Snc', fornitore: true, citta: 'Padova', piva: '05544332211', sdi: '', pec: '', email: 'info@verifichenord.esempio', tel: '049 700 200', colore: 'c-blu', aperte: 0, referenti: [], sedi: [] },
+  ],
+  commesse: [
+    { id: '26ST044', desc: 'Nuovo magazzino automatico', cliente: 'C001', sede: 'Magazzino automatico Batokyo', stato: 'Aperta', resp: 'Manuel Gasparotto', persone: ['MG', 'MR'], contratto: 3700, budgetOre: 120, ore: 74, fine: 'venerdì 24 ottobre', margine: '1.140 €',
+      prestazioni: [{ nome: 'Sopralluogo e rilievo', valore: 300, av: 100, stato: 'Fatta' }, { nome: 'Progetto esecutivo', valore: 1800, av: 60, stato: 'In corso' }, { nome: 'Direzione lavori', valore: 1200, av: 0, stato: 'Da fare' }, { nome: 'Dichiarazione di rispondenza', valore: 400, av: 0, stato: 'Da fare' }] },
+    { id: '26ST045', desc: 'Quadro capannone', cliente: 'C002', sede: 'Capannone', stato: 'Aperta', resp: '', persone: ['MG'], contratto: 1600, budgetOre: 40, ore: 46, fine: '30 novembre', margine: '−84 €', prestazioni: [{ nome: 'Progetto quadro', valore: 900, av: 100, stato: 'Fatta' }, { nome: 'Collaudo', valore: 700, av: 30, stato: 'In corso' }] },
+    { id: '26ST046', desc: 'Linea 3', cliente: 'C001', sede: 'Cabina MT Acme', stato: 'Aperta', resp: 'Marco Rossato', persone: ['MR'], contratto: 0, budgetOre: 24, ore: 20, fine: 'scaduta da 4 giorni', margine: '310 €', prestazioni: [] },
+    { id: '26ST047', desc: 'Impianto fotovoltaico', cliente: 'C003', sede: 'Fotovoltaico casa', stato: 'Aperta', resp: '', persone: ['MG'], contratto: 0, budgetOre: null, ore: 6, fine: '', margine: '—', prestazioni: [] },
+  ],
+  registro: [
+    { giorno: 'Oggi', voci: [
+      { chi: 'Laura', frase: 'ha cambiato la tariffa di <b>Rossi Impianti Srl</b>', prima: '40 €/h', dopo: '42 €/h', quando: '16:20' },
+      { chi: 'Marco', frase: 'ha scritto il rapportino <b>RAP/2026/0142</b> per Linea 3', quando: '12:05' },
+      { chi: 'Manuel', frase: 'ha segnato come fatturati <b>4 rapportini</b> di Elettrodinamica', quando: '9:31' },
+    ] },
+    { giorno: 'Ieri', voci: [
+      { chi: 'Manuel', frase: 'ha aggiunto la prestazione <b>Dichiarazione di rispondenza</b> a 26ST044', prima: '', dopo: '400 €', quando: '18:02' },
+      { chi: 'Manuel', frase: 'ha cambiato il ruolo di <b>Marco Rossato</b>', prima: 'Lettura', dopo: 'Collaboratore', quando: '17:45' },
+      { chi: 'Laura', frase: 'ha archiviato il cliente <b>Impianti Vecchi Snc</b>', quando: '11:10' },
+    ] },
+  ],
+};
+const ruoli = {
+  titolare: { nome: 'Titolare', frase: 'Vede e cambia tutto, anche utenti e permessi.' },
+  amministrazione: { nome: 'Amministrazione', frase: 'Clienti, commesse, fatture e soldi. Non cambia utenti e permessi.' },
+  collaboratore: { nome: 'Collaboratore', frase: 'Scrive i suoi rapportini e vede le commesse, senza importi.' },
+  lettura: { nome: 'Lettura', frase: 'Vede tutto, non cambia niente. Per il commercialista.' },
+};
+const moduli = [
+  ['dashboard', 'Dashboard', 'La pagina iniziale'],
+  ['clienti', 'Clienti e fornitori', 'Anagrafiche, referenti, sedi'],
+  ['commesse', 'Progetti e commesse', 'Commesse e prestazioni'],
+  ['rapportini', 'Ore e rapportini', 'I rapportini di tutti o solo i suoi'],
+  ['fatturazione', 'Fatturazione', 'Da fatturare, riepiloghi'],
+  ['amministrazione', 'Amministrazione', 'Studio, utenti, permessi, copie'],
+  ['costi', 'Soldi', 'Tariffe, totali, costi e margini'],
+];
+const perm = {
+  titolare: { dashboard: 2, clienti: 2, commesse: 2, rapportini: 2, fatturazione: 2, amministrazione: 2, costi: 2 },
+  amministrazione: { dashboard: 2, clienti: 2, commesse: 2, rapportini: 2, fatturazione: 2, amministrazione: 1, costi: 2 },
+  collaboratore: { dashboard: 1, clienti: 1, commesse: 1, rapportini: 2, fatturazione: 0, amministrazione: 0, costi: 0 },
+  lettura: { dashboard: 1, clienti: 1, commesse: 1, rapportini: 1, fatturazione: 1, amministrazione: 0, costi: 1 },
+};
+
+// ------------------------------------------------------------------ stato
+const S = { modo: 'tel', chi: 'manuel', pila: [['accesso']], tab: {}, ruoloPerm: 'collaboratore', segClienti: 'clienti', latoChiuso: false, nuovoRuolo: 'collaboratore', errAccesso: false };
+const io = () => S.chi === 'manuel' ? { nome: 'Manuel Gasparotto', iniz: 'MG', ruolo: 'titolare' } : { nome: 'Marco Rossato', iniz: 'MR', ruolo: 'collaboratore' };
+const puo = (m, l) => (perm[io().ruolo][m] || 0) >= (l || 1);
+// Il punto delle migliaia anche sotto i 10.000 (1.380,00 €), come nel resto di Wisper.
+const euro = n => n.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: 'always' }) + ' €';
+const sog = id => D.soggetti.find(s => s.id === id);
+const com = id => D.commesse.find(c => c.id === id);
+const iniz = n => n.split(' ').map(x => x[0]).slice(0, 2).join('').toUpperCase();
+const esc = s => String(s);
+
+// ------------------------------------------------------------------ voci del menu (ordine delle specifiche, solo quelle che funzionano)
+function vociMenu() {
+  return [
+    ['dashboard', 1, 'Dashboard', 'dashboard'],
+    ['clienti', 2, 'Clienti e fornitori', 'clienti'],
+    ['commesse', 3, 'Progetti e commesse', 'commesse'],
+    ['rapportini', 6, 'Ore e rapportini', 'rapportini'],
+    ['fatturazione', 8, 'Fatturazione', 'fatturazione'],
+    ['amministrazione', 18, 'Amministrazione', 'amministrazione'],
+  ].filter(v => puo(v[0]));
+}
+const sezioneDi = pag => ({ dashboard: 'dashboard', clienti: 'clienti', cliente: 'clienti', commesse: 'commesse', commessa: 'commesse', rapportini: 'rapportini', fatturazione: 'fatturazione',
+  amministrazione: 'amministrazione', utenti: 'amministrazione', permessi: 'amministrazione', registro: 'amministrazione', numerazioni: 'amministrazione', copie: 'amministrazione' })[pag] || 'dashboard';
+
+// ------------------------------------------------------------------ pagine
+function testaTel(titoloDove, conIndietro) {
+  const sx = conIndietro
+    ? '<button type="button" class="tondo" data-azione="indietro" aria-label="Indietro">' + ico('indietro') + '</button>'
+    : '<button type="button" class="btn-menu" data-azione="menu" aria-label="Apri il menu">' + ico('menu') + 'Menu</button>';
+  return '<div class="testa"><div class="sx">' + sx + (titoloDove ? '<span class="dove">' + titoloDove + '</span>' : '') + '</div>' +
+    '<div class="dx"><span class="cerchio c-ambra" aria-label="' + io().nome + '">' + io().iniz + '</span></div></div>';
+}
+
+function pagAccesso() {
+  return '<div style="display:flex;flex-direction:column;gap:18px;padding-top:70px">' +
+    '<div style="display:flex;justify-content:center">' + marchio.replace(/30/g, '64').replace('rx="8"', 'rx="18"') + '</div>' +
+    '<div style="text-align:center;display:flex;flex-direction:column;gap:6px"><h1 class="titolo">Entra in Wisper</h1><p class="sottotitolo">Studio Tecnico GM</p></div>' +
+    (S.errAccesso ? '<div class="avviso-errore" role="alert">Email o password sbagliate. Riprova: l\'email è rimasta scritta.</div>' : '') +
+    '<div class="campo"><label for="acc-email">Email</label><input id="acc-email" type="email" value="' + (S.chi === 'manuel' ? 'manuel@esempio.it' : 'marco@esempio.it') + '" autocomplete="username"></div>' +
+    '<div class="campo"><label for="acc-pw">Password</label><div style="position:relative"><input id="acc-pw" type="password" value="prova" autocomplete="current-password" style="padding-right:56px">' +
+    '<button type="button" class="tondo" data-azione="mostra-pw" aria-label="Mostra la password" style="position:absolute;right:6px;top:6px;background:none">' + ico('occhio') + '</button></div></div>' +
+    '<button type="button" class="principale" data-azione="entra">Entra</button>' +
+    '<button type="button" class="testo-link" data-azione="sbaglia" style="align-self:center">Prova con una password sbagliata</button>' +
+    '</div>';
+}
+
+function righeDashboard() {
+  const soldi = puo('costi');
+  const urgenti = [
+    { ico: 'allarme', col: 'ico-rosso', t1: 'Quadro capannone è oltre il budget', t2: '46 ore su 40 · Rossi Impianti Srl', vai: ['commessa', '26ST045'] },
+    { ico: 'calendario', col: 'ico-rosso', t1: 'Linea 3 è scaduta da 4 giorni', t2: 'Elettrodinamica · Cabina MT Acme', vai: ['commessa', '26ST046'] },
+    { ico: 'firma', col: 'ico-giallo', t1: '2 rapportini da far firmare da più di una settimana', t2: 'Rossi Impianti, Mario Bianchi', vai: ['rapportini'] },
+  ];
+  const settimana = [
+    { ico: 'calendario', col: 'ico-giallo', t1: 'Mercoledì 22 senza rapportino', t2: 'Tocca per scriverlo', vai: ['rapportini'] },
+    { ico: 'commesse', col: 'ico-grigio', t1: 'Nuovo magazzino automatico finisce venerdì', t2: '26ST044 · 74 ore su 120', vai: ['commessa', '26ST044'] },
+  ];
+  if (soldi) settimana.push({ ico: 'fatturazione', col: 'ico-blu', t1: 'Da fatturare a ottobre', t2: '3 clienti · 11 rapportini', quanto: '2.940,00 €', vai: ['fatturazione'] });
+  const pianificare = [
+    { ico: 'lista', col: 'ico-grigio', t1: 'Impianto fotovoltaico non ha un budget', t2: '26ST047 · Mario Bianchi', vai: ['commessa', '26ST047'] },
+    { ico: 'clienti', col: 'ico-grigio', t1: '2 commesse senza responsabile', t2: '26ST045, 26ST047', vai: ['commesse'] },
+  ];
+  if (soldi) pianificare.push({ ico: 'fatturazione', col: 'ico-grigio', t1: 'Rossi Impianti: mancano codice SDI e PEC', t2: 'Serviranno per le fatture', vai: ['cliente', 'C002'] });
+  return { urgenti, settimana, pianificare };
+}
+function rigaDash(r) {
+  return '<button type="button" class="riga" data-vai="' + r.vai.join('|') + '"><span class="ico-riga ' + r.col + '">' + ico(r.ico, 20) + '</span>' +
+    '<span class="corpo"><span class="t1">' + r.t1 + '</span><span class="t2">' + r.t2 + '</span></span>' +
+    (r.quanto ? '<span class="quanto">' + r.quanto + '</span>' : '') + '<span class="freccia">' + ico('freccia', 18) + '</span></button>';
+}
+function ilTuoGiorno() {
+  const giorni = [['Lun', '20', 'fatto', '8 h'], ['Mar', '21', 'fatto', '6,5 h'], ['Mer', '22', 'manca', 'manca'], ['Gio', '23', 'oggi', ''], ['Ven', '24', 'futuro', '']];
+  return '<div class="scheda" style="display:flex;flex-direction:column;gap:14px">' +
+    '<div style="display:flex;justify-content:space-between;align-items:center"><span class="etichetta">Il tuo giorno</span><span class="sottotitolo" style="font-size:14px">2 di 4 giorni</span></div>' +
+    '<div class="settimana">' + giorni.map(g => '<button type="button" class="giorno ' + g[2] + '" data-vai="rapportini"><span>' + g[0] + '</span><span class="c">' + (g[2] === 'fatto' ? '✓' : g[1]) + '</span><span class="sotto">' + g[3] + '</span></button>').join('') + '</div>' +
+    '<div style="font-size:22px;font-weight:800;letter-spacing:-0.3px">Il rapportino di oggi non l\'hai ancora scritto</div>' +
+    '<button type="button" class="principale" data-vai="rapportini">Scrivi il rapportino</button></div>';
+}
+function numeriCommesse() {
+  return '<div class="tre-num">' +
+    [['6', 'aperte', 'commesse'], ['1', 'sospesa', 'commesse'], ['2', 'in ritardo', 'commesse', 'rosso'], ['14', 'chiuse', 'commesse']]
+      .map(n => '<button type="button" class="num-box ' + (n[3] || '') + '" data-vai="' + n[2] + '"><b>' + n[0] + '</b><span>' + n[1] + '</span></button>').join('') + '</div>';
+}
+function pagDashboard() {
+  const r = righeDashboard();
+  const sez = (nome, lista) => '<div style="display:flex;flex-direction:column;gap:8px"><span class="etichetta">' + nome + ' · ' + lista.length + '</span><div class="scheda righe">' + lista.map(rigaDash).join('') + '</div></div>';
+  const saluto = '<div style="display:flex;flex-direction:column;gap:4px"><span class="sottotitolo">Giovedì 23 ottobre</span><h1 class="titolo">Buongiorno, ' + io().nome.split(' ')[0] + '</h1></div>';
+  const urgentissima = puo('costi')
+    ? '<div class="scheda" style="background:var(--scelta);border-color:var(--giallo);display:flex;flex-direction:column;gap:10px"><span class="etichetta" style="color:var(--giallo-testo)">La cosa più urgente</span>' +
+      '<div style="font-size:19px;font-weight:800;line-height:1.25">3 rapportini di settembre ancora da fatturare</div><div class="sottotitolo">Rossi Impianti Srl · 1.284,50 €</div>' +
+      '<button type="button" class="secondario" data-vai="fatturazione" style="align-self:flex-start">Prepara il riepilogo</button></div>'
+    : '';
+  if (S.modo === 'pc') {
+    return '<div style="display:flex;justify-content:space-between;align-items:flex-end;gap:16px">' + saluto + (puo('rapportini', 2) ? '<button type="button" class="btn-giallo" data-vai="rapportini">' + ico('piu', 18) + 'Nuovo rapportino</button>' : '') + '</div>' +
+      numeriCommesse() + '<div class="pc-griglia"><div style="display:flex;flex-direction:column;gap:18px">' + urgentissima + sez('Urgenti', r.urgenti) + sez('Questa settimana', r.settimana) + '</div>' +
+      '<div style="display:flex;flex-direction:column;gap:18px">' + sez('Da pianificare', r.pianificare) + '</div></div>';
+  }
+  return testaTel('', false) + saluto + ilTuoGiorno() + urgentissima + sez('Urgenti', r.urgenti) + sez('Questa settimana', r.settimana) + numeriCommesse() + sez('Da pianificare', r.pianificare);
+}
+
+function pagClienti() {
+  const lista = D.soggetti.filter(s => S.segClienti === 'clienti' ? s.cliente : s.fornitore);
+  const seg = '<div class="segmenti" role="group"><button type="button" data-seg-clienti="clienti" aria-pressed="' + (S.segClienti === 'clienti') + '">Clienti · 3</button><button type="button" data-seg-clienti="fornitori" aria-pressed="' + (S.segClienti === 'fornitori') + '">Fornitori · 2</button></div>';
+  const cerca = '<label class="cerca">' + ico('cerca', 20) + '<input placeholder="Nome, città, partita IVA" aria-label="Cerca"></label>';
+  const nuovo = puo('clienti', 2) ? (S.segClienti === 'clienti' ? 'Nuovo cliente' : 'Nuovo fornitore') : '';
+  if (S.modo === 'pc') {
+    return '<div style="display:flex;justify-content:space-between;align-items:flex-end"><div><span class="dove">2 · Clienti e fornitori</span><h1 class="titolo">Clienti e fornitori</h1></div>' + (nuovo ? '<button type="button" class="btn-giallo" data-azione="avviso" data-testo="' + nuovo + ': si apre il modulo">' + ico('piu', 18) + nuovo + '</button>' : '') + '</div>' +
+      '<div style="display:flex;gap:12px;align-items:center"><div style="width:300px">' + seg + '</div><div style="flex:1">' + cerca + '</div></div>' +
+      '<div class="tabella"><div class="tr th" style="grid-template-columns:52px 2fr 1.2fr 1.2fr 1.4fr 110px"><span></span><span>Nome</span><span>Città</span><span>Partita IVA</span><span>' + (S.segClienti === 'clienti' ? 'Tariffa' : 'Email') + '</span><span class="n">Commesse</span></div>' +
+      lista.map(s => '<div class="tr cl" data-vai="cliente|' + s.id + '" style="grid-template-columns:52px 2fr 1.2fr 1.2fr 1.4fr 110px"><span class="cerchio ' + s.colore + '">' + iniz(s.nome) + '</span><b>' + s.nome + '</b><span>' + s.citta + '</span><span>' + (s.piva || '—') + '</span><span>' + (S.segClienti === 'clienti' ? (puo('costi') ? s.tariffa : '—') : s.email) + '</span><span class="n">' + (s.aperte || '—') + '</span></div>').join('') + '</div>';
+  }
+  return testaTel('', false) + '<h1 class="titolo">Clienti e fornitori</h1>' + seg + cerca +
+    '<div class="scheda righe">' + lista.map(s => '<button type="button" class="riga" data-vai="cliente|' + s.id + '"><span class="cerchio ' + s.colore + '">' + iniz(s.nome) + '</span><span class="corpo"><span class="t1">' + s.nome + '</span><span class="t2">' + s.citta + (s.aperte ? ' · ' + s.aperte + (s.aperte === 1 ? ' commessa aperta' : ' commesse aperte') : '') + '</span></span><span class="freccia">' + ico('freccia', 18) + '</span></button>').join('') + '</div>' +
+    (nuovo ? '<div class="in-basso"><button type="button" class="principale" data-azione="avviso" data-testo="' + nuovo + ': si apre il modulo">' + ico('piu', 20) + nuovo + '</button></div>' : '');
+}
+
+function pagCliente(id) {
+  const s = sog(id);
+  const tab = S.tab[id] || 'dati';
+  const tabs = [['dati', 'Dati'], ['referenti', 'Referenti · ' + s.referenti.length], ['sedi', 'Sedi e impianti · ' + s.sedi.length]].concat(s.cliente ? [['commesse', 'Commesse · ' + s.aperte]] : []);
+  const seg = '<div class="segmenti" role="group">' + tabs.map(t => '<button type="button" data-tab="' + id + '|' + t[0] + '" aria-pressed="' + (tab === t[0]) + '">' + t[1] + '</button>').join('') + '</div>';
+  const contatti = '<div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="secondario" data-azione="avviso" data-testo="Chiama ' + s.tel + '">' + ico('telefono', 18) + 'Chiama</button><button type="button" class="secondario" data-azione="avviso" data-testo="Email a ' + s.email + '">' + ico('email', 18) + 'Email</button></div>';
+  const mancaSdi = s.cliente && puo('costi') && !s.sdi && !s.pec;
+  let corpo = '';
+  if (tab === 'dati') {
+    corpo = (mancaSdi ? '<div class="scheda" style="background:var(--giallo-tenue);border-color:transparent;font-weight:700;color:var(--giallo-testo)">Mancano codice SDI e PEC: serviranno per le fatture.</div>' : '') +
+      '<div class="scheda"><div class="coppie">' +
+      [['Partita IVA', s.piva || '—'], ['Codice fiscale', s.piva || '—'], ['Codice SDI', s.sdi || '—'], ['PEC', s.pec || '—'], ['Email', s.email], ['Telefono', s.tel]]
+        .concat(s.cliente && puo('costi') ? [['Tariffa', s.tariffa], ['Viaggio', s.id === 'C001' ? 'non pagato' : 'pagato']] : [])
+        .map(c => '<div class="coppia"><span class="k">' + c[0] + '</span><span class="v">' + c[1] + '</span></div>').join('') + '</div></div>';
+  } else if (tab === 'referenti') {
+    corpo = '<div class="scheda righe">' + (s.referenti.length ? s.referenti.map(r => '<div class="riga"><span class="cerchio c-ambra">' + iniz(r.nome) + '</span><span class="corpo"><span class="t1">' + r.nome + '</span><span class="t2">' + r.ruolo + ' · ' + r.tel + '</span></span><button type="button" class="tondo" data-azione="avviso" data-testo="Chiama ' + r.nome + '" aria-label="Chiama">' + ico('telefono', 18) + '</button></div>').join('') : '<div class="vuoto">Nessun referente. Aggiungi chi chiami di solito.</div>') + '</div>' +
+      (puo('clienti', 2) ? '<button type="button" class="secondario" data-azione="avviso" data-testo="Nuovo referente">' + ico('piu', 18) + 'Aggiungi un referente</button>' : '');
+  } else if (tab === 'sedi') {
+    corpo = '<div class="scheda righe">' + (s.sedi.length ? s.sedi.map(x => '<div class="riga"><span class="ico-riga ico-grigio">' + ico('luogo', 20) + '</span><span class="corpo"><span class="t1">' + x.nome + '</span><span class="t2">' + x.ind + '</span></span><span class="pill ' + (x.tipo === 'Impianto' ? 'p-blu' : 'p-grigio') + '">' + x.tipo + '</span></div>').join('') : '<div class="vuoto">Nessuna sede o impianto.</div>') + '</div>' +
+      (puo('clienti', 2) ? '<button type="button" class="secondario" data-azione="avviso" data-testo="Nuova sede o impianto">' + ico('piu', 18) + 'Aggiungi una sede o un impianto</button>' : '');
+  } else {
+    corpo = '<div class="scheda righe">' + D.commesse.filter(c => c.cliente === id).map(c => '<button type="button" class="riga" data-vai="commessa|' + c.id + '"><span class="codice">' + c.id + '</span><span class="corpo"><span class="t1">' + c.desc + '</span><span class="t2">' + c.sede + '</span></span><span class="freccia">' + ico('freccia', 18) + '</span></button>').join('') + '</div>';
+  }
+  const testa = '<div style="display:flex;gap:14px;align-items:center"><span class="cerchio ' + s.colore + '" style="width:56px;height:56px;border-radius:28px;font-size:18px">' + iniz(s.nome) + '</span>' +
+    '<div style="display:flex;flex-direction:column;gap:4px;min-width:0"><h1 class="titolo" style="font-size:26px">' + s.nome + '</h1><div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><span class="pill ' + (s.cliente ? 'p-verde' : 'p-blu') + '">' + (s.cliente ? 'Cliente' : 'Fornitore') + '</span><span class="sottotitolo">' + s.id + ' · ' + s.citta + '</span></div></div></div>';
+  if (S.modo === 'pc') {
+    return '<div style="display:flex;align-items:center;gap:12px"><button type="button" class="tondo" data-azione="indietro" aria-label="Indietro">' + ico('indietro') + '</button><span class="dove">Clienti e fornitori</span></div>' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;gap:16px">' + testa + '<div style="display:flex;gap:8px">' + contatti + (puo('clienti', 2) ? '<button type="button" class="btn-giallo" data-azione="avviso" data-testo="Modifica">Modifica</button>' : '') + '</div></div>' +
+      '<div style="max-width:720px">' + seg + '</div>' + corpo;
+  }
+  return testaTel('Clienti e fornitori', true) + testa + contatti + seg + corpo;
+}
+
+function pagCommesse() {
+  const soldi = puo('costi');
+  if (S.modo === 'pc') {
+    return '<div style="display:flex;justify-content:space-between;align-items:flex-end"><div><span class="dove">3 · Progetti e commesse</span><h1 class="titolo">Commesse</h1></div>' + (puo('commesse', 2) ? '<button type="button" class="btn-giallo" data-azione="avviso" data-testo="Nuova commessa: 26ST048">' + ico('piu', 18) + 'Nuova commessa</button>' : '') + '</div>' +
+      '<div style="max-width:560px"><div class="segmenti"><button aria-pressed="true">Aperte · 6</button><button aria-pressed="false">Sospese · 1</button><button aria-pressed="false">Chiuse · 14</button><button aria-pressed="false">Archivio · 3</button></div></div>' +
+      '<div class="tabella"><div class="tr th" style="grid-template-columns:110px 2fr 1.4fr 1.2fr 1.6fr 110px"><span>Codice</span><span>Commessa</span><span>Cliente</span><span>Responsabile</span><span>Ore sul budget</span><span class="n">' + (soldi ? 'Margine' : '') + '</span></div>' +
+      D.commesse.map(c => { const p = c.budgetOre ? Math.min(100, Math.round(c.ore / c.budgetOre * 100)) : 0; const cl = c.budgetOre && c.ore > c.budgetOre ? 'sforato' : p >= 85 ? 'attenzione' : '';
+        return '<div class="tr cl" data-vai="commessa|' + c.id + '" style="grid-template-columns:110px 2fr 1.4fr 1.2fr 1.6fr 110px"><span class="codice">' + c.id + '</span><b>' + c.desc + '</b><span>' + sog(c.cliente).nome + '</span><span>' + (c.resp || '<span style="color:var(--giallo-testo);font-weight:700">da scegliere</span>') + '</span><span style="display:flex;flex-direction:column;gap:4px"><span style="font-size:13px;font-weight:700;color:var(--tenue)">' + (c.budgetOre ? c.ore + ' di ' + c.budgetOre + ' h' : c.ore + ' h, senza budget') + '</span><span class="barra-av"><i class="' + cl + '" style="width:' + p + '%"></i></span></span><span class="n">' + (soldi ? c.margine : '') + '</span></div>'; }).join('') + '</div>';
+  }
+  return testaTel('', false) + '<h1 class="titolo">Commesse</h1><div class="segmenti"><button aria-pressed="true">Aperte · 6</button><button aria-pressed="false">Sospese · 1</button><button aria-pressed="false">Chiuse</button><button aria-pressed="false">Archivio</button></div>' +
+    '<div class="scheda righe">' + D.commesse.map(c => { const p = c.budgetOre ? Math.min(100, Math.round(c.ore / c.budgetOre * 100)) : 0; const cl = c.budgetOre && c.ore > c.budgetOre ? 'sforato' : p >= 85 ? 'attenzione' : '';
+      return '<button type="button" class="riga" data-vai="commessa|' + c.id + '" style="flex-wrap:wrap"><span class="codice">' + c.id + '</span><span class="corpo"><span class="t1">' + c.desc + '</span><span class="t2">' + sog(c.cliente).nome + '</span>' + (c.budgetOre ? '<span class="barra-av" style="margin-top:6px"><i class="' + cl + '" style="width:' + p + '%"></i></span>' : '') + '</span><span class="freccia">' + ico('freccia', 18) + '</span></button>'; }).join('') + '</div>' +
+    (puo('commesse', 2) ? '<div class="in-basso"><button type="button" class="principale" data-azione="avviso" data-testo="Nuova commessa: 26ST048">' + ico('piu', 20) + 'Nuova commessa</button></div>' : '');
+}
+
+function pagCommessa(id) {
+  const c = com(id); const s = sog(c.cliente); const soldi = puo('costi');
+  const tab = S.tab[id] || 'prestazioni';
+  const tabs = [['panoramica', 'Panoramica'], ['prestazioni', 'Prestazioni · ' + c.prestazioni.length], ['rapportini', 'Rapportini'], ['documenti', 'Documenti']].concat(soldi ? [['costi', 'Costi'], ['dafatturare', 'Da fatturare']] : []);
+  const seg = '<div class="segmenti" role="group">' + tabs.map(t => '<button type="button" data-tab="' + id + '|' + t[0] + '" aria-pressed="' + (tab === t[0]) + '">' + t[1] + '</button>').join('') + '</div>';
+  const persone = '<div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center"><div class="coppia"><span class="k">Responsabile</span><span class="v">' + (c.resp || '<span style="color:var(--giallo-testo)">da scegliere</span>') + '</span></div>' +
+    '<div class="coppia"><span class="k">Persone</span><span style="display:flex;gap:4px">' + c.persone.map(p => '<span class="cerchio c-ambra" style="width:32px;height:32px;font-size:12px">' + p + '</span>').join('') + '</span></div>' +
+    '<div class="coppia"><span class="k">Fine prevista</span><span class="v">' + (c.fine || '—') + '</span></div></div>';
+  let corpo = '';
+  if (tab === 'prestazioni') {
+    const totale = c.prestazioni.reduce((a, p) => a + p.valore, 0);
+    const fatto = c.prestazioni.reduce((a, p) => a + p.valore * p.av / 100, 0);
+    corpo = (c.prestazioni.length ? (soldi ? '<div class="scheda" style="display:flex;flex-direction:column;gap:10px"><div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap"><span style="font-size:28px;font-weight:800;letter-spacing:-0.5px">' + euro(fatto) + '</span><span class="sottotitolo">fatto su ' + euro(totale) + (c.contratto ? ' · contratto ' + euro(c.contratto) : '') + '</span></div><div class="barra-av"><i style="width:' + Math.round(fatto / totale * 100) + '%"></i></div></div>' : '') +
+      '<div class="scheda righe">' + c.prestazioni.map((p, i) => '<div class="riga" style="flex-direction:column;align-items:stretch;gap:8px"><div style="display:flex;justify-content:space-between;gap:10px;align-items:center"><span class="t1">' + p.nome + '</span>' + (soldi ? '<span class="quanto">' + euro(p.valore) + '</span>' : '') + '</div>' +
+        '<div style="display:flex;align-items:center;gap:10px"><span class="barra-av" style="flex:1"><i style="width:' + p.av + '%"></i></span><span style="font-size:14px;font-weight:800;width:42px;text-align:right">' + p.av + '%</span><span class="pill ' + (p.stato === 'Fatta' ? 'p-verde' : p.stato === 'In corso' ? 'p-giallo' : 'p-grigio') + '">' + p.stato + '</span></div>' +
+        (puo('commesse', 2) && p.av < 100 ? '<div style="display:flex;gap:8px"><button type="button" class="secondario" style="height:40px;font-size:14px" data-avanza="' + id + '|' + i + '">+10%</button><button type="button" class="secondario" style="height:40px;font-size:14px" data-finisci="' + id + '|' + i + '">Segna fatta</button></div>' : '') + '</div>').join('') + '</div>'
+      : '<div class="scheda"><div class="vuoto">Nessuna prestazione. Dividi la commessa in prestazioni (sopralluogo, progetto, direzione lavori…) per seguirne valore e avanzamento.</div></div>') +
+      (puo('commesse', 2) ? '<button type="button" class="secondario" data-azione="avviso" data-testo="Nuova prestazione">' + ico('piu', 18) + 'Aggiungi una prestazione</button>' : '');
+  } else if (tab === 'panoramica') {
+    const p = c.budgetOre ? Math.min(100, Math.round(c.ore / c.budgetOre * 100)) : 0;
+    corpo = '<div class="scheda" style="display:flex;flex-direction:column;gap:10px"><span class="etichetta">Ore</span><div style="font-size:24px;font-weight:800">' + c.ore + (c.budgetOre ? ' di ' + c.budgetOre + ' ore' : ' ore') + '</div>' + (c.budgetOre ? '<div class="barra-av"><i class="' + (c.ore > c.budgetOre ? 'sforato' : p >= 85 ? 'attenzione' : '') + '" style="width:' + p + '%"></i></div>' : '') + '</div>' +
+      (soldi ? '<div class="scheda"><div class="coppie"><div class="coppia"><span class="k">Contratto</span><span class="v">' + (c.contratto ? euro(c.contratto) : '—') + '</span></div><div class="coppia"><span class="k">Margine atteso</span><span class="v">' + c.margine + '</span></div></div></div>' : '');
+  } else {
+    corpo = '<div class="scheda"><div class="vuoto">Come oggi in Wisper: ' + (tab === 'rapportini' ? 'i rapportini della commessa.' : tab === 'documenti' ? 'i documenti della commessa.' : tab === 'costi' ? 'lavoro, auto e spese.' : 'cosa è pronto da fatturare.') + '</div></div>';
+  }
+  const testa = '<div style="display:flex;flex-direction:column;gap:8px"><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span class="codice">' + c.id + '</span><span class="pill p-verde">' + c.stato + '</span></div><h1 class="titolo" style="font-size:26px">' + c.desc + '</h1><span class="sottotitolo">' + s.nome + ' · ' + c.sede + '</span></div>';
+  const menuPiu = puo('commesse', 2) ? '<button type="button" class="tondo" data-azione="menu-commessa" aria-label="Altre azioni">' + ico('piuvoci') + '</button>' : '';
+  if (S.modo === 'pc') {
+    return '<div style="display:flex;align-items:center;gap:12px"><button type="button" class="tondo" data-azione="indietro" aria-label="Indietro">' + ico('indietro') + '</button><span class="dove">Progetti e commesse</span></div>' +
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px">' + testa + '<div style="display:flex;gap:8px">' + menuPiu + (puo('commesse', 2) ? '<button type="button" class="btn-giallo" data-azione="avviso" data-testo="Modifica">Modifica</button>' : '') + '</div></div>' +
+      '<div class="scheda">' + persone + '</div><div style="max-width:820px">' + seg + '</div><div style="max-width:820px;display:flex;flex-direction:column;gap:12px">' + corpo + '</div>';
+  }
+  return testaTel('Progetti e commesse', true).replace('<div class="dx">', '<div class="dx">' + menuPiu) + testa + '<div class="scheda">' + persone + '</div>' + seg + corpo;
+}
+
+function pagRapportini() {
+  return (S.modo === 'pc' ? '<div><span class="dove">6 · Ore e rapportini</span><h1 class="titolo">Rapportini</h1></div>' : testaTel('', false) + '<h1 class="titolo">Rapportini</h1>') +
+    '<div class="scheda"><div class="vuoto">Come oggi in Wisper 0.4.0: ricerca, mesi, Tutti · Da fatturare · Da firmare, il rapportino in tre passi. ' + (puo('costi') ? '' : 'Marco vede solo i suoi rapportini, senza importi.') + '</div></div>';
+}
+function pagFatturazione() {
+  return (S.modo === 'pc' ? '<div><span class="dove">8 · Fatturazione</span><h1 class="titolo">Da fatturare</h1></div>' : testaTel('', false) + '<h1 class="titolo">Da fatturare</h1>') +
+    '<div class="scheda"><div class="vuoto">È il Fine mese di oggi, spostato qui: una scheda per cliente, Prepara riepilogo, Segna fatturati. Le fatture vere arrivano nella fase 4; fino ad allora l\'invio allo SDI non c\'è.</div></div>';
+}
+
+function pagAmministrazione() {
+  const voci = [['Dati dello studio', 'Intestazione dei PDF, logo, la tua firma', 'scudo', null], ['Utenti', '4 persone · 3 attive', 'clienti', 'utenti'], ['Ruoli e permessi', 'Titolare, Amministrazione, Collaboratore, Lettura', 'scudo', 'permessi'],
+    ['Numerazioni', 'Commesse 26ST048 · Rapportini RAP/2026/0143', 'numero', 'numerazioni'], ['Tariffe e rimborsi', 'Rimborso km 0,76 €, costo orario', 'fatturazione', null], ['Registro attività', 'Chi ha cambiato cosa', 'lista', 'registro'],
+    ['Copie ed esportazioni', 'Copia di stanotte fatta alle 2:30', 'copia', 'copie'], ['Cestino', 'File tolti, recuperabili', 'cestino', null], ['L\'app', 'Tema, visita guidata, versione', 'amministrazione', null]];
+  const lista = '<div class="scheda righe">' + voci.map(v => '<button type="button" class="riga" ' + (v[3] ? 'data-vai="' + v[3] + '"' : 'data-azione="avviso" data-testo="' + v[0] + ': come oggi nelle Impostazioni"') + '><span class="ico-riga ico-grigio">' + ico(v[2], 20) + '</span><span class="corpo"><span class="t1">' + v[0] + '</span><span class="t2">' + v[1] + '</span></span><span class="freccia">' + ico('freccia', 18) + '</span></button>').join('') + '</div>';
+  return (S.modo === 'pc' ? '<div><span class="dove">18 · Amministrazione</span><h1 class="titolo">Amministrazione</h1></div><div style="max-width:720px">' + lista + '</div>' : testaTel('', false) + '<h1 class="titolo">Amministrazione</h1>' + lista);
+}
+
+function pagUtenti() {
+  const righe = D.utenti.map(u => '<div class="riga"><span class="cerchio c-ambra">' + iniz(u.nome) + '</span><span class="corpo"><span class="t1">' + u.nome + '</span><span class="t2">' + u.email + ' · ultimo accesso ' + u.ultimo + '</span></span><span style="display:flex;flex-direction:column;align-items:flex-end;gap:4px"><span class="pill p-grigio">' + ruoli[u.ruolo].nome + '</span>' + (u.attivo ? '' : '<span class="pill p-giallo">Invito da completare</span>') + '</span></div>').join('');
+  const nuovo = '<button type="button" class="' + (S.modo === 'pc' ? 'btn-giallo' : 'principale') + '" data-azione="nuovo-utente">' + ico('piu', 20) + 'Nuovo utente</button>';
+  if (S.modo === 'pc') return '<div style="display:flex;align-items:center;gap:12px"><button type="button" class="tondo" data-azione="indietro" aria-label="Indietro">' + ico('indietro') + '</button><span class="dove">Amministrazione</span></div><div style="display:flex;justify-content:space-between;align-items:center"><h1 class="titolo">Utenti</h1>' + nuovo + '</div><div class="scheda righe" style="max-width:820px">' + righe + '</div>';
+  return testaTel('Amministrazione', true) + '<h1 class="titolo">Utenti</h1><div class="scheda righe">' + righe + '</div><div class="in-basso">' + nuovo + '</div>';
+}
+
+function pagPermessi() {
+  const r = S.ruoloPerm;
+  const seg = '<div class="segmenti" role="group">' + Object.keys(ruoli).map(k => '<button type="button" data-ruolo-perm="' + k + '" aria-pressed="' + (r === k) + '">' + ruoli[k].nome + '</button>').join('') + '</div>';
+  const bloccato = r === 'titolare';
+  const righe = moduli.map(m => { const l = perm[r][m[0]];
+    return '<div class="riga-perm"><div style="min-width:0"><div class="nome-m">' + m[1] + '</div><div class="spiega">' + m[2] + '</div></div><div class="liv' + (bloccato ? ' bloccato' : '') + '" role="group" aria-label="' + m[1] + '">' +
+      ['Niente', 'Vede', 'Modifica'].map((t, i) => '<button type="button" class="l' + i + '" data-perm="' + r + '|' + m[0] + '|' + i + '" aria-pressed="' + (l === i) + '">' + t + '</button>').join('') + '</div></div>'; }).join('');
+  const intro = '<div class="scheda" style="display:flex;flex-direction:column;gap:4px"><b style="font-size:17px">' + ruoli[r].nome + '</b><span class="sottotitolo">' + ruoli[r].frase + (bloccato ? ' Il titolare ha sempre tutto.' : '') + '</span></div>';
+  const corpo = intro + '<div class="scheda" style="padding-top:4px;padding-bottom:4px">' + righe + '</div>';
+  if (S.modo === 'pc') return '<div style="display:flex;align-items:center;gap:12px"><button type="button" class="tondo" data-azione="indietro" aria-label="Indietro">' + ico('indietro') + '</button><span class="dove">Amministrazione</span></div><h1 class="titolo">Ruoli e permessi</h1><div style="max-width:820px;display:flex;flex-direction:column;gap:14px">' + seg + corpo + '</div>';
+  return testaTel('Amministrazione', true) + '<h1 class="titolo">Ruoli e permessi</h1>' + seg + corpo;
+}
+
+function pagRegistro() {
+  const filtri = '<div style="display:flex;gap:8px;flex-wrap:wrap">' + ['Tutte le persone', 'Tutto', 'Ultimi 7 giorni'].map(f => '<button type="button" class="secondario" style="height:40px;font-size:14px" data-azione="avviso" data-testo="Filtro: ' + f + '">' + f + '</button>').join('') + '</div>';
+  const giorni = D.registro.map(g => '<div style="display:flex;flex-direction:column;gap:8px"><span class="etichetta">' + g.giorno + '</span><div class="scheda" style="padding-top:2px;padding-bottom:2px">' +
+    g.voci.map(v => '<div class="voce-reg"><span class="cerchio c-ambra" style="width:34px;height:34px;font-size:12px">' + v.chi[0] + '</span><div style="min-width:0"><div class="frase"><b>' + v.chi + '</b> ' + v.frase + '</div>' +
+      (v.dopo ? '<div class="prima-dopo">' + (v.prima ? '<s>' + v.prima + '</s>' + ico('freccia', 14) : '') + '<ins>' + v.dopo + '</ins></div>' : '') + '<div class="quando">' + g.giorno.toLowerCase() + ' alle ' + v.quando + '</div></div></div>').join('') + '</div></div>').join('');
+  const esporta = '<button type="button" class="testo-link" data-azione="avviso" data-testo="Registro esportato per Excel">Esporta per Excel</button>';
+  if (S.modo === 'pc') return '<div style="display:flex;align-items:center;gap:12px"><button type="button" class="tondo" data-azione="indietro" aria-label="Indietro">' + ico('indietro') + '</button><span class="dove">Amministrazione</span></div><div style="display:flex;justify-content:space-between;align-items:center"><h1 class="titolo">Registro attività</h1>' + esporta + '</div><div style="max-width:820px;display:flex;flex-direction:column;gap:14px">' + filtri + giorni + '</div>';
+  return testaTel('Amministrazione', true) + '<h1 class="titolo">Registro attività</h1>' + filtri + giorni + esporta;
+}
+
+function pagNumerazioni() {
+  const box = (titolo, formato, prossimo, nota) => '<div class="scheda" style="display:flex;flex-direction:column;gap:10px"><span class="etichetta">' + titolo + '</span><div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span class="codice" style="height:34px;font-size:16px">' + prossimo + '</span><span class="sottotitolo">la prossima</span></div><div class="coppie"><div class="coppia"><span class="k">Formato</span><span class="v">' + formato + '</span></div><div class="coppia"><span class="k">Numero</span><span class="v">' + nota + '</span></div></div></div>';
+  const corpo = box('Commesse', 'anno a due cifre, ST, numero', '26ST048', 'continua da un anno all\'altro') + box('Rapportini', 'RAP, anno, numero', 'RAP/2026/0143', 'riparte a gennaio');
+  if (S.modo === 'pc') return '<div style="display:flex;align-items:center;gap:12px"><button type="button" class="tondo" data-azione="indietro" aria-label="Indietro">' + ico('indietro') + '</button><span class="dove">Amministrazione</span></div><h1 class="titolo">Numerazioni</h1><div class="pc-griglia" style="max-width:900px">' + corpo + '</div>';
+  return testaTel('Amministrazione', true) + '<h1 class="titolo">Numerazioni</h1>' + corpo;
+}
+
+function pagCopie() {
+  const corpo = '<div class="scheda" style="display:flex;flex-direction:column;gap:6px"><span class="etichetta">Ultima copia</span><div style="font-size:20px;font-weight:800;display:flex;gap:8px;align-items:center"><span style="color:var(--firmato)">' + ico('scudo', 22) + '</span>Stanotte alle 2:30</div><span class="sottotitolo">Sul NAS e fuori casa, su Drive · il foglio è aggiornato</span></div>' +
+    '<button type="button" class="secondario" data-azione="avviso" data-testo="Copia fatta adesso">Fai una copia adesso</button>' +
+    '<span class="etichetta">Esporta per Excel</span><div class="scheda righe">' + ['Rapportini', 'Clienti e fornitori', 'Commesse'].map(x => '<button type="button" class="riga" data-azione="avviso" data-testo="' + x + ': file per Excel pronto"><span class="ico-riga ico-grigio">' + ico('copia', 20) + '</span><span class="corpo"><span class="t1">' + x + '</span><span class="t2">Un file che Excel apre così com\'è</span></span></button>').join('') + '</div>';
+  if (S.modo === 'pc') return '<div style="display:flex;align-items:center;gap:12px"><button type="button" class="tondo" data-azione="indietro" aria-label="Indietro">' + ico('indietro') + '</button><span class="dove">Amministrazione</span></div><h1 class="titolo">Copie ed esportazioni</h1><div style="max-width:720px;display:flex;flex-direction:column;gap:14px">' + corpo + '</div>';
+  return testaTel('Amministrazione', true) + '<h1 class="titolo">Copie ed esportazioni</h1>' + corpo;
+}
+
+const PAGINE = { accesso: pagAccesso, dashboard: pagDashboard, clienti: pagClienti, cliente: pagCliente, commesse: pagCommesse, commessa: pagCommessa, rapportini: pagRapportini, fatturazione: pagFatturazione,
+  amministrazione: pagAmministrazione, utenti: pagUtenti, permessi: pagPermessi, registro: pagRegistro, numerazioni: pagNumerazioni, copie: pagCopie };
+
+// ------------------------------------------------------------------ disegno
+function cassetto() {
+  const attiva = sezioneDi(S.pila[S.pila.length - 1][0]);
+  return '<div class="chi"><span class="cerchio c-ambra" style="width:48px;height:48px;border-radius:24px;font-size:16px">' + io().iniz + '</span><div style="display:flex;flex-direction:column;gap:2px;min-width:0"><b style="font-size:17px">' + io().nome + '</b><span class="sottotitolo" style="font-size:14px">' + ruoli[io().ruolo].nome + '</span></div></div>' +
+    vociMenu().map(v => '<button type="button" class="voce' + (attiva === v[0] ? ' attiva' : '') + '" data-sezione="' + v[0] + '"' + (attiva === v[0] ? ' aria-current="page"' : '') + '>' + ico(v[3]) + '<span class="lab">' + v[2] + '</span>' + (v[0] === 'fatturazione' ? '<span class="num-v">3</span>' : '') + '</button>').join('') +
+    '<div class="piede"><span class="stato-ok"><i></i>Collegato · letto alle 16:52</span><button type="button" class="voce" data-azione="esci" style="padding:0;min-height:44px">' + ico('esci', 20) + 'Esci</button></div>';
+}
+function lato() {
+  const attiva = sezioneDi(S.pila[S.pila.length - 1][0]);
+  return '<div class="marchio-pc">' + marchio + '<div><b>Wisper</b><span>Studio Tecnico GM</span></div></div>' +
+    vociMenu().map(v => '<button type="button" class="voce' + (attiva === v[0] ? ' attiva' : '') + '" data-sezione="' + v[0] + '" title="' + v[2] + '"' + (attiva === v[0] ? ' aria-current="page"' : '') + '>' + ico(v[3]) + '<span class="lab">' + v[2] + '</span>' + (v[0] === 'fatturazione' ? '<span class="num-v">3</span>' : '') + '</button>').join('') +
+    '<div class="piede-pc"><span class="stato-ok"><i></i><span class="lab">Collegato · 16:52</span></span><span style="display:flex;align-items:center;gap:10px"><span class="cerchio c-ambra" style="width:36px;height:36px;font-size:13px">' + io().iniz + '</span><span class="lab">' + io().nome + '</span></span>' +
+    '<button type="button" class="voce" data-azione="richiudi" title="Richiudi il menu" style="min-height:40px">' + ico('lato', 20) + '<span class="lab">' + (S.latoChiuso ? 'Apri il menu' : 'Richiudi il menu') + '</span></button></div>';
+}
+let ultimoVerso = 'sfuma';
+function disegna() {
+  const [pag, arg] = S.pila[S.pila.length - 1];
+  const html = PAGINE[pag](arg);
+  if (S.modo === 'tel') {
+    const sc = document.getElementById('schermo');
+    sc.innerHTML = html; sc.scrollTop = 0;
+    sc.className = 'schermo entra-' + ultimoVerso;
+    document.getElementById('cassetto').innerHTML = pag === 'accesso' ? '' : cassetto();
+  } else {
+    if (pag === 'accesso') { S.pila = [['dashboard']]; return disegna(); }
+    const c = document.getElementById('contenuto-pc');
+    c.innerHTML = html; c.scrollTop = 0; c.className = 'contenuto-pc entra-' + ultimoVerso;
+    const l = document.getElementById('lato'); l.innerHTML = lato(); l.classList.toggle('chiuso', S.latoChiuso);
+    adattaComputer();
+  }
+  ultimoVerso = 'sfuma';
+}
+function adattaComputer() {
+  // La cornice resta 1280x800 e si rimpicciolisce da sola quando la finestra è stretta.
+  const sc = document.getElementById('computer-scala');
+  const largo = Math.min(1, (window.innerWidth - 32) / 1282);
+  const pc = document.getElementById('computer');
+  pc.style.transform = 'scale(' + largo + ')';
+  sc.style.height = Math.ceil(802 * largo) + 'px'; sc.style.width = Math.ceil(1282 * largo) + 'px';
+}
+function vai(pag, arg) { S.pila.push([pag, arg]); ultimoVerso = 'avanti'; chiudiCassetto(); disegna(); }
+function sezione(nome) { S.pila = [[nome]]; ultimoVerso = 'sfuma'; chiudiCassetto(); disegna(); }
+function indietro() { if (S.pila.length > 1) { S.pila.pop(); ultimoVerso = 'indietro'; disegna(); } }
+function apriCassetto() { document.getElementById('cassetto').classList.add('aperto'); document.getElementById('velo').classList.add('aperto'); }
+function chiudiCassetto() { document.getElementById('cassetto').classList.remove('aperto'); document.getElementById('velo').classList.remove('aperto'); }
+let timerAvviso;
+function avviso(t) { const a = document.getElementById('avviso'); document.getElementById('avviso-testo').textContent = t; a.classList.add('visto'); clearTimeout(timerAvviso); timerAvviso = setTimeout(() => a.classList.remove('visto'), 2600); }
+function foglio(html) { const f = document.getElementById('foglio'); f.innerHTML = '<div class="maniglia"></div>' + html; f.classList.add('aperto'); document.getElementById('velo-foglio').classList.add('aperto'); }
+function chiudiFoglio() { document.getElementById('foglio').classList.remove('aperto'); document.getElementById('velo-foglio').classList.remove('aperto'); }
+function foglioNuovoUtente() {
+  foglio('<h2 style="margin:0;font-size:22px;font-weight:800">Nuovo utente</h2><div class="campo"><label for="nu-nome">Nome</label><input id="nu-nome" value="Giorgio Pozzan"></div><div class="campo"><label for="nu-email">Email</label><input id="nu-email" value="giorgio@esempio.it"></div><span class="etichetta">Ruolo</span>' +
+    Object.keys(ruoli).filter(k => k !== 'titolare').concat(['titolare']).map(k => '<button type="button" class="scelta-ruolo' + (S.nuovoRuolo === k ? ' scelto' : '') + '" data-nuovo-ruolo="' + k + '"><span class="pallino"></span><span style="display:flex;flex-direction:column;gap:2px"><b>' + ruoli[k].nome + '</b><span>' + ruoli[k].frase + '</span></span></button>').join('') +
+    '<button type="button" class="principale" data-azione="crea-utente">Crea l\'utente</button>');
+}
+
+// ------------------------------------------------------------------ tocchi
+document.addEventListener('click', e => {
+  const b = e.target.closest('button, [data-vai]');
+  if (!b) return;
+  const d = b.dataset;
+  if (d.vai) { const [p, a] = d.vai.split('|'); return vai(p, a); }
+  if (d.sezione) return sezione(d.sezione);
+  if (d.tab) { const [id, t] = d.tab.split('|'); S.tab[id] = t; return disegna(); }
+  if (d.segClienti) { S.segClienti = d.segClienti; return disegna(); }
+  if (d.ruoloPerm) { S.ruoloPerm = d.ruoloPerm; return disegna(); }
+  if (d.perm) { const [r, m, l] = d.perm.split('|'); perm[r][m] = Number(l); disegna(); return avviso('Permesso cambiato: vale da subito'); }
+  if (d.avanza) { const [id, i] = d.avanza.split('|'); const p = com(id).prestazioni[i]; p.av = Math.min(100, p.av + 10); p.stato = p.av === 100 ? 'Fatta' : 'In corso'; return disegna(); }
+  if (d.finisci) { const [id, i] = d.finisci.split('|'); const p = com(id).prestazioni[i]; p.av = 100; p.stato = 'Fatta'; disegna(); return avviso(p.nome + ': fatta'); }
+  if (d.nuovoRuolo) { S.nuovoRuolo = d.nuovoRuolo; return foglioNuovoUtente(); }
+  switch (d.azione) {
+    case 'menu': return apriCassetto();
+    case 'indietro': return indietro();
+    case 'entra': S.errAccesso = false; S.pila = [['dashboard']]; ultimoVerso = 'avanti'; return disegna();
+    case 'sbaglia': S.errAccesso = true; return disegna();
+    case 'mostra-pw': { const i = document.getElementById('acc-pw'); i.type = i.type === 'password' ? 'text' : 'password'; return; }
+    case 'esci': chiudiCassetto(); S.pila = [['accesso']]; return disegna();
+    case 'avviso': return avviso(d.testo);
+    case 'richiudi': S.latoChiuso = !S.latoChiuso; return disegna();
+    case 'nuovo-utente': S.nuovoRuolo = 'collaboratore'; return foglioNuovoUtente();
+    case 'crea-utente': chiudiFoglio(); return avviso('Utente creato come ' + ruoli[S.nuovoRuolo].nome);
+    case 'menu-commessa': return foglio('<h2 style="margin:0;font-size:20px;font-weight:800">Altre azioni</h2><div class="scheda righe">' + ['Duplica', 'Duplica come modello', 'Sospendi', 'Chiudi', 'Archivia'].map(x => '<button type="button" class="riga" data-azione="chiudi-avviso" data-testo="' + x + ': fatto"><span class="corpo"><span class="t1">' + x + '</span></span></button>').join('') + '</div>');
+    case 'chiudi-avviso': chiudiFoglio(); return avviso(d.testo);
+  }
+});
+document.getElementById('velo').addEventListener('click', chiudiCassetto);
+document.getElementById('velo-foglio').addEventListener('click', chiudiFoglio);
+document.getElementById('avviso-annulla').addEventListener('click', () => document.getElementById('avviso').classList.remove('visto'));
+// Scorrere dal bordo sinistro apre il menu, verso sinistra lo chiude.
+(function () {
+  const t = document.getElementById('telefono'); let x0 = null, daBordo = false;
+  t.addEventListener('pointerdown', e => { const r = t.getBoundingClientRect(); x0 = e.clientX; daBordo = e.clientX - r.left < 24; });
+  t.addEventListener('pointerup', e => { if (x0 === null) return; const dx = e.clientX - x0; if (daBordo && dx > 50 && S.pila[S.pila.length - 1][0] !== 'accesso') apriCassetto(); if (dx < -50) chiudiCassetto(); x0 = null; });
+})();
+function scegliModo(m) {
+  S.modo = m;
+  document.getElementById('b-tel').setAttribute('aria-pressed', m === 'tel');
+  document.getElementById('b-pc').setAttribute('aria-pressed', m === 'pc');
+  document.getElementById('telefono').hidden = m !== 'tel';
+  document.getElementById('computer-scala').hidden = m !== 'pc';
+  document.getElementById('palco').className = 'palco modo-' + m;
+  disegna();
+}
+function scegliChi(c) {
+  S.chi = c;
+  document.getElementById('b-manuel').setAttribute('aria-pressed', c === 'manuel');
+  document.getElementById('b-marco').setAttribute('aria-pressed', c === 'marco');
+  const [pag] = S.pila[S.pila.length - 1];
+  if (pag !== 'accesso' && !puo(sezioneDi(pag))) S.pila = [['dashboard']];
+  disegna();
+}
+document.getElementById('b-tel').addEventListener('click', () => scegliModo('tel'));
+document.getElementById('b-pc').addEventListener('click', () => scegliModo('pc'));
+document.getElementById('b-manuel').addEventListener('click', () => scegliChi('manuel'));
+document.getElementById('b-marco').addEventListener('click', () => scegliChi('marco'));
+window.addEventListener('resize', () => { if (S.modo === 'pc') adattaComputer(); });
+disegna();
+})();
+</script>

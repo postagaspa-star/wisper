@@ -3,4 +3,5 @@
     <string name="app_name">Wisper</string>
     <string name="canale_salvataggi">Rapportini sul foglio</string>
     <string name="canale_versioni">Versioni nuove di Wisper</string>
+    <string name="canale_promemoria">Promemoria di attività e appuntamenti</string>
 </resources>

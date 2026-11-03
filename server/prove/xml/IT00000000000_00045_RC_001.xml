@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ns3:RicevutaConsegna xmlns:ns3="http://ivaservizi.agenziaentrate.gov.it/docs/xsd/messaggi/v1.0" versione="1.0">
+  <IdentificativoSdI>111111111</IdentificativoSdI>
+  <NomeFile>IT00000000000_00045.xml</NomeFile>
+  <Hash>0000000000000000000000000000000000000000000000000000000000000000</Hash>
+  <DataOraRicezione>2026-10-19T10:00:00.000+02:00</DataOraRicezione>
+  <DataOraConsegna>2026-10-19T10:05:00.000+02:00</DataOraConsegna>
+  <Destinatario>
+    <Codice>0000000</Codice>
+    <Descrizione>Rossi Impianti Srl</Descrizione>
+  </Destinatario>
+  <MessageId>900000001</MessageId>
+</ns3:RicevutaConsegna>

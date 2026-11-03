@@ -1,0 +1,1592 @@
+<!doctype html>
+<html lang="it">
+<meta charset="utf-8">
+<title>Wisper Gestionale fase 5</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap">
+<style>
+/* Prototipo della fase 5 del gestionale (documenti, ticket e assistenza): telefono (390x844) e computer (1280x800)
+   con gli stessi dati, anche affiancati. Impalcatura e stili dal prototipo della fase 4; colori, caratteri e misure da
+   docs/aspetto.md. Solo dati di esempio. Accordo: docs/gestionale/fase5.md. */
+:root {
+  --fondo: #F4F4F2; --scheda: #FFFFFF; --sup: #E7E6E2; --bordo: #E6E5E1; --bordo-campo: #CFCEC9; --riga: #EFEEEB;
+  --testo: #1B1B1F; --testo2: #3F3F46; --tenue: #5F5F67; --tenuissimo: #8A8A92;
+  --giallo: #FFC53D; --giallo-premuto: #F2B21E; --giallo-tenue: #FFF4D6; --giallo-testo: #8A5A00; --giallo-tratteggio: #B98300;
+  --firmato: #1F6A30; --firmato-f: #EBF7EE; --inviato: #1E4FA8; --inviato-f: #EAF1FD; --fatturato: #3F3F46; --fatturato-f: #E7E6E2;
+  --rosso: #C92A2A; --rosso-f: #FDEEEC; --rosso-t: #9B1C1C; --ambra: #E59F00; --binario: #E2E1DD;
+  --nero: #1B1B1F; --su-nero: #FFFFFF; --velo: rgba(20,20,22,.45); --scelta: #FFF8E5; --cornice: #D9D8D3; --palco: #ECEBE7;
+  --blu-f: #EAF1FD; --blu-t: #1E4FA8; --verde-f: #EBF7EE; --verde-t: #1F6A30; --viola-f: #F1ECFE; --viola-t: #5532C9; --ambra-f: #FBF3E3; --ambra-t: #8A5A12;
+  --font: 'Figtree', system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --fondo: #121214; --scheda: #1C1C1F; --sup: #2A2A2E; --bordo: #2C2C30; --bordo-campo: #46464D; --riga: #2A2A2E;
+  --testo: #F2F2F3; --testo2: #D4D4D8; --tenue: #A1A1AA; --tenuissimo: #71717A;
+  --giallo-tenue: #3A2F14; --giallo-testo: #FFD76A; --giallo-tratteggio: #C99A2A;
+  --firmato: #8CE0A4; --firmato-f: #1E3326; --inviato: #9EC1FF; --inviato-f: #1C2A44; --fatturato: #D4D4D8; --fatturato-f: #2A2A2E;
+  --rosso: #E03131; --rosso-f: #3A1C1C; --rosso-t: #FFA8A8; --binario: #2C2C30;
+  --nero: #F2F2F3; --su-nero: #1B1B1F; --velo: rgba(0,0,0,.6); --scelta: #2A2414; --cornice: #2C2C30; --palco: #0B0B0C;
+  --blu-f: #1C2A44; --blu-t: #9EC1FF; --verde-f: #1E3326; --verde-t: #8CE0A4; --viola-f: #2A2340; --viola-t: #C4B5FD; --ambra-f: #33281A; --ambra-t: #F2C27A;
+  color-scheme: dark;
+} }
+:root[data-theme="dark"] {
+  --fondo: #121214; --scheda: #1C1C1F; --sup: #2A2A2E; --bordo: #2C2C30; --bordo-campo: #46464D; --riga: #2A2A2E;
+  --testo: #F2F2F3; --testo2: #D4D4D8; --tenue: #A1A1AA; --tenuissimo: #71717A;
+  --giallo-tenue: #3A2F14; --giallo-testo: #FFD76A; --giallo-tratteggio: #C99A2A;
+  --firmato: #8CE0A4; --firmato-f: #1E3326; --inviato: #9EC1FF; --inviato-f: #1C2A44; --fatturato: #D4D4D8; --fatturato-f: #2A2A2E;
+  --rosso: #E03131; --rosso-f: #3A1C1C; --rosso-t: #FFA8A8; --binario: #2C2C30;
+  --nero: #F2F2F3; --su-nero: #1B1B1F; --velo: rgba(0,0,0,.6); --scelta: #2A2414; --cornice: #2C2C30; --palco: #0B0B0C;
+  --blu-f: #1C2A44; --blu-t: #9EC1FF; --verde-f: #1E3326; --verde-t: #8CE0A4; --viola-f: #2A2340; --viola-t: #C4B5FD; --ambra-f: #33281A; --ambra-t: #F2C27A;
+  color-scheme: dark;
+}
+html, body { height: 100%; margin: 0; }
+body { background: var(--palco); color: var(--testo); font-family: var(--font); -webkit-tap-highlight-color: transparent; }
+* { box-sizing: border-box; }
+button, input { font-family: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 3px solid var(--giallo); outline-offset: 2px; }
+
+/* ---------- palco e commutatore ---------- */
+.barra-proto { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: center; padding-block: 14px 0;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.barra-proto .pill-proto { font-size: 12px; font-weight: 800; letter-spacing: .08em; background: var(--giallo); color: #1B1B1F; border-radius: 999px; padding: 5px 11px; }
+.seg { display: inline-flex; background: var(--sup); border-radius: 999px; padding: 4px; gap: 2px; }
+.seg button { border: none; background: transparent; border-radius: 999px; min-height: 40px; padding: 0 16px; font-size: 15px; font-weight: 700; color: var(--testo2); }
+.seg button[aria-pressed="true"] { background: var(--scheda); color: var(--testo); box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+.palco { display: flex; align-items: flex-start; justify-content: center; gap: 36px; padding-block: 18px 32px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.telefono { width: 390px; height: 844px; position: relative; overflow: hidden; background: var(--fondo); border-radius: 44px;
+  border: 10px solid var(--cornice); box-shadow: 0 30px 80px rgba(20,20,22,.18); flex: none; }
+.computer-scala { flex: none; overflow: hidden; }
+.computer { transform-origin: top left; }
+.computer { width: 1280px; height: 800px; position: relative; overflow: hidden; background: var(--fondo); border-radius: 14px;
+  border: 1px solid var(--cornice); box-shadow: 0 30px 80px rgba(20,20,22,.18); display: flex; }
+.accanto { max-width: 300px; display: flex; flex-direction: column; gap: 12px; color: var(--testo2); font-size: 15px; line-height: 1.45; padding-top: 30px; }
+.accanto h1 { margin: 0; font-size: 26px; font-weight: 800; letter-spacing: -0.5px; color: var(--testo); text-wrap: balance; }
+.accanto ol { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; }
+.accanto .ruolo-scelta { display: flex; flex-direction: column; gap: 6px; }
+.accanto .ruolo-scelta label { font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--tenue); }
+@media (max-width: 1100px) { .accanto { display: none; } }
+@media (max-width: 520px) {
+  .palco.modo-tel { padding: 0; display: block; }
+  .modo-tel .telefono { width: 100%; height: calc(100vh - 70px); border: none; border-radius: 0; box-shadow: none; }
+}
+
+/* ---------- elementi comuni ---------- */
+.schermo { position: absolute; inset: 0; overflow-y: auto; overflow-x: hidden; padding: 10px 20px 120px; display: flex; flex-direction: column; gap: 14px; scrollbar-width: none; }
+.schermo::-webkit-scrollbar { display: none; }
+.schermo > * { flex-shrink: 0; }
+.entra-avanti { animation: avanti 260ms cubic-bezier(.2,.8,.2,1); }
+.entra-indietro { animation: indietro 260ms cubic-bezier(.2,.8,.2,1); }
+.entra-sfuma { animation: sfuma 200ms ease-out; }
+@keyframes avanti { from { opacity: 0; transform: translateX(28px); } }
+@keyframes indietro { from { opacity: 0; transform: translateX(-28px); } }
+@keyframes sfuma { from { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .entra-avanti, .entra-indietro, .entra-sfuma { animation: none; } * { transition: none !important; } }
+
+.testa { display: flex; align-items: center; justify-content: space-between; min-height: 52px; gap: 8px; }
+.testa .sx, .testa .dx { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.btn-menu { display: inline-flex; align-items: center; gap: 8px; height: 44px; padding: 0 14px 0 10px; border-radius: 22px; border: none; background: var(--sup); font-size: 15px; font-weight: 800; }
+.tondo { width: 44px; height: 44px; border-radius: 22px; border: none; background: var(--sup); display: flex; align-items: center; justify-content: center; flex: none; }
+.dove { font-size: 13px; font-weight: 700; color: var(--tenue); letter-spacing: .02em; }
+.titolo { font-size: 30px; font-weight: 800; letter-spacing: -0.6px; margin: 0; line-height: 1.12; text-wrap: balance; }
+.sottotitolo { font-size: 15px; font-weight: 600; color: var(--tenue); margin: 0; }
+.etichetta { font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--tenue); }
+.scheda { background: var(--scheda); border: 1px solid var(--bordo); border-radius: 22px; padding: 18px; }
+.scheda.righe { padding: 0 18px; }
+.riga { display: flex; align-items: center; gap: 12px; min-height: 64px; padding: 12px 0; border-top: 1px solid var(--riga); text-align: left; background: none; border-left: none; border-right: none; border-bottom: none; width: 100%; font-size: inherit; }
+.riga:first-child { border-top: none; }
+.riga .corpo { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.riga .t1 { font-size: 16px; font-weight: 800; }
+.riga .t2 { font-size: 14px; font-weight: 600; color: var(--tenue); }
+.riga .quanto { font-size: 15px; font-weight: 800; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.riga .freccia { color: var(--tenuissimo); flex: none; }
+.ico-riga { width: 40px; height: 40px; border-radius: 12px; display: flex; align-items: center; justify-content: center; flex: none; }
+.ico-rosso { background: var(--rosso-f); color: var(--rosso-t); }
+.ico-giallo { background: var(--giallo-tenue); color: var(--giallo-testo); }
+.ico-grigio { background: var(--sup); color: var(--testo2); }
+.ico-blu { background: var(--blu-f); color: var(--blu-t); }
+.cerchio { width: 40px; height: 40px; border-radius: 20px; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 14px; flex: none; }
+.c-blu { background: var(--blu-f); color: var(--blu-t); } .c-verde { background: var(--verde-f); color: var(--verde-t); }
+.c-viola { background: var(--viola-f); color: var(--viola-t); } .c-ambra { background: var(--ambra-f); color: var(--ambra-t); }
+.pill { display: inline-flex; align-items: center; height: 26px; padding: 0 10px; border-radius: 999px; font-size: 13px; font-weight: 800; white-space: nowrap; }
+.p-grigio { background: var(--sup); color: var(--testo2); } .p-verde { background: var(--firmato-f); color: var(--firmato); }
+.p-blu { background: var(--inviato-f); color: var(--inviato); } .p-giallo { background: var(--giallo-tenue); color: var(--giallo-testo); }
+.p-rosso { background: var(--rosso-f); color: var(--rosso-t); }
+.codice { display: inline-flex; align-items: center; height: 26px; padding: 0 9px; border-radius: 8px; background: var(--nero); color: var(--giallo); font-size: 13px; font-weight: 800; letter-spacing: .02em; }
+.principale { height: 64px; border-radius: 18px; border: none; background: var(--giallo); color: #1B1B1F; font-size: 18px; font-weight: 800; width: 100%; display: flex; align-items: center; justify-content: center; gap: 10px; }
+.principale:active { background: var(--giallo-premuto); }
+.secondario { height: 48px; border-radius: 14px; border: 1.5px solid var(--bordo-campo); background: var(--scheda); font-size: 16px; font-weight: 700; padding: 0 16px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+.testo-link { background: none; border: none; color: var(--giallo-testo); font-size: 15px; font-weight: 700; padding: 8px 0; }
+.in-basso { position: absolute; left: 0; right: 0; bottom: 0; padding: 18px 20px 26px; background: linear-gradient(to bottom, transparent, var(--fondo) 30%); }
+.segmenti { display: flex; background: var(--sup); border-radius: 14px; padding: 4px; gap: 4px; overflow-x: auto; scrollbar-width: none; }
+.segmenti button { flex: 1 0 auto; border: none; background: transparent; border-radius: 10px; min-height: 40px; padding: 0 12px; font-size: 14px; font-weight: 700; color: var(--testo2); white-space: nowrap; }
+.segmenti button[aria-pressed="true"] { background: var(--scheda); color: var(--testo); box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+.cerca { display: flex; align-items: center; gap: 10px; height: 52px; border-radius: 16px; border: 1.5px solid var(--bordo-campo); background: var(--scheda); padding: 0 14px; color: var(--tenue); font-size: 16px; font-weight: 600; }
+.cerca input { border: none; outline: none; background: transparent; font-size: 16px; font-weight: 600; flex: 1; min-width: 0; }
+.campo { display: flex; flex-direction: column; gap: 6px; }
+.campo label { font-size: 13px; font-weight: 700; color: var(--testo2); }
+.campo input { height: 56px; border-radius: 16px; border: 1.5px solid var(--bordo-campo); background: var(--scheda); padding: 0 16px; font-size: 17px; font-weight: 600; outline: none; width: 100%; }
+.campo input:focus { border-color: var(--testo); }
+.avviso-errore { background: var(--rosso-f); color: var(--rosso-t); border-radius: 14px; padding: 12px 14px; font-size: 15px; font-weight: 700; }
+.coppie { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 14px 16px; }
+.coppia { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.coppia .k { font-size: 13px; font-weight: 600; color: var(--tenue); }
+.coppia .v { font-size: 16px; font-weight: 700; overflow-wrap: anywhere; }
+.barra-av { height: 8px; background: var(--binario); border-radius: 4px; overflow: hidden; }
+.barra-av i { display: block; height: 100%; background: var(--nero); border-radius: 4px; transition: width 400ms cubic-bezier(.2,.8,.2,1); }
+.barra-av i.sforato { background: var(--rosso); } .barra-av i.attenzione { background: var(--ambra); }
+.tre-num { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.num-box { background: var(--scheda); border: 1px solid var(--bordo); border-radius: 18px; padding: 12px; display: flex; flex-direction: column; gap: 2px; text-align: left; }
+.num-box b { font-size: 26px; font-weight: 800; letter-spacing: -0.5px; font-variant-numeric: tabular-nums; }
+.num-box span { font-size: 13px; font-weight: 700; color: var(--tenue); }
+.num-box.rosso b { color: var(--rosso); }
+.vuoto { font-size: 15px; color: var(--tenue); font-weight: 600; padding: 14px 0; }
+
+/* il tuo giorno */
+.settimana { display: flex; justify-content: space-between; gap: 4px; }
+.giorno { display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 12px; font-weight: 700; color: var(--tenue); min-width: 44px; background: none; border: none; }
+.giorno .c { width: 40px; height: 40px; border-radius: 20px; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 800; }
+.giorno.fatto .c { background: var(--nero); color: var(--su-nero); }
+.giorno.manca .c { border: 2px dashed var(--giallo-tratteggio); color: var(--giallo-testo); }
+.giorno.oggi .c { background: var(--giallo); color: #1B1B1F; }
+.giorno.futuro .c { background: var(--sup); color: var(--tenuissimo); }
+.giorno .sotto { color: var(--giallo-testo); }
+
+/* menu laterale del telefono */
+.velo { position: absolute; inset: 0; background: var(--velo); opacity: 0; pointer-events: none; transition: opacity 260ms ease; z-index: 20; }
+.velo.aperto { opacity: 1; pointer-events: auto; }
+.cassetto { position: absolute; top: 0; bottom: 0; left: 0; width: 312px; background: var(--scheda); z-index: 21; transform: translateX(-100%); transition: transform 300ms cubic-bezier(.2,.8,.2,1); display: flex; flex-direction: column; padding: 16px 12px 18px; gap: 6px; border-radius: 0 24px 24px 0; }
+.cassetto.aperto { transform: none; }
+.cassetto .chi { display: flex; align-items: center; gap: 12px; padding: 10px 8px 16px; border-bottom: 1px solid var(--riga); margin-bottom: 6px; }
+.voce { display: flex; align-items: center; gap: 14px; min-height: 52px; padding: 0 14px; border-radius: 16px; border: none; background: none; font-size: 16px; font-weight: 700; text-align: left; width: 100%; color: var(--testo2); }
+.voce.attiva { background: var(--giallo-tenue); color: var(--testo); font-weight: 800; }
+.voce .num-v { margin-left: auto; min-width: 24px; height: 24px; border-radius: 12px; background: var(--giallo); color: #1B1B1F; font-size: 13px; font-weight: 800; display: flex; align-items: center; justify-content: center; padding: 0 7px; }
+.voce .n-spec { font-size: 12px; color: var(--tenuissimo); font-weight: 700; width: 18px; font-variant-numeric: tabular-nums; }
+.cassetto .piede { margin-top: auto; border-top: 1px solid var(--riga); padding: 12px 8px 0; display: flex; flex-direction: column; gap: 4px; font-size: 13px; font-weight: 600; color: var(--tenue); }
+.stato-ok { display: flex; align-items: center; gap: 6px; } .stato-ok i { width: 8px; height: 8px; border-radius: 4px; background: var(--firmato); }
+
+/* foglio dal basso */
+.foglio { position: absolute; left: 0; right: 0; bottom: 0; background: var(--scheda); border-radius: 26px 26px 0 0; z-index: 31; padding: 10px 20px 26px; transform: translateY(100%); transition: transform 320ms cubic-bezier(.2,.8,.2,1); display: flex; flex-direction: column; gap: 12px; max-height: 88%; overflow-y: auto; }
+.foglio.aperto { transform: none; }
+.foglio .maniglia { width: 40px; height: 5px; border-radius: 3px; background: var(--bordo-campo); align-self: center; margin-bottom: 6px; }
+.velo-foglio { z-index: 30; }
+.scelta-ruolo { display: flex; gap: 12px; align-items: flex-start; border: 1.5px solid var(--bordo); border-radius: 16px; padding: 14px; text-align: left; background: var(--scheda); width: 100%; }
+.scelta-ruolo.scelto { border: 2px solid var(--nero); background: var(--scelta); }
+.scelta-ruolo b { font-size: 16px; } .scelta-ruolo span { font-size: 14px; color: var(--tenue); font-weight: 600; }
+.pallino { width: 22px; height: 22px; border-radius: 11px; border: 2px solid var(--bordo-campo); flex: none; margin-top: 1px; display: flex; align-items: center; justify-content: center; }
+.scelto .pallino { border-color: var(--nero); } .scelto .pallino::after { content: ""; width: 10px; height: 10px; border-radius: 5px; background: var(--nero); }
+
+/* permessi */
+.liv { display: flex; background: var(--sup); border-radius: 12px; padding: 3px; gap: 2px; }
+.liv button { border: none; background: none; border-radius: 9px; min-height: 36px; padding: 0 10px; font-size: 13px; font-weight: 800; color: var(--tenue); }
+.liv button[aria-pressed="true"].l0 { background: var(--scheda); color: var(--testo2); }
+.liv button[aria-pressed="true"].l1 { background: var(--inviato-f); color: var(--inviato); }
+.liv button[aria-pressed="true"].l2 { background: var(--firmato-f); color: var(--firmato); }
+.liv.bloccato { opacity: .55; pointer-events: none; }
+.riga-perm { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 60px; border-top: 1px solid var(--riga); padding: 8px 0; }
+.riga-perm:first-child { border-top: none; }
+.riga-perm .nome-m { font-size: 15px; font-weight: 800; } .riga-perm .spiega { font-size: 13px; font-weight: 600; color: var(--tenue); }
+
+/* registro */
+.voce-reg { display: flex; gap: 12px; padding: 12px 0; border-top: 1px solid var(--riga); }
+.voce-reg:first-child { border-top: none; }
+.voce-reg .frase { font-size: 15px; font-weight: 600; color: var(--testo2); line-height: 1.4; }
+.voce-reg .frase b { color: var(--testo); font-weight: 800; }
+.voce-reg .quando { font-size: 13px; font-weight: 600; color: var(--tenue); margin-top: 2px; }
+.prima-dopo { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 6px; font-size: 14px; font-weight: 700; }
+.prima-dopo s { color: var(--tenue); background: var(--sup); border-radius: 6px; padding: 1px 6px; }
+.prima-dopo ins { text-decoration: none; background: var(--firmato-f); color: var(--firmato); border-radius: 6px; padding: 1px 6px; }
+
+.avviso { position: absolute; left: 20px; right: 20px; bottom: 28px; background: #1B1B1F; color: #fff; border-radius: 16px; padding: 14px 16px; font-size: 15px; font-weight: 700; display: flex; justify-content: space-between; align-items: center; z-index: 40; opacity: 0; transform: translateY(10px); transition: all 220ms ease; pointer-events: none; }
+.avviso.visto { opacity: 1; transform: none; pointer-events: auto; }
+.avviso button { background: none; border: none; color: var(--giallo); font-weight: 800; font-size: 15px; }
+
+/* ---------- computer ---------- */
+.lato { width: 248px; flex: none; background: var(--scheda); border-right: 1px solid var(--bordo); display: flex; flex-direction: column; padding: 18px 14px; gap: 4px; transition: width 260ms ease-in-out; overflow: hidden; }
+.lato.chiuso { width: 76px; }
+.lato .marchio-pc { display: flex; align-items: center; gap: 10px; padding: 4px 6px 18px; white-space: nowrap; }
+.lato .marchio-pc div { display: flex; flex-direction: column; line-height: 1.1; } .lato .marchio-pc b { font-size: 17px; font-weight: 800; } .lato .marchio-pc span { font-size: 13px; color: var(--tenue); font-weight: 600; }
+.lato .voce { white-space: nowrap; min-height: 46px; font-size: 15px; }
+.lato.chiuso .voce span.lab, .lato.chiuso .voce .num-v, .lato.chiuso .marchio-pc div, .lato.chiuso .piede-pc .lab, .lato.chiuso .voce .n-spec { display: none; }
+.lato .piede-pc { margin-top: auto; display: flex; flex-direction: column; gap: 8px; border-top: 1px solid var(--riga); padding-top: 12px; font-size: 13px; color: var(--tenue); font-weight: 600; white-space: nowrap; }
+.contenuto-pc { flex: 1; min-width: 0; overflow-y: auto; padding: 28px 40px 60px; display: flex; flex-direction: column; gap: 18px; position: relative; }
+.contenuto-pc .titolo { font-size: 34px; letter-spacing: -0.8px; }
+.pc-griglia { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 18px; align-items: start; }
+.pc-tre { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 14px; align-items: start; }
+.tabella { background: var(--scheda); border: 1px solid var(--bordo); border-radius: 20px; overflow: hidden; }
+.tabella .tr { display: grid; align-items: center; gap: 12px; padding: 0 18px; min-height: 56px; border-top: 1px solid var(--riga); font-size: 15px; }
+.tabella .tr:first-child { border-top: none; }
+.tabella .th { font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--tenue); min-height: 44px; }
+.tabella .tr.cl { cursor: pointer; } .tabella .tr.cl:hover { background: var(--scelta); }
+.n { text-align: right; font-variant-numeric: tabular-nums; }
+.btn-giallo { height: 48px; border-radius: 14px; border: none; background: var(--giallo); color: #1B1B1F; font-size: 16px; font-weight: 800; padding: 0 20px; display: inline-flex; align-items: center; gap: 8px; }
+
+/* ---------- fase 4 ---------- */
+.p-ambra { background: var(--ambra-f); color: var(--ambra-t); }
+.p-scollegato { background: transparent; color: var(--tenue); border: 1.5px dashed var(--bordo-campo); gap: 6px; height: 28px; }
+.p-proposta { background: var(--giallo-tenue); color: var(--giallo-testo); }
+.fascia { display: flex; align-items: center; gap: 10px; background: var(--giallo-tenue); color: var(--giallo-testo); border-radius: 16px; padding: 8px 8px 8px 14px; font-size: 14px; font-weight: 800; line-height: 1.3; }
+.fascia button { margin-left: auto; flex: none; height: 40px; border-radius: 12px; border: 1.5px solid var(--giallo-tratteggio); background: transparent; color: var(--giallo-testo); font-weight: 800; font-size: 14px; padding: 0 12px; }
+.fascia.rossa { background: var(--rosso-f); color: var(--rosso-t); }
+.casella { width: 28px; height: 28px; border-radius: 8px; flex: none; border: 2px solid var(--bordo-campo); background: transparent; display: flex; align-items: center; justify-content: center; padding: 0; color: var(--su-nero); }
+.casella.si { border-color: var(--nero); background: var(--nero); }
+.tocco { min-width: 48px; min-height: 48px; display: inline-flex; align-items: center; justify-content: center; background: none; border: none; padding: 0; flex: none; }
+.conti-r { display: flex; justify-content: space-between; align-items: center; gap: 10px; min-height: 34px; font-size: 15px; font-weight: 600; color: var(--testo2); }
+.conti-r .et { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.conti-r b { color: var(--testo); font-variant-numeric: tabular-nums; font-weight: 800; white-space: nowrap; }
+.conti-r.tot { border-top: 1px solid var(--riga); padding-top: 10px; margin-top: 4px; color: var(--testo); font-weight: 800; }
+.conti-r.tot b { font-size: 24px; letter-spacing: -0.4px; }
+.conti-r.netto { background: var(--fondo); border-radius: 14px; padding: 10px 12px; color: var(--testo); font-weight: 800; margin-top: 6px; }
+.conti-r.netto b { font-size: 26px; letter-spacing: -0.5px; }
+.passi { display: flex; gap: 6px; }
+.passi span { flex: 1; display: flex; flex-direction: column; gap: 6px; font-size: 12px; font-weight: 700; color: var(--tenue); }
+.passi span::before { content: ""; height: 6px; border-radius: 3px; background: var(--binario); }
+.passi span.fatto { color: var(--testo); } .passi span.fatto::before { background: var(--nero); }
+.giorno-scad { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 14px 4px 6px; font-size: 15px; font-weight: 800; }
+.giorno-scad .saldo { font-variant-numeric: tabular-nums; display: flex; align-items: center; gap: 8px; }
+.giorno-scad.sotto { color: var(--rosso-t); }
+.segno-piu { color: var(--firmato); } .segno-meno { color: var(--testo); }
+.riga.sotto { background: var(--rosso-f); margin: 0 -18px; padding-left: 18px; padding-right: 18px; }
+.finestra-velo { position: absolute; inset: 0; background: var(--velo); z-index: 50; display: none; align-items: center; justify-content: center; }
+.finestra-velo.aperta { display: flex; }
+.finestra { background: var(--scheda); border-radius: 22px; width: 900px; max-height: 740px; overflow-y: auto; padding: 24px 28px 28px; box-shadow: 0 30px 80px rgba(20,20,22,.25); display: flex; flex-direction: column; gap: 14px; }
+.finestra.stretta { width: 520px; }
+.finestra.larga { width: 1060px; }
+.finestra .testa-f { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.finestra h2 { margin: 0; font-size: 24px; font-weight: 800; letter-spacing: -0.3px; }
+.pannello { position: absolute; top: 0; right: 0; bottom: 0; width: 440px; background: var(--scheda); border-left: 1px solid var(--bordo); box-shadow: -18px 0 40px rgba(20,20,22,.10); overflow-y: auto; padding: 20px 24px 30px; display: none; flex-direction: column; gap: 14px; z-index: 10; }
+.pannello.aperto { display: flex; }
+.avviso-pc { position: absolute; left: 50%; bottom: 26px; transform: translate(-50%, 10px); background: #1B1B1F; color: #fff; border-radius: 14px; padding: 12px 16px; font-size: 15px; font-weight: 700; z-index: 60; opacity: 0; transition: all 220ms ease; pointer-events: none; display: flex; gap: 16px; align-items: center; }
+.avviso-pc.visto { opacity: 1; transform: translate(-50%, 0); }
+.avviso-pc button { background: none; border: none; color: var(--giallo); font-weight: 800; font-size: 15px; }
+.campo-copia { display: grid; grid-template-columns: 190px minmax(0,1fr) auto; align-items: center; gap: 12px; min-height: 48px; border-top: 1px solid var(--riga); font-size: 15px; }
+.campo-copia:first-child { border-top: none; }
+.campo-copia .k { color: var(--tenue); font-weight: 600; } .campo-copia .v { font-weight: 700; overflow-wrap: anywhere; }
+.btn-copia { height: 40px; border-radius: 12px; border: 1.5px solid var(--bordo-campo); background: var(--scheda); font-size: 14px; font-weight: 700; padding: 0 12px; display: inline-flex; align-items: center; gap: 6px; }
+.btn-copia.fatto { border-color: var(--firmato); color: var(--firmato); }
+.btn-piccolo { height: 40px; border-radius: 12px; border: 1.5px solid var(--bordo-campo); background: var(--scheda); font-size: 14px; font-weight: 700; padding: 0 12px; display: inline-flex; align-items: center; gap: 6px; }
+.mancano { background: var(--giallo-tenue); color: var(--giallo-testo); border-radius: 12px; padding: 8px 12px; font-size: 14px; font-weight: 700; }
+.barre { display: flex; align-items: flex-end; gap: 10px; height: 190px; position: relative; padding-top: 10px; }
+.barre .col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; height: 100%; justify-content: flex-end; font-size: 12px; font-weight: 700; color: var(--tenue); }
+.barre .coppia-b { display: flex; gap: 3px; align-items: flex-end; height: 100%; width: 100%; justify-content: center; }
+.barre i { display: block; width: 42%; border-radius: 6px 6px 2px 2px; background: var(--nero); }
+.barre i.b2 { background: var(--firmato); }
+.barre i.uscita { background: var(--rosso); }
+.legenda { display: flex; gap: 16px; font-size: 13px; font-weight: 700; color: var(--tenue); align-items: center; flex-wrap: wrap; }
+.legenda i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+.palco.modo-due { justify-content: flex-start; }
+.zona-file { border: 2px dashed var(--bordo-campo); border-radius: 18px; background: var(--scelta); min-height: 150px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; font-weight: 800; font-size: 16px; color: var(--testo2); }
+details.chiuso { background: var(--scheda); border: 1px solid var(--bordo); border-radius: 22px; padding: 0 18px; }
+details.chiuso summary { min-height: 56px; display: flex; align-items: center; justify-content: space-between; font-size: 15px; font-weight: 800; cursor: pointer; list-style: none; }
+details.chiuso summary::-webkit-details-marker { display: none; }
+.voce-df { display: flex; align-items: center; gap: 4px; min-height: 64px; padding: 6px 0; border-top: 1px solid var(--riga); }
+.voce-df:first-child { border-top: none; }
+.voce-df .corpo { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; padding-left: 4px; }
+.voce-df .t1 { font-size: 15px; font-weight: 800; } .voce-df .t2 { font-size: 13px; font-weight: 600; color: var(--tenue); }
+.voce-df .quanto { font-size: 15px; font-weight: 800; white-space: nowrap; font-variant-numeric: tabular-nums; text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+.contenuto-pc > * { flex-shrink: 0; }
+.accanto[hidden] { display: none; }
+.segmenti.stretti button { padding: 0 8px; font-size: 13.5px; }
+.num-box.euro-tel b { font-size: 15px !important; white-space: nowrap; letter-spacing: -0.3px; }
+.prova-esito { position: fixed; left: 8px; bottom: 8px; background: #1B1B1F; color: #fff; font: 12px/1.4 monospace; padding: 8px 10px; border-radius: 8px; z-index: 99; max-width: 60vw; white-space: pre-wrap; }
+
+/* ---------- fase 5: documenti, ticket e assistenza ---------- */
+.ico-ambra { background: var(--ambra-f); color: var(--ambra-t); }
+.ico-verde { background: var(--verde-f); color: var(--verde-t); }
+.ico-viola { background: var(--viola-f); color: var(--viola-t); }
+.p-tenue { background: transparent; color: var(--tenue); border: 1.5px solid var(--bordo-campo); }
+.p-coll { background: var(--blu-f); color: var(--blu-t); gap: 6px; }
+.p-nero { background: var(--nero); color: var(--giallo); }
+.pill-riga { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+.pillole { display: flex; flex-wrap: wrap; gap: 8px; }
+.pillole button { min-height: 48px; border-radius: 999px; border: 1.5px solid var(--bordo-campo); background: var(--scheda); padding: 0 16px; font-size: 15px; font-weight: 700; color: var(--testo2); }
+.pillole button[aria-pressed="true"] { background: var(--nero); border-color: var(--nero); color: var(--su-nero); }
+.pillole.piccole button { min-height: 40px; font-size: 14px; padding: 0 12px; }
+.pillole.scorre { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin: 0 -20px; padding: 0 20px; }
+.pillole.scorre::-webkit-scrollbar { display: none; }
+.pillole.scorre button { flex: none; }
+.domanda { display: flex; flex-direction: column; gap: 8px; }
+.domanda > label, .domanda > span.q { font-size: 15px; font-weight: 800; }
+.campo textarea { min-height: 96px; border-radius: 16px; border: 1.5px solid var(--bordo-campo); background: var(--scheda); padding: 12px 16px; font: 600 16px/1.45 var(--font); color: inherit; outline: none; width: 100%; resize: vertical; }
+.campo textarea:focus { border-color: var(--testo); }
+.esito-prio { display: flex; align-items: center; justify-content: space-between; gap: 10px; background: var(--fondo); border-radius: 16px; padding: 10px 14px; font-weight: 700; font-size: 15px; }
+.tempi { display: flex; flex-direction: column; gap: 4px; border-radius: 16px; padding: 12px 14px; background: var(--scheda); border: 1px solid var(--bordo); font-size: 15px; font-weight: 700; }
+.tempi.ritardo { background: var(--rosso-f); color: var(--rosso-t); border-color: transparent; }
+.foto-fila { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; }
+.foto-mini { width: 84px; height: 84px; border-radius: 14px; flex: none; background: linear-gradient(135deg, #8d8a80, #5f5d57); position: relative; overflow: hidden; }
+.foto-mini::after { content: ""; position: absolute; left: 18px; top: 22px; width: 46px; height: 36px; border: 3px solid rgba(255,255,255,.75); border-radius: 6px; }
+.foto-nuova { width: 84px; height: 84px; border-radius: 14px; flex: none; border: 2px dashed var(--giallo-tratteggio); background: transparent; color: var(--giallo-testo); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; font-size: 12px; font-weight: 800; }
+.data-box { width: 54px; flex: none; border-radius: 14px; background: var(--sup); display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 54px; line-height: 1.05; }
+.data-box b { font-size: 20px; font-weight: 800; } .data-box span { font-size: 12px; font-weight: 700; color: var(--tenue); }
+.data-box.rosso { background: var(--rosso-f); color: var(--rosso-t); } .data-box.rosso span { color: var(--rosso-t); }
+.data-box.ambra { background: var(--ambra-f); color: var(--ambra-t); } .data-box.ambra span { color: var(--ambra-t); }
+.tempo-voce { display: flex; gap: 12px; padding: 10px 0; border-top: 1px solid var(--riga); }
+.tempo-voce:first-child { border-top: none; }
+.tempo-voce .quando { font-size: 13px; font-weight: 700; color: var(--tenue); width: 74px; flex: none; padding-top: 2px; }
+.tempo-voce .cosa { font-size: 15px; font-weight: 600; color: var(--testo2); line-height: 1.4; }
+.tempo-voce .cosa b { color: var(--testo); font-weight: 800; }
+.anteprima-pdf { background: #fff; border: 1px solid var(--bordo); border-radius: 12px; height: 220px; padding: 18px 20px; display: flex; flex-direction: column; gap: 8px; overflow: hidden; }
+.anteprima-pdf i { display: block; height: 7px; border-radius: 4px; background: #E3E2DE; }
+.anteprima-pdf i.t { height: 12px; width: 55%; background: #C9C8C3; }
+.anteprima-pdf .schema { flex: 1; border: 2px solid #D0CFCA; border-radius: 6px; margin-top: 6px; background:
+  linear-gradient(#D0CFCA, #D0CFCA) 30% 0 / 2px 100% no-repeat, linear-gradient(#D0CFCA, #D0CFCA) 70% 0 / 2px 100% no-repeat, linear-gradient(#D0CFCA, #D0CFCA) 0 50% / 100% 2px no-repeat; }
+.indirizzo { font-family: ui-monospace, Consolas, monospace; font-size: 13px; background: var(--fondo); border-radius: 12px; padding: 10px 12px; overflow-wrap: anywhere; color: var(--testo2); }
+.pannello > *, .finestra > * { flex-shrink: 0; }
+.riga-rete[hidden] { display: none; }
+.riga-rete { position: absolute; left: 20px; right: 20px; bottom: 100px; z-index: 15; display: flex; align-items: center; gap: 8px; justify-content: center; background: var(--sup); color: var(--testo2); border-radius: 999px; min-height: 40px; padding: 0 14px; font-size: 14px; font-weight: 700; pointer-events: none; }
+.firma-box { background: #fff; border: 1.5px solid #CFCEC9; border-radius: 18px; height: 230px; position: relative; }
+.firma-box svg { position: absolute; inset: 0; }
+.firma-box .linea { position: absolute; left: 24px; right: 24px; bottom: 54px; border-top: 1.5px solid #CFCEC9; }
+.stepper { display: flex; align-items: center; gap: 10px; }
+.stepper button { width: 52px; height: 52px; border-radius: 26px; border: none; background: var(--sup); font-size: 24px; font-weight: 700; }
+.stepper b { font-size: 26px; font-weight: 800; min-width: 76px; text-align: center; font-variant-numeric: tabular-nums; }
+.barra-passi { height: 6px; border-radius: 3px; background: var(--binario); overflow: hidden; }
+.barra-passi i { display: block; height: 100%; background: var(--nero); }
+.cat-lato { display: flex; flex-direction: column; gap: 2px; width: 230px; flex: none; }
+.cat-lato button { display: flex; justify-content: space-between; align-items: center; min-height: 44px; border: none; background: none; border-radius: 12px; padding: 0 12px; font-size: 14px; font-weight: 700; color: var(--testo2); text-align: left; }
+.cat-lato button[aria-pressed="true"] { background: var(--giallo-tenue); color: var(--testo); font-weight: 800; }
+.cat-lato button span { font-size: 13px; color: var(--tenue); }
+.colonne-pc { display: flex; gap: 22px; align-items: flex-start; }
+.barra-h { display: flex; align-items: center; gap: 10px; font-size: 14px; font-weight: 700; color: var(--testo2); min-height: 40px; }
+.barra-h .nome { width: 150px; flex: none; }
+.barra-h .bin { flex: 1; height: 14px; background: var(--binario); border-radius: 7px; overflow: hidden; }
+.barra-h .bin i { display: block; height: 100%; background: var(--nero); border-radius: 7px; }
+.barra-h .val { width: 120px; text-align: right; flex: none; font-variant-numeric: tabular-nums; }
+.segnaposto { display: inline-flex; align-items: center; height: 32px; border-radius: 10px; border: 1.5px dashed var(--bordo-campo); padding: 0 10px; font-size: 13px; font-weight: 800; color: var(--testo2); background: transparent; }
+.manca { background: var(--giallo-tenue); color: var(--giallo-testo); border-radius: 6px; padding: 0 4px; font-weight: 800; }
+.lettera { background: #fff; color: #1B1B1F; border: 1px solid var(--bordo); border-radius: 12px; padding: 16px 18px; font-size: 14px; line-height: 1.5; white-space: pre-wrap; }
+.btn-bordo { height: 48px; border-radius: 14px; border: 1.5px solid var(--bordo-campo); background: var(--scheda); font-size: 16px; font-weight: 700; padding: 0 18px; display: inline-flex; align-items: center; gap: 8px; }
+.giorni-pf { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
+.giorni-pf button { flex: none; min-width: 64px; min-height: 60px; border-radius: 16px; border: 1.5px solid var(--bordo-campo); background: var(--scheda); display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; color: var(--tenue); }
+.giorni-pf button b { font-size: 18px; color: var(--testo); }
+.giorni-pf button[aria-pressed="true"] { background: var(--nero); border-color: var(--nero); color: var(--su-nero); }
+.giorni-pf button[aria-pressed="true"] b { color: var(--su-nero); }
+.agenda-pc { display: grid; grid-template-columns: 54px repeat(2, minmax(0,1fr)); border: 1px solid var(--bordo); border-radius: 16px; overflow: hidden; font-size: 13px; }
+.agenda-pc > div { border-top: 1px solid var(--riga); min-height: 34px; padding: 6px 8px; color: var(--tenue); font-weight: 700; }
+.agenda-pc .ev { background: var(--blu-f); color: var(--blu-t); border-radius: 8px; font-weight: 800; }
+.agenda-pc .ev.nuovo { background: var(--giallo-tenue); color: var(--giallo-testo); border: 2px dashed var(--giallo-tratteggio); }
+</style>
+
+<div class="barra-proto">
+  <span class="pill-proto">PROTOTIPO</span>
+  <div class="seg" role="group" aria-label="Dispositivo">
+    <button type="button" id="b-tel" aria-pressed="true">Telefono</button>
+    <button type="button" id="b-pc" aria-pressed="false">Computer</button>
+    <button type="button" id="b-due" aria-pressed="false">Tutti e due</button>
+  </div>
+  <div class="seg" role="group" aria-label="Chi entra">
+    <button type="button" id="b-manuel" aria-pressed="true">Manuel, titolare</button>
+    <button type="button" id="b-marco" aria-pressed="false">Marco, collaboratore</button>
+  </div>
+  <div class="seg" role="group" aria-label="Tema">
+    <button type="button" id="b-chiaro" aria-pressed="false">Chiaro</button>
+    <button type="button" id="b-scuro" aria-pressed="false">Scuro</button>
+  </div>
+  <div class="seg" role="group" aria-label="Rete del telefono">
+    <button type="button" id="b-rete" aria-pressed="true">Con la rete</button>
+    <button type="button" id="b-norete" aria-pressed="false">Senza rete</button>
+  </div>
+</div>
+
+<div class="palco modo-tel" id="palco">
+  <div class="telefono" id="telefono">
+    <div class="schermo" id="schermo"></div>
+    <div class="riga-rete" id="riga-rete" hidden></div>
+    <div class="velo" id="velo"></div>
+    <nav class="cassetto" id="cassetto" aria-label="Menu"></nav>
+    <div class="velo velo-foglio" id="velo-foglio"></div>
+    <div class="foglio" id="foglio" role="dialog" aria-modal="true"></div>
+    <div class="avviso" id="avviso"><span id="avviso-testo"></span><button type="button" id="avviso-annulla">Annulla</button></div>
+  </div>
+  <div class="computer-scala" id="computer-scala" hidden>
+    <div class="computer" id="computer">
+      <nav class="lato" id="lato" aria-label="Menu"></nav>
+      <div class="contenuto-pc" id="contenuto-pc"></div>
+      <aside class="pannello" id="pannello-pc" aria-label="Dettaglio"></aside>
+      <div class="finestra-velo" id="finestra-velo"><div class="finestra" id="finestra" role="dialog" aria-modal="true"></div></div>
+      <div class="avviso-pc" id="avviso-pc"><span id="avviso-pc-testo"></span><button type="button" id="avviso-pc-annulla">Annulla</button></div>
+    </div>
+  </div>
+  <aside class="accanto" id="accanto">
+    <h1>Fase 5: documenti, ticket e assistenza</h1>
+    <p>Un ticket tiene insieme intervento, rapportino, ore e spese che stanno già nei loro posti, e alla chiusura entra in Da fatturare. I documenti sono file sul NAS o collegamenti a OneDrive e Drive, con le revisioni.</p>
+    <ol>
+      <li>Dalla <b>Dashboard</b> apri il ticket urgente <b>TK/2026/0014</b>: <b>Prendo io</b>, poi <b>Pianifica l'intervento</b>.</li>
+      <li>Metti <b>Senza rete</b> e tocca <b>Scrivi il rapportino</b>: firma, <b>Sì, è risolto</b>. Guarda la pillola grigia, poi rimetti la rete.</li>
+      <li>Apri <b>TK/2026/0012</b> e <b>Chiudi il ticket</b>: una riga per l'intervento, va in Da fatturare.</li>
+      <li>Tocca la riga dell'impianto: lo <b>storico</b> della Cabina MT Acme.</li>
+      <li><b>Documenti</b>: apri lo schema unifilare e approva la rev. 3; poi <b>Aggiungi un documento</b> e incolla un collegamento di OneDrive.</li>
+      <li>In <b>Scadenze</b> segna fatta la verifica di terra di Batokyo e guarda la prossima.</li>
+      <li>Passa a <b>Marco</b>: vede i suoi ticket e quelli da prendere, non chiude, i documenti solo da leggere.</li>
+    </ol>
+  </aside>
+</div>
+
+<script>
+window.addEventListener('error', function (e) { document.documentElement.setAttribute('data-errore', String(e.message)); });
+(function () {
+'use strict';
+
+// ------------------------------------------------------------------ icone (tratto 2,2, mai emoji)
+const P = {
+  menu: 'M4 6h16M4 12h16M4 18h10',
+  dashboard: 'M4 4h7v7H4zM13 4h7v4h-7zM13 10h7v10h-7zM4 13h7v7H4z',
+  clienti: 'M16 19v-1.5a3.5 3.5 0 0 0-3.5-3.5h-5A3.5 3.5 0 0 0 4 17.5V19M10 10.5a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM20 19v-1.5a3.5 3.5 0 0 0-2.5-3.35M15.5 4.6a3 3 0 0 1 0 5.8',
+  commesse: 'M3 7.5A1.5 1.5 0 0 1 4.5 6H9l2 2h8.5A1.5 1.5 0 0 1 21 9.5v9a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18.5z',
+  rapportini: 'M12 7v5l3 2M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z',
+  fatturazione: 'M7 3h10v18l-2.5-1.5L12 21l-2.5-1.5L7 21zM10 8h4M10 12h4',
+  banca: 'M3 10l9-6 9 6M5 10v8M9.5 10v8M14.5 10v8M19 10v8M3 20h18',
+  amministrazione: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68 1.65 1.65 0 0 0 10 3.17V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z',
+  indietro: 'M15 18l-6-6 6-6', freccia: 'M9 18l6-6-6-6', piu: 'M12 5v14M5 12h14', cerca: 'M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM20 20l-4-4',
+  allarme: 'M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z',
+  calendario: 'M4 6.5A1.5 1.5 0 0 1 5.5 5h13A1.5 1.5 0 0 1 20 6.5v12a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 18.5zM4 10h16M8 3v4M16 3v4',
+  firma: 'M3 17c3-2 5-8 7-8s-1 8 2 8 3-4 5-4 2 3 4 3', piuvoci: 'M5 12h.01M12 12h.01M19 12h.01', chiudi: 'M6 6l12 12M18 6 6 18',
+  spunta: 'M5 12l5 5L19 7', scontrino: 'M6 3h12v18l-2-1.4-2 1.4-2-1.4-2 1.4-2-1.4L6 21zM9 8h6M9 12h6M9 16h3',
+  doc: 'M7 3h7l4 4v14H7zM14 3v4h4M10 12h5M10 16h5', preventivo: 'M7 3h7l4 4v14H7zM14 3v4h4M10 12h5M10 16h5',
+  duplica: 'M9 9h11v11H9zM5 15H4V4h11v1', condividi: 'M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7M16 6l-4-4-4 4M12 2v13',
+  scollegato: 'M9 15l-2 2a3 3 0 0 1-4.2-4.2l2-2M15 9l2-2a3 3 0 0 1 4.2 4.2l-2 2M8 4V2M4 8H2M16 20v2M20 16h2',
+  scarica: 'M12 3v12M7 10l5 5 5-5M5 21h14', importa: 'M12 21V9M7 14l5-5 5 5M5 3h14', esci: 'M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 17l5-5-5-5M15 12H3',
+  lato: 'M4 5h16v14H4zM9 5v14', grafico: 'M4 19V5M4 19h16M8 15v-4M12 15V8M16 15v-6', ripeti: 'M17 2l3 3-3 3M3 11V9a4 4 0 0 1 4-4h13M7 22l-3-3 3-3M21 13v2a4 4 0 0 1-4 4H4',
+  chiave: 'M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.8-3.8a6 6 0 0 1-7.9 7.9l-6.9 6.9a2.1 2.1 0 0 1-3-3l6.9-6.9a6 6 0 0 1 7.9-7.9z',
+  link: 'M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1',
+  nuvola: 'M7 18a4 4 0 0 1-.5-8A6 6 0 0 1 18 9a4.5 4.5 0 0 1-.5 9zM12 10v5M9.5 12.5 12 15l2.5-2.5',
+  foto: 'M4 8h3l2-3h6l2 3h3v11H4zM12 17a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z', bandiera: 'M5 21V4M5 4h11l-2 4 2 4H5',
+  fulmine: 'M13 2 4 14h7l-1 8 9-12h-7z', telefono: 'M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2z',
+  storia: 'M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5M12 7v5l3 2', persona: 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21a8 8 0 0 1 16 0',
+  monitor: 'M3 4h18v12H3zM8 20h8M12 16v4', triangolo: 'M12 4 21 19H3z', lucchetto: 'M6 11h12v10H6zM8 11V7a4 4 0 0 1 8 0v4',
+  pausa: 'M9 5v14M15 5v14', numero: 'M5 9h14M5 15h14M10 3 8 21M16 3l-2 18', disco: 'M4 6h16v5H4zM4 13h16v5H4zM7 8.5h.01M7 15.5h.01',
+};
+function ico(nome, dim, spess) {
+  dim = dim || 22;
+  return '<svg width="' + dim + '" height="' + dim + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="' + (spess || 2.2) + '" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="' + P[nome] + '"/></svg>';
+}
+const marchio = '<svg width="30" height="30" viewBox="0 0 30 30" aria-hidden="true"><rect width="30" height="30" rx="8" fill="#1B1B1F"/><circle cx="9" cy="15" r="2.2" fill="#FFC53D"/><circle cx="15" cy="15" r="2.2" fill="#FFC53D"/><circle cx="21" cy="15" r="2.2" fill="#FFC53D"/><circle cx="12" cy="9.5" r="1.6" fill="#FFC53D" opacity=".6"/><circle cx="18" cy="20.5" r="1.6" fill="#FFC53D" opacity=".6"/></svg>';
+
+// ------------------------------------------------------------------ formati e date
+const OGGI = '2026-10-22', ORA = 10 + 5 / 60;
+const c2 = n => Math.round(n * 100) / 100;
+const euro = n => (n < 0 ? '−' : '') + Math.abs(n).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: 'always' }) + ' €';
+const numIt = n => n.toLocaleString('it-IT', { maximumFractionDigits: 2 });
+const GG = ['domenica', 'lunedì', 'martedì', 'mercoledì', 'giovedì', 'venerdì', 'sabato'];
+const MM = ['gennaio', 'febbraio', 'marzo', 'aprile', 'maggio', 'giugno', 'luglio', 'agosto', 'settembre', 'ottobre', 'novembre', 'dicembre'];
+const dt = iso => new Date(iso + 'T12:00:00');
+const isoDi = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+const piuGiorni = (iso, n) => { const d = dt(iso); d.setDate(d.getDate() + n); return isoDi(d); };
+const piuMesi = (iso, n) => { const d = dt(iso); const g = d.getDate(); d.setDate(1); d.setMonth(d.getMonth() + n); const ult = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate(); d.setDate(Math.min(g, ult)); return isoDi(d); };
+const giorniTra = (a, b) => Math.round((dt(b) - dt(a)) / 86400000);
+const dBreve = iso => iso.slice(8, 10) + '/' + iso.slice(5, 7);
+const dIt = iso => dBreve(iso) + '/' + iso.slice(0, 4);
+const dLunga = iso => { const d = dt(iso); return GG[d.getDay()] + ' ' + d.getDate() + ' ' + MM[d.getMonth()]; };
+const Maiusc = s => s.charAt(0).toUpperCase() + s.slice(1);
+const oraIt = h => Math.floor(h) + ':' + String(Math.round((h % 1) * 60)).padStart(2, '0');
+const quandoIt = iso => iso === OGGI ? 'oggi' : iso === piuGiorni(OGGI, 1) ? 'domani' : iso === piuGiorni(OGGI, -1) ? 'ieri' : dLunga(iso);
+const MESE_BREVE = ['gen', 'feb', 'mar', 'apr', 'mag', 'giu', 'lug', 'ago', 'set', 'ott', 'nov', 'dic'];
+
+// ------------------------------------------------------------------ dati di esempio (solo esempio, nessun dato vero)
+const CLI = {
+  C001: { id: 'C001', nome: 'Elettrodinamica', citta: 'Thiene', colore: 'c-blu', fissa: true, email: 'ufficio@elettrodinamica.example' },
+  C002: { id: 'C002', nome: 'Rossi Impianti Srl', citta: 'Bassano del Grappa', colore: 'c-verde', email: 'ufficio@rossi.example' },
+  C003: { id: 'C003', nome: 'Mario Bianchi', citta: 'Marostica', colore: 'c-viola', email: 'mario.bianchi@esempio.it' },
+  C004: { id: 'C004', nome: 'Batokyo Srl', citta: 'Schio', colore: 'c-ambra', email: 'tecnico@batokyo.example' },
+};
+const IMP = {
+  4: { id: 4, cli: 'C002', nome: 'Cabina MT Acme', cat: 'Cabina MT', ind: 'Via dell\'Artigianato 9, Zanè (VI)', luogo: 'Zanè', potenza: '630 kVA', tensione: '15 kV / 400 V', servizio: '2014-05-20', ambiente: 'Ordinario: verifica ogni 5 anni', referente: 'Sig. Ferretti · 0445 000201', matricola: 'TR-2014-0571', note: 'Trasformatore in resina, due scomparti MT', contr: 2, comm: '26ST041' },
+  5: { id: 5, cli: 'C002', nome: 'Quadro generale capannone', cat: 'Quadro', ind: 'Via Nuova 3, Bassano del Grappa (VI)', luogo: 'Bassano', potenza: '250 A', tensione: '400 V', servizio: '2019-03-11', ambiente: 'Ordinario: verifica ogni 5 anni', referente: 'Anna Rossi · 0445 000004', matricola: '', note: '' },
+  6: { id: 6, cli: 'C004', nome: 'Magazzino automatico', cat: 'Automazione', ind: 'Zona industriale, Schio (VI)', luogo: 'Schio', potenza: '', tensione: '400 V', servizio: '2023-09-04', ambiente: 'Ordinario', referente: 'Ufficio tecnico Batokyo', matricola: 'MAG-02', note: 'Due navette, PLC di linea', contr: 1, comm: '26ST038' },
+  7: { id: 7, cli: 'C004', nome: 'Impianto di terra stabilimento', cat: 'Impianto di terra', ind: 'Zona industriale, Schio (VI)', luogo: 'Schio', potenza: '', tensione: '', servizio: '2012-01-12', ambiente: 'Ordinario: verifica ogni 5 anni', referente: 'Ufficio tecnico Batokyo', matricola: '', note: '' },
+  8: { id: 8, cli: 'C003', nome: 'Impianto fotovoltaico 6 kW', cat: 'Fotovoltaico', ind: 'Via Montegrappa 8, Marostica (VI)', luogo: 'Marostica', potenza: '6 kW', tensione: '230 V', servizio: '2021-06-30', ambiente: 'Ordinario', referente: 'Mario Bianchi', matricola: 'INV-6K-2231', note: 'Inverter monofase', contr: 3 },
+  9: { id: 9, cli: 'C001', nome: 'Quadro di linea 3', cat: 'Quadro', ind: 'Via dell\'Industria 12, Thiene (VI)', luogo: 'Thiene', potenza: '', tensione: '400 V', servizio: '2024-02-15', ambiente: 'Ordinario', referente: 'Giulia Bianchi', matricola: '', note: '' },
+};
+const U = { 1: 'Manuel Gasparotto', 3: 'Marco Rossato' };
+const PRIO = { urgente: ['Urgente', 'p-rosso', 'ico-rosso'], alta: ['Alta', 'p-ambra', 'ico-ambra'], normale: ['Normale', 'p-grigio', 'ico-grigio'], bassa: ['Bassa', 'p-tenue', 'ico-grigio'] };
+const STATI = { aperto: ['Aperto', 'p-giallo'], in_carico: ['In carico', 'p-blu'], in_attesa: ['In attesa', 'p-ambra'], risolto: ['Risolto', 'p-verde'], chiuso: ['Chiuso', 'p-grigio'], annullato: ['Annullato', 'p-grigio'] };
+const TIPI = { guasto: 'Guasto', verifica: 'Verifica', piccolo: 'Piccolo intervento', assistenza: 'Assistenza', programmato: 'Programmato' };
+const MODI = { ticket: 'Una riga per l\'intervento', separati: 'Con gli altri rapportini', contratto: 'Nel contratto', no: 'Non si fattura' };
+const MATRICE = { fermo: { subito: 'urgente', presto: 'alta', quando: 'normale' }, ridotto: { subito: 'alta', presto: 'normale', quando: 'bassa' }, nessuno: { subito: 'normale', presto: 'bassa', quando: 'bassa' } };
+const ORE_INT = { urgente: 4, alta: 24, normale: 72, bassa: 240 };
+const entroIt = ore => { const h = ORA + ore; const g = Math.floor(h / 24); return (g === 0 ? 'oggi' : g === 1 ? 'domani' : dLunga(piuGiorni(OGGI, g))) + ' alle ' + oraIt(h % 24); };
+
+let TICKET = [
+  { id: 14, num: 'TK/2026/0014', cli: 'C002', imp: 4, contr: 2, titolo: 'Scatta il generale MT', desc: 'Il generale della cabina scatta appena lo riarmano. Lo stabilimento è fermo.', tipo: 'guasto', origine: 'Telefono', chi: 'Sig. Ferretti, manutenzione Acme · 0445 000201', rif: '', pr: 'urgente', resp: null, stato: 'aperto',
+    aperto: [OGGI, '8:40'], entroPresa: '9:40', entroInt: 'oggi alle 12:40', interventi: [], rap: [], spese: [], foto: 1, cron: [['oggi 8:40', 'Aperto da <b>Manuel Gasparotto</b> (telefono)']] },
+  { id: 13, num: 'TK/2026/0013', cli: 'C004', imp: 6, contr: 1, titolo: 'Navetta 2 si ferma in errore', desc: 'La navetta 2 va in errore di posizione due o tre volte al giorno. La linea va avanti con la navetta 1.', tipo: 'guasto', origine: 'Email', chi: 'Ufficio tecnico Batokyo', rif: 'Richiesta 4471', pr: 'alta', resp: 3, stato: 'in_carico',
+    aperto: [piuGiorni(OGGI, -1), '16:10'], entroInt: 'domani alle 16:10', interventi: [{ g: OGGI, ora: 14.5, fine: 16, chi: 3 }], rap: [], spese: [], foto: 0,
+    cron: [['ieri 16:10', 'Aperto da <b>Manuel Gasparotto</b> (email)'], ['ieri 16:25', 'Preso da <b>Marco Rossato</b>'], ['ieri 16:27', 'Intervento pianificato per <b>oggi alle 14:30</b>']] },
+  { id: 12, num: 'TK/2026/0012', cli: 'C003', imp: 8, contr: 3, titolo: 'Inverter in errore di isolamento', desc: 'L\'inverter si spegne la mattina con l\'errore di isolamento e riparte a mezzogiorno.', tipo: 'guasto', origine: 'Telefono', chi: 'Mario Bianchi · 333 0000123', rif: '', pr: 'normale', resp: 1, stato: 'risolto',
+    aperto: ['2026-10-20', '9:15'], entroInt: 'giovedì 23 alle 9:15', interventi: [{ g: '2026-10-21', ora: 9, fine: 11.5, chi: 1, fatto: true }],
+    rap: [{ id: 'RAP/2026/0151', data: '2026-10-21', ore: 2, viaggio: 0.5, km: 24, stato: 'Firmato', firm: 'Mario Bianchi', compenso: 90, kmEuro: 18.24, chi: 1 }],
+    spese: [{ d: 'Fusibili e portafusibili', cat: 'Materiale', imp: 18.5, a: 'Al cliente' }], foto: 2,
+    cron: [['20/10 9:15', 'Aperto da <b>Manuel Gasparotto</b> (telefono)'], ['20/10 9:16', 'Preso da <b>Manuel Gasparotto</b>'], ['21/10 11:40', 'Rapportino <b>RAP/2026/0151</b> firmato da Mario Bianchi'], ['21/10 11:41', '<b>Risolto</b>: cambiati i fusibili della stringa 2, isolamento a posto']] },
+  { id: 11, num: 'TK/2026/0011', cli: 'C001', imp: 9, contr: null, titolo: 'Aggiungere un\'uscita al PLC', desc: 'Serve un\'uscita in più per la nuova sirena di linea.', tipo: 'piccolo', origine: 'Sopralluogo', chi: 'Giulia Bianchi', rif: '', pr: 'bassa', resp: 1, stato: 'in_attesa', motivo: 'Aspetta il modulo di uscite dal fornitore',
+    aperto: ['2026-10-15', '11:00'], entroInt: 'domenica 25 alle 11:00', interventi: [], rap: [], spese: [], foto: 0, cron: [['15/10 11:00', 'Aperto da <b>Manuel Gasparotto</b> (sopralluogo)'], ['15/10 11:30', '<b>In attesa</b>: aspetta il modulo di uscite dal fornitore']] },
+  { id: 15, num: 'TK/2026/0015', cli: 'C002', imp: 4, contr: 2, titolo: 'Manutenzione cabina MT Acme', desc: 'Visita semestrale del contratto CA/2026/002.', tipo: 'programmato', origine: 'Da una scadenza', chi: '', rif: '', pr: 'normale', resp: 1, stato: 'in_carico', previsto: '2026-11-20',
+    aperto: [piuGiorni(OGGI, -1), '2:30'], entroInt: 'venerdì 20 novembre', interventi: [], rap: [], spese: [], foto: 0, cron: [['ieri 2:30', 'Nato dalla scadenza del <b>20/11/2026</b> (contratto CA/2026/002)']] },
+  { id: 10, num: 'TK/2026/0010', cli: 'C002', imp: 5, contr: null, titolo: 'Presa del quadro bruciata', desc: '', tipo: 'guasto', origine: 'Telefono', chi: '', rif: '', pr: 'alta', resp: 1, stato: 'chiuso', fatt: 'ticket', fattura: 'Fattura 47/2026', chiusoIl: '2026-10-14',
+    aperto: ['2026-10-12', '8:05'], entroInt: '', interventi: [], rap: [{ id: 'RAP/2026/0139', data: '2026-10-13', ore: 1.5, viaggio: 0.5, km: 48, stato: 'Fatturato', firm: 'Anna Rossi', chi: 1 }], spese: [], foto: 1, cron: [] },
+  { id: 9, num: 'TK/2026/0009', cli: 'C004', imp: 6, contr: 1, titolo: 'Domanda sulla selettività degli interruttori', desc: '', tipo: 'assistenza', origine: 'Telefono', chi: '', rif: '', pr: 'bassa', resp: 3, stato: 'chiuso', fatt: 'no', fattura: '', chiusoIl: '2026-10-09',
+    aperto: ['2026-10-09', '15:00'], entroInt: '', interventi: [], rap: [], spese: [], foto: 0, cron: [] },
+];
+let prossimoTk = 16;
+const CONTRATTI = {
+  2: { id: 2, num: 'CA/2026/002', cli: 'C002', titolo: 'Manutenzione cabina MT Acme', dal: '2026-01-01', al: '2026-12-31', rinnovo: 'tacito', disdetta: '2026-11-01', stato: 'In scadenza', canone: 1200, rate: 'semestrale', copre: 'Visite e guasti', materiali: false, extra: 45,
+    tempi: 'Urgente: presa entro 1 ora, intervento entro 4 ore', imp: [[4, 6, '2026-11-20']], comm: '26ST041', doc: 12, ticketAnno: 3,
+    righe: [['Canone 1° semestre 2026', '2026-01-01', 600, 'Fatturata 31/2026'], ['Canone 2° semestre 2026', '2026-07-01', 600, 'Fatturata 40/2026']] },
+  1: { id: 1, num: 'CA/2026/001', cli: 'C004', titolo: 'Assistenza magazzino automatico', dal: '2026-03-01', al: '2027-02-28', rinnovo: 'no', disdetta: '', stato: 'Attivo', canone: 2400, rate: 'annuale', copre: 'Solo visite', materiali: false, extra: 45,
+    tempi: 'Quelli dello studio', imp: [[6, 3, '2026-12-01']], comm: '26ST038', doc: null, ticketAnno: 4, righe: [['Canone 2026', '2026-03-01', 2400, 'Fatturata 22/2026']] },
+  3: { id: 3, num: 'CA/2025/004', cli: 'C003', titolo: 'Controllo annuale fotovoltaico', dal: '2025-11-01', al: '2026-10-31', rinnovo: 'no', disdetta: '', stato: 'In scadenza', canone: 120, rate: 'annuale', copre: 'Solo visite', materiali: false, extra: null,
+    tempi: 'Quelli dello studio', imp: [[8, 12, '2026-10-28']], comm: '26ST029', doc: null, ticketAnno: 2, righe: [['Canone 2025-2026', '2025-11-01', 120, 'Fatturata 52/2025']] },
+};
+const CAT = ['Progetti e schemi', 'Dichiarazioni di conformità', 'Dichiarazioni di rispondenza', 'Verbali di verifica', 'Relazioni e collaudi', 'Certificati', 'Contratti', 'Polizze e assicurazioni', 'Corrispondenza', 'Foto', 'Manuali e schede tecniche', 'Modelli dello studio', 'Documenti dello studio', 'Mandati ai clienti', 'Da classificare'];
+const CAT_APPROVA = ['Progetti e schemi', 'Dichiarazioni di conformità', 'Dichiarazioni di rispondenza', 'Relazioni e collaudi'];
+const COLL = { onedrive: 'OneDrive', sharepoint: 'SharePoint', gdrive: 'Google Drive', percorso: 'Cartella del computer', web: 'Sito' };
+let DOCS = [
+  { id: 4, titolo: 'Schema unifilare cabina MT', cat: 'Progetti e schemi', cli: 'C002', comm: '26ST041', imp: 4, origine: 'file', data: '2026-06-18', vede: 'tutti',
+    rev: [{ n: 3, stato: 'da_approvare', chi: 3, quando: 'ieri', nota: 'Aggiunto il trasformatore di riserva' }, { n: 2, stato: 'approvata', chi: 1, quando: '18/06/2026', nota: 'Nuove protezioni SPG' }, { n: 1, stato: 'approvata', chi: 1, quando: '12/03/2024', nota: 'Prima emissione dopo il rilievo' }] },
+  { id: 5, titolo: 'Dichiarazione di conformità quadro generale', cat: 'Dichiarazioni di conformità', cli: 'C002', comm: '', imp: 5, origine: 'file', data: '2019-03-11', vede: 'tutti', rif: 'DiCo 7/2019', rev: [{ n: 0, stato: 'approvata', chi: 1, quando: '11/03/2019', nota: '' }] },
+  { id: 11, titolo: 'Verbale verifica impianto di terra 2022', cat: 'Verbali di verifica', cli: 'C004', comm: '', imp: 7, origine: 'file', data: '2022-01-12', vede: 'tutti', scad: 9, rev: [{ n: 0, stato: 'approvata', chi: 1, quando: '14/01/2022', nota: '' }] },
+  { id: 7, titolo: 'Cartella della commessa 26ST003', cat: 'Progetti e schemi', cli: 'C002', comm: '26ST003', imp: null, origine: 'collegamento', coll: 'onedrive', cartella: true, principale: true, vede: 'tutti', url: 'https://esempio-my.sharepoint.com/:f:/g/personal/studio/Commesse/26ST003', data: '2026-10-15' },
+  { id: 8, titolo: 'Progetto impianto fotovoltaico Bianchi', cat: 'Progetti e schemi', cli: 'C003', comm: '26ST029', imp: 8, origine: 'collegamento', coll: 'gdrive', cartella: false, vede: 'tutti', url: 'https://drive.google.com/file/d/1AbCdEsempio/view', data: '2021-05-02' },
+  { id: 12, titolo: 'Contratto CA/2026/002 firmato', cat: 'Contratti', cli: 'C002', comm: '26ST041', imp: 4, contr: 2, origine: 'file', data: '2025-12-18', vede: 'costi', rev: [{ n: 0, stato: 'approvata', chi: 1, quando: '18/12/2025', nota: '' }] },
+  { id: 13, titolo: 'Certificato di taratura del misuratore di terra', cat: 'Certificati', cli: '', comm: '', imp: null, origine: 'file', data: '2025-11-15', vede: 'tutti', scad: 10, rev: [{ n: 0, stato: 'approvata', chi: 1, quando: '16/11/2025', nota: '' }] },
+  { id: 14, titolo: 'Manuale dell\'inverter', cat: 'Manuali e schede tecniche', cli: 'C003', comm: '', imp: 8, origine: 'collegamento', coll: 'web', cartella: false, vede: 'tutti', url: 'https://www.esempio-inverter.example/manuali/6k.pdf', data: '2021-06-30' },
+  { id: 16, titolo: 'Schemi elettrici archivio 2019', cat: 'Documenti dello studio', cli: '', comm: '', imp: null, origine: 'collegamento', coll: 'percorso', cartella: true, vede: 'tutti', url: '\\\\SERVER-STUDIO\\Archivio\\2019\\Schemi', data: '2019-12-31' },
+  { id: 17, titolo: 'Rilievo quadri linea 3', cat: 'Da classificare', cli: 'C001', comm: '26ST044', imp: null, origine: 'file', data: '2026-09-02', vede: 'tutti', rev: [{ n: 0, stato: 'approvata', chi: 1, quando: '02/09/2026', nota: '' }] },
+  { id: 18, titolo: 'Offerta materiali quadro', cat: 'Da classificare', cli: 'C002', comm: '26ST045', imp: null, origine: 'file', data: '2026-08-21', vede: 'tutti', rev: [{ n: 0, stato: 'approvata', chi: 1, quando: '21/08/2026', nota: '' }] },
+  { id: 19, titolo: 'Foto quadro prima dei lavori', cat: 'Da classificare', cli: 'C002', comm: '26ST045', imp: null, origine: 'file', data: '2026-08-20', vede: 'tutti', rev: [{ n: 0, stato: 'approvata', chi: 1, quando: '20/08/2026', nota: '' }] },
+];
+let prossimoDoc = 20;
+let SCAD = [
+  { id: 3, titolo: 'Verifica protezioni SPG e SPI', cli: 'C002', imp: 4, data: '2026-09-30', ogni: 60, prea: 90, azione: 'promemoria', stato: 'aperta' },
+  { id: 12, titolo: 'Disdetta del contratto CA/2026/002', cli: 'C002', imp: null, contr: 2, data: '2026-11-01', ogni: null, prea: 30, azione: 'promemoria', stato: 'aperta' },
+  { id: 10, titolo: 'Certificato di taratura del misuratore di terra scade', cli: '', imp: null, doc: 13, data: '2026-11-15', ogni: 12, prea: 60, azione: 'promemoria', stato: 'aperta' },
+  { id: 5, titolo: 'Manutenzione cabina MT Acme', cli: 'C002', imp: 4, contr: 2, data: '2026-11-20', ogni: 6, prea: 30, azione: 'ticket', tk: 15, stato: 'aperta', dalla: 'data' },
+  { id: 11, titolo: 'Manutenzione magazzino automatico', cli: 'C004', imp: 6, contr: 1, data: '2026-12-01', ogni: 3, prea: 30, azione: 'ticket', stato: 'aperta', dalla: 'data' },
+  { id: 9, titolo: 'Verifica impianto di terra (DPR 462)', cli: 'C004', imp: 7, doc: 11, data: '2027-01-12', ogni: 60, prea: 90, azione: 'promemoria', stato: 'aperta' },
+  { id: 13, titolo: 'Verifica impianto di terra (DPR 462)', cli: 'C002', imp: 5, data: '2029-03-11', ogni: 60, prea: 90, azione: 'promemoria', stato: 'aperta' },
+];
+let prossimaScad = 20;
+const SPAZIO = { liberoGb: 1800, usatoMb: 2140, cestinoMb: 49, cestinoVecchioMb: 31.5, soloNas: [['Rilievo laser capannone.zip', 48.2], ['Video prova navette.mp4', 37.9]], perTipo: [['Documenti', 1320], ['Foto e firme dei rapportini', 610], ['Foto dei ticket', 121], ['Mandati ai clienti', 40], ['Cestino', 49]] };
+
+// ------------------------------------------------------------------ chi entra, permessi
+const perm = {
+  titolare: { dashboard: 2, clienti: 2, commesse: 2, preventivi: 2, attivita: 2, rapportini: 2, spese: 2, fatturazione: 2, banche: 2, documenti: 2, ticket: 2, amministrazione: 2, costi: 2 },
+  collaboratore: { dashboard: 1, clienti: 1, commesse: 1, preventivi: 0, attivita: 2, rapportini: 2, spese: 2, fatturazione: 0, banche: 0, documenti: 1, ticket: 2, amministrazione: 0, costi: 0 },
+};
+const S = { vista: 'tel', modo: 'tel', chi: 'manuel', pila: [['dashboard']], segT: 'aperti', segD: 'archivio', segStat: 'tipo', filtroT: 'tutti', filtroD: 'tutti', catD: null, cercaD: '', cercaT: '',
+  latoChiuso: false, rete: true, coda: { ticket: 0, rapportini: 0, foto: 0 }, ultimo: {}, silenzio: false, pan: false };
+let DISP = 'tel';
+const io = () => S.chi === 'manuel' ? { id: 1, nome: 'Manuel Gasparotto', iniz: 'MG', ruolo: 'titolare', ruoloNome: 'Titolare' } : { id: 3, nome: 'Marco Rossato', iniz: 'MR', ruolo: 'collaboratore', ruoloNome: 'Collaboratore' };
+const puo = (m, l) => (perm[io().ruolo][m] || 0) >= (l || 1) && (m !== 'fatturazione' && m !== 'banche' || (perm[io().ruolo].costi || 0) >= 1);
+const soldi = () => puo('costi');
+const approva = () => io().ruolo === 'titolare';
+const chiude = () => puo('ticket', 2) && soldi();
+const iniz = n => n.split(' ').filter(x => x.length > 1 || /[A-Z]/.test(x)).map(x => x[0]).slice(0, 2).join('').toUpperCase();
+const pc = () => S.modo === 'pc';
+
+// ------------------------------------------------------------------ calcoli
+const tk = id => TICKET.find(t => t.id === Number(id));
+const doc = id => DOCS.find(d => d.id === Number(id));
+const scad = id => SCAD.find(s => s.id === Number(id));
+const vedeTk = t => io().ruolo !== 'collaboratore' || t.resp === 3 || t.resp === null || t.interventi.some(i => i.chi === 3) || t.rap.some(r => r.chi === 3);
+const vedeDoc = d => d.vede === 'tutti' || (d.vede === 'costi' && soldi());
+const aperto = t => ['aperto', 'in_carico', 'in_attesa', 'risolto'].includes(t.stato);
+const daPianificare = t => t.stato === 'in_carico' && !t.interventi.some(i => i.g >= OGGI) && !t.rap.length;
+const prossimoInt = t => t.interventi.filter(i => i.g >= OGGI && !i.fatto).sort((a, b) => a.g < b.g ? -1 : 1)[0];
+function sommaTk(t) {
+  const ore = t.rap.reduce((a, r) => a + r.ore + (r.viaggio || 0), 0);
+  const km = t.rap.reduce((a, r) => a + r.km, 0);
+  const spese = c2(t.spese.reduce((a, s) => a + s.imp, 0));
+  const importo = c2(t.rap.reduce((a, r) => a + (r.compenso || 0) + (r.kmEuro || 0), 0) + t.spese.filter(s => s.a === 'Al cliente').reduce((a, s) => a + s.imp, 0));
+  return { ore, orePagate: t.rap.reduce((a, r) => a + r.ore, 0), km, spese, importo };
+}
+function propostaTk(t) {
+  const c = t.contr && CONTRATTI[t.contr];
+  if (c && (t.tipo === 'programmato' || c.copre === 'Visite e guasti')) return ['contratto', 'Il contratto ' + c.num + ' copre ' + c.copre.toLowerCase()];
+  if (CLI[t.cli].fissa) return ['separati', 'Elettrodinamica ha la tariffa fissa: il mese resta una riga'];
+  if (c) return ['ticket', 'Il contratto ' + c.num + ' copre solo le visite'];
+  return ['ticket', 'Nessun contratto per questo impianto'];
+}
+function statoScad(s) {
+  if (s.stato === 'fatta') return ['Fatta', 'p-verde', ''];
+  const g = giorniTra(OGGI, s.data);
+  if (g < 0) return ['Scaduta da ' + (-g) + ' giorni', 'p-rosso', 'rosso'];
+  if (g <= s.prea) return [g === 0 ? 'Scade oggi' : g === 1 ? 'Scade domani' : 'Scade fra ' + g + ' giorni', 'p-ambra', 'ambra'];
+  return ['Prossima', 'p-grigio', ''];
+}
+function statoDoc(d) {
+  if (d.origine === 'collegamento') return [COLL[d.coll], 'p-coll'];
+  if (d.cat === 'Da classificare') return ['Da classificare', 'p-ambra'];
+  const valida = d.rev.find(r => r.stato === 'approvata');
+  if (!valida) return ['Da approvare', 'p-giallo'];
+  return ['Valida rev. ' + valida.n, 'p-verde'];
+}
+const revAttesa = d => d.rev && d.rev.find(r => r.stato === 'da_approvare');
+const daApprovare = () => DOCS.filter(d => revAttesa(d));
+const codaTot = () => S.coda.ticket + S.coda.rapportini + S.coda.foto;
+function inCoda(cosa) { if (!S.rete && DISP === 'tel') { S.coda[cosa]++; return true; } return false; }
+
+// ------------------------------------------------------------------ pezzi comuni
+const pill = (t, c, extra) => '<span class="pill ' + c + '"' + (extra || '') + '>' + t + '</span>';
+const pillNonCollegato = '<span class="pill p-scollegato">' + ico('scollegato', 15) + 'Non collegato</span>';
+const giallo = (testo, azione) => {
+  const bordo = pc() && S.pan;
+  return '<button type="button" class="' + (bordo ? 'btn-bordo' : pc() ? 'btn-giallo' : 'principale') + '" ' + azione + '>' + testo + '</button>';
+};
+const gialloF = (t, a) => '<button type="button" class="' + (DISP === 'pc' ? 'btn-giallo' : 'principale') + '" ' + a + (DISP === 'pc' ? ' style="align-self:flex-end"' : '') + '>' + t + '</button>';
+const bordo = (t, a) => '<button type="button" class="btn-bordo" ' + a + '>' + t + '</button>';
+const inBasso = btn => btn ? (pc() ? '<div style="display:flex;justify-content:flex-end">' + btn + '</div>' : '<div style="height:84px"></div><div class="in-basso">' + btn + '</div>') : '';
+function testaTel(dove, conIndietro, destra) {
+  const sx = conIndietro ? '<button type="button" class="tondo" data-azione="indietro" aria-label="Indietro">' + ico('indietro') + '</button>'
+    : '<button type="button" class="btn-menu" data-azione="menu" aria-label="Apri il menu">' + ico('menu') + 'Menu</button>';
+  return '<div class="testa"><div class="sx">' + sx + (dove ? '<span class="dove">' + dove + '</span>' : '') + '</div><div class="dx">' + (destra || '') + '<span class="cerchio c-ambra" aria-label="' + io().nome + '">' + io().iniz + '</span></div></div>';
+}
+const testaPc = (dove, destra) => '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px"><div style="display:flex;align-items:center;gap:12px"><button type="button" class="tondo" data-azione="indietro" aria-label="Indietro">' + ico('indietro') + '</button><span class="dove">' + dove + '</span></div><div style="display:flex;gap:8px">' + (destra || '') + '</div></div>';
+const titoloPc = (dove, titolo, destra) => '<div style="display:flex;justify-content:space-between;align-items:flex-end;gap:16px"><div><span class="dove">' + dove + '</span><h1 class="titolo">' + titolo + '</h1></div><div style="display:flex;gap:10px;align-items:center">' + (destra || '') + '</div></div>';
+const segmenti = (chiave, voci, attivo, classe) => '<div class="segmenti' + (classe ? ' ' + classe : '') + '" role="group">' + voci.map(v => '<button type="button" data-seg="' + chiave + '|' + v[0] + '" aria-pressed="' + (attivo === v[0]) + '">' + v[1] + '</button>').join('') + '</div>';
+const pillole = (chiave, voci, attivo, classe) => '<div class="pillole' + (classe ? ' ' + classe : '') + '" role="group">' + voci.map(v => '<button type="button" data-' + chiave + '="' + v[0] + '" aria-pressed="' + (attivo === v[0]) + '">' + v[1] + '</button>').join('') + '</div>';
+const sez = (nome, html, n) => '<div style="display:flex;flex-direction:column;gap:8px"><span class="etichetta">' + nome + (n !== undefined ? ' · ' + n : '') + '</span>' + html + '</div>';
+const righe = lista => '<div class="scheda righe">' + (lista.length ? lista.join('') : '<div class="vuoto">Niente qui.</div>') + '</div>';
+const riga = o => '<' + (o.vai || o.attr ? 'button type="button"' : 'div') + ' class="riga"' + (o.vai ? ' data-vai="' + o.vai + '"' : '') + (o.attr ? ' ' + o.attr : '') + '>' +
+  (o.ico ? '<span class="ico-riga ' + (o.col || 'ico-grigio') + '">' + ico(o.ico, 20) + '</span>' : '') + (o.sx || '') +
+  '<span class="corpo"><span class="t1">' + o.t1 + '</span>' + (o.t2 ? '<span class="t2">' + o.t2 + '</span>' : '') + (o.t3 ? '<span class="t2">' + o.t3 + '</span>' : '') + (o.dx ? '<span class="pill-riga" style="justify-content:flex-start;margin-top:4px">' + o.dx + '</span>' : '') + '</span>' + (o.quanto ? '<span class="quanto">' + o.quanto + '</span>' : '') + (o.vai || o.attr ? '<span class="freccia">' + ico('freccia', 18) + '</span>' : '') + '</' + (o.vai || o.attr ? 'button' : 'div') + '>';
+const riquadri = lista => '<div class="tre-num" style="grid-template-columns:repeat(' + (!pc() && lista.length > 3 ? 2 : lista.length) + ',minmax(0,1fr))">' + lista.map(n => '<button type="button" class="num-box' + (n[3] ? ' ' + n[3] : '') + '"' + (n[2] ? ' ' + n[2] : '') + '><b style="font-size:' + (pc() ? 26 : 22) + 'px">' + n[0] + '</b><span>' + n[1] + '</span></button>').join('') + '</div>';
+const cerchioCli = id => id ? '<span class="cerchio ' + CLI[id].colore + '">' + iniz(CLI[id].nome) + '</span>' : '<span class="cerchio c-ambra">GM</span>';
+const coppie = lista => '<div class="coppie">' + lista.filter(x => x[1]).map(x => '<div class="coppia"><span class="k">' + x[0] + '</span><span class="v">' + x[1] + '</span></div>').join('') + '</div>';
+const icoColl = d => d.origine === 'collegamento' ? (d.coll === 'gdrive' ? 'triangolo' : d.coll === 'percorso' ? 'monitor' : d.cartella ? 'commesse' : 'link') : d.cat === 'Foto' || /Foto/.test(d.titolo) ? 'foto' : 'doc';
+const legatoA = d => [d.cli ? CLI[d.cli].nome : 'Studio', d.comm, d.imp ? IMP[d.imp].nome : ''].filter(Boolean).join(' · ');
+
+// ------------------------------------------------------------------ dashboard
+function vociDashboard() {
+  const urgenti = [], settimana = [], pianificare = [];
+  const mio = io().ruolo === 'collaboratore';
+  TICKET.filter(t => aperto(t) && t.pr === 'urgente' && vedeTk(t) && (!t.resp || !t.interventi.length)).forEach(t => urgenti.push({ ico: 'chiave', col: 'ico-rosso', t1: t.num + ' urgente: ' + t.titolo, t2: CLI[t.cli].nome + ' · ' + IMP[t.imp].nome + ' · aperto alle ' + t.aperto[1] + (t.resp ? ' · ' + U[t.resp] : ' · nessuno l\'ha preso'), vai: 'tk|' + t.id }));
+  if (!mio) SCAD.filter(s => s.stato === 'aperta' && s.data < OGGI).forEach(s => urgenti.push({ ico: 'bandiera', col: 'ico-rosso', t1: s.titolo + ' scaduta da ' + giorniTra(s.data, OGGI) + ' giorni', t2: (s.cli ? CLI[s.cli].nome : 'Studio') + (s.imp ? ' · ' + IMP[s.imp].nome : ''), vai: 'scad|' + s.id }));
+  TICKET.filter(t => vedeTk(t) && t.interventi.some(i => i.g === OGGI && !i.fatto) && (!mio || t.interventi.some(i => i.chi === 3))).forEach(t => { const i = t.interventi.find(x => x.g === OGGI); settimana.push({ ico: 'calendario', col: 'ico-blu', t1: 'Intervento di oggi alle ' + oraIt(i.ora) + ': ' + t.num + ' ' + t.titolo, t2: U[i.chi] + ' · ' + CLI[t.cli].nome + ' · ' + IMP[t.imp].luogo, vai: 'tk|' + t.id }); });
+  if (approva() && daApprovare().length) settimana.push({ ico: 'doc', col: 'ico-giallo', t1: daApprovare().length + (daApprovare().length === 1 ? ' documento da approvare' : ' documenti da approvare'), t2: daApprovare().map(d => d.titolo + ' rev. ' + revAttesa(d).n + ' · ' + U[revAttesa(d).chi]).join(', '), vai: 'documenti|approvare' });
+  if (mio && daApprovare().some(d => revAttesa(d).chi === 3)) settimana.push({ ico: 'doc', col: 'ico-grigio', t1: daApprovare().filter(d => revAttesa(d).chi === 3).map(d => d.titolo + ' rev. ' + revAttesa(d).n).join(', ') + ': aspetta l\'approvazione', t2: 'L\'ha caricata Marco Rossato ieri', vai: 'documenti|approvare' });
+  if (chiude()) TICKET.filter(t => t.stato === 'risolto').forEach(t => settimana.push({ ico: 'spunta', col: 'ico-verde', t1: t.num + ' risolto: da chiudere', t2: CLI[t.cli].nome + (t.rap.length ? ' · rapportino firmato il ' + dBreve(t.rap[t.rap.length - 1].data) : ''), vai: 'tk|' + t.id }));
+  if (!mio) {
+    SCAD.filter(s => s.stato === 'aperta' && s.data >= OGGI && giorniTra(OGGI, s.data) <= Math.min(30, s.prea) && !s.contr).forEach(s => settimana.push({ ico: 'bandiera', col: 'ico-ambra', t1: s.titolo.replace(/ scade$/, '') + ' scade fra ' + giorniTra(OGGI, s.data) + ' giorni', t2: (s.cli ? CLI[s.cli].nome : 'Studio') + ' · ' + dIt(s.data), vai: 'scad|' + s.id }));
+    if (soldi()) {
+      settimana.push({ ico: 'preventivo', col: 'ico-ambra', t1: 'CA/2026/002: la disdetta va mandata entro domenica 1 novembre', t2: 'Rossi Impianti Srl · si rinnova da solo il 01/01/2027', vai: 'contratto|2' });
+      settimana.push({ ico: 'preventivo', col: 'ico-ambra', t1: 'CA/2025/004 scade il 31/10/2026: rinnovalo o lascialo scadere', t2: 'Mario Bianchi · Controllo annuale fotovoltaico', vai: 'contratto|3' });
+    }
+  }
+  TICKET.filter(t => vedeTk(t) && daPianificare(t) && t.tipo === 'programmato').forEach(t => pianificare.push({ ico: 'calendario', col: 'ico-grigio', t1: t.titolo + ' del ' + dBreve(t.previsto) + ' da pianificare', t2: t.num + ' · ' + CLI[t.cli].nome, vai: 'tk|' + t.id }));
+  const nonPresi = TICKET.filter(t => aperto(t) && !t.resp && t.pr !== 'urgente');
+  if (nonPresi.length) pianificare.push({ ico: 'chiave', col: 'ico-grigio', t1: nonPresi.length + ' ticket da prendere', t2: nonPresi.map(t => t.titolo).join(', '), vai: 'ticket' });
+  if (!mio) {
+    SCAD.filter(s => s.stato === 'aperta' && giorniTra(OGGI, s.data) > 30 && giorniTra(OGGI, s.data) <= 120 && s.azione === 'promemoria').forEach(s => pianificare.push({ ico: 'bandiera', col: 'ico-grigio', t1: s.titolo + ': ' + dIt(s.data), t2: CLI[s.cli].nome + ' · ' + IMP[s.imp].nome + ' · ' + statoScad(s)[0].toLowerCase(), vai: 'scad|' + s.id }));
+    const dc = DOCS.filter(d => d.cat === 'Da classificare').length;
+    if (dc) pianificare.push({ ico: 'doc', col: 'ico-grigio', t1: dc + ' documenti da classificare', t2: 'Arrivati dalle cartelle delle commesse', vai: 'documenti|classificare' });
+    pianificare.push({ ico: 'disco', col: 'ico-grigio', t1: '2 file sono solo sul NAS: troppo grandi per la copia fuori casa', t2: 'Rilievo laser capannone.zip, Video prova navette.mp4', vai: 'spazio' });
+  }
+  return { urgenti, settimana, pianificare };
+}
+function pagDashboard() {
+  const r = vociDashboard();
+  const rd = x => riga({ ico: x.ico, col: x.col, t1: x.t1, t2: x.t2, vai: x.vai });
+  const s = (nome, l) => l.length ? sez(nome, righe(l.map(rd)), l.length) : '';
+  const aperti = TICKET.filter(t => aperto(t) && vedeTk(t));
+  const vicine = SCAD.filter(x => x.stato === 'aperta' && giorniTra(OGGI, x.data) <= x.prea).length;
+  const num = riquadri([[aperti.length, 'ticket aperti', 'data-vai="ticket"'], [aperti.filter(t => t.pr === 'urgente').length, 'urgenti', 'data-vai="ticket|urgenti"', 'rosso'], [TICKET.filter(t => vedeTk(t) && t.interventi.some(i => i.g === OGGI)).length, 'interventi oggi', 'data-vai="calendario"'], [vicine, 'scadenze vicine', 'data-vai="documenti|scadenze"']]);
+  const saluto = '<div style="display:flex;flex-direction:column;gap:4px"><span class="sottotitolo">' + Maiusc(dLunga(OGGI)) + '</span><h1 class="titolo">Buongiorno, ' + io().nome.split(' ')[0] + '</h1></div>';
+  const prima = r.urgenti[0] ? '<div class="scheda" style="background:var(--scelta);border-color:var(--giallo);display:flex;flex-direction:column;gap:10px"><span class="etichetta" style="color:var(--giallo-testo)">La cosa più urgente</span><div style="font-size:19px;font-weight:800;line-height:1.25">' + r.urgenti[0].t1 + '</div><div class="sottotitolo">' + r.urgenti[0].t2 + '</div><button type="button" class="secondario" data-vai="' + r.urgenti[0].vai + '" style="align-self:flex-start">Apri</button></div>' : '';
+  if (pc()) return saluto + num + '<div class="pc-griglia"><div style="display:flex;flex-direction:column;gap:18px">' + prima + s('Urgenti', r.urgenti.slice(1)) + s('Questa settimana', r.settimana) + '</div><div style="display:flex;flex-direction:column;gap:18px">' + s('Da pianificare', r.pianificare) + '</div></div>';
+  return testaTel('', false) + saluto + prima + s('Urgenti', r.urgenti.slice(1)) + s('Questa settimana', r.settimana) + num + s('Da pianificare', r.pianificare);
+}
+
+// ------------------------------------------------------------------ ticket: elenchi
+function rigaTk(t) {
+  const p = PRIO[t.pr], st = STATI[t.stato];
+  const pi = prossimoInt(t);
+  const det = t.stato === 'chiuso' ? 'chiuso il ' + dBreve(t.chiusoIl) + (t.resp ? ' · ' + U[t.resp] : '')
+    : pi ? U[pi.chi] + ' · ' + quandoIt(pi.g) + ' alle ' + oraIt(pi.ora)
+    : t.stato === 'in_attesa' ? t.motivo
+    : t.tipo === 'programmato' ? 'previsto per ' + dLunga(t.previsto) + (daPianificare(t) ? ' · da pianificare' : '')
+    : 'aperto ' + (t.aperto[0] === OGGI ? 'alle ' + t.aperto[1] : quandoIt(t.aperto[0])) + ' · ' + (t.resp ? U[t.resp] : 'nessuno');
+  const dx = (t.stato === 'chiuso' ? pill(t.fatt === 'contratto' ? 'Nel contratto' : t.fatt === 'no' ? 'Non si fattura' : t.fatt === 'separati' ? 'Con i rapportini' : 'Una riga', 'p-grigio') + (t.fattura && soldi() ? pill(t.fattura, 'p-blu') : '') : (t.pr !== 'normale' ? pill(p[0], p[1]) : '') + pill(st[0], st[1]));
+  if (pc()) return '<div class="tr cl" data-vai="tk|' + t.id + '" style="grid-template-columns:92px 120px minmax(0,1fr) 110px 150px 170px">' +
+    '<span>' + pill(p[0], p[1]) + '</span><b style="font-size:14px">' + t.num + '</b><span style="display:flex;flex-direction:column;gap:2px;min-width:0"><b>' + t.titolo + '</b><span style="color:var(--tenue);font-weight:600;font-size:14px">' + CLI[t.cli].nome + ' · ' + IMP[t.imp].nome + '</span></span>' +
+    '<span>' + (t.stato === 'chiuso' ? pill(t.fatt === 'contratto' ? 'Nel contratto' : t.fatt === 'no' ? 'Non si fattura' : 'Una riga', 'p-grigio') : pill(st[0], st[1])) + '</span><span style="font-weight:700;color:var(--testo2)">' + (t.resp ? U[t.resp] : 'Nessuno') + '</span><span style="font-weight:600;color:var(--tenue);font-size:14px">' + (pi ? Maiusc(quandoIt(pi.g)) + ' alle ' + oraIt(pi.ora) : t.stato === 'chiuso' ? 'Chiuso il ' + dBreve(t.chiusoIl) : t.tipo === 'programmato' ? 'Entro il ' + dBreve(t.previsto) : t.stato === 'risolto' ? 'Risolto' : 'Entro ' + t.entroInt) + '</span></div>';
+  return riga({ sx: '<span class="ico-riga ' + p[2] + '">' + ico(t.tipo === 'programmato' ? 'calendario' : t.tipo === 'assistenza' ? 'telefono' : 'chiave', 20) + '</span>', t1: t.num + ' · ' + t.titolo, t2: CLI[t.cli].nome + ' · ' + IMP[t.imp].nome, t3: det, dx, vai: 'tk|' + t.id });
+}
+function corpoAperti() {
+  const mio = io().ruolo === 'collaboratore';
+  let l = TICKET.filter(t => aperto(t) && vedeTk(t) && !(t.tipo === 'programmato' && giorniTra(OGGI, t.previsto) > 30));
+  const peso = t => (t.pr === 'urgente' && !t.resp ? 0 : 10) + { urgente: 1, alta: 2, normale: 3, bassa: 4 }[t.pr];
+  l.sort((a, b) => peso(a) - peso(b));
+  if (S.filtroT === 'urgenti') l = l.filter(t => t.pr === 'urgente');
+  if (S.filtroT === 'miei') l = l.filter(t => t.resp === io().id);
+  if (S.filtroT === 'prendere') l = l.filter(t => !t.resp);
+  const q = S.cercaT.trim().toLowerCase();
+  if (q) l = l.filter(t => (t.num + ' ' + t.titolo + ' ' + CLI[t.cli].nome + ' ' + IMP[t.imp].nome).toLowerCase().includes(q));
+  const filtri = pillole('filtro-t', [['tutti', 'Tutti'], ['urgenti', 'Urgenti'], ['miei', 'Miei'], ['prendere', 'Da prendere']], S.filtroT, 'piccole');
+  const cerca = '<label class="cerca">' + ico('cerca', 20) + '<input data-cerca="t" placeholder="Cerca un ticket, un cliente, un impianto" value="' + S.cercaT.replace(/"/g, '&quot;') + '" aria-label="Cerca"></label>';
+  const gruppi = mio && S.filtroT === 'tutti' ? sez('In carico a te', righe(l.filter(t => t.resp === 3).map(rigaTk))) + sez('Da prendere', righe(l.filter(t => !t.resp).map(rigaTk))) : (pc() ? tabTk(l) : righe(l.map(rigaTk)));
+  const tot = TICKET.filter(t => aperto(t) && vedeTk(t));
+  const num = pc() ? riquadri([[tot.length, 'aperti', 'data-filtro-t="tutti"'], [tot.filter(t => t.pr === 'urgente').length, 'urgenti', 'data-filtro-t="urgenti"', 'rosso'], [tot.filter(t => !t.resp).length, 'da prendere', 'data-filtro-t="prendere"'], [tot.filter(t => t.stato === 'risolto').length, 'risolti da chiudere']]) : '';
+  return num + (pc() ? '<div style="display:flex;gap:12px;align-items:center"><div style="flex:1">' + cerca + '</div>' + filtri + '</div>' : cerca + filtri) + gruppi;
+}
+const tabTk = l => '<div class="tabella"><div class="tr th" style="grid-template-columns:92px 120px minmax(0,1fr) 110px 150px 170px"><span>Priorità</span><span>Numero</span><span>Cosa</span><span>Stato</span><span>Chi</span><span>Intervento</span></div>' + (l.length ? l.map(rigaTk).join('') : '<div class="tr"><span class="vuoto">Niente qui.</span></div>') + '</div>';
+function corpoProgrammati() {
+  const l = TICKET.filter(t => t.tipo === 'programmato' && aperto(t) && vedeTk(t));
+  const r = t => riga({ sx: '<span class="data-box"><b>' + Number(t.previsto.slice(8)) + '</b><span>' + MESE_BREVE[Number(t.previsto.slice(5, 7)) - 1] + '</span></span>', t1: t.titolo, t2: CLI[t.cli].nome + ' · ' + IMP[t.imp].nome, t3: t.num + (t.contr ? ' · contratto ' + CONTRATTI[t.contr].num : ''), dx: pill(daPianificare(t) ? 'Da pianificare' : 'In calendario', daPianificare(t) ? 'p-giallo' : 'p-blu'), vai: 'tk|' + t.id });
+  const prossime = SCAD.filter(s => s.azione === 'ticket' && !s.tk && s.stato === 'aperta').map(s => riga({ sx: '<span class="data-box"><b>' + Number(s.data.slice(8)) + '</b><span>' + MESE_BREVE[Number(s.data.slice(5, 7)) - 1] + '</span></span>', t1: s.titolo, t2: CLI[s.cli].nome + ' · ' + IMP[s.imp].nome, t3: 'il ticket nasce il ' + dIt(piuGiorni(s.data, -30)), dx: pill('Prossima', 'p-grigio') }));
+  return sez('Da pianificare', righe(l.filter(daPianificare).map(r))) + sez('In calendario', righe(l.filter(t => !daPianificare(t)).map(r))) + sez('Prossime visite dei contratti', righe(prossime)) + '<div class="vuoto" style="padding-top:0">Le prossime visite nascono 30 giorni prima.</div>';
+}
+function corpoChiusi() {
+  const l = TICKET.filter(t => !aperto(t) && vedeTk(t));
+  return '<div style="display:flex;align-items:center;justify-content:space-between"><button type="button" class="tondo" data-azione="avviso" data-testo="Settembre 2026" aria-label="Mese prima">' + ico('indietro') + '</button><b style="font-size:17px">Ottobre 2026</b><button type="button" class="tondo" data-azione="avviso" data-testo="Novembre non è ancora cominciato" aria-label="Mese dopo">' + ico('freccia') + '</button></div>' + (pc() ? tabTk(l) : righe(l.map(rigaTk)));
+}
+function rigaContratto(c) {
+  const st = { 'In scadenza': 'p-ambra', Attivo: 'p-verde', Bozza: 'p-grigio', Scaduto: 'p-rosso', Disdetto: 'p-grigio' }[c.stato];
+  return riga({ sx: '<span class="codice" style="flex:none">' + c.num.replace('CA/', '') + '</span>', t1: c.titolo, t2: CLI[c.cli].nome + ' · dal ' + dBreve(c.dal) + ' al ' + dIt(c.al), t3: c.rinnovo === 'tacito' ? 'si rinnova da solo' : 'senza rinnovo', dx: pill(c.stato, st) + (soldi() ? '<b style="font-size:14px;white-space:nowrap">' + euro(c.canone) + '/anno</b>' : ''), vai: 'contratto|' + c.id });
+}
+function corpoContratti() { return righe(Object.values(CONTRATTI).map(rigaContratto)); }
+function corpoStatistiche() {
+  const per = { tipo: [['Guasti', 14, 6.2], ['Programmati', 8, 0], ['Piccoli interventi', 5, 41], ['Assistenza', 4, 2.5]], cliente: [['Rossi Impianti Srl', 12, 9.5], ['Batokyo Srl', 10, 15.2], ['Mario Bianchi', 5, 30], ['Elettrodinamica', 4, 48]],
+    impianto: [['Cabina MT Acme', 7, 5.1], ['Magazzino automatico', 9, 14.8], ['Impianto fotovoltaico 6 kW', 5, 30], ['Quadro generale capannone', 5, 16]], persona: [['Manuel Gasparotto', 19, 17.2], ['Marco Rossato', 12, 22.4]] }[S.segStat];
+  const max = Math.max.apply(null, per.map(x => x[1]));
+  const barre = per.map(x => '<div class="barra-h"><span class="nome">' + x[0] + '</span><span class="bin"><i style="width:' + Math.round(x[1] / max * 100) + '%"></i></span><span class="val">' + x[1] + ' ticket · ' + (x[2] ? numIt(x[2]) + ' h' : 'a data') + '</span></div>').join('');
+  return segmenti('segStat', [['tipo', 'Periodo: 12 mesi']], 'tipo') + riquadri([['31', 'aperti'], ['27', 'chiusi'], ['19 h', 'intervento medio'], ['85%', 'entro i tempi']]) +
+    segmenti('segStat', [['tipo', 'Per tipo'], ['cliente', 'Per cliente'], ['impianto', 'Per impianto'], ['persona', 'Per persona']], S.segStat, 'stretti') +
+    '<div class="scheda" style="display:flex;flex-direction:column;gap:4px"><span class="etichetta">Ticket e tempo medio d\'intervento</span>' + barre + '</div>' +
+    (soldi() ? '<div class="scheda">' + coppie([['Ore', '96,5'], ['Km', '1.840'], ['Costo', euro(2710.4)], ['Fatturato', euro(4320)], ['Nel contratto', '9 ticket'], ['Chiusura media', '3,2 giorni']]) + '</div>' : '<div class="scheda">' + coppie([['Ore', '96,5'], ['Km', '1.840'], ['Chiusura media', '3,2 giorni'], ['Presa media', '1,6 ore']]) + '</div>') +
+    (pc() ? '<div>' + bordo(ico('scarica', 18) + 'Esporta', 'data-azione="avviso" data-testo="Esportato: wisper-ticket-2026-10-22.csv"') + '</div>' : '');
+}
+function pagTicket() {
+  const corpo = { aperti: corpoAperti, programmati: corpoProgrammati, chiusi: corpoChiusi, contratti: corpoContratti, statistiche: corpoStatistiche }[S.segT]();
+  const titolo = { aperti: 'Ticket aperti', programmati: 'Interventi programmati', chiusi: 'Ticket chiusi', contratti: 'Contratti di assistenza', statistiche: 'Statistiche' }[S.segT];
+  const seg = segmenti('segT', [['aperti', 'Aperti'], ['programmati', 'Programmati'], ['chiusi', 'Chiusi'], ['contratti', 'Contratti'], ['statistiche', 'Statistiche']], S.segT, pc() ? '' : 'stretti');
+  const btn = S.segT === 'aperti' ? giallo(ico('piu', 20) + 'Nuovo ticket', 'data-azione="nuovo-ticket"') : S.segT === 'contratti' && soldi() && puo('ticket', 2) ? giallo(ico('piu', 20) + 'Nuovo contratto', 'data-azione="avviso" data-testo="Si apre il modulo del contratto: cliente, impianti, periodo, canone"') : '';
+  if (pc()) return titoloPc('12 · Ticket e assistenza', titolo, btn) + '<div style="max-width:820px">' + seg + '</div>' + corpo;
+  return testaTel('', false) + '<h1 class="titolo">Ticket e assistenza</h1>' + seg + corpo + inBasso(btn);
+}
+
+// ------------------------------------------------------------------ ticket: la pagina
+function passiTk(t) {
+  const n = { aperto: 1, in_carico: 2, in_attesa: 2, risolto: 3, chiuso: 4, annullato: 4 }[t.stato];
+  return '<div class="passi">' + ['Aperto', 'In carico', 'Risolto', 'Chiuso'].map((p, i) => '<span class="' + (i < n ? 'fatto' : '') + '">' + p + '</span>').join('') + '</div>';
+}
+function gialloTk(t) {
+  if (t.stato === 'aperto' && !t.resp) return ['Prendo io', 'data-azione="prendi" data-id="' + t.id + '"'];
+  if (t.stato === 'in_attesa') return ['Riprendi', 'data-azione="riprendi" data-id="' + t.id + '"'];
+  if (t.stato === 'risolto') return chiude() ? ['Chiudi il ticket', 'data-azione="chiudi" data-id="' + t.id + '"'] : null;
+  if (t.stato === 'in_carico' || t.stato === 'aperto') {
+    if (t.rap.some(r => r.stato === 'Firmato')) return ['Segna risolto', 'data-azione="risolvi" data-id="' + t.id + '"'];
+    if (t.interventi.some(i => i.g <= OGGI)) return [ico('firma', 20) + 'Scrivi il rapportino', 'data-azione="rapportino" data-id="' + t.id + '"'];
+    if (!t.interventi.length) return ['Pianifica l\'intervento', 'data-azione="pianifica" data-id="' + t.id + '"'];
+  }
+  return null;
+}
+function corpoTk(t) {
+  const c = CLI[t.cli], im = IMP[t.imp], p = PRIO[t.pr], st = STATI[t.stato];
+  const ritardo = t.pr === 'urgente' && !t.resp && ORA > 9 + 40 / 60 && t.aperto[0] === OGGI;
+  const testa = '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">' + pill(p[0], p[1]) + pill(st[0] + (t.stato === 'chiuso' ? ' · ' + MODI[t.fatt].toLowerCase() : ''), st[1]) + (ritardo ? pill('In ritardo', 'p-rosso') : '') + (t.locale ? pill('Parte appena c\'è rete', 'p-grigio') : '') + '</div>' +
+    '<h1 class="titolo" style="font-size:' + (pc() ? 28 : 26) + 'px">' + t.titolo + '</h1><p class="sottotitolo">' + t.num + ' · aperto ' + (t.aperto[0] === OGGI ? 'oggi' : quandoIt(t.aperto[0])) + ' alle ' + t.aperto[1] + ' · ' + t.origine.toLowerCase() + ' · ' + TIPI[t.tipo].toLowerCase() + '</p>' + passiTk(t);
+  const contr = t.contr ? CONTRATTI[t.contr] : null;
+  const cliImp = '<div class="scheda righe">' + riga({ sx: cerchioCli(t.cli), t1: c.nome, t2: t.chi || 'Chi ha chiamato non è scritto', vai: 'cliente|' + t.cli }) + riga({ ico: 'fulmine', col: 'ico-blu', t1: im.nome, t2: im.cat + ' · ' + im.ind, vai: 'impianto|' + im.id }) +
+    (contr ? riga({ ico: 'preventivo', col: 'ico-grigio', t1: 'Nel contratto ' + contr.num, t2: 'copre ' + contr.copre.toLowerCase() + (contr.materiali ? '' : ' · materiale a parte'), vai: 'contratto|' + contr.id }) : '') + (t.rif ? riga({ ico: 'numero', t1: 'Riferimento del cliente', t2: t.rif }).replace('ico-riga ico-grigio"><svg', 'ico-riga ico-grigio"><svg') : '') + '</div>';
+  const tempi = aperto(t) ? '<div class="tempi' + (ritardo ? ' ritardo' : '') + '">' + (t.tipo === 'programmato' ? '<span>Da fare entro ' + dLunga(t.previsto) + '</span>' : (!t.resp ? '<span>' + (ritardo ? 'Da prendere entro le ' + t.entroPresa + ': in ritardo' : 'Da prendere entro le ' + t.entroPresa) + '</span>' : '') + '<span>Intervento entro ' + t.entroInt + '</span>') + '</div>' : '';
+  const desc = t.desc ? sez('Cosa dice il cliente', '<div class="scheda" style="font-size:16px;font-weight:500;line-height:1.45">' + t.desc + (t.motivo && t.stato === 'in_attesa' ? '<div class="fascia" style="margin-top:10px">' + ico('pausa', 18) + '<span>In attesa: ' + t.motivo + '</span></div>' : '') + '</div>') : '';
+  const interventi = sez('Interventi', righe(t.interventi.map(i => riga({ ico: 'calendario', col: i.fatto ? 'ico-verde' : 'ico-blu', t1: Maiusc(quandoIt(i.g)) + ' alle ' + oraIt(i.ora), t2: U[i.chi] + ' · ' + im.luogo + (i.fatto ? ' · fatto' : ''), vai: 'calendario' }))
+    .concat(aperto(t) && t.interventi.length && puo('ticket', 2) ? ['<button type="button" class="riga" data-azione="pianifica" data-id="' + t.id + '"><span class="ico-riga ico-grigio">' + ico('piu', 20) + '</span><span class="corpo"><span class="t1" style="color:var(--giallo-testo)">Un altro intervento</span></span></button>'] : [])));
+  const rap = t.rap.length ? sez('Rapportini', righe(t.rap.map(r => riga({ ico: 'firma', col: r.stato === 'Firmato' ? 'ico-verde' : 'ico-grigio', t1: r.id + ' · ' + dBreve(r.data), t2: numIt(r.ore) + ' ore' + (r.viaggio ? ' e ' + numIt(r.viaggio) + ' di viaggio' : '') + ' · ' + r.km + ' km' + (r.firm ? ' · firmato da ' + r.firm : ''), dx: pill(r.stato === 'Da firmare' ? 'Da firmare' : r.stato, r.stato === 'Firmato' ? 'p-verde' : r.stato === 'Da firmare' ? 'p-giallo' : 'p-grigio'), attr: 'data-azione="avviso" data-testo="Si apre il rapportino ' + r.id + '"' })))) : '';
+  const s = sommaTk(t);
+  const spese = sez('Ore, materiali e spese', '<div class="scheda righe">' + t.spese.map(x => riga({ ico: 'scontrino', col: 'ico-grigio', t1: x.d, t2: x.cat + ' · ' + x.a, quanto: euro(x.imp) })).join('') +
+    '<div class="riga" style="min-height:52px"><span class="corpo"><span class="t1" style="font-size:15px">' + (s.ore ? numIt(s.ore) + ' ore · ' + s.km + ' km' : 'Ancora niente') + (s.spese ? ' · materiale e spese ' + euro(s.spese) : '') + '</span>' + (soldi() && s.importo ? '<span class="t2">In fattura come lavoro: ' + euro(s.importo) + '</span>' : '') + '</span></div>' +
+    (aperto(t) && puo('ticket', 2) ? '<div class="riga" style="gap:8px;min-height:60px"><button type="button" class="btn-piccolo" data-azione="avviso" data-testo="Si apre Registra ore col ticket già scelto">' + ico('piu', 16) + 'Ore</button><button type="button" class="btn-piccolo" data-azione="avviso" data-testo="Si apre Nuova spesa: materiale, al cliente, col ticket">' + ico('piu', 16) + 'Materiale o spesa</button></div>' : '') + '</div>');
+  const foto = sez('Foto', '<div class="foto-fila">' + Array.from({ length: t.foto }, () => '<span class="foto-mini" role="img" aria-label="Foto del ticket"></span>').join('') + (aperto(t) && puo('ticket', 2) ? '<button type="button" class="foto-nuova" data-azione="foto" data-id="' + t.id + '">' + ico('foto', 22) + 'Fotografa</button>' : '') + (t.foto === 0 && !aperto(t) ? '<span class="vuoto">Nessuna foto.</span>' : '') + '</div>');
+  const storico = sez('Storico dell\'impianto', righe(vociStorico(im.id).filter(v => v.k !== 'tk' + t.id).slice(0, 3).map(v => riga({ ico: v.ico, col: v.col, t1: v.t1, t2: v.t2 })).concat(['<button type="button" class="riga" data-vai="impianto|' + im.id + '" style="min-height:52px"><span class="corpo"><span class="t1" style="color:var(--giallo-testo)">Vedi tutto lo storico</span></span><span class="freccia">' + ico('freccia', 18) + '</span></button>'])));
+  const cron = sez('Cronologia', '<div class="scheda" style="padding:4px 18px">' + (t.cron.length ? t.cron.map(x => '<div class="tempo-voce"><span class="quando">' + x[0] + '</span><span class="cosa">' + x[1] + '</span></div>').join('') : '<div class="vuoto">Nessuna voce.</div>') + '</div>');
+  const g = gialloTk(t);
+  const nota = t.stato === 'risolto' && !chiude() ? '<div class="vuoto" style="text-align:center">Lo chiude l\'ufficio.</div>' : '';
+  const menu = puo('ticket', 2) ? '<button type="button" class="tondo" data-azione="menu-tk" data-id="' + t.id + '" aria-label="Altre azioni">' + ico('piuvoci', 20) + '</button>' : '';
+  return { testa: testa + tempi, cliImp, desc, interventi, rap, spese, foto, storico, cron, g, nota, menu };
+}
+function pagTk(id) {
+  const t = tk(id);
+  if (!t || !vedeTk(t)) return pagTicket();
+  if (pc()) return pagTicket();
+  const p = corpoTk(t);
+  return testaTel('Ticket', true, p.menu) + p.testa + p.cliImp + p.desc + p.interventi + p.rap + p.spese + p.foto + p.storico + p.cron + p.nota + inBasso(p.g ? giallo(p.g[0], p.g[1]) : '');
+}
+function pannelloTk(id) {
+  const t = tk(id); if (!t) return '';
+  const p = corpoTk(t);
+  return '<div style="display:flex;justify-content:space-between;align-items:center"><span class="dove">Ticket</span><div style="display:flex;gap:8px">' + p.menu + '<button type="button" class="tondo" data-azione="chiudi-pannello" aria-label="Chiudi">' + ico('chiudi', 20) + '</button></div></div>' +
+    p.testa + p.cliImp + p.desc + p.interventi + p.rap + p.spese + p.foto + p.storico + p.cron + p.nota + (p.g ? '<div style="position:sticky;bottom:0;padding-top:8px;background:linear-gradient(to bottom, transparent, var(--scheda) 30%)"><button type="button" class="btn-giallo" style="width:100%;justify-content:center;height:56px" ' + p.g[1] + '>' + p.g[0] + '</button></div>' : '');
+}
+
+// ------------------------------------------------------------------ nuovo ticket
+function formNuovo() {
+  const n = S.nt;
+  const pr = n.prMano || (n.impatto && n.urgenza ? MATRICE[n.impatto][n.urgenza] : 'normale');
+  const contr = n.imp && IMP[n.imp].contr ? CONTRATTI[IMP[n.imp].contr] : null;
+  const recenti = ['C002', 'C004', 'C003', 'C001'].map(id => '<button type="button" class="scelta-ruolo' + (n.cli === id ? ' scelto' : '') + '" data-nt="cli|' + id + '" style="align-items:center">' + cerchioCli(id) + '<span style="display:flex;flex-direction:column;gap:2px"><b>' + CLI[id].nome + '</b><span>' + CLI[id].citta + '</span></span></button>').join('');
+  const impianti = n.cli ? pillole('nt-imp', Object.values(IMP).filter(i => i.cli === n.cli).map(i => [String(i.id), i.nome]).concat([['0', 'Nessuno in particolare']]), String(n.imp || (n.imp === 0 ? 0 : ''))) : '<div class="vuoto">Prima scegli il cliente.</div>';
+  const a = '<div class="domanda"><span class="q">Per chi</span><div style="display:flex;flex-direction:column;gap:8px">' + recenti + '</div></div>' +
+    '<div class="domanda"><span class="q">Quale impianto</span>' + impianti + (contr ? '<div class="esito-prio" style="font-size:14px"><span>Nel contratto ' + contr.num + ' · copre ' + contr.copre.toLowerCase() + '</span><button type="button" class="testo-link" data-azione="avviso" data-testo="Si sceglie un altro contratto o nessuno">Cambia</button></div>' : '') + '</div>' +
+    '<div class="campo"><label for="nt-titolo">Cosa succede</label><input id="nt-titolo" data-ntin="titolo" value="' + n.titolo.replace(/"/g, '&quot;') + '"></div>' +
+    '<div class="campo"><label for="nt-desc">Cosa dice il cliente</label><textarea id="nt-desc" data-ntin="desc">' + n.desc + '</textarea></div>' +
+    '<button type="button" class="testo-link" style="align-self:flex-start" data-azione="avviso" data-testo="Si aprono Chi ha chiamato e Riferimento del cliente">' + ico('piu', 16) + ' Chi ha chiamato e riferimento del cliente</button>';
+  const b = '<div class="domanda"><span class="q">Da dove arriva</span>' + pillole('nt-origine', [['Telefono', 'Telefono'], ['Email', 'Email'], ['Sopralluogo', 'Sopralluogo'], ['Ufficio', 'Ufficio']], n.origine, 'piccole') + '</div>' +
+    '<div class="domanda"><span class="q">Che cos\'è</span>' + pillole('nt-tipo', [['guasto', 'Guasto'], ['verifica', 'Verifica'], ['piccolo', 'Piccolo intervento'], ['assistenza', 'Assistenza']], n.tipo, 'piccole') + '</div>' +
+    '<div class="domanda"><span class="q">L\'impianto è fermo?</span>' + pillole('nt-impatto', [['fermo', 'Fermo'], ['ridotto', 'Va a metà'], ['nessuno', 'Funziona']], n.impatto) + '</div>' +
+    '<div class="domanda"><span class="q">Per quando?</span>' + pillole('nt-urgenza', [['subito', 'Subito'], ['presto', 'Entro domani'], ['quando', 'Quando si può']], n.urgenza) + '</div>' +
+    '<div class="esito-prio"><span style="display:flex;align-items:center;gap:8px">Priorità ' + pill(PRIO[pr][0], PRIO[pr][1]) + '</span><button type="button" class="testo-link" data-azione="cambia-prio">Cambia</button></div>' +
+    '<div class="tempi"><span>Intervento entro ' + entroIt(contr && pr === 'urgente' ? 4 : ORE_INT[pr]) + '</span></div>' +
+    '<div class="domanda"><span class="q">Chi lo segue</span>' + pillole('nt-resp', io().ruolo === 'collaboratore' ? [['io', 'Io'], ['nessuno', 'Nessuno per ora']] : [['io', 'Io'], ['marco', 'Marco Rossato'], ['nessuno', 'Nessuno per ora']], n.resp, 'piccole') + '</div>';
+  return { a, b };
+}
+function pagNuovoTk() {
+  const f = formNuovo();
+  return testaTel('Ticket', true) + '<h1 class="titolo">Nuovo ticket</h1>' + f.a + f.b + inBasso(giallo('Apri il ticket', 'data-azione="apri-ticket"'));
+}
+function finestraNuovoTk() {
+  const f = formNuovo();
+  foglio(titoloF('Nuovo ticket') + '<div class="pc-griglia" style="grid-template-columns:1fr 1fr"><div style="display:flex;flex-direction:column;gap:14px">' + f.a + '</div><div style="display:flex;flex-direction:column;gap:14px">' + f.b + '</div></div>' + gialloF('Apri il ticket', 'data-azione="apri-ticket"'), 'larga');
+}
+
+// ------------------------------------------------------------------ storico dell'impianto
+function vociStorico(idImp) {
+  const v = [];
+  TICKET.filter(t => t.imp === idImp).forEach(t => v.push({ k: 'tk' + t.id, data: t.aperto[0], ico: 'chiave', col: aperto(t) ? PRIO[t.pr][2] : 'ico-grigio', t1: t.num + ' · ' + t.titolo, t2: dIt(t.aperto[0]) + ' · ' + STATI[t.stato][0] + ' · ' + TIPI[t.tipo] }));
+  TICKET.filter(t => t.imp === idImp).forEach(t => t.rap.forEach(r => v.push({ k: r.id, data: r.data, ico: 'firma', col: 'ico-verde', t1: r.id + ' · ' + t.titolo, t2: dIt(r.data) + ' · ' + U[r.chi] + ' · ' + numIt(r.ore) + ' ore · firmato da ' + r.firm })));
+  DOCS.filter(d => d.imp === idImp && vedeDoc(d)).forEach(d => v.push({ k: 'd' + d.id, data: d.data, ico: icoColl(d), col: 'ico-blu', t1: d.titolo + (d.rev ? ' rev. ' + (d.rev.find(r => r.stato === 'approvata') || d.rev[0]).n : ''), t2: dIt(d.data) + ' · ' + d.cat }));
+  if (idImp === 4) v.push({ k: 'r98', data: '2026-06-18', ico: 'firma', col: 'ico-verde', t1: 'RAP/2026/0098 · Manutenzione semestrale', t2: '18/06/2026 · Manuel Gasparotto · 4 ore · firmato da R. Ferretti' }, { k: 'c2', data: '2025-12-18', ico: 'preventivo', col: 'ico-grigio', t1: 'Contratto CA/2026/002 firmato', t2: '18/12/2025 · Manutenzione cabina MT Acme' });
+  SCAD.filter(s => s.imp === idImp && s.stato === 'fatta').forEach(s => v.push({ k: 's' + s.id, data: s.fattaIl, ico: 'bandiera', col: 'ico-verde', t1: s.titolo + ' fatta', t2: dIt(s.fattaIl) }));
+  return v.sort((a, b) => a.data < b.data ? 1 : -1);
+}
+function pagImpianto(id) {
+  id = Number(id);
+  const im = IMP[id];
+  const dati = '<div class="scheda" style="display:flex;flex-direction:column;gap:12px">' + coppie([['Potenza', im.potenza], ['Tensione', im.tensione], ['Messa in servizio', im.servizio ? dIt(im.servizio) : ''], ['Matricola', im.matricola], ['Ambiente', im.ambiente], ['Referente sul posto', im.referente], ['Note', im.note]]) + (puo('clienti', 2) ? '<button type="button" class="secondario" style="align-self:flex-start" data-azione="avviso" data-testo="Si apre il modulo dell\'impianto">Cambia</button>' : '') + '</div>';
+  const ap = sez('Aperti', righe(TICKET.filter(t => t.imp === id && aperto(t) && vedeTk(t)).map(rigaTk)));
+  const sc = sez('Scadenze', righe(SCAD.filter(s => s.imp === id && s.stato === 'aperta').map(rigaScad)));
+  const co = im.contr && CONTRATTI[im.contr] ? sez('Contratto', righe([rigaContratto(CONTRATTI[im.contr])])) : '';
+  const vs = vociStorico(id);
+  let anno = '';
+  const tempo = '<div class="scheda righe">' + vs.map(v => { const a = v.data.slice(0, 4); const h = a !== anno ? '<div class="etichetta" style="padding:14px 0 4px">' + a + '</div>' : ''; anno = a; return h + riga({ ico: v.ico, col: v.col, t1: v.t1, t2: v.t2 }); }).join('') + '</div>';
+  const testa = '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">' + pill(im.cat, 'p-blu') + '</div><h1 class="titolo">' + im.nome + '</h1><p class="sottotitolo">' + CLI[im.cli].nome + ' · ' + im.ind + '</p>';
+  const btn = puo('ticket', 2) ? giallo(ico('piu', 20) + 'Nuovo ticket per questo impianto', 'data-azione="nuovo-ticket" data-imp="' + id + '"') : '';
+  if (pc()) return testaPc('Storico dell\'impianto', btn) + testa + '<div class="pc-griglia"><div style="display:flex;flex-direction:column;gap:14px">' + dati + ap + sc + co + '</div>' + sez('Storico', tempo) + '</div>';
+  return testaTel('Impianto', true) + testa + dati + ap + sc + co + sez('Storico', tempo) + inBasso(btn);
+}
+
+// ------------------------------------------------------------------ contratto
+function corpoContratto(c) {
+  const st = { 'In scadenza': 'p-ambra', Attivo: 'p-verde' }[c.stato] || 'p-grigio';
+  const testa = '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span class="codice">' + c.num + '</span>' + pill(c.stato, st) + '</div><h1 class="titolo" style="font-size:26px">' + c.titolo + '</h1><p class="sottotitolo">' + CLI[c.cli].nome + ' · dal ' + dIt(c.dal) + ' al ' + dIt(c.al) + '</p>';
+  const fascia = c.disdetta ? '<div class="fascia">' + ico('allarme', 20) + '<span>Si rinnova da solo il 01/01/2027: la disdetta va mandata entro ' + dLunga(c.disdetta) + '</span></div>' : c.stato === 'In scadenza' ? '<div class="fascia">' + ico('allarme', 20) + '<span>Scade il ' + dIt(c.al) + ': rinnovalo o lascialo scadere</span></div>' : '';
+  const dati = '<div class="scheda">' + coppie([['Rinnovo', c.rinnovo === 'tacito' ? 'Si rinnova da solo, disdetta 60 giorni prima' : 'Senza rinnovo'], ['Copre', c.copre + (c.materiali ? ', materiali compresi' : ', materiale a parte')], ['Canone', soldi() ? euro(c.canone) + ' all\'anno, ' + c.rate : ''], ['Lavoro fuori contratto', soldi() && c.extra ? euro(c.extra) + ' all\'ora' : ''], ['Tempi promessi', c.tempi], ['Commessa', c.comm]]) + '</div>';
+  const imp = sez('Impianti e visite', righe(c.imp.map(x => riga({ ico: 'fulmine', col: 'ico-blu', t1: IMP[x[0]].nome, t2: 'una visita ogni ' + x[1] + ' mesi · la prossima ' + dLunga(x[2]), vai: 'impianto|' + x[0] }))));
+  const rate = soldi() ? sez('Rate del canone', righe(c.righe.map(r => riga({ ico: 'fatturazione', col: 'ico-grigio', t1: r[0], t2: dIt(r[1]) + ' · ' + euro(r[2]), dx: pill(r[3], 'p-verde') })))) : '';
+  const tkl = sez('Ticket del contratto', righe(TICKET.filter(t => t.contr === c.id && vedeTk(t)).map(rigaTk)));
+  const d = c.doc && doc(c.doc) && vedeDoc(doc(c.doc)) ? sez('Documento', righe([riga({ ico: 'doc', col: 'ico-blu', t1: doc(c.doc).titolo, t2: 'Contratti · rev. 0', vai: 'doc|' + c.doc })])) : '';
+  const g = c.stato === 'In scadenza' && c.rinnovo === 'no' && soldi() && puo('ticket', 2) ? ['Rinnova', 'data-azione="rinnova" data-id="' + c.id + '"'] : null;
+  return { html: testa + fascia + dati + imp + rate + tkl + d, g };
+}
+function pagContratto(id) {
+  const c = CONTRATTI[id]; if (!c) return pagTicket();
+  if (pc()) { S.segT = 'contratti'; return pagTicket(); }
+  const x = corpoContratto(c);
+  return testaTel('Contratti', true, puo('ticket', 2) && soldi() ? '<button type="button" class="tondo" data-azione="avviso" data-testo="Cambia, Disdici, Chiudi, Contratto in PDF" aria-label="Altre azioni">' + ico('piuvoci', 20) + '</button>' : '') + x.html + inBasso(x.g ? giallo(x.g[0], x.g[1]) : '');
+}
+function pannelloContratto(id) {
+  const x = corpoContratto(CONTRATTI[id]);
+  return '<div style="display:flex;justify-content:space-between;align-items:center"><span class="dove">Contratto</span><button type="button" class="tondo" data-azione="chiudi-pannello" aria-label="Chiudi">' + ico('chiudi', 20) + '</button></div>' + x.html +
+    (x.g ? '<div style="position:sticky;bottom:0;padding-top:8px;background:linear-gradient(to bottom, transparent, var(--scheda) 30%)"><button type="button" class="btn-giallo" style="width:100%;justify-content:center;height:56px" ' + x.g[1] + '>' + x.g[0] + '</button></div>' : '');
+}
+
+// ------------------------------------------------------------------ rapportino dal ticket (solo l'aggancio: i tre passi sono quelli di oggi)
+function pagRapportino(arg) {
+  const h = corpoRapportino(arg);
+  return pc() ? '<div style="max-width:680px;display:flex;flex-direction:column;gap:14px">' + h + '</div>' : h;
+}
+function corpoRapportino(arg) {
+  const [id, passo] = String(arg).split(':');
+  const t = tk(id); const im = IMP[t.imp];
+  const comm = im.comm || '';
+  if (passo === 'firma') return '<div class="testa"><div class="sx"><button type="button" class="tondo" data-azione="indietro" aria-label="Indietro">' + ico('indietro') + '</button></div><div class="dx"><span class="dove">Firma</span></div></div>' +
+    '<p class="sottotitolo">' + CLI[t.cli].nome + ' · ' + dLunga(OGGI) + '</p><h1 class="titolo">Firma del cliente</h1>' +
+    '<div class="scheda" style="font-size:16px;font-weight:500;line-height:1.45">Controllato il generale MT e la bobina di sgancio: sostituito il relè di protezione, prove di intervento a posto.<div class="t2" style="margin-top:8px;color:var(--tenue);font-weight:600;font-size:14px">3 ore di lavoro · 1 ora di viaggio · 48 km</div></div>' +
+    '<div class="campo"><label>Nome di chi firma</label><input value="R. Ferretti" aria-label="Nome di chi firma"></div>' +
+    '<div class="firma-box"><svg viewBox="0 0 330 230" aria-hidden="true"><path d="M40 160c20-30 40-80 60-80s-10 70 15 70 30-50 50-50 10 40 35 40 25-30 45-30 15 20 40 20" fill="none" stroke="#1B1B1F" stroke-width="3" stroke-linecap="round"/></svg><span class="linea"></span></div>' +
+    '<div class="vuoto" style="text-align:center;padding:4px">Firmando confermi lavoro e ore del rapportino</div>' + inBasso(giallo(ico('spunta', 20) + 'Conferma firma', 'data-azione="firma" data-id="' + t.id + '"'));
+  return '<div class="testa"><div class="sx"><button type="button" class="tondo" data-azione="indietro" aria-label="Indietro">' + ico('indietro') + '</button></div><div class="dx"><span class="dove">Passo 2 di 3</span></div></div>' +
+    '<div class="barra-passi"><i style="width:66%"></i></div>' +
+    '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span class="sottotitolo">' + CLI[t.cli].nome + (comm ? ' · ' + comm : '') + '</span>' + pill('Ticket ' + t.num, 'p-grigio') + '</div><h1 class="titolo">Ore e strada</h1>' +
+    '<div class="scheda" style="display:flex;justify-content:space-between;align-items:center"><b style="font-size:18px">Lavoro</b><span class="stepper"><button type="button" aria-label="Meno">−</button><b>3 h</b><button type="button" aria-label="Più">+</button></span></div>' +
+    '<div class="scheda" style="display:flex;justify-content:space-between;align-items:center"><span style="display:flex;flex-direction:column"><b style="font-size:18px">Viaggio</b><span class="t2" style="color:var(--tenue);font-weight:600;font-size:13px">pagato</span></span><span class="stepper"><button type="button" aria-label="Meno">−</button><b>1 h</b><button type="button" aria-label="Più">+</button></span></div>' +
+    '<div class="scheda" style="display:flex;flex-direction:column;gap:10px"><b style="font-size:18px">Chilometri</b><div class="campo"><input value="48" aria-label="Chilometri"></div><div class="pillole piccole"><button type="button" aria-pressed="true">Ultima volta · 48 km</button><button type="button" aria-pressed="false">Senza auto</button></div></div>' +
+    '<div class="scheda">' + coppie([['Luogo', im.ind], ['Ticket', t.num]]) + '</div>' +
+    (pc() ? '' : '<div style="height:84px"></div>') + '<div class="' + (pc() ? '' : 'in-basso') + '" style="display:flex;align-items:center;gap:14px"><span style="display:flex;flex-direction:column;flex:1"><span class="t2" style="color:var(--tenue);font-weight:700;font-size:14px">' + (soldi() ? 'Totale' : 'Ore') + '</span><b style="font-size:24px">' + (soldi() ? euro(204.48) : '4 h') + '</b></span><button type="button" class="' + (pc() ? 'btn-giallo' : 'principale') + '" style="' + (pc() ? '' : 'width:172px;height:60px') + '" data-vai="rapportino|' + t.id + ':firma">Avanti</button></div>';
+}
+
+// ------------------------------------------------------------------ documenti
+function rigaDoc(d) {
+  const st = statoDoc(d); const att = revAttesa(d);
+  const sc = d.scad && scad(d.scad) && scad(d.scad).stato === 'aperta' && statoScad(scad(d.scad))[1] !== 'p-grigio' ? pill(statoScad(scad(d.scad))[0], statoScad(scad(d.scad))[1]) : '';
+  const t2 = d.cat + ' · ' + legatoA(d) + (d.rev ? ' · rev. ' + (d.rev.find(r => r.stato === 'approvata') || d.rev[0]).n : d.cartella ? ' · cartella' : '');
+  const dx = (att ? pill('Da approvare', 'p-giallo') : '') + sc + (d.origine === 'collegamento' || d.cat === 'Da classificare' ? pill(st[0], st[1]) : '') + (d.vede === 'costi' ? '<span style="color:var(--tenue)" aria-label="Solo chi vede i prezzi">' + ico('lucchetto', 16) + '</span>' : '');
+  if (pc()) return '<div class="tr cl" data-vai="doc|' + d.id + '" style="grid-template-columns:minmax(0,1.4fr) 170px minmax(0,1fr) 150px 120px"><span style="display:flex;gap:10px;align-items:center;min-width:0"><span class="ico-riga ' + (d.origine === 'collegamento' ? 'ico-blu' : 'ico-grigio') + '" style="width:34px;height:34px">' + ico(icoColl(d), 18) + '</span><b style="overflow:hidden;text-overflow:ellipsis">' + d.titolo + '</b></span><span style="color:var(--testo2);font-weight:600;font-size:14px">' + d.cat + '</span><span style="color:var(--tenue);font-weight:600;font-size:14px">' + legatoA(d) + '</span><span class="pill-riga" style="justify-content:flex-start">' + (att ? pill('Da approvare', 'p-giallo') : pill(st[0], st[1])) + '</span><span style="color:var(--tenue);font-size:14px;font-weight:600">' + (sc ? sc : dBreve(d.data) + '/' + d.data.slice(2, 4)) + '</span></div>';
+  return riga({ sx: '<span class="ico-riga ' + (d.origine === 'collegamento' ? 'ico-blu' : 'ico-grigio') + '">' + ico(icoColl(d), 20) + '</span>', t1: d.titolo, t2: t2, dx, vai: 'doc|' + d.id });
+}
+function filtraDoc() {
+  let l = DOCS.filter(vedeDoc);
+  if (S.filtroD === 'classificare') l = l.filter(d => d.cat === 'Da classificare');
+  if (S.filtroD === 'cliente') l = l.filter(d => d.cli === 'C002');
+  if (S.filtroD === 'commessa') l = l.filter(d => d.comm === '26ST041');
+  if (S.filtroD === 'impianto') l = l.filter(d => d.imp === 4);
+  if (S.catD) l = l.filter(d => d.cat === S.catD);
+  const q = S.cercaD.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  if (q) l = l.filter(d => q.split(/\s+/).every(p => (d.titolo + ' ' + d.cat + ' ' + legatoA(d) + ' ' + (d.rif || '')).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').includes(p)));
+  return l;
+}
+function corpoArchivio() {
+  const l = filtraDoc();
+  const filtroPill = { cliente: 'Rossi Impianti Srl', commessa: '26ST041', impianto: 'Cabina MT Acme' }[S.filtroD];
+  const cerca = '<label class="cerca">' + ico('cerca', 20) + '<input data-cerca="d" placeholder="Cerca titolo, cliente, commessa, impianto" value="' + S.cercaD.replace(/"/g, '&quot;') + '" aria-label="Cerca nei documenti"></label>';
+  const filtri = filtroPill ? '<div class="pillole piccole"><button type="button" aria-pressed="false" data-filtro-d="tutti" style="background:var(--giallo-tenue);border-color:var(--giallo-tratteggio);color:var(--giallo-testo)">' + filtroPill + ' ' + ico('chiudi', 14) + '</button></div>'
+    : pillole('filtro-d', [['tutti', 'Tutti'], ['cliente', 'Per cliente'], ['commessa', 'Per commessa'], ['impianto', 'Per impianto'], ['classificare', 'Da classificare']], S.filtroD, 'piccole scorre');
+  const cats = pillole('cat-d', [['', 'Tutte le categorie']].concat(CAT.filter(c => DOCS.some(d => d.cat === c && vedeDoc(d))).map(c => [c, c])), S.catD || '', 'piccole scorre');
+  const sfoglia = '<div class="riga" style="min-height:56px;border:1px solid var(--bordo);border-radius:16px;padding:8px 14px;background:var(--scheda)"><span class="ico-riga ico-grigio">' + ico('commesse', 20) + '</span><span class="corpo"><span class="t1" style="font-size:15px">Sfoglia OneDrive e Google Drive</span><span class="t2">Intanto incolla il collegamento</span></span>' + pillNonCollegato + '</div>';
+  if (pc()) {
+    const conta = c => DOCS.filter(d => vedeDoc(d) && (!c || d.cat === c)).length;
+    const lato = '<div class="cat-lato">' + [['', 'Tutte']].concat(CAT.filter(c => conta(c)).map(c => [c, c])).map(c => '<button type="button" data-cat-d="' + c[0] + '" aria-pressed="' + ((S.catD || '') === c[0]) + '">' + c[1] + '<span>' + conta(c[0]) + '</span></button>').join('') + '</div>';
+    return '<div class="colonne-pc">' + lato + '<div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:14px">' + cerca + filtri + '<div class="tabella"><div class="tr th" style="grid-template-columns:minmax(0,1.4fr) 170px minmax(0,1fr) 150px 120px"><span>Titolo</span><span>Categoria</span><span>Legato a</span><span>Stato</span><span>Scadenza</span></div>' + (l.length ? l.map(rigaDoc).join('') : '<div class="tr"><span class="vuoto">Nessun documento.</span></div>') + '</div>' + sfoglia + '</div></div>';
+  }
+  return cerca + filtri + cats + righe(l.map(rigaDoc)) + sfoglia;
+}
+function corpoApprovare() {
+  const l = daApprovare().filter(d => approva() || revAttesa(d).chi === io().id);
+  return righe(l.map(d => { const r = revAttesa(d); return riga({ ico: 'doc', col: 'ico-giallo', t1: d.titolo, t2: 'rev. ' + r.n + ' · ' + U[r.chi] + ' · ' + r.quando, t3: r.nota, dx: pill('Da approvare', 'p-giallo'), vai: 'doc|' + d.id }); })) + (l.length ? '' : '');
+}
+function rigaScad(s) {
+  const st = statoScad(s);
+  return riga({ sx: '<span class="data-box ' + st[2] + '"><b>' + Number(s.data.slice(8)) + '</b><span>' + MESE_BREVE[Number(s.data.slice(5, 7)) - 1] + ' ' + s.data.slice(2, 4) + '</span></span>', t1: s.titolo, t2: [s.cli ? CLI[s.cli].nome : 'Studio', s.imp ? IMP[s.imp].nome : '', s.ogni ? 'ogni ' + (s.ogni % 12 === 0 ? (s.ogni / 12 === 1 ? 'anno' : s.ogni / 12 + ' anni') : s.ogni + ' mesi') : 'una volta'].filter(Boolean).join(' · '), dx: pill(st[0], st[1]), attr: 'data-scad="' + s.id + '"' });
+}
+function corpoScadenze() {
+  const ap = SCAD.filter(s => s.stato === 'aperta' && (soldi() || !s.contr));
+  const g = s => giorniTra(OGGI, s.data);
+  return sez('Scadute', righe(ap.filter(s => g(s) < 0).map(rigaScad))) + sez('Nel preavviso', righe(ap.filter(s => g(s) >= 0 && g(s) <= s.prea).map(rigaScad))) + sez('Più avanti', righe(ap.filter(s => g(s) > s.prea).map(rigaScad))) +
+    (SCAD.some(s => s.stato === 'fatta') ? sez('Fatte di recente', righe(SCAD.filter(s => s.stato === 'fatta').map(rigaScad))) : '');
+}
+function corpoModelli() {
+  const wis = [['Rapportino', 'impaginazione fissa · testo dell\'email'], ['Riepilogo del mese', 'impaginazione fissa · testo dell\'email'], ['Preventivo', 'impaginazione fissa · introduzione, condizioni, email'], ['Prospetto per il programma delle fatture', 'impaginazione fissa'], ['Avviso di parcella', 'impaginazione fissa · testo dell\'email'], ['Lettera', 'impaginazione fissa · verifica impianto di terra, lettera libera'], ['Contratto di assistenza', 'impaginazione fissa · condizioni']];
+  const studio = [['Dichiarazione di conformità (allegato I)', 'Word · 2 pagine'], ['Verbale di verifica cabina MT', 'PDF · 3 pagine'], ['Checklist manutenzione cabina', 'Excel']];
+  return sez('Modelli di Wisper', righe(wis.map(m => riga({ ico: 'doc', col: 'ico-grigio', t1: m[0], t2: m[1], attr: puo('amministrazione', 2) ? 'data-azione="testi" data-nome="' + m[0] + '"' : 'data-azione="avviso" data-testo="I testi li cambia chi ha Amministrazione"' })))) +
+    sez('Modelli dello studio', righe(studio.map(m => riga({ ico: 'doc', col: 'ico-blu', t1: m[0], t2: m[1], attr: 'data-azione="avviso" data-testo="Si apre ' + m[0] + '"' }))));
+}
+function pagDocumenti() {
+  const segs = [['archivio', 'Archivio']].concat(approva() || daApprovare().some(d => revAttesa(d).chi === io().id) ? [['approvare', 'Da approvare']] : []).concat([['scadenze', 'Scadenze'], ['modelli', 'Modelli']]);
+  if (!segs.some(s => s[0] === S.segD)) S.segD = 'archivio';
+  const corpo = { archivio: corpoArchivio, approvare: corpoApprovare, scadenze: corpoScadenze, modelli: corpoModelli }[S.segD]();
+  const titolo = { archivio: 'Archivio', approvare: 'Da approvare', scadenze: 'Scadenze', modelli: 'Modelli' }[S.segD];
+  const btn = !puo('documenti', 2) ? '' : S.segD === 'archivio' ? giallo(ico('piu', 20) + 'Aggiungi un documento', 'data-azione="aggiungi"') : S.segD === 'scadenze' ? giallo(ico('piu', 20) + 'Nuova scadenza', 'data-azione="avviso" data-testo="Si apre Nuova scadenza: cosa, quando, ogni quanto, il preavviso"') : S.segD === 'modelli' ? giallo(ico('piu', 20) + 'Nuova lettera', 'data-azione="lettera"') : '';
+  const seg = segmenti('segD', segs, S.segD);
+  if (pc()) return titoloPc('11 · Documenti', titolo, btn) + '<div style="max-width:620px">' + seg + '</div>' + corpo;
+  return testaTel('', false) + '<h1 class="titolo">Documenti</h1>' + seg + corpo + inBasso(btn);
+}
+function corpoDoc(d) {
+  const st = statoDoc(d); const att = revAttesa(d);
+  const valida = d.rev ? d.rev.find(r => r.stato === 'approvata') : null;
+  const testa = '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">' + pill(st[0], st[1]) + (att ? pill('rev. ' + att.n + ' da approvare', 'p-giallo') : '') + (d.cartella ? pill('Cartella', 'p-grigio') : '') + (d.vede === 'costi' ? pill('Chi vede i prezzi', 'p-grigio') : '') + '</div><h1 class="titolo" style="font-size:' + (pc() ? 26 : 24) + 'px">' + d.titolo + '</h1><p class="sottotitolo">' + d.cat + ' · ' + dIt(d.data) + (d.rif ? ' · ' + d.rif : '') + '</p>';
+  const leg = sez('A cosa è legato', righe([d.cli ? riga({ sx: cerchioCli(d.cli), t1: CLI[d.cli].nome, t2: 'Cliente', vai: 'cliente|' + d.cli }) : riga({ sx: cerchioCli(''), t1: 'Studio Tecnico GM', t2: 'Documento dello studio' }), d.comm ? riga({ sx: '<span class="codice" style="flex:none">' + d.comm + '</span>', t1: 'Commessa', t2: d.comm === '26ST041' ? 'Assistenza cabina MT Acme' : 'Commessa ' + d.comm, vai: d.comm === '26ST041' ? 'commessa|26ST041' : '' }) : '', d.imp ? riga({ ico: 'fulmine', col: 'ico-blu', t1: IMP[d.imp].nome, t2: 'Impianto', vai: 'impianto|' + d.imp }) : ''].filter(Boolean)));
+  let corpo;
+  if (d.origine === 'file') {
+    corpo = '<div class="anteprima-pdf" role="img" aria-label="Anteprima della prima pagina"><i class="t"></i><i style="width:80%"></i><i style="width:65%"></i><span class="schema"></span></div>' +
+      sez('Revisioni', righe(d.rev.map(r => { const s = r.stato === 'da_approvare' ? ['Da approvare', 'p-giallo'] : r.stato === 'respinta' ? ['Respinta', 'p-rosso'] : r === valida ? ['Valida', 'p-verde'] : ['Superata', 'p-grigio']; return riga({ ico: 'doc', col: r === valida ? 'ico-verde' : 'ico-grigio', t1: 'rev. ' + r.n + (r.nota ? ' · ' + r.nota : ''), t2: U[r.chi] + ' · ' + r.quando + (r.motivo ? ' · ' + r.motivo : ''), dx: pill(s[0], s[1]), attr: 'data-azione="avviso" data-testo="Si apre la rev. ' + r.n + (s[0] === 'Superata' ? ', segnata superata' : '') + '"' }); }))) +
+      (puo('documenti', 2) ? '<button type="button" class="secondario" style="align-self:flex-start" data-azione="revisione" data-id="' + d.id + '">' + ico('importa', 18) + 'Carica una revisione</button>' : '');
+  } else {
+    corpo = sez('Collegamento', '<div class="scheda" style="display:flex;flex-direction:column;gap:10px"><div style="display:flex;gap:8px;align-items:center">' + pill(COLL[d.coll], 'p-coll') + (d.cartella ? pill('Cartella', 'p-grigio') : '') + '</div><div class="indirizzo">' + d.url + '</div><div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="btn-piccolo" data-azione="avviso" data-testo="Collegamento copiato">' + ico('duplica', 16) + 'Copia</button></div>' +
+      '<div class="vuoto" style="padding:0">' + (d.coll === 'percorso' ? (pc() ? 'Si apre in Esplora file.' : 'Si apre dal computer dello studio.') : d.coll === 'web' ? 'Il file è su un sito: Wisper non ne tiene una copia.' : 'Le revisioni le tiene ' + COLL[d.coll] + '.') + '</div></div>');
+  }
+  const sc = d.scad && scad(d.scad) ? sez('Scadenza', righe([rigaScad(scad(d.scad))])) : '';
+  const cond = sez('Condividi', '<div class="scheda righe">' + riga({ ico: 'condividi', col: 'ico-grigio', t1: 'Manda per email', t2: d.coll === 'percorso' ? 'Un percorso del computer non si può mandare' : d.origine === 'collegamento' ? 'Manda il collegamento' : 'Allegato, fino a 15 MB', attr: d.coll === 'percorso' || !puo('documenti', 2) ? '' : 'data-azione="manda" data-id="' + d.id + '"' }) +
+    '<div class="riga"><span class="ico-riga ico-grigio">' + ico('link', 20) + '</span><span class="corpo"><span class="t1">Link che scade</span><span class="t2">Per i clienti, fra 14 giorni</span></span>' + pillNonCollegato + '</div></div>');
+  const cron = sez('Cronologia', '<div class="scheda" style="padding:4px 18px">' + (d.rev ? d.rev.slice().reverse().map(r => '<div class="tempo-voce"><span class="quando">' + r.quando + '</span><span class="cosa">rev. ' + r.n + ' caricata da <b>' + U[r.chi] + '</b>' + (r.stato === 'approvata' && r.chi !== 1 ? ', approvata da <b>Manuel Gasparotto</b>' : '') + '</span></div>').join('') : '<div class="tempo-voce"><span class="quando">' + dBreve(d.data) + '</span><span class="cosa">Collegamento aggiunto da <b>Manuel Gasparotto</b></span></div>') + '</div>');
+  let g = null, sec = '';
+  if (att && approva()) { g = ['Approva la rev. ' + att.n, 'data-azione="approva" data-id="' + d.id + '"']; sec = bordo('Respingi', 'data-azione="respingi" data-id="' + d.id + '"'); }
+  else if (d.origine === 'file') g = ['Apri', 'data-azione="apri-doc" data-id="' + d.id + '"'];
+  else if (d.coll !== 'percorso' || pc()) g = [d.coll === 'percorso' ? 'Apri in Esplora file' : d.coll === 'web' ? 'Apri il sito' : 'Apri in ' + COLL[d.coll], 'data-azione="apri-doc" data-id="' + d.id + '"'];
+  const menu = '<button type="button" class="tondo" data-azione="avviso" data-testo="Cambia, Tieni sul telefono, Scarica, Archivia" aria-label="Altre azioni">' + ico('piuvoci', 20) + '</button>';
+  return { html: testa + (d.origine === 'file' ? corpo + leg : leg + corpo) + sc + cond + cron, g, sec, menu };
+}
+function pagDoc(id) {
+  const d = doc(id); if (!d || !vedeDoc(d)) return pagDocumenti();
+  if (pc()) return pagDocumenti();
+  const x = corpoDoc(d);
+  const btn = x.g ? (x.sec ? '<div style="display:flex;gap:10px">' + x.sec.replace('class="btn-bordo"', 'class="btn-bordo" style="height:64px;flex:none"') + giallo(x.g[0], x.g[1]) + '</div>' : giallo(x.g[0], x.g[1])) : '';
+  return testaTel('Documenti', true, x.menu) + x.html + inBasso(btn);
+}
+function pannelloDoc(id) {
+  const d = doc(id); if (!d) return '';
+  const x = corpoDoc(d);
+  return '<div style="display:flex;justify-content:space-between;align-items:center"><span class="dove">Documento</span><div style="display:flex;gap:8px">' + x.menu + '<button type="button" class="tondo" data-azione="chiudi-pannello" aria-label="Chiudi">' + ico('chiudi', 20) + '</button></div></div>' + x.html +
+    (x.g ? '<div style="position:sticky;bottom:0;padding-top:8px;display:flex;gap:8px;background:linear-gradient(to bottom, transparent, var(--scheda) 30%)">' + x.sec + '<button type="button" class="btn-giallo" style="flex:1;justify-content:center;height:56px" ' + x.g[1] + '>' + x.g[0] + '</button></div>' : '');
+}
+function tipoColl(u) {
+  u = u.trim();
+  if (/^https:\/\/[^/]*-my\.sharepoint\.com\//i.test(u) || /^https:\/\/(1drv\.ms|onedrive\.live\.com)\//i.test(u)) return ['onedrive', /\/:f:\/|\/f\//.test(u)];
+  if (/^https:\/\/[^/]*\.sharepoint\.com\//i.test(u)) return ['sharepoint', /\/:f:\/|Forms\/AllItems/.test(u)];
+  if (/^https:\/\/(drive|docs)\.google\.com\//i.test(u)) return ['gdrive', /\/drive\/folders\//.test(u)];
+  if (/^(\\\\|[a-z]:\\|file:\/\/\/)/i.test(u)) return ['percorso', /\\$/.test(u) || !/\.[a-z0-9]{2,4}$/i.test(u)];
+  if (/^https:\/\//i.test(u)) return ['web', false];
+  return null;
+}
+const LEGAMI = [{ cli: 'C004', imp: 7, comm: '' }, { cli: 'C002', imp: 4, comm: '26ST041' }, { cli: 'C003', imp: 8, comm: '' }, { cli: '', imp: null, comm: '' }];
+function formAggiungi() {
+  const a = S.ad;
+  const scelta = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">' +
+    '<button type="button" class="scelta-ruolo' + (a.modo === 'file' ? ' scelto' : '') + '" data-ad="modo|file" style="flex-direction:column"><span class="ico-riga ico-grigio">' + ico('importa', 20) + '</span><b>Carica un file</b><span>Fotografa o scegli</span></button>' +
+    '<button type="button" class="scelta-ruolo' + (a.modo === 'link' ? ' scelto' : '') + '" data-ad="modo|link" style="flex-direction:column"><span class="ico-riga ico-blu">' + ico('link', 20) + '</span><b>Collega un file o una cartella</b><span>OneDrive, Drive, il computer</span></button></div>';
+  const sfoglia = '<div class="riga" style="min-height:52px;border:1px solid var(--bordo);border-radius:16px;padding:6px 14px;background:var(--scheda)"><span class="corpo"><span class="t1" style="font-size:15px">Sfoglia OneDrive e Google Drive</span></span>' + pillNonCollegato + '</div>';
+  let sorgente = '';
+  if (a.modo === 'file') sorgente = a.file ? '<div class="scheda righe">' + riga({ ico: 'doc', col: 'ico-grigio', t1: a.file, t2: 'PDF · 1,2 MB · diventa la rev. 0' }) + '</div>' : '<div class="pillole"><button type="button" data-azione="scegli-file">' + ico('foto', 18) + ' Fotografa</button><button type="button" data-azione="scegli-file">Dal ' + (pc() ? 'computer' : 'telefono') + '</button></div>';
+  if (a.modo === 'link') { const tc = a.url ? tipoColl(a.url) : null; sorgente = '<div class="campo"><label for="ad-url">Collegamento</label><div style="display:flex;gap:8px"><input id="ad-url" data-adin="url" value="' + a.url.replace(/"/g, '&quot;') + '" placeholder="https://… o \\\\server\\cartella"><button type="button" class="btn-bordo" data-azione="incolla" style="height:56px">Incolla</button></div></div>' + (a.url ? (tc ? '<div style="display:flex;gap:8px">' + pill(COLL[tc[0]], 'p-coll') + (tc[1] ? pill('Cartella', 'p-grigio') : '') + '</div>' : '<div class="avviso-errore">Collegamento: incolla un indirizzo che comincia con https:// o un percorso come \\\\server\\cartella</div>') : ''); }
+  const leg = LEGAMI[a.leg];
+  const dati = a.modo ? '<div class="campo"><label for="ad-titolo">Titolo</label><input id="ad-titolo" data-adin="titolo" value="' + a.titolo.replace(/"/g, '&quot;') + '"></div>' +
+    '<div class="domanda"><span class="q">Categoria</span>' + pillole('ad-cat', CAT.filter(c => c !== 'Da classificare' && c !== 'Mandati ai clienti').map(c => [c, c]), a.cat, 'piccole') + '</div>' +
+    '<div class="domanda"><span class="q">A cosa è legato</span><div class="scheda righe">' + riga({ sx: cerchioCli(leg.cli), t1: leg.cli ? CLI[leg.cli].nome : 'Studio Tecnico GM', t2: [leg.comm, leg.imp ? IMP[leg.imp].nome : ''].filter(Boolean).join(' · ') || 'Documento dello studio', attr: 'data-azione="cambia-legame"' }) + '</div></div>' +
+    '<div class="domanda"><span class="q">Scade</span>' + pillole('ad-scade', [['no', 'No'], ['si', 'Sì']], a.scade ? 'si' : 'no', 'piccole') + '</div>' +
+    '<div class="domanda"><span class="q">Chi lo vede</span>' + pillole('ad-vede', [['tutti', 'Tutti'], ['costi', 'Chi vede i prezzi']], a.vede, 'piccole') + '</div>' : '';
+  return { scelta, sorgente, sfoglia, dati };
+}
+function pagAggiungi() {
+  const f = formAggiungi();
+  return testaTel('Documenti', true) + '<h1 class="titolo">Aggiungi un documento</h1>' + f.scelta + f.sorgente + f.sfoglia + f.dati + inBasso(S.ad.modo ? giallo('Salva il documento', 'data-azione="salva-doc"') : '');
+}
+function finestraAggiungi() {
+  const f = formAggiungi();
+  foglio(titoloF('Aggiungi un documento') + '<div class="pc-griglia" style="grid-template-columns:1fr 1fr"><div style="display:flex;flex-direction:column;gap:14px">' + f.scelta + f.sorgente + f.sfoglia + '<div class="zona-file" style="min-height:110px">' + ico('importa', 26) + 'Trascina qui un file o un link</div></div><div style="display:flex;flex-direction:column;gap:14px">' + (f.dati || '<div class="vuoto">Prima scegli il file o il collegamento.</div>') + '</div></div>' + (S.ad.modo ? gialloF('Salva il documento', 'data-azione="salva-doc"') : ''), 'larga');
+}
+
+// ------------------------------------------------------------------ altre pagine
+function pagCliente(id) {
+  const c = CLI[id];
+  const imp = sez('Sedi e impianti', righe(Object.values(IMP).filter(i => i.cli === id).map(i => riga({ ico: 'fulmine', col: 'ico-blu', t1: i.nome, t2: i.cat + ' · ' + i.ind, dx: pill('Impianto', 'p-blu'), vai: 'impianto|' + i.id }))));
+  const tkl = sez('Ticket', righe(TICKET.filter(t => t.cli === id && vedeTk(t)).map(rigaTk)));
+  const dl = DOCS.filter(d => d.cli === id && vedeDoc(d));
+  const docs = sez('Documenti', righe(dl.map(rigaDoc)), dl.length) + sez('Da Wisper', righe([riga({ ico: 'preventivo', col: 'ico-grigio', t1: 'Preventivo PR/2026/012 rev. 1', t2: '15/10/2026 · inviato', attr: 'data-azione="avviso" data-testo="Si apre il preventivo: il PDF lo fa l\'app"' }), riga({ ico: 'firma', col: 'ico-grigio', t1: 'Rapportino RAP/2026/0139', t2: '13/10/2026 · fatturato', attr: 'data-azione="avviso" data-testo="Si apre il rapportino"' })]));
+  const t = '<h1 class="titolo">' + c.nome + '</h1><p class="sottotitolo">' + c.citta + '</p>';
+  if (pc()) return testaPc('Clienti e fornitori') + t + '<div class="pc-griglia"><div style="display:flex;flex-direction:column;gap:14px">' + imp + tkl + '</div><div style="display:flex;flex-direction:column;gap:14px">' + docs + '</div></div>';
+  return testaTel('Clienti', true) + t + segmenti('x', [['d', 'Dati'], ['s', 'Sedi e impianti'], ['doc', 'Documenti'], ['t', 'Ticket']], 's', 'stretti') + imp + tkl + docs;
+}
+function pagCommessa(id) {
+  const t = '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span class="codice">26ST041</span>' + pill('Aperta', 'p-verde') + pill('Assistenza', 'p-blu') + '</div><h1 class="titolo">Assistenza cabina MT Acme</h1><p class="sottotitolo">Rossi Impianti Srl · Cabina MT Acme · dal contratto CA/2026/002</p>';
+  const contr = righe([riga({ ico: 'preventivo', col: 'ico-grigio', t1: 'Contratto CA/2026/002', t2: 'Manutenzione cabina MT Acme · si rinnova da solo', vai: 'contratto|2' })]);
+  const dl = DOCS.filter(d => d.comm === '26ST041' && vedeDoc(d));
+  const docs = sez('Documenti', righe(dl.map(rigaDoc))) + sez('Da Wisper', righe([riga({ ico: 'firma', col: 'ico-grigio', t1: 'Rapportino RAP/2026/0098', t2: '18/06/2026 · Manutenzione semestrale · firmato', attr: 'data-azione="avviso" data-testo="Si apre il rapportino"' })]));
+  const seg = segmenti('x', [['p', 'Panoramica'], ['r', 'Rapportini'], ['d', 'Documenti'], ['c', 'Costi']], 'd', 'stretti');
+  if (pc()) return testaPc('Progetti e commesse') + t + seg + '<div class="pc-griglia"><div style="display:flex;flex-direction:column;gap:14px">' + docs + '</div>' + sez('Contratto', contr) + '</div>';
+  return testaTel('Commesse', true) + t + seg + sez('Contratto', contr) + docs;
+}
+function pagCalendario() {
+  const giorni = [];
+  for (let i = 0; i < 31; i++) {
+    const g = piuGiorni(OGGI, i);
+    const voci = [];
+    TICKET.filter(vedeTk).forEach(t => t.interventi.filter(x => x.g === g).forEach(x => voci.push(riga({ ico: 'chiave', col: 'ico-blu', t1: oraIt(x.ora) + ' · ' + t.num + ' ' + t.titolo, t2: U[x.chi] + ' · ' + IMP[t.imp].luogo, dx: pill('Ticket', 'p-blu'), vai: 'tk|' + t.id }))));
+    if (g === piuGiorni(OGGI, 1)) voci.push(riga({ ico: 'calendario', col: 'ico-grigio', t1: '8:30 · Riunione di cantiere Batokyo', t2: 'Manuel Gasparotto · Schio' }));
+    SCAD.filter(s => s.data === g && s.stato === 'aperta' && (soldi() || !s.contr)).forEach(s => voci.push(riga({ ico: 'bandiera', col: 'ico-ambra', t1: 'Scadenza: ' + s.titolo, t2: (s.cli ? CLI[s.cli].nome : 'Studio') + (s.imp ? ' · ' + IMP[s.imp].nome : ''), attr: 'data-scad="' + s.id + '"' })));
+    if (voci.length) giorni.push(sez(Maiusc(dLunga(g)), righe(voci)));
+  }
+  const corpo = giorni.join('') + '<div class="vuoto">Le scadenze si vedono nel loro giorno: non sono attività da spuntare.</div>';
+  if (pc()) return titoloPc('5 · Attività e calendario', 'Prossimi 30 giorni') + '<div style="max-width:760px;display:flex;flex-direction:column;gap:14px">' + corpo + '</div>';
+  return testaTel('', false) + '<h1 class="titolo">Calendario</h1>' + corpo;
+}
+function pagAmministrazione() {
+  const v = [['Utenti e permessi', 'Come nella fase 1', 'avviso'], ['Impostazioni fiscali', 'Fase 4', 'avviso'], ['Categorie dei documenti', CAT.length + ' categorie · 4 da approvare', 'categorie'], ['Testi dei modelli', 'Email, lettere, condizioni', 'modelli'], ['Spazio sul NAS', 'Liberi 1.800 GB · 2 file solo sul NAS', 'spazio'], ['Copie di sicurezza', 'Ultima stanotte alle 2:30', 'avviso']];
+  const r = righe(v.map(x => riga({ ico: x[2] === 'spazio' ? 'disco' : x[2] === 'categorie' ? 'doc' : 'amministrazione', col: 'ico-grigio', t1: x[0], t2: x[1], attr: x[2] === 'avviso' ? 'data-azione="avviso" data-testo="Come nelle fasi prima"' : x[2] === 'modelli' ? 'data-vai="documenti|modelli"' : 'data-vai="' + x[2] + '"' })));
+  return pc() ? titoloPc('18 · Amministrazione', 'Amministrazione') + '<div style="max-width:760px">' + r + '</div>' : testaTel('', false) + '<h1 class="titolo">Amministrazione</h1>' + r;
+}
+function pagSpazio() {
+  const max = Math.max.apply(null, SPAZIO.perTipo.map(x => x[1]));
+  const corpo = riquadri([['1.800 GB', 'liberi'], ['2,1 GB', 'usati da Wisper'], ['49 MB', 'nel cestino'], ['2', 'file solo sul NAS', '', 'rosso']]) +
+    '<div class="scheda" style="display:flex;flex-direction:column;gap:4px"><span class="etichetta">Dove va lo spazio</span>' + SPAZIO.perTipo.map(x => '<div class="barra-h"><span class="nome">' + x[0] + '</span><span class="bin"><i style="width:' + Math.max(3, Math.round(x[1] / max * 100)) + '%"></i></span><span class="val">' + numIt(x[1]) + ' MB</span></div>').join('') + '</div>' +
+    sez('Solo sul NAS', righe(SPAZIO.soloNas.map(f => riga({ ico: 'disco', col: 'ico-ambra', t1: f[0], t2: numIt(f[1]) + ' MB · troppo grande per la copia fuori casa', dx: pill('Solo sul NAS', 'p-ambra') })))) +
+    '<div class="scheda">' + coppie([['Copia fuori casa', 'Stanotte alle 2:30 · 12 file · 3 restano per domani'], ['Avviso sotto', '10 GB liberi'], ['Niente documenti nuovi sotto', '2 GB liberi'], ['File più grande', '50 MB']]) + '</div>' +
+    (approva() ? '<div>' + bordo(ico('chiudi', 18) + 'Svuota il cestino', 'data-azione="svuota"') + '</div>' : '');
+  return pc() ? testaPc('Amministrazione') + '<h1 class="titolo">Spazio sul NAS</h1><div style="max-width:820px;display:flex;flex-direction:column;gap:14px">' + corpo + '</div>' : testaTel('Amministrazione', true) + '<h1 class="titolo">Spazio sul NAS</h1>' + corpo;
+}
+function pagCategorie() {
+  const r = righe(CAT.map(c => riga({ ico: 'doc', col: 'ico-grigio', t1: c, t2: (CAT_APPROVA.includes(c) ? 'Da approvare' : 'Senza approvazione') + ' · ' + (c === 'Contratti' || c === 'Polizze e assicurazioni' || c === 'Mandati ai clienti' ? 'chi vede i prezzi' : 'tutti') + (c === 'Certificati' || c === 'Polizze e assicurazioni' ? ' · scade dopo 12 mesi' : ''), attr: 'data-azione="avviso" data-testo="Si apre la categoria: nome, approvazione, chi la vede, scadenza proposta"' })));
+  const b = '<div>' + bordo(ico('piu', 18) + 'Nuova categoria', 'data-azione="avviso" data-testo="Si apre Nuova categoria"') + '</div>';
+  return pc() ? testaPc('Amministrazione') + '<h1 class="titolo">Categorie dei documenti</h1><div style="max-width:760px;display:flex;flex-direction:column;gap:14px">' + r + b + '</div>' : testaTel('Amministrazione', true) + '<h1 class="titolo">Categorie dei documenti</h1>' + r + b;
+}
+function pagSegnaposto(nome, fase) {
+  const t = '<div class="scheda"><div class="vuoto">Com\'era nella fase ' + fase + ': apri docs/prototipo/Gestionale-fase' + fase + '.html. Qui contano documenti e ticket.</div></div>';
+  return pc() ? titoloPc(nome, nome) + '<div style="max-width:720px">' + t + '</div>' : testaTel('', false) + '<h1 class="titolo">' + nome + '</h1>' + t;
+}
+const PAGINE = { dashboard: pagDashboard, ticket: pagTicket, tk: pagTk, nuovotk: pagNuovoTk, impianto: pagImpianto, contratto: pagContratto, rapportino: pagRapportino,
+  documenti: pagDocumenti, doc: pagDoc, aggiungi: pagAggiungi, cliente: pagCliente, commessa: pagCommessa, calendario: pagCalendario, amministrazione: pagAmministrazione, spazio: pagSpazio, categorie: pagCategorie,
+  clienti: () => pagCliente('C002'), commesse: () => pagCommessa('26ST041'), preventivi: () => pagSegnaposto('Preventivi e contratti', 2), rapportini: () => pagSegnaposto('Ore e rapportini', 3), spese: () => pagSegnaposto('Spese e trasferte', 3),
+  fatturazione: () => pagSegnaposto('Fatturazione', 4), banche: () => pagSegnaposto('Banche e scadenze', 4),
+  accesso: () => '<div style="padding-top:120px;text-align:center"><h1 class="titolo">Entra in Wisper</h1><p class="sottotitolo">Studio Tecnico GM</p><div style="height:20px"></div><button type="button" class="principale" data-azione="entra">Entra</button></div>' };
+
+// ------------------------------------------------------------------ fogli (telefono) e finestre (computer)
+function foglio(html, stretta) {
+  if (DISP === 'pc') {
+    const f = document.getElementById('finestra'); f.className = 'finestra' + (stretta === true ? ' stretta' : stretta ? ' ' + stretta : ''); f.innerHTML = html;
+    document.getElementById('finestra-velo').classList.add('aperta');
+  } else {
+    const f = document.getElementById('foglio'); f.innerHTML = '<div class="maniglia"></div>' + html; f.classList.add('aperto'); document.getElementById('velo-foglio').classList.add('aperto');
+  }
+}
+function chiudiFoglio() {
+  document.getElementById('foglio').classList.remove('aperto'); document.getElementById('velo-foglio').classList.remove('aperto');
+  document.getElementById('finestra-velo').classList.remove('aperta');
+}
+const titoloF = t => DISP === 'pc' ? '<div class="testa-f"><h2>' + t + '</h2><button type="button" class="tondo" data-azione="chiudi-foglio" aria-label="Chiudi">' + ico('chiudi', 20) + '</button></div>' : '<h2 style="margin:0;font-size:22px;font-weight:800">' + t + '</h2>';
+function foglioPianifica(id) {
+  const t = tk(id); const pf = S.pf;
+  const gg = [0, 1, 2, 4, 5, 6].map(i => piuGiorni(OGGI, i));
+  const sovrapp = pf.g === piuGiorni(OGGI, 1) && pf.chi === 1 && pf.ora < 10 && pf.ora + pf.dur > 8.5;
+  const agenda = DISP === 'pc' ? '<div class="agenda-pc"><div></div><div style="color:var(--testo)">Manuel Gasparotto</div><div style="color:var(--testo)">Marco Rossato</div>' + [8, 9, 10, 11, 12, 14, 15, 16].map(h => { const m = pf.g === piuGiorni(OGGI, 1) && h >= 8 && h < 10 ? '<div class="ev">Riunione di cantiere</div>' : '<div></div>'; const mr = pf.g === OGGI && h >= 14 && h < 16 ? '<div class="ev">TK/2026/0013</div>' : '<div></div>'; const nuovo = h >= Math.floor(pf.ora) && h < pf.ora + pf.dur; return '<div>' + h + ':00</div>' + (nuovo && pf.chi === 1 ? '<div class="ev nuovo">' + t.num + '</div>' : m) + (nuovo && pf.chi === 3 ? '<div class="ev nuovo">' + t.num + '</div>' : mr); }).join('') + '</div>' : '';
+  const campi = '<div class="domanda"><span class="q">Che giorno</span><div class="giorni-pf">' + gg.map(g => '<button type="button" data-pf="g|' + g + '" aria-pressed="' + (pf.g === g) + '">' + (g === OGGI ? 'oggi' : g === piuGiorni(OGGI, 1) ? 'domani' : GG[dt(g).getDay()].slice(0, 3)) + '<b>' + Number(g.slice(8)) + '</b></button>').join('') + '</div></div>' +
+    '<div class="domanda"><span class="q">A che ora</span><span class="stepper"><button type="button" data-pf="ora|-0.5" aria-label="Mezz\'ora prima">−</button><b>' + oraIt(pf.ora) + '</b><button type="button" data-pf="ora|0.5" aria-label="Mezz\'ora dopo">+</button></span></div>' +
+    '<div class="domanda"><span class="q">Quanto dura</span>' + pillole('pf-dur', [['1', '1 h'], ['2', '2 h'], ['4', 'Mezza giornata']], String(pf.dur), 'piccole') + '</div>' +
+    '<div class="domanda"><span class="q">Chi va</span>' + pillole('pf-chi', io().ruolo === 'collaboratore' ? [['3', 'Io']] : [['1', 'Manuel Gasparotto'], ['3', 'Marco Rossato']], String(pf.chi), 'piccole') + '</div>' +
+    '<div class="scheda" style="padding:12px 14px">' + coppie([['Luogo', IMP[t.imp].ind]]) + '</div>' +
+    (sovrapp ? '<div class="fascia rossa">' + ico('allarme', 20) + '<span>Si sovrappone a: Riunione di cantiere Batokyo (8:30-10:00)</span></div>' : '');
+  foglio(titoloF('Pianifica l\'intervento') + '<p class="sottotitolo">' + t.num + ' · ' + t.titolo + '</p>' + (DISP === 'pc' ? '<div class="pc-griglia" style="grid-template-columns:1.1fr 1fr"><div>' + agenda + '</div><div style="display:flex;flex-direction:column;gap:12px">' + campi + '</div></div>' : campi) + gialloF(sovrapp ? 'Mettilo lo stesso' : 'Metti in calendario', 'data-azione="metti" data-id="' + id + '"'), DISP === 'pc' ? 'larga' : false);
+}
+function foglioFinito(id) {
+  const t = tk(id); const r = t.rap[t.rap.length - 1];
+  foglio(titoloF('Il lavoro è finito?') + '<p class="sottotitolo">' + r.id + ' firmato da ' + r.firm + (r.locale ? ' · parte appena c\'è rete' : '') + '</p>' + gialloF('Sì, è risolto', 'data-azione="risolvi" data-id="' + id + '"') + '<button type="button" class="testo-link" style="align-self:center" data-azione="altro-intervento" data-id="' + id + '">Serve un altro intervento</button>', true);
+}
+function foglioChiudi(id) {
+  const t = tk(id); const ch = S.ch; const s = sommaTk(t); const prop = propostaTk(t);
+  const scelte = Object.keys(MODI).filter(k => k !== 'contratto' || t.contr).map(k => '<button type="button" class="scelta-ruolo' + (ch.modo === k ? ' scelto' : '') + '" data-ch="' + k + '"><span class="pallino"></span><span style="display:flex;flex-direction:column;gap:3px"><b>' + MODI[k] + '</b><span>' + ({ ticket: 'Una voce in Da fatturare con rapportini, ore e spese', separati: 'I rapportini e le ore vanno in Da fatturare come sempre', contratto: 'Lo copre il canone di ' + (t.contr ? CONTRATTI[t.contr].num : '') + (t.contr && !CONTRATTI[t.contr].materiali && s.spese ? ': il materiale si fattura a parte' : ''), no: 'Garanzia o cortesia, col motivo' }[k]) + '</span>' + (k === prop[0] ? '<span style="color:var(--giallo-testo);font-weight:800">Proposta: ' + prop[1] + '</span>' : '') + '</span></button>').join('');
+  const dett = ch.modo === 'ticket' ? '<div class="scheda" style="display:flex;flex-direction:column;gap:10px"><div class="conti-r"><span class="et">' + numIt(s.orePagate) + ' ore · ' + s.km + ' km · materiale e spese ' + euro(s.spese) + '</span></div>' + (soldi() ? '<div class="conti-r tot"><span class="et">' + (ch.corpo ? 'A corpo' : 'In fattura') + '</span><b>' + euro(ch.corpo ? 150 : s.importo) + '</b></div>' : '') +
+    '<button type="button" class="tocco" style="justify-content:flex-start;gap:10px;font-weight:700" data-azione="corpo" aria-pressed="' + !!ch.corpo + '"><span class="casella' + (ch.corpo ? ' si' : '') + '">' + (ch.corpo ? ico('spunta', 15, 3) : '') + '</span>A corpo, con un prezzo</button>' + (ch.corpo ? '<div class="campo"><label for="ch-prezzo">Prezzo</label><input id="ch-prezzo" value="150,00"></div>' : '') +
+    '<div class="vuoto" style="padding:0;font-size:14px">Riga: Intervento ' + t.num + ' del ' + dIt(t.rap.length ? t.rap[0].data : OGGI) + ': ' + t.titolo + ' - ' + IMP[t.imp].nome + (ch.corpo ? ' (a corpo)' : ' (' + numIt(s.orePagate) + ' ore, ' + s.km + ' km, materiale e spese ' + euro(s.spese).replace(' €', '') + ' €)') + '</div></div>'
+    : ch.modo === 'no' ? '<div class="campo"><label for="ch-motivo">Perché non si fattura</label><input id="ch-motivo" value="Garanzia dell\'intervento di settembre"></div>' : '';
+  foglio(titoloF('Chiudi il ticket') + '<p class="sottotitolo">' + t.num + ' · ' + CLI[t.cli].nome + '</p><span class="q" style="font-weight:800">Come si fattura?</span>' + scelte + dett + gialloF('Chiudi il ticket', 'data-azione="conferma-chiudi" data-id="' + id + '"'), DISP === 'pc' ? false : false);
+}
+function foglioScad(id) {
+  const s = scad(id); const st = statoScad(s);
+  const d = s.doc && doc(s.doc);
+  const azioni = s.stato === 'aperta' && puo('documenti', 2) ? '<button type="button" class="secondario" data-azione="avviso" data-testo="Si apre Aggiungi un documento: Verbali di verifica, già legato all\'impianto">' + ico('importa', 18) + 'Carica il verbale e segna fatta</button>' +
+    (s.tipo !== 'contratto' && /Verifica/.test(s.titolo) ? '<button type="button" class="secondario" data-azione="lettera" data-scad="' + s.id + '">Prepara la lettera per il cliente</button>' : '') +
+    '<div style="display:flex;gap:16px"><button type="button" class="testo-link" data-azione="avviso" data-testo="Si sceglie la data nuova">Rimanda</button><button type="button" class="testo-link" data-azione="avviso" data-testo="Togli: solo questa o anche le prossime">Togli</button></div>' : '';
+  foglio(titoloF(s.titolo) + '<div style="display:flex;gap:8px">' + pill(st[0], st[1]) + '</div><div class="scheda">' + coppie([['Data', dLunga(s.data) + ' ' + s.data.slice(0, 4)], ['Ogni', s.ogni ? (s.ogni % 12 === 0 ? s.ogni / 12 + (s.ogni === 12 ? ' anno' : ' anni') : s.ogni + ' mesi') + (s.dalla === 'data' ? ', dalla data prevista' : ', da quando si fa') : 'Una volta'], ['Cliente', s.cli ? CLI[s.cli].nome : 'Studio'], ['Impianto', s.imp ? IMP[s.imp].nome : ''], ['Documento', d ? d.titolo : ''], ['Ticket', s.tk ? tk(s.tk).num + ' · ' + STATI[tk(s.tk).stato][0] : s.azione === 'ticket' ? 'nasce il ' + dIt(piuGiorni(s.data, -30)) : ''], ['Preavviso', s.prea + ' giorni']]) + '</div>' +
+    azioni + (s.stato === 'aperta' && puo('documenti', 2) && s.azione !== 'ticket' ? gialloF('Segna fatta', 'data-azione="fai-scad" data-id="' + s.id + '"') : ''), true);
+}
+function foglioRespingi(id) {
+  const d = doc(id); const r = revAttesa(d);
+  foglio(titoloF('Respingi la rev. ' + r.n) + '<p class="sottotitolo">' + d.titolo + ' · ' + U[r.chi] + '</p><div class="campo"><label for="motivo">Motivo</label><input id="motivo" value="Manca la sezione del trasformatore di riserva nello schema"></div>' + gialloF('Respingi', 'data-azione="conferma-respingi" data-id="' + id + '"'), true);
+}
+function foglioManda(id) {
+  const d = doc(id);
+  const email = d.cli ? CLI[d.cli].email : '';
+  foglio(titoloF('Manda per email') + '<p class="sottotitolo">' + d.titolo + (d.origine === 'file' ? ' · rev. ' + (d.rev.find(r => r.stato === 'approvata') || d.rev[0]).n + ' · 1,2 MB' : '') + '</p><div class="campo"><label for="m-a">A</label><input id="m-a" value="' + email + '"></div><div class="campo"><label for="m-mess">Messaggio</label><textarea id="m-mess">Buongiorno, le mando ' + d.titolo.toLowerCase() + '.\nCordiali saluti,\nManuel Gasparotto · Studio Tecnico GM</textarea></div>' +
+    (d.origine === 'collegamento' ? '<div class="fascia">' + ico('link', 18) + '<span>Il cliente lo apre solo se in ' + COLL[d.coll] + ' è condiviso anche fuori dallo studio</span></div>' : '') + gialloF('Manda', 'data-azione="conferma-manda" data-id="' + id + '"'), true);
+}
+function foglioLettera(idScad) {
+  const s = scad(idScad || 9);
+  const testo = 'Gentile <b>Batokyo Srl</b>,\n\nl\'impianto di terra di <b>Impianto di terra stabilimento</b> è stato verificato il <b>12/01/2022</b>: la prossima verifica periodica va fatta entro il <b>' + dIt(s.data) + '</b> da un organismo abilitato.\nSe vuole, la aiutiamo a organizzarla. Il referente da contattare è <span class="manca">{referente}</span>.\n\nCordiali saluti,\nManuel Gasparotto\nStudio Tecnico GM';
+  foglio(titoloF('Nuova lettera') + pillole('modello', [['terra', 'Verifica impianto di terra'], ['libera', 'Lettera libera']], 'terra', 'piccole') + '<div class="scheda">' + coppie([['Cliente', 'Batokyo Srl'], ['Impianto', 'Impianto di terra stabilimento']]) + '</div><div class="lettera">' + testo + '</div><div class="mancano">Manca: {referente}. Scrivilo nella lettera o nel cliente.</div>' +
+    '<div style="display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap">' + bordo('Salva nell\'archivio', 'data-azione="chiudi-avviso" data-testo="Salvata in Corrispondenza, legata a Batokyo Srl"') + '</div>' + gialloF('Crea il PDF', 'data-azione="chiudi-avviso" data-testo="PDF pronto: Lettera verifica impianto di terra.pdf"'), DISP === 'pc' ? false : false);
+}
+function foglioTesti(nome) {
+  const pills = ['{cliente}', '{impianto}', '{scadenza}', '{ultima_verifica}', '{referente}', '{oggi}', '{studio}'].map(p => '<button type="button" class="segnaposto" data-azione="avviso" data-testo="Inserito ' + p + '">' + p + '</button>').join(' ');
+  foglio(titoloF('Testi: ' + nome) + '<div class="campo"><label for="t-ogg">Oggetto dell\'email</label><input id="t-ogg" value="Verifica periodica dell\'impianto di terra"></div><div class="campo"><label for="t-test">Testo</label><textarea id="t-test" style="min-height:150px">Gentile {cliente},&#10;l\'impianto di terra di {impianto} è stato verificato il {ultima_verifica}: la prossima verifica periodica va fatta entro il {scadenza}...</textarea></div><div style="display:flex;gap:6px;flex-wrap:wrap">' + pills + '</div><div>' + bordo('Salva', 'data-azione="chiudi-avviso" data-testo="Salvato: vale per le lettere nuove"') + '</div>', true);
+}
+function foglioMenuTk(id) {
+  const t = tk(id);
+  const voci = [['Cambia', 'Si apre il modulo del ticket'], ['Assegna', io().ruolo === 'collaboratore' ? 'Puoi prenderlo tu o lasciarlo a nessuno' : 'Si sceglie chi lo segue'], ['Metti in attesa', 'Si scrive il motivo: aspetta il materiale, il cliente...'], ['Lega un rapportino', 'I rapportini di ' + CLI[t.cli].nome + ' senza ticket'], ['Annulla il ticket', 'Si scrive il motivo'], ['Esporta', 'Esportato: ' + t.num.replace(/\//g, '-') + '.csv']];
+  foglio(titoloF(t.num) + '<div class="scheda righe">' + voci.map(v => '<button type="button" class="riga" data-azione="chiudi-avviso" data-testo="' + v[1] + '"><span class="corpo"><span class="t1">' + v[0] + '</span></span></button>').join('') + '</div>', true);
+}
+function foglioPrio() {
+  foglio(titoloF('Cambia la priorità') + pillole('prio', Object.keys(PRIO).map(k => [k, PRIO[k][0]]), S.nt.prMano || '', '') + '<div class="vuoto">Le risposte alle due domande restano scritte nel ticket.</div>', true);
+}
+
+// ------------------------------------------------------------------ azioni
+function apriTicket() {
+  const n = S.nt;
+  if (!n.cli) return avviso('Cliente: scegli il cliente');
+  if (!n.titolo.trim()) return avviso('Titolo: scrivi in poche parole cosa succede');
+  const pr = n.prMano || (n.impatto && n.urgenza ? MATRICE[n.impatto][n.urgenza] : 'normale');
+  const imp = n.imp || Object.values(IMP).find(i => i.cli === n.cli).id;
+  const resp = n.resp === 'io' ? io().id : n.resp === 'marco' ? 3 : null;
+  const locale = inCoda('ticket');
+  const t = { id: prossimoTk, num: 'TK/2026/' + String(prossimoTk).padStart(4, '0'), cli: n.cli, imp, contr: IMP[imp].contr || null, titolo: n.titolo.trim(), desc: n.desc.trim(), tipo: n.tipo, origine: n.origine, chi: '', rif: '', pr, resp, stato: resp ? 'in_carico' : 'aperto',
+    aperto: [OGGI, '10:05'], entroPresa: oraIt(ORA + 1), entroInt: entroIt(ORE_INT[pr]), interventi: [], rap: [], spese: [], foto: 0, locale, cron: [['oggi 10:05', 'Aperto da <b>' + io().nome + '</b> (' + n.origine.toLowerCase() + ')' + (locale ? ' · senza rete' : '')]] };
+  prossimoTk++; TICKET.unshift(t); chiudiFoglio();
+  S.pila = [['ticket'], ['tk', t.id]]; disegna(); avviso(locale ? 'Ticket ' + t.num + ' aperto: parte appena c\'è rete' : 'Ticket ' + t.num + ' aperto');
+}
+function salvaDoc() {
+  const a = S.ad;
+  if (a.modo === 'link' && !tipoColl(a.url)) return avviso('Collegamento: incolla un indirizzo che comincia con https://');
+  if (a.modo === 'file' && !a.file) return avviso('Scegli il file');
+  if (!a.titolo.trim()) return avviso('Titolo: scrivi di cosa si tratta');
+  if (!a.cat) return avviso('Categoria: scegli la categoria');
+  const leg = LEGAMI[a.leg];
+  const tc = a.modo === 'link' ? tipoColl(a.url) : null;
+  const d = { id: prossimoDoc++, titolo: a.titolo.trim(), cat: a.cat, cli: leg.cli, comm: leg.comm, imp: leg.imp, origine: a.modo === 'link' ? 'collegamento' : 'file', coll: tc ? tc[0] : '', cartella: tc ? tc[1] : false, url: a.url, data: OGGI, vede: a.vede,
+    rev: a.modo === 'file' ? [{ n: 0, stato: CAT_APPROVA.includes(a.cat) && !approva() ? 'da_approvare' : 'approvata', chi: io().id, quando: 'oggi', nota: '' }] : undefined };
+  DOCS.unshift(d); chiudiFoglio();
+  const chiudeScad = a.cat === 'Verbali di verifica' && leg.imp === 7 && SCAD.find(s => s.id === 9 && s.stato === 'aperta');
+  S.pila = [['documenti'], ['doc', d.id]]; disegna();
+  if (chiudeScad) foglio(titoloF('È la verifica che chiude la scadenza?') + '<p class="sottotitolo">Verifica impianto di terra (DPR 462) · Impianto di terra stabilimento · ' + dIt(chiudeScad.data) + '</p>' + gialloF('Sì, segna fatta', 'data-azione="fai-scad" data-id="9" data-doc="' + d.id + '"') + '<button type="button" class="testo-link" style="align-self:center" data-azione="chiudi-foglio">No</button>', true);
+  else avviso('Documento salvato' + (d.origine === 'collegamento' ? ': il file resta su ' + COLL[d.coll] : ''));
+}
+function faiScad(id, idDoc) {
+  const s = scad(id);
+  s.stato = 'fatta'; s.fattaIl = OGGI;
+  let msg = 'Fatta';
+  if (s.ogni) { const base = s.dalla === 'data' ? s.data : OGGI; const n = Object.assign({}, s, { id: prossimaScad++, data: piuMesi(base, s.ogni), stato: 'aperta', fattaIl: null, tk: null, doc: idDoc ? Number(idDoc) : s.doc }); SCAD.push(n); msg += ': la prossima è il ' + dIt(n.data); }
+  chiudiFoglio(); disegna(); avviso(msg);
+}
+document.addEventListener('click', e => {
+  const b = e.target.closest('button, [data-vai], [data-scad]');
+  if (!b || b.disabled) return;
+  if (e.target.closest('#telefono')) DISP = 'tel'; else if (e.target.closest('#computer')) DISP = 'pc';
+  S.modo = DISP;
+  const d = b.dataset;
+  if (d.vai) {
+    chiudiFoglio();
+    const [p, a] = d.vai.split('|');
+    if (!p) return;
+    if (p === 'ticket') { S.segT = 'aperti'; S.filtroT = a === 'urgenti' ? 'urgenti' : 'tutti'; return sezione('ticket'); }
+    if (p === 'documenti') { if (a === 'classificare') { S.segD = 'archivio'; S.filtroD = 'classificare'; } else S.segD = a || 'archivio'; return sezione('documenti'); }
+    if (p === 'scad') { S.segD = 'scadenze'; S.pila = [['documenti']]; disegna(); return foglioScad(a); }
+    if (['dashboard', 'calendario'].includes(p)) return sezione(p);
+    if (p === 'contratto' && DISP === 'pc') { S.segT = 'contratti'; S.pila = [['ticket'], ['contratto', a]]; return disegna(); }
+    if ((p === 'tk' || p === 'doc') && DISP === 'pc') { const top = S.pila[S.pila.length - 1][0]; if (top === 'tk' || top === 'doc' || top === 'contratto') S.pila.pop(); if (p === 'tk' && S.segT !== 'aperti' && S.segT !== 'chiusi' && S.segT !== 'programmati') S.segT = 'aperti'; if (p === 'tk' && sezioneDi(S.pila[S.pila.length - 1][0]) !== 'ticket') S.pila = [['ticket']]; if (p === 'doc' && sezioneDi(S.pila[S.pila.length - 1][0]) !== 'documenti') S.pila = [['documenti']]; S.pila.push([p, a]); return disegna(); }
+    return vai(p, a);
+  }
+  if (d.scad && !d.azione) return foglioScad(d.scad);
+  if (d.sezione) { chiudiFoglio(); if (d.sezione === 'ticket') S.filtroT = 'tutti'; return sezione(d.sezione); }
+  if (d.seg) { const [k, v] = d.seg.split('|'); if (k === 'x') return; S[k] = v; const top = S.pila[S.pila.length - 1][0]; if ((k === 'segT' && top !== 'ticket') || (k === 'segD' && top !== 'documenti')) S.pila = [[k === 'segT' ? 'ticket' : 'documenti']]; return disegna(); }
+  if (d.filtroT) { S.filtroT = d.filtroT; return disegna(); }
+  if (d.filtroD !== undefined) { S.filtroD = d.filtroD; return disegna(); }
+  if (d.catD !== undefined) { S.catD = d.catD || null; return disegna(); }
+  if (d.nt) { const [k, v] = d.nt.split('|'); S.nt[k] = v; if (k === 'cli') S.nt.imp = null; return ridisegnaNuovo(); }
+  if (d.ntImp !== undefined) { S.nt.imp = Number(d.ntImp) || 0; return ridisegnaNuovo(); }
+  if (d.ntOrigine) { S.nt.origine = d.ntOrigine; return ridisegnaNuovo(); }
+  if (d.ntTipo) { S.nt.tipo = d.ntTipo; return ridisegnaNuovo(); }
+  if (d.ntImpatto) { S.nt.impatto = d.ntImpatto; S.nt.prMano = null; return ridisegnaNuovo(); }
+  if (d.ntUrgenza) { S.nt.urgenza = d.ntUrgenza; S.nt.prMano = null; return ridisegnaNuovo(); }
+  if (d.ntResp) { S.nt.resp = d.ntResp; return ridisegnaNuovo(); }
+  if (d.prio) { S.nt.prMano = d.prio; chiudiFoglio(); return ridisegnaNuovo(); }
+  if (d.pf) { const [k, v] = d.pf.split('|'); if (k === 'ora') S.pf.ora = Math.min(18, Math.max(7, S.pf.ora + Number(v))); else S.pf[k] = v; return foglioPianifica(S.pfId); }
+  if (d.pfDur) { S.pf.dur = Number(d.pfDur); return foglioPianifica(S.pfId); }
+  if (d.pfChi) { S.pf.chi = Number(d.pfChi); return foglioPianifica(S.pfId); }
+  if (d.ch) { S.ch.modo = d.ch; return foglioChiudi(S.chId); }
+  if (d.ad) { const [k, v] = d.ad.split('|'); S.ad[k] = v; if (k === 'modo' && v === 'file') S.ad.titolo = S.ad.titolo || ''; return ridisegnaAggiungi(); }
+  if (d.adCat) { S.ad.cat = d.adCat; return ridisegnaAggiungi(); }
+  if (d.adScade) { S.ad.scade = d.adScade === 'si'; return ridisegnaAggiungi(); }
+  if (d.adVede) { S.ad.vede = d.adVede; return ridisegnaAggiungi(); }
+  if (d.modello) return avviso('Lettera libera: si scrive il testo, i segnaposti restano');
+  switch (d.azione) {
+    case 'menu': return apriCassetto();
+    case 'indietro': chiudiFoglio(); return indietro();
+    case 'entra': S.pila = [['dashboard']]; ultimoVerso = 'avanti'; return disegna();
+    case 'esci': chiudiCassetto(); S.pila = [['accesso']]; return disegna();
+    case 'avviso': return avviso(d.testo);
+    case 'chiudi-avviso': chiudiFoglio(); return avviso(d.testo);
+    case 'chiudi-foglio': return chiudiFoglio();
+    case 'chiudi-pannello': S.pila.pop(); return disegna();
+    case 'richiudi': S.latoChiuso = !S.latoChiuso; return disegna();
+    case 'nuovo-ticket': S.nt = { cli: d.imp ? IMP[d.imp].cli : null, imp: d.imp ? Number(d.imp) : null, titolo: '', desc: '', origine: 'Telefono', tipo: 'guasto', impatto: null, urgenza: null, prMano: null, resp: io().ruolo === 'collaboratore' ? 'io' : 'nessuno' }; if (DISP === 'pc') return finestraNuovoTk(); return vai('nuovotk');
+    case 'cambia-prio': return foglioPrio();
+    case 'apri-ticket': return apriTicket();
+    case 'menu-tk': return foglioMenuTk(d.id);
+    case 'prendi': { const t = tk(d.id); t.resp = io().id; t.stato = 'in_carico'; t.cron.push(['oggi 10:05', 'Preso da <b>' + io().nome + '</b>' + (inCoda('ticket') ? ' · senza rete' : '')]); disegna(); return avviso('Preso: adesso pianifica l\'intervento'); }
+    case 'pianifica': { S.pfId = Number(d.id); const t = tk(d.id); S.pf = { g: OGGI, ora: 11, dur: 2, chi: t.resp || io().id }; return foglioPianifica(d.id); }
+    case 'metti': { const t = tk(d.id); t.interventi.push({ g: S.pf.g, ora: S.pf.ora, fine: S.pf.ora + S.pf.dur, chi: S.pf.chi }); if (!t.resp) t.resp = S.pf.chi; t.stato = 'in_carico'; t.cron.push(['oggi 10:06', 'Intervento pianificato per <b>' + quandoIt(S.pf.g) + ' alle ' + oraIt(S.pf.ora) + '</b> · ' + U[S.pf.chi]]); chiudiFoglio(); disegna(); return avviso('In calendario: ' + quandoIt(S.pf.g) + ' alle ' + oraIt(S.pf.ora)); }
+    case 'rapportino': return vai('rapportino', d.id);
+    case 'firma': {
+      const t = tk(d.id); const loc = inCoda('rapportini');
+      t.rap.push({ id: loc ? 'Rapportino nuovo' : 'RAP/2026/0156', data: OGGI, ore: 3, viaggio: 1, km: 48, stato: 'Firmato', firm: 'R. Ferretti', compenso: 126, kmEuro: 36.48, chi: io().id, locale: loc });
+      t.interventi.forEach(i => { if (i.g <= OGGI) i.fatto = true; });
+      t.cron.push(['oggi 13:20', 'Rapportino <b>' + (loc ? 'nuovo' : 'RAP/2026/0156') + '</b> firmato da R. Ferretti' + (loc ? ' · parte appena c\'è rete' : '')]);
+      S.pila = S.pila.filter(x => x[0] !== 'rapportino'); if (S.pila[S.pila.length - 1][0] !== 'tk') S.pila.push(['tk', t.id]);
+      ultimoVerso = 'indietro'; disegna(); return foglioFinito(t.id);
+    }
+    case 'risolvi': { const t = tk(d.id); t.stato = 'risolto'; if (inCoda('ticket')) t.locale = true; t.cron.push(['oggi 13:21', '<b>Risolto</b>']); chiudiFoglio(); disegna(); return avviso(chiude() ? 'Risolto: adesso chiudilo e scegli come si fattura' : 'Risolto: lo chiude l\'ufficio'); }
+    case 'altro-intervento': { const t = tk(d.id); t.cron.push(['oggi 13:21', 'Serve un altro intervento']); chiudiFoglio(); disegna(); return avviso('Resta in carico'); }
+    case 'riprendi': { const t = tk(d.id); t.stato = 'in_carico'; t.motivo = ''; t.cron.push(['oggi 10:06', 'Ripreso']); disegna(); return avviso('Ripreso'); }
+    case 'chiudi': { const t = tk(d.id); S.chId = t.id; S.ch = { modo: propostaTk(t)[0], corpo: false }; return foglioChiudi(t.id); }
+    case 'corpo': S.ch.corpo = !S.ch.corpo; return foglioChiudi(S.chId);
+    case 'conferma-chiudi': { const t = tk(d.id); t.stato = 'chiuso'; t.fatt = S.ch.modo; t.chiusoIl = OGGI; t.cron.push(['oggi 10:07', 'Chiuso: <b>' + MODI[S.ch.modo].toLowerCase() + '</b>']); chiudiFoglio(); disegna();
+      const imp = S.ch.corpo ? 150 : sommaTk(t).importo;
+      return avviso(S.ch.modo === 'ticket' ? 'Chiuso: va in Da fatturare (' + euro(imp) + ')' : S.ch.modo === 'separati' ? 'Chiuso: i rapportini vanno in Da fatturare come sempre' : S.ch.modo === 'contratto' ? 'Chiuso: nel contratto, niente da fatturare' : 'Chiuso: non si fattura'); }
+    case 'rinnova': return avviso('Si apre il rinnovo: periodo nuovo di 12 mesi, canone e rate');
+    case 'foto': { const t = tk(d.id); t.foto++; const loc = inCoda('foto'); disegna(); return avviso(loc ? 'Foto salvata sul telefono: parte appena c\'è rete' : 'Foto aggiunta al ticket'); }
+    case 'aggiungi': S.ad = { modo: null, url: '', file: '', titolo: '', cat: null, leg: S.filtroD === 'impianto' ? 1 : 3, scade: false, vede: 'tutti' }; if (DISP === 'pc') return finestraAggiungi(); return vai('aggiungi');
+    case 'incolla': S.ad.url = 'https://esempio-my.sharepoint.com/:f:/g/personal/studio/Commesse/26ST041'; if (!S.ad.titolo) S.ad.titolo = 'Cartella della commessa 26ST041'; S.ad.leg = 1; return ridisegnaAggiungi();
+    case 'scegli-file': S.ad.file = 'Verbale verifica impianto di terra 2026.pdf'; S.ad.titolo = 'Verbale verifica impianto di terra 2026'; S.ad.leg = 0; return ridisegnaAggiungi();
+    case 'cambia-legame': S.ad.leg = (S.ad.leg + 1) % LEGAMI.length; return ridisegnaAggiungi();
+    case 'salva-doc': return salvaDoc();
+    case 'approva': { const dd = doc(d.id); const r = revAttesa(dd); r.stato = 'approvata'; r.quando = 'oggi'; disegna(); return avviso('rev. ' + r.n + ' approvata: è la valida, la rev. ' + (r.n - 1) + ' è superata'); }
+    case 'respingi': return foglioRespingi(d.id);
+    case 'conferma-respingi': { const dd = doc(d.id); const r = revAttesa(dd); r.stato = 'respinta'; r.motivo = 'Motivo: manca la sezione del trasformatore di riserva'; chiudiFoglio(); disegna(); return avviso('Respinta: il motivo arriva a ' + U[r.chi]); }
+    case 'revisione': { const dd = doc(d.id); const n = Math.max.apply(null, dd.rev.map(r => r.n)) + 1; dd.rev.unshift({ n, stato: CAT_APPROVA.includes(dd.cat) && !approva() ? 'da_approvare' : 'approvata', chi: io().id, quando: 'oggi', nota: 'Revisione di prova' }); disegna(); return avviso(approva() ? 'rev. ' + n + ' caricata: è la valida' : 'rev. ' + n + ' caricata: aspetta l\'approvazione'); }
+    case 'apri-doc': { const dd = doc(d.id); if (!S.rete && DISP === 'tel' && dd.origine === 'file' && dd.id !== 4) return avviso('Si apre quando c\'è rete'); return avviso(dd.origine === 'file' ? 'Si apre il PDF' : dd.coll === 'percorso' ? 'Si apre Esplora file' : 'Si apre ' + COLL[dd.coll]); }
+    case 'manda': return foglioManda(d.id);
+    case 'conferma-manda': chiudiFoglio(); return avviso('Mandato: lo trovi nella cronologia');
+    case 'fai-scad': return faiScad(d.id, d.doc);
+    case 'lettera': return foglioLettera(d.scad);
+    case 'testi': return foglioTesti(d.nome);
+    case 'svuota': return avviso('Tolgo per sempre 22 file (31,5 MB) messi nel cestino prima del 24/07: conferma due volte');
+  }
+});
+document.addEventListener('input', e => {
+  const t = e.target;
+  if (t.dataset.ntin) { S.nt[t.dataset.ntin] = t.value; return; }
+  if (t.dataset.adin) { S.ad[t.dataset.adin] = t.value; if (t.dataset.adin === 'url') { clearTimeout(S.tUrl); S.tUrl = setTimeout(() => { const pos = t.selectionStart; ridisegnaAggiungi(); const n = document.querySelector((DISP === 'pc' ? '#finestra' : '#schermo') + ' [data-adin="url"]'); if (n) { n.focus(); n.setSelectionRange(pos, pos); } }, 400); } return; }
+  const c = t.closest('[data-cerca]');
+  if (!c) return;
+  DISP = t.closest('#computer') ? 'pc' : 'tel';
+  const pos = c.selectionStart;
+  if (c.dataset.cerca === 'd') S.cercaD = c.value; else S.cercaT = c.value;
+  disegna();
+  const n = document.getElementById(DISP === 'pc' ? 'computer' : 'telefono').querySelector('[data-cerca="' + c.dataset.cerca + '"]');
+  if (n) { n.focus(); n.setSelectionRange(pos, pos); }
+});
+function ridisegnaNuovo() { if (DISP === 'pc') return finestraNuovoTk(); disegna(); }
+function ridisegnaAggiungi() { if (DISP === 'pc') return finestraAggiungi(); disegna(); }
+
+// ------------------------------------------------------------------ menu, disegno, navigazione
+function vociMenu() {
+  return [
+    ['dashboard', 'Dashboard', 'dashboard'], ['clienti', 'Clienti e fornitori', 'clienti'], ['commesse', 'Progetti e commesse', 'commesse'], ['preventivi', 'Preventivi e contratti', 'preventivo'],
+    ['calendario', 'Attività e calendario', 'calendario', 'attivita'], ['rapportini', 'Ore e rapportini', 'rapportini'], ['spese', 'Spese e trasferte', 'scontrino'], ['fatturazione', 'Fatturazione', 'fatturazione'],
+    ['banche', 'Banche e scadenze', 'banca'], ['documenti', 'Documenti', 'doc'], ['ticket', 'Ticket e assistenza', 'chiave'], ['amministrazione', 'Amministrazione', 'amministrazione'],
+  ].filter(v => puo(v[3] || v[0]));
+}
+const sezioneDi = pag => ({ tk: 'ticket', nuovotk: 'ticket', impianto: 'ticket', contratto: 'ticket', rapportino: 'ticket', doc: 'documenti', aggiungi: 'documenti', cliente: 'clienti', commessa: 'commesse', spazio: 'amministrazione', categorie: 'amministrazione' })[pag] || pag;
+const numerino = s => s === 'ticket' ? (io().ruolo === 'collaboratore' ? TICKET.filter(t => aperto(t) && (t.resp === 3 || !t.resp) && t.stato !== 'risolto').length : TICKET.filter(t => aperto(t) && !t.resp).length) : s === 'documenti' && approva() ? daApprovare().length : 0;
+function vociHtml(chiusoPc) {
+  const attiva = sezioneDi(S.pila[S.pila.length - 1][0]);
+  return vociMenu().map(v => '<button type="button" class="voce' + (attiva === v[0] ? ' attiva' : '') + '" data-sezione="' + v[0] + '" title="' + v[1] + '"' + (attiva === v[0] ? ' aria-current="page"' : '') + '>' + ico(v[2]) + '<span class="lab">' + v[1] + '</span>' + (numerino(v[0]) ? '<span class="num-v">' + numerino(v[0]) + '</span>' : '') + '</button>').join('');
+}
+const statoRete = () => S.rete ? '<span class="stato-ok"><i></i>Collegato · letto alle 10:05</span>' : '<span class="stato-ok" style="color:var(--tenue)">' + ico('nuvola', 16) + 'Senza rete · letto alle 9:58</span>';
+function cassetto() {
+  return '<div class="chi"><span class="cerchio c-ambra" style="width:48px;height:48px;border-radius:24px;font-size:16px">' + io().iniz + '</span><div style="display:flex;flex-direction:column;gap:2px;min-width:0"><b style="font-size:17px">' + io().nome + '</b><span class="sottotitolo" style="font-size:14px">' + io().ruoloNome + '</span></div></div>' +
+    '<div style="overflow-y:auto;display:flex;flex-direction:column;gap:2px">' + vociHtml() + '</div>' +
+    '<div class="piede">' + statoRete() + '<button type="button" class="voce" data-azione="esci" style="padding:0;min-height:44px">' + ico('esci', 20) + 'Esci</button></div>';
+}
+function lato() {
+  return '<div class="marchio-pc">' + marchio + '<div><b>Wisper</b><span>Studio Tecnico GM</span></div></div>' + vociHtml() +
+    '<div class="piede-pc"><span class="stato-ok"><i></i><span class="lab">Collegato · 10:05</span></span><span style="display:flex;align-items:center;gap:10px"><span class="cerchio c-ambra" style="width:36px;height:36px;font-size:13px">' + io().iniz + '</span><span class="lab">' + io().nome + '</span></span>' +
+    '<button type="button" class="voce" data-azione="richiudi" title="Richiudi il menu" style="min-height:40px">' + ico('lato', 20) + '<span class="lab">' + (S.latoChiuso ? 'Apri il menu' : 'Richiudi il menu') + '</span></button></div>';
+}
+let ultimoVerso = 'sfuma';
+function disegna() {
+  const [pag, arg] = S.pila[S.pila.length - 1];
+  const chiave = JSON.stringify(S.pila) + S.segT + S.segD;
+  if (S.vista !== 'pc') {
+    S.modo = 'tel'; S.pan = false;
+    const sc = document.getElementById('schermo');
+    const stessa = S.ultimo.tel === chiave;
+    const top = sc.scrollTop;
+    sc.innerHTML = PAGINE[pag](arg);
+    sc.scrollTop = stessa ? top : 0;
+    if (!stessa) sc.className = 'schermo entra-' + ultimoVerso;
+    document.getElementById('cassetto').innerHTML = pag === 'accesso' ? '' : cassetto();
+    const rr = document.getElementById('riga-rete');
+    const n = codaTot();
+    rr.hidden = !(n > 0 && pag !== 'rapportino');
+    if (n) { const parti = []; if (S.coda.ticket) parti.push(S.coda.ticket === 1 ? '1 ticket' : S.coda.ticket + ' cambi ai ticket'); if (S.coda.rapportini) parti.push(S.coda.rapportini === 1 ? '1 rapportino' : S.coda.rapportini + ' rapportini'); if (S.coda.foto) parti.push(S.coda.foto === 1 ? '1 foto' : S.coda.foto + ' foto'); rr.innerHTML = ico('nuvola', 18) + parti.join(' e ') + (n === 1 ? ' parte' : ' partono') + ' appena c\'è rete'; }
+    S.ultimo.tel = chiave;
+  }
+  if (S.vista !== 'tel') {
+    S.modo = 'pc';
+    const c = document.getElementById('contenuto-pc');
+    const p = pag === 'accesso' ? 'dashboard' : pag === 'nuovotk' ? 'ticket' : pag === 'aggiungi' ? 'documenti' : pag;
+    const pan = document.getElementById('pannello-pc');
+    const conPannello = (p === 'tk' && tk(arg)) || (p === 'doc' && doc(arg)) || (p === 'contratto' && CONTRATTI[arg]);
+    S.pan = !!conPannello;
+    const stessa = S.ultimo.pc === chiave;
+    const top = c.scrollTop;
+    c.innerHTML = PAGINE[p](arg);
+    c.scrollTop = stessa ? top : 0;
+    if (!stessa) c.className = 'contenuto-pc entra-' + ultimoVerso;
+    if (conPannello) { pan.innerHTML = p === 'tk' ? pannelloTk(arg) : p === 'doc' ? pannelloDoc(arg) : pannelloContratto(arg); pan.classList.add('aperto'); } else pan.classList.remove('aperto');
+    const l = document.getElementById('lato'); l.innerHTML = lato(); l.classList.toggle('chiuso', S.latoChiuso);
+    S.ultimo.pc = chiave; S.pan = false;
+    adattaComputer();
+  }
+  S.modo = DISP;
+  ultimoVerso = 'sfuma';
+}
+function adattaComputer() {
+  const sc = document.getElementById('computer-scala');
+  const posto = window.innerWidth - 32 - (S.vista === 'due' ? 390 + 20 + 36 : 0);
+  const largo = Math.max(0.3, Math.min(1, posto / 1282));
+  document.getElementById('computer').style.transform = 'scale(' + largo + ')';
+  sc.style.height = Math.ceil(802 * largo) + 'px'; sc.style.width = Math.ceil(1282 * largo) + 'px';
+}
+function vai(pag, arg) { S.pila.push([pag, arg]); ultimoVerso = 'avanti'; chiudiCassetto(); disegna(); }
+function sezione(nome) { S.pila = [[nome]]; ultimoVerso = 'sfuma'; chiudiCassetto(); disegna(); }
+function indietro() { if (S.pila.length > 1) { S.pila.pop(); ultimoVerso = 'indietro'; disegna(); } }
+function apriCassetto() { document.getElementById('cassetto').classList.add('aperto'); document.getElementById('velo').classList.add('aperto'); }
+function chiudiCassetto() { document.getElementById('cassetto').classList.remove('aperto'); document.getElementById('velo').classList.remove('aperto'); }
+let timerAvviso;
+function avviso(t) {
+  if (S.silenzio) return;
+  const pcx = DISP === 'pc';
+  const a = document.getElementById(pcx ? 'avviso-pc' : 'avviso');
+  document.getElementById(pcx ? 'avviso-pc-testo' : 'avviso-testo').textContent = t;
+  a.classList.add('visto'); clearTimeout(timerAvviso); timerAvviso = setTimeout(() => a.classList.remove('visto'), 3500);
+}
+document.getElementById('velo').addEventListener('click', chiudiCassetto);
+document.getElementById('velo-foglio').addEventListener('click', chiudiFoglio);
+document.getElementById('finestra-velo').addEventListener('click', e => { if (e.target.id === 'finestra-velo') chiudiFoglio(); });
+document.getElementById('avviso-annulla').addEventListener('click', () => document.getElementById('avviso').classList.remove('visto'));
+document.getElementById('avviso-pc-annulla').addEventListener('click', () => document.getElementById('avviso-pc').classList.remove('visto'));
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { chiudiFoglio(); chiudiCassetto(); } });
+(function () {
+  const t = document.getElementById('telefono'); let x0 = null, daBordo = false;
+  t.addEventListener('pointerdown', e => { const r = t.getBoundingClientRect(); x0 = e.clientX; daBordo = e.clientX - r.left < 24; });
+  t.addEventListener('pointerup', e => { if (x0 === null) return; const dx = e.clientX - x0; if (daBordo && dx > 50 && S.pila[S.pila.length - 1][0] !== 'accesso') apriCassetto(); if (dx < -50) chiudiCassetto(); x0 = null; });
+})();
+function scegliVista(v) {
+  S.vista = v; DISP = v === 'pc' ? 'pc' : 'tel';
+  ['tel', 'pc', 'due'].forEach(x => document.getElementById('b-' + x).setAttribute('aria-pressed', x === v));
+  document.getElementById('telefono').hidden = v === 'pc';
+  document.getElementById('computer-scala').hidden = v === 'tel';
+  document.getElementById('accanto').hidden = v === 'due' || (v === 'pc' && window.innerWidth < 1660);
+  document.getElementById('palco').className = 'palco modo-' + v;
+  chiudiFoglio(); S.ultimo = {};
+  disegna();
+}
+function scegliChi(c) {
+  S.chi = c;
+  document.getElementById('b-manuel').setAttribute('aria-pressed', c === 'manuel');
+  document.getElementById('b-marco').setAttribute('aria-pressed', c === 'marco');
+  const [pag, arg] = S.pila[S.pila.length - 1];
+  const sez0 = sezioneDi(pag);
+  if (pag !== 'accesso' && (!vociMenu().some(v => v[0] === sez0) || (pag === 'tk' && (!tk(arg) || !vedeTk(tk(arg)))) || (pag === 'doc' && (!doc(arg) || !vedeDoc(doc(arg)))))) S.pila = [[vociMenu().some(v => v[0] === sez0) ? sez0 : 'dashboard']];
+  chiudiFoglio(); S.ultimo = {}; disegna();
+}
+function scegliTema(t) {
+  document.documentElement.setAttribute('data-theme', t);
+  document.getElementById('b-chiaro').setAttribute('aria-pressed', t === 'light');
+  document.getElementById('b-scuro').setAttribute('aria-pressed', t === 'dark');
+}
+function scegliRete(si) {
+  S.rete = si;
+  document.getElementById('b-rete').setAttribute('aria-pressed', si);
+  document.getElementById('b-norete').setAttribute('aria-pressed', !si);
+  if (si && codaTot()) { const n = codaTot(); S.coda = { ticket: 0, rapportini: 0, foto: 0 }; TICKET.forEach(t => { t.locale = false; t.rap.forEach(r => { if (r.locale) { r.locale = false; r.id = 'RAP/2026/0156'; } }); }); S.ultimo = {}; disegna(); DISP = 'tel'; return avviso(n === 1 ? 'Partito: il server l\'ha ricevuto' : 'Partiti: ' + n + ' cose ricevute dal server'); }
+  S.ultimo = {}; disegna();
+}
+document.getElementById('b-tel').addEventListener('click', () => scegliVista('tel'));
+document.getElementById('b-pc').addEventListener('click', () => scegliVista('pc'));
+document.getElementById('b-due').addEventListener('click', () => scegliVista('due'));
+document.getElementById('b-manuel').addEventListener('click', () => scegliChi('manuel'));
+document.getElementById('b-marco').addEventListener('click', () => scegliChi('marco'));
+document.getElementById('b-chiaro').addEventListener('click', () => scegliTema('light'));
+document.getElementById('b-scuro').addEventListener('click', () => scegliTema('dark'));
+document.getElementById('b-rete').addEventListener('click', () => scegliRete(true));
+document.getElementById('b-norete').addEventListener('click', () => scegliRete(false));
+window.addEventListener('resize', () => { if (S.vista !== 'tel') adattaComputer(); document.getElementById('accanto').hidden = S.vista === 'due' || (S.vista === 'pc' && window.innerWidth < 1660); });
+const scuroDiSistema = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+document.getElementById(scuroDiSistema ? 'b-scuro' : 'b-chiaro').setAttribute('aria-pressed', 'true');
+
+// ------------------------------------------------------------------ stato dall'indirizzo (per le schermate di controllo):
+// #pc&scuro&marco&senzarete&p=tk&a=12&segT=contratti&segD=scadenze&f=chiudi:12  (f = un foglio da aprire)
+const H = location.hash.slice(1).split('&').filter(Boolean);
+S.silenzio = true;
+const val = k => { const x = H.find(h => h.startsWith(k + '=')); return x ? decodeURIComponent(x.slice(k.length + 1)) : null; };
+if (H.includes('scuro')) scegliTema('dark');
+if (H.includes('chiaro')) scegliTema('light');
+if (H.includes('marco')) S.chi = 'marco', scegliChi('marco');
+if (H.includes('senzarete')) { S.rete = false; document.getElementById('b-rete').setAttribute('aria-pressed', 'false'); document.getElementById('b-norete').setAttribute('aria-pressed', 'true'); }
+if (val('segT')) S.segT = val('segT');
+if (val('segD')) S.segD = val('segD');
+if (val('filtroD')) S.filtroD = val('filtroD');
+if (H.includes('coda')) { S.coda = { ticket: 1, rapportini: 1, foto: 1 }; }
+if (val('p')) { const p = val('p'); const base = sezioneDi(p); S.pila = p === base ? [[p]] : [[base], [p, val('a')]]; }
+if (H.includes('nuovo')) S.nt = { cli: 'C002', imp: 4, titolo: 'Scatta il generale MT', desc: 'Il generale della cabina scatta appena lo riarmano.', origine: 'Telefono', tipo: 'guasto', impatto: 'fermo', urgenza: 'subito', prMano: null, resp: 'nessuno' };
+if (H.includes('aggiungi')) S.ad = { modo: 'link', url: 'https://esempio-my.sharepoint.com/:f:/g/personal/studio/Commesse/26ST041', file: '', titolo: 'Cartella della commessa 26ST041', cat: 'Progetti e schemi', leg: 1, scade: false, vede: 'tutti' };
+const vistaIniziale = H.includes('pc') ? 'pc' : H.includes('due') ? 'due' : 'tel';
+scegliVista(vistaIniziale);
+if (val('f')) {
+  const [quale, arg] = val('f').split(':');
+  DISP = vistaIniziale === 'pc' ? 'pc' : 'tel'; S.modo = DISP;
+  if (quale === 'chiudi') { const t = tk(arg); S.chId = t.id; S.ch = { modo: propostaTk(t)[0], corpo: false }; foglioChiudi(t.id); }
+  if (quale === 'pianifica') { S.pfId = Number(arg); S.pf = { g: piuGiorni(OGGI, 1), ora: 9, dur: 2, chi: 1 }; foglioPianifica(arg); }
+  if (quale === 'finito') foglioFinito(arg);
+  if (quale === 'scad') foglioScad(arg);
+  if (quale === 'lettera') foglioLettera(9);
+  if (quale === 'manda') foglioManda(arg);
+  if (quale === 'nuovotk') finestraNuovoTk();
+  if (quale === 'aggiungi') finestraAggiungi();
+  if (quale === 'menu') apriCassetto();
+}
+S.silenzio = false;
+
+// ------------------------------------------------------------------ prova automatica: #prova tocca pagine, fogli e flussi, controlla un solo giallo per schermata e niente punti esclamativi
+if (H.includes('prova')) {
+  const esito = [];
+  const tocca = (sel, radice) => { const r = document.getElementById(radice || (DISP === 'pc' ? 'computer' : 'telefono')); const el = Array.from(r.querySelectorAll(sel)).find(x => x.offsetParent !== null || x.closest('.foglio.aperto, .finestra-velo.aperta')) || r.querySelector(sel); if (!el) throw new Error('manca ' + sel); el.click(); };
+  const gialli = el => el ? Array.from(el.querySelectorAll('.principale, .btn-giallo')).length : 0;
+  const controlla = nome => {
+    const tel = document.getElementById('schermo'), fg = document.getElementById('foglio');
+    if (S.vista !== 'pc') { if (gialli(tel) > 1) throw new Error(nome + ': ' + gialli(tel) + ' gialli nel telefono'); if (fg.classList.contains('aperto') && gialli(fg) > 1) throw new Error(nome + ': più gialli nel foglio'); }
+    if (S.vista !== 'tel') { const n = gialli(document.getElementById('contenuto-pc')) + gialli(document.getElementById('pannello-pc').classList.contains('aperto') ? document.getElementById('pannello-pc') : null); if (n > 1) throw new Error(nome + ': ' + n + ' gialli nel computer'); if (gialli(document.getElementById('finestra')) > 1 && document.getElementById('finestra-velo').classList.contains('aperta')) throw new Error(nome + ': più gialli nella finestra'); }
+    const testo = (S.vista !== 'pc' ? tel.innerText + fg.innerText : '') + (S.vista !== 'tel' ? document.getElementById('computer').innerText : '');
+    if (/!/.test(testo)) throw new Error(nome + ': punto esclamativo');
+    if (/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u.test(testo)) throw new Error(nome + ': emoji');
+  };
+  const passi = [];
+  ['tel', 'pc'].forEach(v => {
+    const R = v === 'pc' ? 'computer' : 'telefono';
+    passi.push(['vista ' + v, () => scegliVista(v)]);
+    ['dashboard', 'clienti', 'commesse', 'preventivi', 'calendario', 'rapportini', 'spese', 'fatturazione', 'banche', 'documenti', 'ticket', 'amministrazione'].forEach(s => passi.push([v + ' sezione ' + s, () => tocca('[data-sezione="' + s + '"]', R)]));
+    ['aperti', 'programmati', 'chiusi', 'contratti', 'statistiche'].forEach(s => passi.push([v + ' ticket ' + s, () => { tocca('[data-sezione="ticket"]', R); tocca('[data-seg="segT|' + s + '"]', R); }]));
+    ['cliente', 'impianto', 'persona'].forEach(s => passi.push([v + ' statistiche ' + s, () => tocca('[data-seg="segStat|' + s + '"]', R)]));
+    passi.push([v + ' filtri ticket', () => { tocca('[data-seg="segT|aperti"]', R); tocca('[data-filtro-t="urgenti"]', R); tocca('[data-filtro-t="prendere"]', R); tocca('[data-filtro-t="tutti"]', R); }]);
+    passi.push([v + ' nuovo ticket', () => { tocca('[data-sezione="ticket"]', R); tocca('[data-azione="nuovo-ticket"]', R); tocca('[data-nt="cli|C004"]', R); tocca('[data-nt-imp="6"]', R); S.nt.titolo = 'Fotocellula del portone guasta'; tocca('[data-nt-impatto="ridotto"]', R); tocca('[data-nt-urgenza="presto"]', R); tocca('[data-azione="cambia-prio"]', R); tocca('[data-prio="alta"]', R); tocca('[data-azione="apri-ticket"]', R); if (!TICKET.some(t => t.titolo === 'Fotocellula del portone guasta')) throw new Error('ticket non aperto'); }]);
+    passi.push([v + ' prendi e pianifica', () => { const id = v === 'tel' ? 14 : prossimoTk - 1; tocca('[data-sezione="ticket"]', R); tocca('[data-vai="tk|' + id + '"]', R); if (tk(id).stato === 'aperto') tocca('[data-azione="prendi"]', R); tocca('[data-azione="pianifica"]', R); tocca('[data-pf="ora|0.5"]', R); tocca('[data-pf-dur="1"]', R); tocca('[data-azione="metti"]', R); if (!tk(id).interventi.length) throw new Error('intervento non messo'); }]);
+    passi.push([v + ' rapportino e risolto', () => { const id = v === 'tel' ? 14 : prossimoTk - 1; if (v === 'tel') scegliRete(false); tocca('[data-sezione="ticket"]', R); tocca('[data-vai="tk|' + id + '"]', R); tocca('[data-azione="rapportino"]', R); controlla(v + ' passo 2'); tocca('[data-vai^="rapportino|"]', R); controlla(v + ' firma'); tocca('[data-azione="firma"]', R); tocca('[data-azione="risolvi"]', R); if (tk(id).stato !== 'risolto') throw new Error('non risolto'); if (v === 'tel') { if (codaTot() < 1) throw new Error('niente in coda senza rete'); scegliRete(true); } }]);
+    passi.push([v + ' chiudi nel contratto', () => { const id = v === 'tel' ? 14 : prossimoTk - 1; tocca('[data-azione="chiudi"]', R); tocca('[data-ch="' + (tk(id).contr ? 'contratto' : 'ticket') + '"]', R); tocca('[data-azione="conferma-chiudi"]', R); if (tk(id).stato !== 'chiuso') throw new Error('non chiuso'); }]);
+    passi.push([v + ' chiudi una riga', () => { if (tk(12).stato === 'chiuso') return; tocca('[data-sezione="ticket"]', R); tocca('[data-vai="tk|12"]', R); tocca('[data-azione="chiudi"]', R); tocca('[data-azione="corpo"]', R); tocca('[data-azione="corpo"]', R); tocca('[data-ch="no"]', R); tocca('[data-ch="ticket"]', R); tocca('[data-azione="conferma-chiudi"]', R); if (tk(12).fatt !== 'ticket') throw new Error('modo sbagliato'); }]);
+    passi.push([v + ' in attesa', () => { tocca('[data-sezione="ticket"]', R); tocca('[data-vai="tk|11"]', R); tocca('[data-azione="menu-tk"]', R); chiudiFoglio(); tocca('[data-azione="foto"]', R); if (tk(11).stato === 'in_attesa') tocca('[data-azione="riprendi"]', R); }]);
+    passi.push([v + ' storico impianto', () => { tocca('[data-sezione="ticket"]', R); tocca('[data-vai="tk|13"]', R); tocca('[data-vai="impianto|6"]', R); if (v === 'tel') { tocca('[data-azione="indietro"]', R); } tocca('[data-sezione="clienti"]', R); tocca('[data-vai="impianto|4"]', R); }]);
+    passi.push([v + ' contratto', () => { tocca('[data-sezione="ticket"]', R); tocca('[data-seg="segT|contratti"]', R); tocca('[data-vai="contratto|3"]', R); tocca('[data-azione="rinnova"]', R); tocca('[data-sezione="ticket"]', R); tocca('[data-seg="segT|contratti"]', R); tocca('[data-vai="contratto|2"]', R); }]);
+    passi.push([v + ' commessa', () => { tocca('[data-sezione="commesse"]', R); tocca('[data-vai="contratto|2"]', R); }]);
+    ['archivio', 'approvare', 'scadenze', 'modelli'].forEach(s => passi.push([v + ' documenti ' + s, () => { tocca('[data-sezione="documenti"]', R); tocca('[data-seg="segD|' + s + '"]', R); }]));
+    passi.push([v + ' filtri documenti', () => { tocca('[data-seg="segD|archivio"]', R); tocca('[data-filtro-d="impianto"]', R); tocca('[data-filtro-d="tutti"]', R); tocca('[data-filtro-d="classificare"]', R); tocca('[data-filtro-d="tutti"]', R); tocca('[data-cat-d="Contratti"]', R); tocca('[data-cat-d=""]', R); }]);
+    passi.push([v + ' revisione e approvazione', () => { tocca('[data-sezione="documenti"]', R); tocca('[data-seg="segD|archivio"]', R); tocca('[data-vai="doc|4"]', R); if (revAttesa(doc(4))) { tocca('[data-azione="respingi"]', R); chiudiFoglio(); tocca('[data-azione="approva"]', R); } tocca('[data-azione="revisione"]', R); tocca('[data-azione="manda"]', R); tocca('[data-azione="conferma-manda"]', R); }]);
+    passi.push([v + ' collegamenti', () => { [7, 8, 16, 14].forEach(id => { tocca('[data-sezione="documenti"]', R); tocca('[data-seg="segD|archivio"]', R); tocca('[data-vai="doc|' + id + '"]', R); const g = document.getElementById(R).querySelector('[data-azione="apri-doc"]'); if (g) g.click(); }); }]);
+    passi.push([v + ' aggiungi collegamento', () => { tocca('[data-sezione="documenti"]', R); tocca('[data-seg="segD|archivio"]', R); tocca('[data-azione="aggiungi"]', R); tocca('[data-ad="modo|link"]', R); tocca('[data-azione="incolla"]', R); tocca('[data-ad-cat="Progetti e schemi"]', R); tocca('[data-azione="salva-doc"]', R); if (doc(prossimoDoc - 1).coll !== 'onedrive') throw new Error('tipo del collegamento sbagliato'); }]);
+    passi.push([v + ' aggiungi verbale e chiudi la scadenza', () => { if (scad(9).stato === 'fatta') return; tocca('[data-sezione="documenti"]', R); tocca('[data-azione="aggiungi"]', R); tocca('[data-ad="modo|file"]', R); tocca('[data-azione="scegli-file"]', R); tocca('[data-ad-cat="Verbali di verifica"]', R); tocca('[data-azione="salva-doc"]', R); tocca('[data-azione="fai-scad"]', R); if (scad(9).stato !== 'fatta') throw new Error('scadenza non fatta'); }]);
+    passi.push([v + ' scadenza', () => { tocca('[data-sezione="documenti"]', R); tocca('[data-seg="segD|scadenze"]', R); tocca('[data-scad="10"]', R); if (scad(10).stato === 'aperta') tocca('[data-azione="fai-scad"]', R); else chiudiFoglio(); }]);
+    passi.push([v + ' lettera e testi', () => { tocca('[data-sezione="documenti"]', R); tocca('[data-seg="segD|modelli"]', R); tocca('[data-azione="lettera"]', R); chiudiFoglio(); tocca('[data-azione="testi"]', R); chiudiFoglio(); }]);
+    passi.push([v + ' calendario', () => { tocca('[data-sezione="calendario"]', R); tocca('[data-scad]', R); chiudiFoglio(); }]);
+    passi.push([v + ' amministrazione', () => { tocca('[data-sezione="amministrazione"]', R); tocca('[data-vai="spazio"]', R); tocca('[data-azione="svuota"]', R); tocca('[data-sezione="amministrazione"]', R); tocca('[data-vai="categorie"]', R); }]);
+    passi.push([v + ' marco', () => {
+      scegliChi('marco');
+      const r = document.getElementById(R);
+      if (r.querySelector('[data-sezione="fatturazione"]')) throw new Error('Marco vede Fatturazione');
+      tocca('[data-sezione="ticket"]', R);
+      if (r.querySelector('[data-vai="tk|12"]')) throw new Error('Marco vede un ticket di Manuel');
+      tocca('[data-seg="segT|contratti"]', R); tocca('[data-vai="contratto|2"]', R);
+      if (/€/.test(r.innerText)) throw new Error('Marco vede il canone');
+      tocca('[data-sezione="documenti"]', R); tocca('[data-seg="segD|archivio"]', R);
+      if (gialli(r.querySelector(v === 'pc' ? '#contenuto-pc' : '#schermo'))) throw new Error('Marco ha un giallo nei documenti');
+      if (r.querySelector('[data-vai="doc|12"]')) throw new Error('Marco vede il contratto firmato');
+      tocca('[data-sezione="dashboard"]', R);
+      scegliChi('manuel');
+    }]);
+  });
+  passi.push(['due', () => scegliVista('due')]);
+  passi.forEach(p => { try { p[1](); controlla(p[0]); esito.push('ok ' + p[0]); } catch (err) { esito.push('ERRORE ' + p[0] + ': ' + err.message); } chiudiFoglio(); });
+  const errori = esito.filter(x => x.startsWith('ERRORE'));
+  document.documentElement.setAttribute('data-prova', errori.length ? 'errori:' + errori.length : 'ok:' + esito.length);
+  const box = document.createElement('div'); box.className = 'prova-esito'; box.id = 'prova-esito'; box.textContent = (errori.length ? errori.join('\n') : 'Prova: ' + esito.length + ' passi, nessun errore'); document.body.appendChild(box);
+}
+})();
+</script>

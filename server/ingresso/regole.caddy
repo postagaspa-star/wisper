@@ -1,0 +1,119 @@
+# Le regole dell'ingresso da internet: le stesse in produzione (Caddyfile) e nella prova in locale
+# (Caddyfile.prova). Il server rifa' lo stesso controllo delle strade sulla sua porta dell'ingresso
+# (src/http.js, stradaDaFuori): se qui qualcosa passasse per sbaglio, la' risponde 404.
+
+# Il passaggio verso il server, col limite del corpo della richiesta come argomento.
+(verso-wisper) {
+	request_body {
+		max_size {args[0]}
+	}
+	# wisper:8402 e' la porta dell'ingresso del server: solo nella rete Docker del progetto (expose, mai ports).
+	# L'indirizzo vero di chi chiama arriva al server in X-Forwarded-For: senza trusted_proxies Caddy lo
+	# riscrive sempre con l'indirizzo della connessione (quello mandato da chi chiama si butta, provato
+	# in locale), e cosi' X-Forwarded-Host e X-Forwarded-Proto.
+	reverse_proxy {$WISPER_INGRESSO_DESTINO:wisper:8402} {
+		# Le altre intestazioni con un indirizzo o un'identita' si buttano: chi le scrive da internet non e'
+		# nel tailnet, e il server non deve mai trovarle (la fase 8 leggera' quelle di Tailscale).
+		header_up -Tailscale-*
+		header_up -X-Real-IP
+		header_up -Forwarded
+		header_up -CF-Connecting-IP
+		header_up -True-Client-IP
+		transport http {
+			dial_timeout 5s
+		}
+	}
+}
+
+# Su ogni risposta, anche sui 404. HSTS con un indirizzo IP i browser non lo tengono; resta per gli altri.
+(intestazioni) {
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "no-referrer"
+		-Server
+		-X-Powered-By
+		-Via
+	}
+}
+
+# Chi chiama con un altro nome (Host diverso dall'indirizzo pubblico): 404 come per le strade sconosciute.
+(altri-nomi) {
+	import intestazioni
+	respond "Non trovato" 404
+}
+
+(regole) {
+	import intestazioni
+
+	# Le sole strade di telefono e computer, metodo e percorso esatti.
+	@exec {
+		method GET POST
+		path /exec /exec/
+	}
+	@carica {
+		method POST
+		path /carica /carica/
+	}
+	@file {
+		method GET
+		path_regexp ^/file/[A-Za-z0-9_-]{1,64}$
+	}
+	@salute {
+		method GET
+		path /salute /salute/
+	}
+	# Il ponte delle versioni vecchie, solo nelle settimane del cambio: WISPER_PONTE_DA_FUORI=si nel .env
+	# (lo stesso valore lo legge il server, che altrimenti risponde 404 anche lui).
+	@ponte {
+		method POST
+		path /ponte /ponte/
+		expression `{env.WISPER_PONTE_DA_FUORI} == "si"`
+	}
+
+	# I limiti del corpo: /carica sopra FILE_MAX_MB (50 MB), cosi' a un file troppo grande risponde il
+	# server con la sua frase (se FILE_MAX_MB sale sopra 60, va alzato anche qui); /exec sotto i 60 MB
+	# del server ma sopra i 30 MB di XML (40 in base64) che Wisper Ufficio manda in una volta.
+	handle @exec {
+		import verso-wisper 45MiB
+	}
+	handle @carica {
+		import verso-wisper 60MiB
+	}
+	handle @file {
+		import verso-wisper 1KB
+	}
+	handle @salute {
+		import verso-wisper 1KB
+	}
+	handle @ponte {
+		import verso-wisper 45MiB
+	}
+	# Tutto il resto, anche la radice, /ponte chiuso, /condiviso, le pagine del NAS e gli altri metodi.
+	handle {
+		respond "Non trovato" 404
+	}
+
+	# Un corpo troppo grande: come lo direbbe il server (HTTP 200 e ok false), cosi' la coda del telefono
+	# non riprova all'infinito.
+	handle_errors 413 {
+		import intestazioni
+		header Content-Type "application/json; charset=utf-8"
+		respond `{"ok":false,"errore":"Richiesta troppo grande: manda un file più piccolo"}` 200
+	}
+
+	# Il registro delle richieste nel log del contenitore: chi, cosa, esito. Senza intestazioni (token,
+	# segreto del ponte, nomi dei dispositivi) e senza la parte dopo "?" (nomi dei file caricati).
+	log {
+		output stdout
+		format filter {
+			fields {
+				request>uri regexp \?.*$ ?…
+				request>headers delete
+				request>tls delete
+				resp_headers delete
+			}
+		}
+	}
+}

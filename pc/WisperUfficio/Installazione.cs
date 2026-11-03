@@ -111,22 +111,31 @@ public static class Installazione
     }
 
     private const string TipoCollegamento = "WisperUfficio.Collegamento";
+    private const string EstensioneVecchia = FileCollegamento.Estensione;
 
     /// <summary>
-    /// I file .wisper (il collegamento che arriva per email) si aprono con Wisper Ufficio:
-    /// col doppio clic il programma si collega da solo al foglio. Solo per questo utente.
+    /// I file .wisper (il collegamento che arriva per email: dentro c'è la strada da fuori
+    /// casa, la porta Google) si aprono con Wisper Ufficio: col doppio clic il programma si
+    /// collega da solo. Solo per questo utente, con lo stesso tipo della 0.4.
     /// </summary>
     private static void AssociaFileCollegamento(string exe)
     {
-        using (var est = Registry.CurrentUser.CreateSubKey(@"Software\Classes\" + Collegamento.Estensione))
-            est.SetValue("", TipoCollegamento);
-        using (var tipo = Registry.CurrentUser.CreateSubKey(@"Software\Classes\" + TipoCollegamento))
+        try
         {
-            tipo.SetValue("", "Collegamento a Wisper Ufficio");
-            using (var icona = tipo.CreateSubKey("DefaultIcon")) icona.SetValue("", $"\"{exe}\",0");
-            using (var cmd = tipo.CreateSubKey(@"shell\open\command")) cmd.SetValue("", $"\"{exe}\" \"%1\"");
+            using (var est = Registry.CurrentUser.CreateSubKey(@"Software\Classes\" + EstensioneVecchia))
+                est.SetValue("", TipoCollegamento);
+            using (var tipo = Registry.CurrentUser.CreateSubKey(@"Software\Classes\" + TipoCollegamento))
+            {
+                tipo.SetValue("", "Collegamento a Wisper Ufficio");
+                using (var icona = tipo.CreateSubKey("DefaultIcon")) icona.SetValue("", $"\"{exe}\",0");
+                using (var cmd = tipo.CreateSubKey(@"shell\open\command")) cmd.SetValue("", $"\"{exe}\" \"%1\"");
+            }
+            SHChangeNotify(0x08000000, 0, IntPtr.Zero, IntPtr.Zero); // SHCNE_ASSOCCHANGED: Esplora risorse se ne accorge subito
         }
-        SHChangeNotify(0x08000000, 0, IntPtr.Zero, IntPtr.Zero); // SHCNE_ASSOCCHANGED: Esplora risorse se ne accorge subito
+        catch (Exception e) when (e is UnauthorizedAccessException or System.Security.SecurityException or IOException)
+        {
+            Log.Errore("associazione .wisper non fatta", e);
+        }
     }
 
     [System.Runtime.InteropServices.DllImport("shell32.dll")]
@@ -134,7 +143,7 @@ public static class Installazione
 
     /// <summary>
     /// Da Impostazioni › App installate: via le icone, la voce e il programma. I dati
-    /// (collegamento al foglio, copie delle foto) e i PDF in Documenti\Wisper restano.
+    /// (indirizzo del server, copie delle foto) e i PDF in Documenti\Wisper restano.
     /// </summary>
     public static void Disinstalla(Luoghi luoghi)
     {
@@ -146,7 +155,7 @@ public static class Installazione
         {
             Registry.CurrentUser.DeleteSubKeyTree(ChiaveDisinstalla, throwOnMissingSubKey: false);
             Registry.CurrentUser.DeleteSubKeyTree(@"Software\Classes\" + TipoCollegamento, throwOnMissingSubKey: false);
-            Registry.CurrentUser.DeleteSubKeyTree(@"Software\Classes\" + Collegamento.Estensione, throwOnMissingSubKey: false);
+            Registry.CurrentUser.DeleteSubKeyTree(@"Software\Classes\" + EstensioneVecchia, throwOnMissingSubKey: false);
         }
         // L'exe in uso non si può cancellare: lo fa PowerShell appena questo programma si è chiuso
         // (dopo che si è letto il messaggio "è stato tolto").

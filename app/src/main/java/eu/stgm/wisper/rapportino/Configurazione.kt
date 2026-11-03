@@ -3,52 +3,113 @@ package eu.stgm.wisper.rapportino
 import android.content.Context
 import android.os.Build
 import eu.stgm.wisper.BuildConfig
+import org.json.JSONObject
 import java.util.UUID
 
 /**
- * Le tre cose che l'app deve sapere: dove sta il foglio, il codice per
- * entrarci e chi sta compilando.
+ * Quello che l'app deve sapere su questo telefono: dove sta il server (le due
+ * strade: in casa e da fuori, attraverso Google), il token di chi è entrato (e chi
+ * è, per aprirsi anche senza rete), come si presenta il telefono, il tema.
  *
- * Indirizzo e codice si scrivono nella schermata "Collega" e si cambiano dalle
- * impostazioni: se il codice va rifatto perche' e' finito in mani sbagliate, non
- * serve un'app nuova. Nell'APK pubblicato non ci sono (build.gradle.kts).
+ * Il server di casa è di base il NAS dello studio (http://192.168.1.51:8400); le
+ * build di sviluppo possono portarne un altro (build.gradle.kts, da wisper-keys o
+ * 10.0.2.2:8400 per l'emulatore). L'indirizzo dello script Google NON è mai
+ * nell'APK pubblicato: arriva dalle versioni 0.4.0 (che lo tenevano nelle
+ * Impostazioni, la stessa voce "url"), dalle build di sviluppo, o lo scrive la
+ * persona. Il token sta nelle preferenze private dell'app, mai nei log.
  */
 class Configurazione(ctx: Context) {
     private val prefs = ctx.getSharedPreferences("wisper", Context.MODE_PRIVATE)
 
-    var url: String
-        get() = prefs.getString("url", null)?.takeIf { it.isNotBlank() } ?: BuildConfig.SHEET_URL
+    /**
+     * Il server di casa: "http://192.168.1.51:8400", o "http://10.0.2.2:8450" per
+     * provare con l'emulatore. Vuoto (scritto vuoto apposta) = solo Google.
+     */
+    var server: String
+        get() = if (prefs.contains("server")) prefs.getString("server", "").orEmpty() else serverDiBase
+        set(v) = prefs.edit().putString("server", v.trim()).apply()
+
+    /**
+     * La porta Google: l'indirizzo dello script del foglio (quello che finisce con
+     * /exec). Vuoto = solo casa, come prima. È la voce "url" della 0.4.0: chi
+     * aggiorna se la ritrova già scritta.
+     */
+    var google: String
+        get() = if (prefs.contains("url")) prefs.getString("url", "").orEmpty() else BuildConfig.SHEET_URL
         set(v) = prefs.edit().putString("url", v.trim()).apply()
 
-    var codice: String
-        get() = prefs.getString("codice", null)?.takeIf { it.isNotBlank() } ?: BuildConfig.SHEET_CODICE
-        set(v) = prefs.edit().putString("codice", v.trim()).apply()
+    private val serverDiBase: String get() = BuildConfig.SERVER_URL.ifBlank { Indirizzi.CASA_DI_BASE }
+
+    /** Il token di chi è entrato su questo telefono; vuoto = si deve entrare. */
+    var token: String
+        get() = prefs.getString("token", "").orEmpty()
+        set(v) = prefs.edit().putString("token", v.trim()).apply()
+
+    /** L'email dell'ultimo accesso: resta scritta nella schermata di accesso. */
+    var ultimaEmail: String
+        get() = prefs.getString("ultimaEmail", "").orEmpty()
+        set(v) = prefs.edit().putString("ultimaEmail", v.trim()).apply()
+
+    /** Vero se si è usciti perché il server ha detto "accesso scaduto" (non con Esci). */
+    var uscitoPerScadenza: Boolean
+        get() = prefs.getBoolean("uscitoPerScadenza", false)
+        set(v) = prefs.edit().putBoolean("uscitoPerScadenza", v).apply()
+
+    /** La ragione sociale, per la schermata di accesso ("Studio Tecnico GM"). */
+    var ragioneSociale: String
+        get() = prefs.getString("ragioneSociale", "").orEmpty()
+        set(v) = prefs.edit().putString("ragioneSociale", v).apply()
+
+    /** Il nome del titolare, per "Chiedi a Manuel". */
+    var titolare: String
+        get() = prefs.getString("titolare", "").orEmpty()
+        set(v) = prefs.edit().putString("titolare", v).apply()
+
+    /** Chi è entrato e i suoi permessi, l'ultima volta che il server li ha detti. */
+    fun sessioneSalvata(): Sessione {
+        if (token.isBlank()) return Sessione.NESSUNA.copy(scaduta = uscitoPerScadenza)
+        val u = runCatching { Utente.daJson(JSONObject(prefs.getString("utente", "{}").orEmpty())) }.getOrNull()
+        val p = runCatching { Permessi.daJson(JSONObject(prefs.getString("permessi", "{}").orEmpty())) }.getOrNull()
+        if (u == null || u.id.isBlank()) return Sessione.NESSUNA
+        val i = runCatching { Interfaccia.daJson(JSONObject(prefs.getString("interfaccia", "{}").orEmpty())) }.getOrDefault(Interfaccia())
+        return Sessione(u, p ?: Permessi(emptyMap()), interfaccia = i)
+    }
+
+    fun salvaSessione(s: Sessione) {
+        prefs.edit()
+            .putString("utente", s.utente.aJson().toString())
+            .putString("permessi", s.permessi.aJson().toString())
+            .putString("interfaccia", s.interfaccia.aJson().toString())
+            .apply()
+    }
+
+    /** L'id dell'ultimo utente entrato qui (anche dopo Esci): se cambia persona, le copie sul telefono si rifanno. */
+    val idUltimoUtente: String
+        get() = runCatching { JSONObject(prefs.getString("utente", "{}").orEmpty()).optString("id") }.getOrDefault("")
 
     init {
         // Un APK di casa (build di prova, o -PconIndirizzo) porta l'indirizzo dentro:
-        // si salva subito, perche' l'aggiornamento dopo, preso da GitHub, non ce l'ha.
-        if (prefs.getString("url", null).isNullOrBlank() && BuildConfig.SHEET_URL.isNotBlank()) url = BuildConfig.SHEET_URL
-        if (prefs.getString("codice", null).isNullOrBlank() && BuildConfig.SHEET_CODICE.isNotBlank()) codice = BuildConfig.SHEET_CODICE
+        // si salva subito, perché l'aggiornamento dopo, preso da GitHub, non ce l'ha.
+        if (!prefs.contains("server") && BuildConfig.SERVER_URL.isNotBlank()) server = BuildConfig.SERVER_URL
+        if (!prefs.contains("url") && BuildConfig.SHEET_URL.isNotBlank()) google = BuildConfig.SHEET_URL
     }
 
     /**
-     * Come si presenta questo telefono al foglio, che lo scrive nella scheda
-     * Accessi a ogni richiesta. Nasce qui al primo avvio e non e' mai uguale su
-     * due telefoni: un dispositivo che il foglio non conosce si vede subito.
+     * Come si presenta questo telefono al server, che lo scrive nel registro degli
+     * accessi. Nasce qui al primo avvio e non è mai uguale su due telefoni.
      */
     val dispositivo: String
         get() = prefs.getString("dispositivo", null)
             ?: UUID.randomUUID().toString().also { prefs.edit().putString("dispositivo", it).apply() }
 
-    /** "motorola edge 60 pro": quello che si legge nella scheda Accessi. */
+    /** "motorola edge 60 pro": quello che si legge fra i dispositivi collegati. */
     val nomeDispositivo: String
         get() = if (Build.MODEL.startsWith(Build.MANUFACTURER, ignoreCase = true)) Build.MODEL
         else "${Build.MANUFACTURER} ${Build.MODEL}"
 
     /**
-     * Chi compila su QUESTO telefono. Vuoto = quello scritto nelle impostazioni
-     * del foglio. Se un giorno i telefoni sono due, ognuno ha il suo nome e i
-     * rapportini escono gia' firmati dalla persona giusta.
+     * Chi compila su QUESTO telefono, se non si è entrati (la visita, la 0.4.0).
+     * Dalla fase 1 il nome è quello dell'utente che è entrato.
      */
     var tecnico: String
         get() = prefs.getString("tecnico", "").orEmpty()
@@ -60,8 +121,8 @@ class Configurazione(ctx: Context) {
         set(v) = prefs.edit().putString("tema", v).apply()
 
     /**
-     * La visita guidata parte da sola una volta: al primo collegamento, o al
-     * primo avvio dopo l'aggiornamento al nuovo aspetto (versione 2).
+     * La visita guidata parte da sola una volta: al primo accesso, o al primo
+     * avvio dopo un aggiornamento che la cambia (3 = il gestionale).
      */
     var visitaVista: Int
         get() = prefs.getInt("visitaVista", 0)

@@ -14,12 +14,35 @@
     <!-- Da Android 12: le versioni dopo la prima si installano senza chiedere niente,
          perché a installarle è Wisper stesso (e solo se l'app è chiusa). -->
     <uses-permission android:name="android.permission.UPDATE_PACKAGES_WITHOUT_USER_ACTION" />
+    <!-- I promemoria delle attività e degli appuntamenti (Promemoria.kt): la sveglia di
+         Android all'ora giusta, anche ad app chiusa, e di nuovo dopo un riavvio. -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- Collega un computer (docs/gestionale/collega-qr.md §7): la fotocamera dentro l'app legge
+         il QR di Wisper Ufficio. Si chiede solo entrando in quella schermata. Non obbligatoria:
+         un telefono senza fotocamera installa Wisper lo stesso e il computer entra con la password.
+         Attenzione: con questo permesso dichiarato, la fotocamera di sistema (scontrini, foto)
+         parte solo col permesso dato; per questo le foto passano da ui/FotoSistema.kt. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera.any" android:required="false" />
+
+    <!-- Fase 7 (fase7.md §3.13): il messaggio pronto si apre nel WhatsApp di Manuel, Business
+         o normale. Da Android 11 un'app vede le altre solo se le dichiara qui. -->
+    <queries>
+        <package android:name="com.whatsapp" />
+        <package android:name="com.whatsapp.w4b" />
+        <!-- Fase 8 (fase8.md §5.6): Apri con ICSx⁵ o, se manca, Installa ICSx⁵ (da F-Droid, gratis). -->
+        <package android:name="at.bitfire.icsdroid" />
+        <package android:name="org.fdroid.fdroid" />
+    </queries>
 
     <application
         android:name=".WisperApp"
         android:allowBackup="false"
         android:icon="@drawable/ic_launcher"
         android:label="@string/app_name"
+        android:networkSecurityConfig="@xml/rete_casa"
         android:supportsRtl="true"
         android:theme="@style/Theme.Wisper">
 
@@ -33,10 +56,68 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- Fase 4: le fatture elettroniche arrivate per email o WhatsApp (.xml, .p7m, .zip)
+                 si condividono con Wisper, che le fa leggere al server (Fatturazione, Importa l'XML).
+                 application/octet-stream perché molte app mandano così i .p7m: i file che non
+                 finiscono in .xml, .p7m o .zip li scarta l'app con la sua frase. -->
+            <intent-filter android:label="Importa in Wisper">
+                <action android:name="android.intent.action.SEND" />
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="application/xml" />
+                <data android:mimeType="text/xml" />
+                <data android:mimeType="application/pkcs7-mime" />
+                <data android:mimeType="application/x-pkcs7-mime" />
+                <data android:mimeType="application/pkcs7-signature" />
+                <data android:mimeType="application/zip" />
+                <data android:mimeType="application/x-zip-compressed" />
+                <data android:mimeType="application/octet-stream" />
+            </intent-filter>
+            <!-- Fase 5 (fase5.md §3.1): il collegamento di OneDrive, SharePoint o Drive ("Copia
+                 collegamento", Condividi) e i PDF e le foto vanno in Documenti, Aggiungi un documento.
+                 Il file resta su OneDrive o Drive: Wisper tiene solo l'indirizzo. -->
+            <intent-filter android:label="Metti nei documenti di Wisper">
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+                <data android:mimeType="application/pdf" />
+                <data android:mimeType="image/*" />
+            </intent-filter>
+            <!-- Fase 8 (fase8.md §7.2): l'elenco dei clienti esportato dal programma delle fatture (CSV
+                 o Excel) si condivide con Wisper: Amministrazione, Importa clienti e fornitori. -->
+            <intent-filter android:label="Importa clienti in Wisper">
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/csv" />
+                <data android:mimeType="text/comma-separated-values" />
+                <data android:mimeType="application/csv" />
+                <data android:mimeType="application/vnd.ms-excel" />
+                <data android:mimeType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" />
+            </intent-filter>
+            <intent-filter android:label="Importa in Wisper">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="content" />
+                <data android:mimeType="application/xml" />
+                <data android:mimeType="text/xml" />
+                <data android:mimeType="application/pkcs7-mime" />
+                <data android:mimeType="application/x-pkcs7-mime" />
+                <data android:mimeType="application/zip" />
+            </intent-filter>
         </activity>
 
         <!-- Le risposte dell'installazione di una versione nuova. -->
         <receiver android:name=".EsitoInstallazione" android:exported="false" />
+
+        <!-- I promemoria: la notifica all'ora scelta, e le sveglie rimesse dopo un riavvio. -->
+        <receiver android:name=".AvvisoPromemoria" android:exported="false" />
+        <receiver android:name=".RiavvioPromemoria" android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
 
         <!-- La fotocamera scrive la foto dello scontrino direttamente in un
              file dell'app: serve un indirizzo che possa raggiungere. -->

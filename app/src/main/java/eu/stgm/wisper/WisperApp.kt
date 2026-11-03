@@ -46,6 +46,12 @@ class WisperApp : Application() {
             ).apply { setShowBadge(true) }
         )
 
+        // I promemoria di attività e appuntamenti (Promemoria.kt): devono farsi vedere, come una sveglia.
+        gestore.createNotificationChannel(
+            NotificationChannel(Promemoria.CANALE, getString(R.string.canale_promemoria), NotificationManager.IMPORTANCE_HIGH)
+                .apply { setShowBadge(true) }
+        )
+
         // Le versioni nuove: lo stato salvato, e il controllo di ogni ora.
         NuoveVersioni.carica(this)
         NuoveVersioni.programma(this)

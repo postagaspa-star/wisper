@@ -1,0 +1,135 @@
+{
+  "nota": "I conti del preventivo (docs/gestionale/fase2.md §3, architettura.md §13.4). Li fa il server (server/src/conti.js, contiPreventivo); telefono e computer li rifanno per l'anteprima e devono dare gli stessi numeri al centesimo su ogni caso. Importo voce = quantita x prezzo x (1 - sconto voce / 100); contano le voci normali, le facoltative scelte e di ogni gruppo di alternative la prima scelta; imponibile = somma - somma x sconto% / 100 - sconto in euro; contributo = imponibile x EPPI / 100; base IVA = imponibile + contributo; IVA = base x IVA / 100; totale = base + IVA. Ogni pezzo arrotondato al centesimo (Math.round(n * 100) / 100) prima di sommare. Le scadenze: percentuale = imponibile x valore / 100, importo = valore. I valori attesi sono fatti a mano.",
+  "casi": [
+    {
+      "nome": "a corpo: una voce",
+      "preventivo": {"eppiPercentuale": 5, "ivaPercentuale": 22, "sezioni": [{"titolo": "Progetto", "voci": [
+        {"modo": "corpo", "quantita": 1, "prezzo": 1000}]}]},
+      "atteso": {"sommaVoci": 1000, "scontoDaPercentuale": 0, "scontoEuro": 0, "imponibile": 1000, "contributo": 50, "baseIva": 1050, "iva": 231, "totale": 1281, "oreVoci": 0,
+        "voci": [{"importo": 1000, "conta": true}], "sezioni": [1000]}
+    },
+    {
+      "nome": "a ore: 16 ore a 45 euro",
+      "preventivo": {"eppiPercentuale": 5, "ivaPercentuale": 22, "sezioni": [{"titolo": "Cantiere", "voci": [
+        {"modo": "ore", "quantita": 16, "unita": "ore", "prezzo": 45}]}]},
+      "atteso": {"sommaVoci": 720, "imponibile": 720, "contributo": 36, "baseIva": 756, "iva": 166.32, "totale": 922.32, "oreVoci": 16,
+        "voci": [{"importo": 720, "conta": true}]}
+    },
+    {
+      "nome": "a quantità: 7 pezzi a 12,35",
+      "preventivo": {"eppiPercentuale": 5, "ivaPercentuale": 22, "sezioni": [{"titolo": "Verifiche", "voci": [
+        {"modo": "quantita", "quantita": 7, "unita": "quadri", "prezzo": 12.35}]}]},
+      "atteso": {"sommaVoci": 86.45, "imponibile": 86.45, "contributo": 4.32, "baseIva": 90.77, "iva": 19.97, "totale": 110.74, "oreVoci": 0}
+    },
+    {
+      "nome": "sconto sulla voce: 15% su 2 x 415,40",
+      "preventivo": {"eppiPercentuale": 5, "ivaPercentuale": 22, "sezioni": [{"titolo": "Progetto", "voci": [
+        {"modo": "corpo", "quantita": 2, "prezzo": 415.4, "scontoPercentuale": 15},
+        {"modo": "corpo", "quantita": 1, "prezzo": 100}]}]},
+      "atteso": {"sommaVoci": 806.18, "imponibile": 806.18, "contributo": 40.31, "baseIva": 846.49, "iva": 186.23, "totale": 1032.72,
+        "voci": [{"importo": 706.18, "conta": true}, {"importo": 100, "conta": true}]}
+    },
+    {
+      "nome": "sconto in percentuale sul totale: 8%",
+      "preventivo": {"eppiPercentuale": 5, "ivaPercentuale": 22, "scontoPercentuale": 8, "sezioni": [{"titolo": "Progetto", "voci": [
+        {"modo": "corpo", "quantita": 1, "prezzo": 1200},
+        {"modo": "ore", "quantita": 8, "prezzo": 43.25}]}]},
+      "atteso": {"sommaVoci": 1546, "scontoDaPercentuale": 123.68, "scontoEuro": 0, "imponibile": 1422.32, "contributo": 71.12, "baseIva": 1493.44, "iva": 328.56, "totale": 1822, "oreVoci": 8}
+    },
+    {
+      "nome": "sconto in euro sul totale: 80 euro",
+      "preventivo": {"eppiPercentuale": 5, "ivaPercentuale": 22, "scontoEuro": 80, "sezioni": [{"titolo": "Progetto", "voci": [
+        {"modo": "corpo", "quantita": 1, "prezzo": 2000},
+        {"modo": "ore", "quantita": 12, "prezzo": 40}]}]},
+      "atteso": {"sommaVoci": 2480, "scontoDaPercentuale": 0, "scontoEuro": 80, "imponibile": 2400, "contributo": 120, "baseIva": 2520, "iva": 554.4, "totale": 3074.4}
+    },
+    {
+      "nome": "sconto in percentuale e in euro insieme",
+      "preventivo": {"eppiPercentuale": 5, "ivaPercentuale": 22, "scontoPercentuale": 10, "scontoEuro": 50, "sezioni": [{"titolo": "A", "voci": [
+        {"modo": "corpo", "quantita": 1, "prezzo": 1000}]}, {"titolo": "B", "voci": [
+        {"modo": "corpo", "quantita": 1, "prezzo": 500}]}]},
+      "atteso": {"sommaVoci": 1500, "scontoDaPercentuale": 150, "scontoEuro": 50, "imponibile": 1300, "contributo": 65, "baseIva": 1365, "iva": 300.3, "totale": 1665.3, "sezioni": [1000, 500]}
+    },
+    {
+      "nome": "facoltative: una scelta e una no",
+      "preventivo": {"eppiPercentuale": 5, "ivaPercentuale": 22, "sezioni": [{"titolo": "Lavori", "voci": [
+        {"modo": "corpo", "quantita": 1, "prezzo": 1000},
+        {"modo": "corpo", "quantita": 1, "prezzo": 300, "facoltativa": true, "scelta": true},
+        {"modo": "corpo", "quantita": 1, "prezzo": 200, "facoltativa": true, "scelta": false}]}]},
+      "atteso": {"sommaVoci": 1300, "imponibile": 1300, "contributo": 65, "baseIva": 1365, "iva": 300.3, "totale": 1665.3,
+        "voci": [{"importo": 1000, "conta": true}, {"importo": 300, "conta": true}, {"importo": 200, "conta": false}]}
+    },
+    {
+      "nome": "alternative: di ogni gruppo conta solo quella scelta",
+      "preventivo": {"eppiPercentuale": 5, "ivaPercentuale": 22, "sezioni": [{"titolo": "Lavori", "voci": [
+        {"modo": "corpo", "quantita": 1, "prezzo": 1000},
+        {"modo": "corpo", "quantita": 1, "prezzo": 380, "alternativa": "collaudo", "scelta": true},
+        {"modo": "corpo", "quantita": 1, "prezzo": 620, "alternativa": "collaudo", "scelta": false},
+        {"modo": "corpo", "quantita": 1, "prezzo": 500, "alternativa": "quadro", "scelta": false},
+        {"modo": "corpo", "quantita": 1, "prezzo": 700, "alternativa": "Quadro ", "scelta": true}]}]},
+      "atteso": {"sommaVoci": 2080, "imponibile": 2080, "contributo": 104, "baseIva": 2184, "iva": 480.48, "totale": 2664.48,
+        "voci": [{"importo": 1000, "conta": true}, {"importo": 380, "conta": true}, {"importo": 620, "conta": false}, {"importo": 500, "conta": false}, {"importo": 700, "conta": true}]}
+    },
+    {
+      "nome": "alternative: nessuna scelta non conta niente, due scelte conta la prima",
+      "preventivo": {"eppiPercentuale": 5, "ivaPercentuale": 22, "sezioni": [{"titolo": "Lavori", "voci": [
+        {"modo": "corpo", "quantita": 1, "prezzo": 50},
+        {"modo": "corpo", "quantita": 1, "prezzo": 100, "alternativa": "x"},
+        {"modo": "corpo", "quantita": 1, "prezzo": 200, "alternativa": "x"},
+        {"modo": "corpo", "quantita": 1, "prezzo": 300, "alternativa": "y", "scelta": true},
+        {"modo": "corpo", "quantita": 1, "prezzo": 400, "alternativa": "y", "scelta": true}]}]},
+      "atteso": {"sommaVoci": 350, "imponibile": 350, "contributo": 17.5, "baseIva": 367.5, "iva": 80.85, "totale": 448.35,
+        "voci": [{"importo": 50, "conta": true}, {"importo": 100, "conta": false}, {"importo": 200, "conta": false}, {"importo": 300, "conta": true}, {"importo": 400, "conta": false}]}
+    },
+    {
+      "nome": "PR/2026/012 del prototipo: due sezioni, una facoltativa, due alternative, tre scadenze",
+      "preventivo": {"eppiPercentuale": 5, "ivaPercentuale": 22, "sezioni": [
+        {"titolo": "Progettazione", "voci": [
+          {"descrizione": "Sopralluogo e rilievo", "modo": "corpo", "quantita": 1, "prezzo": 350},
+          {"descrizione": "Progetto esecutivo impianto elettrico", "modo": "corpo", "quantita": 1, "prezzo": 1900}]},
+        {"titolo": "Cantiere", "voci": [
+          {"descrizione": "Direzione lavori", "modo": "ore", "quantita": 16, "unita": "ore", "prezzo": 45},
+          {"descrizione": "Dichiarazione di rispondenza", "modo": "corpo", "quantita": 1, "prezzo": 450, "facoltativa": true, "scelta": false},
+          {"descrizione": "Collaudo con strumenti propri", "modo": "corpo", "quantita": 1, "prezzo": 380, "alternativa": "collaudo", "scelta": true},
+          {"descrizione": "Collaudo con laboratorio esterno", "modo": "corpo", "quantita": 1, "prezzo": 620, "alternativa": "collaudo", "scelta": false}]}],
+        "scadenzePagamento": [{"tipo": "percentuale", "valore": 30}, {"tipo": "percentuale", "valore": 40}, {"tipo": "percentuale", "valore": 30}]},
+      "atteso": {"sommaVoci": 3350, "imponibile": 3350, "contributo": 167.5, "baseIva": 3517.5, "iva": 773.85, "totale": 4291.35, "oreVoci": 16, "senzaPrezzo": 0,
+        "sezioni": [2250, 1100], "scadenze": [1005, 1340, 1005], "restoScadenze": 0}
+    },
+    {
+      "nome": "EPPI e IVA congelati diversi da oggi: 4% e 10%",
+      "preventivo": {"eppiPercentuale": 4, "ivaPercentuale": 10, "sezioni": [{"titolo": "Progetto", "voci": [
+        {"modo": "corpo", "quantita": 1, "prezzo": 1000}]}]},
+      "atteso": {"imponibile": 1000, "eppiPercentuale": 4, "contributo": 40, "baseIva": 1040, "ivaPercentuale": 10, "iva": 104, "totale": 1144}
+    },
+    {
+      "nome": "senza contributo e senza IVA",
+      "preventivo": {"eppiPercentuale": 0, "ivaPercentuale": 0, "sezioni": [{"titolo": "Progetto", "voci": [
+        {"modo": "corpo", "quantita": 1, "prezzo": 750}]}]},
+      "atteso": {"imponibile": 750, "contributo": 0, "baseIva": 750, "iva": 0, "totale": 750}
+    },
+    {
+      "nome": "arrotondamenti: ogni voce al centesimo prima di sommare (20,00 e non 20,01)",
+      "preventivo": {"eppiPercentuale": 5, "ivaPercentuale": 22, "sezioni": [{"titolo": "Varie", "voci": [
+        {"modo": "corpo", "quantita": 1, "prezzo": 10.004},
+        {"modo": "corpo", "quantita": 1, "prezzo": 10.004}]}]},
+      "atteso": {"sommaVoci": 20, "imponibile": 20, "contributo": 1, "baseIva": 21, "iva": 4.62, "totale": 25.62,
+        "voci": [{"importo": 10, "conta": true}, {"importo": 10, "conta": true}]}
+    },
+    {
+      "nome": "scadenze a importo e in percentuale, con un resto da coprire",
+      "preventivo": {"eppiPercentuale": 5, "ivaPercentuale": 22, "sezioni": [{"titolo": "Progetto", "voci": [
+        {"modo": "corpo", "quantita": 1, "prezzo": 2000}]}],
+        "scadenzePagamento": [{"tipo": "importo", "valore": 500}, {"tipo": "percentuale", "valore": 25}]},
+      "atteso": {"imponibile": 2000, "contributo": 100, "baseIva": 2100, "iva": 462, "totale": 2562, "scadenze": [500, 500], "restoScadenze": 1000}
+    },
+    {
+      "nome": "una voce senza prezzo: conta zero e si segnala",
+      "preventivo": {"eppiPercentuale": 5, "ivaPercentuale": 22, "sezioni": [{"titolo": "Verifica", "voci": [
+        {"modo": "corpo", "quantita": 1, "prezzo": null},
+        {"modo": "corpo", "quantita": 1, "prezzo": 300}]}]},
+      "atteso": {"sommaVoci": 300, "imponibile": 300, "contributo": 15, "baseIva": 315, "iva": 69.3, "totale": 384.3, "senzaPrezzo": 1,
+        "voci": [{"importo": 0, "conta": true}, {"importo": 300, "conta": true}]}
+    }
+  ]
+}

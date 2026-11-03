@@ -348,10 +348,141 @@
     return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
   }
 
+  // ------------------------------------------------------------------ preventivi (fase 2)
+
+  /*
+   * I conti del preventivo (docs/gestionale/fase2.md §3). Il conto vero lo fa il
+   * server; questi servono all'anteprima mentre si compila e al PDF, e devono dare
+   * gli stessi numeri sugli stessi casi (server/prove/casi-preventivo.json).
+   * Ogni pezzo si arrotonda al centesimo prima di sommarlo, come nei rapportini.
+   */
+  const primo = function () { for (let i = 0; i < arguments.length; i++) if (arguments[i] !== undefined && arguments[i] !== null && arguments[i] !== '') return arguments[i]; return undefined; };
+
+  /** Importo di una voce: quantità × prezzo × (1 − sconto della voce), al centesimo (come server/src/conti.js). */
+  function importoVoce(v) {
+    return centesimi(num(v.quantita) * num(v.prezzo) * (1 - num(primo(v.scontoPercentuale, v.sconto, 0)) / 100));
+  }
+
+  const vero = x => x === true || x === 1 || x === '1' || x === 'true';
+
+  /** Il gruppo di alternative ("una di queste"): lo stesso testo, senza badare a maiuscole e spazi. */
+  function gruppoAlternativa(v) {
+    return String(primo(v.alternativa, v.alt, '') || '').trim().toLowerCase().replace(/\s+/g, ' ');
+  }
+
+  /**
+   * Quali voci contano, nello stesso ordine: le normali sempre, le facoltative se
+   * scelte, di ogni gruppo di alternative solo la PRIMA scelta (nessuna scelta: niente).
+   */
+  function vociCheContano(voci) {
+    const presi = {};
+    return (voci || []).map(v => {
+      const g = gruppoAlternativa(v);
+      if (g) {
+        if (!vero(v.scelta) || presi[g]) return false;
+        presi[g] = true;
+        return true;
+      }
+      if (vero(v.facoltativa)) return vero(v.scelta);
+      return true;
+    });
+  }
+
+  /** Una voce conta? Con l'elenco di tutte le voci si sa anche se è la prima scelta del suo gruppo. */
+  function contaVoce(v, voci) {
+    if (voci) { const i = voci.indexOf(v); if (i >= 0) return vociCheContano(voci)[i]; }
+    if (gruppoAlternativa(v)) return vero(v.scelta);
+    if (vero(v.facoltativa)) return vero(v.scelta);
+    return true;
+  }
+
+  /**
+   * Le voci con le scelte del cliente: scelte = { idVoce: true|false }. Scegliere
+   * un'alternativa toglie le altre dello stesso gruppo.
+   */
+  function applicaScelte(voci, scelte) {
+    const s = scelte || {};
+    const out = (voci || []).map(v => Object.assign({}, v));
+    out.forEach(v => {
+      const k = String(v.id);
+      if (!Object.prototype.hasOwnProperty.call(s, k)) return;
+      v.scelta = !!s[k];
+      const g = gruppoAlternativa(v);
+      if (g && v.scelta) out.forEach(x => { if (x !== v && gruppoAlternativa(x) === g && !Object.prototype.hasOwnProperty.call(s, String(x.id))) x.scelta = false; });
+    });
+    return out;
+  }
+
+  /** Tutte le voci di un preventivo, nell'ordine delle sezioni, ognuna con l'id della sua sezione. */
+  function vociDelPreventivo(p) {
+    if (!p) return [];
+    if (Array.isArray(p.voci) && p.voci.length) return p.voci;
+    const out = [];
+    (p.sezioni || []).forEach((s, i) => (s.voci || []).forEach(v => out.push(v.idSezione === undefined ? Object.assign({ idSezione: chiaveSezione(s, i) }, v) : v)));
+    return out;
+  }
+  /** La chiave di una sezione: il suo id, o la posizione per una sezione senza id (i casi di prova). */
+  const chiaveSezione = (s, i) => (s.id === undefined || s.id === null || s.id === '' ? '#' + i : s.id);
+
+  /**
+   * Il conto (docs/gestionale/architettura.md §13.4), con gli stessi nomi del server:
+   * sommaVoci, scontoDaPercentuale, scontoEuro, imponibile, contributo (EPPI, entra nella
+   * base IVA), baseIva, iva, totale, oreVoci, senzaPrezzo, restoScadenze; voci = [{importo,
+   * conta}] nell'ordine delle voci; sezioni = i subtotali nell'ordine delle sezioni;
+   * perSezione = { idSezione: subtotale } per le pagine.
+   */
+  function contiPreventivo(p, vociScelte) {
+    const x = p || {};
+    const tutte = vociScelte || vociDelPreventivo(x);
+    const contano = vociCheContano(tutte);
+    const ordineSezioni = [];
+    const perSezione = {};
+    let ore = 0;
+    const voci = tutte.map((v, i) => {
+      const importo = importoVoce(v);
+      const k0 = primo(v.idSezione, v.sezioneId);
+      const k = k0 === undefined ? '' : String(k0);
+      if (!(k in perSezione)) { perSezione[k] = 0; ordineSezioni.push(k); }
+      if (contano[i]) {
+        perSezione[k] = centesimi(perSezione[k] + importo);
+        if (v.modo === 'ore') ore += num(v.quantita);
+      }
+      return { importo, conta: contano[i] };
+    });
+    // Le sezioni senza voci hanno subtotale zero, al loro posto.
+    (x.sezioni || []).forEach((s, i) => { const k = String(chiaveSezione(s, i)); if (!(k in perSezione)) { perSezione[k] = 0; ordineSezioni.push(k); } });
+    const sezioni = (x.sezioni && x.sezioni.length ? x.sezioni.map((s, i) => String(chiaveSezione(s, i))) : ordineSezioni).map(k => perSezione[k] || 0);
+    const sommaVoci = ordineSezioni.reduce((a, k) => centesimi(a + perSezione[k]), 0);
+    const scontoDaPercentuale = centesimi(sommaVoci * num(primo(x.scontoPercentuale, 0)) / 100);
+    const scontoEuro = centesimi(num(primo(x.scontoEuro, 0)));
+    const imponibile = centesimi(sommaVoci - scontoDaPercentuale - scontoEuro);
+    const contributo = centesimi(imponibile * num(primo(x.eppiPercentuale, x.eppi, 0)) / 100);
+    const baseIva = centesimi(imponibile + contributo);
+    const iva = centesimi(baseIva * num(primo(x.ivaPercentuale, x.iva, 0)) / 100);
+    const scadenze = (x.scadenzePagamento || []).map(s => importoScadenza(s, imponibile));
+    return {
+      sommaVoci, scontoDaPercentuale, scontoEuro, sconto: centesimi(scontoDaPercentuale + scontoEuro), imponibile,
+      eppiPercentuale: num(primo(x.eppiPercentuale, x.eppi, 0)), contributo, baseIva, ivaPercentuale: num(primo(x.ivaPercentuale, x.iva, 0)), iva,
+      totale: centesimi(baseIva + iva), oreVoci: Math.round(ore * 100) / 100, senzaPrezzo: tutte.filter(v => !(num(v.prezzo) > 0)).length,
+      restoScadenze: centesimi(imponibile - scadenze.reduce((a, b) => centesimi(a + b), 0)), voci, sezioni, perSezione, scadenze,
+    };
+  }
+
+  /**
+   * Gli importi delle scadenze di pagamento: in percentuale dell'imponibile, o un
+   * importo fisso. Il saldo (una percentuale senza valore, o "il resto") non serve:
+   * ognuna dice il suo.
+   */
+  function importoScadenza(s, imponibile) {
+    if (s.tipo === 'importo') return centesimi(num(s.valore));
+    return centesimi(num(imponibile) * num(s.valore) / 100);
+  }
+
   const Conti = {
     num, numONull, centesimi, euro, numero, ore, data, dataOra, nomeMese, oggiIso, normalizza,
     regoleDi, calcola, tariffaProposta, prossimoCodiceCommessa, prezzoOrarioDi, costoOrarioDi, budgetDi,
     STATI, ETICHETTE_STATO, filtra, ordina, totali, cruscotto, settimane,
+    importoVoce, vociCheContano, contaVoce, gruppoAlternativa, applicaScelte, vociDelPreventivo, contiPreventivo, importoScadenza,
   };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = Conti;

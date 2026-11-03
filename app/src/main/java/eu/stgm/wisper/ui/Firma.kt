@@ -62,15 +62,55 @@ fun SchermataFirma(
     onAnnulla: () -> Unit,
 ) {
     // Il cliente firma su un foglio bianco, anche se il telefono è in tema scuro.
-    ConColori(Chiaro) { Firma(rapportino, onConferma, onAnnulla) }
+    ConColori(Chiaro) {
+        Firma(
+            sopra = rapportino?.let { r -> r.cliente + " · " + r.data.format(DateTimeFormatter.ofPattern("EEEE d MMMM", Locale.ITALY)) },
+            descrizione = rapportino?.descrizione,
+            // Il lavoro e le ore, mai i soldi: il telefono adesso è in mano al cliente.
+            dettaglio = rapportino?.let { r ->
+                listOf("${Numeri.ore(r.oreLavoro + r.oreExtra)} di lavoro", r.oreViaggio.takeIf { it > 0 }?.let { "${Numeri.ore(it)} di viaggio" },
+                    "${Numeri.scrivi(r.km)} km").filterNotNull().joinToString(" · ")
+            },
+            frase = "Firmando confermi lavoro e ore del rapportino",
+            onConferma = onConferma,
+            onAnnulla = onAnnulla,
+        )
+    }
+}
+
+/**
+ * La firma del cliente per accettare un preventivo (fase2.md §5): la stessa
+ * schermata del rapportino, con l'oggetto e il numero del preventivo al posto del
+ * lavoro. [nome] è chi ha accettato, se l'ha già scritto nel foglio "Come ha accettato?".
+ */
+@Composable
+fun SchermataFirmaPreventivo(
+    sopra: String,
+    oggetto: String,
+    dettaglio: String,
+    nome: String,
+    onConferma: (Bitmap, String) -> Unit,
+    onAnnulla: () -> Unit,
+) {
+    ConColori(Chiaro) {
+        Firma(sopra, oggetto, dettaglio, "Firmando accetti il preventivo e le sue condizioni", onConferma, onAnnulla, nome)
+    }
 }
 
 @Composable
-private fun Firma(r: Rapportino?, onConferma: (Bitmap, String) -> Unit, onAnnulla: () -> Unit) {
+private fun Firma(
+    sopra: String?,
+    descrizione: String?,
+    dettaglio: String?,
+    frase: String,
+    onConferma: (Bitmap, String) -> Unit,
+    onAnnulla: () -> Unit,
+    nomeIniziale: String = "",
+) {
     val c = W.colori
     val tratti = remember { mutableStateListOf<List<Offset>>() }
     var tratto by remember { mutableStateOf<List<Offset>>(emptyList()) }
-    var nome by remember { mutableStateOf("") }
+    var nome by remember { mutableStateOf(nomeIniziale) }
     var dimensione by remember { mutableStateOf(IntSize.Zero) }
     val spessore = with(LocalDensity.current) { 3.dp.toPx() }
     val pronto = tratti.isNotEmpty() && nome.isNotBlank() && dimensione != IntSize.Zero
@@ -86,23 +126,15 @@ private fun Firma(r: Rapportino?, onConferma: (Bitmap, String) -> Unit, onAnnull
                 PulsanteTondo(Icone.indietro, "Indietro", onAnnulla)
             }
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                if (r != null) {
-                    Text(
-                        r.cliente + " · " + r.data.format(DateTimeFormatter.ofPattern("EEEE d MMMM", Locale.ITALY)),
-                        style = Testi.secondarioGrande, color = c.tenue, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                    )
+                if (sopra != null) {
+                    Text(sopra, style = Testi.secondarioGrande, color = c.tenue, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
                 Text("Firma del cliente", style = Testi.titoloPagina, color = c.testo)
             }
-            if (r != null) {
-                // Il lavoro e le ore, mai i soldi: il telefono adesso è in mano al cliente.
+            if (descrizione != null) {
                 Scheda(spazio = 6.dp) {
-                    Text(r.descrizione, style = Testi.forte, color = c.testo, maxLines = 3, overflow = TextOverflow.Ellipsis)
-                    Text(
-                        listOf("${Numeri.ore(r.oreLavoro + r.oreExtra)} di lavoro", r.oreViaggio.takeIf { it > 0 }?.let { "${Numeri.ore(it)} di viaggio" },
-                            "${Numeri.scrivi(r.km)} km").filterNotNull().joinToString(" · "),
-                        style = Testi.secondarioGrande, color = c.testo2,
-                    )
+                    Text(descrizione, style = Testi.forte, color = c.testo, maxLines = 3, overflow = TextOverflow.Ellipsis)
+                    if (!dettaglio.isNullOrBlank()) Text(dettaglio, style = Testi.secondarioGrande, color = c.testo2)
                 }
             }
             CampoTesto(nome, { nome = it }, "Nome di chi firma", stile = Testi.titoloSezione.copy(fontWeight = FontWeight.SemiBold))
@@ -147,7 +179,7 @@ private fun Firma(r: Rapportino?, onConferma: (Bitmap, String) -> Unit, onAnnull
                 }
                 Box(Modifier.align(Alignment.BottomCenter).padding(start = 24.dp, end = 24.dp, bottom = 54.dp).fillMaxWidth().height(1.5.dp).background(c.superficie2))
                 Text(
-                    "Firmando confermi lavoro e ore del rapportino", style = Testi.secondario, color = c.tenue,
+                    frase, style = Testi.secondario, color = c.tenue,
                     modifier = Modifier.align(Alignment.BottomStart).padding(start = 24.dp, bottom = 20.dp),
                 )
             }
@@ -163,6 +195,68 @@ private fun Firma(r: Rapportino?, onConferma: (Bitmap, String) -> Unit, onAnnull
                 Modifier.weight(1.6f), icona = Icone.spunta, abilitato = pronto,
             )
         }
+    }
+}
+
+/** Lo stato del riquadro della firma riusabile (fase 6: la consegna dei DPI). */
+class StatoFirma {
+    val tratti = mutableStateListOf<List<Offset>>()
+    var tratto by mutableStateOf<List<Offset>>(emptyList())
+    var dimensione by mutableStateOf(IntSize.Zero)
+    var spessore = 6f
+    val pronta: Boolean get() = tratti.isNotEmpty() && dimensione != IntSize.Zero
+
+    /** La firma in PNG, ritagliata attorno ai tratti. */
+    fun png(): ByteArray = java.io.ByteArrayOutputStream().use { out ->
+        disegna(tratti, dimensione, spessore).compress(Bitmap.CompressFormat.PNG, 100, out); out.toByteArray()
+    }
+}
+
+/**
+ * Il riquadro bianco della firma col dito (come quella del cliente: sempre su
+ * bianco), con la linea e sotto la frase ("Ricevuto da Marco Rossato · …").
+ */
+@Composable
+internal fun RiquadroFirma(stato: StatoFirma, frase: String, modifier: Modifier = Modifier) {
+    val c = W.colori
+    stato.spessore = with(LocalDensity.current) { 3.dp.toPx() }
+    Box(
+        modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(22.dp))
+            .background(Color.White)
+            .border(1.5.dp, c.bordoCampo, RoundedCornerShape(22.dp))
+            .onSizeChanged { stato.dimensione = it }
+            .pointerInput(Unit) {
+                awaitEachGesture {
+                    val giu = awaitFirstDown()
+                    var punti = listOf(giu.position)
+                    stato.tratto = punti
+                    giu.consume()
+                    while (true) {
+                        val dito = awaitPointerEvent().changes.firstOrNull { it.id == giu.id } ?: break
+                        if (!dito.pressed) break
+                        punti = punti + dito.position
+                        stato.tratto = punti
+                        dito.consume()
+                    }
+                    stato.tratti.add(if (punti.size == 1) listOf(punti[0], punti[0] + Offset(0.5f, 0.5f)) else punti)
+                    stato.tratto = emptyList()
+                }
+            },
+    ) {
+        Canvas(Modifier.fillMaxSize()) {
+            (stato.tratti + listOf(stato.tratto)).forEach { punti ->
+                if (punti.size < 2) return@forEach
+                val p = Path().apply {
+                    moveTo(punti.first().x, punti.first().y)
+                    punti.drop(1).forEach { lineTo(it.x, it.y) }
+                }
+                drawPath(p, Color(0xFF1B1B1F), style = Stroke(stato.spessore, cap = StrokeCap.Round, join = StrokeJoin.Round))
+            }
+        }
+        Box(Modifier.align(Alignment.BottomCenter).padding(start = 24.dp, end = 24.dp, bottom = 46.dp).fillMaxWidth().height(1.5.dp).background(Color(0xFFE7E6E2)))
+        Text(frase, style = Testi.secondario, color = Color(0xFF5F5F67), modifier = Modifier.align(Alignment.BottomStart).padding(start = 24.dp, end = 24.dp, bottom = 14.dp), maxLines = 2)
     }
 }
 

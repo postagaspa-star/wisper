@@ -129,9 +129,13 @@ fun SchermataRapportino(
     onFirma: (String) -> Unit,
     onChiudi: () -> Unit,
     onInvia: (String) -> Unit = {},
+    /** Fase 5: salvato senza firma, col ticket: si chiede "Il lavoro è finito?". */
+    onSalvatoSenzaFirma: (eu.stgm.wisper.rapportino.Rapportino) -> Unit = {},
 ) {
     val c = W.colori
     val ctx = LocalContext.current
+    var firmaPortale by remember { mutableStateOf(false) }
+    var legaTicket by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val visita = LocalVisita.current
     val avvisi = LocalAvvisi.current
@@ -147,7 +151,8 @@ fun SchermataRapportino(
     LaunchedEffect(vista?.rapportino?.id, vista?.rapportino?.stato, vista?.rapportino?.foto) {
         vista?.rapportino?.let { r ->
             stato.base = stato.base.copy(id = r.id, foto = r.foto, firma = r.firma, firmatario = r.firmatario,
-                firmatoIl = r.firmatoIl, stato = r.stato, gruppo = r.gruppo)
+                firmatoIl = r.firmatoIl, stato = r.stato, gruppo = r.gruppo,
+                idTicket = r.idTicket.ifBlank { stato.base.idTicket }, numeroTicket = r.numeroTicket.ifBlank { stato.base.numeroTicket }, nonSiFattura = r.nonSiFattura)
         }
     }
     // La copia su disco a ogni modifica, se Android chiude l'app (non nella visita).
@@ -156,6 +161,11 @@ fun SchermataRapportino(
     }
 
     val bloccato = stato.base.bloccato
+    // Senza il permesso dei soldi (il collaboratore) niente tariffa, totale e conto: ore, km e spese sì.
+    val costi = LocalPermessi.current.costi
+    // Chi vede i rapportini solo in lettura non cambia niente; segnare fatturato è della fatturazione.
+    val scrive = LocalPermessi.current.modifica(eu.stgm.wisper.rapportino.Moduli.RAPPORTINI)
+    val fattura = LocalPermessi.current.modifica(eu.stgm.wisper.rapportino.Moduli.FATTURAZIONE)
     val clienteScelto: Cliente? = ana.cliente(stato.idCliente, if (stato.idCliente.isBlank()) stato.cliente else "")
     val regole = ana.regoleDi(clienteScelto, ana.commessa(stato.idCommessa))
     // La tariffa da proporre: il prezzo della commessa, se ce l'ha; altrimenti l'ultima del cliente.
@@ -200,7 +210,7 @@ fun SchermataRapportino(
     }
 
     fun avanti() {
-        if (!stato.validaPasso(stato.passo, regole)) return
+        if (!stato.validaPasso(stato.passo, regole, costi)) return
         visita?.azione("avanti")
         if (stato.tornaAlRiepilogo) { stato.tornaAlRiepilogo = false; vaiA(4) } else vaiA(stato.passo + 1)
     }
@@ -217,7 +227,7 @@ fun SchermataRapportino(
     fun salva(): Boolean {
         val r = stato.rapportino()
         if (!bloccato) {
-            if (!stato.valida(regole)) {
+            if (!stato.valida(regole, costi)) {
                 val passoConErrore = when {
                     "cliente" in stato.errori -> 1
                     stato.errori.keys.any { it in setOf("oreLavoro", "oreExtra", "oreViaggio", "km", "tariffa") } -> 2
@@ -237,11 +247,11 @@ fun SchermataRapportino(
 
     // ---- foto ----
     var scattoInCorso by rememberSaveable { mutableStateOf<String?>(null) }
-    val fotocamera = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { riuscito ->
-        val percorso = scattoInCorso ?: return@rememberLauncherForActivityResult
+    val fotocamera = rememberFotoSistema { riuscito ->
+        val percorso = scattoInCorso ?: return@rememberFotoSistema
         scattoInCorso = null
         val scatto = File(percorso)
-        if (!riuscito) { scatto.delete(); return@rememberLauncherForActivityResult }
+        if (!riuscito) { scatto.delete(); return@rememberFotoSistema }
         scope.launch {
             runCatching { dati.preparaFoto(Uri.fromFile(scatto)) }.onSuccess { stato.fotoNuove.add(it); stato.speseAperte = true }
             scatto.delete()
@@ -331,8 +341,8 @@ fun SchermataRapportino(
         }
     }
     var scattoFoglio by rememberSaveable { mutableStateOf<String?>(null) }
-    val fotocameraFoglio = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { riuscito ->
-        val percorso = scattoFoglio ?: return@rememberLauncherForActivityResult
+    val fotocameraFoglio = rememberFotoSistema { riuscito ->
+        val percorso = scattoFoglio ?: return@rememberFotoSistema
         scattoFoglio = null
         val scatto = File(percorso)
         if (riuscito) caricaFoglio(Uri.fromFile(scatto)) { scatto.delete() } else scatto.delete()
@@ -363,7 +373,7 @@ fun SchermataRapportino(
                     if (stato.passo == 4 && !stato.nuovo) {
                         ParolaStato(stato.base.stato)
                         Spacer(Modifier.width(8.dp))
-                        PulsanteTondo(Icone.altro, "Altre azioni", { menu = true })
+                        if (scrive) PulsanteTondo(Icone.altro, "Altre azioni", { menu = true })
                     } else {
                         Text(if (stato.passo == 4) "Riepilogo" else "Passo ${stato.passo} di 3", style = Testi.secondario.copy(fontWeight = FontWeight.Bold), color = c.tenue)
                     }
@@ -397,7 +407,7 @@ fun SchermataRapportino(
                             1 -> PassoPerChi(stato, dati, viste, ana, regole, onScelto = { visita?.azione(it); vaiA(if (stato.tornaAlRiepilogo) 4 else 2); stato.tornaAlRiepilogo = false })
                             2 -> PassoOre(stato, regole, proposta, ultimiKm, clienteScelto, prezzoCommessa != null)
                             3 -> PassoLavoro(stato, ana.ticketAttivo, vista, onScatta = { scatta() }, onGalleria = { dallaGalleria() }, dati = dati)
-                            else -> PassoRiepilogo(stato, vista, conto, regole, dati, onCambia = { cambiaDa(it) })
+                            else -> PassoRiepilogo(stato, vista, conto, regole, dati, onCambia = { cambiaDa(it) }, solaLettura = !scrive)
                         }
                     }
                 }
@@ -412,16 +422,22 @@ fun SchermataRapportino(
                         Modifier.fillMaxWidth().border(1.dp, c.bordoScheda).padding(start = 20.dp, end = 20.dp, top = 14.dp, bottom = 16.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Column(Modifier.weight(1f).bersaglio("totale")) {
+                        if (costi) Column(Modifier.weight(1f).bersaglio("totale")) {
                             Text("Totale", style = Testi.piccolo.copy(fontWeight = FontWeight.Bold), color = c.tenue)
                             EuroAnimati(conto.totale, Testi.titoloScheda.copy(fontSize = Testi.titoloScheda.fontSize * 1.08f))
-                        }
+                        } else Spacer(Modifier.weight(1f))
                         val pronto = stato.passo != 2 || oreTotali > 0
                         Box(
                             Modifier.width(172.dp).height(60.dp).clip(RoundedCornerShape(18.dp))
                                 .background(if (pronto) c.giallo else c.superficie2).clickable { avanti() }.bersaglio("avanti"),
                             contentAlignment = Alignment.Center,
                         ) { Text("Avanti", style = Testi.pulsante, color = if (pronto) c.suGiallo else c.moltoTenue) }
+                    }
+                    stato.passo == 4 && !scrive -> Column(
+                        Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 16.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        PulsantePrincipale("PDF del rapportino", { pdf(condividi = false) }, icona = Icone.pdf)
                     }
                     stato.passo == 4 && !bloccato -> Column(
                         Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 10.dp),
@@ -432,7 +448,7 @@ fun SchermataRapportino(
                         else PulsantePrincipale("Fai firmare al cliente", {
                             if (salva()) onFirma(stato.base.idLocale)
                         }, Modifier.bersaglio("firma"), icona = Icone.firma)
-                        PulsanteTesto("Salva senza firma", { if (salva()) onChiudi() }, colore = c.testo2)
+                        PulsanteTesto("Salva senza firma", { val r = stato.rapportino(); if (salva()) { onChiudi(); onSalvatoSenzaFirma(r) } }, colore = c.testo2)
                     }
                     // UN pulsante giallo, la cosa da fare adesso; il resto è nel menu ⋯.
                     stato.passo == 4 && bloccato -> Column(
@@ -445,7 +461,7 @@ fun SchermataRapportino(
                             occupato != null -> PulsantePrincipale(occupato, {}, abilitato = false)
                             stato.base.stato == Stato.FIRMATO ->
                                 PulsantePrincipale("Invia al cliente", { onInvia(stato.base.idLocale) }, icona = Icone.invia)
-                            stato.base.stato == Stato.INVIATO ->
+                            stato.base.stato == Stato.INVIATO && fattura ->
                                 PulsantePrincipale("Segna fatturato", { segna(Stato.FATTURATO, "Rapportino fatturato") }, icona = Icone.spunta)
                             else -> PulsantePrincipale("PDF del rapportino", { pdf(condividi = false) }, icona = Icone.pdf)
                         }
@@ -468,7 +484,7 @@ fun SchermataRapportino(
     if (chiediElimina) {
         FoglioConferma(
             titolo = "Eliminare il rapportino?",
-            testo = "Sul foglio resta, segnato come annullato: si recupera da lì.",
+            testo = "Sul server resta, segnato come annullato: si recupera da lì.",
             azione = "Elimina",
             onConferma = {
                 chiediElimina = false
@@ -526,8 +542,30 @@ fun SchermataRapportino(
                 VoceMenu(Icone.indietroStato, "Non ancora fatturato", { menu = false; segna(Stato.INVIATO, "Non più fatturato") })
             }
             if (st != Stato.BOZZA) VoceMenu(Icone.indietroStato, "Riporta in bozza", { menu = false; chiediBozza = true })
+            // Fase 5 (§3.3): legare dopo un rapportino scritto dalla strada solita, o toglierlo dal ticket.
+            if (stato.base.id.isNotBlank() && st != Stato.FATTURATO && LocalPermessi.current.vede(eu.stgm.wisper.rapportino.Moduli.TICKET) && !dati.esempio) {
+                if (stato.base.conTicket) VoceMenu(Icone.chiudi, "Togli dal ticket", {
+                    menu = false
+                    scope.launch {
+                        dati.fase5.legaRapportino(stato.base.id, null).onSuccess { r -> stato.base = stato.base.copy(idTicket = "", idLocaleTicket = "", numeroTicket = "", ticket = r.ticket); stato.ticket = r.ticket; dati.aggiorna(); avvisi.mostra("Tolto dal ticket") }
+                            .onFailure { avvisi.mostra(spiegaErrore2(it, "Non è stato tolto: riprova")) }
+                    }
+                })
+                else VoceMenu(Icone.chiave, "Lega a un ticket", { menu = false; legaTicket = true })
+            }
+            // Fase 7 (§3.9): un rapportino da firmare si fa firmare a distanza nel portale.
+            if (st == Stato.BOZZA && stato.base.id.isNotBlank() && !stato.base.portaleDaFirmare && LocalPermessi.current.modifica(eu.stgm.wisper.rapportino.Moduli.PORTALE) &&
+                dati.anagrafiche.value.cliente(stato.base.idCliente, stato.base.cliente)?.portale == true) {
+                VoceMenu(Icone.globo, "Fallo firmare nel portale", { menu = false; firmaPortale = true })
+            }
             if (st == Stato.BOZZA) VoceMenu(Icone.cestino, "Elimina", { menu = false; chiediElimina = true }, pericolo = true)
         }
+    }
+
+    if (legaTicket) FoglioLegaTicket(dati, stato.base, onChiudi = { legaTicket = false }, onLegato = { legaTicket = false; onChiudi() })
+    if (firmaPortale) {
+        val cl = dati.anagrafiche.value.cliente(stato.base.idCliente, stato.base.cliente)
+        FoglioPubblica(dati, "rapportino", stato.base.id, cl?.id ?: stato.base.idCliente, cl?.nome ?: stato.base.cliente, inBozza = true) { firmaPortale = false }
     }
 
     if (sceltaScontrino) {
@@ -607,7 +645,8 @@ private fun ColumnScope.PassoPerChi(
                     stato.sceltaCommessa = true
                 }
             }
-            if (trovati.none { it.nome.equals(testo, ignoreCase = true) }) {
+            // Fase 6 (§8.4): l'esterno scrive solo sulle commesse dei suoi incarichi (cliente o commessa nuovi no).
+            if (!dati.sessione.value.esterno && trovati.none { it.nome.equals(testo, ignoreCase = true) }) {
                 // Un cliente nuovo ha la tariffa libera: Elettrodinamica, l'unica fissa, c'è già.
                 PulsanteBordo("Cliente nuovo «$testo»", {
                     stato.cliente = testo; stato.idCliente = ""
@@ -635,10 +674,11 @@ private fun ColumnScope.PassoPerChi(
                 onScelto("commessa")
             }
         }
-        PulsanteBordo("Senza commessa", { stato.commessa = ""; stato.idCommessa = ""; stato.codiceProposto = ""; onScelto("commessa") }, Modifier.fillMaxWidth())
+        val esterno = dati.sessione.value.esterno
+        if (!esterno) PulsanteBordo("Senza commessa", { stato.commessa = ""; stato.idCommessa = ""; stato.codiceProposto = ""; onScelto("commessa") }, Modifier.fillMaxWidth())
         var nuova by remember { mutableStateOf("") }
-        CampoTesto(nuova, { nuova = it }, "Commessa nuova", segnaposto = "Come la chiami tu")
-        if (nuova.isNotBlank()) {
+        if (!esterno) CampoTesto(nuova, { nuova = it }, "Commessa nuova", segnaposto = "Come la chiami tu")
+        if (nuova.isNotBlank() && !esterno) {
             // Il codice della commessa nuova si sa subito, anche senza rete.
             val codice = ana.prossimoCodiceCommessa(stato.data.year)
             PulsanteBordo("Usa «${nuova.trim()}» · $codice", {
@@ -726,6 +766,8 @@ private fun ColumnScope.PassoOre(
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Text(listOf(stato.cliente, stato.idCommessa.ifBlank { stato.codiceProposto }.ifBlank { stato.commessa }.takeIf { it.isNotBlank() }).filterNotNull().joinToString(" · "),
             style = Testi.secondarioGrande, color = c.tenue, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        // Fase 5 (§3.3): il rapportino del ticket lo dice con la pillola grigia.
+        if (stato.base.numeroTicket.isNotBlank()) Parola5("Ticket ${stato.base.numeroTicket}", Modifier.padding(vertical = 4.dp), colore = eu.stgm.wisper.rapportino.ColoreFase5.GRIGIO)
         Text("Ore e strada", style = Testi.titoloPagina, color = c.testo)
     }
 
@@ -798,8 +840,8 @@ private fun ColumnScope.PassoOre(
         if (!regole.kmRimborsati) Text("Questo cliente non rimborsa i km", style = Testi.piccolo, color = c.tenue)
     }
 
-    // La tariffa: fissa per il gruppo, o quella scritta qui (proposta: l'ultima usata).
-    Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+    // La tariffa: fissa per il gruppo, o quella scritta qui (proposta: l'ultima usata). Solo con i soldi.
+    if (LocalPermessi.current.costi) Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text(if (regole.tariffaFissa != null) "Tariffa fissa ${stato.cliente}" else "Tariffa oraria", style = Testi.secondarioGrande.copy(fontWeight = FontWeight.Bold), color = c.testo)
             if (regole.tariffaFissa == null) Text(
@@ -897,8 +939,12 @@ private fun ColumnScope.PassoLavoro(
         }
     }
 
+    // Fase 6 (§3.9): gli strumenti usati, chiusi in una riga come la nota; aperti se il rapportino ne ha.
+    val conMezzi = LocalPermessi.current.vede(eu.stgm.wisper.rapportino.Moduli.MEZZI)
+    if (conMezzi && stato.strumentiAperti) StrumentiUsati(stato, dati)
     // Le cose che servono ogni tanto: chiuse finché non servono.
     Row(Modifier.padding(top = 4.dp).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (conMezzi && !stato.strumentiAperti) Pillola("+ Strumenti usati", false, { stato.strumentiAperti = true; if (stato.strumenti == null) stato.strumenti = emptyList() }, altezza = 44.dp)
         if (!stato.luogoAperto) Pillola("+ Luogo", false, { stato.luogoAperto = true }, altezza = 44.dp)
         if (!stato.notaAperta) Pillola("+ Una nota per te", false, { stato.notaAperta = true }, altezza = 44.dp)
     }
@@ -939,19 +985,27 @@ private fun ColumnScope.PassoRiepilogo(
     regole: eu.stgm.wisper.rapportino.Regole,
     dati: Dati,
     onCambia: (Int) -> Unit,
+    /** Chi vede i rapportini solo in lettura: niente "Cambia". */
+    solaLettura: Boolean = false,
 ) {
     val c = W.colori
     val ctx = LocalContext.current
-    val bloccato = stato.base.bloccato
+    val bloccato = stato.base.bloccato || solaLettura
     val r = stato.rapportino()
 
     if (!stato.nuovo) Scheda { Passi(stato.base.stato) }
     vista?.errore?.takeIf { it.isNotBlank() }?.let {
-        Text("Il foglio non l'ha accettato: $it", style = Testi.secondario, color = c.rossoTesto)
+        Text("Il server non l'ha accettato: $it", style = Testi.secondario, color = c.rossoTesto)
     }
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Text(dataLungaIt(stato.data), style = Testi.secondarioGrande, color = c.tenue)
         Text(if (stato.base.id.isNotBlank()) stato.base.id else "Riepilogo", style = Testi.titoloPagina, color = c.testo)
+        if (stato.base.numeroTicket.isNotBlank() || stato.base.nonSiFattura.isNotBlank()) Row(
+            Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            if (stato.base.numeroTicket.isNotBlank()) Parola5("Ticket ${stato.base.numeroTicket}", colore = eu.stgm.wisper.rapportino.ColoreFase5.GRIGIO)
+            if (stato.base.nonSiFattura.isNotBlank()) Parola5(stato.base.nonSiFattura, colore = eu.stgm.wisper.rapportino.ColoreFase5.GRIGIO)
+        }
     }
 
     Scheda(verticale = 4.dp, spazio = 0.dp) {
@@ -974,9 +1028,19 @@ private fun ColumnScope.PassoRiepilogo(
             Box(Modifier.fillMaxWidth().height(1.dp).background(c.riga))
             Text("Luogo · ${r.luogo}", style = Testi.secondario.copy(fontWeight = FontWeight.Medium), color = c.tenue, modifier = Modifier.padding(vertical = 12.dp))
         }
+        // Fase 6 (§3.9): la riga Strumenti coi nomi e lo stato; Cambia riporta al passo 3.
+        val strumenti = r.strumenti.orEmpty()
+        if (strumenti.isNotEmpty()) {
+            Box(Modifier.fillMaxWidth().height(1.dp).background(c.riga))
+            RigaRiepilogo(
+                "Strumenti: " + strumenti.joinToString(", ") { it.riga },
+                if (strumenti.any { it.statoAllora == eu.stgm.wisper.rapportino.ContiMezzi.SCADUTA }) "Uno strumento ha la taratura scaduta" else "Strumenti usati",
+                bloccato,
+            ) { onCambia(3) }
+        }
     }
 
-    Scheda(verticale = 16.dp, spazio = 8.dp) {
+    if (LocalPermessi.current.costi) Scheda(verticale = 16.dp, spazio = 8.dp) {
         val orePagate = r.oreLavoro + r.oreExtra + if (conto.pagaViaggio || regole.pagaViaggio) r.oreViaggio else 0.0
         RigaConto("Ore · ${Numeri.ore(orePagate)} × ${Numeri.scrivi(conto.tariffa)} €", Numeri.euro(conto.compensoOre))
         RigaConto("Km · ${Numeri.scrivi(r.km)} × ${Numeri.scrivi(conto.euroKm)} €", Numeri.euro(conto.rimborsoKm))
@@ -988,7 +1052,9 @@ private fun ColumnScope.PassoRiepilogo(
         }
     }
 
-    if (bloccato) {
+    // Fase 7 (§12.6): Da firmare nel portale o Nel portale; "Firmato nel portale da …".
+    if (!stato.nuovo) BloccoPortaleRapportino(dati, stato.base)
+    if (stato.base.bloccato) {
         val quando = stato.base.firmatoIl.takeIf { it.isNotBlank() }?.let {
             runCatching { LocalDateTime.parse(it).format(DateTimeFormatter.ofPattern("dd/MM 'alle' HH:mm")) }.getOrNull()
         }

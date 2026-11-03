@@ -1,0 +1,26 @@
+{
+  "nota": "Il numero per WhatsApp (fase7.md §9.3): numeroWhatsapp(testo) in server/src/comunicazioni.js, rifatto uguale in Kotlin e in pc/ui/regole-comunicazioni.js. 1) tieni solo cifre e un + iniziale; 2) + davanti: togli il +; 00 davanti: togli 00; 3) solo se davanti non c'erano + o 00: comincia con 3 e ha 9 o 10 cifre (cellulare italiano): 39 davanti; 4) solo se davanti non c'erano + o 00: comincia con 0 e ha da 6 a 11 cifre (fisso italiano): 39 davanti e fisso true; 5) comincia con 39 e ha 11 o 12 cifre: cosi' (fisso true se dopo il 39 viene uno 0); 6) altrimenti da 8 a 15 cifre: cosi' (estero col prefisso); fuori da questi casi valido false. visto: come si mostra (Italia, cellulare cioe' dopo il 39 viene un 3: +39 e poi gruppi da 3, 3 e il resto; Italia, fisso: +39 e le cifre tutte attaccate; estero: + e le cifre). link: https://wa.me/<numero>?text=<testo con encodeURIComponent> (fase7.md §9.4).",
+  "casi": [
+    {"nome": "cellulare con gli spazi", "testo": "333 000 1122", "valido": true, "numero": "393330001122", "fisso": false, "visto": "+39 333 000 1122"},
+    {"nome": "cellulare col prefisso e i trattini", "testo": "+39 333-000-1122", "valido": true, "numero": "393330001122", "fisso": false, "visto": "+39 333 000 1122"},
+    {"nome": "cellulare col doppio zero", "testo": "0039 3330001122", "valido": true, "numero": "393330001122", "fisso": false, "visto": "+39 333 000 1122"},
+    {"nome": "cellulare con punti e parentesi", "testo": "(340) 000.4455", "valido": true, "numero": "393400004455", "fisso": false, "visto": "+39 340 000 4455"},
+    {"nome": "cellulare a 9 cifre", "testo": "333 000 112", "valido": true, "numero": "39333000112", "fisso": false, "visto": "+39 333 000 112"},
+    {"nome": "cellulare che comincia con 393, senza prefisso", "testo": "393 123 4567", "valido": true, "numero": "393931234567", "fisso": false, "visto": "+39 393 123 4567"},
+    {"nome": "cellulare scritto con 39 senza piu'", "testo": "39 333 000 1122", "valido": true, "numero": "393330001122", "fisso": false, "visto": "+39 333 000 1122"},
+    {"nome": "fisso dello studio", "testo": "0445 000100", "valido": true, "numero": "390445000100", "fisso": true, "visto": "+39 0445000100"},
+    {"nome": "fisso con la barra", "testo": "0445/000100", "valido": true, "numero": "390445000100", "fisso": true, "visto": "+39 0445000100"},
+    {"nome": "fisso col prefisso", "testo": "+39 0445 000100", "valido": true, "numero": "390445000100", "fisso": true, "visto": "+39 0445000100"},
+    {"nome": "svizzero", "testo": "+41 79 000 11 22", "valido": true, "numero": "41790001122", "fisso": false, "visto": "+41790001122"},
+    {"nome": "tedesco col doppio zero", "testo": "0049 151 00011223", "valido": true, "numero": "4915100011223", "fisso": false, "visto": "+4915100011223"},
+    {"nome": "estero corto che comincia con 3 (Andorra): col + non si aggiunge il 39", "testo": "+376 312 345", "valido": true, "numero": "376312345", "fisso": false, "visto": "+376312345"},
+    {"nome": "troppo corto", "testo": "123", "valido": false},
+    {"nome": "vuoto", "testo": "", "valido": false},
+    {"nome": "solo lettere", "testo": "chiamare in ufficio", "valido": false},
+    {"nome": "troppo lungo", "testo": "+39 333 000 1122 333 000 1122", "valido": false}
+  ],
+  "link": [
+    {"numero": "393330001122", "testo": "Buongiorno Sig. Ferretti, le ricordo l'appuntamento di giovedì 23 ottobre alle 9:00.\nManuel Gasparotto · Studio Tecnico GM",
+     "link": "https://wa.me/393330001122?text=Buongiorno%20Sig.%20Ferretti%2C%20le%20ricordo%20l'appuntamento%20di%20gioved%C3%AC%2023%20ottobre%20alle%209%3A00.%0AManuel%20Gasparotto%20%C2%B7%20Studio%20Tecnico%20GM"}
+  ]
+}

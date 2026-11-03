@@ -1,0 +1,26 @@
+# La prova in locale dell'ingresso (README, "Internet entrance"): le stesse regole e opzioni del
+# Caddyfile vero, ma con un certificato fatto da Caddy (tls internal) al posto di Let's Encrypt, sulla
+# 8444 del computer, verso un server di prova con la porta dell'ingresso sulla 8402.
+#   WISPER_IP_PUBBLICO=127.0.0.1 WISPER_INGRESSO_DESTINO=127.0.0.1:8402 caddy run --config Caddyfile.prova --adapter caddyfile
+# Caddy non installa il suo certificato tra quelli di sistema (skip_install_trust): curl con -k.
+{
+	admin off
+	default_sni {$WISPER_IP_PUBBLICO}
+	auto_https disable_redirects
+	https_port 8444
+	skip_install_trust
+	import opzioni.caddy
+}
+
+import regole.caddy
+
+https://{$WISPER_IP_PUBBLICO}:8444 {
+	bind 127.0.0.1
+	tls internal
+	import regole
+}
+
+:8444 {
+	bind 127.0.0.1
+	import altri-nomi
+}

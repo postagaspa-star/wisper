@@ -60,6 +60,10 @@ class ModuloStato(
     var tariffaToccata by mutableStateOf(tariffaToccata)
     var noteInterne by mutableStateOf(base.noteInterne)
 
+    /** Fase 6 (§3.9): gli strumenti usati (null = non toccati: non si mandano) e la riga aperta. */
+    var strumenti by mutableStateOf(base.strumenti)
+    var strumentiAperti by mutableStateOf(!base.strumenti.isNullOrEmpty())
+
     /** Foto fatte in questo modulo: partono quando si salva, dopo il rapportino. */
     val fotoNuove = mutableStateListOf<File>()
 
@@ -86,6 +90,7 @@ class ModuloStato(
         noteSpese = noteSpese.trim(),
         tariffa = Numeri.leggi(tariffa),
         noteInterne = noteInterne.trim(),
+        strumenti = strumenti,
     )
 
     /** Vero se c'e' qualcosa da salvare rispetto a com'era all'apertura. */
@@ -93,8 +98,8 @@ class ModuloStato(
         get() = nuovo || fotoNuove.isNotEmpty() || rapportino().soloCompilato() != base.soloCompilato()
 
     /** Controlla solo i campi di un passo: Avanti non va oltre finché mancano. */
-    fun validaPasso(n: Int, regole: Regole): Boolean {
-        val tutti = valida(regole)
+    fun validaPasso(n: Int, regole: Regole, chiediTariffa: Boolean = true): Boolean {
+        val tutti = valida(regole, chiediTariffa)
         val delPasso = when (n) {
             1 -> setOf("cliente")
             2 -> setOf("oreLavoro", "oreExtra", "oreViaggio", "km", "tariffa")
@@ -119,8 +124,11 @@ class ModuloStato(
     /**
      * Controlla che il rapportino stia in piedi. Gli errori si scrivono sotto il
      * campo che li ha, con le parole di chi compila e non col nome del campo.
+     *
+     * @param chiediTariffa falso per chi non vede i soldi (dalla fase 1): la
+     *        tariffa non la vede e non la scrive, la mette il server.
      */
-    fun valida(regole: Regole): Boolean {
+    fun valida(regole: Regole, chiediTariffa: Boolean = true): Boolean {
         val e = mutableMapOf<String, String>()
         if (cliente.isBlank()) e["cliente"] = "Scegli il cliente"
         if (descrizione.isBlank()) e["descrizione"] = "Scrivi che lavoro hai fatto"
@@ -130,7 +138,7 @@ class ModuloStato(
             }
         val ore = listOf(oreLavoro, oreExtra, oreViaggio).sumOf { Numeri.leggi(it) ?: 0.0 }
         if (ore <= 0.0 && "oreLavoro" !in e) e["oreLavoro"] = "Mancano le ore"
-        if (regole.tariffaFissa == null && (Numeri.leggi(tariffa) ?: 0.0) <= 0.0) {
+        if (chiediTariffa && regole.tariffaFissa == null && (Numeri.leggi(tariffa) ?: 0.0) <= 0.0) {
             e["tariffa"] = "Scrivi la tariffa oraria"
         }
         errori = e

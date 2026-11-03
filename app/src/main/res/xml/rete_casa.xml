@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Tutto in https (Google, GitHub), tranne il server dello studio in casa, che
+     parla HTTP sulla rete di casa (docs/gestionale/porta-google.md §8): l'app gli
+     manda il token solo dopo la firma che prova che risponde il server vero. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">192.168.1.51</domain>
+    </domain-config>
+</network-security-config>

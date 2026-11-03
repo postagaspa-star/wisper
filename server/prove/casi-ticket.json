@@ -1,0 +1,26 @@
+{
+  "nota": "La priorita' di un ticket dalle due domande (fase5.md §7.2): \"L'impianto e' fermo?\" (impatto) e \"Per quando?\" (urgenza). prioritaDa(impatto, urgenza) in server/src/conti.js; telefono e computer la rifanno uguale mentre si risponde. Senza risposte: normale. \"cambia\": la priorita' scritta a mano vince (prioritaAMano true) e le risposte restano. \"tempi\": le ore di calendario di TICKET_TEMPI (da confermare con Manuel) e quelle di un contratto che le cambia.",
+  "priorita": [
+    {"impatto": "fermo", "urgenza": "subito", "atteso": "urgente"},
+    {"impatto": "fermo", "urgenza": "presto", "atteso": "alta"},
+    {"impatto": "fermo", "urgenza": "quando_si_puo", "atteso": "normale"},
+    {"impatto": "ridotto", "urgenza": "subito", "atteso": "alta"},
+    {"impatto": "ridotto", "urgenza": "presto", "atteso": "normale"},
+    {"impatto": "ridotto", "urgenza": "quando_si_puo", "atteso": "bassa"},
+    {"impatto": "nessuno", "urgenza": "subito", "atteso": "normale"},
+    {"impatto": "nessuno", "urgenza": "presto", "atteso": "bassa"},
+    {"impatto": "nessuno", "urgenza": "quando_si_puo", "atteso": "bassa"},
+    {"impatto": "", "urgenza": "", "atteso": "normale"}
+  ],
+  "cambia": {"impatto": "fermo", "urgenza": "subito", "priorita": "bassa", "atteso": {"priorita": "bassa", "prioritaAMano": true, "impatto": "fermo", "urgenza": "subito"}},
+  "tempi": {
+    "studio": {"urgente": {"presa": 1, "intervento": 4}, "alta": {"presa": 2, "intervento": 24}, "normale": {"presa": 8, "intervento": 72}, "bassa": {"presa": 24, "intervento": 240}},
+    "casi": [
+      {"apertoIl": "2026-10-22T08:40:00", "priorita": "urgente", "atteso": {"entroPresa": "2026-10-22T09:40:00", "entroIntervento": "2026-10-22T12:40:00"}},
+      {"apertoIl": "2026-10-21T16:10:00", "priorita": "alta", "atteso": {"entroPresa": "2026-10-21T18:10:00", "entroIntervento": "2026-10-22T16:10:00"}},
+      {"apertoIl": "2026-10-20T09:15:00", "priorita": "normale", "atteso": {"entroPresa": "2026-10-20T17:15:00", "entroIntervento": "2026-10-23T09:15:00"}},
+      {"apertoIl": "2026-10-24T23:30:00", "priorita": "urgente", "atteso": {"entroPresa": "2026-10-25T00:30:00", "entroIntervento": "2026-10-25T02:30:00"}, "nota": "ore di calendario: la notte conta (e il 25/10 l'ora legale finisce)"},
+      {"apertoIl": "2026-10-22T08:40:00", "priorita": "urgente", "contratto": {"urgente": {"presa": 0.5, "intervento": 2}}, "atteso": {"entroPresa": "2026-10-22T09:10:00", "entroIntervento": "2026-10-22T10:40:00"}}
+    ]
+  }
+}

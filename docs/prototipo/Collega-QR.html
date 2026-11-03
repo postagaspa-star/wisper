@@ -1,0 +1,390 @@
+<!doctype html>
+<html lang="it">
+<meta charset="utf-8">
+<title>Wisper Collega col QR</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap">
+<style>
+/* Prototipo del collegamento col QR (02/11/2026): il computer mostra un codice, il telefono lo inquadra, si conferma,
+   il computer entra. Telefono 390x844 e computer 1280x800, chiaro e scuro. Colori, caratteri e misure da
+   docs/aspetto.md e dal prototipo della fase 8. Accordo: docs/gestionale/collega-qr.md. Solo dati di esempio. */
+:root {
+  --fondo: #F4F4F2; --scheda: #FFFFFF; --sup: #E7E6E2; --bordo: #E6E5E1; --bordo-campo: #CFCEC9;
+  --testo: #1B1B1F; --testo2: #3F3F46; --tenue: #5F5F67;
+  --giallo: #FFC53D; --giallo-premuto: #F2B21E; --giallo-tenue: #FFF4D6; --giallo-testo: #8A5A00;
+  --verde-f: #EBF7EE; --verde-t: #1F6A30; --rosso-f: #FDEEEC; --rosso-t: #9B1C1C;
+  --velo: rgba(20,20,22,.45); --cornice: #D9D8D3; --palco: #ECEBE7; --qr-fondo: #FFFFFF; --qr: #1B1B1F;
+  --font: 'Figtree', system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --fondo: #121214; --scheda: #1C1C1F; --sup: #2A2A2E; --bordo: #2C2C30; --bordo-campo: #46464D;
+  --testo: #F2F2F3; --testo2: #D4D4D8; --tenue: #A1A1AA;
+  --giallo-tenue: #3A2F14; --giallo-testo: #FFD76A; --verde-f: #1E3326; --verde-t: #8CE0A4; --rosso-f: #3A1C1C; --rosso-t: #FFA8A8;
+  --velo: rgba(0,0,0,.6); --cornice: #2C2C30; --palco: #0B0B0C; color-scheme: dark;
+} }
+:root[data-theme="dark"] {
+  --fondo: #121214; --scheda: #1C1C1F; --sup: #2A2A2E; --bordo: #2C2C30; --bordo-campo: #46464D;
+  --testo: #F2F2F3; --testo2: #D4D4D8; --tenue: #A1A1AA;
+  --giallo-tenue: #3A2F14; --giallo-testo: #FFD76A; --verde-f: #1E3326; --verde-t: #8CE0A4; --rosso-f: #3A1C1C; --rosso-t: #FFA8A8;
+  --velo: rgba(0,0,0,.6); --cornice: #2C2C30; --palco: #0B0B0C; color-scheme: dark;
+}
+html, body { margin: 0; min-height: 100%; }
+body { background: var(--palco); color: var(--testo); font-family: var(--font); -webkit-tap-highlight-color: transparent; }
+* { box-sizing: border-box; }
+button { font-family: inherit; color: inherit; cursor: pointer; }
+:focus-visible { outline: 3px solid var(--giallo); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; animation: none !important; } }
+
+/* ---------- palco ---------- */
+.barra-proto { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: center; padding: 14px 16px 0; }
+.pill-proto { font-size: 12px; font-weight: 800; letter-spacing: .08em; background: var(--giallo); color: #1B1B1F; border-radius: 999px; padding: 5px 11px; }
+.seg { display: inline-flex; flex-wrap: wrap; background: var(--sup); border-radius: 22px; padding: 4px; gap: 2px; }
+.seg button { border: none; background: transparent; border-radius: 999px; min-height: 40px; padding: 0 14px; font-size: 14px; font-weight: 700; color: var(--testo2); }
+.seg button[aria-pressed="true"] { background: var(--scheda); color: var(--testo); box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+.palco { display: flex; align-items: flex-start; justify-content: center; gap: 32px; padding: 18px 16px 32px; flex-wrap: wrap; }
+.computer-scala { flex: none; overflow: hidden; }
+.computer { width: 1280px; height: 800px; transform-origin: top left; position: relative; overflow: hidden; background: var(--fondo);
+  border-radius: 14px; border: 1px solid var(--cornice); box-shadow: 0 30px 80px rgba(20,20,22,.18); }
+.telefono { width: 390px; height: 844px; position: relative; overflow: hidden; background: var(--fondo); border-radius: 44px;
+  border: 10px solid var(--cornice); box-shadow: 0 30px 80px rgba(20,20,22,.18); flex: none; }
+.accanto { max-width: 1280px; margin: 0 auto; padding: 0 16px 40px; color: var(--testo2); font-size: 15px; line-height: 1.5; }
+.accanto h2 { color: var(--testo); font-size: 20px; margin: 0 0 8px; }
+.accanto ol { padding-left: 20px; margin: 0; display: grid; gap: 6px; }
+@media (max-width: 1400px) { .computer-scala { width: calc(min(100vw - 32px, 860px)); } }
+
+/* ---------- computer: pagina di accesso ---------- */
+.accesso { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px; }
+.marchio { display: flex; align-items: center; gap: 12px; }
+.marchio h1 { margin: 0; font-size: 28px; font-weight: 800; letter-spacing: -0.5px; }
+.marchio p { margin: 2px 0 0; color: var(--tenue); font-size: 15px; }
+.carta { width: 760px; min-height: 380px; background: var(--scheda); border: 1px solid var(--bordo); border-radius: 20px;
+  box-shadow: 0 12px 40px rgba(20,20,22,.08); display: grid; grid-template-columns: 300px 1fr; gap: 40px; padding: 40px; align-items: center; }
+.carta.una { grid-template-columns: 1fr; width: 440px; }
+.qr-box { width: 300px; height: 300px; border-radius: 16px; background: var(--qr-fondo); padding: 18px; position: relative; border: 1px solid var(--bordo); }
+.qr-box svg { width: 100%; height: 100%; display: block; transition: filter .25s, opacity .25s; }
+.qr-box .centro { position: absolute; left: 50%; top: 50%; width: 52px; height: 52px; margin: -26px 0 0 -26px; border-radius: 12px; background: var(--qr-fondo);
+  display: grid; place-items: center; }
+.qr-box.scaduto svg { filter: blur(6px); opacity: .35; }
+.qr-velo { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; }
+.qr-box.scaduto .qr-velo { display: flex; }
+.passi h2 { margin: 0 0 18px; font-size: 24px; font-weight: 800; letter-spacing: -0.3px; }
+.passi ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 16px; counter-reset: p; }
+.passi li { counter-increment: p; display: grid; grid-template-columns: 34px 1fr; gap: 12px; align-items: center; font-size: 17px; color: var(--testo2); }
+.passi li::before { content: counter(p); width: 34px; height: 34px; border-radius: 50%; background: var(--sup); color: var(--testo); font-weight: 800;
+  display: grid; place-items: center; font-size: 15px; }
+.passi b { color: var(--testo); }
+.altro { margin-top: 26px; display: flex; gap: 10px; flex-wrap: wrap; }
+.btn { min-height: 48px; padding: 0 18px; border-radius: 12px; border: 1px solid var(--bordo-campo); background: var(--scheda); font-size: 16px; font-weight: 700; }
+.btn:hover { background: var(--sup); }
+.btn-giallo { border: none; background: var(--giallo); color: #1B1B1F; }
+.btn-giallo:hover { background: var(--giallo-premuto); }
+.btn-testo { border: none; background: transparent; font-weight: 700; text-decoration: underline; text-underline-offset: 3px; min-height: 44px; padding: 0 6px; color: var(--testo2); }
+.riga-server { color: var(--tenue); font-size: 14px; display: flex; gap: 8px; align-items: center; }
+.campo { display: grid; gap: 6px; font-weight: 700; font-size: 14px; color: var(--testo2); }
+.campo input { min-height: 48px; border: 1px solid var(--bordo-campo); border-radius: 12px; padding: 0 14px; font-size: 16px; background: var(--scheda); color: var(--testo); font-family: inherit; }
+.modulo { display: grid; gap: 16px; }
+.esito { display: grid; justify-items: center; gap: 14px; text-align: center; grid-column: 1 / -1; }
+.esito h2 { margin: 0; font-size: 26px; font-weight: 800; }
+.esito p { margin: 0; color: var(--tenue); font-size: 16px; max-width: 460px; }
+.spunta { width: 84px; height: 84px; border-radius: 50%; background: var(--verde-f); display: grid; place-items: center; animation: entra .35s cubic-bezier(.2,.8,.2,1); }
+.spunta svg path { stroke: var(--verde-t); stroke-dasharray: 40; stroke-dashoffset: 40; animation: traccia .4s .15s ease-out forwards; }
+.lontano-icona { width: 64px; height: 64px; border-radius: 50%; background: var(--sup); display: grid; place-items: center; }
+@keyframes entra { from { transform: scale(.6); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+@keyframes traccia { to { stroke-dashoffset: 0; } }
+.dashboard-finta { position: absolute; inset: 0; display: grid; grid-template-columns: 240px 1fr; animation: sfuma .3s ease-out; }
+.dashboard-finta aside { background: var(--scheda); border-right: 1px solid var(--bordo); padding: 22px 16px; display: grid; align-content: start; gap: 6px; }
+.dashboard-finta aside div { padding: 12px; border-radius: 10px; font-weight: 700; color: var(--testo2); }
+.dashboard-finta aside div.su { background: var(--giallo-tenue); color: var(--testo); }
+.dashboard-finta main { padding: 32px; }
+.dashboard-finta main h1 { margin: 0 0 6px; font-size: 30px; }
+.avviso-calmo { background: var(--verde-f); color: var(--verde-t); border-radius: 12px; padding: 14px 16px; font-weight: 700; display: inline-block; margin-top: 10px; }
+@keyframes sfuma { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+/* ---------- telefono ---------- */
+.schermo { position: absolute; inset: 0; display: flex; flex-direction: column; }
+.stato-tel { height: 44px; flex: none; display: flex; align-items: center; justify-content: space-between; padding: 0 26px; font-size: 14px; font-weight: 700; }
+.barra-tel { height: 60px; flex: none; display: flex; align-items: center; gap: 6px; padding: 0 8px; }
+.barra-tel h1 { margin: 0; font-size: 20px; font-weight: 800; }
+.tondo { width: 48px; height: 48px; border-radius: 50%; border: none; background: transparent; display: grid; place-items: center; }
+.tondo:hover { background: rgba(127,127,127,.15); }
+.menu { padding: 8px 12px; display: grid; gap: 4px; }
+.menu .voce { min-height: 52px; border-radius: 14px; border: none; background: transparent; display: flex; align-items: center; gap: 14px; padding: 0 14px;
+  font-size: 17px; font-weight: 700; color: var(--testo2); text-align: left; width: 100%; }
+.menu .voce.su { background: var(--giallo-tenue); color: var(--testo); }
+.menu .voce.nuova { outline: 2px dashed var(--giallo-testo); outline-offset: -2px; }
+.menu hr { border: none; border-top: 1px solid var(--bordo); margin: 8px 6px; }
+.chi { padding: 18px 26px 6px; }
+.chi b { display: block; font-size: 18px; }
+.chi span { color: var(--tenue); font-size: 14px; }
+/* fotocamera */
+.cam { position: absolute; inset: 0; background: radial-gradient(120% 80% at 50% 45%, #3a3a40 0%, #141416 70%); overflow: hidden; color: #fff; }
+.cam .monitor { position: absolute; left: 50%; top: 40%; width: 330px; height: 230px; margin-left: -165px; margin-top: -115px; background: #F4F4F2; border-radius: 10px;
+  transform: rotate(-4deg) scale(1.05); box-shadow: 0 0 0 10px #222, 0 20px 60px rgba(0,0,0,.5); display: grid; place-items: center; }
+.cam .monitor svg { width: 150px; height: 150px; }
+.cam .velo-cam { position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(circle at 50% 40%, transparent 0 0) ; }
+.finestra { position: absolute; left: 50%; top: 40%; width: 250px; height: 250px; margin: -125px 0 0 -125px; border-radius: 26px;
+  box-shadow: 0 0 0 2000px rgba(0,0,0,.55); transition: transform .25s cubic-bezier(.2,.8,.2,1); }
+.finestra::before, .finestra::after { content: ''; position: absolute; inset: -3px; border-radius: 28px; border: 4px solid rgba(255,255,255,.9);
+  -webkit-mask: linear-gradient(#000 0 0) top left / 54px 54px no-repeat, linear-gradient(#000 0 0) top right / 54px 54px no-repeat,
+    linear-gradient(#000 0 0) bottom left / 54px 54px no-repeat, linear-gradient(#000 0 0) bottom right / 54px 54px no-repeat;
+          mask: linear-gradient(#000 0 0) top left / 54px 54px no-repeat, linear-gradient(#000 0 0) top right / 54px 54px no-repeat,
+    linear-gradient(#000 0 0) bottom left / 54px 54px no-repeat, linear-gradient(#000 0 0) bottom right / 54px 54px no-repeat; }
+.finestra::after { display: none; }
+.finestra.letto { transform: scale(.94); }
+.finestra.letto::before { border-color: var(--giallo); }
+.cam .su-cam { position: absolute; top: 0; left: 0; right: 0; z-index: 2; }
+.cam .su-cam .stato-tel, .cam .su-cam .barra-tel { color: #fff; }
+.cam .etichetta { position: absolute; left: 0; right: 0; top: calc(40% + 150px); text-align: center; font-size: 17px; font-weight: 700; color: #fff; text-shadow: 0 1px 6px rgba(0,0,0,.6); }
+.chip { position: absolute; left: 50%; transform: translateX(-50%); top: calc(40% + 186px); background: rgba(27,27,31,.86); color: #fff; padding: 10px 14px; border-radius: 12px;
+  font-size: 15px; font-weight: 600; width: 320px; text-align: center; animation: sfuma .3s ease-out; }
+.simula { position: absolute; bottom: 26px; left: 50%; transform: translateX(-50%); background: rgba(255,255,255,.14); color: #fff; border: 1px dashed rgba(255,255,255,.5);
+  border-radius: 999px; min-height: 44px; padding: 0 16px; font-size: 14px; font-weight: 700; }
+/* foglio di conferma */
+.foglio { position: absolute; left: 0; right: 0; bottom: 0; background: var(--scheda); color: var(--testo); border-radius: 26px 26px 0 0; padding: 12px 22px 28px;
+  box-shadow: 0 -10px 40px rgba(0,0,0,.25); animation: sale .3s cubic-bezier(.2,.8,.2,1); z-index: 3; }
+.foglio .maniglia { width: 40px; height: 5px; border-radius: 3px; background: var(--bordo-campo); margin: 0 auto 16px; }
+.foglio h2 { margin: 0 0 14px; font-size: 22px; font-weight: 800; }
+.pc-nome { display: flex; gap: 14px; align-items: center; background: var(--sup); border-radius: 16px; padding: 14px; margin-bottom: 12px; }
+.pc-nome .ic { width: 48px; height: 48px; border-radius: 12px; background: var(--scheda); display: grid; place-items: center; flex: none; }
+.pc-nome b { font-size: 18px; display: block; }
+.pc-nome span { color: var(--tenue); font-size: 14px; }
+.foglio p { margin: 0 0 20px; color: var(--testo2); font-size: 16px; line-height: 1.45; }
+.foglio .azioni { display: grid; gap: 8px; }
+.foglio .btn { width: 100%; min-height: 54px; font-size: 17px; border-radius: 14px; }
+@keyframes sale { from { transform: translateY(100%); } to { transform: none; } }
+.pieno { flex: 1; display: grid; place-items: center; padding: 26px; text-align: center; }
+.pieno .dentro { display: grid; gap: 14px; justify-items: center; }
+.pieno h2 { margin: 0; font-size: 24px; font-weight: 800; }
+.pieno p { margin: 0; color: var(--testo2); font-size: 16px; line-height: 1.45; max-width: 300px; }
+.pieno .btn { min-width: 220px; min-height: 54px; border-radius: 14px; font-size: 17px; }
+.gira { width: 40px; height: 40px; border: 4px solid var(--sup); border-top-color: var(--giallo); border-radius: 50%; animation: giro .8s linear infinite; }
+@keyframes giro { to { transform: rotate(360deg); } }
+</style>
+
+<div class="barra-proto">
+  <span class="pill-proto">PROTOTIPO</span>
+  <div class="seg" role="group" aria-label="Situazione" id="sit">
+    <button aria-pressed="true" data-s="normale">Tutto bene</button>
+    <button aria-pressed="false" data-s="scaduto">Codice scaduto</button>
+    <button aria-pressed="false" data-s="fuori">Computer fuori ufficio</button>
+    <button aria-pressed="false" data-s="negata">Fotocamera negata</button>
+    <button aria-pressed="false" data-s="muto">Il computer non risponde</button>
+  </div>
+  <div class="seg" role="group" aria-label="Tema" id="tema">
+    <button aria-pressed="true" data-t="">Come il sistema</button>
+    <button aria-pressed="false" data-t="light">Chiaro</button>
+    <button aria-pressed="false" data-t="dark">Scuro</button>
+  </div>
+  <button class="btn" id="ricomincia">Ricomincia</button>
+</div>
+
+<div class="palco">
+  <div class="computer-scala" id="scalaPc"><div class="computer" id="pc"></div></div>
+  <div class="telefono" id="tel"></div>
+</div>
+
+<div class="accanto">
+  <h2>Come si prova</h2>
+  <ol>
+    <li>Sul telefono tocca <b>Collega un computer</b> nel menu: si apre la fotocamera.</li>
+    <li>Tocca <b>Simula: inquadro il codice</b> (nel telefono vero basta inquadrare il computer).</li>
+    <li>Tocca <b>Collega</b>: il telefono dice "Fatto" e nello stesso momento il computer entra.</li>
+    <li>In alto cambia la situazione per vedere i casi difficili: codice scaduto, computer fuori ufficio, fotocamera negata, computer che non risponde.</li>
+  </ol>
+</div>
+
+<script>
+(function () {
+  'use strict';
+  const PC = document.getElementById('pc');
+  const TEL = document.getElementById('tel');
+  const st = { sit: 'normale', pc: 'qr', tel: 'menu', chip: false, password: false };
+  let timerChip = null, timerMuto = null;
+
+  // --- un QR finto ma credibile (25x25 moduli, tre quadrati di aggancio): nel programma vero lo disegna pc/ui/qr.js
+  function qrFinto(colore) {
+    const n = 25, celle = [];
+    let seme = 7;
+    const caso = () => (seme = (seme * 16807) % 2147483647) / 2147483647;
+    const aggancio = (x, y) => (x < 7 && y < 7) || (x >= n - 7 && y < 7) || (x < 7 && y >= n - 7);
+    for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
+      if (aggancio(x, y)) continue;
+      if (caso() < 0.48) celle.push('<rect x="' + x + '" y="' + y + '" width="1" height="1"/>');
+    }
+    const quadro = (x, y) => '<rect x="' + x + '" y="' + y + '" width="7" height="7" rx="1.6"/><rect x="' + (x + 1) + '" y="' + (y + 1) + '" width="5" height="5" rx="1.1" fill="var(--qr-fondo)"/><rect x="' + (x + 2) + '" y="' + (y + 2) + '" width="3" height="3" rx=".7"/>';
+    return '<svg viewBox="0 0 ' + n + ' ' + n + '" fill="' + (colore || 'var(--qr)') + '" shape-rendering="crispEdges" aria-hidden="true">' + celle.join('') + quadro(0, 0) + quadro(n - 7, 0) + quadro(0, n - 7) + '</svg>';
+  }
+  function simbolo(d) {
+    return '<svg width="' + d + '" height="' + d + '" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="9" fill="#1B1B1F"/>' +
+      [[16, 7.5], [22, 10], [24.5, 16], [22, 22], [16, 24.5], [10, 22], [7.5, 16], [10, 10]].map(p => '<circle cx="' + p[0] + '" cy="' + p[1] + '" r="2.2" fill="#FFC53D"/>').join('') +
+      '<circle cx="16" cy="16" r="3.2" fill="#F2F4F7"/></svg>';
+  }
+  const ic = {
+    indietro: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>',
+    menu: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>',
+    pc: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>',
+    casa: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-7 9 7M5 10v10h14V10"/></svg>',
+    cal: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>',
+    doc: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/></svg>',
+    ingr: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2"/></svg>',
+    cam: '<svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/><path d="M3 3l18 18"/></svg>',
+    rete: '<svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M2 9a15 15 0 0 1 20 0M5 12.5a10 10 0 0 1 14 0M8.5 16a5 5 0 0 1 7 0"/><path d="M3 3l18 18"/></svg>',
+  };
+  const spunta = '<div class="spunta"><svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div>';
+
+  // ================================================================ computer
+  function disegnaPc() {
+    if (st.pc === 'dentro') {
+      PC.innerHTML = '<div class="dashboard-finta"><aside>' + simbolo(40) + '<div class="su">Dashboard</div><div>Rapportini</div><div>Commesse</div><div>Clienti</div><div>Amministrazione</div></aside>' +
+        '<main><h1>Buongiorno, Manuel</h1><div class="avviso-calmo">Entrato col telefono: questo computer resta collegato finché non lo scolleghi.</div></main></div>';
+      return;
+    }
+    const testa = '<div class="marchio">' + simbolo(56) + '<div><h1>Entra in Wisper</h1><p>Studio Tecnico GM</p></div></div>';
+    const piede = '<div class="riga-server">Da fuori: Google · In casa: 192.168.1.51 <button class="btn-testo" type="button">Cambia</button></div>';
+    let carta;
+    if (st.pc === 'entrato') {
+      carta = '<div class="carta una"><div class="esito">' + spunta + '<h2>Entrato come Manuel Gasparotto</h2><p>Apro la Dashboard…</p></div></div>';
+    } else if (st.password) {
+      carta = '<div class="carta una"><form class="modulo" onsubmit="return false">' +
+        '<div class="campo">Email<input type="email" value="manuel@studio.example"></div>' +
+        '<div class="campo">Password<input type="password" value="prova123"></div>' +
+        '<button class="btn btn-giallo" type="button" data-a="entra">Entra</button>' +
+        '<button class="btn-testo" type="button" data-a="codice">Torna al codice del telefono</button></form></div>';
+    } else if (st.sit === 'fuori') {
+      carta = '<div class="carta una"><div class="esito"><div class="lontano-icona">' + ic.rete + '</div><h2>Il server dell\'ufficio non risponde</h2>' +
+        '<p>Il codice per il telefono funziona solo quando questo computer è in ufficio, sulla stessa rete del server.</p>' +
+        '<div class="altro"><button class="btn btn-giallo" type="button" data-a="riprova">Riprova</button><button class="btn" type="button" data-a="password">Entra con email e password</button></div></div></div>';
+    } else {
+      const scaduto = st.sit === 'scaduto';
+      carta = '<div class="carta"><div class="qr-box' + (scaduto ? ' scaduto' : '') + '">' + qrFinto() +
+        '<div class="qr-velo"><button class="btn btn-giallo" type="button" data-a="nuovo">Mostra un codice nuovo</button></div></div>' +
+        '<div class="passi"><h2>Entra col telefono</h2><ol>' +
+        '<li><span>Apri <b>Wisper</b> sul telefono</span></li>' +
+        '<li><span>Nel menu tocca <b>Collega un computer</b></span></li>' +
+        '<li><span>Inquadra questo codice</span></li></ol>' +
+        '<div class="altro"><button class="btn-testo" type="button" data-a="password">Entra con email e password</button></div></div></div>';
+    }
+    PC.innerHTML = '<div class="accesso">' + testa + carta + piede + '</div>';
+  }
+  PC.addEventListener('click', e => {
+    const a = e.target.closest('[data-a]');
+    if (!a) return;
+    const azione = a.dataset.a;
+    if (azione === 'password') { st.password = true; }
+    if (azione === 'codice') { st.password = false; }
+    if (azione === 'nuovo' || azione === 'riprova') { scegliSit('normale'); return; }
+    if (azione === 'entra') { st.pc = 'entrato'; disegnaPc(); setTimeout(() => { st.pc = 'dentro'; disegnaPc(); }, 1400); return; }
+    disegnaPc();
+  });
+
+  // ================================================================ telefono
+  function barra(titolo, icona, chiaro) {
+    return '<div class="stato-tel"' + (chiaro ? ' style="color:#fff"' : '') + '><span>9:41</span><span>5G</span></div>' +
+      '<div class="barra-tel"><button class="tondo" type="button" data-t="' + (icona === 'menu' ? 'menu' : 'indietro') + '" aria-label="' + (icona === 'menu' ? 'Menu' : 'Indietro') + '">' + ic[icona] + '</button><h1>' + titolo + '</h1></div>';
+  }
+  function disegnaTel() {
+    clearTimeout(timerChip);
+    if (st.tel === 'menu') {
+      TEL.innerHTML = '<div class="schermo">' + barra('Menu', 'indietro') +
+        '<div class="chi"><b>Manuel Gasparotto</b><span>Titolare · Studio Tecnico GM</span></div>' +
+        '<div class="menu">' +
+        '<button class="voce" type="button">' + ic.casa + 'Dashboard</button>' +
+        '<button class="voce" type="button">' + ic.doc + 'Rapportini</button>' +
+        '<button class="voce" type="button">' + ic.cal + 'Calendario</button>' +
+        '<hr>' +
+        '<button class="voce nuova" type="button" data-t="cam">' + ic.pc + 'Collega un computer</button>' +
+        '<button class="voce" type="button">' + ic.ingr + 'Impostazioni</button></div></div>';
+      return;
+    }
+    if (st.tel === 'cam') {
+      if (st.sit === 'negata') {
+        TEL.innerHTML = '<div class="schermo">' + barra('Collega un computer', 'indietro') +
+          '<div class="pieno"><div class="dentro"><div class="lontano-icona">' + ic.cam + '</div><h2>Serve la fotocamera</h2>' +
+          '<p>Senza fotocamera non posso leggere il codice sul computer.</p>' +
+          '<button class="btn btn-giallo" type="button" data-t="cam-ok">Consenti la fotocamera</button></div></div></div>';
+        return;
+      }
+      TEL.innerHTML = '<div class="cam"><div class="monitor">' + qrFinto('#1B1B1F') + '</div><div class="finestra" id="fin"></div>' +
+        '<div class="su-cam">' + barra('Collega un computer', 'indietro', true) + '</div>' +
+        '<div class="etichetta">Inquadra il codice sul computer</div>' +
+        (st.chip ? '<div class="chip">Avvicina il telefono o alza la luminosità dello schermo</div>' : '') +
+        '<button class="simula" type="button" data-t="letto">Simula: inquadro il codice</button></div>';
+      if (!st.chip) timerChip = setTimeout(() => { st.chip = true; if (st.tel === 'cam') disegnaTel(); }, 6000);
+      return;
+    }
+    if (st.tel === 'conferma') {
+      TEL.innerHTML = '<div class="cam"><div class="monitor">' + qrFinto('#1B1B1F') + '</div><div class="finestra letto"></div>' +
+        '<div class="su-cam">' + barra('Collega un computer', 'indietro', true) + '</div>' +
+        '<div class="foglio" role="dialog" aria-label="Collegare questo computer?"><div class="maniglia"></div><h2>Collegare questo computer?</h2>' +
+        '<div class="pc-nome"><div class="ic">' + ic.pc + '</div><div><b>UFFICIO-PC</b><span>Wisper Ufficio su Windows</span></div></div>' +
+        '<p>Entrerà come <b>Manuel Gasparotto</b>, con i tuoi stessi permessi. Lo scolleghi quando vuoi da Amministrazione › Dispositivi.</p>' +
+        '<div class="azioni"><button class="btn btn-giallo" type="button" data-t="collega">Collega</button><button class="btn-testo" type="button" data-t="annulla">Annulla</button></div></div></div>';
+      return;
+    }
+    if (st.tel === 'attesa') {
+      TEL.innerHTML = '<div class="schermo">' + barra('Collega un computer', 'indietro') + '<div class="pieno"><div class="dentro"><div class="gira"></div><h2>Collego UFFICIO-PC…</h2><p>Il computer entra fra un attimo.</p></div></div></div>';
+      return;
+    }
+    if (st.tel === 'fatto') {
+      TEL.innerHTML = '<div class="schermo">' + barra('Collega un computer', 'indietro') + '<div class="pieno"><div class="dentro">' + spunta + '<h2>UFFICIO-PC è entrato</h2><p>Sul computer si apre Wisper con il tuo nome.</p>' +
+        '<button class="btn btn-giallo" type="button" data-t="chiudi">Fatto</button></div></div></div>';
+      return;
+    }
+    if (st.tel === 'muto') {
+      TEL.innerHTML = '<div class="schermo">' + barra('Collega un computer', 'indietro') + '<div class="pieno"><div class="dentro"><div class="lontano-icona">' + ic.rete + '</div><h2>Il computer non ha risposto</h2>' +
+        '<p>Deve essere in ufficio, sulla stessa rete del server, con la pagina del codice aperta.</p>' +
+        '<button class="btn btn-giallo" type="button" data-t="cam">Riprova</button></div></div></div>';
+    }
+  }
+  TEL.addEventListener('click', e => {
+    const b = e.target.closest('[data-t]');
+    if (!b) return;
+    const t = b.dataset.t;
+    if (t === 'cam') { st.chip = false; st.tel = 'cam'; }
+    else if (t === 'cam-ok') { scegliSit('normale'); st.tel = 'cam'; }
+    else if (t === 'indietro' || t === 'chiudi') { st.tel = 'menu'; }
+    else if (t === 'letto') { navigator.vibrate && navigator.vibrate(30); st.tel = 'conferma'; }
+    else if (t === 'annulla') { st.chip = false; st.tel = 'cam'; }
+    else if (t === 'collega') {
+      st.tel = 'attesa';
+      clearTimeout(timerMuto);
+      timerMuto = setTimeout(() => {
+        if (st.sit === 'muto') { st.tel = 'muto'; disegnaTel(); return; }
+        st.tel = 'fatto'; st.pc = 'entrato'; st.password = false; disegnaTel(); disegnaPc();
+        setTimeout(() => { if (st.pc === 'entrato') { st.pc = 'dentro'; disegnaPc(); } }, 1600);
+      }, st.sit === 'muto' ? 2600 : 900);
+    }
+    disegnaTel();
+  });
+
+  // ================================================================ comandi del prototipo
+  function scegliSit(s) {
+    st.sit = s;
+    document.querySelectorAll('#sit button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.s === s)));
+    st.pc = 'qr'; st.password = false;
+    disegnaPc(); disegnaTel();
+  }
+  document.getElementById('sit').addEventListener('click', e => { const b = e.target.closest('button'); if (b) { st.tel = b.dataset.s === 'negata' ? 'cam' : 'menu'; scegliSit(b.dataset.s); } });
+  document.getElementById('tema').addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    if (b.dataset.t) document.documentElement.setAttribute('data-theme', b.dataset.t); else document.documentElement.removeAttribute('data-theme');
+    document.querySelectorAll('#tema button').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+  });
+  document.getElementById('ricomincia').addEventListener('click', () => { st.tel = 'menu'; scegliSit('normale'); });
+  function scala() {
+    const box = document.getElementById('scalaPc');
+    const w = Math.min(1280, box.parentElement.clientWidth - 32 - (window.innerWidth > 900 ? 422 : 0));
+    const k = Math.max(0.3, Math.min(1, w / 1280));
+    PC.style.transform = 'scale(' + k + ')';
+    box.style.width = (1280 * k) + 'px';
+    box.style.height = (800 * k) + 'px';
+  }
+  window.addEventListener('resize', scala);
+  scala();
+  disegnaPc();
+  disegnaTel();
+})();
+</script>
+</html>

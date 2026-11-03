@@ -9,6 +9,14 @@
 //
 // Codice: "prova". Le email non partono: finiscono in apps-script/prove/posta-finta/.
 // Si parte con qualche cliente, commessa e rapportino di esempio.
+//
+// Fase 7 (docs/gestionale/fase7.md §0.1): con WISPER_PROGETTO=portale fa lo SCRIPT DEL PORTALE, il progetto a parte:
+//   WISPER_PROGETTO=portale node apps-script/prove/finto-google.js 8766
+// carica solo Porta.gs e PortaleClienti.gs (niente foglio, niente dati di esempio, niente CODICE), risponde con
+// Access-Control-Allow-Origin: * come Google dopo il rimbalzo su script.googleusercontent.com, e il segreto del NAS
+// (la proprieta' SEGRETO_SERVER dello script) e' WISPER_SEGRETO_PORTALE, di base "prova-portale".
+// Fase 8 (docs/gestionale/fase8.md §0.3): in modalita' portale anche le GET con ?calendario=<chiave> (il calendario
+// "anche fuori casa"): la risposta e' text/calendar se e' un calendario, text/plain se no (come MimeType.ICAL e TEXT).
 'use strict';
 
 process.env.TZ = 'Europe/Rome';
@@ -20,6 +28,7 @@ const vm = require('node:vm');
 const crypto = require('node:crypto');
 
 const PORTA = Number(process.argv[2] || 8765);
+const PORTALE = process.env.WISPER_PROGETTO === 'portale';
 const CARTELLA_POSTA = process.env.WISPER_POSTA_FINTA || path.join(__dirname, 'posta-finta');
 
 // ------------------------------------------------------------------ Fogli
@@ -45,6 +54,10 @@ class Intervallo {
     return this;
   }
   setValue(v) { this.foglio.scrivi(this.riga, this.colonna, v); return this; }
+  clearContent() {
+    for (let r = 0; r < this.righe; r++) for (let c = 0; c < this.colonne; c++) this.foglio.scrivi(this.riga + r, this.colonna + c, '');
+    return this;
+  }
   setFontWeight() { return this; }
 }
 
@@ -88,6 +101,7 @@ function comeFogli(v) {
 const fogli = new Map();
 const Cartella = {
   getId: () => 'foglio-finto',
+  getName: () => 'Wisper',
   getSheetByName: n => fogli.get(n) || null,
   insertSheet: n => { const f = new Foglio(n); fogli.set(n, f); return f; },
   getSheets: () => Array.from(fogli.values()),
@@ -110,6 +124,8 @@ class FileFinto {
   getBlob() { return this.blob; }
   getMimeType() { return this.blob.mime; }
   getLastUpdated() { return this.data; }
+  getDateCreated() { return this.data; }
+  getSize() { return this.blob.bytes.length; }
   isTrashed() { return this.cestino; }
   setTrashed(v) { this.cestino = v; return this; }
   getParents() { return iteratore(this.madre ? [this.madre] : []); }
@@ -126,8 +142,28 @@ class CartellaFinta {
   getFilesByName(n) { return iteratore(this.figli.filter(x => x instanceof FileFinto && x.getName() === n && !x.cestino)); }
   getFiles() { return iteratore(this.figli.filter(x => x instanceof FileFinto)); }
   createFolder(n) { const c = new CartellaFinta(n, this); this.figli.push(c); return c; }
-  createFile(blob) { const f = new FileFinto(blob, this); this.figli.push(f); return f; }
+  createFile(blob, contenuto, mime) {
+    // Come DriveApp: createFile(blob) oppure createFile(nome, testo, tipo).
+    if (typeof blob === 'string') blob = Utilities.newBlob(contenuto || '', mime || 'text/plain', blob);
+    const f = new FileFinto(blob, this); this.figli.push(f); return f;
+  }
 }
+
+/**
+ * Il servizio avanzato "Drive API" (nell'editor: Servizi > Drive API). Di base
+ * spento, come in un progetto appena creato: le prove lo accendono con
+ * modulo.driveAvanzato(true). Files.remove cancella per sempre, senza cestino.
+ */
+const DriveAvanzato = {
+  Files: {
+    remove: id => {
+      const e = elementi.get(id);
+      if (!(e instanceof FileFinto)) throw new Error('File not found: ' + id);
+      elementi.delete(id);
+      if (e.madre) e.madre.figli = e.madre.figli.filter(x => x !== e);
+    },
+  },
+};
 
 function iteratore(lista) {
   let i = 0;
@@ -147,21 +183,60 @@ const DriveApp = {
 
 // ------------------------------------------------------------------ il resto di Google
 
-const proprieta = new Map([['CODICE', 'prova']]);
+const proprieta = PORTALE ? new Map([['SEGRETO_SERVER', process.env.WISPER_SEGRETO_PORTALE || 'prova-portale']]) : new Map([['CODICE', 'prova']]);
 const PropertiesService = {
   getScriptProperties: () => ({
     getProperty: k => (proprieta.has(k) ? proprieta.get(k) : null),
     setProperty: (k, v) => { proprieta.set(k, String(v)); },
+    getProperties: () => Object.fromEntries(proprieta),
+    deleteProperty: k => { proprieta.delete(k); },
   }),
 };
 
-const LockService = { getScriptLock: () => ({ waitLock: () => {}, tryLock: () => true, releaseLock: () => {} }) };
+// Nel filo principale (le prove che chiamano lo script direttamente) il lucchetto non aspetta mai.
+// Le esecuzioni HTTP (finto-esecuzione.js) usano quello vero qui sotto, uno per tutto lo script.
+const LockService = { getScriptLock: () => ({ waitLock: () => {}, tryLock: () => true, releaseLock: () => {}, hasLock: () => true }) };
+const lucchetto = { chi: null, scade: 0 };
 
+/**
+ * La cache dello script, con i limiti della documentazione di Google: chiave fino
+ * a 250 caratteri, valore fino a 100 KB, scadenza da 1 secondo a 6 ore (di base
+ * 10 minuti), al massimo 1.000 voci (oltre, restano le 900 piu' lontane dalla scadenza).
+ */
 const memoria = new Map();
+const LIMITI_CACHE = { chiave: 250, valore: 100 * 1024, scadenza: 21600, voci: 1000, dopo: 900 };
+function cacheViva(k) {
+  const e = memoria.get(k);
+  if (!e) return null;
+  if (e.scade <= Date.now()) { memoria.delete(k); return null; }
+  return e.v;
+}
+function cacheMetti(k, v, secondi) {
+  k = String(k);
+  v = String(v);
+  if (k.length > LIMITI_CACHE.chiave) throw new Error('Argument too large: key');
+  if (Buffer.byteLength(v, 'utf8') > LIMITI_CACHE.valore) throw new Error('Argument too large: value');
+  const s = secondi === undefined ? 600 : Number(secondi);
+  if (!(s >= 1 && s <= LIMITI_CACHE.scadenza)) throw new Error('Invalid argument: expirationInSeconds');
+  memoria.set(k, { v, scade: Date.now() + s * 1000 });
+}
+function cacheTroppe() {
+  if (memoria.size <= LIMITI_CACHE.voci) return;
+  const ordine = Array.from(memoria.entries()).sort((a, b) => b[1].scade - a[1].scade);
+  ordine.slice(LIMITI_CACHE.dopo).forEach(([k]) => memoria.delete(k));
+}
 const CacheService = {
   getScriptCache: () => ({
-    get: k => { const e = memoria.get(k); return e && e.scade > Date.now() ? e.v : null; },
-    put: (k, v, secondi) => { memoria.set(k, { v: String(v), scade: Date.now() + (secondi || 600) * 1000 }); },
+    get: k => cacheViva(String(k)),
+    getAll: chiavi => {
+      const o = {};
+      (chiavi || []).forEach(k => { const v = cacheViva(String(k)); if (v !== null) o[k] = v; });
+      return o;
+    },
+    put: (k, v, secondi) => { cacheMetti(k, v, secondi); cacheTroppe(); },
+    putAll: (valori, secondi) => { Object.keys(valori || {}).forEach(k => cacheMetti(k, valori[k], secondi)); cacheTroppe(); },
+    remove: k => { memoria.delete(String(k)); },
+    removeAll: chiavi => { (chiavi || []).forEach(k => memoria.delete(String(k))); },
   }),
 };
 
@@ -183,12 +258,18 @@ const Utilities = {
   getUuid: () => crypto.randomUUID(),
   base64Decode: s => Array.from(Buffer.from(s, 'base64')),
   base64Encode: b => Buffer.from(b).toString('base64'),
+  // Come Google: l'impronta torna in byte con segno (da -128 a 127).
+  DigestAlgorithm: { MD5: 'md5', SHA_256: 'sha256' },
+  computeDigest: (alg, bytes) => Array.from(crypto.createHash(alg).update(Buffer.from(bytes.map(b => b & 0xff))).digest()).map(b => b > 127 ? b - 256 : b),
   newBlob: (bytes, mime, nome) => ({
     nome, mime, bytes: Buffer.from(bytes),
     getBytes() { return Array.from(this.bytes); },
+    getDataAsString() { return this.bytes.toString('utf8'); },
     getContentType() { return this.mime; },
     getName() { return this.nome; },
   }),
+  // Ferma l'esecuzione (qui il filo principale: solo per attese brevi nelle prove dirette).
+  sleep: ms => { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, Math.max(0, Number(ms) || 0)); },
 };
 
 const MailApp = {
@@ -206,20 +287,72 @@ const MailApp = {
   getRemainingDailyQuota: () => 100,
 };
 
+/**
+ * UrlFetchApp e' sincrono, Node no: la chiamata vera la fa un secondo processo
+ * Node, aspettato fino alla fine. Basta per il ponte verso il server di prova.
+ * Le prove possono sostituirla con modulo.urlFetch = (url, opzioni) => ({ codice, testo }).
+ */
+const { execFileSync } = require('node:child_process');
+function urlFetchVero(url, opzioni) {
+  const script = 'let d="";process.stdin.on("data",x=>d+=x).on("end",async()=>{const o=JSON.parse(d);' +
+    'try{const r=await fetch(o.url,{method:o.metodo,headers:o.intestazioni,body:o.corpo});' +
+    'process.stdout.write(JSON.stringify({codice:r.status,testo:await r.text()}))}' +
+    'catch(e){process.stdout.write(JSON.stringify({errore:e.message}))}})';
+  const intestazioni = Object.assign({}, opzioni.headers || {});
+  if (opzioni.contentType) intestazioni['Content-Type'] = opzioni.contentType;
+  const fuori = JSON.parse(execFileSync(process.execPath, ['-e', script], {
+    input: JSON.stringify({ url, metodo: (opzioni.method || 'get').toUpperCase(), intestazioni, corpo: opzioni.payload }),
+    timeout: 30000,
+  }).toString());
+  if (fuori.errore) throw new Error('Indirizzo non raggiungibile: ' + url);
+  return fuori;
+}
+const modulo = { urlFetch: urlFetchVero, chiamate: [] };
+const UrlFetchApp = {
+  fetch(url, opzioni) {
+    modulo.chiamate.push({ url, opzioni: opzioni || {} });
+    const r = modulo.urlFetch(url, opzioni || {});
+    return { getResponseCode: () => r.codice, getContentText: () => r.testo };
+  },
+};
+
+// Gli attivatori: si ricordano e basta.
+const attivatori = [];
+const ScriptApp = {
+  getProjectTriggers: () => attivatori.slice(),
+  deleteTrigger: t => { attivatori.splice(attivatori.indexOf(t), 1); },
+  newTrigger: funzione => {
+    const t = { funzione, getHandlerFunction: () => funzione };
+    const catena = { timeBased: () => catena, everyDays: () => catena, atHour: o => { t.ora = o; return catena; }, create: () => { attivatori.push(t); return t; } };
+    return catena;
+  },
+};
+
 const contesto = {
   SpreadsheetApp: { getActiveSpreadsheet: () => Cartella },
-  DriveApp, PropertiesService, LockService, CacheService, Utilities, MailApp,
+  DriveApp, PropertiesService, LockService, CacheService, Utilities, MailApp, UrlFetchApp, ScriptApp,
   Session: { getEffectiveUser: () => ({ getEmail: () => 'proprietario@example.com' }) },
   ContentService: {
-    MimeType: { JSON: 'application/json' },
-    createTextOutput: testo => ({ testo, setMimeType() { return this; } }),
+    MimeType: { JSON: 'application/json', TEXT: 'text/plain', ICAL: 'text/calendar' },
+    createTextOutput: testo => ({ testo, mime: '', setMimeType(m) { this.mime = m; return this; } }),
   },
   Logger: { log: (...x) => console.log('[script]', ...x) },
   console,
 };
 vm.createContext(contesto);
-// WISPER_SCRIPT: un altro Code.gs (per esempio quello di prima, per vedere che le prove lo bocciano).
-vm.runInContext(fs.readFileSync(process.env.WISPER_SCRIPT || path.join(__dirname, '..', 'Code.gs'), 'utf8'), contesto, { filename: 'Code.gs' });
+// I file del progetto Apps Script, nell'ordine dell'editor. WISPER_SCRIPT: un altro Code.gs (per esempio
+// quello di prima, per vedere che le prove lo bocciano). Ponte.gs: il ponte verso il server e il postino;
+// Porta.gs: la porta Google (le app nuove e il server sul NAS che viene a prendere il lavoro).
+const FILE_SCRIPT = PORTALE ? ['Porta.gs', 'PortaleClienti.gs'].map(f => path.join(__dirname, '..', f))
+  : [process.env.WISPER_SCRIPT || path.join(__dirname, '..', 'Code.gs')]
+    .concat(['Ponte.gs', 'Porta.gs'].map(f => path.join(__dirname, '..', f)).filter(f => fs.existsSync(f)));
+FILE_SCRIPT.forEach(f => vm.runInContext(fs.readFileSync(f, 'utf8'), contesto, { filename: path.basename(f) }));
+
+/** Accende o spegne il servizio avanzato Drive API (vedi DriveAvanzato). */
+function driveAvanzato(acceso) {
+  if (acceso) contesto.Drive = DriveAvanzato;
+  else delete contesto.Drive;
+}
 
 // ------------------------------------------------------------------ dati di esempio
 
@@ -247,39 +380,207 @@ function semina() {
   console.log('Seminati 2 clienti, 2 commesse, 4 rapportini.');
 }
 
-semina();
+if (!PORTALE) semina();
+
+// ------------------------------------------------------------------ le esecuzioni in parallelo
+
+/**
+ * Su Google ogni richiesta all'app web e' un'esecuzione a se', e ne girano fino
+ * a 30 insieme per utente: la porta Google ci conta (un'esecuzione aspetta la
+ * risposta mentre un'altra, quella del server sul NAS, viene a prendere il
+ * lavoro). Qui ogni richiesta HTTP gira in un filo suo (finto-esecuzione.js),
+ * che usa fogli, Drive, proprieta' e cache di questo filo con chiamate che
+ * aspettano la risposta. Questo filo non deve mai fermarsi ad aspettare un'esecuzione.
+ */
+const { Worker, MessageChannel } = require('node:worker_threads');
+const ESECUZIONI_MASSIME = 30;
+const esecuzioni = new Set();
+let numeroEsecuzione = 0;
+
+function eData(v) { return Object.prototype.toString.call(v) === '[object Date]'; }
+
+/** I nomi dei metodi di un oggetto (anche quelli della sua classe), per la controfigura. */
+function metodiDi(o) {
+  const nomi = new Set();
+  for (let p = o; p && p !== Object.prototype && p !== Function.prototype; p = Object.getPrototypeOf(p)) {
+    for (const k of Object.getOwnPropertyNames(p)) {
+      if (k === 'constructor') continue;
+      try { if (typeof o[k] === 'function') nomi.add(k); } catch (e) { /* un getter che si arrabbia */ }
+    }
+  }
+  return Array.from(nomi);
+}
+
+/** Le maniglie di un'esecuzione: ogni oggetto con dei metodi resta qui, all'esecuzione va un numero. */
+function nuoveManiglie() {
+  const oggetti = [];
+  const numeri = new Map();
+  function verso(v) {
+    if (v === null || (typeof v !== 'object' && typeof v !== 'function')) return v;
+    if (eData(v)) return new Date(v.getTime());
+    if (Buffer.isBuffer(v) || ArrayBuffer.isView(v)) return v;
+    if (Array.isArray(v)) return v.map(verso);
+    const proto = Object.getPrototypeOf(v);
+    const semplice = typeof v === 'object' && (proto === Object.prototype || proto === null) && Object.keys(v).every(k => typeof v[k] !== 'function');
+    if (semplice) {
+      const o = {};
+      for (const k of Object.keys(v)) o[k] = verso(v[k]);
+      return o;
+    }
+    if (!numeri.has(v)) { numeri.set(v, oggetti.length); oggetti.push(v); }
+    return { __maniglia: numeri.get(v), metodi: metodiDi(v) };
+  }
+  function da(v) {
+    if (v === null || typeof v !== 'object') return v;
+    if (v.__maniglia !== undefined) return oggetti[v.__maniglia];
+    if (eData(v) || ArrayBuffer.isView(v)) return v;
+    if (Array.isArray(v)) return v.map(da);
+    const o = {};
+    for (const k of Object.keys(v)) o[k] = da(v[k]);
+    return o;
+  }
+  return { verso, da, oggetti };
+}
+
+/**
+ * Esegue doGet o doPost in un filo nuovo. Torna {testo} o {errore} (lo script si
+ * e' fermato), come Google: un errore diventa una pagina HTML.
+ */
+function eseguiInParallelo(tipo, evento) {
+  if (esecuzioni.size >= ESECUZIONI_MASSIME) {
+    return Promise.resolve({ troppe: true, errore: 'Service invoked too many times in a short time: ' + ESECUZIONI_MASSIME + ' simultaneous executions' });
+  }
+  const id = ++numeroEsecuzione;
+  const m = nuoveManiglie();
+  const radici = {};
+  for (const nome of ['SpreadsheetApp', 'DriveApp', 'PropertiesService', 'CacheService', 'Utilities', 'MailApp', 'UrlFetchApp', 'ScriptApp', 'Session']) {
+    radici[nome] = m.verso(contesto[nome]);
+  }
+  if (contesto.Drive) radici.Drive = m.verso(contesto.Drive);
+  const { port1, port2 } = new MessageChannel();
+  const segnale = new SharedArrayBuffer(4);
+  const vista = new Int32Array(segnale);
+  const esecuzione = { id };
+  return new Promise(risolvi => {
+    let finito = false;
+    const fine = r => {
+      if (finito) return;
+      finito = true;
+      esecuzioni.delete(esecuzione);
+      if (lucchetto.chi === id) lucchetto.chi = null;
+      port1.close();
+      esecuzione.lavoratore.terminate().catch(() => null);
+      risolvi(r);
+    };
+    esecuzione.fine = fine;
+    const rispondi = r => {
+      port1.postMessage(r);
+      Atomics.store(vista, 0, 1);
+      Atomics.notify(vista, 0);
+    };
+    port1.on('message', msg => {
+      if (msg.tipo === 'fine') return fine(msg.errore !== undefined ? { errore: msg.errore } : { testo: msg.testo });
+      try {
+        if (msg.tipo === 'lucchetto') {
+          if (msg.cosa === 'prendi') {
+            const libero = lucchetto.chi === null || lucchetto.chi === id || Date.now() > lucchetto.scade;
+            if (libero) { lucchetto.chi = id; lucchetto.scade = Date.now() + 6 * 60 * 1000; }
+            return rispondi({ valore: libero });
+          }
+          if (lucchetto.chi === id) lucchetto.chi = null;
+          return rispondi({ valore: true });
+        }
+        const o = m.oggetti[msg.maniglia];
+        if (msg.tipo === 'leggi') return rispondi({ valore: m.verso(o[msg.proprieta]) });
+        if (msg.tipo === 'scrivi') { o[msg.proprieta] = m.da(msg.valore); return rispondi({ valore: true }); }
+        const f = o[msg.metodo];
+        if (typeof f !== 'function') throw new Error(msg.metodo + ' non e\' una funzione');
+        return rispondi({ valore: m.verso(f.apply(o, m.da(msg.argomenti))) });
+      } catch (e) {
+        return rispondi({ errore: e && e.message ? e.message : String(e) });
+      }
+    });
+    esecuzione.lavoratore = new Worker(path.join(__dirname, 'finto-esecuzione.js'), {
+      workerData: { porta: port2, segnale, radici, file: FILE_SCRIPT, tipo, evento, ritardo: Number(process.env.WISPER_FINTO_RITARDO_MS || 0) },
+      transferList: [port2],
+    });
+    esecuzioni.add(esecuzione);
+    esecuzione.lavoratore.on('error', e => fine({ errore: e && e.message ? e.message : String(e) }));
+    esecuzione.lavoratore.on('exit', () => setTimeout(() => fine({ errore: 'esecuzione finita senza risposta' }), 50));
+  });
+}
+
+/**
+ * Il finto Google in HTTP, come l'app web pubblicata: GET e POST su /exec (e su
+ * qualunque altro percorso), ogni richiesta in un'esecuzione sua. Torna il server
+ * (in ascolto: aspettare 'listening'; opzioni.host: di base tutte le interfacce, come prima).
+ */
+function ascoltaHttp(porta, opzioni) {
+  opzioni = opzioni || {};
+  const parla = opzioni.parla !== undefined ? opzioni.parla : require.main === module;
+  const server = http.createServer((richiesta, risposta) => {
+    const url = new URL(richiesta.url, 'http://localhost');
+    // Solo qui, per guardare le schede durante le prove: GET /scheda/Accessi
+    if (url.pathname.startsWith('/scheda/')) {
+      const f = fogli.get(decodeURIComponent(url.pathname.slice('/scheda/'.length)));
+      risposta.writeHead(f ? 200 : 404, { 'Content-Type': 'application/json; charset=utf-8' });
+      risposta.end(JSON.stringify(f ? f.celle : null));
+      return;
+    }
+    const pezzi = [];
+    richiesta.on('data', p => pezzi.push(p));
+    richiesta.on('end', () => {
+      const corpo = Buffer.concat(pezzi).toString('utf8');
+      const evento = richiesta.method === 'GET'
+        ? { parameter: Object.fromEntries(url.searchParams) }
+        : { postData: { contents: corpo, length: Buffer.byteLength(corpo), type: richiesta.headers['content-type'] || '', name: 'postData' } };
+      eseguiInParallelo(richiesta.method === 'GET' ? 'doGet' : 'doPost', evento).then(out => {
+        let testo = out.testo;
+        // Come Google: uno script che si ferma con un errore risponde con una pagina HTML,
+        // che le app trattano come rete (riprovano). Il ponte conta su questo.
+        if (out.errore !== undefined) testo = '<!DOCTYPE html><html><body>Errore dello script: ' + out.errore + '</body></html>';
+        if (parla) {
+          const azione = url.searchParams.get('azione') || (() => {
+            try { const d = JSON.parse(corpo); return d.azione || (d.porta ? 'porta ' + (d.strada || 'exec') : ''); } catch (e) { return ''; }
+          })();
+          console.log(richiesta.method, azione || '(anagrafiche)', testo.length + ' byte');
+        }
+        if (risposta.destroyed) return;
+        const intestazioni = { 'Content-Type': out.errore !== undefined ? 'text/html; charset=utf-8' : 'application/json; charset=utf-8' };
+        // Lo script del portale, GET (fase 8): il calendario come text/calendar, la riga di testo come text/plain.
+        if (PORTALE && richiesta.method === 'GET' && out.errore === undefined) {
+          intestazioni['Content-Type'] = /^BEGIN:VCALENDAR/.test(testo || '') ? 'text/calendar; charset=utf-8' : 'text/plain; charset=utf-8';
+        }
+        // Lo script del portale: Google risponde dal rimbalzo con Access-Control-Allow-Origin: * (la pagina sta su Netlify).
+        if (PORTALE) intestazioni['Access-Control-Allow-Origin'] = '*';
+        risposta.writeHead(out.troppe ? 429 : 200, intestazioni);
+        risposta.end(testo);
+      });
+    });
+  });
+  server.listen(porta, opzioni.host);
+  return server;
+}
+
+/** Chiude il finto Google in HTTP e ferma le esecuzioni ancora in corso. */
+function chiudiHttp(server) {
+  return new Promise(r => {
+    Array.from(esecuzioni).forEach(e => e.fine({ errore: 'finto Google chiuso' }));
+    server.close(() => r());
+    if (server.closeAllConnections) server.closeAllConnections();
+  });
+}
 
 // Le prove (registro.test.js) lo usano senza server: lo script, le schede, la posta.
-module.exports = { contesto, fogli, proprieta, memoria, CARTELLA_POSTA };
+module.exports = {
+  contesto, fogli, proprieta, memoria, CARTELLA_POSTA, modulo, attivatori, elementi,
+  driveAvanzato, ascoltaHttp, chiudiHttp, esecuzioni,
+};
 if (require.main !== module) return;
 
 // ------------------------------------------------------------------ il server
 
-http.createServer((richiesta, risposta) => {
-  const url = new URL(richiesta.url, 'http://localhost');
-  // Solo qui, per guardare le schede durante le prove: GET /scheda/Accessi
-  if (url.pathname.startsWith('/scheda/')) {
-    const f = fogli.get(decodeURIComponent(url.pathname.slice('/scheda/'.length)));
-    risposta.writeHead(f ? 200 : 404, { 'Content-Type': 'application/json; charset=utf-8' });
-    risposta.end(JSON.stringify(f ? f.celle : null));
-    return;
-  }
-  let corpo = '';
-  richiesta.on('data', p => { corpo += p; });
-  richiesta.on('end', () => {
-    let out;
-    try {
-      if (richiesta.method === 'GET') {
-        out = contesto.doGet({ parameter: Object.fromEntries(url.searchParams) });
-      } else {
-        out = contesto.doPost({ postData: { contents: corpo } });
-      }
-    } catch (e) {
-      out = { testo: JSON.stringify({ ok: false, errore: 'finto google: ' + e.message }) };
-    }
-    const azione = url.searchParams.get('azione') || (() => { try { return JSON.parse(corpo).azione; } catch (e) { return ''; } })();
-    console.log(richiesta.method, azione || '(anagrafiche)', out.testo.length + ' byte');
-    risposta.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
-    risposta.end(out.testo);
-  });
-}).listen(PORTA, () => console.log('Finto Google su http://localhost:' + PORTA + '/exec (codice: prova)'));
+ascoltaHttp(PORTA).on('listening', () => console.log(PORTALE
+  ? 'Finto Google, script del portale, su http://localhost:' + PORTA + '/exec (segreto del NAS: ' + proprieta.get('SEGRETO_SERVER') + ')'
+  : 'Finto Google su http://localhost:' + PORTA + '/exec (codice: prova)'));
+

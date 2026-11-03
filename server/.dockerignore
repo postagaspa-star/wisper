@@ -1,0 +1,7 @@
+.env
+dati
+dati-prova
+prove
+*.db
+*.db-wal
+*.db-shm

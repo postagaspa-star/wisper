@@ -1,0 +1,73 @@
+{
+  "nota": "I conti della fase 6 sulle persone (docs/gestionale/fase6.md §6.2 e §6.3, architettura.md §17). Li fa il server (server/src/conti.js: festivi, giorniLavorativi, oreAssenza, saldoAssenze, costoOrarioDaAnno); telefono e computer li rifanno per l'anteprima di una richiesta di ferie o di permesso e devono ritrovare gli stessi numeri. Festivi: 1/1, 6/1, Pasquetta, 25/4, 1/5, 2/6, 15/8, 4/10 (dal 2026), 1/11, 8/12, 25/12, 26/12 e il santo patrono ('mm-gg'). Giorni lavorativi: i giorni del periodo (compresi) nei giorni della persona (1 = lunedi') e non festivi. Ore del giorno = oreSettimana / numero dei giorniSettimana. Ferie e 'altro' a giorni: giorni lavorativi x ore del giorno, mezza giornata = meta' (0 se quel giorno non si lavora). Permesso (e 'altro' o Legge 104 con dalle-alle o ore scritte): le ore fra dalle e alle, o quelle scritte, giorni 0. Malattia, infortunio, congedo, Legge 104 a giorni: giorni di calendario, ore = giorni lavorativi x ore del giorno. Saldo: maturate = centesimi(annue x mesi / 12), mesi = i mesi che finiscono dopo il saldo scritto ed entro oggi (dentro entrata-uscita; senza saldo si parte dal primo giorno del mese di entrata o dal 1 gennaio, quello che viene dopo); godute = ore delle approvate dopo il saldo fino a oggi compreso; prenotate = approvate da domani piu' da approvare; oggi = scritto + maturate - godute; restano = oggi - prenotate. Le assenze dei casi del saldo hanno gia' le ore, giorno per giorno quando sono a cavallo. costoOrarioDaAnno = centesimi(costoAnno / oreAnno), null senza ore. I valori attesi sono fatti a mano.",
+  "festivi": [
+    {"nome": "2026, senza patrono (Pasquetta il 6 aprile, San Francesco il 4 ottobre)", "anno": 2026, "patrono": "",
+     "atteso": ["2026-01-01", "2026-01-06", "2026-04-06", "2026-04-25", "2026-05-01", "2026-06-02", "2026-08-15", "2026-10-04", "2026-11-01", "2026-12-08", "2026-12-25", "2026-12-26"]},
+    {"nome": "2025, prima di San Francesco festivo, col patrono di Thiene (1 luglio di esempio)", "anno": 2025, "patrono": "07-01",
+     "atteso": ["2025-01-01", "2025-01-06", "2025-04-21", "2025-04-25", "2025-05-01", "2025-06-02", "2025-07-01", "2025-08-15", "2025-11-01", "2025-12-08", "2025-12-25", "2025-12-26"]}
+  ],
+  "giorniLavorativi": [
+    {"nome": "ferie di Marco, lunedi'-venerdi'", "dal": "2026-11-02", "al": "2026-11-06", "giorni": [1, 2, 3, 4, 5], "patrono": "", "atteso": 5},
+    {"nome": "Natale con la chiusura", "dal": "2026-12-24", "al": "2027-01-06", "giorni": [1, 2, 3, 4, 5], "patrono": "", "atteso": 7},
+    {"nome": "il 4 ottobre del 2027 e' lunedi'", "dal": "2027-10-01", "al": "2027-10-08", "giorni": [1, 2, 3, 4, 5], "patrono": "", "atteso": 5},
+    {"nome": "Pasquetta 2027", "dal": "2027-03-29", "al": "2027-04-02", "giorni": [1, 2, 3, 4, 5], "patrono": "", "atteso": 4},
+    {"nome": "part time lunedi', mercoledi', venerdi'", "dal": "2026-11-02", "al": "2026-11-15", "giorni": [1, 3, 5], "patrono": "", "atteso": 6},
+    {"nome": "il patrono cade di mercoledi'", "dal": "2026-06-29", "al": "2026-07-03", "giorni": [1, 2, 3, 4, 5], "patrono": "07-01", "atteso": 4},
+    {"nome": "un sabato e una domenica", "dal": "2026-10-24", "al": "2026-10-25", "giorni": [1, 2, 3, 4, 5], "patrono": "", "atteso": 0}
+  ],
+  "oreAssenza": [
+    {"nome": "mezza giornata di Laura a 30 ore", "assenza": {"tipo": "ferie", "dal": "2026-11-09", "al": "2026-11-09", "mezza": "mattina"},
+     "persona": {"oreSettimana": 30, "giorniSettimana": [1, 2, 3, 4, 5]}, "atteso": {"giorni": 0.5, "ore": 3}},
+    {"nome": "permesso dalle 15 alle 18", "assenza": {"tipo": "permesso", "dal": "2026-10-30", "al": "2026-10-30", "dalle": "15:00", "alle": "18:00"},
+     "persona": {"oreSettimana": 40, "giorniSettimana": [1, 2, 3, 4, 5]}, "atteso": {"giorni": 0, "ore": 3}},
+    {"nome": "ferie di Marco dal 2 al 6 novembre", "assenza": {"tipo": "ferie", "dal": "2026-11-02", "al": "2026-11-06"},
+     "persona": {"oreSettimana": 40, "giorniSettimana": [1, 2, 3, 4, 5]}, "atteso": {"giorni": 5, "ore": 40}},
+    {"nome": "ferie di Laura a cavallo del fine settimana", "assenza": {"tipo": "ferie", "dal": "2026-10-22", "al": "2026-10-27"},
+     "persona": {"oreSettimana": 30, "giorniSettimana": [1, 2, 3, 4, 5]}, "atteso": {"giorni": 4, "ore": 24}},
+    {"nome": "permesso con le ore scritte", "assenza": {"tipo": "permesso", "dal": "2026-11-03", "al": "2026-11-03", "ore": 2.5},
+     "persona": {"oreSettimana": 40, "giorniSettimana": [1, 2, 3, 4, 5]}, "atteso": {"giorni": 0, "ore": 2.5}},
+    {"nome": "malattia da venerdi' a martedi': 5 giorni di calendario, 3 lavorativi", "assenza": {"tipo": "malattia", "dal": "2026-10-09", "al": "2026-10-13"},
+     "persona": {"oreSettimana": 40, "giorniSettimana": [1, 2, 3, 4, 5]}, "atteso": {"giorni": 5, "ore": 24}},
+    {"nome": "mezza giornata di sabato: niente", "assenza": {"tipo": "ferie", "dal": "2026-10-24", "al": "2026-10-24", "mezza": "pomeriggio"},
+     "persona": {"oreSettimana": 40, "giorniSettimana": [1, 2, 3, 4, 5]}, "atteso": {"giorni": 0, "ore": 0}},
+    {"nome": "Legge 104 a ore", "assenza": {"tipo": "legge104", "dal": "2026-11-04", "al": "2026-11-04", "dalle": "08:00", "alle": "10:00"},
+     "persona": {"oreSettimana": 40, "giorniSettimana": [1, 2, 3, 4, 5]}, "atteso": {"giorni": 0, "ore": 2}},
+    {"nome": "altro a giorni (trasloco)", "assenza": {"tipo": "altro", "dal": "2026-11-05", "al": "2026-11-05"},
+     "persona": {"oreSettimana": 36, "giorniSettimana": [1, 2, 3, 4]}, "atteso": {"giorni": 1, "ore": 9}}
+  ],
+  "saldoAssenze": [
+    {"nome": "Marco oggi, con la richiesta del 2-6 novembre", "annue": 208, "oggi": "2026-10-22",
+     "saldi": [{"data": "2026-09-30", "ore": 104}],
+     "assenze": [{"dal": "2026-11-02", "al": "2026-11-06", "ore": 40, "stato": "da_approvare"}],
+     "atteso": {"tenuto": true, "scritto": 104, "scrittoIl": "2026-09-30", "maturate": 0, "godute": 0, "oggi": 104, "prenotate": 40, "restano": 64}},
+    {"nome": "Marco il 10 novembre, ferie godute e ottobre maturato", "annue": 208, "oggi": "2026-11-10",
+     "saldi": [{"data": "2026-09-30", "ore": 104}],
+     "assenze": [{"dal": "2026-11-02", "al": "2026-11-06", "ore": 40, "stato": "approvata"}],
+     "atteso": {"tenuto": true, "scritto": 104, "scrittoIl": "2026-09-30", "maturate": 17.33, "godute": 40, "oggi": 81.33, "prenotate": 0, "restano": 81.33}},
+    {"nome": "Laura oggi, primo giorno di ferie", "annue": 156, "oggi": "2026-10-22",
+     "saldi": [{"data": "2026-09-30", "ore": 78}],
+     "assenze": [{"dal": "2026-10-22", "al": "2026-10-22", "ore": 6, "stato": "approvata"}, {"dal": "2026-10-23", "al": "2026-10-23", "ore": 6, "stato": "approvata"}],
+     "atteso": {"tenuto": true, "scritto": 78, "scrittoIl": "2026-09-30", "maturate": 0, "godute": 6, "oggi": 72, "prenotate": 6, "restano": 66}},
+    {"nome": "senza ore all'anno ne' saldo", "annue": null, "oggi": "2026-10-22", "saldi": [], "assenze": [],
+     "atteso": {"tenuto": false}},
+    {"nome": "senza saldo scritto, entrato il 12 settembre: si parte dal primo di settembre (rateo pieno)", "annue": 160, "oggi": "2026-10-22", "entrata": "2026-09-12",
+     "saldi": [], "assenze": [{"dal": "2026-10-02", "al": "2026-10-02", "ore": 8, "stato": "approvata"}, {"dal": "2026-10-20", "al": "2026-10-20", "ore": 8, "stato": "respinta"}],
+     "atteso": {"tenuto": true, "scritto": 0, "scrittoIl": "", "maturate": 13.33, "godute": 8, "oggi": 5.33, "prenotate": 0, "restano": 5.33}},
+    {"nome": "senza saldo, in Studio da anni: dal 1 gennaio", "annue": 208, "oggi": "2026-10-22", "entrata": "2019-03-01",
+     "saldi": [], "assenze": [],
+     "atteso": {"tenuto": true, "scritto": 0, "scrittoIl": "", "maturate": 156, "godute": 0, "oggi": 156, "prenotate": 0, "restano": 156}},
+    {"nome": "ferie a cavallo del saldo, giorno per giorno: contano solo i giorni dopo", "annue": 208, "oggi": "2026-10-22",
+     "saldi": [{"data": "2026-09-30", "ore": 104}, {"data": "2026-06-30", "ore": 150}],
+     "assenze": [{"dal": "2026-09-29", "ore": 8, "stato": "approvata"}, {"dal": "2026-09-30", "ore": 8, "stato": "approvata"}, {"dal": "2026-10-01", "ore": 8, "stato": "approvata"}, {"dal": "2026-10-02", "ore": 8, "stato": "approvata"}],
+     "atteso": {"tenuto": true, "scritto": 104, "scrittoIl": "2026-09-30", "maturate": 0, "godute": 16, "oggi": 88, "prenotate": 0, "restano": 88}},
+    {"nome": "uscito il 15 ottobre: ottobre matura pieno (rateo del mese di uscita), novembre no", "annue": 208, "oggi": "2026-11-10", "uscita": "2026-10-15",
+     "saldi": [{"data": "2026-08-31", "ore": 90}], "assenze": [],
+     "atteso": {"tenuto": true, "scritto": 90, "scrittoIl": "2026-08-31", "maturate": 34.67, "godute": 0, "oggi": 124.67, "prenotate": 0, "restano": 124.67}}
+  ],
+  "costoOrarioDaAnno": [
+    {"costoAnno": 47025, "oreAnno": 1650, "atteso": 28.5},
+    {"costoAnno": 26880, "oreAnno": 1200, "atteso": 22.4},
+    {"costoAnno": 30000, "oreAnno": 1720, "atteso": 17.44},
+    {"costoAnno": 30000, "oreAnno": 0, "atteso": null}
+  ]
+}

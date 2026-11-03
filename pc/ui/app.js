@@ -1,342 +1,259 @@
 /*
- * Wisper Ufficio: l'interfaccia (docs/aspetto.md §8).
+ * Wisper Ufficio: l'interfaccia (docs/gestionale/fase1-schermate.md, docs/aspetto.md).
  *
- * Cinque sezioni: Fine mese (la casa: cosa c'è da fatturare e a chi), Rapportini,
- * Commesse, Clienti, Impostazioni. Da Pleya si sono presi i Progetti (qui
- * Commesse, come le chiama chi lo usa) e i Rapportini del team, adattati a una
- * persona sola; il resto viene da quello che è stato chiesto: gruppi e tariffe,
- * rimborso ACI, rapportini divisi per chi paga coi totali, riepilogo in PDF.
+ * Si entra con email e password (la pagina di accesso), poi la barra laterale
+ * con le voci che il proprio ruolo può vedere, nell'ordine delle specifiche:
+ * Dashboard (la casa: cosa fare adesso), Clienti e fornitori, Progetti e
+ * commesse, Ore e rapportini, Fatturazione (la vecchia Fine mese), Amministrazione.
  *
- * Tutto quello che si vede viene dal foglio, e ogni modifica va al foglio subito:
- * i conti li fa lo script, qui si mostrano. Durante la visita guidata le stesse
- * pagine girano sui dati di esempio (esempio.js), senza toccare il foglio.
+ * Tutto quello che si vede viene dal server, e ogni modifica va al server
+ * subito: i conti e i permessi li decide lui, qui si mostrano. Le pagine dei
+ * moduli stanno in clienti.js, commesse.js e amministrazione.js; qui ci sono
+ * la navigazione, la Dashboard, i rapportini e la fatturazione. Durante la visita
+ * guidata le stesse pagine girano sui dati di esempio (esempio.js).
  */
 (function () {
   'use strict';
 
   const C = window.WisperConti;
   const D = window.WisperDocumenti;
+  const R = window.WisperRegole;
+  const B = window.WisperBase;
   const Api = window.WisperApi;
   const Visita = window.WisperVisita;
   const Esempio = window.WisperEsempio;
+  const RA = window.WisperRegoleAttivita;
+  const RO = window.WisperRegoleOreSpese;
+  const K7 = window.WisperRegoleComunicazioni;
+  const Q8 = window.WisperRegoleFase8;
+  const { $, h, aggiungi, svuota, icona, tondo, iniziali, stato, avviso, lavora, finestra, conferma, apriMenu, chiudiMenu,
+    campo, conSuffisso, selezione, segmenti, cerca, riga, quadrato, segnaposto } = B;
 
   // ======================================================================= stato
 
   const meseDiOggi = () => C.oggiIso().slice(0, 7);
+  const filtriRapportini = f => Object.assign({ testo: '', mese: meseDiOggi(), quali: 'tutti', stato: '', chi: '', cliente: '', commessa: '' }, f || {});
+  const filtriCommesse = f => Object.assign({ testo: '', stato: 'APERTA', cliente: '', ritardo: false, responsabile: '' }, f || {});
 
-  // Un numero da scrivere in un campo da modificare: la virgola per i decimali e NIENTE punto
-  // delle migliaia. Con C.numero un budget di 2500 diventava "2.500", che C.num rilegge come 2,5:
-  // salvato senza toccarlo, il budget passava da 2.500 € a 2,50 €.
-  function numeroCampo(n) {
-    if (n === null || n === undefined || n === '') return '';
-    const x = C.num(n);
-    if (!isFinite(x)) return '';
-    return String(Math.round(x * 100) / 100).replace('.', ',');
-  }
-
-  // Un numero scritto a mano nei campi della commessa: "2.500" (punto delle migliaia, come lo
-  // scrive chiunque) vale 2500, come sul telefono; il resto come C.numONull.
-  function leggiCampo(testo) {
-    const s = String(testo === null || testo === undefined ? '' : testo).trim().replace(/\s/g, '');
-    return C.numONull(/^\d{1,3}(\.\d{3})+(,\d+)?$/.test(s) ? s.replace(/\./g, '') : s);
+  function leggiLato() {
+    try { return localStorage.getItem('wisper-lato') === 'chiuso'; } catch (e) { return false; }
   }
 
   const S = {
-    configurato: false,
+    // null = non lo so ancora; false = serve l'accesso; true = dentro.
+    entrato: null,
+    erroreAccesso: '',
+    uscito: false,
+    // La pagina di accesso: '' o 'qr' = il codice per il telefono, 'password' = il modulo con email e password.
+    modoAccesso: '',
     caricato: false,
     erroreLettura: '',
-    ana: { clienti: [], commesse: [], gruppi: [], impostazioni: {} },
+    io: null,
+    ana: anaVuota(),
     rapportini: [],
     ultimaLettura: null,
+    dash: null,
+    dashErrore: '',
     mese: meseDiOggi(),
-    filtri: { testo: '', mese: meseDiOggi(), quali: 'tutti', chi: '', cliente: '', commessa: '' },
+    filtri: filtriRapportini(),
     scelti: new Set(),
     aperto: null,
-    filtriCommesse: { testo: '', stato: 'APERTA', cliente: '' },
-    filtriClienti: { testo: '' },
-    schedaCommessa: 'panoramica',
+    apriDopo: null,
+    filtriCommesse: filtriCommesse(),
+    filtriSoggetti: { tipo: 'clienti', testo: '', archiviati: false },
+    schedaCommessa: {},
+    schedaSoggetto: {},
     esempio: null,
     veri: null,
+    latoChiuso: leggiLato(),
   };
 
-  const $ = sel => document.querySelector(sel);
-
-  /** Crea un elemento: h('div', { class: 'x', onclick: f }, figli...) */
-  function h(tag, attr) {
-    const el = document.createElement(tag);
-    if (attr) {
-      Object.keys(attr).forEach(k => {
-        const v = attr[k];
-        if (v === null || v === undefined || v === false) return;
-        if (k === 'class') el.className = v;
-        else if (k === 'style') Object.assign(el.style, v);
-        else if (k.slice(0, 2) === 'on') el.addEventListener(k.slice(2), v);
-        else if (k === 'value') el.value = v;
-        else if (k === 'checked' || k === 'selected' || k === 'disabled') el[k] = !!v;
-        else el.setAttribute(k, v === true ? '' : String(v));
-      });
-    }
-    for (let i = 2; i < arguments.length; i++) aggiungi(el, arguments[i]);
-    return el;
+  function anaVuota() {
+    return { soggetti: [], clienti: [], fornitori: [], commesse: [], referenti: [], sedi: [], prestazioni: [], utenti: [], numerazioni: [], gruppi: [], impostazioni: {} };
   }
 
-  function aggiungi(el, f) {
-    if (f === null || f === undefined || f === false) return;
-    if (Array.isArray(f)) { f.forEach(x => aggiungi(el, x)); return; }
-    el.append(f instanceof Node ? f : document.createTextNode(String(f)));
-  }
-
-  function svuota(el) { while (el.firstChild) el.removeChild(el.firstChild); return el; }
-
-  // ======================================================================= icone
-
-  const ICONE = {
-    indietro: '<path d="M15 6l-6 6 6 6"/>',
-    avanti: '<path d="M9 6l6 6-6 6"/>',
-    chiudi: '<path d="M6 6l12 12M18 6L6 18"/>',
-    spunta: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
-    cerca: '<circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4-4"/>',
-    piu: '<path d="M12 5v14M5 12h14"/>',
-    meno: '<path d="M5 12h14"/>',
-    altro: '<circle cx="5.5" cy="12" r="1.8" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.8" fill="currentColor" stroke="none"/><circle cx="18.5" cy="12" r="1.8" fill="currentColor" stroke="none"/>',
-    avviso: '<path d="M12 4l9 16H3z"/><path d="M12 10v4M12 17v.5"/>',
-    aggiorna: '<path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 5v6h-6"/>',
-  };
-
-  function icona(nome, dim, spessore) {
-    const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    s.setAttribute('width', dim || 18);
-    s.setAttribute('height', dim || 18);
-    s.setAttribute('viewBox', '0 0 24 24');
-    s.setAttribute('fill', 'none');
-    s.setAttribute('stroke-width', spessore || 2.4);
-    s.setAttribute('stroke-linecap', 'round');
-    s.setAttribute('stroke-linejoin', 'round');
-    s.setAttribute('aria-hidden', 'true');
-    s.innerHTML = ICONE[nome] || '';
-    return s;
-  }
-
-  function tondo(nomeIcona, etichetta, onclick, classe) {
-    return h('button', { type: 'button', class: 'tondo' + (classe ? ' ' + classe : ''), 'aria-label': etichetta, title: etichetta, onclick }, icona(nomeIcona, 18, 2.6));
-  }
-
-  /** Il cerchio con le iniziali: colore scelto dal nome, sempre lo stesso. */
-  function iniziali(nome, piccole) {
-    const parole = String(nome || '?').replace(/\b(srl|spa|snc|sas)\b/gi, '').trim().split(/\s+/).filter(Boolean);
-    const testo = (parole.length > 1 ? parole[0][0] + parole[1][0] : (parole[0] || '?').slice(0, 2)).toUpperCase();
-    let somma = 0;
-    for (const ch of String(nome || '')) somma = (somma * 31 + ch.charCodeAt(0)) % 997;
-    return h('span', { class: 'iniziali tinta-' + (somma % 6) + (piccole ? ' piccole' : ''), 'aria-hidden': 'true' }, testo);
-  }
-
-  function stato(st, grande) {
-    const nomi = { BOZZA: 'Da firmare', FIRMATO: 'Firmato', INVIATO: 'Inviato', FATTURATO: 'Fatturato', APERTA: 'Aperta', SOSPESA: 'Sospesa', CHIUSA: 'Chiusa' };
-    return h('span', { class: 'stato ' + st + (grande ? ' grande' : '') }, nomi[st] || st);
-  }
-
-  // ======================================================================= avvisi e attese
-
-  function avviso(testo, errore, durata) {
-    const chiudi = () => a.remove();
-    const a = h('div', { class: 'avviso' + (errore ? ' errore' : ''), role: errore ? 'alert' : 'status' },
-      errore ? icona('avviso', 18) : null, h('span', null, testo),
-      errore ? h('button', { type: 'button', 'aria-label': 'Chiudi', onclick: chiudi }, icona('chiudi', 16)) : null);
-    aggiungi($('#avvisi'), [a]);
-    // Gli errori restano finché non si chiudono: dicono cosa fare.
-    if (!errore) setTimeout(chiudi, durata || 3500);
-  }
-
-  let inAttesa = 0;
-  /** Esegue un'operazione col foglio mostrando "un momento" e gli errori a parole. */
-  async function lavora(testo, fn) {
-    inAttesa++;
-    let etichetta = $('.attesa');
-    if (!etichetta) { etichetta = h('div', { class: 'attesa' }, h('i'), h('span')); aggiungi(document.body, [etichetta]); }
-    etichetta.lastChild.textContent = testo + '…';
-    try {
-      return await fn();
-    } catch (e) {
-      avviso(e.message || String(e), true);
-      return undefined;
-    } finally {
-      inAttesa--;
-      if (inAttesa === 0 && etichetta) etichetta.remove();
-    }
-  }
+  /** I permessi di chi è entrato. */
+  const perm = () => (S.io && S.io.permessi) || {};
+  const puo = (modulo, minimo) => R.puo(perm(), modulo, minimo);
+  const soldi = () => puo('costi');
 
   // ======================================================================= rete
 
-  /** Le chiamate: al foglio vero, oppure ai dati di esempio durante la visita. */
+  /** Le chiamate: al server (tramite il programma), oppure ai dati di esempio durante la visita. */
   const copia = o => JSON.parse(JSON.stringify(o));
+
+  function daEsempio(metodo, percorso, corpo) {
+    const r = copia(Esempio.gestisci(S.esempio, metodo, percorso, corpo || {}));
+    if (r && r.ok === false) {
+      const e = new Error(r.errore || 'Non si può');
+      e.permesso = r.permesso;
+      e.dati = r;
+      return Promise.reject(e);
+    }
+    return Promise.resolve(r);
+  }
+
+  /** Accesso scaduto o revocato: si torna alla pagina di accesso (i dati restano dove sono). */
+  function errore(e, scrittura) {
+    if (e && e.accesso === false && !S.esempio) {
+      S.entrato = false;
+      S.uscito = true;
+      chiudiPannello(true);
+      document.querySelectorAll('.velo').forEach(x => x.remove());
+      mostra();
+    } else if (e && e.rete && scrittura && !(e.dati && e.dati.porta)) {
+      // Le risposte "riprova" della porta Google hanno già le parole giuste ("Il server dello studio non risponde
+      // dalle 10:42"): restano come sono. Riprovando, il programma rimanda la stessa scrittura con lo stesso id.
+      e.message = 'Serve la rete per salvare: riprova quando c\'è';
+    }
+    throw e;
+  }
+
   const Rete = {
     get(percorso) {
-      if (S.esempio && percorso.indexOf('/foglio/') === 0) return Promise.resolve(copia(Esempio.gestisci(S.esempio, 'GET', percorso)));
-      return Api.get(percorso);
+      if (S.esempio && percorso.indexOf('/server/') === 0) return daEsempio('GET', percorso);
+      return Api.get(percorso).catch(e => errore(e, false));
     },
     post(percorso, corpo) {
       if (S.esempio) {
-        if (percorso.indexOf('/foglio/') === 0) return Promise.resolve(copia(Esempio.gestisci(S.esempio, 'POST', percorso, corpo || {})));
+        if (percorso.indexOf('/server/') === 0) return daEsempio('POST', percorso, corpo);
         if (percorso === '/locale/pdf') return Promise.resolve({ ok: true, percorso: '', nome: 'esempio.pdf', base64: '' });
-        if (percorso === '/locale/scegli-file') return Promise.resolve({ ok: false });
+        if (percorso === '/locale/scegli-file' || percorso === '/locale/salva-file') return Promise.resolve({ ok: false });
       }
-      return Api.post(percorso, corpo);
+      return Api.post(percorso, corpo).catch(e => errore(e, percorso.indexOf('/server/') === 0));
     },
   };
 
-  // ======================================================================= finestre e menu
-
-  function finestra(opzioni) {
-    const o = opzioni || {};
-    const velo = h('div', { class: 'velo' });
-    const chiudi = () => { velo.remove(); if (o.allaChiusura) o.allaChiusura(); };
-    const f = h('div', { class: 'finestra' + (o.larghezza ? ' ' + o.larghezza : ''), role: 'dialog', 'aria-label': o.titolo || '' });
-    if (o.contenuto) {
-      aggiungi(f, o.contenuto);
-    } else {
-      aggiungi(f, [h('div', { class: 'testa-f' }, h('h2', null, o.titolo), tondo('chiudi', 'Chiudi', chiudi, 'piccolo')),
-        h('div', { class: 'corpo-f' }, o.corpo)]);
-      if (o.pulsanti && o.pulsanti.length) aggiungi(f, [h('div', { class: 'piede-f' }, o.pulsanti.map(p => p === 'spazio' ? h('span', { class: 'spazio' }) : p))]);
-    }
-    aggiungi(velo, [f]);
-    velo.addEventListener('mousedown', e => { if (e.target === velo && !Visita.attiva) chiudi(); });
-    aggiungi($('#sovrapposti'), [velo]);
-    const primo = f.querySelector('input:not([type=checkbox]):not([disabled]), textarea');
-    if (primo && o.fuoco !== false) setTimeout(() => primo.focus(), 40);
-    return chiudi;
-  }
-
-  function conferma(titolo, testo, siTesto, pericolo) {
-    return new Promise(risolvi => {
-      let chiudi;
-      const no = h('button', { type: 'button', class: 'btn testo grande', onclick: () => { chiudi(); risolvi(false); } }, 'Annulla');
-      const si = h('button', { type: 'button', class: 'btn grande ' + (pericolo ? 'pericolo' : 'giallo'), onclick: () => { chiudi(); risolvi(true); } }, siTesto || 'Conferma');
-      chiudi = finestra({ titolo, corpo: h('p', { style: { margin: 0, fontSize: '16px' } }, testo), pulsanti: ['spazio', no, si], fuoco: false });
-    });
-  }
-
-  let menuAperto = null;
-  function chiudiMenu() { if (menuAperto) { menuAperto.remove(); menuAperto = null; } }
-
-  /** Il menu ⋯: voci { testo, fn, pericolo } o '-' per una riga. */
-  function apriMenu(ancora, voci) {
-    chiudiMenu();
-    const m = h('div', { class: 'menu', role: 'menu' }, voci.filter(Boolean).map(v => v === '-' ? h('hr') :
-      h('button', { type: 'button', role: 'menuitem', class: v.pericolo ? 'pericolo' : '', onclick: () => { chiudiMenu(); v.fn(); } }, v.testo)));
-    aggiungi(document.body, [m]);
-    const r = ancora.getBoundingClientRect();
-    const alto = m.offsetHeight;
-    const sotto = r.bottom + 6 + alto < window.innerHeight;
-    m.style.top = (sotto ? r.bottom + 6 : r.top - alto - 6) + 'px';
-    m.style.left = Math.max(12, Math.min(r.right - m.offsetWidth, window.innerWidth - m.offsetWidth - 12)) + 'px';
-    menuAperto = m;
-    const primo = m.querySelector('button');
-    if (primo) primo.focus();
-  }
-  document.addEventListener('mousedown', e => { if (menuAperto && !menuAperto.contains(e.target)) chiudiMenu(); });
-
-  document.addEventListener('keydown', e => {
-    if (e.key !== 'Escape') return;
-    if (menuAperto) { chiudiMenu(); return; }
-    const veli = document.querySelectorAll('.velo');
-    if (veli.length) veli[veli.length - 1].remove();
-    else if (S.aperto) chiudiPannello();
-  });
-
-  // ======================================================================= campi
-
-  function campo(etichetta, controllo, errore) {
-    return h('div', { class: 'campo' + (errore ? ' sbagliato' : '') },
-      etichetta ? h('label', null, etichetta) : null, controllo,
-      errore ? h('div', { class: 'errore' }, errore) : null);
-  }
-
-  function conSuffisso(input, suffisso) {
-    return h('div', { class: 'con-suffisso' }, input, h('span', null, suffisso));
-  }
-
-  function selezione(opzioni, valore, onchange, attr) {
-    return h('select', Object.assign({ class: 'scelta', onchange: e => onchange && onchange(e.target.value) }, attr || {}),
-      opzioni.map(o => h('option', { value: o[0], selected: String(o[0]) === String(valore) }, o[1])));
-  }
-
-  /** I segmenti: [[valore, etichetta, attributi?]], uno scelto. */
-  function segmenti(voci, scelto, onscelta, classe) {
-    const s = h('div', { class: 'segmenti' + (classe ? ' ' + classe : ''), role: 'group' });
-    voci.forEach(v => aggiungi(s, [h('button', Object.assign({
-      type: 'button', class: String(v[0]) === String(scelto) ? 'scelto' : '', 'aria-pressed': String(v[0]) === String(scelto) ? 'true' : 'false',
-      onclick: () => onscelta(v[0]),
-    }, v[2] || {}), v[1])]));
-    return s;
-  }
-
-  function cerca(valore, segnaposto, oninput) {
-    const input = h('input', { type: 'search', 'aria-label': 'Cerca', placeholder: segnaposto, value: valore, oninput: e => oninput(e.target.value) });
-    return h('label', { class: 'cerca' }, icona('cerca', 18), input);
-  }
-
   // ======================================================================= dati
 
+  /**
+   * Le anagrafiche come le manda il server: clienti e fornitori diventano
+   * un'anagrafica sola (soggetti), come nel database; "clienti" resta per le
+   * pagine dei rapportini e delle commesse.
+   */
   function normalizzaAna(ana) {
-    return { clienti: ana.clienti || [], commesse: ana.commesse || [], gruppi: ana.gruppi || [], impostazioni: ana.impostazioni || {} };
+    const a = ana || {};
+    const perId = new Map();
+    const metti = (lista, chiave) => (lista || []).forEach(x => {
+      const s = Object.assign({}, perId.get(x.id) || {}, x);
+      if (s[chiave] === undefined || s[chiave] === null) s[chiave] = true;
+      if (s.cliente === undefined) s.cliente = false;
+      if (s.fornitore === undefined) s.fornitore = false;
+      s.cliente = !!s.cliente;
+      s.fornitore = !!s.fornitore;
+      s.archiviato = !!s.archiviato;
+      if (!Array.isArray(s.alias)) s.alias = R.aliasDi(s);
+      perId.set(x.id, s);
+    });
+    metti(a.clienti, 'cliente');
+    metti(a.fornitori, 'fornitore');
+    const soggetti = Array.from(perId.values());
+    return {
+      soggetti,
+      clienti: soggetti.filter(s => s.cliente),
+      fornitori: soggetti.filter(s => s.fornitore),
+      commesse: (a.commesse || []).map(m => Object.assign({ persone: [], archiviata: false, modello: false }, m, { archiviata: !!m.archiviata, modello: !!m.modello, persone: m.persone || [] })),
+      referenti: a.referenti || [],
+      sedi: a.sedi || [],
+      prestazioni: a.prestazioni || [],
+      utenti: a.utenti || [],
+      numerazioni: a.numerazioni || [],
+      gruppi: a.gruppi || [],
+      impostazioni: conLogoDaIo(a.impostazioni || {}),
+      // Fase 6 (§17.2): i mezzi e i miei strumenti con l'ultima taratura (per il rapportino), solo con mezzi ≥ 1.
+      mezzi: a.mezzi || [],
+      mieiStrumenti: a.mieiStrumenti || [],
+    };
   }
 
+  /**
+   * Fase 8 (§9.3): il logo e la riga in fondo ai PDF. A chi non riceve quelle impostazioni (l'esterno ne ha poche) le dà
+   * "io" (logo, pdfLogo, pdfPiede): così anche i suoi rapportini escono col logo. Chi le riceve resta com'è.
+   */
+  function conLogoDaIo(imp) {
+    const i = (S.io && S.io.interfaccia) || {};
+    if (imp.STUDIO_LOGO !== undefined || !i.logo) return imp;
+    return Object.assign({}, imp, { STUDIO_LOGO: i.logo, PDF_LOGO: i.pdfLogo !== false, PDF_PIEDE: imp.PDF_PIEDE !== undefined ? imp.PDF_PIEDE : (i.pdfPiede || '') });
+  }
+
+  async function caricaAnagrafiche() {
+    S.ana = normalizzaAna(await Rete.get('/server/anagrafiche?archiviati=1'));
+  }
+  const ricaricaAnagrafiche = caricaAnagrafiche;
+
+  /** Chi sono e cosa posso fare: si rilegge a ogni apertura (i permessi possono essere cambiati). */
+  async function caricaIo() {
+    const ris = await Rete.get('/server/io');
+    S.io = { utente: ris.utente || {}, permessi: ris.permessi || {}, titolare: ris.titolare || '', ragioneSociale: ris.ragioneSociale || '', interfaccia: ris.interfaccia || {} };
+  }
+
+  async function caricaDashboard() {
+    if (!puo('dashboard')) return;
+    try {
+      // Fase 3: il proprio timer acceso si vede sulla Dashboard.
+      const [dash] = await Promise.all([Rete.get('/server/dashboard'), Ore.leggiTimer(),
+        // Fase 5: per il collaboratore il numerino di Ticket conta anche i suoi (conteggi.miei).
+        S.io && S.io.utente && S.io.utente.ruolo === 'collaboratore' && puo('ticket') ? Rete.get('/server/tickets?segmento=aperti').then(r => { Ticket.M.miei = (r.conteggi && r.conteggi.miei) || 0; }).catch(() => null) : null]);
+      S.dash = dash;
+      S.dashErrore = '';
+      if (S.caricato) disegnaLato();
+    } catch (e) {
+      if (e.accesso === false) return;
+      S.dashErrore = e.message || String(e);
+    }
+  }
+
+  /** Avvio: il programma sa se su questo computer si è già entrati. */
   async function carica(silenzioso) {
     if (S.esempio) return;
-    const st = await Api.get('/locale/stato').catch(() => ({ configurato: false }));
-    S.configurato = !!st.configurato;
-    S.codiceSalvato = !!st.codiceSalvato;
-    S.codiceFine = st.codiceFine || '';
-    S.cartellaPdf = st.cartellaPdf;
+    const st = await Api.get('/locale/stato').catch(() => ({ entrato: false, rete: true }));
+    S.locale = st;
     S.versione = st.versione;
     S.aggiornamento = st.aggiornamento || null;
     mostraAggiornamento();
-    // La prima apertura dopo che si è installato da solo: dove ritrovarlo.
-    // Aperto col doppio clic sul file dell'email: è collegato, lo si dice una volta.
-    if (st.appenaCollegato && !S.dettoCollegato) {
-      S.dettoCollegato = true;
-      avviso('Collegato al foglio col file dell\'email. Ora puoi cancellare l\'email.', false, 8000);
-    }
     if (st.appenaInstallato && !S.dettoInstallato) {
       S.dettoInstallato = true;
       avviso('Wisper Ufficio è installato: lo trovi in Start e sul Desktop. Il file scaricato si può cancellare.', false, 10000);
     }
-    if (!S.configurato) {
+    // Aperto col doppio clic sul file dell'email: adesso sa la strada da fuori casa.
+    if (st.appenaCollegato) avviso('Collegato: da fuori casa Wisper Ufficio passa da Google', false, 8000);
+    if (!st.entrato) {
+      S.entrato = false;
       S.caricato = false;
-      if (location.hash !== '#impostazioni') location.hash = '#impostazioni';
-      aggiornaStatoFoglio();
+      aggiornaStatoServer();
       mostra();
       return;
     }
+    S.entrato = true;
+    await leggiTutto(silenzioso);
+  }
+
+  async function leggiTutto(silenzioso) {
     S.erroreLettura = '';
-    const fatto = await lavora(silenzioso ? 'Rileggo il foglio' : 'Leggo il foglio', async () => {
+    const fatto = await lavora(silenzioso ? 'Rileggo' : 'Leggo i dati', async () => {
       try {
-        const [ana, rap] = await Promise.all([Api.get('/foglio/anagrafiche'), Api.get('/foglio/rapportini')]);
-        S.ana = normalizzaAna(ana);
+        await caricaIo();
+        const voglioRapportini = puo('rapportini') || puo('fatturazione') || puo('commesse');
+        const [, rap] = await Promise.all([caricaAnagrafiche(), voglioRapportini ? Rete.get('/server/rapportini') : Promise.resolve({ rapportini: [] })]);
         S.rapportini = rap.rapportini || [];
         S.caricato = true;
-        S.codiceRifiutato = false;
         S.ultimaLettura = new Date();
         return true;
       } catch (e) {
+        if (e.accesso === false) throw e;
         S.erroreLettura = e.message || String(e);
-        // Il foglio risponde, ma non col codice di questo computer: di solito l'hanno
-        // cambiato nello script, e va scritto quello nuovo. Non e' "il foglio non risponde".
-        S.codiceRifiutato = /codice sbagliato/i.test(S.erroreLettura);
+        S.rete = !!e.rete;
         throw e;
       }
     });
-    aggiornaStatoFoglio();
-    if (S.codiceRifiutato && location.hash !== '#impostazioni') location.hash = '#impostazioni';
+    if (fatto) await caricaDashboard();
+    if (fatto) { rileggiPromemoria().then(controllaPromemoria); }
+    aggiornaStatoServer();
     if (silenzioso) ridisegna(); else mostra();
     if (fatto && !S.esempio && !visitaVista()) setTimeout(iniziaVisita, 400);
   }
 
-  async function ricaricaAnagrafiche() {
-    S.ana = normalizzaAna(await Rete.get('/foglio/anagrafiche'));
-  }
-
-  /** Mette (o rimette) nell'elenco i rapportini che il foglio ha appena restituito. */
+  /** Mette (o rimette) nell'elenco i rapportini che il server ha appena restituito. */
   function accogli(lista) {
     (lista || []).forEach(r => {
       if (!r) return;
@@ -344,10 +261,17 @@
       if (r.stato === 'ANNULLATO') { if (i >= 0) S.rapportini.splice(i, 1); return; }
       if (i >= 0) S.rapportini[i] = r; else S.rapportini.unshift(r);
     });
+    // I numeri della Dashboard cambiano con i rapportini: si rileggono senza fretta.
+    caricaDashboard();
+    // Fase 3: le spese di un rapportino sono righe di Spese e trasferte.
+    Spese.daRileggere();
   }
 
-  const cliente = id => S.ana.clienti.find(c => c.id === id);
+  const cliente = id => S.ana.soggetti.find(c => c.id === id);
   const commessa = id => S.ana.commesse.find(m => m.id === id);
+  const utente = id => S.ana.utenti.find(u => String(u.id) === String(id));
+  /** I clienti che si possono scegliere in un rapportino o in una commessa nuova: niente archiviati. */
+  const clientiAttivi = () => S.ana.clienti.filter(c => !c.archiviato);
   const trova = chiave => S.rapportini.find(x => x.id === chiave || x.idLocale === chiave);
   const attivi = () => S.rapportini.filter(r => r.stato !== 'ANNULLATO');
   const somma = lista => C.totali(lista).totale;
@@ -369,7 +293,7 @@
     const c = cliente(r.idCliente) || { nome: r.cliente };
     return {
       chiave: 'c:' + (r.idCliente || C.normalizza(r.cliente)), nome: c.nome, email: c.email || '',
-      righe: [c.indirizzo, c.partitaIva ? 'P.IVA ' + c.partitaIva : '', c.email],
+      righe: [R.indirizzoCompleto(c), c.partitaIva ? 'P.IVA ' + c.partitaIva : '', c.email],
     };
   }
 
@@ -398,19 +322,50 @@
 
   // ======================================================================= navigazione
 
-  function sezione() {
-    const h0 = (location.hash || '#finemese').slice(1);
-    return h0 || 'finemese';
+  /** L'indirizzo della pagina: "commesse/26ST044", "amministrazione/utenti/3"... */
+  function percorso() {
+    return (location.hash || '#dashboard').slice(1) || 'dashboard';
   }
 
   window.addEventListener('hashchange', () => {
+    // Fase 3: entrando in una pagina ore e spese si rileggono (un telefono può averle cambiate).
+    Ore.daRileggere();
+    Spese.daRileggere();
+    // Fase 4: fatture e banche si rileggono entrando (il telefono o un'altra persona possono averle cambiate).
+    Fatture.daRileggere();
+    Banche.daRileggere();
+    if (percorso().indexOf('fatturazione/fatture') !== 0) Fatture.M.aperta = null;
+    // Fase 5: Documenti e Ticket si rileggono entrando da un'altra voce; i loro pannelli si chiudono cambiando pagina.
+    const modulo5 = percorso().split('/')[0];
+    if (modulo5 !== S.moduloPrima) { if (modulo5 === 'documenti') Archivio.daRileggere(); if (modulo5 === 'ticket') Ticket.daRileggere(); }
+    // Fase 6: le schede delle persone (dati personali e riservati) non restano in memoria fuori dalla loro pagina.
+    if (modulo5 !== S.moduloPrima) { Persone.daRileggere(); Mezzi.daRileggere(); Collaboratori.daRileggere(); }
+    Persone.chiudiPannello(true);
+    // Fase 7: i pannelli della comunicazione e del file dal cliente si chiudono cambiando pagina; entrando si rilegge.
+    Comunicazioni.chiudiPannello(true);
+    Portale.chiudiPannello(true);
+    if (modulo5 !== S.moduloPrima) { if (modulo5 === 'comunicazioni') Comunicazioni.daRileggere(); if (modulo5 === 'portale') Portale.daRileggere(); }
+    // Fase 8: il pannello del collegamento si chiude cambiando pagina; entrando in Integrazioni si rilegge lo stato vero.
+    if (percorso().split('/')[0] !== 'integrazioni') Integrazioni.chiudiPannello(true);
+    if (percorso() !== 'amministrazione/controlli' && W.Sistema8) W.Sistema8.chiudiPannello(true);
+    if (modulo5 !== S.moduloPrima && modulo5 === 'integrazioni') Integrazioni.daRileggere();
+    S.moduloPrima = modulo5;
+    Archivio.M.aperto = null;
+    Ticket.M.aperto = null;
+    Ticket.M.contrattoAperto = null;
     mostra();
-    if (sezione() === 'rapportini') Visita.azione('nav-rapportini');
+    const nome = percorso().split('/')[0];
+    if (nome === 'rapportini') Visita.azione('nav-rapportini');
+    if (nome === 'fatturazione') Visita.azione('nav-fatturazione');
+    if (nome === 'preventivi') Visita.azione('nav-preventivi');
+    if (nome === 'attivita') Visita.azione('nav-attivita');
+    if (nome === 'spese') Visita.azione('nav-spese');
   });
 
   /** Cambio di pagina: si chiude il pannello e si ridisegna da capo. */
   function mostra() {
     chiudiPannello(true);
+    document.querySelectorAll('.pannello').forEach(p => p.remove());
     disegnaPagina(true);
     $('#principale').scrollTop = 0;
   }
@@ -423,54 +378,324 @@
     if (S.aperto) disegnaPannello();
   }
 
+  function vai(hash) {
+    if (location.hash === hash) mostra(); else location.hash = hash;
+  }
+
+  /** Dove porta una riga della Dashboard (o un numero): l'elenco giusto, già filtrato. */
+  function vaiA(collegamento) {
+    const c = collegamento || {};
+    if (c.pagina === 'nuovoRapportino') { moduloRapportino(null, { data: c.data }); return; }
+    const d = R.destinazione(c);
+    const f = d.filtro;
+    // I giorni senza rapportino: si scrive quello del giorno più recente che manca.
+    if (d.hash === '#rapportini' && f && f.senzaRapportino && puo('rapportini', 2)) {
+      const giorni = ((S.dash && S.dash.numeri && S.dash.numeri.giorniSenzaRapportino) || []).slice().sort();
+      if (giorni.length) { moduloRapportino(null, { data: giorni[giorni.length - 1] }); return; }
+    }
+    if (d.hash === '#commesse') S.filtriCommesse = filtriCommesse(f || {});
+    if (c.pagina === 'commessa' && f && f.sezione) S.schedaCommessa[c.id] = f.sezione;
+    // Fase 3: Ore e rapportini ha i segmenti Ore · Rapportini · Da approvare.
+    if (d.hash === '#rapportini' && f && (f.segmento === 'ore' || f.segmento === 'daApprovare')) {
+      S.filtroOre = { segmento: f.segmento, giorno: f.giorno || '' };
+      vai(d.hash);
+      return;
+    }
+    if (d.hash === '#rapportini') Ore.M.segmento = 'rapportini';
+    if (d.hash === '#spese') S.filtroSpese = f ? Object.assign({}, f, c.id ? { id: c.id } : {}) : null;
+    if (d.hash === '#rapportini') {
+      const x = f || {};
+      // "stato": BOZZA è il segmento Da firmare; gli altri stati una pillola col filtro. Di tutti i mesi.
+      const quali = x.quali || (x.stato === 'BOZZA' ? 'firmare' : 'tutti');
+      S.filtri = filtriRapportini({ quali, stato: x.stato && x.stato !== 'BOZZA' ? x.stato : '',
+        mese: x.stato || x.quali === 'firmare' ? '' : (x.mese !== undefined ? x.mese : meseDiOggi()),
+        cliente: x.idCliente || x.cliente || '', commessa: x.idCommessa || x.commessa || '' });
+      S.scelti.clear();
+      S.apriDopo = x.apri || x.id || null;
+    }
+    // Fase 4: Fatturazione (fatture da aprire, filtri) e Banche e scadenze (giorno, proposte, conto).
+    if (d.hash.indexOf('#fatturazione') === 0) S.filtroFatture = f ? Object.assign({}, f) : null;
+    if (d.hash.indexOf('#banche') === 0) S.filtroBanche = f ? Object.assign({}, f) : null;
+    if (d.hash === '#clienti' && f) S.filtriSoggetti = Object.assign({ tipo: 'clienti', testo: '', archiviati: false }, f);
+    // Fase 5: una scadenza senza il permesso dei documenti (una visita di un contratto) si apre sulla pagina dove si è.
+    if (c.pagina === 'scadenza' && !puo('documenti')) { Archivio.apriScadenza(c.id); return; }
+    if (d.hash.indexOf('#documenti') === 0) S.filtroDocumenti = f ? Object.assign({}, f) : null;
+    if (d.hash.indexOf('#ticket') === 0) S.filtroTicket = f ? Object.assign({}, f) : null;
+    // Fase 6: persone, mezzi, collaboratori (la propria scheda è "Io").
+    if (c.pagina === 'persona' && S.io && S.io.interfaccia && String(c.id) === String(S.io.interfaccia.idPersona) && !puo('persone', 2)) { vai('#persone/io'); return; }
+    if (d.hash.indexOf('#persone') === 0) S.filtroPersone = f ? Object.assign({}, f) : null;
+    if (d.hash.indexOf('#mezzi') === 0) S.filtroMezzi = f ? Object.assign({}, f) : null;
+    if (d.hash.indexOf('#collaboratori') === 0) S.filtroCollaboratori = f ? Object.assign({}, f) : null;
+    // Fase 7: comunicazioni (cliente, commessa) e portale (cliente degli accessi).
+    if (d.hash.indexOf('#comunicazioni') === 0) S.filtroComunicazioni = f ? Object.assign({}, f) : null;
+    if (d.hash.indexOf('#portale') === 0) S.filtroPortale = f ? Object.assign({}, f) : null;
+    // Fase 8: Integrazioni (segmento) e Tutto quello che c'è da fare (sezione, area).
+    if (d.hash.indexOf('#integrazioni') === 0) S.filtroIntegrazioni = f ? Object.assign({}, f) : null;
+    if (d.hash === '#dashboard/tutto') { S.filtroTutto = f ? Object.assign({}, f) : null; Dash8.M.tutto = null; }
+    // Fase 2: il segmento dei preventivi, il segmento o il giorno delle attività.
+    if (d.hash === '#preventivi' && f) {
+      const seg = f.segmento || { BOZZA: 'bozze', INVIATO: 'inviati', SCADUTO: 'scaduti', ACCETTATO: 'accettati' }[String(f.stato || '').toUpperCase()];
+      if (seg) Preventivi.M.filtri.segmento = seg;
+    }
+    // Le attività: "non assegnate" è il segmento Non assegnate; un gruppo (oggi) è di tutti, o solo mio per il collaboratore.
+    if (d.hash.indexOf('#attivita') === 0) {
+      S.filtroAttivita = f ? Object.assign({}, f, f.nonAssegnate ? { segmento: 'libere' } : f.gruppo && !f.segmento ? { segmento: S.dash && S.dash.per === 'collaboratore' ? 'mie' : 'squadra' } : {}) : null;
+    }
+    vai(d.hash);
+  }
+
   function disegnaPagina(entra) {
-    const [nome, arg] = sezione().split('/');
-    document.querySelectorAll('.lato a').forEach(a => a.classList.toggle('attivo', a.dataset.sezione === nome));
+    const p = percorso();
+    const [nome, a1, a2] = p.split('/');
+    // I vecchi indirizzi della 0.4.0.
+    if (nome === 'finemese') { location.replace('#fatturazione'); return; }
+    if (nome === 'impostazioni') { location.replace('#amministrazione'); return; }
     chiudiMenu();
+    document.body.classList.toggle('fuori', S.entrato === false && !S.esempio);
+    disegnaLato();
     const main = svuota($('#principale'));
     const pagina = h('div', { class: 'pagina' + (entra ? ' entra' : '') });
     aggiungi(main, [pagina]);
-    if (!S.configurato && nome !== 'impostazioni') {
-      aggiungi(pagina, [h('p', { class: 'vuoto' }, 'Prima collega il foglio da Impostazioni.')]);
+
+    if (S.entrato === false && !S.esempio) { vistaAccesso(pagina); return; }
+    if (S.entrato === null) { aggiungi(pagina, [segnaposto(3, 90)]); return; }
+    if (!S.caricato) {
+      if (S.erroreLettura) {
+        aggiungi(pagina, [h('div', { class: S.rete ? 'banda calma' : 'banda' }, icona('avviso', 20),
+          h('span', { class: 'spazio' }, S.rete ? 'Il server non risponde: controlla la rete e riprova.' : S.erroreLettura),
+          h('button', { type: 'button', class: 'btn piccolo', onclick: () => leggiTutto() }, 'Riprova'))]);
+      } else {
+        aggiungi(pagina, [segnaposto(4, 80)]);
+      }
       return;
     }
-    if (S.configurato && !S.caricato && nome !== 'impostazioni') {
-      aggiungi(pagina, [S.codiceRifiutato
-        ? h('div', { class: 'banda' }, icona('avviso', 20), h('span', { class: 'spazio' }, 'Il foglio non accetta il codice salvato su questo computer: se l\'hai cambiato nello script, scrivi quello nuovo.'),
-          h('button', { type: 'button', class: 'btn piccolo', onclick: () => { location.hash = '#impostazioni'; } }, 'Impostazioni'))
-        : h('div', { class: 'banda' }, icona('avviso', 20), h('span', { class: 'spazio' }, 'Il foglio non risponde' + (S.erroreLettura ? ': ' + S.erroreLettura : '') + '.'),
-          h('button', { type: 'button', class: 'btn piccolo', onclick: () => carica() }, 'Riprova'))]);
+    // Fase 8 (§9.5): una funzione spenta lo dice con le parole del server, non come un permesso che manca.
+    const spente8 = (S.io && S.io.interfaccia && S.io.interfaccia.funzioniSpente) || [];
+    if (spente8.indexOf(R.moduloDi(p)) >= 0) {
+      const nomeF = ((Q8.SPEGNIBILI[R.moduloDi(p)]) || {}).nome || R.moduloDi(p);
+      aggiungi(pagina, [h('div', { class: 'calmo grande' }, icona('interruttore', 22, 2.2), h('span', null, 'La funzione ' + nomeF + ' è spenta: si accende in Amministrazione › Funzioni accese.'))]);
       return;
     }
-    if (nome === 'commesse' && arg) vistaCommessa(pagina, decodeURIComponent(arg));
-    else if (nome === 'commesse') vistaCommesse(pagina);
-    else if (nome === 'clienti') vistaClienti(pagina);
-    else if (nome === 'impostazioni') vistaImpostazioni(pagina);
-    else if (nome === 'rapportini') vistaRapportini(pagina);
-    else vistaFineMese(pagina);
+    if (!R.paginaPermessa(perm(), p)) { senzaPermesso(pagina); return; }
+
+    if (nome === 'clienti') a1 ? Clienti.scheda(pagina, decodeURIComponent(a1)) : Clienti.vista(pagina);
+    else if (nome === 'commesse') a1 ? Commesse.pagina(pagina, decodeURIComponent(a1)) : Commesse.vista(pagina);
+    else if (nome === 'rapportini') { const f = S.filtroOre; S.filtroOre = null; Ore.vista(pagina, a1 ? decodeURIComponent(a1) : '', f); }
+    else if (nome === 'spese') { const f = S.filtroSpese; S.filtroSpese = null; Spese.vista(pagina, a1 ? decodeURIComponent(a1) : '', f); }
+    else if (nome === 'fatturazione') { const f = S.filtroFatture; S.filtroFatture = null; Fatture.vista(pagina, a1 || '', a2 || '', f); }
+    else if (nome === 'banche') { const f = S.filtroBanche; S.filtroBanche = null; Banche.vista(pagina, a1 || '', f); }
+    else if (nome === 'amministrazione') Amministrazione.vista(pagina, a1 || '', a2 ? decodeURIComponent(a2) : '');
+    else if (nome === 'preventivi') Preventivi.vista(pagina, a1 ? decodeURIComponent(a1) : '', a2 || '');
+    else if (nome === 'attivita' && a1 === 'altreapp') Integrazioni.calendarioAltre(pagina);
+    else if (nome === 'attivita') { const f = S.filtroAttivita; S.filtroAttivita = null; Attivita.vista(pagina, a1 ? decodeURIComponent(a1) : '', f); }
+    // Fase 5: Documenti e Ticket e assistenza.
+    else if (nome === 'documenti') { const f = S.filtroDocumenti; S.filtroDocumenti = null; Archivio.vista(pagina, a1 || '', a2 ? decodeURIComponent(a2) : '', f); }
+    else if (nome === 'ticket') { const f = S.filtroTicket; S.filtroTicket = null; Ticket.vista(pagina, a1 || '', a2 ? decodeURIComponent(a2) : '', f); }
+    // Fase 6: Persone e risorse umane, Mezzi e attrezzature, Collaboratori esterni.
+    else if (nome === 'persone') { const f = S.filtroPersone; S.filtroPersone = null; Persone.vista(pagina, a1 || '', a2 ? decodeURIComponent(a2) : '', f); }
+    else if (nome === 'mezzi') { const f = S.filtroMezzi; S.filtroMezzi = null; Mezzi.vista(pagina, a1 || '', a2 ? decodeURIComponent(a2) : '', f); }
+    else if (nome === 'collaboratori') { const f = S.filtroCollaboratori; S.filtroCollaboratori = null; Collaboratori.vista(pagina, a1 || '', a2 ? decodeURIComponent(a2) : '', f); }
+    // Fase 7: WhatsApp e comunicazioni, Portale clienti.
+    else if (nome === 'comunicazioni') { const f = S.filtroComunicazioni; S.filtroComunicazioni = null; Comunicazioni.vista(pagina, a1 || '', a2 || '', f); }
+    else if (nome === 'portale') { const f = S.filtroPortale; S.filtroPortale = null; Portale.vista(pagina, a1 || '', a2 || '', f); }
+    // Fase 8: Integrazioni, Tutto quello che c'è da fare, Il calendario in altre app.
+    else if (nome === 'integrazioni') { const f = S.filtroIntegrazioni; S.filtroIntegrazioni = null; Integrazioni.vista(pagina, a1 ? decodeURIComponent(a1) : '', f); }
+    else if (nome === 'dashboard' && a1 === 'tutto' && Dash8.attiva()) { const f = S.filtroTutto; S.filtroTutto = null; Dash8.paginaTutto(pagina, f); }
+    else vistaDashboard(pagina);
   }
 
-  function aggiornaStatoFoglio() {
-    const b = svuota($('#stato-foglio'));
-    b.classList.remove('male');
-    if (S.esempio) { aggiungi(b, [h('span', null, 'Dati di esempio')]); return; }
-    if (!S.configurato) { aggiungi(b, [h('span', null, 'Foglio non collegato')]); return; }
-    if (S.codiceRifiutato) {
-      b.classList.add('male');
-      aggiungi(b, [icona('avviso', 16), h('span', null, 'Codice da aggiornare')]);
-      return;
-    }
-    if (S.erroreLettura || !S.caricato) {
-      b.classList.add('male');
-      aggiungi(b, [icona('avviso', 16), h('span', null, 'Foglio non raggiunto'), h('span', { class: 'riprova' }, 'Riprova')]);
-      return;
-    }
-    const ora = S.ultimaLettura ? S.ultimaLettura.toTimeString().slice(0, 5) : '';
-    const spunta = icona('spunta', 16, 2.8);
-    spunta.style.stroke = 'var(--firmato)';
-    aggiungi(b, [spunta, h('span', null, 'Foglio letto alle ' + ora)]);
+  /**
+   * Una scrittura che il server può fermare per chiedere conferma (fase 2: un preventivo a cui manca
+   * qualcosa per legge, un appuntamento che si sovrappone): risponde serveConferma; si chiede alla
+   * persona (domanda, con la risposta del server) e, se dice sì, si rimanda con conferma: true.
+   */
+  async function scriviConConferma(testo, percorso, corpo, domanda) {
+    const prova = c => lavora(testo, async () => {
+      try { return await Rete.post(percorso, c); } catch (e) { if (e && e.dati && e.dati.serveConferma) return { daConfermare: e.dati }; throw e; }
+    });
+    const ris = await prova(corpo);
+    if (!ris || !ris.daConfermare) return ris;
+    if (!(await domanda(ris.daConfermare))) return null;
+    return prova(Object.assign({}, corpo, { conferma: true }));
   }
-  $('#stato-foglio').addEventListener('click', () => { if (!S.esempio) carica(true); });
+
+  /** Il nome del titolare da citare: quello che dice il server, altrimenti il primo titolare attivo. */
+  function titolare() {
+    return S.io && S.io.titolare ? S.io.titolare.split(' ')[0] : R.titolareDi(S.ana.utenti);
+  }
+
+  /** La scheda calma di chi non ha il permesso per una pagina. */
+  function senzaPermesso(pagina) {
+    aggiungi(pagina, [h('div', { class: 'calmo grande' }, icona('scudo', 22, 2.2),
+      h('span', null, 'Non hai il permesso per vedere questa pagina. Chiedi a ' + titolare() + '.'))]);
+  }
+
+  // ======================================================================= barra laterale
+
+  /** Quanti clienti hanno qualcosa da fatturare nel mese: il numerino giallo su Fatturazione. */
+  function clientiDaFatturare() {
+    // Fase 4: il server conta i clienti con qualcosa di pronto (scadenze, rapportini, spese, ore: §15.16).
+    const n = S.dash && S.dash.numeri && S.dash.numeri.soldi && S.dash.numeri.soldi.clientiDaFatturare;
+    if (typeof n === 'number') return n;
+    const mese = meseDiOggi();
+    return perChiPaga(attivi().filter(r => (r.stato === 'FIRMATO' || r.stato === 'INVIATO') && String(r.data).slice(0, 7) === mese && !RO.bloccoInvio(r))).length;
+  }
+
+  function disegnaLato() {
+    const lato = $('#lato');
+    lato.classList.toggle('chiuso', S.latoChiuso);
+    // Fase 8 (§9.3): il nome breve dello studio nel menu, se c'è.
+    const interf = (S.io && S.io.interfaccia) || {};
+    const studio = interf.nomeBreve || (S.io && S.io.ragioneSociale) || S.ana.impostazioni.RAGIONE_SOCIALE || (S.locale && S.locale.studio) || 'Ufficio';
+    $('#lato-studio').textContent = S.esempio ? 'Studio Tecnico GM' : studio;
+    const voci = svuota($('#voci'));
+    if (S.entrato === false && !S.esempio) return;
+    const attiva = R.moduloDi(percorso());
+    const esterno = eEsterno();
+    // Fase 8 (§9.5): le funzioni spente spariscono dal menu di tutti.
+    Q8.senzaSpente(R.vociMenu(perm(), esterno), interf.funzioniSpente).forEach(v => {
+      // Col server della fase 8 i numerini arrivano già fatti con la regola sola (§8.6): S.dash.numerini {modulo: n}.
+      const numerini8 = S.dash && S.dash.numerini && typeof S.dash.numerini === 'object' ? S.dash.numerini : null;
+      const n0 = numerini8 && S.caricato ? Number(numerini8[v.modulo]) || 0
+        : v.modulo === 'fatturazione' && S.caricato ? clientiDaFatturare() : (v.modulo === 'documenti' || v.modulo === 'ticket') && S.caricato ? numerinoFase5(v.modulo)
+        : (v.modulo === 'persone' || v.modulo === 'mezzi' || v.modulo === 'collaboratori') && S.caricato && !esterno ? numerinoFase6(v.modulo)
+          // Fase 7 (§11.1): da mandare oggi più preparati; da guardare.
+          : (v.modulo === 'comunicazioni' || v.modulo === 'portale') && S.caricato ? K7.numerino(S.dash && S.dash.numeri, v.modulo)
+            // Fase 8 (§8.6): i collegamenti in Errore, solo per il titolare e chi ha amministrazione 2.
+            : v.modulo === 'integrazioni' && S.caricato ? Integrazioni.numerino() : 0;
+      // Una regola sola (§8.6): il numerino conta le cose che aspettano te; oltre 99 "99+".
+      const n = Q8.numerino(n0);
+      const sua = attiva === v.modulo;
+      const nomeV = window.WisperRegolePersone.nomeVoce(v, esterno);
+      aggiungi(voci, [h('a', {
+        href: '#' + v.modulo, class: 'voce' + (sua ? ' attiva' : ''), 'aria-current': sua ? 'page' : null,
+        'data-nome': nomeV, 'data-visita': 'nav-' + v.modulo,
+      }, icona(v.icona, 22, 2.2), h('span', { class: 'lab' }, nomeV), n ? h('span', { class: 'num-v', 'aria-label': n + ' da guardare' }, n) : null)]);
+    });
+    disegnaChi();
+    disegnaCampanella();
+    aggiornaStatoServer();
+    $('#richiudi .lab').textContent = S.latoChiuso ? 'Apri il menu' : 'Richiudi il menu';
+    $('#richiudi').setAttribute('data-nome', S.latoChiuso ? 'Apri il menu' : 'Richiudi il menu');
+  }
+
+  /**
+   * Il numerino giallo di Documenti (le revisioni da approvare, solo per chi approva) e di Ticket e
+   * assistenza (quelli che nessuno ha preso; per il collaboratore anche i suoi da fare): architettura §16.18.
+   */
+  function numerinoFase5(modulo) {
+    const n = (S.dash && S.dash.numeri) || {};
+    if (modulo === 'documenti') return (S.io && S.io.interfaccia && S.io.interfaccia.puoApprovareDocumenti && n.documenti && n.documenti.daApprovare) || 0;
+    const t = n.ticket || {};
+    const miei = S.io && S.io.utente && S.io.utente.ruolo === 'collaboratore' ? (Ticket.M.miei || 0) : 0;
+    return (t.nonAssegnati || 0) + miei;
+  }
+
+  /**
+   * Fase 6: il numerino giallo di Persone (le richieste da approvare, per chi approva), di Mezzi e attrezzature
+   * (tarature scadute, mezzi fermi, prestiti in ritardo; per il collaboratore le sue cose) e di Collaboratori
+   * esterni (con un incarico affidato e documenti non in regola): architettura §17.17.
+   */
+  function numerinoFase6(modulo) {
+    const n = (S.dash && S.dash.numeri) || {};
+    if (modulo === 'persone') return (S.io && S.io.interfaccia && S.io.interfaccia.puoApprovareAssenze && n.persone && n.persone.daApprovare) || 0;
+    if (modulo === 'mezzi') { const m = n.mezzi || {}; return (m.tarateScadute || 0) + (m.fermi || 0) + (m.prestitiInRitardo || 0); }
+    return (n.collaboratori && n.collaboratori.nonInRegola) || 0;
+  }
+
+  /** Fase 6: l'utente è un collaboratore esterno (ruolo esterno, legato al suo fornitore). */
+  /**
+   * Fase 7 (§3.16, §12): la campanella in fondo al menu, sopra il nome, col numero delle notifiche nuove.
+   * Le notifiche sono di tutti (ognuno le sue): si apre Comunicazioni › Notifiche.
+   */
+  function disegnaCampanella() {
+    const b = $('#campanella');
+    if (!b) return;
+    const dentro = (S.entrato && S.caricato) || S.esempio;
+    b.classList.toggle('nascosto', !dentro);
+    if (!dentro) return;
+    const n = Comunicazioni.nuove();
+    const sua = percorso() === 'comunicazioni/notifiche';
+    b.classList.toggle('attiva', sua);
+    b.setAttribute('data-nome', 'Notifiche' + (n ? ' · ' + n + ' nuove' : ''));
+    aggiungi(svuota(b), [icona('campana', 22, 2.2), h('span', { class: 'lab' }, 'Notifiche'), n ? h('span', { class: 'num-v', 'aria-label': n + ' nuove' }, String(n)) : null]);
+  }
+  $('#campanella').addEventListener('click', () => vai('#comunicazioni/notifiche'));
+
+  function eEsterno() {
+    return !!(S.io && S.io.utente && (S.io.utente.ruolo === 'esterno' || (S.io.interfaccia && S.io.interfaccia.esterno)));
+  }
+
+  function disegnaChi() {
+    const b = svuota($('#chi'));
+    const u = (S.io && S.io.utente) || {};
+    if (!u.nome) { b.classList.add('nascosto'); return; }
+    b.classList.remove('nascosto');
+    b.setAttribute('data-nome', u.nome);
+    // L'esterno: accanto al nome la pillola "Esterno · {il suo collaboratore}" (fase6.md §12.7).
+    const est = eEsterno() && S.io.interfaccia && S.io.interfaccia.esterno;
+    aggiungi(b, [h('span', { class: 'cerchio-io' }, B.lettere(u.nome)),
+      h('span', { class: 'lab' }, h('b', null, u.nome), est ? h('span', { class: 'pill p-blu piccola pill-esterno' }, 'Esterno · ' + est.nome) : h('span', null, (R.RUOLI[u.ruolo] || { nome: u.ruolo || '' }).nome))]);
+  }
+
+  function aggiornaStatoServer() {
+    const b = svuota($('#stato-server'));
+    b.classList.remove('male');
+    if (S.esempio) { aggiungi(b, [h('i', { class: 'pallino-stato' }), h('span', { class: 'lab' }, 'Dati di esempio')]); return; }
+    if (S.entrato === false) { b.classList.add('nascosto'); return; }
+    b.classList.remove('nascosto');
+    if (S.erroreLettura || !S.caricato) {
+      if (!S.erroreLettura) { aggiungi(b, [h('span', { class: 'lab' }, 'Leggo…')]); return; }
+      b.classList.add('male');
+      b.setAttribute('data-nome', 'Server non raggiunto · Riprova');
+      aggiungi(b, [h('i', { class: 'pallino-stato' }), h('span', { class: 'lab' }, 'Server non raggiunto', h('span', { class: 'riprova' }, ' · Riprova'))]);
+      return;
+    }
+    const ora = S.ultimaLettura ? S.ultimaLettura.getHours() + ':' + String(S.ultimaLettura.getMinutes()).padStart(2, '0') : '';
+    b.setAttribute('data-nome', 'Collegato · letto alle ' + ora);
+    aggiungi(b, [h('i', { class: 'pallino-stato' }), h('span', { class: 'lab' }, 'Collegato · letto alle ' + ora)]);
+  }
+
+  function richiudiLato() {
+    S.latoChiuso = !S.latoChiuso;
+    try { localStorage.setItem('wisper-lato', S.latoChiuso ? 'chiuso' : 'aperto'); } catch (e) { /* resta per questa volta */ }
+    nascondiNome();
+    disegnaLato();
+  }
+
+  $('#richiudi').addEventListener('click', richiudiLato);
+  $('#stato-server').addEventListener('click', () => { if (!S.esempio && S.entrato) leggiTutto(true); });
+  // Fase 8 (§9.2): Tu: Cambia la password, Notifiche, Aspetto, Il calendario in altre app, Esci.
+  $('#chi').addEventListener('click', () => apriMenu($('#chi'), [
+    S.esempio ? null : { testo: 'Cambia la password', fn: cambiaPassword },
+    { testo: 'Notifiche', fn: () => vai('#amministrazione/notifiche') },
+    { testo: 'Aspetto', fn: () => vai('#amministrazione/app') },
+    puo('attivita') ? { testo: 'Il calendario in altre app', fn: () => vai('#attivita/altreapp') } : null,
+    S.esempio ? null : '-',
+    S.esempio ? null : { testo: 'Esci', fn: esci },
+  ]));
+  document.addEventListener('keydown', e => {
+    // Ctrl+B richiude e riapre il menu (come nelle app con la barra laterale).
+    if (e.ctrlKey && !e.altKey && !e.shiftKey && (e.key === 'b' || e.key === 'B') && !document.body.classList.contains('fuori')) {
+      e.preventDefault();
+      richiudiLato();
+    }
+  });
+
+  // Richiusa, la barra mostra il nome della voce al passaggio del mouse e al fuoco.
+  const nomeVoce = h('div', { class: 'nome-voce', role: 'tooltip' });
+  document.body.append(nomeVoce);
+  function mostraNome(el) {
+    if (!S.latoChiuso || !el || !el.dataset.nome) return;
+    const r = el.getBoundingClientRect();
+    nomeVoce.textContent = el.dataset.nome;
+    nomeVoce.style.top = (r.top + r.height / 2) + 'px';
+    nomeVoce.style.left = (r.right + 10) + 'px';
+    nomeVoce.classList.add('visto');
+  }
+  function nascondiNome() { nomeVoce.classList.remove('visto'); }
+  ['mouseover', 'focusin'].forEach(t => $('#lato').addEventListener(t, e => { const el = e.target.closest('[data-nome]'); if (el) mostraNome(el); else nascondiNome(); }));
+  ['mouseleave', 'focusout'].forEach(t => $('#lato').addEventListener(t, nascondiNome));
 
   // ======================================================================= aggiornamenti
 
@@ -499,7 +724,7 @@
     S.aggiornamento = ris.aggiornamento || S.aggiornamento;
     mostraAggiornamento();
     if (S.aggiornamento) avviso(S.aggiornamento.stato === 'errore' ? S.aggiornamento.messaggio : (S.aggiornamento.messaggio || 'Hai l’ultima versione'), S.aggiornamento.stato === 'errore');
-    if (sezione() === 'impostazioni') ridisegna();
+    if (percorso() === 'amministrazione/app') ridisegna();
   }
 
   // Il programma lo dice da solo quando la versione nuova è pronta.
@@ -513,127 +738,534 @@
     });
   }
 
-  // ======================================================================= FINE MESE
+  // ======================================================================= ACCESSO
 
-  function vistaFineMese(pagina) {
-    const mese = S.mese;
-    const delMese = attivi().filter(r => String(r.data).slice(0, 7) === mese);
-    const t = C.totali(delMese);
-    const daFatturare = delMese.filter(r => r.stato === 'FIRMATO' || r.stato === 'INVIATO');
-    const bozze = delMese.filter(r => r.stato === 'BOZZA');
-    const fatturati = delMese.filter(r => r.stato === 'FATTURATO');
-    const spostaMese = d => {
-      const [a, m] = mese.split('-').map(Number);
-      const x = new Date(a, m - 1 + d, 1);
-      S.mese = x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0');
-      disegnaPagina();
+  /**
+   * La pagina di accesso (prototipo docs/prototipo/Collega-QR.html, accordo docs/gestionale/collega-qr.md §6): di
+   * base il codice da inquadrare col telefono, come WhatsApp, coi tre passi accanto; sotto, "Entra con email e
+   * password" mostra il modulo di sempre (guida §2). Il programma parla col server e tiene la chiave d'accesso per
+   * sé: la pagina non la vede mai, nemmeno quando si entra col telefono.
+   */
+  function vistaAccesso(pagina) {
+    const st = S.locale || {};
+    const Coll = window.WisperCollegamento;
+    fermaQr();
+    // Il codice funziona solo col server di casa (attesaComputer non passa da Google): senza indirizzo di casa, il modulo.
+    const conQr = !!(st.casa || st.server) && !!window.WisperQr;
+    if (!conQr) S.modoAccesso = 'password';
+    // Due indirizzi (porta-google.md §8): il server di casa e la porta Google (lo script del foglio). Dell'indirizzo
+    // Google la pagina sa solo se c'è: lo tiene il programma, cifrato, e qui non torna mai.
+    let cambiaServer = !st.server && !st.google;
+    const zonaErrore = h('div', { class: 'zona-errore-accesso', 'aria-live': 'polite' });
+    const mostraErrore = (testo, calmo) => {
+      aggiungi(svuota(zonaErrore), testo ? [h('div', { class: calmo ? 'avviso-calmo' : 'avviso-errore', role: 'alert' }, testo)] : []);
+    };
+    if (S.erroreAccesso) mostraErrore(S.erroreAccesso.testo, S.erroreAccesso.calmo);
+    else if (S.uscito) mostraErrore('Sei uscito da questo dispositivo: entra di nuovo.', true);
+    const zonaCarta = h('div', { class: 'zona-carta' });
+    const piede = !cambiaServer ? h('div', { class: 'riga-server' }, h('span', null, Coll.frase({ casa: st.casa || st.server, google: st.google, ultimoContatto: st.ultimoContatto, ultimaStrada: st.ultimaStrada })),
+      h('button', { type: 'button', class: 'btn collegamento', onclick: () => {
+        // Gli indirizzi si cambiano nel modulo con email e password (anche quello di casa vale per il codice dopo l'accesso).
+        cambiaServer = true;
+        piede.remove();
+        modulo(true);
+      } }, 'Cambia')) : null;
+    aggiungi(pagina, [h('div', { class: 'pagina-accesso' }, h('div', { class: 'colonna-accesso' },
+      h('div', { class: 'marchio-accesso' }, h('span', { class: 'simbolo-accesso', 'aria-hidden': 'true' }, simbolo(56)),
+        h('div', { class: 'titoli-accesso' }, h('h1', null, 'Entra in Wisper'), st.studio ? h('p', { class: 'sotto-titolo' }, st.studio) : null)),
+      zonaErrore, zonaCarta, piede))]);
+
+    // ------------------------------------------------------------- col telefono
+    const F = Coll.FRASI_QR;
+    const Qr = window.WisperQr;
+    const codice = () => {
+      fermaQr();
+      S.modoAccesso = 'qr';
+      // Ogni disegno ha il suo giro, coi conti di prima: il giro di un disegno vecchio (la pagina ridisegnata mentre
+      // chiedeva un codice, Riprova, Torna al codice) vede che non è più quello di adesso e si ferma da solo.
+      const prima = QrGiro;
+      const g = QrGiro = Object.assign(giroNuovo(), { testo: prima.testo, creato: prima.creato, codici: prima.codici, fermo: prima.fermo,
+        lontani: prima.lontani, domande: prima.domande, vista: prima.vista });
+      if (g.vista === 'lontano') { lontano(); return; }
+      const box = h('div', { class: 'qr-box' + (g.fermo ? ' scaduto' : ''), role: 'img', 'aria-label': F.descrizioneQr });
+      const disegnaQr = () => {
+        svuota(box);
+        box.classList.toggle('scaduto', g.fermo);
+        if (g.testo) box.insertAdjacentHTML('afterbegin', Qr.svg(Qr.codifica(g.testo), { lato: 298 }));
+        if (g.fermo) {
+          aggiungi(box, [h('div', { class: 'qr-velo' }, h('button', { type: 'button', class: 'btn giallo grande', onclick: () => {
+            Object.assign(g, { codici: 0, fermo: false, testo: '' });
+            codice();
+          } }, F.nuovoCodice))]);
+        }
+      };
+      aggiungi(svuota(zonaCarta), [h('div', { class: 'carta-accesso' }, box,
+        h('div', { class: 'passi-qr' }, h('h2', null, F.titolo),
+          h('ol', null, F.passi.map(p => h('li', null, h('span', null, p[0], p[1] ? h('b', null, p[1]) : null, p[2])))),
+          h('div', { class: 'altro-accesso' }, h('button', { type: 'button', class: 'btn-testo', onclick: () => modulo(false) }, F.altraStrada))))]);
+      disegnaQr();
+      if (g.fermo) return;
+
+      /** Un codice nuovo dal programma (chiavi nuove, che restano nel programma): conta per i 5. */
+      const nuovo = async tieniErrore => {
+        g.testo = '';
+        // Un riquadro rimasto da prima ("Sei uscito", un collegamento rifiutato) vale fino al codice dopo, non per sempre.
+        if (!tieniErrore && g.codici > 0) mostraErrore('');
+        disegnaQr();
+        try {
+          const r = await Api.post('/locale/collega-qr', {});
+          if (g !== QrGiro) return false;
+          g.testo = r.testo;
+          g.creato = Date.now();
+          g.codici++;
+          disegnaQr();
+          return true;
+        } catch (e) {
+          // Un programma che il codice non lo sa fare (o un errore suo): resta il modulo di sempre.
+          if (g === QrGiro && !e.rete) { fermaQr(); modulo(false); }
+          return false;
+        }
+      };
+      /** Ogni 2 secondi, solo con la pagina in vista: il codice scade? Il telefono l'ha collegato? */
+      const giro = async () => {
+        if (g !== QrGiro || !document.body.contains(box)) { if (g === QrGiro) fermaQr(); return; }
+        if (document.visibilityState === 'hidden' || g.occupato) return;
+        g.occupato = true;
+        try {
+          const passo = g.testo ? Coll.codiceDopo(g.creato, g.codici, Date.now()) : 'nuovo';
+          if (passo === 'fermo') { g.fermo = true; fermaQr(); disegnaQr(); return; }
+          if (passo === 'nuovo' && !(await nuovo())) return;
+          let r;
+          try { r = await Api.get('/locale/collega-qr-stato'); } catch (e) { return; }
+          if (g !== QrGiro || !document.body.contains(box)) return;
+          const dopo = Coll.vistaDopo(g, r.stato);
+          g.lontani = dopo.lontani;
+          g.domande++;
+          if (dopo.vista === 'entrato') { fermaQr(); entrato(r); return; }
+          if (dopo.vista === 'lontano') { fermaQr(); g.vista = 'lontano'; lontano(); return; }
+          if (dopo.vista === 'rifiutato') {
+            mostraErrore(F.rifiutato);
+            await nuovo(true);
+          }
+        } finally {
+          g.occupato = false;
+        }
+      };
+      g.tick = giro;
+      g.timer = setInterval(giro, Coll.QR.OGNI_MS);
+      giro();
     };
 
-    aggiungi(pagina, [h('div', { class: 'testata' },
-      h('div', { class: 'titoli' }, h('h1', null, C.nomeMese(mese)),
-        h('span', { class: 'sotto-titolo' }, nRapportini(t.n) + ' · ' + C.numero(t.ore) + ' ore · ' + C.numero(t.km) + ' km')),
-      tondo('indietro', 'Mese prima', () => spostaMese(-1)),
-      tondo('avanti', 'Mese dopo', () => spostaMese(1)),
-      h('button', { type: 'button', class: 'btn', onclick: () => moduloRapportino(null) }, 'Nuovo rapportino'))]);
+    /** Il server di casa non risponde: il computer non è in ufficio (o il server è spento). */
+    const lontano = () => {
+      aggiungi(svuota(zonaCarta), [h('div', { class: 'carta-accesso una' }, h('div', { class: 'esito-accesso' },
+        h('div', { class: 'lontano-icona' }, icona('reteSpenta', 30, 2)),
+        h('h2', null, F.lontanoTitolo), h('p', null, F.lontanoTesto),
+        h('div', { class: 'altro-accesso' },
+          h('button', { type: 'button', class: 'btn giallo grande', onclick: () => { QrGiro = giroNuovo(); codice(); } }, F.riprova),
+          h('button', { type: 'button', class: 'btn grande', onclick: () => modulo(false) }, F.altraStrada))))]);
+    };
 
-    const clientiDi = lista => Array.from(new Set(lista.map(r => r.cliente))).join(', ');
-    aggiungi(pagina, [h('div', { class: 'tre-colonne' },
-      riquadro('Da fatturare', C.euro(somma(daFatturare)), daFatturare.length ? nRapportini(daFatturare.length) + (daFatturare.length === 1 ? ' firmato o inviato' : ' firmati o inviati') : 'niente in attesa', { 'data-visita': 'da-fatturare' }),
-      riquadro('Da far firmare', C.euro(somma(bozze)), bozze.length ? nRapportini(bozze.length) + ' di ' + clientiDi(bozze) : 'nessuno'),
-      riquadro('Fatturato', C.euro(somma(fatturati)), mese === meseDiOggi() ? 'questo mese' : 'a ' + meseMinuscolo(mese)))]);
+    /** Il telefono l'ha collegato: la chiave è già salvata nel programma. La spunta per 1,2 secondi, poi la Dashboard. */
+    const entrato = r => {
+      const nome = (r.utente && r.utente.nome) || '';
+      const spunta = h('div', { class: 'spunta-accesso' }, icona('spunta', 44, 2.6));
+      aggiungi(svuota(zonaCarta), [h('div', { class: 'carta-accesso una' }, h('div', { class: 'esito-accesso', role: 'status' },
+        spunta, h('h2', null, F.entrato(nome)), h('p', null, F.aproDashboard)))]);
+      mostraErrore('');
+      QrGiro = giroNuovo();
+      setTimeout(async () => {
+        S.erroreAccesso = '';
+        S.uscito = false;
+        S.modoAccesso = 'qr';
+        S.io = { utente: r.utente || {}, permessi: r.permessi || {} };
+        S.entrato = true;
+        if (location.hash !== '#dashboard' && location.hash !== '') history.replaceState(null, '', '#dashboard');
+        await carica();
+      }, Coll.QR.ENTRATO_MS);
+    };
 
-    // Da fatturare: una scheda per chi paga.
-    const sez = h('div', { class: 'sezione' }, h('h2', null, 'Da fatturare'));
-    const gruppi = perChiPaga(daFatturare);
-    if (!gruppi.length) {
-      const spunta = icona('spunta', 20, 2.8);
-      aggiungi(sez, [h('div', { class: 'calmo' }, spunta, 'Niente da fatturare a ' + meseMinuscolo(mese))]);
-    }
-    gruppi.forEach((g, i) => aggiungi(sez, [schedaChiPaga(g, i === 0)]));
-    const prima = attivi().filter(r => (r.stato === 'FIRMATO' || r.stato === 'INVIATO') && String(r.data).slice(0, 7) < mese);
-    if (prima.length) {
-      const ultimoMese = prima.map(r => String(r.data).slice(0, 7)).sort().reverse()[0];
-      aggiungi(sez, [h('div', { class: 'secondario' }, 'Restano da fatturare anche ' + nRapportini(prima.length) + ' dei mesi prima. ',
-        h('button', { type: 'button', class: 'btn collegamento', onclick: () => { S.mese = ultimoMese; disegnaPagina(); } }, 'Vai a ' + meseMinuscolo(ultimoMese)))]);
-    }
-    aggiungi(pagina, [sez]);
+    // ------------------------------------------------------------- con email e password
+    const modulo = conIndirizzi => {
+      fermaQr();
+      S.modoAccesso = 'password';
+      if (conIndirizzi) cambiaServer = true;
+      let togliGoogle = false;
+      const v = {
+        server: h('input', { type: 'url', value: st.casa || st.server || '', placeholder: 'http://192.168.1.51:8400', autocomplete: 'off', spellcheck: 'false' }),
+        google: h('input', { type: 'url', value: '', placeholder: st.google ? 'Già salvato' : 'https://script.google.com/…/exec', autocomplete: 'off', spellcheck: 'false' }),
+        email: h('input', { type: 'email', value: S.emailAccesso || st.email || '', autocomplete: 'username', spellcheck: 'false' }),
+        password: h('input', { type: 'password', autocomplete: 'current-password' }),
+      };
+      // Il file "Collega Wisper Ufficio.wisper" che il telefono fa mandare per email: porta l'indirizzo Google.
+      const usaFile = async () => {
+        try {
+          await Api.post('/locale/collega-file', {});
+        } catch (x) {
+          if (x.dati && x.dati.annullato) return;
+          mostraErrore(x.message || 'Il file non va bene.');
+          return;
+        }
+        S.erroreAccesso = { testo: 'Collegato col file dell\'email: da fuori casa Wisper passa da Google.', calmo: true };
+        await carica();
+      };
+      const zonaServer = h('div');
+      const occhio = h('button', { type: 'button', class: 'occhio', 'aria-label': 'Mostra la password', title: 'Mostra la password', onclick: () => {
+        const vedi = v.password.type === 'password';
+        v.password.type = vedi ? 'text' : 'password';
+        occhio.setAttribute('aria-label', vedi ? 'Nascondi la password' : 'Mostra la password');
+        occhio.classList.toggle('acceso', vedi);
+        v.password.focus();
+      } }, icona('occhio', 22, 2.2));
+      const entra = h('button', { type: 'submit', class: 'btn-entra' }, 'Entra');
 
-    // Da far firmare e commesse da guardare.
-    const firmare = h('div', { class: 'sezione' }, h('h2', null, 'Da far firmare'));
-    if (bozze.length) {
-      aggiungi(firmare, [h('div', { class: 'scheda stretta righe' }, C.ordina(bozze, 'data', -1).slice(0, 6).map(r =>
-        h('div', { class: 'riga-el', role: 'button', tabindex: '0', onclick: () => apriPannello(r.id || r.idLocale), onkeydown: e => { if (e.key === 'Enter') apriPannello(r.id || r.idLocale); } },
-          h('span', { class: 'giorno' }, h('b', null, String(Number(String(r.data).slice(8, 10)))), h('span', null, giornoSett(r.data))),
-          h('span', { class: 'testi' }, h('span', { class: 'titolo' }, r.cliente), h('span', { class: 'sotto' }, [r.descrizione || r.commessa, C.ore(r.oreTotali)].filter(Boolean).join(' · '))),
-          h('span', { class: 'valore' }, C.euro(r.totale)))))]);
-      if (bozze.length > 6) aggiungi(firmare, [h('button', { type: 'button', class: 'btn collegamento', onclick: () => vaiARapportini({ mese, quali: 'firmare' }) }, 'Vedi tutti i ' + bozze.length)]);
-    } else {
-      aggiungi(firmare, [h('div', { class: 'calmo' }, icona('spunta', 20, 2.8), 'Tutti firmati')]);
-    }
+      const disegnaServer = () => {
+        svuota(zonaServer);
+        if (!cambiaServer) return;
+        aggiungi(zonaServer, [h('div', { class: 'indirizzi-accesso' },
+          campo('In casa', v.server),
+          campo('Da fuori, l\'indirizzo Google', v.google),
+          h('div', { class: 'riga-collega' },
+            h('button', { type: 'button', class: 'btn collegamento', onclick: usaFile }, 'Usa il file dell\'email'),
+            st.google && !togliGoogle ? h('button', { type: 'button', class: 'btn collegamento', onclick: () => {
+              togliGoogle = true;
+              v.google.value = '';
+              v.google.placeholder = 'https://script.google.com/…/exec';
+              disegnaServer();
+            } }, 'Non usare Google') : null))]);
+      };
+      disegnaServer();
 
-    const guardare = h('div', { class: 'sezione' }, h('h2', null, 'Commesse da guardare'));
-    const daGuardare = S.ana.commesse.filter(m => m.stato === 'APERTA').map(m => ({ m, k: C.cruscotto(m, S.rapportini, S.ana.impostazioni, null, cliente(m.idCliente)) }))
-      .filter(x => x.k.livelloOre === 'attenzione' || x.k.livelloOre === 'sforato' || (x.k.giorniMancanti !== null && x.k.giorniMancanti < 0));
-    if (daGuardare.length) {
-      aggiungi(guardare, [h('div', { class: 'scheda stretta' }, daGuardare.map(({ m, k }) => {
-        const scaduta = k.giorniMancanti !== null && k.giorniMancanti < 0;
-        const etichetta = k.livelloOre === 'sforato' ? ['Oltre il budget', 'pericolo'] : k.livelloOre === 'attenzione' ? ['Vicina al budget', 'avviso'] : ['Scaduta', 'pericolo'];
-        return h('div', { class: 'guarda', role: 'button', tabindex: '0', onclick: () => { location.hash = '#commesse/' + encodeURIComponent(m.id); } },
-          h('div', { class: 'alto' }, h('span', { class: 'codice' }, m.id), h('b', null, m.descrizione), h('span', { class: 'stato ' + etichetta[1] }, etichetta[0])),
-          k.budgetOre ? h('div', { class: 'barra' }, h('i', { class: k.livelloOre, style: { width: Math.min(100, Math.round(k.percOre * 100)) + '%' } })) : null,
-          h('div', { class: 'basso' },
-            h('span', null, k.budgetOre ? C.numero(k.ore) + ' di ' + C.numero(k.budgetOre) + ' ore' : (scaduta ? 'Fine prevista il ' + C.data(m.finePrevista) : C.numero(k.ore) + ' ore')),
-            k.costo.lavoroNoto ? h('span', null, 'Margine ' + C.euro(k.margine) + (k.percMargine !== null ? ' · ' + Math.round(k.percMargine * 100) + '%' : '')) : null));
-      }))]);
-    } else {
-      aggiungi(guardare, [h('div', { class: 'calmo' }, icona('spunta', 20, 2.8), 'Nessuna commessa vicina al budget')]);
-    }
-    aggiungi(pagina, [h('div', { class: 'due-colonne' }, firmare, guardare)]);
+      const form = h('form', { class: 'accesso', novalidate: true, onsubmit: async e => {
+        e.preventDefault();
+        const corpo = { email: v.email.value.trim(), password: v.password.value };
+        if (cambiaServer) {
+          corpo.casa = v.server.value.trim();
+          corpo.google = v.google.value.trim();
+          if (togliGoogle && !corpo.google) corpo.togliGoogle = true;
+        }
+        if (cambiaServer && !corpo.casa && !corpo.google && !(st.google && !togliGoogle)) { mostraErrore('Scrivi l\'indirizzo del server.'); v.server.focus(); return; }
+        if (!corpo.email) { mostraErrore('Scrivi la tua email.'); v.email.focus(); return; }
+        if (!corpo.password) { mostraErrore('Scrivi la password.'); v.password.focus(); return; }
+        entra.disabled = true;
+        entra.textContent = 'Entro…';
+        S.emailAccesso = corpo.email;
+        try {
+          const ris = await Api.post('/locale/accedi', corpo);
+          S.erroreAccesso = '';
+          S.uscito = false;
+          S.io = { utente: ris.utente || {}, permessi: ris.permessi || {} };
+          S.entrato = true;
+          QrGiro = giroNuovo();
+          if (location.hash !== '#dashboard' && location.hash !== '') history.replaceState(null, '', '#dashboard');
+          await carica();
+        } catch (x) {
+          entra.disabled = false;
+          entra.textContent = 'Entra';
+          // Senza rete il riquadro è grigio: non è colpa di nessuno.
+          S.erroreAccesso = { testo: Coll.erroreAccesso(x), calmo: !!x.rete };
+          mostraErrore(S.erroreAccesso.testo, S.erroreAccesso.calmo);
+          v.password.select();
+          v.password.focus();
+        }
+      } },
+      zonaServer,
+      campo('Email', v.email),
+      campo('Password', h('div', { class: 'con-occhio' }, v.password, occhio)),
+      entra,
+      conQr ? h('button', { type: 'button', class: 'btn-testo', onclick: () => {
+        // La pagina da capo (anche la riga del server, tolta da Cambia), col codice e un giro nuovo.
+        S.erroreAccesso = '';
+        S.uscito = false;
+        S.modoAccesso = 'qr';
+        QrGiro = giroNuovo();
+        mostra();
+      } }, F.tornaAlCodice) : null);
+      aggiungi(svuota(zonaCarta), [h('div', { class: 'carta-accesso una' }, form)]);
+      setTimeout(() => (cambiaServer && !v.server.value ? v.server : v.email.value ? v.password : v.email).focus(), 60);
+    };
+
+    if (S.modoAccesso === 'password') modulo(false);
+    else codice();
   }
+
+  /**
+   * Entrare col telefono: il giro dei codici (collega-qr.md §6), che resta fra un disegno e l'altro della pagina di
+   * accesso. testo: quello del QR di adesso; codici: quanti se ne sono mostrati (dopo 5 ci si ferma); lontani e
+   * domande per regole-collegamento.js (vistaDopo); vista: 'qr' o 'lontano'.
+   */
+  const giroNuovo = () => ({ testo: '', creato: 0, codici: 0, fermo: false, lontani: 0, domande: 0, vista: 'qr', timer: null, tick: null, occupato: false });
+  let QrGiro = giroNuovo();
+
+  function fermaQr() {
+    if (QrGiro.timer) clearInterval(QrGiro.timer);
+    QrGiro.timer = null;
+    QrGiro.tick = null;
+  }
+
+  // Tornando a vedere la pagina (finestra rimessa su), lo stato si chiede subito invece di aspettare il giro.
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && QrGiro.tick) QrGiro.tick();
+  });
+
+  /** Il simbolo di Wisper (lo stesso dell'icona del programma). */
+  function simbolo(dim) {
+    const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    s.setAttribute('width', dim);
+    s.setAttribute('height', dim);
+    s.setAttribute('viewBox', '0 0 32 32');
+    s.innerHTML = '<rect width="32" height="32" rx="9" fill="#1B1B1F"/>' +
+      [[16, 7.5], [22, 10], [24.5, 16], [22, 22], [16, 24.5], [10, 22], [7.5, 16], [10, 10]].map(p => '<circle cx="' + p[0] + '" cy="' + p[1] + '" r="2.2" fill="#FFC53D"/>').join('') +
+      '<circle cx="16" cy="16" r="3.2" fill="#F2F4F7"/>';
+    return s;
+  }
+
+  async function esci() {
+    await lavora('Esco', () => Api.post('/locale/esci'));
+    S.entrato = false;
+    S.uscito = false;
+    S.caricato = false;
+    S.io = null;
+    S.ana = anaVuota();
+    S.rapportini = [];
+    S.dash = null;
+    S.erroreAccesso = '';
+    // Dopo Esci la pagina di accesso riparte dal codice per il telefono, con un giro nuovo.
+    S.modoAccesso = '';
+    QrGiro = giroNuovo();
+    history.replaceState(null, '', '#dashboard');
+    // Lo stato del programma si rilegge (il nome dello studio sotto il titolo, la riga del server), poi la pagina di accesso.
+    await carica();
+  }
+
+  function cambiaPassword() {
+    const v = { vecchia: h('input', { type: 'password', autocomplete: 'current-password' }), nuova: h('input', { type: 'password', autocomplete: 'new-password' }), ancora: h('input', { type: 'password', autocomplete: 'new-password' }) };
+    const zona = h('div', { class: 'fila' });
+    let errori = {};
+    const disegna = () => aggiungi(svuota(zona), [campo('Password di adesso', v.vecchia, errori.vecchia), campo('Password nuova', v.nuova, errori.nuova), campo('Ancora la password nuova', v.ancora, errori.ancora)]);
+    disegna();
+    let chiudi;
+    const salva = async () => {
+      errori = {};
+      if (!v.vecchia.value) errori.vecchia = 'Scrivi la password che usi adesso';
+      if (v.nuova.value.length < 8) errori.nuova = 'Almeno 8 caratteri';
+      else if (v.nuova.value !== v.ancora.value) errori.ancora = 'Le due password nuove non sono uguali';
+      if (Object.keys(errori).length) { disegna(); return; }
+      const ok = await lavora('Cambio la password', () => Rete.post('/server/cambiaPassword', { vecchia: v.vecchia.value, nuova: v.nuova.value }));
+      if (ok) { chiudi(); avviso('Password cambiata'); }
+    };
+    chiudi = finestra({ titolo: 'Cambia la password', corpo: zona,
+      pulsanti: ['spazio', h('button', { type: 'button', class: 'btn testo grande', onclick: () => chiudi() }, 'Annulla'),
+        h('button', { type: 'button', class: 'btn giallo grande', onclick: salva }, 'Cambia la password')] });
+  }
+
+  // ======================================================================= DASHBOARD
+
+  /** L'icona di una riga della Dashboard, dal tipo che manda il server. */
+  function iconaVoce(v) {
+    if (v.tipo === 'commessa') return v.gravita === 'urgente' ? 'allarme' : 'commesse';
+    return { budget: 'allarme', scadenza: 'calendario', firma: 'firma', giorno: 'calendario', giorni: 'calendario', fatturare: 'fatturazione',
+      fatturazione: 'fatturazione', responsabile: 'clienti', sdi: 'fatturazione', cliente: 'clienti', rapportini: 'firma', rapportino: 'rapportini',
+      prestazioni: 'lista', preventivo: 'preventivo', preventivi: 'preventivo', attivita: 'lista', appuntamento: 'calendario', sopralluogo: 'luogo',
+      calendario: 'calendario', listino: 'libro',
+      // fase 3
+      approvare: 'spunta', respinta: 'allarme', timer: 'orologio', rimborsi: 'scontrino', veicoli: 'auto',
+      // fase 4
+      fattura: v.gravita === 'urgente' ? 'allarme' : 'fatturazione', ricevuta: 'scontrino', impegno: 'calendario', cassa: 'banca', conto: 'banca', fiscale: 'scudo',
+      // fase 5
+      ticket: 'chiaveInglese', intervento: 'calendario', scadenza: 'bandiera', documento: 'file', contratto: 'contratto', spazio: 'disco', copia: 'disco',
+      // fase 6
+      assenza: 'valigia', persona: 'persona', qualifica: 'libro', visita: 'calendario', mezzo: 'furgone', strumento: 'misura', prestito: 'misura',
+      guasto: 'allarme', collaboratore: 'collaboratori', incarico: 'collaboratori',
+      // fase 7
+      portale: 'globo', messaggio: 'fumetto', pagamento: 'fatturazione',
+      // fase 8 (§8.7): le voci di sistema, i collegamenti, il ripristino, le versioni, la lista di controllo
+      sistema: /^integrazione/.test(String(v.oggetto || '')) ? 'spina' : v.oggetto === 'ripristino' ? 'disco' : v.oggetto === 'versioni' ? 'scarica' : v.oggetto === 'controlli' ? 'lista' : 'server',
+      integrazione: 'spina', ripristino: 'disco', versione: 'scarica', controlli: 'lista' }[v.tipo] ||
+      ({ urgente: 'allarme', attenzione: 'calendario', soldi: 'fatturazione' }[v.gravita] || 'lista');
+  }
+
+  function rigaDashboard(v, onclick) {
+    return riga({
+      sinistra: quadrato(iconaVoce(v), R.classeGravita(v.gravita)),
+      titolo: v.titolo, sotto: v.dettaglio,
+      // A destra solo gli importi (guida §3): i conteggi sono già nel titolo.
+      destra: (v.unita === 'euro' || (!v.unita && v.gravita === 'soldi')) && typeof v.quanto === 'number' && soldi() ? h('span', { class: 'quanto' }, C.euro(v.quanto)) : null,
+      onclick: onclick || (() => vaiA(v.collegamento)),
+    });
+  }
+
+  function vistaDashboard(pagina) {
+    const u = (S.io && S.io.utente) || {};
+    const nome = String(u.nome || '').split(' ')[0];
+    const esterno = eEsterno();
+    const est = esterno && S.io.interfaccia && S.io.interfaccia.esterno;
+    aggiungi(pagina, [h('div', { class: 'testata alta' },
+      h('div', { class: 'titoli' }, h('span', { class: 'sotto-titolo' }, R.dataTitolo(new Date())),
+        h('h1', null, R.saluto() + (nome ? ', ' + nome : '')),
+        est ? h('div', { class: 'pillole-testa' }, h('span', { class: 'pill p-blu' }, 'Esterno · ' + est.nome)) : null),
+      puo('rapportini', 2) ? h('button', { type: 'button', class: 'btn giallo', onclick: () => moduloRapportino(null) }, icona('piu', 18, 2.6), esterno ? 'Scrivi il rapportino' : 'Nuovo rapportino') : null)]);
+
+    // Fase 8 (§8): col server della fase 8 i quattro riquadri della persona e le sezioni coi tetti (dashboard8.js).
+    if (Dash8.attiva() && !esterno) {
+      // Come nel prototipo: la cosa più urgente in cima, poi i riquadri, poi le sezioni.
+      if (!S.dashErrore) aggiungi(pagina, [Dash8.piuUrgente()]);
+      aggiungi(pagina, [Dash8.riquadri()]);
+      const timer8 = Ore.schedaTimer();
+      if (timer8) aggiungi(pagina, [timer8]);
+      const corpo8 = h('div', { class: 'dash-corpo', 'data-visita': 'dashboard' });
+      aggiungi(pagina, [corpo8]);
+      if (S.dashErrore) {
+        aggiungi(corpo8, [h('div', { class: 'banda calma' }, icona('avviso', 20), h('span', { class: 'spazio' }, 'La Dashboard non si è caricata: ' + S.dashErrore),
+          h('button', { type: 'button', class: 'btn piccolo', onclick: async () => { await caricaDashboard(); ridisegna(); } }, 'Riprova'))]);
+        return;
+      }
+      Dash8.corpo(corpo8, true);
+      if ((S.dash.urgenti || []).length) corpo8.removeAttribute('data-visita');
+      return;
+    }
+
+    // Fase 6 (§17.16): l'esterno vede i suoi incarichi in corso con l'avanzamento.
+    if (esterno && S.dash && (S.dash.incarichi || []).length) {
+      aggiungi(pagina, [h('div', { class: 'sezione-dash' }, h('span', { class: 'etichetta' }, 'I tuoi incarichi · ' + S.dash.incarichi.length),
+        h('div', { class: 'scheda righe' }, S.dash.incarichi.map(i => riga({
+          sinistra: h('span', { class: 'codice' }, i.idCommessa), titolo: i.titolo, sotto: [i.numero, i.commessa, i.al ? 'fino al ' + C.data(i.al) : ''].filter(Boolean).join(' · '),
+          destra: i.modo === 'corpo' ? h('span', { class: 'barra-incarico' }, h('span', { class: 'barra sottile' }, h('i', { style: { width: Math.max(0, Math.min(100, Number(i.avanzamento) || 0)) + '%' } })), h('b', null, (Number(i.avanzamento) || 0) + '%')) : h('span', { class: 'pill p-blu' }, 'A ore'),
+          onclick: () => vai('#collaboratori/in/' + i.id),
+        }))))]);
+    }
+
+    // Fase 6 (§17.17): per chi vede le persone, Assenti oggi · Ferie da approvare · Tarature scadute · Scadenze vicine (toccabili).
+    const np = S.dash && S.dash.numeri && S.dash.numeri.persone;
+    if (np && puo('persone') && !esterno) {
+      const nm = (S.dash.numeri.mezzi) || null;
+      const nc = (S.dash.numeri.collaboratori) || null;
+      const box6 = (quanti, che, fn, rosso) => h('button', { type: 'button', class: 'num-box' + (rosso && quanti > 0 ? ' rosso' : ''), onclick: fn }, h('b', null, String(quanti || 0)), h('span', null, che));
+      const vicine = (np.scadenzeVicine || 0) + (nm ? nm.scadenzeVicine || 0 : 0) + (nc ? nc.documentiInScadenza || 0 : 0);
+      aggiungi(pagina, [h('div', { class: 'quattro-num' },
+        box6(np.assentiOggi, 'assenti oggi', () => vaiA({ pagina: 'persone', filtro: { segmento: 'ferie' } })),
+        np.daApprovare !== undefined ? box6(np.daApprovare, 'ferie da approvare', () => vaiA({ pagina: 'persone', filtro: { segmento: 'ferie', daApprovare: true } })) : box6(np.scadute, 'tue scadute', () => vai('#persone/io'), true),
+        nm ? box6(nm.tarateScadute, 'tarature scadute', () => vaiA({ pagina: 'mezzi', filtro: { segmento: 'strumenti', taratura: 'scadute' } }), true) : null,
+        box6(vicine, 'scadenze di persone e mezzi', () => vaiA(puo('persone', 2) ? { pagina: 'persone', filtro: { segmento: 'scadenze' } } : nm ? { pagina: 'mezzi', filtro: { segmento: 'scadenze' } } : { pagina: 'persone' })))]);
+    }
+
+    // Fase 5 (§12.5): per chi vede i ticket, Ticket aperti · Urgenti · Interventi oggi · Scadenze vicine (toccabili).
+    const nt = S.dash && S.dash.numeri && S.dash.numeri.ticket;
+    if (nt && puo('ticket')) {
+      const ns = (S.dash.numeri.scadenze) || {};
+      const box5 = (quanti, che, fn, rosso) => h('button', { type: 'button', class: 'num-box' + (rosso && quanti > 0 ? ' rosso' : ''), onclick: fn }, h('b', null, String(quanti || 0)), h('span', null, che));
+      aggiungi(pagina, [h('div', { class: 'quattro-num', 'data-visita': 'riquadri-ticket' },
+        box5(nt.aperti, 'ticket aperti', () => vaiA({ pagina: 'tickets', filtro: { segmento: 'aperti' } })),
+        box5(nt.urgenti, 'urgenti', () => vaiA({ pagina: 'tickets', filtro: { segmento: 'aperti', priorita: 'urgente' } }), true),
+        box5(nt.interventiOggi, nt.interventiOggi === 1 ? 'intervento oggi' : 'interventi oggi', () => vaiA({ pagina: 'calendario', filtro: { giorno: C.oggiIso() } })),
+        box5(ns.vicine !== undefined ? ns.vicine : (ns.scadute || 0) + (ns.entro || 0), 'scadenze vicine', () => (puo('documenti') ? vaiA({ pagina: 'documenti', filtro: { segmento: 'scadenze' } }) : vai('#ticket/programmati')), (ns.scadute || 0) > 0))]);
+    }
+
+    // Fase 7 (§11.1): Dal portale (da guardare) e Da mandare oggi, toccabili; il collaboratore solo Da mandare oggi (i suoi).
+    const n7 = (S.dash && S.dash.numeri) || {};
+    if ((n7.portale && puo('portale')) || (n7.comunicazioni && puo('comunicazioni'))) {
+      const box7 = (quanti, che, fn) => h('button', { type: 'button', class: 'num-box', onclick: fn }, h('b', null, String(quanti || 0)), h('span', null, che));
+      aggiungi(pagina, [h('div', { class: 'quattro-num due-num' },
+        n7.portale && puo('portale') ? box7(n7.portale.daGuardare, 'dal portale', () => vaiA({ pagina: 'portale', filtro: { segmento: 'daguardare' } })) : null,
+        n7.comunicazioni && puo('comunicazioni') ? box7(n7.comunicazioni.daMandareOggi, 'da mandare oggi', () => vaiA({ pagina: 'comunicazioni', filtro: { segmento: 'damandare' } })) : null)]);
+    }
+
+    // Fase 4 (§13.6): quattro riquadri dei soldi per chi vede fatture o banche: Da fatturare · Da incassare · Scaduto · Nel conto.
+    const sd = S.dash && S.dash.numeri && S.dash.numeri.soldi;
+    if (sd && soldi() && (R.vociMenu(perm()).some(v => v.modulo === 'fatturazione' || v.modulo === 'banche')) && sd.daIncassare !== undefined) {
+      const vedeF = puo('fatturazione');
+      const vedeB = puo('banche');
+      const box = (quanto, che, collegamento, rosso) => h('button', { type: 'button', class: 'num-box' + (rosso ? ' rosso' : ''), disabled: !collegamento, onclick: () => collegamento && vaiA(collegamento) },
+        h('b', null, C.euro(quanto)), h('span', null, che));
+      aggiungi(pagina, [h('div', { class: 'quattro-num' },
+        box(sd.daFatturare, 'da fatturare', vedeF ? { pagina: 'fatturazione' } : null),
+        box(sd.daIncassare, 'da incassare', vedeF ? { pagina: 'fatture', filtro: { pagamento: 'aperta' } } : null),
+        box(sd.scaduto, 'scaduto', vedeF ? { pagina: 'fatture', filtro: { scadute: true } } : null, C.num(sd.scaduto) > 0),
+        box(sd.saldoConti, 'nel conto', vedeB ? { pagina: 'conti' } : null))]);
+    }
+
+    // I numeri delle commesse: ognuno apre Commesse sul filtro giusto.
+    if (puo('commesse')) {
+      const n = (S.dash && S.dash.numeri && S.dash.numeri.commesse) || (S.dash && S.dash.commesse) || R.contaCommesse(S.ana.commesse);
+      const box = (quanti, che, filtro, rosso) => h('button', { type: 'button', class: 'num-box' + (rosso && quanti > 0 ? ' rosso' : ''), onclick: () => vaiA({ pagina: 'commesse', filtro }) },
+        h('b', null, String(quanti || 0)), h('span', null, che));
+      aggiungi(pagina, [h('div', { class: 'quattro-num' },
+        box(n.aperte, n.aperte === 1 ? 'aperta' : 'aperte', { stato: 'APERTA' }),
+        box(n.sospese, n.sospese === 1 ? 'sospesa' : 'sospese', { stato: 'SOSPESA' }),
+        box(n.inRitardo, 'in ritardo', { stato: 'APERTA', ritardo: true }, true),
+        box(n.chiuse, n.chiuse === 1 ? 'chiusa' : 'chiuse', { stato: 'CHIUSA' }))]);
+    }
+
+    // Fase 3: il timer acceso, in vista appena si apre il programma.
+    const timer = Ore.schedaTimer();
+    if (timer) aggiungi(pagina, [timer]);
+
+    const corpo = h('div', { class: 'dash-corpo', 'data-visita': 'dashboard' });
+    aggiungi(pagina, [corpo]);
+    if (S.dashErrore) {
+      aggiungi(corpo, [h('div', { class: 'banda calma' }, icona('avviso', 20), h('span', { class: 'spazio' }, 'La Dashboard non si è caricata: ' + S.dashErrore),
+        h('button', { type: 'button', class: 'btn piccolo', onclick: async () => { await caricaDashboard(); ridisegna(); } }, 'Riprova'))]);
+      return;
+    }
+    if (!S.dash) { aggiungi(corpo, [segnaposto(4, 64)]); return; }
+
+    const urgenti = (S.dash.urgenti || []).slice();
+    const settimana = S.dash.settimana || [];
+    const pianificare = S.dash.pianificare || [];
+    // La cosa più urgente è la prima voce urgente: in grande, e non si ripete sotto.
+    const prima = urgenti.shift();
+    const sezione = (nomeSez, lista) => lista.length ? h('div', { class: 'sezione-dash' }, h('span', { class: 'etichetta' }, nomeSez + ' · ' + lista.length),
+      h('div', { class: 'scheda righe' }, lista.map(rigaDashboard))) : null;
+    if (!prima && !settimana.length && !pianificare.length) {
+      aggiungi(corpo, [h('div', { class: 'calmo' }, icona('spunta', 20, 2.8), 'Niente da sistemare oggi')]);
+      return;
+    }
+    // La visita illumina la cosa più urgente (se c'è): è lì che si legge "cosa fare adesso".
+    if (prima) corpo.removeAttribute('data-visita');
+    const piuUrgente = prima ? h('div', { class: 'piu-urgente', 'data-visita': 'dashboard' },
+      h('span', { class: 'etichetta' }, 'La cosa più urgente'),
+      h('div', { class: 'titolo-urgente' }, prima.titolo),
+      prima.dettaglio ? h('div', { class: 'sotto-titolo' }, prima.dettaglio) : null,
+      h('button', { type: 'button', class: 'btn', onclick: () => vaiA(prima.collegamento) }, prima.azione || R.testoAzione(prima.collegamento))) : null;
+    aggiungi(corpo, [h('div', { class: 'griglia-dash' },
+      h('div', { class: 'colonna-dash' }, piuUrgente, sezione('Urgenti', urgenti), sezione('Questa settimana', settimana)),
+      h('div', { class: 'colonna-dash' }, sezione('Da pianificare', pianificare)))]);
+  }
+
+  // ======================================================================= FATTURAZIONE
+
+  // La pagina di Fatturazione sta in fatture.js (fase 4): il fine mese di prima vive dentro Da fatturare
+  // (i rapportini di un mese sono una voce, col suo Prepara riepilogo). Qui resta il riquadro dei numeri.
 
   function riquadro(che, quanto, nota, attr, negativo) {
     return h('div', Object.assign({ class: 'riquadro' + (negativo ? ' negativo' : '') }, attr || {}),
       h('span', { class: 'che' }, che), h('span', { class: 'quanto' }, quanto), nota ? h('span', { class: 'nota' }, nota) : null);
   }
 
-  function schedaChiPaga(g, prima) {
-    const t = C.totali(g.lista);
-    const tuttiInviati = g.lista.every(r => r.stato === 'INVIATO');
-    const quando = g.lista.map(r => r.inviatoIl).filter(Boolean).sort().reverse()[0];
-    const azioni = h('div', { class: 'azioni' },
-      h('button', { type: 'button', class: 'btn grande', onclick: () => vaiARapportini({ mese: S.mese, quali: 'fatturare', chi: g.chiave }) }, 'Vedi rapportini'),
-      tuttiInviati
-        ? h('button', { type: 'button', class: 'btn grande giallo', 'data-visita': prima ? 'segna-fatturati' : null, onclick: async () => {
-          const fatto = await cambiaStato(g.lista, 'FATTURATO');
-          if (fatto) Visita.azione('segna-fatturati');
-        } }, 'Segna fatturati')
-        : h('button', { type: 'button', class: 'btn grande giallo', 'data-visita': prima ? 'prepara-riepilogo' : null, onclick: () => {
-          preparaInvio(g.lista);
-          Visita.azione('prepara-riepilogo');
-        } }, 'Prepara riepilogo'));
-    let esito = null;
-    if (tuttiInviati) {
-      const spunta = icona('spunta', 16, 2.8);
-      esito = h('span', { class: 'esito' }, spunta, 'Riepilogo inviato' + (g.email ? ' a ' + g.email : '') + (quando ? ' il ' + dataBreve(quando) : ''));
+
+  /** Il codice che avrà una commessa nuova: quello che dice il server (Numerazioni), o 26ST + il numero dopo l'ultimo. */
+  function prossimoCodiceCommessa(anno) {
+    const n = S.ana.numerazioni.find(x => x.tipo === 'commessa');
+    if (n && n.formato) {
+      const usati = S.ana.commesse.map(m => { const x = String(m.id).match(/(\d+)$/); return x ? Number(x[1]) : 0; });
+      const prossimo = Math.max(Number(n.ultimo) || 0, ...usati, 0) + 1;
+      return R.formattaNumero(n.formato, prossimo, anno || new Date().getFullYear());
     }
-    return h('div', { class: 'chi-paga' },
-      iniziali(g.nome),
-      h('div', { class: 'chi' }, h('b', null, g.nome),
-        h('span', { class: 'secondario' }, nRapportini(t.n) + ' · ' + C.ore(t.ore) + ' · ' + C.numero(t.km) + ' km'),
-        esito),
-      h('span', { class: 'quanto' }, C.euro(t.totale)),
-      azioni);
+    return C.prossimoCodiceCommessa(S.ana.commesse.map(x => x.id), anno || new Date().getFullYear());
   }
 
   function vaiARapportini(filtri) {
-    S.filtri = Object.assign({ testo: '', mese: meseDiOggi(), quali: 'tutti', chi: '', cliente: '', commessa: '' }, filtri);
+    S.filtri = filtriRapportini(filtri);
     S.scelti.clear();
-    if (location.hash === '#rapportini') mostra(); else location.hash = '#rapportini';
+    Ore.M.segmento = 'rapportini';
+    vai('#rapportini');
   }
 
   // ======================================================================= RAPPORTINI
 
-  function vistaRapportini(pagina) {
+  /** Il segmento Rapportini di Ore e rapportini (ore.js mette i segmenti sotto la testata). */
+  function vistaRapportini(pagina, extra) {
+    const ex = extra || {};
     const f = S.filtri;
     const mesi = Array.from(new Set(attivi().map(r => String(r.data).slice(0, 7)).concat([meseDiOggi()])))
       .filter(Boolean).sort().reverse();
@@ -648,15 +1280,18 @@
     }
     if (f.cliente) attiviFiltri.push(chip((cliente(f.cliente) || { nome: f.cliente }).nome, () => { f.cliente = ''; disegnaPagina(); }));
     if (f.commessa) attiviFiltri.push(chip(f.commessa, () => { f.commessa = ''; disegnaPagina(); }));
+    if (f.stato) attiviFiltri.push(chip({ FIRMATO: 'Firmati', INVIATO: 'Inviati', FATTURATO: 'Fatturati' }[f.stato] || f.stato, () => { f.stato = ''; disegnaPagina(); }));
 
     aggiungi(pagina, [
-      h('div', { class: 'testata' }, h('h1', { class: 'spazio' }, 'Rapportini'),
-        h('button', { type: 'button', class: 'btn giallo', onclick: () => moduloRapportino(null) }, 'Nuovo rapportino')),
+      h('div', { class: 'testata' }, h('div', { class: 'titoli' }, h('span', { class: 'dove' }, 'Ore e rapportini'), h('h1', null, 'Rapportini')),
+        puo('rapportini', 2) ? h('button', { type: 'button', class: 'btn giallo', onclick: () => moduloRapportino(null) }, icona('piu', 18, 2.6), 'Nuovo rapportino') : null),
+      ex.segmenti ? h('div', null, ex.segmenti) : null,
       h('div', { class: 'filtri' },
         cerca(f.testo, 'Cliente, commessa, lavoro, numero', v => { f.testo = v; S.scelti.clear(); elencoRapportini(area); }),
         selezione([['', 'Tutti i mesi']].concat(mesi.map(m => [m, C.nomeMese(m)])), f.mese, v => { f.mese = v; S.scelti.clear(); elencoRapportini(area); }),
         segmenti([['tutti', 'Tutti'], ['fatturare', 'Da fatturare'], ['firmare', 'Da firmare', { 'data-visita': 'segmento-firmare' }]], f.quali, v => {
           f.quali = v;
+          f.stato = '';
           S.scelti.clear();
           disegnaPagina();
           if (v === 'firmare') Visita.azione('segmento-firmare');
@@ -664,19 +1299,31 @@
         attiviFiltri),
       area]);
     elencoRapportini(area);
+    // Arrivando dalla Dashboard su un rapportino preciso: si apre il suo pannello.
+    if (S.apriDopo) { const k = S.apriDopo; S.apriDopo = null; if (trova(k)) apriPannello(k); }
   }
 
   function filtrati() {
     const f = S.filtri;
-    const stato0 = f.quali === 'fatturare' ? 'dafatturare' : f.quali === 'firmare' ? 'BOZZA' : '';
+    const stato0 = f.stato || (f.quali === 'fatturare' ? 'dafatturare' : f.quali === 'firmare' ? 'BOZZA' : '');
     let lista = C.filtra(S.rapportini, { testo: f.testo, mese: f.mese, cliente: f.cliente, commessa: f.commessa, stato: stato0 });
     if (f.chi) lista = lista.filter(r => chiPaga(r).chiave === f.chi);
+    // Fase 5 (§16.14): i rapportini di un ticket non chiuso aspettano la chiusura; quelli "nel contratto" o "non si fattura" non sono da fatturare.
+    if (stato0 === 'dafatturare') lista = lista.filter(r => !r.nonSiFattura && !(r.idTicket && r.ticketAperto));
     return C.ordina(lista, 'data', -1);
+  }
+
+  /** Le colonne della tabella dei rapportini: senza il permesso dei soldi niente spese e totale. */
+  function colonneRapportini(conCasella) {
+    return (conCasella ? '22px ' : '') + '112px minmax(0, 1.3fr) minmax(0, 2fr) 54px 54px ' + (soldi() ? '84px 100px ' : '') + '104px';
   }
 
   function elencoRapportini(area) {
     svuota(area);
     const lista = filtrati();
+    // Scegliere più righe serve ai riepiloghi e agli stati della fatturazione.
+    const sceglie = puo('fatturazione', 2) && soldi();
+    const colonne = colonneRapportini(sceglie);
     if (!lista.length) {
       aggiungi(area, [h('p', { class: 'vuoto' }, S.rapportini.length ? 'Nessun rapportino con questi filtri.' : 'Ancora nessun rapportino.')]);
       return;
@@ -687,49 +1334,68 @@
       const daFatturare = g.lista.filter(r => r.stato === 'FIRMATO' || r.stato === 'INVIATO');
       const intesta = h('div', { class: 'intesta' }, h('b', null, g.nome),
         h('span', { class: 'riassunto' }, nRapportini(t.n) + ' · ' + C.ore(t.ore) + ' · ' + C.numero(t.km) + ' km'),
-        h('span', { class: 'totale' }, C.euro(t.totale)),
-        daFatturare.length ? h('button', { type: 'button', class: 'btn piccolo', onclick: () => preparaInvio(daFatturare) }, 'Prepara riepilogo') : null);
+        soldi() ? h('span', { class: 'totale' }, C.euro(t.totale)) : null,
+        daFatturare.length && sceglie ? h('button', { type: 'button', class: 'btn piccolo', onclick: () => preparaInvio(daFatturare) }, 'Prepara riepilogo') : null);
       const tab = h('div', { class: 'tab' + (S.scelti.size ? ' con-scelti' : '') },
-        h('div', { class: 'r testa colonne-rap' }, h('span'), h('span', null, 'Data · N°'), h('span', null, 'Commessa'),
-          h('span', null, 'Lavoro svolto'), h('span', { class: 'n' }, 'Ore'), h('span', { class: 'n' }, 'Km'), h('span', { class: 'n' }, 'Spese'),
-          h('span', { class: 'n' }, 'Totale'), h('span', null, 'Stato')));
+        h('div', { class: 'r testa', style: { gridTemplateColumns: colonne } }, sceglie ? h('span') : null, h('span', null, 'Data · N°'), h('span', null, 'Commessa'),
+          h('span', null, 'Lavoro svolto'), h('span', { class: 'n' }, 'Ore'), h('span', { class: 'n' }, 'Km'),
+          soldi() ? h('span', { class: 'n' }, 'Spese') : null, soldi() ? h('span', { class: 'n' }, 'Totale') : null, h('span', null, 'Stato')));
       g.lista.forEach(r => {
         const chiave = r.id || r.idLocale;
-        const casella = h('input', { type: 'checkbox', class: 'casella', 'aria-label': 'Scegli ' + (r.id || 'il rapportino'), checked: S.scelti.has(chiave),
-          onclick: e => { e.stopPropagation(); if (e.target.checked) S.scelti.add(chiave); else S.scelti.delete(chiave); elencoRapportini(area); } });
+        const casella = sceglie ? h('input', { type: 'checkbox', class: 'casella', 'aria-label': 'Scegli ' + (r.id || 'il rapportino'), checked: S.scelti.has(chiave),
+          onclick: e => { e.stopPropagation(); if (e.target.checked) S.scelti.add(chiave); else S.scelti.delete(chiave); elencoRapportini(area); } }) : null;
         aggiungi(tab, [h('div', {
-          class: 'r colonne-rap cliccabile' + (S.aperto === chiave ? ' scelta' : ''), role: 'button', tabindex: '0', 'data-chiave': chiave,
+          class: 'r cliccabile' + (S.aperto === chiave ? ' scelta' : ''), style: { gridTemplateColumns: colonne }, role: 'button', tabindex: '0', 'data-chiave': chiave,
           'data-visita': primaRiga ? 'riga-rapportino' : null,
           onclick: () => { apriPannello(chiave); Visita.azione('riga-rapportino'); },
           onkeydown: e => { if (e.key === 'Enter') apriPannello(chiave); },
         },
-        h('span', null, casella),
+        sceglie ? h('span', null, casella) : null,
         // La data e sotto il numero: una colonna in meno, più spazio a commessa e lavoro.
         h('span', { class: 'doppia' }, h('span', { class: 'forte' }, dataBreve(r.data)), h('span', { class: 'num' }, r.id || 'in arrivo')),
         h('span', { class: 'doppia' }, h('span', null, r.idCommessa || r.commessa || 'Senza commessa'), r.idCommessa && r.commessa ? h('span', null, r.commessa) : null),
         h('span', { class: 'taglia t2', title: r.descrizione }, r.descrizione),
         h('span', { class: 'n' }, C.numero(r.oreTotali)),
         h('span', { class: 'n' }, C.numero(r.km)),
-        h('span', { class: 'n t2' }, C.num(r.spese) ? C.euro(r.spese) : ''),
-        h('span', { class: 'n forte' }, C.euro(r.totale)),
-        h('span', null, stato(r.stato)))]);
+        soldi() ? h('span', { class: 'n t2' }, C.num(r.spese) ? C.euro(r.spese) : '') : null,
+        soldi() ? h('span', { class: 'n forte' }, C.euro(r.totale)) : null,
+        statoRapportino(r))]);
         primaRiga = false;
       });
       aggiungi(area, [h('div', { class: 'gruppo-tab' }, intesta, tab)]);
     });
     const t = C.totali(lista);
-    aggiungi(area, [h('div', { class: 'totali-fondo' }, h('span', null, C.ore(t.ore)), h('span', null, C.numero(t.km) + ' km'), h('b', null, 'Totale ' + C.euro(t.totale)))]);
+    aggiungi(area, [h('div', { class: 'totali-fondo' }, h('span', null, C.ore(t.ore)), h('span', null, C.numero(t.km) + ' km'), soldi() ? h('b', null, 'Totale ' + C.euro(t.totale)) : null)]);
 
-    if (S.scelti.size) {
+    if (S.scelti.size && sceglie) {
       const sel = lista.filter(r => S.scelti.has(r.id || r.idLocale));
       aggiungi(area, [h('div', { class: 'barra-scelti' },
         h('b', null, (sel.length === 1 ? '1 scelto' : sel.length + ' scelti') + ' · ' + C.euro(somma(sel))),
         h('button', { type: 'button', class: 'btn piccolo', onclick: () => preparaInvio(sel) }, 'Riepilogo'),
         // I fatturati restano fatturati: "inviato" viene prima.
         h('button', { type: 'button', class: 'btn piccolo', onclick: () => cambiaStato(sel.filter(r => r.stato !== 'FATTURATO'), 'INVIATO') }, 'Segna inviati'),
-        h('button', { type: 'button', class: 'btn piccolo', onclick: () => cambiaStato(sel, 'FATTURATO') }, 'Segna fatturati'),
+        h('button', { type: 'button', class: 'btn piccolo', onclick: () => segnaFatturatiAMano(sel) }, 'Segna fatturati a mano'),
         h('button', { type: 'button', class: 'btn piccolo', onclick: () => { S.scelti.clear(); elencoRapportini(area); } }, 'Deseleziona'))]);
     }
+  }
+
+  /** La parola dello stato e, sotto, la pillola dell'approvazione (fase 3: "Da approvare", "Respinto: motivo"). */
+  function statoRapportino(r) {
+    const p = RO.pillolaApprovazione(r);
+    if (!p) return h('span', null, stato(r.stato));
+    return h('span', { class: 'stato-doppio' }, stato(r.stato), h('span', { class: 'pill piccola p-' + p.colore, title: p.testo }, p.testo));
+  }
+
+  /**
+   * Un rapportino che aspetta l'approvazione non si manda al cliente e non si fattura:
+   * il server lo rifiuterebbe, qui lo si dice prima (con la sua frase). true = si può.
+   */
+  function puoMandare(lista) {
+    const fermo = (lista || []).find(r => RO.bloccoInvio(r));
+    if (!fermo) return true;
+    const altri = lista.filter(r => RO.bloccoInvio(r)).length - 1;
+    avviso(RO.bloccoInvio(fermo) + (altri > 0 ? ' (e altri ' + altri + ')' : ''), true);
+    return false;
   }
 
   // ----------------------------------------------------------------------- pannello
@@ -783,10 +1449,23 @@
     if (!r) { if (vecchio) vecchio.remove(); S.aperto = null; return; }
     const bloccato = ['FIRMATO', 'INVIATO', 'FATTURATO'].indexOf(r.stato) >= 0;
     const commessaLunga = r.idCommessa ? r.idCommessa + ' ' + (r.commessa || '') : (r.commessa || 'Senza commessa');
+    // Fase 3: da approvare o respinto = non si manda al cliente e non si fattura.
+    const approvazione = RO.pillolaApprovazione(r);
+    const fermo = !!RO.bloccoInvio(r);
 
     const corpo = h('div', { class: 'corpo' },
       h('div', { class: 'alto' }, h('span', { class: 'numero' }, r.id || 'Rapportino'), stato(r.stato, true), tondo('chiudi', 'Chiudi', () => chiudiPannello(), 'piccolo')),
       passi(r.stato),
+      // Fase 7 (§12.6): Da firmare nel portale o Nel portale, col visto.
+      r.portale && r.portale.pubblicato && Portale ? h('div', { class: 'pillole-testa' }, Portale.pillola(r.portale)) : null,
+      // Fase 4 (§15.2): la pillola della fattura in cui sta, col collegamento (solo per chi vede le fatture).
+      r.fattura ? h('button', { type: 'button', class: 'pill ' + (r.fattura.stato === 'emessa' ? 'p-blu' : 'p-grigio') + ' pill-fattura', title: 'Apri', onclick: () => apriSuaFattura(r) }, icona('fatturazione', 14, 2.2), r.fattura.etichetta) : null,
+      // Fase 5: il ticket di cui è il rapportino (apre il ticket) e "Nel contratto" / "Non si fattura".
+      r.idTicket || r.nonSiFattura ? h('div', { class: 'pillole-testa' },
+        r.idTicket && puo('ticket') ? h('button', { type: 'button', class: 'pill p-grigio pill-fattura', title: 'Apri il ticket', onclick: () => { chiudiPannello(true); vai('#ticket/tk/' + r.idTicket); } }, icona('chiaveInglese', 14, 2.2), 'Ticket ' + (r.numeroTicket || '')) : null,
+        r.nonSiFattura ? h('span', { class: 'pill p-grigio' }, r.nonSiFattura) : null) : null,
+      approvazione ? h('div', { class: approvazione.colore === 'rosso' ? 'banda' : 'banda calma' }, icona(approvazione.colore === 'rosso' ? 'avviso' : 'orologio', 20),
+        h('span', { class: 'spazio' }, approvazione.colore === 'rosso' ? approvazione.testo : 'Da approvare: si manda al cliente e si fattura dopo l\'approvazione')) : null,
       h('div', null, h('div', { style: { fontSize: '18px', fontWeight: '800' } }, r.cliente),
         h('div', { class: 't2', style: { fontSize: '15px', color: 'var(--testo2)' } }, commessaLunga + ' · ' + dataLunga(r.data))),
       h('div', { class: 'lavoro' }, r.descrizione || '—'),
@@ -794,35 +1473,53 @@
         h('span', null, h('em', null, 'Ore'), h('b', null, C.ore(r.oreTotali))),
         h('span', null, h('em', null, 'Km'), h('b', null, C.numero(r.km) + ' km')),
         h('span', null, h('em', null, 'Spese'), h('b', null, C.num(r.spese) ? C.euro(r.spese) : '—'))),
-      h('div', { class: 'conto' }, righeDelConto(r),
-        h('div', { class: 'tot' }, h('span', null, 'Totale'), h('span', null, C.euro(r.totale)))),
+      // Fase 6 (§3.9): gli strumenti usati, con lo stato della taratura di quel giorno; l'avviso se uno era scaduto o non si doveva usare.
+      bloccoStrumenti(r),
+      soldi() ? h('div', { class: 'conto' }, righeDelConto(r),
+        h('div', { class: 'tot' }, h('span', null, 'Totale'), h('span', null, C.euro(r.totale)))) : null,
       r.firma ? h('div', { class: 'firma-box' }, h('img', { src: '/file/' + r.firma.id, alt: 'Firma del cliente' }),
-        h('div', null, h('b', null, r.firmatario || 'Firmato'), h('span', { class: 'tenue' }, r.firmatoIl ? 'firmato il ' + C.dataOra(r.firmatoIl).replace(' ', ' alle ') : 'firmato'))) : null,
+        h('div', null, h('b', null, r.firmatario || 'Firmato'), h('span', { class: 'tenue' }, r.firmatoIl ? 'firmato il ' + C.dataOra(r.firmatoIl).replace(' ', ' alle ') : 'firmato'),
+          // Fase 7 (§3.9): sotto la firma "Firmato nel portale da Roberto Ferretti · 22/10/2026 10:15".
+          r.firmaModo === 'portale' ? h('span', { class: 'tenue' }, 'Firmato nel portale da ' + (r.firmatario || r.firmaReferente || '') + (r.firmatoIl ? ' · ' + C.dataOra(r.firmatoIl) : '')) : null)) : null,
       (r.foto || []).length ? h('div', null, h('div', { class: 'etichetta', style: { marginBottom: '8px' } }, 'Scontrini'),
-        h('div', { class: 'miniature' }, r.foto.map(f => h('a', { href: f.url, target: '_blank', title: 'Apri lo scontrino' }, h('img', { src: '/file/' + f.id, alt: 'Scontrino' }))))) : null,
+        h('div', { class: 'miniature' }, r.foto.map(f => h('a', { href: '#', title: 'Apri lo scontrino', onclick: e => { e.preventDefault(); apriFile(f); } }, h('img', { src: '/file/' + f.id, alt: 'Scontrino' }))))) : null,
       r.luogo ? h('div', null, h('div', { class: 'etichetta' }, 'Luogo'), h('div', null, r.luogo)) : null,
       r.noteInterne ? h('div', null, h('div', { class: 'etichetta' }, 'Nota per te'), h('div', { class: 't2' }, r.noteInterne)) : null);
 
     const pdf = giallo => h('button', { type: 'button', class: 'btn grande' + (giallo ? ' giallo' : ''), 'data-visita': giallo ? 'azione-gialla' : null, onclick: () => pdfRapportino(r, { apri: true }) }, 'PDF');
+    // Chi scrive rapportini li corregge; invii e stati della fatturazione sono di chi fattura.
+    const scrive = puo('rapportini', 2);
+    const fattura = puo('fatturazione', 2) && soldi() && !fermo;
     const voci = [
-      bloccato ? null : (r.stato !== 'BOZZA' ? { testo: 'Modifica', fn: () => moduloRapportino(r) } : null),
-      r.stato === 'BOZZA' || r.stato === 'INVIATO' ? { testo: r.stato === 'INVIATO' ? 'Invia di nuovo al cliente' : 'Invia al cliente', fn: () => preparaInvio([r], true) } : null,
-      r.stato === 'BOZZA' ? { testo: 'Carica il foglio firmato', fn: () => caricaFirmato(r) } : null,
-      { testo: 'Aggiungi uno scontrino', fn: () => aggiungiFoto(r) },
-      r.stato === 'BOZZA' || r.stato === 'FIRMATO' ? { testo: 'Segna inviato senza email', fn: () => cambiaStato([r], 'INVIATO') } : null,
-      r.stato === 'BOZZA' || r.stato === 'FIRMATO' ? { testo: 'Segna fatturato', fn: () => cambiaStato([r], 'FATTURATO') } : null,
-      r.stato === 'FATTURATO' ? { testo: 'Non ancora fatturato', fn: () => cambiaStato([r], 'INVIATO') } : null,
-      bloccato ? { testo: 'Riporta in bozza', fn: () => riportaInBozza(r) } : null,
-      r.stato === 'BOZZA' ? '-' : null,
-      r.stato === 'BOZZA' ? { testo: 'Elimina', fn: () => annulla(r), pericolo: true } : null,
-    ];
-    const altro = h('button', { type: 'button', class: 'btn grande', 'aria-label': 'Altre azioni', title: 'Altre azioni', style: { width: '52px', padding: '0' } }, icona('altro', 20));
-    altro.addEventListener('click', () => apriMenu(altro, voci));
-    // UN pulsante giallo: la cosa da fare adesso.
+      bloccato || !scrive ? null : (r.stato !== 'BOZZA' ? { testo: 'Modifica', fn: () => moduloRapportino(r) } : null),
+      fattura && (r.stato === 'BOZZA' || r.stato === 'INVIATO') ? { testo: r.stato === 'INVIATO' ? 'Invia di nuovo al cliente' : 'Invia al cliente', fn: () => preparaInvio([r], true) } : null,
+      scrive && r.stato === 'BOZZA' ? { testo: 'Carica il foglio firmato', fn: () => caricaFirmato(r) } : null,
+      scrive ? { testo: 'Aggiungi uno scontrino', fn: () => aggiungiFoto(r) } : null,
+      fattura && (r.stato === 'BOZZA' || r.stato === 'FIRMATO') ? { testo: 'Segna inviato senza email', fn: () => cambiaStato([r], 'INVIATO') } : null,
+      // Fase 4: diventa fatturato da solo quando torna l'XML; a mano solo quello fatturato fuori da Wisper, con conferma.
+      fattura && !r.fattura && (r.stato === 'FIRMATO' || r.stato === 'INVIATO') ? { testo: 'Segna fatturato a mano', fn: () => segnaFatturatiAMano([r]) } : null,
+      fattura && r.stato === 'FATTURATO' && !r.fattura ? { testo: 'Non ancora fatturato', fn: () => cambiaStato([r], 'INVIATO') } : null,
+      bloccato && (r.stato === 'FIRMATO' ? scrive : fattura) ? { testo: 'Riporta in bozza', fn: () => riportaInBozza(r) } : null,
+      // Fase 5 (§3.3): legare un rapportino scritto dalla strada solita a un ticket, o toglierlo.
+      scrive && puo('ticket') && r.id && r.stato !== 'FATTURATO' && !r.idTicket && !r.fattura ? { testo: 'Lega a un ticket', fn: () => legaATicket(r) } : null,
+      scrive && r.idTicket && r.stato !== 'FATTURATO' && !r.fattura ? { testo: 'Togli dal ticket', fn: () => togliDalTicket(r) } : null,
+      // Fase 7 (§3.9, §8.2): far firmare a distanza un rapportino in bozza; pubblicare un firmato; togliere.
+      Portale && Portale.puoPubblicare('rapportino') && r.id && !(r.portale && r.portale.pubblicato) && (r.stato === 'BOZZA' || bloccato) ? { testo: r.stato === 'BOZZA' ? 'Fallo firmare nel portale' : 'Pubblica nel portale',
+        fn: async () => { const x = await Portale.pubblica('rapportino', r.id, { idCliente: r.idCliente, nomeCliente: r.cliente, titolo: 'Rapportino ' + r.id + ' del ' + C.data(r.data), bozza: r.stato === 'BOZZA', daFirmare: r.stato === 'BOZZA' }); if (x) { await rileggiRapportini(); disegnaPannello(); } } } : null,
+      Portale && Portale.puoPubblicare('rapportino') && r.portale && r.portale.pubblicato ? { testo: 'Togli dal portale', fn: () => Portale.togli(r.portale.pubblicazione || { tipo: 'rapportino', rif: r.id, idCliente: r.idCliente }, async () => { await rileggiRapportini(); disegnaPannello(); }) } : null,
+      scrive && r.stato === 'BOZZA' ? '-' : null,
+      scrive && r.stato === 'BOZZA' ? { testo: 'Elimina', fn: () => annulla(r), pericolo: true } : null,
+    ].filter(Boolean);
+    if (voci[0] === '-') voci.shift();
+    const altro = voci.length ? h('button', { type: 'button', class: 'btn grande', 'aria-label': 'Altre azioni', title: 'Altre azioni', style: { width: '52px', padding: '0' } }, icona('altro', 20)) : null;
+    if (altro) altro.addEventListener('click', () => apriMenu(altro, voci));
+    // UN pulsante giallo: la cosa da fare adesso (quella che il proprio ruolo può fare).
     const principale = {
-      BOZZA: h('button', { type: 'button', class: 'btn grande giallo', 'data-visita': 'azione-gialla', onclick: () => moduloRapportino(r) }, 'Modifica'),
-      FIRMATO: h('button', { type: 'button', class: 'btn grande giallo', 'data-visita': 'azione-gialla', onclick: () => preparaInvio([r], true) }, 'Invia al cliente'),
-      INVIATO: h('button', { type: 'button', class: 'btn grande giallo', 'data-visita': 'azione-gialla', onclick: () => cambiaStato([r], 'FATTURATO') }, 'Segna fatturato'),
+      BOZZA: scrive ? h('button', { type: 'button', class: 'btn grande giallo', 'data-visita': 'azione-gialla', onclick: () => moduloRapportino(r) }, 'Modifica') : null,
+      FIRMATO: fattura ? h('button', { type: 'button', class: 'btn grande giallo', 'data-visita': 'azione-gialla', onclick: () => preparaInvio([r], true) }, 'Invia al cliente') : null,
+      // Fase 4: un rapportino inviato si fattura preparando la bozza (o si apre la bozza in cui è già).
+      INVIATO: r.fattura && puo('fatturazione') ? h('button', { type: 'button', class: 'btn grande giallo', 'data-visita': 'azione-gialla', onclick: () => apriSuaFattura(r) }, 'Apri ' + (r.fattura.riferimento || 'la fattura'))
+        : fattura ? h('button', { type: 'button', class: 'btn grande giallo', 'data-visita': 'azione-gialla', onclick: () => { S.filtroFatture = { preseleziona: 'rapportino:' + r.id }; vai('#fatturazione'); } }, 'Prepara la bozza') : null,
     }[r.stato];
     const piede = h('div', { class: 'piede' }, principale ? [pdf(false), altro, principale] : [altro, pdf(true)]);
 
@@ -830,23 +1527,106 @@
     if (vecchio) { p.style.animation = 'none'; vecchio.replaceWith(p); } else aggiungi($('#sovrapposti'), [p]);
   }
 
+  /**
+   * Fase 6: gli strumenti di un rapportino (o di un ticket), con la pillola dello stato di quel giorno, e la banda
+   * quando uno era scaduto (confermato o no), non conforme o al laboratorio. Niente se non ce ne sono.
+   */
+  function bloccoStrumenti(r) {
+    const P6 = window.WisperRegolePersone;
+    const lista = (r && r.strumenti) || [];
+    if (!lista.length) return null;
+    const daGuardare = lista.filter(s => s.statoAllora === 'scaduta' || s.statoAllora === 'non_conforme' || s.statoAllora === 'laboratorio');
+    const frase = daGuardare.length ? daGuardare.map(s => s.nome + ': ' + P6.statoAllora(s).parola.toLowerCase()).join(' · ') : '';
+    return h('div', { class: 'riga-strumenti' }, h('div', { class: 'etichetta' }, 'Strumenti usati'),
+      daGuardare.length ? h('div', { class: daGuardare.some(s => s.statoAllora !== 'scaduta' || !s.confermato) ? 'banda' : 'banda calma' }, icona('avviso', 18), h('span', { class: 'spazio' }, frase)) : null,
+      lista.map(s => { const st = P6.statoAllora(s); return h('div', { class: 'riga-strumento' }, h('span', null, (s.codice ? s.codice + ' · ' : '') + s.nome + (s.matricola ? ' · matr. ' + s.matricola : '')), st.parola ? h('span', { class: 'pill piccola p-' + st.colore }, st.parola) : null); }));
+  }
+
+  /**
+   * Una foto o un documento: il programma lo scarica dal server e lo apre col
+   * programma di Windows (i file del server non si aprono nel browser: vogliono la chiave).
+   */
+  function apriFile(f) {
+    if (S.esempio) { avviso('Nella visita i file non si aprono'); return; }
+    const nome = f.nome || ('scontrino' + ({ 'image/png': '.png', 'application/pdf': '.pdf' }[f.mime] || '.jpg'));
+    Rete.post('/locale/apri-documento', { id: f.id, nome }).catch(e => avviso(e.message, true));
+  }
+
   async function cambiaStato(lista, st) {
     if (!lista.length) { avviso('Niente da cambiare', true); return false; }
+    if ((st === 'INVIATO' || st === 'FATTURATO') && !puoMandare(lista)) return false;
     const ids = lista.map(r => r.id || r.idLocale);
     const fatto = await lavora('Aggiorno', async () => {
-      const ris = await Rete.post('/foglio/stato', { ids, stato: st });
+      const ris = await Rete.post('/server/stato', { ids, stato: st });
       accogli(ris.rapportini);
       return true;
     });
     if (fatto) {
       const nomi = { BOZZA: 'in bozza', INVIATO: 'inviato', FATTURATO: 'fatturato', ANNULLATO: 'eliminato' };
       const parola = nomi[st] || st.toLowerCase();
-      avviso(ids.length === 1 ? (st === 'ANNULLATO' ? 'Rapportino eliminato' : 'Segnato ' + parola) : ids.length + ' rapportini segnati ' + parola.replace(/o$/, 'i'));
+      // Un rapportino eliminato resta sul server come annullato: Annulla lo rimette com'era.
+      const rimetti = st === 'ANNULLATO' && ids.length === 1 && lista[0].id ? { testo: 'Annulla', fn: () => ripristinaRapportino(lista[0].id) } : null;
+      avviso(ids.length === 1 ? (st === 'ANNULLATO' ? 'Rapportino eliminato' : 'Segnato ' + parola) : ids.length + ' rapportini segnati ' + parola.replace(/o$/, 'i'), false, null, rimetti);
       S.scelti.clear();
       if (st === 'ANNULLATO') chiudiPannello();
       ridisegna();
     }
     return !!fatto;
+  }
+
+  /**
+   * "Segna fatturati a mano" (fase4.md §13.1): solo per i rapportini fatturati fuori da Wisper.
+   * Quelli in una bozza o fattura di Wisper il server li rifiuta con la sua frase; qui si chiede conferma.
+   */
+  async function segnaFatturatiAMano(lista0) {
+    const lista = lista0.filter(r => r.stato !== 'FATTURATO');
+    if (!lista.length) { avviso('Sono già fatturati', true); return false; }
+    const inFattura = lista.filter(r => r.fattura);
+    if (inFattura.length) { avviso('Il rapportino ' + inFattura[0].id + ' è già in ' + inFattura[0].fattura.etichetta + ': diventa fatturato da solo quando torna l\'XML', true); return false; }
+    const ok = await conferma('Fatturati fuori da Wisper?', (lista.length === 1 ? 'Il rapportino diventa fatturato' : 'I ' + lista.length + ' rapportini diventano fatturati') +
+      ' senza una fattura in Wisper. Fallo solo per quelli fatturati fuori da Wisper; gli altri si fatturano da Fatturazione › Da fatturare.', 'Sì, segna fatturati');
+    if (!ok) return false;
+    return cambiaStato(lista, 'FATTURATO');
+  }
+
+  /** La bozza o la fattura in cui sta un rapportino. */
+  function apriSuaFattura(r) {
+    if (!r.fattura) return;
+    chiudiPannello(true);
+    if (r.fattura.stato === 'bozza') vai('#fatturazione/bozza/' + r.fattura.id);
+    else { Fatture.M.aperta = r.fattura.id; vai('#fatturazione/fatture'); }
+  }
+
+  /** Lega a un ticket: i ticket aperti di quel cliente (fase5.md §3.3). */
+  async function legaATicket(r) {
+    const lista = await lavora('Cerco i ticket', () => Rete.get('/server/tickets?segmento=aperti&idCliente=' + encodeURIComponent(r.idCliente)));
+    if (!lista) return;
+    const vivi = lista.ticket || [];
+    let chiudi;
+    const lega = async t => {
+      chiudi();
+      const x = await lavora('Lego al ticket', () => Rete.post('/server/legaRapportino', { idRapportino: r.id, idTicket: t.id }));
+      if (!x) return;
+      accogli([x.rapportino]);
+      Ticket.daRileggere();
+      avviso(r.id + ' legato a ' + t.numero);
+      ridisegna();
+    };
+    chiudi = finestra({ titolo: 'Lega a un ticket', fuoco: false,
+      corpo: vivi.length ? h('div', { class: 'scheda righe' }, vivi.map(t => riga({ sinistra: quadrato('chiaveInglese'), titolo: t.numero + ' · ' + t.titolo,
+        sotto: [t.impianto, t.statoVisto, t.responsabile].filter(Boolean).join(' · '), onclick: () => lega(t) }))) : h('p', { class: 'vuoto sinistra' }, 'Nessun ticket aperto di ' + r.cliente + '.'),
+      pulsanti: ['spazio', h('button', { type: 'button', class: 'btn grande', onclick: () => chiudi() }, 'Chiudi')] });
+  }
+
+  async function togliDalTicket(r) {
+    const ok = await conferma('Togliere dal ticket?', 'Il rapportino ' + r.id + ' non sarà più del ticket ' + (r.numeroTicket || '') + '.', 'Togli dal ticket');
+    if (!ok) return;
+    const x = await lavora('Tolgo dal ticket', () => Rete.post('/server/legaRapportino', { idRapportino: r.id, idTicket: null }));
+    if (!x) return;
+    accogli([x.rapportino]);
+    Ticket.daRileggere();
+    avviso('Tolto dal ticket');
+    ridisegna();
   }
 
   async function riportaInBozza(r) {
@@ -857,15 +1637,23 @@
   }
 
   async function annulla(r) {
-    const ok = await conferma('Eliminare il rapportino?', 'Sul foglio resta, segnato come annullato: si recupera da lì.', 'Elimina', true);
+    const ok = await conferma('Eliminare il rapportino?', 'Sparisce dagli elenchi. Resta nell\'archivio, segnato come annullato.', 'Elimina', true);
     if (ok) cambiaStato([r], 'ANNULLATO');
+  }
+
+  async function ripristinaRapportino(id) {
+    const ris = await lavora('Rimetto il rapportino', () => Rete.post('/server/ripristinaRapportino', { id }));
+    if (!ris) return;
+    accogli(ris.rapportino ? [ris.rapportino] : ris.rapportini);
+    avviso('Rapportino rimesso com\'era');
+    ridisegna();
   }
 
   async function aggiungiFoto(r) {
     const scelto = await Rete.post('/locale/scegli-file', { filtro: 'immagini' }).catch(() => null);
     if (!scelto || !scelto.ok) return;
     const fatto = await lavora('Carico lo scontrino', async () => {
-      const ris = await Rete.post('/foglio/caricaFile', {
+      const ris = await Rete.post('/server/caricaFile', {
         tipo: 'spesa', id: r.id, idLocale: r.idLocale, idFile: 'pc' + Date.now().toString(36), mime: scelto.mime, base64: scelto.base64,
       });
       r.foto = (r.foto || []).concat([ris.file]);
@@ -883,11 +1671,11 @@
       const scelto = await Rete.post('/locale/scegli-file', { filtro: 'immagini' }).catch(() => null);
       if (!scelto || !scelto.ok) return;
       const fatto = await lavora('Carico la firma', async () => {
-        await Rete.post('/foglio/caricaFile', {
+        await Rete.post('/server/caricaFile', {
           tipo: 'firma', id: r.id, idLocale: r.idLocale, idFile: 'pc' + Date.now().toString(36),
           mime: scelto.mime, base64: scelto.base64, firmatario: nome.value.trim(),
         });
-        const ris = await Rete.get('/foglio/rapportini?da=' + r.data + '&a=' + r.data);
+        const ris = await Rete.get('/server/rapportini?da=' + r.data + '&a=' + r.data);
         accogli(ris.rapportini);
         return true;
       });
@@ -928,6 +1716,7 @@
   function preparaInvio(lista0, singolo) {
     const lista = C.ordina(lista0, 'data', 1);
     if (!lista.length) { avviso('Non c\'è niente da mettere nel riepilogo', true); return; }
+    if (!puoMandare(lista)) return;
     const r0 = singolo ? lista[0] : null;
     // Il rapportino singolo va al cliente (o, senza la sua email, a chi paga); il riepilogo a chi paga.
     const intest = r0
@@ -984,7 +1773,7 @@
       }
       const fatto = await lavora(aMe ? 'Mando la copia' : 'Mando l\'email', async () => {
         const pdf = await creaPdf(true);
-        const ris = await Rete.post('/foglio/inviaEmail', {
+        const ris = await Rete.post('/server/inviaEmail', {
           a: a.value.trim(), cc: cc.value.trim(), oggetto: oggetto.value, messaggio: messaggio.value,
           allegati: pdf && pdf.base64 ? [{ nome: pdf.nome, base64: pdf.base64, mime: 'application/pdf' }] : [],
           ids: lista.map(r => r.id), aMe: !!aMe,
@@ -1060,16 +1849,18 @@
     const p = predefiniti || {};
     const r = esistente ? Object.assign({}, esistente) : {
       idLocale: 'U-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
-      data: C.oggiIso(), tecnico: S.ana.impostazioni.TECNICO || '', idCliente: p.idCliente || '', cliente: '',
+      data: p.data || C.oggiIso(), tecnico: (S.io && S.io.utente && S.io.utente.nome) || S.ana.impostazioni.TECNICO || '', idCliente: p.idCliente || '', cliente: '',
       idCommessa: p.idCommessa || '', commessa: '', oreLavoro: 0, oreExtra: 0, oreViaggio: 0, km: '', spese: '',
-      tariffa: null, descrizione: '', luogo: '', ticket: '', noteSpese: '', noteInterne: '',
+      tariffa: null, descrizione: '', luogo: p.luogo || '', ticket: '', noteSpese: '', noteInterne: '',
+      // Fase 5 (§3.3): dal ticket il rapportino nasce già con cliente, commessa e luogo; il numero lo scrive il server.
+      idTicket: p.idTicket || null, numeroTicket: p.numeroTicket || '',
     };
     if (r.idCliente && !r.cliente) r.cliente = (cliente(r.idCliente) || {}).nome || '';
     if (r.idCommessa && !r.commessa) r.commessa = (commessa(r.idCommessa) || {}).descrizione || '';
 
     const m = {
       idCliente: r.idCliente, cliente: r.cliente, idCommessa: r.idCommessa, commessa: r.commessa, codiceProposto: '',
-      sceltaFatta: !!r.cliente, commessaFatta: !!esistente || !!r.idCommessa,
+      sceltaFatta: !!r.cliente, commessaFatta: !!esistente || !!r.idCommessa || !!r.idTicket,
       oreLavoro: C.num(r.oreLavoro), oreExtra: C.num(r.oreExtra), oreViaggio: C.num(r.oreViaggio),
       extraAperto: C.num(r.oreExtra) > 0, tariffaToccata: !!esistente, nuovoCliente: false,
     };
@@ -1079,10 +1870,10 @@
       data: h('input', { type: 'date', value: r.data }),
       ricerca: h('input', { type: 'search', placeholder: 'Scrivi il nome', 'aria-label': 'Cerca il cliente' }),
       nuovaCommessa: h('input', { type: 'text', placeholder: 'Come la chiami tu' }),
-      km: h('input', { type: 'text', inputmode: 'decimal', value: r.km !== '' && r.km !== null && r.km !== undefined && (esistente || C.num(r.km)) ? numeroCampo(r.km) : '' }),
-      tariffa: h('input', { type: 'text', inputmode: 'decimal', value: r.tariffa ? numeroCampo(r.tariffa) : '' }),
+      km: h('input', { type: 'text', inputmode: 'decimal', value: r.km !== '' && r.km !== null && r.km !== undefined && (esistente || C.num(r.km)) ? R.numeroCampo(r.km) : '' }),
+      tariffa: h('input', { type: 'text', inputmode: 'decimal', value: r.tariffa ? R.numeroCampo(r.tariffa) : '' }),
       descrizione: h('textarea', { rows: 5 }),
-      spese: h('input', { type: 'text', inputmode: 'decimal', value: C.num(r.spese) ? numeroCampo(r.spese) : '' }),
+      spese: h('input', { type: 'text', inputmode: 'decimal', value: C.num(r.spese) ? R.numeroCampo(r.spese) : '' }),
       noteSpese: h('input', { type: 'text', value: r.noteSpese || '' }),
       luogo: h('input', { type: 'text', value: r.luogo || '' }),
       ticket: h('input', { type: 'text', value: r.ticket || '' }),
@@ -1094,7 +1885,7 @@
     const clienteScelto = () => (m.idCliente && cliente(m.idCliente)) || null;
     const regoleAttuali = () => C.regoleDi(clienteScelto(), S.ana.gruppi, S.ana.impostazioni, commessa(m.idCommessa));
     // Il codice che avrà una commessa nuova: si vede subito, come vuole lo studio.
-    const codiceNuovo = () => C.prossimoCodiceCommessa(S.ana.commesse.map(x => x.id), new Date(v.data.value || Date.now()).getFullYear());
+    const codiceNuovo = () => prossimoCodiceCommessa(new Date(v.data.value || Date.now()).getFullYear());
     const sottoCliente = c => (c && c.tariffaFissa !== null && c.tariffaFissa !== undefined) ? 'Tariffa fissa ' + C.numero(c.tariffaFissa) + ' €/h' : 'Tariffa libera';
 
     const zonaPerChi = h('div', { class: 'fila', style: { display: 'flex', flexDirection: 'column', gap: '10px' } });
@@ -1106,12 +1897,18 @@
     const campoDescrizione = h('div');
     let luogoAperto = !!r.luogo;
     let notaAperta = !!r.noteInterne;
+    // Fase 6 (§3.9): gli strumenti usati, chiusi in una riga come la nota; dal ticket di tipo Verifica già aperti.
+    const conStrumenti = puo('mezzi') && !eEsterno();
+    const strumentiScelti = (r.strumenti || []).map(s => ({ idAttrezzatura: s.idAttrezzatura, confermato: !!s.confermato, nome: s.nome, codice: s.codice, scadeAllora: s.scadeAllora, statoAllora: s.statoAllora }));
+    let strumentiAperti = strumentiScelti.length > 0 || !!p.verifica;
+    let catalogo = null;
+    const zonaStrumenti = h('div', { class: 'fila', style: { display: 'flex', flexDirection: 'column', gap: '10px' } });
 
     /** Il prezzo della commessa scelta (o l'ultima tariffa del cliente), se la tariffa non l'ha scritta la persona. */
     function proponiTariffa() {
       if (m.tariffaToccata) return;
       const proposta = C.tariffaProposta(clienteScelto(), S.rapportini, commessa(m.idCommessa));
-      v.tariffa.value = proposta ? numeroCampo(proposta) : '';
+      v.tariffa.value = proposta ? R.numeroCampo(proposta) : '';
     }
 
     function scegliCliente(c, nuovo) {
@@ -1125,7 +1922,7 @@
       delete errori.cliente;
       if (!m.tariffaToccata) {
         const proposta = C.tariffaProposta(c, S.rapportini, null);
-        v.tariffa.value = proposta ? numeroCampo(proposta) : '';
+        v.tariffa.value = proposta ? R.numeroCampo(proposta) : '';
       }
       disegnaPerChi();
       disegnaKm();
@@ -1150,7 +1947,7 @@
         aggiungi(zonaPerChi, [h('label', { class: 'cerca' }, icona('cerca', 18), v.ricerca)]);
         const testo = v.ricerca.value.trim();
         if (testo) {
-          const trovati = S.ana.clienti.filter(c => C.normalizza([c.nome].concat(c.alias || []).join(' ')).indexOf(C.normalizza(testo)) >= 0)
+          const trovati = clientiAttivi().filter(c => C.normalizza([c.nome].concat(c.alias || []).join(' ')).indexOf(C.normalizza(testo)) >= 0)
             .sort((a, b) => a.nome.localeCompare(b.nome, 'it')).slice(0, 6);
           trovati.forEach(c => aggiungi(zonaPerChi, [h('button', { type: 'button', class: 'scelta-card', onclick: () => scegliCliente(c) },
             iniziali(c.nome, true), h('span', { class: 'testi' }, h('b', null, c.nome), h('span', null, sottoCliente(c))))]));
@@ -1165,7 +1962,7 @@
       aggiungi(zonaPerChi, [h('div', { class: 'scelta-card scelta' }, iniziali(m.cliente, true),
         h('span', { class: 'testi' }, h('b', null, m.cliente), h('span', null, m.idCliente ? sottoCliente(clienteScelto()) : 'Cliente nuovo · tariffa libera')),
         h('button', { type: 'button', class: 'btn collegamento', onclick: () => { m.sceltaFatta = false; disegnaPerChi(); } }, 'Cambia'))]);
-      const aperte = m.idCliente ? S.ana.commesse.filter(x => x.idCliente === m.idCliente && (x.stato === 'APERTA' || x.id === m.idCommessa)) : [];
+      const aperte = m.idCliente ? S.ana.commesse.filter(x => x.idCliente === m.idCliente && !x.modello && ((x.stato === 'APERTA' && !x.archiviata) || x.id === m.idCommessa)) : [];
       const pill = (testo, scelta, fn) => h('button', { type: 'button', class: 'pillola' + (scelta ? ' scelta' : ''), onclick: fn }, testo);
       aggiungi(zonaPerChi, [h('div', { class: 'etichetta' }, 'Commessa'),
         h('div', { class: 'pillole' },
@@ -1209,11 +2006,13 @@
           ultimi !== null ? h('button', { type: 'button', class: 'pillola', onclick: () => impostaKm(ultimi) }, 'Ultima volta · ' + C.numero(ultimi) + ' km') : null,
           h('button', { type: 'button', class: 'pillola', onclick: () => impostaKm(0) }, 'Senza auto'))]);
     }
-    function impostaKm(n) { v.km.value = numeroCampo(n); if (errori.km) { delete errori.km; disegnaKm(); } aggiornaConto(); }
+    function impostaKm(n) { v.km.value = R.numeroCampo(n); if (errori.km) { delete errori.km; disegnaKm(); } aggiornaConto(); }
 
     function disegnaTariffa() {
       const regole = regoleAttuali();
       svuota(zonaTariffa);
+      // Senza il permesso dei soldi la tariffa non si vede: la mette il server (l'ultima del cliente).
+      if (!soldi()) return;
       if (regole.tariffaFissa !== null) {
         aggiungi(zonaTariffa, [h('div', { class: 'riga-stepper' }, h('span', { class: 'nome' }, h('b', null, 'Tariffa fissa ' + (m.cliente || ''))),
           h('span', { style: { fontSize: '18px', fontWeight: '800' } }, C.numero(regole.tariffaFissa) + ' €/h'))]);
@@ -1239,7 +2038,97 @@
           !notaAperta ? h('button', { type: 'button', class: 'pillola', onclick: () => { notaAperta = true; disegnaAltro(); v.noteInterne.focus(); } }, '+ Una nota per te') : null) : null,
         luogoAperto ? campo('Luogo', v.luogo) : null,
         ticket ? campo('Ticket', v.ticket) : null,
-        notaAperta ? campo('Nota per te, non va al cliente', v.noteInterne) : null]);
+        notaAperta ? campo('Nota per te, non va al cliente', v.noteInterne) : null,
+        conStrumenti ? (strumentiAperti ? zonaStrumenti : h('div', { class: 'pillole' }, h('button', { type: 'button', class: 'pillola', onclick: () => { strumentiAperti = true; disegnaAltro(); disegnaStrumenti(); } }, '+ Strumenti usati'))) : null]);
+    }
+
+    /**
+     * Gli strumenti usati (fase6.md §3.8, §3.9): i miei strumenti come schede con lo stato della taratura alla data del
+     * rapportino (ricalcolato dalla data, come il telefono senza rete), "Come l'ultima volta qui", "Altro strumento".
+     * Non conforme, al laboratorio, guasto: spento, il tocco dice perché. Scaduto: si usa solo confermando (con
+     * TARATURA_BLOCCO = "blocco" non si sceglie), e la conferma resta scritta nel rapportino.
+     */
+    const statoAllaData = s => {
+      const prea = Number(S.ana.impostazioni.TARATURA_PREAVVISO_GIORNI) || 30;
+      if (s.ultimaTaratura !== undefined || s.controllo !== undefined) return window.WisperRegolePersone.statoTaratura({ controllo: s.controllo, ultima: s.ultimaTaratura || null, fuoriUso: s.fuoriUso, inLaboratorio: s.stato === 'laboratorio' }, v.data.value || C.oggiIso(), prea) || s.taratura || null;
+      return s.taratura || null;
+    };
+    function disegnaStrumenti() {
+      const P6 = window.WisperRegolePersone;
+      const miei = S.ana.mieiStrumenti || [];
+      const blocco = (S.io && S.io.interfaccia && S.io.interfaccia.taraturaBlocco) || 'avviso';
+      const scelto = id => strumentiScelti.find(s => String(s.idAttrezzatura) === String(id));
+      const altri = strumentiScelti.filter(s => !miei.some(x => String(x.id) === String(s.idAttrezzatura)));
+      const chip = s => {
+        const t = statoAllaData(s);
+        const sc = P6.sceltaStrumento(Object.assign({}, s, { taratura: t }), blocco);
+        const si = scelto(s.id);
+        return h('button', { type: 'button', class: 'chip-str' + (!sc.si && !si ? ' spento' : ''), 'aria-pressed': si ? 'true' : 'false', title: sc.si ? '' : sc.motivo,
+          onclick: () => tocca(s, t, sc) }, h('span', null, (s.codice ? s.codice + ' · ' : '') + s.nome),
+        t ? h('span', { class: 'pill p-' + P6.coloreTaratura(t) }, t.parola + (si && si.confermato ? ' · confermato' : '')) : null);
+      };
+      const ultime = P6.comeUltimaVolta(S.rapportini, m.idCliente, v.luogo.value, r.id || r.idLocale);
+      const nomeUltimo = id => { for (const x of S.rapportini) { const u = (x.strumenti || []).find(y => String(y.idAttrezzatura) === String(id)); if (u) return u.nome; } return ''; };
+      aggiungi(svuota(zonaStrumenti), [h('div', { class: 'etichetta' }, 'Strumenti usati'),
+        miei.length || altri.length ? h('div', { class: 'strumenti-scelta' }, miei.map(chip), altri.map(a => h('button', { type: 'button', class: 'chip-str', 'aria-pressed': 'true', onclick: () => { strumentiScelti.splice(strumentiScelti.indexOf(a), 1); disegnaStrumenti(); } },
+          h('span', null, (a.codice ? a.codice + ' · ' : '') + (a.nome || 'Strumento')), a.statoAllora ? h('span', { class: 'pill p-' + P6.statoAllora(a).colore }, P6.statoAllora(a).parola) : null))) : null,
+        h('div', { class: 'pillole' },
+          ultime.length && ultime.some(id => !scelto(id)) ? h('button', { type: 'button', class: 'pillola', onclick: () => usaUltime(ultime) }, 'Come l\'ultima volta qui: ' + ultime.map(nomeUltimo).filter(Boolean).join(', ')) : null,
+          h('button', { type: 'button', class: 'pillola', onclick: altroStrumento }, icona('cerca', 16, 2.4), 'Altro strumento'))]);
+    }
+    async function tocca(s, t, sc) {
+      const i = strumentiScelti.findIndex(x => String(x.idAttrezzatura) === String(s.id));
+      if (i >= 0) { strumentiScelti.splice(i, 1); disegnaStrumenti(); return; }
+      if (!sc.si) { avviso(sc.motivo, true); return; }
+      let confermato = false;
+      if (sc.conferma) {
+        confermato = await new Promise(risolvi => {
+          let detto = false;
+          const rispondi = x => { if (!detto) { detto = true; risolvi(x); } };
+          let chiudiC;
+          chiudiC = finestra({ titolo: sc.titolo, fuoco: false, allaChiusura: () => rispondi(false), corpo: h('p', { class: 'testo-forte' }, sc.frase),
+            pulsanti: [h('button', { type: 'button', class: 'btn testo grande', onclick: () => { rispondi(true); chiudiC(); } }, 'Lo uso lo stesso'), 'spazio',
+              h('button', { type: 'button', class: 'btn giallo grande', onclick: () => { rispondi(false); chiudiC(); } }, 'Scegli un altro strumento')] });
+        });
+        if (!confermato) return;
+      }
+      strumentiScelti.push({ idAttrezzatura: s.id, confermato, nome: s.nome, codice: s.codice, statoAllora: t ? (t.stato === 'in_scadenza' ? 'valida' : t.stato) : '' });
+      disegnaStrumenti();
+    }
+    async function leggiCatalogo() {
+      if (!catalogo) catalogo = ((await Rete.get('/server/attrezzature')).attrezzature || []).filter(a => a.controllo || a.categoria === 'strumento');
+      return catalogo;
+    }
+    async function usaUltime(ids) {
+      const tutti = await lavora('Leggo gli strumenti', leggiCatalogo);
+      if (!tutti) return;
+      for (const id of ids) {
+        if (strumentiScelti.some(x => String(x.idAttrezzatura) === String(id))) continue;
+        const s = (S.ana.mieiStrumenti || []).find(x => String(x.id) === String(id)) || tutti.find(x => String(x.id) === String(id));
+        if (!s) continue;
+        const t = statoAllaData(s);
+        await tocca(s, t, window.WisperRegolePersone.sceltaStrumento(Object.assign({}, s, { taratura: t }), (S.io.interfaccia || {}).taraturaBlocco || 'avviso'));
+      }
+    }
+    async function altroStrumento() {
+      const tutti = await lavora('Leggo gli strumenti', leggiCatalogo);
+      if (!tutti) return;
+      const cerca1 = h('input', { type: 'search', placeholder: 'Codice, nome o matricola', 'aria-label': 'Cerca lo strumento' });
+      const elenco = h('div', { class: 'scheda righe' });
+      let chiudiA;
+      const disegnaE = () => {
+        const t = C.normalizza(cerca1.value);
+        const l = tutti.filter(a => !t || C.normalizza([a.codice, a.nome, a.matricola, a.marca, a.modello].join(' ')).indexOf(t) >= 0).slice(0, 12);
+        aggiungi(svuota(elenco), l.length ? l.map(a => {
+          const sc = window.WisperRegolePersone.sceltaStrumento(a, (S.io.interfaccia || {}).taraturaBlocco || 'avviso');
+          return riga({ sinistra: h('span', { class: 'codice' }, a.codice), titolo: a.nome, sotto: [a.matricola ? 'matr. ' + a.matricola : '', a.statoVisto].filter(Boolean).join(' · '),
+            destra: a.taratura ? h('span', { class: 'pill p-' + window.WisperRegolePersone.coloreTaratura(a.taratura) }, a.taratura.parola) : null,
+            classe: sc.si ? '' : 'non-conta', onclick: () => { if (!sc.si) { avviso(sc.motivo, true); return; } chiudiA(); tocca(a, a.taratura, sc); } });
+        }) : [h('p', { class: 'vuoto sinistra' }, 'Nessuno strumento con questa ricerca.')]);
+      };
+      cerca1.addEventListener('input', disegnaE);
+      disegnaE();
+      chiudiA = finestra({ titolo: 'Altro strumento', corpo: [h('label', { class: 'cerca' }, icona('cerca', 18), cerca1), elenco], pulsanti: ['spazio', h('button', { type: 'button', class: 'btn grande', onclick: () => chiudiA() }, 'Chiudi')] });
     }
 
     function leggiModulo() {
@@ -1262,8 +2151,11 @@
         km: C.num(v.km.value),
         spese: C.num(v.spese.value),
         noteSpese: v.noteSpese.value.trim(),
-        tariffa: leggiCampo(v.tariffa.value),
+        tariffa: R.leggiCampo(v.tariffa.value),
         noteInterne: v.noteInterne.value.trim(),
+        ...(r.idTicket && !esistente ? { idTicket: r.idTicket } : {}),
+        // Fase 6: l'elenco intero degli strumenti (il server congela lo stato della taratura di quel giorno).
+        ...(conStrumenti ? { strumenti: strumentiScelti.map(s => ({ idAttrezzatura: s.idAttrezzatura, confermato: !!s.confermato })) } : {}),
       };
     }
 
@@ -1290,7 +2182,7 @@
         if (t && C.numONull(t) === null) e[k] = 'Non è un numero';
       });
       if (dati.oreLavoro + dati.oreExtra + dati.oreViaggio <= 0) e.oreLavoro = 'Mancano le ore';
-      if (regoleAttuali().tariffaFissa === null && !(dati.tariffa > 0) && !e.tariffa) e.tariffa = 'Scrivi la tariffa';
+      if (soldi() && regoleAttuali().tariffaFissa === null && !(dati.tariffa > 0) && !e.tariffa) e.tariffa = 'Scrivi la tariffa';
       return e;
     }
 
@@ -1309,21 +2201,27 @@
         return;
       }
       const nuovaAnagrafica = !dati.idCliente || (dati.commessa && !dati.idCommessa);
-      const ris = await lavora('Salvo il rapportino', () => Rete.post('/foglio/salvaRapportino', { rapportino: dati }));
+      const ris = await lavora('Salvo il rapportino', () => Rete.post('/server/salvaRapportino', { rapportino: dati }));
       if (!ris) return;
       accogli([ris.rapportino]);
       if (nuovaAnagrafica) await ricaricaAnagrafiche().catch(() => null);
       chiudi();
-      avviso('Salvato: ' + ris.rapportino.id + ' · ' + C.euro(ris.rapportino.totale));
+      avviso('Salvato: ' + ris.rapportino.id + (soldi() ? ' · ' + C.euro(ris.rapportino.totale) : ''));
+      // Fase 5: un rapportino del ticket chiede "Il lavoro è finito?" (il ticket si rilegge col rapportino nuovo).
+      if (ris.rapportino.idTicket && !esistente) { Ticket.daRileggere(); Ticket.lavoroFinito(ris.rapportino); if (W.percorso().indexOf('ticket') === 0) { ridisegna(); if (Ticket.M.tk) Ticket.apriPannello(ris.rapportino.idTicket); return; } }
       S.aperto = ris.rapportino.id || ris.rapportino.idLocale;
       ridisegna();
     }
 
     disegnaPerChi(); disegnaOre(); disegnaKm(); disegnaTariffa(); disegnaAltro(); disegnaDescrizione(); aggiornaConto();
+    if (conStrumenti && strumentiAperti) disegnaStrumenti();
+    // La data cambia lo stato della taratura (uno strumento che scade oggi domani è scaduto).
+    v.data.addEventListener('change', () => { if (conStrumenti && strumentiAperti) disegnaStrumenti(); });
     const corpo = h('div', { class: 'modulo' },
-      h('div', { class: 'col' }, campo('Data', v.data), h('h3', null, 'Per chi'), zonaPerChi, h('h3', null, 'Ore e strada'),
+      h('div', { class: 'col' }, r.numeroTicket || r.idTicket ? h('div', { class: 'pillole-testa' }, h('span', { class: 'pill p-grigio' }, icona('chiaveInglese', 14, 2.2), 'Ticket ' + (r.numeroTicket || esistente && esistente.numeroTicket || ''))) : null,
+        campo('Data', v.data), h('h3', null, 'Per chi'), zonaPerChi, h('h3', null, 'Ore e strada'),
         zonaOre, zonaKm, zonaTariffa),
-      h('div', { class: 'col' }, h('h3', null, 'Il lavoro'), campoDescrizione, zonaAltro, h('h3', null, 'Il conto'), zonaConto));
+      h('div', { class: 'col' }, h('h3', null, 'Il lavoro'), campoDescrizione, zonaAltro, soldi() ? h('h3', null, 'Il conto') : null, soldi() ? zonaConto : null));
     const chiudi = finestra({
       titolo: esistente ? 'Modifica ' + (r.id || 'il rapportino') : 'Nuovo rapportino', larghezza: 'larga', corpo, fuoco: false,
       pulsanti: ['spazio', h('button', { type: 'button', class: 'btn testo grande', onclick: () => chiudi() }, 'Annulla'),
@@ -1332,581 +2230,158 @@
     if (!m.sceltaFatta) setTimeout(() => v.ricerca.focus(), 40);
   }
 
-  // ======================================================================= COMMESSE
-
-  function vistaCommesse(pagina) {
-    const f = S.filtriCommesse;
-    const area = h('div', { class: 'sezione' });
-    const conta = st => S.ana.commesse.filter(m => !st || m.stato === st).length;
-    aggiungi(pagina, [
-      h('div', { class: 'testata' }, h('h1', { class: 'spazio' }, 'Commesse'),
-        h('button', { type: 'button', class: 'btn giallo', onclick: () => moduloCommessa(null) }, 'Nuova commessa')),
-      h('div', { class: 'filtri' },
-        cerca(f.testo, 'Codice, commessa, cliente', x => { f.testo = x; tabellaCommesse(area); }),
-        segmenti([['APERTA', h('span', null, 'Aperte', h('span', { class: 'conta' }, conta('APERTA')))],
-          ['SOSPESA', h('span', null, 'Sospese', h('span', { class: 'conta' }, conta('SOSPESA')))],
-          ['CHIUSA', h('span', null, 'Chiuse', h('span', { class: 'conta' }, conta('CHIUSA')))],
-          ['', h('span', null, 'Tutte', h('span', { class: 'conta' }, conta('')))]], f.stato, x => { f.stato = x; disegnaPagina(); }),
-        f.cliente ? h('span', { class: 'filtro-attivo' }, (cliente(f.cliente) || { nome: f.cliente }).nome,
-          h('button', { type: 'button', 'aria-label': 'Togli il filtro', onclick: () => { f.cliente = ''; disegnaPagina(); } }, icona('chiudi', 14, 2.6))) : null),
-      area]);
-    tabellaCommesse(area);
-  }
-
-  function tabellaCommesse(area) {
-    svuota(area);
-    const f = S.filtriCommesse;
-    const testo = C.normalizza(f.testo);
-    const tutte = S.ana.commesse.filter(m => {
-      if (f.cliente && m.idCliente !== f.cliente) return false;
-      if (testo) {
-        const c = cliente(m.idCliente);
-        if (C.normalizza([m.id, m.descrizione, c ? c.nome : '', m.indirizzo].join(' ')).indexOf(testo) < 0) return false;
-      }
-      return true;
-    });
-    const mostrate = tutte.filter(m => !f.stato || m.stato === f.stato).sort((a, b) => (a.id < b.id ? 1 : -1));
-    // Come in Pleya, ma detto: quante ce ne sono che il filtro nasconde.
-    const nascoste = tutte.length - mostrate.length;
-    if (!mostrate.length) {
-      aggiungi(area, [h('p', { class: 'vuoto' }, 'Nessuna commessa.')]);
-    } else {
-      const tab = h('div', { class: 'tab' }, h('div', { class: 'r testa colonne-com' }, h('span', null, 'Codice'), h('span', null, 'Commessa'), h('span', null, 'Stato'),
-        h('span', null, 'Ore'), h('span', { class: 'n' }, 'Costo'), h('span', { class: 'n' }, 'Valore atteso'), h('span', { class: 'n' }, 'Margine')));
-      mostrate.forEach(m => {
-        const c = cliente(m.idCliente);
-        const k = C.cruscotto(m, S.rapportini, S.ana.impostazioni, null, cliente(m.idCliente));
-        aggiungi(tab, [h('div', { class: 'r colonne-com cliccabile', role: 'button', tabindex: '0', onclick: () => { location.hash = '#commesse/' + encodeURIComponent(m.id); } },
-          h('span', null, h('span', { class: 'codice' }, m.id)),
-          h('span', { class: 'doppia' }, h('span', null, m.descrizione, k.livelloOre === 'sforato' ? h('span', { class: 'pallino', title: 'Oltre le ore a budget' }) : null), h('span', null, c ? c.nome : m.idCliente)),
-          h('span', null, stato(m.stato)),
-          h('span', { class: 'doppia' }, h('span', { class: 'num' }, C.numero(k.ore) + (k.budgetOre ? ' di ' + C.numero(k.budgetOre) : '') + ' h'),
-            k.budgetOre ? h('span', null, h('span', { class: 'barra sottile', style: { marginTop: '6px' } }, h('i', { class: k.livelloOre, style: { width: Math.min(100, Math.round(k.percOre * 100)) + '%' } }))) : null),
-          h('span', { class: 'n' }, k.costo.lavoroNoto ? C.euro(k.costo.totale) : '—'),
-          h('span', { class: 'n' }, C.euro(k.valoreAtteso)),
-          h('span', { class: 'n forte' }, k.costo.lavoroNoto ? C.euro(k.margine) : '—'))]);
-      });
-      aggiungi(area, [tab]);
-    }
-    if (nascoste) {
-      aggiungi(area, [h('div', { class: 'secondario' }, (nascoste === 1 ? 'Una commessa è nascosta dal filtro. ' : nascoste + ' commesse sono nascoste dal filtro. '),
-        h('button', { type: 'button', class: 'btn collegamento', onclick: () => { f.stato = ''; disegnaPagina(); } }, 'Mostrale'))]);
-    }
-  }
-
-  function vistaCommessa(pagina, id) {
-    const m = commessa(id);
-    if (!m) { aggiungi(pagina, [h('p', { class: 'vuoto' }, 'Commessa ' + id + ' non trovata.')]); return; }
-    const c = cliente(m.idCliente);
-    const k = C.cruscotto(m, S.rapportini, S.ana.impostazioni, null, c);
-    const area = h('div', { class: 'sezione' });
-
-    const azioni = [];
-    if (m.stato === 'APERTA') {
-      azioni.push(h('button', { type: 'button', class: 'btn', onclick: () => statoCommessa(m, 'SOSPESA') }, 'Sospendi'));
-      azioni.push(h('button', { type: 'button', class: 'btn', onclick: () => statoCommessa(m, 'CHIUSA') }, 'Chiudi'));
-    } else {
-      azioni.push(h('button', { type: 'button', class: 'btn', onclick: () => statoCommessa(m, 'APERTA') }, 'Riapri'));
-    }
-    azioni.push(h('button', { type: 'button', class: 'btn giallo', onclick: () => moduloCommessa(m) }, 'Modifica'));
-
-    aggiungi(pagina, [
-      h('div', { class: 'testata' }, tondo('indietro', 'Torna alle commesse', () => { location.hash = '#commesse'; }),
-        h('div', { class: 'titoli' },
-          h('div', { style: { display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' } }, h('span', { class: 'codice' }, m.id), h('h1', null, m.descrizione), stato(m.stato, true)),
-          h('span', { class: 'sotto-titolo' }, [c ? c.nome : m.idCliente, m.indirizzo,
-            m.inizio ? 'dal ' + C.data(m.inizio) + (m.finePrevista ? ' al ' + C.data(m.finePrevista) : '') : ''].filter(Boolean).join(' · '))),
-        azioni),
-      segmenti([['panoramica', 'Panoramica'], ['rapportini', 'Rapportini · ' + k.totali.n], ['costi', 'Costi'], ['dafatturare', 'Da fatturare'], ['documenti', 'Documenti']],
-        S.schedaCommessa, x => { S.schedaCommessa = x; disegnaPagina(); }),
-      area]);
-
-    if (S.schedaCommessa === 'rapportini') {
-      aggiungi(area, [h('div', { class: 'testata' }, h('span', { class: 'spazio' }),
-        h('button', { type: 'button', class: 'btn giallo', onclick: () => moduloRapportino(null, { idCliente: m.idCliente, idCommessa: m.id }) }, 'Nuovo rapportino'))]);
-      aggiungi(area, [tabellaSemplice(C.ordina(k.rapportini, 'data', -1))]);
-    } else if (S.schedaCommessa === 'costi') {
-      costiCommessa(area, m, k);
-    } else if (S.schedaCommessa === 'dafatturare') {
-      const da = k.rapportini.filter(r => r.stato === 'FIRMATO' || r.stato === 'INVIATO');
-      const inBozza = k.rapportini.filter(r => r.stato === 'BOZZA');
-      aggiungi(area, [h('div', { class: 'tre-colonne' },
-        riquadro('Pronto da fatturare', C.euro(k.prontoDaFatturare), da.length ? nRapportini(da.length) + ' firmati o inviati' : 'niente'),
-        riquadro('Da far firmare', C.euro(k.inBozza), inBozza.length ? nRapportini(inBozza.length) : 'nessuno'),
-        riquadro('Già fatturato', C.euro(k.fatturato), null))]);
-      if (da.length) {
-        aggiungi(area, [h('div', { class: 'testata' }, h('span', { class: 'spazio' }),
-          h('button', { type: 'button', class: 'btn', onclick: () => cambiaStato(da, 'FATTURATO') }, 'Segna fatturati'),
-          h('button', { type: 'button', class: 'btn giallo', onclick: () => preparaInvio(da) }, 'Prepara riepilogo'))]);
-        aggiungi(area, [tabellaSemplice(C.ordina(da, 'data', 1))]);
-      } else {
-        aggiungi(area, [h('p', { class: 'vuoto' }, 'Niente da fatturare.')]);
-      }
-    } else if (S.schedaCommessa === 'documenti') {
-      documentiCommessa(area, m);
-    } else {
-      panoramicaCommessa(area, m, k);
-    }
-  }
-
   /** I rapportini di una commessa: la stessa tabella, senza gruppi. */
-  function tabellaSemplice(lista) {
+  function tabellaRapportini(lista) {
     if (!lista.length) return h('p', { class: 'vuoto' }, 'Ancora nessun rapportino.');
-    const tab = h('div', { class: 'tab' }, h('div', { class: 'r testa colonne-rap-semplici' }, h('span', null, 'Data · N°'), h('span', null, 'Cliente'),
-      h('span', null, 'Lavoro svolto'), h('span', { class: 'n' }, 'Ore'), h('span', { class: 'n' }, 'Km'), h('span', { class: 'n' }, 'Spese'), h('span', { class: 'n' }, 'Totale'), h('span', null, 'Stato')));
+    const colonne = colonneRapportini(false);
+    const tab = h('div', { class: 'tab' }, h('div', { class: 'r testa', style: { gridTemplateColumns: colonne } }, h('span', null, 'Data · N°'), h('span', null, 'Cliente'),
+      h('span', null, 'Lavoro svolto'), h('span', { class: 'n' }, 'Ore'), h('span', { class: 'n' }, 'Km'),
+      soldi() ? h('span', { class: 'n' }, 'Spese') : null, soldi() ? h('span', { class: 'n' }, 'Totale') : null, h('span', null, 'Stato')));
     lista.forEach(r => {
       const chiave = r.id || r.idLocale;
-      aggiungi(tab, [h('div', { class: 'r colonne-rap-semplici cliccabile' + (S.aperto === chiave ? ' scelta' : ''), role: 'button', tabindex: '0', 'data-chiave': chiave, onclick: () => apriPannello(chiave) },
+      aggiungi(tab, [h('div', { class: 'r cliccabile' + (S.aperto === chiave ? ' scelta' : ''), style: { gridTemplateColumns: colonne }, role: 'button', tabindex: '0', 'data-chiave': chiave, onclick: () => apriPannello(chiave) },
         h('span', { class: 'doppia' }, h('span', { class: 'forte' }, dataBreve(r.data)), h('span', { class: 'num' }, r.id)),
         h('span', { class: 'doppia' }, h('span', null, r.cliente), h('span', null, r.idCommessa)),
         h('span', { class: 'taglia t2', title: r.descrizione }, r.descrizione),
         h('span', { class: 'n' }, C.numero(r.oreTotali)), h('span', { class: 'n' }, C.numero(r.km)),
-        h('span', { class: 'n t2' }, C.num(r.spese) ? C.euro(r.spese) : ''), h('span', { class: 'n forte' }, C.euro(r.totale)), h('span', null, stato(r.stato)))]);
+        soldi() ? h('span', { class: 'n t2' }, C.num(r.spese) ? C.euro(r.spese) : '') : null, soldi() ? h('span', { class: 'n forte' }, C.euro(r.totale)) : null, statoRapportino(r))]);
     });
     const t = C.totali(lista);
-    aggiungi(tab, [h('div', { class: 'r piede colonne-rap-semplici' }, h('span', { style: { gridColumn: 'span 3' } }, 'Totale · ' + nRapportini(t.n)),
-      h('span', { class: 'n' }, C.numero(t.ore)), h('span', { class: 'n' }, C.numero(t.km)), h('span', { class: 'n' }, C.euro(t.spese)), h('span', { class: 'n' }, C.euro(t.totale)), h('span'))]);
+    aggiungi(tab, [h('div', { class: 'r piede', style: { gridTemplateColumns: colonne } }, h('span', { style: { gridColumn: 'span 3' } }, 'Totale · ' + nRapportini(t.n)),
+      h('span', { class: 'n' }, C.numero(t.ore)), h('span', { class: 'n' }, C.numero(t.km)),
+      soldi() ? h('span', { class: 'n' }, C.euro(t.spese)) : null, soldi() ? h('span', { class: 'n' }, C.euro(t.totale)) : null, h('span'))]);
     return tab;
   }
 
-  function panoramicaCommessa(area, m, k) {
-    const perc = x => x === null ? '' : Math.round(x * 100) + '%';
-    const b = k.previsto;
-    if (b && (b.ore !== null || b.euro !== null || b.prezzo !== null)) {
-      const voce = (che, quanto, nota) => h('div', { class: 'voce-budget' }, h('span', { class: 'piccolo' }, che), h('b', null, quanto), nota ? h('span', { class: 'piccolo' }, nota) : null);
-      const tratt = '—';
-      aggiungi(area, [h('div', { class: 'scheda' }, h('h2', null, 'Budget'),
-        h('div', { class: 'griglia-budget' },
-          voce('Ore previste', b.ore !== null ? C.ore(b.ore) : tratt, k.ore ? C.ore(k.ore) + ' fatte' : null),
-          voce('Prezzo orario', b.prezzo !== null ? C.numero(b.prezzo) + ' €/h' : tratt),
-          voce('Costo orario', b.costo !== null ? C.numero(b.costo) + ' €/h' : tratt),
-          voce('Margine orario', b.margineOrario !== null ? C.numero(b.margineOrario) + ' €/h' : tratt),
-          voce('Budget', b.euro !== null ? C.euro(b.euro) : tratt),
-          voce('Costo previsto', b.costoPrevisto !== null ? C.euro(b.costoPrevisto) : tratt),
-          voce('Margine previsto', b.margine !== null ? C.euro(b.margine) : tratt, b.euro && b.margine !== null ? perc(b.margine / b.euro) : null)))]);
-    }
-    aggiungi(area, [h('div', { class: 'tre-colonne' },
-      riquadro('Valore atteso', C.euro(k.valoreAtteso), (m.budgetEuro || (k.previsto && k.previsto.euro)) && (m.budgetEuro || k.previsto.euro) >= k.valoreMaturato ? 'il budget della commessa' : 'quello che i rapportini hanno maturato'),
-      riquadro('Costo sostenuto', k.costo.lavoroNoto ? C.euro(k.costo.totale) : '—',
-        k.costo.lavoroNoto ? (k.valoreAtteso > 0 ? perc(k.costo.totale / k.valoreAtteso) + ' del valore atteso' : '') : 'manca il tuo costo orario in Impostazioni'),
-      riquadro('Margine atteso', k.costo.lavoroNoto ? C.euro(k.margine) : '—',
-        k.costo.lavoroNoto && k.percMargine !== null ? perc(k.percMargine) + (k.margine < 0 ? ': costa più di quanto vale'
-          : k.margineDaBudget ? ', dopo ' + C.euro(k.costoAtteso) + ' di costi previsti' : ', dopo i costi') : '', null, k.costo.lavoroNoto && k.margine < 0))]);
+  // ======================================================================= i moduli
 
-    const tot = k.fatturato + k.prontoDaFatturare + k.inBozza;
-    const pezzo = (x, classe) => tot > 0 && x > 0 ? h('i', { class: classe, style: { width: (x / tot * 100) + '%' } }) : null;
-    aggiungi(area, [h('div', { class: 'scheda' },
-      h('h2', null, 'Fatturazione'),
-      h('div', { class: 'barra' }, pezzo(k.fatturato, 'fatturato'), pezzo(k.prontoDaFatturare, 'pronto'), pezzo(k.inBozza, 'bozza')),
-      h('div', { class: 'legenda' },
-        h('span', null, h('i', { style: { background: 'var(--testo)' } }), 'Fatturato ' + C.euro(k.fatturato)),
-        h('span', null, h('i', { style: { background: 'var(--firmato)' } }), 'Pronto da fatturare ' + C.euro(k.prontoDaFatturare)),
-        h('span', null, h('i', { style: { background: 'var(--bordo-campo)' } }), 'Da far firmare ' + C.euro(k.inBozza))))]);
+  /**
+   * Quello che le pagine dei moduli (clienti.js, commesse.js, amministrazione.js)
+   * usano di qui: lo stato, la rete, i rapportini, la navigazione.
+   */
+  const W = {
+    S, C, D, R, B, Rete, Api, Visita,
+    puo, soldi, perm, cliente, commessa, utente, clientiAttivi, attivi, somma, nRapportini, dataBreve, meseMinuscolo,
+    mostra, ridisegna, disegnaPagina, vai, vaiA, vaiARapportini, ricaricaAnagrafiche, caricaDashboard, accogli,
+    riquadro, apriPannello, moduloRapportino, preparaInvio, cambiaStato, tabellaRapportini, apriFile,
+    iniziaVisita, cercaAggiornamenti, riavvia, statoAggiornamenti, mostraLicenza, esci, filtriCommesse, titolare,
+    // fase 2
+    senzaPermesso, nomeFile, prossimoCodiceCommessa, attivitaLette, scriviConConferma,
+    // fase 3
+    vistaRapportini, esporta, rileggiRapportini,
+    // fase 5
+    percorso,
+    // fase 6
+    bloccoStrumenti,
+    // fase 8
+    leggiTutto, richiudiLato, rileggiIo: async () => { await caricaIo(); disegnaLato(); },
+  };
+  const Clienti = window.WisperClienti(W);
+  const Commesse = window.WisperCommesse(W);
+  const Amministrazione = window.WisperAmministrazione(W);
+  const Preventivi = window.WisperPreventivi(W);
+  const Attivita = window.WisperAttivita(W);
+  const Ore = window.WisperOre(W);
+  const Spese = window.WisperSpese(W);
+  // Fase 4: Fatturazione e Banche e scadenze (si chiamano a vicenda: segnare un incasso da una fattura).
+  const Fatture = window.WisperFatture(W);
+  const Banche = window.WisperBanche(W);
+  W.Fatture = Fatture;
+  W.Banche = Banche;
+  // Fase 5: Documenti e Ticket e assistenza usano calendario, ore, spese e la scheda dell'impianto.
+  W.Attivita = Attivita;
+  W.Ore = Ore;
+  W.Spese = Spese;
+  W.Clienti = Clienti;
+  const Archivio = window.WisperArchivio(W);
+  const Ticket = window.WisperTicket(W);
+  W.Archivio = Archivio;
+  W.Ticket = Ticket;
+  // Fase 6: Persone (che porta gli aiuti comuni W.F6), Mezzi e attrezzature, Collaboratori esterni.
+  W.eEsterno = eEsterno;
+  const Persone = window.WisperPersone(W);
+  W.Persone = Persone;
+  const Mezzi = window.WisperMezzi(W);
+  W.Mezzi = Mezzi;
+  const Collaboratori = window.WisperCollaboratori(W);
+  W.Collaboratori = Collaboratori;
+  // Fase 7: WhatsApp e comunicazioni, Portale clienti (le altre pagine usano il Messaggio, Pubblica e Togli dal portale).
+  W.disegnaCampanella = () => disegnaCampanella();
+  const Comunicazioni = window.WisperComunicazioni(W);
+  W.Comunicazioni = Comunicazioni;
+  const Portale = window.WisperPortale(W);
+  W.Portale = Portale;
+  // Fase 8: la Dashboard coi riquadri e i tetti, Integrazioni e il calendario in altre app.
+  W.rigaDashboard = rigaDashboard;
+  const Dash8 = window.WisperDashboard8(W);
+  W.Dash8 = Dash8;
+  const Integrazioni = window.WisperIntegrazioni(W);
+  W.Integrazioni = Integrazioni;
 
-    const ore = h('div', { class: 'scheda' }, h('h2', null, 'Ore'));
-    const corpoOre = h('div', { style: { display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '12px' } });
-    if (k.budgetOre) {
-      aggiungi(corpoOre, [h('div', { style: { display: 'flex', justifyContent: 'space-between', fontWeight: '700' } },
-        h('span', null, C.numero(k.ore) + ' ore di ' + C.numero(k.budgetOre) + ' a budget'),
-        h('span', { class: k.livelloOre === 'sforato' ? 'stato pericolo' : k.livelloOre === 'attenzione' ? 'stato avviso' : 'tenue' },
-          k.livelloOre === 'sforato' ? 'Oltre il budget' : k.livelloOre === 'attenzione' ? 'Vicina al budget' : perc(k.percOre))),
-      h('div', { class: 'barra' }, h('i', { class: k.livelloOre, style: { width: Math.min(100, Math.round(k.percOre * 100)) + '%' } }))]);
-    } else {
-      aggiungi(corpoOre, [h('div', { style: { fontWeight: '700' } }, C.numero(k.ore) + ' ore')]);
-    }
-    if (k.percTempo !== null) {
-      aggiungi(corpoOre, [h('div', { class: 'secondario' }, 'Tempo ' + perc(k.percTempo) + (k.giorniMancanti >= 0 ? ' · mancano ' + k.giorniMancanti + ' giorni' : ' · scaduta da ' + (-k.giorniMancanti) + ' giorni')),
-        h('div', { class: 'barra sottile' }, h('i', { class: 'bozza', style: { width: Math.round(k.percTempo * 100) + '%' } }))]);
-    }
-    const massimo = Math.max(1, ...k.settimane.map(s => s.ore));
-    aggiungi(corpoOre, [h('div', { class: 'etichetta', style: { marginTop: '8px' } }, 'Settimana per settimana'),
-      h('div', { class: 'settimane' }, k.settimane.map(s => h('div', { class: 'settimana', title: 'Settimana del ' + C.data(s.inizio) + ': ' + C.numero(s.ore) + ' ore' },
-        h('span', null, s.ore ? C.numero(s.ore) : ''),
-        h('div', { class: 'colonna' + (s.ore ? ' piena' : ''), style: { height: Math.round(s.ore / massimo * 80) + 'px' } }),
-        h('span', null, dataBreve(s.inizio)))))]);
-    aggiungi(ore, [corpoOre]);
-    aggiungi(area, [ore]);
-    if (m.note) aggiungi(area, [h('div', { class: 'scheda' }, h('h2', null, 'Note'), h('div', { class: 'lavoro' }, m.note))]);
+  /**
+   * L'esportazione per Excel (§12.13, §13.9, §14.14): il server prepara il CSV coi
+   * filtri dell'elenco, il programma lo salva con la finestra Salva di Windows.
+   */
+  async function esporta(cosa, filtri) {
+    const ris = await lavora('Preparo il file', () => Rete.post('/server/esporta', Object.assign({ cosa }, filtri || {})));
+    if (!ris) return;
+    if (S.esempio) { avviso('Nella visita non si salva niente'); return; }
+    const fatto = await lavora('Salvo il file', () => Api.post('/locale/salva-file', { nome: ris.nome || R.nomeEsportazione(cosa), testo: ris.csv || ris.testo || '', base64: ris.base64 || '' }));
+    if (fatto && fatto.ok) avviso('Salvato in ' + fatto.percorso);
   }
 
-  function costiCommessa(area, m, k) {
-    const imp = S.ana.impostazioni;
-    const conSpese = k.rapportini.filter(r => C.num(r.spese) > 0 || (r.foto || []).length);
-    aggiungi(area, [h('div', { class: 'scheda' },
-      h('h2', null, 'Il costo · ' + (k.costo.lavoroNoto ? C.euro(k.costo.totale) : 'incompleto')),
-      h('div', { class: 'conto', style: { borderTop: 'none' } },
-        rigaConto('Il tuo lavoro · ' + C.numero(k.ore) + ' ore × ' + (imp.COSTO_ORARIO ? C.euro(imp.COSTO_ORARIO) : 'costo orario da mettere in Impostazioni'), k.costo.lavoroNoto ? C.euro(k.costo.lavoro) : '—'),
-        rigaConto('Auto · ' + C.numero(k.totali.km) + ' km al costo ACI', C.euro(k.costo.auto)),
-        rigaConto('Spese · ' + nRapportini(conSpese.length), C.euro(k.costo.spese))))]);
-    if (conSpese.length) {
-      const tab = h('div', { class: 'tab' }, h('div', { class: 'r testa', style: { gridTemplateColumns: '70px 130px minmax(0,1fr) 240px 110px' } },
-        h('span', null, 'Data'), h('span', null, 'N°'), h('span', null, 'Di cosa'), h('span', null, 'Scontrini'), h('span', { class: 'n' }, 'Importo')));
-      conSpese.forEach(r => aggiungi(tab, [h('div', { class: 'r cliccabile', style: { gridTemplateColumns: '70px 130px minmax(0,1fr) 240px 110px', minHeight: '72px' }, onclick: () => apriPannello(r.id) },
-        h('span', { class: 'forte' }, dataBreve(r.data)), h('span', { class: 't2' }, r.id), h('span', { class: 'taglia' }, r.noteSpese || '—'),
-        h('span', { class: 'miniature' }, (r.foto || []).slice(0, 3).map(f => h('a', { href: f.url, target: '_blank', style: { width: '52px', height: '52px' }, onclick: e => e.stopPropagation() }, h('img', { src: '/file/' + f.id, alt: '' })))),
-        h('span', { class: 'n forte' }, C.euro(r.spese)))]));
-      aggiungi(area, [tab]);
-    }
+  /** Dopo un'approvazione i rapportini cambiano (statoApprovazione): si rileggono. */
+  async function rileggiRapportini() {
+    if (!(puo('rapportini') || puo('fatturazione') || puo('commesse'))) return;
+    try {
+      const r = await Rete.get('/server/rapportini');
+      S.rapportini = r.rapportini || [];
+    } catch (e) { /* alla prossima lettura */ }
   }
 
-  async function documentiCommessa(area, m) {
-    const lista = h('div', null, h('p', { class: 'vuoto' }, 'Leggo la cartella…'));
-    let cartella = m.cartella;
-    const leggiCartella = async () => {
-      const ris = await Rete.get('/foglio/documenti?idCommessa=' + encodeURIComponent(m.id)).catch(e => { avviso(e.message, true); return null; });
-      svuota(lista);
-      if (!ris) return;
-      cartella = ris.cartella;
-      if (!ris.documenti.length) { aggiungi(lista, [h('p', { class: 'vuoto' }, 'Nessun documento.')]); return; }
-      const tab = h('div', { class: 'tab' }, h('div', { class: 'r testa', style: { gridTemplateColumns: 'minmax(0,1fr) 200px' } }, h('span', null, 'Documento'), h('span', null, 'Ultima modifica')));
-      ris.documenti.forEach(d => aggiungi(tab, [h('div', { class: 'r cliccabile', style: { gridTemplateColumns: 'minmax(0,1fr) 200px' }, onclick: () => window.open(d.url, '_blank') },
-        h('span', { class: 'forte taglia' }, d.nome), h('span', { class: 't2' }, C.dataOra(d.data)))]));
-      aggiungi(lista, [tab]);
-    };
-    aggiungi(area, [h('div', { class: 'testata' }, h('span', { class: 'spazio' }),
-      h('button', { type: 'button', class: 'btn', onclick: () => { if (cartella) window.open(cartella, '_blank'); } }, 'Apri la cartella su Drive'),
-      h('button', { type: 'button', class: 'btn giallo', onclick: async () => {
-        const scelto = await Rete.post('/locale/scegli-file', { filtro: 'tutti' }).catch(() => null);
-        if (!scelto || !scelto.ok) return;
-        const fatto = await lavora('Carico ' + scelto.nome, () => Rete.post('/foglio/caricaFile', {
-          tipo: 'documento', idCommessa: m.id, nome: scelto.nome, mime: scelto.mime, base64: scelto.base64,
-        }));
-        if (fatto) { avviso('Caricato ' + scelto.nome); leggiCartella(); }
-      } }, 'Carica un documento')),
-    lista]);
-    leggiCartella();
+  // ======================================================================= promemoria
+
+  /*
+   * I promemoria delle proprie attività (fase2.md §5): un avviso nel programma e una
+   * notifica di Windows, finché Wisper Ufficio è aperto. Le attività dei prossimi
+   * giorni si rileggono ogni cinque minuti; ogni mezzo minuto si guarda se ne scatta
+   * uno. Quelli già dati si ricordano (anche chiudendo e riaprendo il programma).
+   */
+  const CHIAVE_PROMEMORIA = 'wisper-promemoria-visti';
+  let attivitaMie = [];
+  function attivitaLette(lista) {
+    const idIo = S.io && S.io.utente && S.io.utente.id;
+    if (!S.esempio) attivitaMie = (lista || []).filter(a => String(a.assegnataA) === String(idIo));
   }
-
-  async function statoCommessa(m, st) {
-    const frasi = {
-      SOSPESA: ['Sospendere la commessa?', 'Non si propone più nei rapportini nuovi finché non la riapri.'],
-      CHIUSA: ['Chiudere la commessa?', 'Il lavoro è finito: non si propone più nei rapportini nuovi. Ore, costi e rapportini restano, e si può riaprire.'],
-      APERTA: ['Riaprire la commessa?', 'Torna fra quelle proposte nei rapportini.'],
-    };
-    const ok = await conferma(frasi[st][0], frasi[st][1], st === 'APERTA' ? 'Riapri' : st === 'CHIUSA' ? 'Chiudi' : 'Sospendi');
-    if (!ok) return;
-    const ris = await lavora('Aggiorno la commessa', () => Rete.post('/foglio/aggiornaCommessa', { id: m.id, campi: { stato: st } }));
-    if (ris) { Object.assign(m, ris.commessa); avviso('Commessa ' + ris.commessa.stato.toLowerCase()); ridisegna(); }
+  function promemoriaVisti() {
+    try { return JSON.parse(localStorage.getItem(CHIAVE_PROMEMORIA) || '{}') || {}; } catch (e) { return {}; }
   }
-
-  function moduloCommessa(esistente) {
-    const m = esistente || {};
-    const anno = new Date().getFullYear();
-    // Il codice si vede subito: 26ST + il numero dopo l'ultimo. Si può cambiare prima di salvare.
-    const prossimo = C.prossimoCodiceCommessa(S.ana.commesse.map(x => x.id), anno);
-    const clientiOrdinati = S.ana.clienti.slice().sort((a, b) => a.nome.localeCompare(b.nome, 'it'));
-    const v = {
-      cliente: h('select', null, [h('option', { value: '' }, 'Scegli il cliente')].concat(clientiOrdinati.map(c => h('option', { value: c.id, selected: c.id === (m.idCliente || S.filtriCommesse.cliente) }, c.nome)))),
-      descrizione: h('input', { type: 'text', value: m.descrizione || '' }),
-      codice: h('input', { type: 'text', value: esistente ? m.id : prossimo, disabled: !!esistente }),
-      indirizzo: h('input', { type: 'text', value: m.indirizzo || '' }),
-      inizio: h('input', { type: 'date', value: m.inizio || (esistente ? '' : C.oggiIso()) }),
-      fine: h('input', { type: 'date', value: m.finePrevista || '' }),
-      budgetOre: h('input', { type: 'text', inputmode: 'decimal', value: m.budgetOre ? numeroCampo(m.budgetOre) : '' }),
-      prezzoOrario: h('input', { type: 'text', inputmode: 'decimal', value: m.prezzoOrario ? numeroCampo(m.prezzoOrario) : '' }),
-      budgetEuro: h('input', { type: 'text', inputmode: 'decimal', value: m.budgetEuro ? numeroCampo(m.budgetEuro) : '' }),
-      costoOrario: h('input', { type: 'text', inputmode: 'decimal', value: m.costoOrario ? numeroCampo(m.costoOrario) : '' }),
-      // Vuoto = quello delle impostazioni, che si vede in grigio.
-      euroKm: h('input', { type: 'text', inputmode: 'decimal', value: m.euroKm !== null && m.euroKm !== undefined ? numeroCampo(m.euroKm) : '', placeholder: C.numero(C.num(S.ana.impostazioni.EURO_KM)) }),
-      note: h('textarea', { rows: 3 }),
-    };
-    v.note.value = m.note || '';
-
-    // Il budget come lo scrive lo studio: ore previste × prezzo orario = budget; il costo
-    // orario dà il margine. Ne bastano due fra ore, prezzo e budget: il terzo si calcola.
-    // Un cliente a tariffa fissa (Elettrodinamica) ha già prezzo e, se scritto, costo:
-    // qui si vedono ma non si cambiano.
-    const sottoBudget = h('div', { class: 'secondario' });
-    const clienteSel = () => cliente(v.cliente.value) || null;
-    const fisso = (c, k) => c && c[k] !== null && c[k] !== undefined && c[k] !== '';
-    const aggiornaFissi = () => {
-      const c = clienteSel();
-      v.prezzoOrario.disabled = fisso(c, 'tariffaFissa');
-      if (v.prezzoOrario.disabled) v.prezzoOrario.value = numeroCampo(c.tariffaFissa);
-      v.costoOrario.disabled = fisso(c, 'costoFisso');
-      if (v.costoOrario.disabled) v.costoOrario.value = numeroCampo(c.costoFisso);
-      const costoImp = C.numONull(S.ana.impostazioni.COSTO_ORARIO);
-      v.costoOrario.placeholder = costoImp !== null ? C.numero(costoImp) : '';
-    };
-    const ricalcola = cambiato => {
-      const ore = leggiCampo(v.budgetOre.value);
-      const prezzo = leggiCampo(v.prezzoOrario.value);
-      const euro = leggiCampo(v.budgetEuro.value);
-      if ((cambiato === 'ore' || cambiato === 'prezzo') && ore && prezzo) v.budgetEuro.value = numeroCampo(Math.round(ore * prezzo * 100) / 100);
-      if (cambiato === 'euro' && euro && prezzo) v.budgetOre.value = numeroCampo(Math.round(euro / prezzo * 10) / 10);
-      if (cambiato === 'prezzo' && !ore && euro && prezzo) v.budgetOre.value = numeroCampo(Math.round(euro / prezzo * 10) / 10);
-      const b = C.budgetDi({ budgetOre: leggiCampo(v.budgetOre.value), budgetEuro: leggiCampo(v.budgetEuro.value),
-        prezzoOrario: leggiCampo(v.prezzoOrario.value), costoOrario: leggiCampo(v.costoOrario.value) }, clienteSel(), S.ana.impostazioni);
-      svuota(sottoBudget);
-      const pezzi = [];
-      if (b.margineOrario !== null) pezzi.push('Margine ' + C.numero(b.margineOrario) + ' €/h');
-      if (b.costoPrevisto !== null) pezzi.push('costo previsto ' + C.euro(b.costoPrevisto));
-      if (b.margine !== null) pezzi.push('margine previsto ' + C.euro(b.margine));
-      sottoBudget.textContent = pezzi.join(' · ');
-      sottoBudget.classList.toggle('errore', b.margineOrario !== null && b.margineOrario < 0);
-    };
-    v.budgetOre.addEventListener('input', () => ricalcola('ore'));
-    v.prezzoOrario.addEventListener('input', () => ricalcola('prezzo'));
-    v.budgetEuro.addEventListener('input', () => ricalcola('euro'));
-    v.costoOrario.addEventListener('input', () => ricalcola('costo'));
-    v.cliente.addEventListener('change', () => { aggiornaFissi(); ricalcola('prezzo'); });
-    aggiornaFissi();
-    ricalcola('');
-
-    let chiudi;
-    const salva = async () => {
-      if (!v.cliente.value) { v.cliente.focus(); avviso('Scegli il cliente', true); return; }
-      if (!v.descrizione.value.trim()) { v.descrizione.focus(); avviso('Scrivi come si chiama la commessa', true); return; }
-      const campi = {
-        idCliente: v.cliente.value, descrizione: v.descrizione.value.trim(), indirizzo: v.indirizzo.value.trim(),
-        inizio: v.inizio.value, finePrevista: v.fine.value,
-        budgetOre: leggiCampo(v.budgetOre.value), budgetEuro: leggiCampo(v.budgetEuro.value), euroKm: leggiCampo(v.euroKm.value), note: v.note.value.trim(),
-      };
-      // Prezzo e costo fissi del cliente restano sulla sua scheda, non si copiano sulla commessa.
-      if (!v.prezzoOrario.disabled) campi.prezzoOrario = leggiCampo(v.prezzoOrario.value);
-      if (!v.costoOrario.disabled) campi.costoOrario = leggiCampo(v.costoOrario.value);
-      const codice = v.codice.value.trim().toUpperCase() === prossimo ? '' : v.codice.value.trim().toUpperCase();
-      const ris = await lavora('Salvo la commessa', () => esistente
-        ? Rete.post('/foglio/aggiornaCommessa', { id: m.id, campi })
-        : Rete.post('/foglio/creaCommessa', Object.assign({ id: codice }, campi)));
-      if (!ris) return;
-      await ricaricaAnagrafiche().catch(() => null);
-      chiudi();
-      if (!esistente && ris.commessa.giaEsisteva) avviso('C\'era già: ' + ris.commessa.id, true);
-      else avviso((esistente ? 'Salvata ' : 'Creata ') + ris.commessa.id);
-      location.hash = '#commesse/' + encodeURIComponent(ris.commessa.id);
-      mostra();
-    };
-    chiudi = finestra({
-      titolo: esistente ? 'Modifica ' + m.id : 'Nuova commessa',
-      corpo: [
-        h('div', { class: 'riga-campi' }, campo('Cliente', v.cliente), campo('Codice', v.codice)),
-        campo('Come si chiama', v.descrizione),
-        h('div', { class: 'riga-campi' }, campo('Indirizzo del cantiere', v.indirizzo), campo('Rimborso km (€/km)', v.euroKm)),
-        h('div', { class: 'riga-campi' }, campo('Inizio', v.inizio), campo('Fine prevista', v.fine)),
-        h('div', { class: 'etichetta' }, 'Budget'),
-        h('div', { class: 'riga-campi' }, campo('Ore previste', v.budgetOre), campo('Prezzo orario (€/h)', v.prezzoOrario)),
-        h('div', { class: 'riga-campi' }, campo('Budget (€)', v.budgetEuro), campo('Costo orario (€/h)', v.costoOrario)),
-        sottoBudget,
-        campo('Note', v.note)],
-      pulsanti: ['spazio', h('button', { type: 'button', class: 'btn testo grande', onclick: () => chiudi() }, 'Annulla'),
-        h('button', { type: 'button', class: 'btn giallo grande', onclick: salva }, 'Salva')],
+  function segnaVisto(chiave) {
+    const visti = promemoriaVisti();
+    visti[chiave] = Date.now();
+    // Si tengono solo quelli degli ultimi tre giorni.
+    Object.keys(visti).forEach(k => { if (Date.now() - visti[k] > 3 * 86400000) delete visti[k]; });
+    try { localStorage.setItem(CHIAVE_PROMEMORIA, JSON.stringify(visti)); } catch (e) { /* li ridice, pazienza */ }
+  }
+  async function rileggiPromemoria() {
+    if (S.esempio || !S.entrato || !S.caricato || !puo('attivita') || !(S.io && S.io.utente)) return;
+    try {
+      const r = await Api.get('/server/attivita?da=' + RA.piuGiorni(C.oggiIso(), -1) + '&a=' + RA.piuGiorni(C.oggiIso(), 2) + '&assegnata=' + encodeURIComponent(S.io.utente.id));
+      attivitaLette((r.attivita || []).map(RA.normalizzaAttivita));
+    } catch (e) { /* senza rete si riprova alla prossima */ }
+  }
+  function controllaPromemoria() {
+    if (S.esempio || !S.entrato || Visita.attiva || !(S.io && S.io.utente)) return;
+    RA.promemoriaDaDare(attivitaMie, new Date(), S.io.utente.id, promemoriaVisti()).forEach(({ a, chiave }) => {
+      segnaVisto(chiave);
+      const quando = RA.conOrario(a) && a.inizio && !a.tuttoIlGiorno ? (RA.giornoDi(a) === C.oggiIso() ? 'oggi alle ' : RA.quandoBreve(RA.giornoDi(a)) + ' alle ') + RA.ora(a.inizio) : 'per ' + RA.quandoBreve(RA.giornoDi(a));
+      const testo = a.titolo + ' · ' + quando;
+      avviso('Promemoria: ' + testo, false, 12000, { testo: 'Apri', fn: () => vai('#attivita/' + encodeURIComponent(a.id)) });
+      Api.post('/locale/notifica', { titolo: 'Wisper · promemoria', testo }).catch(() => null);
     });
   }
-
-  // ======================================================================= CLIENTI
-
-  function vistaClienti(pagina) {
-    const f = S.filtriClienti;
-    const area = h('div', { class: 'sezione' });
-    const disegna = () => {
-      svuota(area);
-      const testo = C.normalizza(f.testo);
-      const lista = S.ana.clienti.filter(c => (!testo || C.normalizza([c.id, c.nome, (c.alias || []).join(' '), c.email, c.partitaIva].join(' ')).indexOf(testo) >= 0))
-        .sort((a, b) => a.nome.localeCompare(b.nome, 'it'));
-      if (!lista.length) { aggiungi(area, [h('p', { class: 'vuoto' }, 'Nessun cliente.')]); return; }
-      const mese = meseDiOggi();
-      const tab = h('div', { class: 'tab' }, h('div', { class: 'r testa colonne-cli' }, h('span'), h('span', null, 'Cliente'), h('span', null, 'Tariffa'), h('span', null, 'Ultima usata'),
-        h('span', null, 'Email'), h('span', { class: 'n' }, 'Commesse'), h('span', { class: 'n' }, meseMinuscolo(mese))));
-      lista.forEach(c => {
-        const fissa = c.tariffaFissa !== null && c.tariffaFissa !== undefined;
-        const aperte = S.ana.commesse.filter(m => m.idCliente === c.id && m.stato === 'APERTA').length;
-        const delMese = C.totali(attivi().filter(r => r.idCliente === c.id && String(r.data).slice(0, 7) === mese));
-        aggiungi(tab, [h('div', { class: 'r colonne-cli cliccabile', role: 'button', tabindex: '0', onclick: () => moduloCliente(c) },
-          iniziali(c.nome, true),
-          h('span', { class: 'doppia' }, h('span', null, c.nome), (c.alias || []).length ? h('span', null, c.alias.join(', ')) : null),
-          h('span', { class: 't2' }, fissa ? C.numero(c.tariffaFissa) + ' €/h fissa' : 'libera'),
-          h('span', { class: 't2' }, !fissa && c.ultimaTariffa ? C.numero(c.ultimaTariffa) + ' €/h' : '—'),
-          h('span', { class: 'taglia t2' }, c.email || '—'),
-          h('span', { class: 'n' }, String(aperte)),
-          h('span', { class: 'n' }, delMese.n ? C.ore(delMese.ore) + ' · ' + C.euro(delMese.totale) : ''))]);
-      });
-      aggiungi(area, [tab]);
-    };
-    aggiungi(pagina, [
-      h('div', { class: 'testata' }, h('h1', { class: 'spazio' }, 'Clienti'),
-        h('button', { type: 'button', class: 'btn giallo', onclick: () => moduloCliente(null) }, 'Nuovo cliente')),
-      h('div', { class: 'filtri' },
-        cerca(f.testo, 'Nome, email, partita IVA', x => { f.testo = x; disegna(); })),
-      area]);
-    disegna();
-  }
-
-  function moduloCliente(esistente) {
-    const c = esistente || { alias: [] };
-    // Di solito il viaggio non si paga e i km sì: è così finché non si sceglie altro.
-    const scelte = { pagaViaggio: c.pagaViaggio === true ? 'SI' : 'NO', kmRimborsati: c.kmRimborsati === false ? 'NO' : 'SI' };
-    const v = {
-      nome: h('input', { type: 'text', value: c.nome || '' }),
-      email: h('input', { type: 'email', value: c.email || '' }),
-      telefono: h('input', { type: 'text', value: c.telefono || '' }),
-      indirizzo: h('input', { type: 'text', value: c.indirizzo || '' }),
-      partitaIva: h('input', { type: 'text', value: c.partitaIva || '' }),
-      alias: h('input', { type: 'text', value: (c.alias || []).join(', ') }),
-      tariffaFissa: h('input', { type: 'text', inputmode: 'decimal', value: c.tariffaFissa !== null && c.tariffaFissa !== undefined ? numeroCampo(c.tariffaFissa) : '' }),
-      costoFisso: h('input', { type: 'text', inputmode: 'decimal', value: c.costoFisso !== null && c.costoFisso !== undefined ? numeroCampo(c.costoFisso) : '' }),
-      ultimaTariffa: h('input', { type: 'text', inputmode: 'decimal', value: c.ultimaTariffa ? numeroCampo(c.ultimaTariffa) : '' }),
-      note: h('textarea', { rows: 2 }),
-    };
-    v.note.value = c.note || '';
-    const scegli = (chiave, voci) => {
-      const zona = h('div');
-      const disegna = () => aggiungi(svuota(zona), [segmenti(voci, scelte[chiave], x => { scelte[chiave] = x; disegna(); }, 'piccoli')]);
-      disegna();
-      return zona;
-    };
-    let chiudi;
-    const salva = async () => {
-      if (!v.nome.value.trim()) { v.nome.focus(); avviso('Scrivi il nome del cliente', true); return; }
-      const campi = {
-        nome: v.nome.value.trim(), email: v.email.value.trim(), telefono: v.telefono.value.trim(),
-        indirizzo: v.indirizzo.value.trim(), partitaIva: v.partitaIva.value.trim(),
-        alias: v.alias.value.split(',').map(s => s.trim()).filter(Boolean),
-        pagaViaggio: scelte.pagaViaggio === 'SI', kmRimborsati: scelte.kmRimborsati === 'SI',
-        tariffaFissa: leggiCampo(v.tariffaFissa.value), costoFisso: leggiCampo(v.costoFisso.value), ultimaTariffa: leggiCampo(v.ultimaTariffa.value), note: v.note.value.trim(),
-      };
-      const ris = await lavora('Salvo il cliente', async () => {
-        if (esistente) return Rete.post('/foglio/aggiornaCliente', { id: c.id, campi });
-        const nuovo = await Rete.post('/foglio/creaCliente', campi);
-        if (nuovo.cliente.giaEsisteva) return nuovo;
-        // creaCliente scrive l'anagrafica; il resto (viaggio, km, tariffe) con un aggiornamento.
-        return Rete.post('/foglio/aggiornaCliente', { id: nuovo.cliente.id, campi });
-      });
-      if (!ris) return;
-      await ricaricaAnagrafiche().catch(() => null);
-      chiudi();
-      avviso(ris.cliente && ris.cliente.giaEsisteva ? 'C\'era già: ' + ris.cliente.nome : 'Salvato ' + v.nome.value.trim());
-      ridisegna();
-    };
-    const siNo = [['SI', 'Sì'], ['NO', 'No']];
-    chiudi = finestra({
-      titolo: esistente ? c.nome : 'Nuovo cliente',
-      corpo: [
-        campo('Ragione sociale', v.nome),
-        h('div', { class: 'riga-campi' }, campo('Email', v.email), campo('Telefono', v.telefono)),
-        h('div', { class: 'riga-campi' }, campo('Indirizzo', v.indirizzo), campo('Partita IVA', v.partitaIva)),
-        campo('Altri nomi, separati da virgola', v.alias),
-        h('div', { class: 'riga-campi' }, campo('Tariffa fissa (€/h, vuota = libera)', v.tariffaFissa), campo('Ultima tariffa libera (€/h)', v.ultimaTariffa)),
-        h('div', { class: 'riga-campi' }, campo('Costo orario fisso (€/h, facoltativo)', v.costoFisso), h('span')),
-        h('div', { class: 'riga-campi' }, campo('Viaggio pagato', scegli('pagaViaggio', siNo)), campo('Km rimborsati', scegli('kmRimborsati', siNo))),
-        campo('Note', v.note)],
-      pulsanti: [
-        esistente ? h('button', { type: 'button', class: 'btn', onclick: () => { chiudi(); vaiARapportini({ mese: '', cliente: c.id }); } }, 'Vedi i rapportini') : null,
-        esistente ? h('button', { type: 'button', class: 'btn', onclick: () => { chiudi(); S.filtriCommesse = { testo: '', stato: '', cliente: c.id }; location.hash = '#commesse'; } }, 'Le commesse') : null,
-        'spazio', h('button', { type: 'button', class: 'btn testo grande', onclick: () => chiudi() }, 'Annulla'),
-        h('button', { type: 'button', class: 'btn giallo grande', onclick: salva }, 'Salva')].filter(Boolean),
-    });
-  }
-
-  // ======================================================================= IMPOSTAZIONI
-
-  function vistaImpostazioni(pagina) {
-    const imp = S.ana.impostazioni;
-    aggiungi(pagina, [h('div', { class: 'testata' }, h('h1', null, 'Impostazioni'))]);
-
-    // --- collegamento
-    const url = h('input', { type: 'text', placeholder: 'https://script.google.com/macros/s/…/exec' });
-    // Il codice salvato non si mostra mai, ma si vede che c'e': ••••••••a846, come sul telefono.
-    const codice = h('input', { type: 'password', placeholder: S.codiceSalvato ? '••••••••' + S.codiceFine : '' });
-    Api.get('/locale/stato').then(s => { url.value = s.url || ''; }).catch(() => null);
-    if (S.codiceRifiutato) setTimeout(() => codice.focus(), 0);
-    const statoCollegamento = S.codiceRifiutato ? 'Il foglio non accetta il codice salvato: scrivi quello nuovo'
-      : S.caricato ? 'Collegato · letto alle ' + (S.ultimaLettura ? S.ultimaLettura.toTimeString().slice(0, 5) : '') + (S.codiceSalvato ? ' · codice ••••' + S.codiceFine : '')
-      : 'Il foglio non risponde';
-    aggiungi(pagina, [h('div', { class: 'scheda' }, h('h2', null, S.configurato ? 'Il foglio' : 'Collega Wisper Ufficio al foglio'),
-      h('div', { class: 'fila' },
-        S.configurato ? h('div', { class: S.codiceRifiutato ? 'secondario errore' : 'secondario' }, statoCollegamento) : null,
-        campo('Indirizzo', url),
-        campo('Codice (resta cifrato su questo computer)', codice),
-        h('div', { style: { display: 'flex', gap: '10px', flexWrap: 'wrap' } },
-          // Giallo solo quando collegarsi è la cosa da fare: nelle altre schede "Salva" resta normale.
-          h('button', { type: 'button', class: S.configurato ? 'btn' : 'btn giallo', onclick: async () => {
-            const ok = await lavora('Provo il collegamento', () => Api.post('/locale/configura', { url: url.value.trim(), codice: codice.value.trim() }));
-            if (ok) { codice.value = ''; await carica(); if (S.caricato) avviso('Collegato'); }
-          } }, S.configurato ? 'Salva e prova' : 'Collega'),
-          // Il file che arriva per email quando dal telefono si tocca "Collega il computer".
-          h('button', { type: 'button', class: 'btn', onclick: async () => {
-            const ris = await lavora('Leggo il file', () => Api.post('/locale/collega-file'));
-            if (ris && ris.ok) { await carica(); if (S.caricato) avviso('Collegato al foglio. Ora puoi cancellare l\'email.'); }
-          } }, 'Usa il file dell\'email'),
-          S.cartellaPdf ? h('button', { type: 'button', class: 'btn', onclick: () => Api.post('/locale/cartella-pdf').catch(() => null) }, 'Apri la cartella dei PDF') : null)))]);
-
-    if (S.caricato) {
-      // --- dati dello studio
-      const campiImp = {};
-      const inputImp = (chiave, etichetta) => {
-        const valore = imp[chiave] === undefined || imp[chiave] === null ? '' : imp[chiave];
-        // I numeri alla italiana: 0,76 e non 0.76.
-        campiImp[chiave] = h('input', { type: 'text', value: typeof valore === 'number' ? numeroCampo(valore) : String(valore) });
-        return campo(etichetta, campiImp[chiave]);
-      };
-      const salvaImp = (chiavi, conferma) => async () => {
-        const valori = {};
-        chiavi.forEach(k => {
-          let x = campiImp[k].type === 'checkbox' ? (campiImp[k].checked ? 'SI' : 'NO') : campiImp[k].value.trim();
-          if (['EURO_KM', 'COSTO_ORARIO'].indexOf(k) >= 0 && x !== '') x = C.num(x);
-          valori[k] = x;
-        });
-        const ris = await lavora('Salvo', () => Rete.post('/foglio/salvaImpostazioni', { valori }));
-        if (ris) { S.ana.impostazioni = ris.impostazioni; avviso(conferma || 'Salvato'); }
-      };
-
-      aggiungi(pagina, [h('div', { class: 'scheda' }, h('h2', null, 'Lo studio'),
-        h('div', { class: 'fila' },
-          h('div', { class: 'riga-campi' }, inputImp('RAGIONE_SOCIALE', 'Ragione sociale'), inputImp('TECNICO', 'Chi compila')),
-          h('div', { class: 'riga-campi' }, inputImp('INDIRIZZO', 'Indirizzo'), inputImp('PARTITA_IVA', 'Partita IVA')),
-          h('div', { class: 'riga-campi' }, inputImp('EMAIL', 'Email per le risposte'), inputImp('TELEFONO', 'Telefono'), inputImp('PEC', 'PEC')),
-          h('div', null, h('button', { type: 'button', class: 'btn', onclick: salvaImp(['RAGIONE_SOCIALE', 'TECNICO', 'INDIRIZZO', 'PARTITA_IVA', 'EMAIL', 'TELEFONO', 'PEC']) }, 'Salva'))))]);
-
-      // --- firma del tecnico
-      const idFirma = D.idDaUrl(imp.FIRMA_TECNICO);
-      aggiungi(pagina, [h('div', { class: 'scheda' }, h('h2', null, 'La tua firma'),
-        h('div', { class: 'fila' },
-          idFirma ? h('img', { class: 'firma-tecnico', src: '/file/' + idFirma, alt: 'La tua firma' }) : h('div', { class: 'secondario' }, 'Non ancora caricata: sui rapportini resta lo spazio vuoto.'),
-          h('div', null, h('button', { type: 'button', class: 'btn', onclick: async () => {
-            const scelto = await Rete.post('/locale/scegli-file', { filtro: 'immagini' }).catch(() => null);
-            if (!scelto || !scelto.ok) return;
-            const ris = await lavora('Carico la firma', () => Rete.post('/foglio/caricaFile', { tipo: 'firmaTecnico', mime: scelto.mime, base64: scelto.base64 }));
-            if (ris) { await ricaricaAnagrafiche(); avviso('Firma caricata'); ridisegna(); }
-          } }, idFirma ? 'Cambia la firma' : 'Carica la firma'))))]);
-
-      // --- rimborsi, costi, numerazione
-      campiImp.TICKET_ATTIVO = h('input', { type: 'checkbox', checked: imp.TICKET_ATTIVO === 'SI' });
-      aggiungi(pagina, [h('div', { class: 'scheda' }, h('h2', null, 'Rimborso km e costi'),
-        h('div', { class: 'fila' },
-          h('div', { class: 'riga-campi' },
-            inputImp('EURO_KM', 'Rimborso km (€/km, tabella ACI)'),
-            inputImp('AUTO', 'Auto'),
-            inputImp('COSTO_ORARIO', 'Quanto ti costa un\'ora (€/h)')),
-          h('label', { class: 'spunta-campo' }, campiImp.TICKET_ATTIVO, 'Campo ticket nei rapportini'),
-          h('div', null, h('button', { type: 'button', class: 'btn', onclick: salvaImp(['EURO_KM', 'AUTO', 'COSTO_ORARIO', 'TICKET_ATTIVO'],
-            'Salvato. Vale per i rapportini nuovi: quelli già scritti tengono il rimborso con cui sono nati') }, 'Salva'))))]);
-    }
-
-    // --- l'app
-    let tema = 'auto';
-    try { tema = localStorage.getItem('wisper-tema') || 'auto'; } catch (e) { /* senza memoria */ }
-    const zonaTema = h('div');
-    const disegnaTema = () => aggiungi(svuota(zonaTema), [segmenti([['auto', 'Automatico'], ['chiaro', 'Chiaro'], ['scuro', 'Scuro']], tema, x => {
-      tema = x;
-      try { localStorage.setItem('wisper-tema', x); } catch (e) { /* resta per questa volta */ }
-      document.documentElement.setAttribute('data-tema', x);
-      disegnaTema();
-    })]);
-    disegnaTema();
-    aggiungi(pagina, [h('div', { class: 'scheda' }, h('h2', null, 'L\'app'),
-      h('div', null,
-        h('div', { class: 'voce-imp' }, h('span', { class: 'testi' }, h('b', null, 'Tema')), zonaTema),
-        h('div', { class: 'voce-imp' }, h('span', { class: 'testi' }, h('b', null, 'Visita guidata'), h('span', null, 'Da capo, coi dati di esempio')),
-          h('button', { type: 'button', class: 'btn', onclick: () => iniziaVisita() }, 'Rifai la visita guidata')),
-        h('div', { class: 'voce-imp' }, h('span', { class: 'testi' }, h('b', null, 'Licenze'), h('span', null, 'Carattere Figtree, SIL OFL 1.1')),
-          h('button', { type: 'button', class: 'btn', onclick: mostraLicenza }, 'Leggi')),
-        S.versione ? h('div', { class: 'voce-imp' }, h('span', { class: 'testi' }, h('b', null, 'Versione ' + S.versione),
-          h('span', null, statoAggiornamenti())),
-          S.aggiornamento && S.aggiornamento.stato === 'pronto'
-            ? h('button', { type: 'button', class: 'btn giallo', onclick: riavvia }, 'Riavvia')
-            : S.aggiornamento && S.aggiornamento.attivi ? h('button', { type: 'button', class: 'btn', onclick: cercaAggiornamenti }, 'Cerca aggiornamenti') : null) : null))]);
-  }
+  setInterval(rileggiPromemoria, 5 * 60000);
+  setInterval(controllaPromemoria, 30000);
 
   function statoAggiornamenti() {
     const a = S.aggiornamento;
@@ -1924,42 +2399,87 @@
       pulsanti: ['spazio', h('button', { type: 'button', class: 'btn giallo grande', onclick: () => chiudi() }, 'Chiudi')] });
   }
 
-  /** I gruppi e le loro regole: Elettrodinamica a 30 €/h fissi, i privati a tariffa libera. */
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return;
+    if (chiudiMenu()) return;
+    const veli = document.querySelectorAll('.velo');
+    if (veli.length) { const v = veli[veli.length - 1]; if (v.chiudi) v.chiudi(); else v.remove(); } else if (S.aperto) chiudiPannello();
+    else if (document.querySelector('.pannello-f6')) Persone.chiudiPannello();
+    else if (document.querySelector('.pannello-com')) Comunicazioni.chiudiPannello();
+    else if (document.querySelector('.pannello-integrazione')) Integrazioni.chiudiPannello();
+    else if (document.querySelector('.pannello-controllo')) W.Sistema8.chiudiPannello();
+    else if (document.querySelector('.pannello-file')) Portale.chiudiPannello();
+    else if (document.querySelector('.pannello-doc')) Archivio.chiudiPannello();
+    else if (document.querySelector('.pannello-ticket')) Ticket.chiudiPannello();
+    else if (document.querySelector('.pannello-contratto')) Ticket.chiudiContrattoPannello();
+    else if (document.querySelector('.pannello-fattura')) { const x = document.querySelector('.pannello-fattura [aria-label="Chiudi"]'); if (x) x.click(); }
+  });
+
   // ======================================================================= visita guidata
 
+  // La visita è cambiata con la fase 1 (barra laterale, Dashboard): si ripropone una volta.
+  const CHIAVE_VISITA = 'wisper-visita-2';
+
   function visitaVista() {
-    try { return localStorage.getItem('wisper-visita') === '1'; } catch (e) { return true; }
+    try { return localStorage.getItem(CHIAVE_VISITA) === '1'; } catch (e) { return true; }
+  }
+
+  /** Preventivi e attività tenuti in memoria dalle loro pagine: si rileggono dalla sorgente giusta (vera o di esempio). */
+  function svuotaFase2() {
+    Object.assign(Preventivi.M, { lista: null, listino: null, aperti: {}, bozza: null, chiave: '' });
+    Object.assign(Attivita.M, { aperte: null, periodo: null, da: '', a: '' });
+    // fase 3: ore, timer, approvazioni, spese
+    Object.assign(Ore.M, { ore: null, chiave: '', approvare: null, stat: null, timer: null, attivita: null, aggiunte: {}, persona: null, segmento: 'ore' });
+    Object.assign(Spese.M, { spese: null, trasferte: null, rimborsi: null, veicoli: null, riep: null, persona: '', segmento: 'spese' });
+    // fase 4: fatture, banche e scadenze
+    Fatture.daRileggere();
+    Object.assign(Fatture.M, { scelte: new Map(), cliente: null, aperta: null, conti: null, preselezione: null });
+    Banche.daRileggere();
+    // fase 5
+    Archivio.daRileggere();
+    Ticket.daRileggere();
+    Object.assign(Archivio.M, { aperto: null, doc: null });
+    Object.assign(Ticket.M, { aperto: null, tk: null, contrattoAperto: null, contratto: null, miei: null });
+    // fase 8
+    Integrazioni.daRileggere();
+    Dash8.M.tutto = null;
   }
 
   function iniziaVisita() {
-    // Gira sui dati di esempio: si può rifare anche prima di collegare il foglio.
-    if (Visita.attiva) return;
+    // Gira sui dati di esempio, con i permessi veri di chi la fa: i passi che il suo ruolo non può fare si saltano.
+    if (Visita.attiva || !S.io) return;
+    const chi = { titolare: 'manuel', amministrazione: 'laura', collaboratore: 'marco', lettura: 'lettura' }[S.io.utente.ruolo] || 'manuel';
     Visita.inizia({
+      puo: serve => !serve || puo(serve[0], serve[1]),
       inizio: () => {
-        S.veri = { ana: S.ana, rapportini: S.rapportini, mese: S.mese, filtri: S.filtri };
-        S.esempio = Esempio.crea();
-        S.ana = S.esempio.ana;
-        S.rapportini = S.esempio.rapportini;
+        S.veri = { ana: S.ana, rapportini: S.rapportini, mese: S.mese, filtri: S.filtri, dash: S.dash, dashErrore: S.dashErrore, filtriCommesse: S.filtriCommesse, filtriSoggetti: S.filtriSoggetti };
+        S.esempio = Esempio.crea({ chi, permessi: perm() });
+        S.ana = normalizzaAna(Esempio.gestisci(S.esempio, 'GET', '/server/anagrafiche?archiviati=1'));
+        S.rapportini = Esempio.gestisci(S.esempio, 'GET', '/server/rapportini').rapportini;
+        S.dash = Esempio.gestisci(S.esempio, 'GET', '/server/dashboard');
+        S.dashErrore = '';
         S.mese = meseDiOggi();
-        S.filtri = { testo: '', mese: meseDiOggi(), quali: 'tutti', chi: '', cliente: '', commessa: '' };
+        S.filtri = filtriRapportini();
+        S.filtriCommesse = filtriCommesse();
+        svuotaFase2();
         document.querySelectorAll('.velo').forEach(x => x.remove());
-        aggiornaStatoFoglio();
-        if (location.hash !== '#finemese') location.hash = '#finemese'; else mostra();
+        vai('#dashboard');
       },
       fine: () => {
-        try { localStorage.setItem('wisper-visita', '1'); } catch (e) { /* la ripropone la prossima volta */ }
+        try { localStorage.setItem(CHIAVE_VISITA, '1'); } catch (e) { /* la ripropone la prossima volta */ }
         document.querySelectorAll('.velo').forEach(x => x.remove());
         chiudiMenu();
         S.esempio = null;
-        if (S.veri) { S.ana = S.veri.ana; S.rapportini = S.veri.rapportini; S.mese = S.veri.mese; S.filtri = S.veri.filtri; S.veri = null; }
-        aggiornaStatoFoglio();
-        if (location.hash !== '#finemese') location.hash = '#finemese'; else mostra();
-        carica(true);
+        if (S.veri) { Object.assign(S, S.veri); S.veri = null; }
+        svuotaFase2();
+        vai('#dashboard');
+        if (S.entrato) leggiTutto(true);
       },
     });
   }
 
   // ======================================================================= avvio
 
+  disegnaLato();
   carica();
 })();

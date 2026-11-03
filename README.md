@@ -1,7 +1,9 @@
 # Wisper
 
 Work reports for a technician who works alone: filled in on the phone at
-the client's, managed on the computer at the office, kept in a Google Sheet.
+the client's, managed on the computer at the office. Since version 1.0.0
+(3 November 2026) Wisper is the studio's whole management system and the data
+lives on a small server at home; up to 0.4.0 it was kept in a Google Sheet.
 
 It is built for one person, my father, a self-employed surveyor who does monthly
 reports for a few clients. Everything in it comes from a recorded conversation
@@ -11,6 +13,113 @@ projects (here *commesse*, the word my father uses) and the team's reports.
 
 Every version, with its date, the reason behind it and screenshots, is in the
 diary: [DIARIO.md](DIARIO.md) (in Italian).
+
+## Becoming the studio's management system
+
+My father wrote the specification of a complete management system for the studio
+(`docs/specifiche-stgm.md`, in Italian: 18 modules, from clients and jobs to quotes,
+invoices, people and a client portal). Wisper is growing into it phase by phase, on the
+`gestionale` branch, without losing anything it does today. The plan and the decisions
+are in `docs/gestionale/`; every phase has its entry in the diary. All nine phases were
+released together as version 1.0.0 on 3 November 2026, the evening the studio's data moved
+from the sheet to the server.
+
+Phase 1 (October 2026) replaces the Google Sheet with a small server on
+the home NAS (`server/`: Node.js 24 with its built-in SQLite, no npm dependencies, in
+Docker). It speaks the same protocol as the sheet script, so the phone and the office
+program changed little, but now everyone signs in with their own name and password, and
+the server decides what each role may see: a collaborator never receives rates, totals or
+margins. Both apps got a side menu, a Dashboard as the home page ("what needs doing now"),
+clients and suppliers with contacts and sites, jobs split into professional services with
+their value and progress, and an administration area with users, roles, numbering, an
+activity log and backups. The sheet stays: after the switch it receives a nightly copy of
+the data, and its script keeps forwarding old app versions to the server and sending email
+from the studio's Gmail (`apps-script/Ponte.gs`).
+
+Phase 2 adds quotes, tasks and the calendar. A quote is built from sections and items
+taken from the studio's price list; the client can tick optional items and pick one of
+several alternatives, and the server alone does the maths (fee, the engineers' pension
+contribution, VAT), checked against shared cases that the phone and the office program
+must match to the cent. The quote also lists what Italian law requires a professional's
+quote to state and flags what is missing before it is sent. Once sent, prices are frozen
+(a change means a new revision). An accepted quote becomes a job in one step, with its
+services, values and payment schedule. Tasks can be personal, for the team or
+unassigned, with checklists, attachments, reminders and safe recurrence; the calendar
+has day, week and month views, and the office program adds a weekly plan per person.
+
+Phase 3 adds hours, a timer, expenses and trips. The work report keeps its three steps;
+hours without a report have their own short form, and a one-tap timer lives on the server,
+so it survives closing the app. Collaborators' hours, reports, expenses and trips go to
+whoever approves them, with oddities flagged (13 hours in a day, an expense over 200 euro,
+no receipt) and a mandatory reason when something is rejected. An expense starts from the
+photo of the receipt and says plainly who it is for: the client, the studio, or the person.
+Trips compute the mileage refund from the vehicle and the year's ACI table. Offline, hours
+and expenses wait in the same on-disk queue as reports, and the server ignores a repeated
+send. The migration turned the expenses already written in reports into expense rows
+without touching the reports: a test reads a database from before with the phase 2 code
+and checks every report field, the CSV export and the Dashboard money to the cent.
+
+Phase 4 adds invoicing, banks and due dates. Wisper prepares the invoice (fee, the
+engineers' pension contribution inside the VAT base, VAT, withholding tax only for clients
+who must apply it, re-charged expenses outside VAT, the 2 euro stamp) and the program my
+father already uses issues it: Wisper hands over a field-by-field summary and an XML to
+complete, numbered BOZZA and named so nobody sends it; it never invents an invoice number,
+and sending to the tax exchange is marked "not connected". The issued XML (plain, signed
+.p7m or zipped) comes back into Wisper and is matched to its draft only after an explicit
+confirmation. A unique index in the database guarantees that a report, an instalment or an
+expense can never be invoiced twice. Until the accountant confirms the tax rules, every
+invoicing page says so. Banking is a hand-kept schedule: expected, recorded and verified
+amounts stay separate, and the projected balance turns red on the days it drops below a
+threshold.
+
+Phase 5 adds documents, tickets and maintenance. A document is either a file on the NAS or
+a link to where it already lives (OneDrive, SharePoint, Google Drive, a studio folder):
+nothing is copied. Documents have revisions, approvals, categories and due dates (for
+example the periodic earthing checks). A ticket is a service request on a client's
+installation; it reuses what exists instead of duplicating it: the visit is a calendar
+task, hours and expenses are the phase 3 ones, and it is closed with the usual signed work
+report, offline too. Closing it means choosing how it is invoiced, and it enters the
+invoicing list under the same unique index, so neither the ticket nor its reports can be
+invoiced twice. Maintenance contracts carry their fee and generate the scheduled visits.
+
+Phase 6 adds people, vehicles and equipment, and external collaborators: leave requests
+(offline too), the hourly cost with its history, measuring instruments whose calibration
+is always visible in the work report, and assignments to outside firms with their invoices
+counted in the job's cost.
+
+Phase 7 adds messages and a client portal. Wisper prepares WhatsApp messages from templates
+(appointment reminders, reports to sign, payment reminders) and opens the chat with the text
+ready; a person always presses send, and Wisper asks afterwards whether it went. Phone
+numbers written in any form become the right WhatsApp number with the same rules on server,
+phone and PC. The portal lets a client's contact sign in with an email code and see only what
+the studio published for their company: accept a quote choosing the optional items, sign a
+work report with a finger, download invoices and documents, open and follow service requests.
+It costs nothing to run: the page is a static file on Netlify, the data goes through a
+separate Google Apps Script (so the main sheet's script address never appears in a page
+clients see), and the NAS fetches the requests itself, so nothing is opened on the home
+router. Behind Google the client's IP address doesn't arrive, so neither the access log nor
+the signature evidence records it; there are no cookies either.
+
+Phase 8 closes the plan with integrations, settings and the final checks before the switch.
+An Integrations page lists every connection (Google gateway, portal, VAT number check, app
+updates, calendar feed, backups) with its state, last check, what leaves the NAS and its cost
+(all 0 €); a broken one shows in red with "Try now". The calendar can be added to Google or
+Outlook through a private address that phones read at home; reading it from outside goes
+through the portal script and is off by default. Search now looks inside files (PDF, Word,
+Excel, DXF). Clients and suppliers can be imported from a CSV or Excel file, everything can be
+exported as one ZIP (only at home), each person picks their dashboard tiles, and modules can
+be switched off. Backups can be encrypted, are checked automatically every 30 days (integrity,
+row counts, file hashes, the off-site copy's fingerprint) and a manual restore test is logged
+every 90 days. A checklist of 77 rows tracks the tests before the switch evening. Ten years of
+realistic fake data stay within the agreed times on the NAS (dashboard about 0.4 s, export of
+everything about 10 s).
+
+The office computer can sign in with the phone, the way WhatsApp links devices: the sign-in page
+shows a QR code, the phone (Menu › Connect a computer) scans it, asks for confirmation with the
+computer's name, and the computer is in. The code holds only a random id and the computer's
+public key; the server hands the access key and the Google address to the computer encrypted for
+that key (ECDH P-256, HKDF, AES-GCM), and only on the office network. The QR encoder is written
+by hand and checked with ZXing (`docs/gestionale/collega-qr.md`).
 
 ## What changed
 
@@ -201,6 +310,9 @@ email, access-log notices, "send it to me"). `Session.getEffectiveUser()` needs 
 `https://www.googleapis.com/auth/userinfo.email` scope; a project whose
 `appsscript.json` lists `oauthScopes` by hand without it fails with "Le autorizzazioni
 specificate non sono sufficienti". The script then asks Drive who owns the sheet.
+A hand-written `oauthScopes` list is best removed altogether: on the real sheet it also lacked
+`script.send_mail`, and every email failed. Without the list Google derives the scopes from the code; after
+changing `appsscript.json`, run `autorizza()` (tick "Select all") and deploy a new version.
 Run `autorizza()` from the editor after pasting a new version: Google asks for any
 missing permission, and the execution log says whether the owner's email can be read
 and how many emails are left for the day. It changes nothing in the sheet.

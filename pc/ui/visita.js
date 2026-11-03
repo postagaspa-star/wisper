@@ -8,21 +8,40 @@
  *
  * Gli elementi da illuminare hanno l'attributo data-visita="nome". Le pagine
  * chiamano Visita.azione("nome") quando l'azione è fatta davvero.
+ *
+ * Dalla fase 1 si parte dalla barra laterale e dalla Dashboard, poi i passi di
+ * prima. I passi che il ruolo di chi fa la visita non può fare (serve: modulo e
+ * livello) si saltano: un collaboratore non prepara riepiloghi.
  */
 (function (radice) {
   'use strict';
 
-  const PASSI = [
-    { bersaglio: 'da-fatturare', titolo: 'Da fatturare', frase: 'Qui vedi subito quanto c\'è da fatturare questo mese.' },
-    { bersaglio: 'prepara-riepilogo', titolo: 'Il riepilogo', frase: 'Una scheda per chi paga, coi suoi rapportini. Fai clic su Prepara riepilogo.', fai: true },
-    { bersaglio: 'invia-email', titolo: 'Invia', frase: 'Il PDF parte per email con un clic. È un esempio: non parte niente.', fai: true },
-    { bersaglio: 'segna-fatturati', titolo: 'Dopo la fattura', frase: 'Quando hai fatto la fattura, segnali qui.', fai: true },
-    { bersaglio: 'nav-rapportini', titolo: 'I rapportini', frase: 'Tutti i rapportini, divisi per chi paga. Fai clic su Rapportini.', fai: true },
-    { bersaglio: 'segmento-firmare', titolo: 'Da firmare', frase: 'Restano solo quelli che il cliente non ha ancora firmato.', fai: true },
-    { bersaglio: 'riga-rapportino', titolo: 'Un rapportino', frase: 'Fai clic su una riga per aprirla.', fai: true },
-    { bersaglio: 'azione-gialla', titolo: 'La cosa da fare', frase: 'Il pulsante giallo è sempre la cosa da fare adesso.' },
-    { bersaglio: null, titolo: 'Ecco fatto', frase: 'Adesso Wisper Ufficio lavora con i tuoi rapportini veri.' },
+  const FATTURA = ['fatturazione', 2];
+  const TUTTI_I_PASSI = [
+    { bersaglio: 'lato', titolo: 'Il menu', frase: 'Tutte le parti di Wisper sono qui. Ctrl+B lo richiude a icone.' },
+    { bersaglio: 'dashboard', titolo: 'La Dashboard', frase: 'Qui vedi cosa fare adesso: ogni riga ti porta dove si sistema.', serve: ['dashboard', 1] },
+    // Fase 2: due passi, uno da fare e uno da leggere.
+    { bersaglio: 'nav-preventivi', titolo: 'Preventivi', frase: 'Preventivi con i conti, l\'IVA e cosa chiede la legge. Fai clic su Preventivi e contratti.', fai: true, serve: ['preventivi', 1] },
+    { bersaglio: 'nav-attivita', titolo: 'Attività e calendario', frase: 'Le cose da fare oggi, gli appuntamenti e la settimana di tutti sono qui.', serve: ['attivita', 1] },
+    // Fase 3: Spese e trasferte (da leggere); il timer e i segmenti di Ore e rapportini più sotto.
+    { bersaglio: 'nav-spese', titolo: 'Spese e trasferte', frase: 'Scontrini, trasferte e rimborsi da fare stanno qui.', serve: ['spese', 1] },
+    // Fase 4: il fine mese vive in Da fatturare; poi la bozza, che emette il programma delle fatture.
+    { bersaglio: 'nav-fatturazione', titolo: 'Fatturazione', frase: 'Quello che c\'è da fatturare, cliente per cliente. Fai clic su Fatturazione.', fai: true, serve: FATTURA },
+    { bersaglio: 'da-fatturare', titolo: 'Da fatturare', frase: 'Qui vedi quanto c\'è di pronto: rapportini, spese, ore e scadenze dei contratti.', serve: FATTURA },
+    { bersaglio: 'prepara-riepilogo', titolo: 'Il riepilogo', frase: 'I rapportini di un mese sono una voce. Fai clic su Prepara riepilogo.', fai: true, serve: FATTURA },
+    { bersaglio: 'invia-email', titolo: 'Invia', frase: 'Il PDF parte per email con un clic. È un esempio: non parte niente.', fai: true, serve: FATTURA },
+    { bersaglio: 'scegli-tutto', titolo: 'Cosa va in fattura', frase: 'Spunta quello che va nella stessa fattura. Fai clic su Scegli tutto.', fai: true, serve: FATTURA },
+    { bersaglio: 'prepara-bozza', titolo: 'La bozza', frase: 'Wisper prepara la bozza con contributo, IVA, ritenuta e bollo. Fai clic su Prepara la bozza.', fai: true, serve: FATTURA },
+    { bersaglio: 'passa-al-programma', titolo: 'Al tuo programma', frase: 'La fattura la emette il tuo programma: qui copi i campi, poi importi l\'XML che ti dà.', serve: FATTURA },
+    { bersaglio: 'nav-rapportini', titolo: 'Ore e rapportini', frase: 'Le ore della settimana, il timer e i rapportini. Fai clic su Ore e rapportini.', fai: true, serve: ['rapportini', 1] },
+    { bersaglio: 'timer', titolo: 'Il timer', frase: 'Un clic per partire, uno per fermare: poi correggi le ore e le salvi.', serve: ['rapportini', 2] },
+    { bersaglio: 'segmento-rapportini', titolo: 'I rapportini', frase: 'Tutti i rapportini, divisi per chi paga. Fai clic su Rapportini.', fai: true, serve: ['rapportini', 1] },
+    { bersaglio: 'segmento-firmare', titolo: 'Da firmare', frase: 'Restano solo quelli che il cliente non ha ancora firmato.', fai: true, serve: ['rapportini', 1] },
+    { bersaglio: 'riga-rapportino', titolo: 'Un rapportino', frase: 'Fai clic su una riga per aprirla.', fai: true, serve: ['rapportini', 1] },
+    { bersaglio: 'azione-gialla', titolo: 'La cosa da fare', frase: 'Il pulsante giallo è sempre la cosa da fare adesso.', serve: ['rapportini', 1] },
+    { bersaglio: null, titolo: 'Ecco fatto', frase: 'Adesso Wisper Ufficio lavora con i tuoi dati veri.' },
   ];
+  let PASSI = TUTTI_I_PASSI;
 
   const MARGINE = 8;
   let attiva = false;
@@ -182,7 +201,8 @@
 
   function inizia(callback) {
     if (attiva) return;
-    quando = Object.assign({ inizio: () => {}, fine: () => {} }, callback || {});
+    quando = Object.assign({ inizio: () => {}, fine: () => {}, puo: () => true }, callback || {});
+    PASSI = TUTTI_I_PASSI.filter(p => !p.serve || quando.puo(p.serve));
     attiva = true;
     indice = 0;
     quando.inizio();
@@ -204,7 +224,7 @@
   }
 
   radice.WisperVisita = {
-    inizia, azione, salta: fine,
+    inizia, azione, salta: fine, TUTTI_I_PASSI,
     get attiva() { return attiva; },
   };
 })(window);

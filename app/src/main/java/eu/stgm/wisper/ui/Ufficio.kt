@@ -79,9 +79,10 @@ private var storicoLettoAlle = 0L
 internal fun chiaveRotta(r: Rapportino, ana: Anagrafiche): String = Conti.chiPaga(r, ana).chiave.removePrefix("c:")
 
 /**
- * La fine del mese sul telefono (docs/telefono-ufficio.md, prototipo SCHERMI.ufficio):
- * quanto c'è da fatturare e a chi, cosa manca da far firmare, quali commesse
- * guardare. È la pagina Fine mese di Wisper Ufficio, in colonna.
+ * Fatturazione › Da fatturare (docs/gestionale/fase1-schermate.md §6): la fine del
+ * mese di Wisper Ufficio, com'era nella 0.4.0. Quanto c'è da fatturare e a chi,
+ * cosa manca da far firmare, quali commesse guardare. Le fatture vere arrivano
+ * nella fase 4.
  */
 @Composable
 fun SchermataUfficio(dati: Dati, nav: Navigatore) {
@@ -113,7 +114,7 @@ fun SchermataUfficio(dati: Dati, nav: Navigatore) {
     val fattiOggi = fatturati.filter { it.fatturatoIl.startsWith(oggi) }.map { Conti.chiPaga(it, ana).nome }.distinct()
     val daGuardare = commesseDaGuardare(ana, storico)
 
-    val sigla = dati.tecnico.split(' ').filter { it.isNotBlank() }.take(2).joinToString("") { it.take(1) }.uppercase().ifBlank { "?" }
+
 
     Box(Modifier.fillMaxSize().background(c.fondo)) {
         Column(
@@ -121,7 +122,11 @@ fun SchermataUfficio(dati: Dati, nav: Navigatore) {
                 .padding(MarginePagina).padding(bottom = 90.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
+            Testata(onIndietro = { nav.indietro() })
+            TitoloPagina("Da fatturare")
+            // Il mese con ‹ ›: la fine del mese di Wisper Ufficio, spostata qui.
             Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(Conti.nomeMese(mese), style = Testi.titoloSezione.copy(fontSize = 20.sp), color = c.testo, modifier = Modifier.weight(1f))
                 PulsanteTondo(Icone.indietro, "Mese prima", { meseTesto = mese.minusMonths(1).toString() })
                 PulsanteTondo(Icone.freccia, "Mese dopo", {
                     val dopo = mese.plusMonths(1)
@@ -129,15 +134,7 @@ fun SchermataUfficio(dati: Dati, nav: Navigatore) {
                     if (dopo.isAfter(YearMonth.now())) avvisi.mostra("${Conti.nomeMese(dopo).substringBefore(' ')} non è ancora cominciato")
                     else meseTesto = dopo.toString()
                 })
-                Spacer(Modifier.weight(1f))
-                Box(
-                    Modifier.size(44.dp).clip(CircleShape).background(c.superficie2).clickable { nav.vai("impostazioni") }
-                        .semantics { contentDescription = "Impostazioni"; role = Role.Button },
-                    contentAlignment = Alignment.Center,
-                ) { Text(sigla, style = Testi.forte.copy(fontSize = Testi.secondarioGrande.fontSize), color = c.testo) }
             }
-
-            TitoloPagina(Conti.nomeMese(mese), sopra = "Fine mese", etichettaSopra = true)
 
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Riquadro(
@@ -181,6 +178,7 @@ fun SchermataUfficio(dati: Dati, nav: Navigatore) {
                     },
                     onPrepara = { nav.vai("invio/cliente/${chiaveRotta(r0, ana)}/$mese") },
                     onSegnaFatturati = { daConfermare = g },
+                    puo = LocalPermessi.current.modifica(eu.stgm.wisper.rapportino.Moduli.FATTURAZIONE),
                 )
             }
             if (prima.isNotEmpty()) {
@@ -230,26 +228,6 @@ fun SchermataUfficio(dati: Dati, nav: Navigatore) {
                         if (i < daGuardare.lastIndex) LineaElenco()
                     }
                 }
-            }
-
-            // ---- Tutto l'ufficio
-            TitoloSezione("Tutto l'ufficio")
-            SchedaElenco {
-                val aperte = ana.commesse.count { it.aperta }
-                val sospese = ana.commesse.count { it.sospesa }
-                RigaVoce(
-                    "Commesse", icona = Icone.cartella,
-                    sotto = if (ana.commesse.isEmpty()) "Nessuna commessa"
-                    else listOfNotNull(
-                        Testo.quanti(aperte, "aperta", "aperte"),
-                        if (sospese > 0) Testo.quanti(sospese, "sospesa", "sospese") else null,
-                    ).joinToString(" · "),
-                    onClick = { nav.vai("commesse") },
-                )
-                LineaElenco()
-                RigaVoce("Clienti", icona = Icone.persone, sotto = Testo.quanti(ana.clienti.size, "cliente", "clienti"), onClick = { nav.vai("clienti") })
-                LineaElenco()
-                RigaVoce("Impostazioni", icona = Icone.ingranaggio, sotto = "Lo studio, la firma, rimborso km e costi", onClick = { nav.vai("impostazioni") })
             }
 
             RigaFoglio(agg) {
@@ -323,7 +301,7 @@ private fun PulsanteScheda(testo: String, giallo: Boolean, onClick: () -> Unit, 
  * inviati diventa Segna fatturati, come sul computer.
  */
 @Composable
-private fun SchedaChiPaga(g: Conti.PerChiPaga, onVedi: () -> Unit, onPrepara: () -> Unit, onSegnaFatturati: () -> Unit) {
+private fun SchedaChiPaga(g: Conti.PerChiPaga, onVedi: () -> Unit, onPrepara: () -> Unit, onSegnaFatturati: () -> Unit, puo: Boolean = true) {
     val c = W.colori
     val tuttiInviati = g.rapportini.all { it.stato == Stato.INVIATO }
     Scheda(orizzontale = 20.dp, verticale = 18.dp, raggio = 24.dp, spazio = 12.dp) {
@@ -349,7 +327,9 @@ private fun SchedaChiPaga(g: Conti.PerChiPaga, onVedi: () -> Unit, onPrepara: ()
         }
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             PulsanteScheda("Vedi rapportini", giallo = false, onClick = onVedi, modifier = Modifier.weight(1f))
-            if (tuttiInviati) PulsanteScheda("Segna fatturati", giallo = true, onClick = onSegnaFatturati, modifier = Modifier.weight(1f))
+            // Chi vede la fatturazione solo in lettura non prepara e non segna.
+            if (!puo) Unit
+            else if (tuttiInviati) PulsanteScheda("Segna fatturati", giallo = true, onClick = onSegnaFatturati, modifier = Modifier.weight(1f))
             else PulsanteScheda("Prepara riepilogo", giallo = true, onClick = onPrepara, modifier = Modifier.weight(1f))
         }
     }
@@ -464,7 +444,7 @@ private fun RigaFoglio(agg: Archivio.Aggiornamento, onAggiorna: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         when {
-            agg.inCorso -> Text("Leggo il foglio…", style = stile, color = c.tenue)
+            agg.inCorso -> Text("Leggo…", style = stile, color = c.tenue)
             agg.errore.isNotBlank() -> {
                 Icon(Icone.avviso, null, tint = c.tenue, modifier = Modifier.size(16.dp))
                 Spacer(Modifier.width(8.dp))
@@ -480,7 +460,7 @@ private fun RigaFoglio(agg: Archivio.Aggiornamento, onAggiorna: () -> Unit) {
                     Spacer(Modifier.width(8.dp))
                 }
                 Text(
-                    agg.ultimo?.let { "Foglio letto alle " + it.format(DateTimeFormatter.ofPattern("H:mm")) } ?: "Foglio non ancora letto",
+                    agg.ultimo?.let { "Letto alle " + it.format(DateTimeFormatter.ofPattern("H:mm")) } ?: "Non ancora letto",
                     style = stile, color = c.tenue,
                 )
                 Text(" · Aggiorna", style = stile.copy(fontWeight = FontWeight.Bold), color = c.gialloTesto)

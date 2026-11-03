@@ -3,21 +3,32 @@ using System.Windows.Forms;
 namespace WisperUfficio;
 
 /// <summary>
-/// Wisper Ufficio: il programma del computer. Commesse, rapportini, clienti, tariffe,
-/// PDF e invii; il telefono serve a compilare i rapportini sul posto.
+/// Wisper Ufficio: il programma del computer. Dashboard, clienti e fornitori, commesse,
+/// rapportini, fatturazione, amministrazione; il telefono serve a compilare i rapportini sul posto.
+///
+/// Si entra con email e password: il programma parla col server di Wisper (sul NAS)
+/// e tiene la chiave d'accesso cifrata (Configurazione.cs, Server.cs).
 ///
 /// Opzioni, solo per le prove:
 ///   --dati CARTELLA            configurazione e copie in un'altra cartella
-///   --foglio URL CODICE        collegamento al foglio senza salvarlo
+///   --server URL               un altro server di casa (es. http://localhost:8400) senza salvarlo;
+///                              da solo = il server di prova diretto, senza porta Google
+///   --google URL               un'altra porta Google (il finto Google: http://127.0.0.1:8766/exec)
+///                              senza salvarla; da sola = solo Google (fuori casa)
 ///   --stampa-prova HTML PDF    stampa un documento col motore del programma ed esce
 ///                              (per capire, su un computer nuovo, se i PDF escono)
 ///   --aggiornamenti URL        un altro aggiornamento.json (le prove degli aggiornamenti)
 ///   --no-installa              parte da dov'è, senza installarsi
 ///   --installa-in CARTELLA     si installa lì invece che in Programs, Start e Desktop
 ///                              (le prove dell'installazione), senza toccare il registro
+///   --prova-collega CASI ESITO decifra i casi fissi del collegamento col QR (server/prove/casi-collega.json),
+///                              scrive l'esito in ESITO ed esce (pc/prove/collega-exe.test.js)
+///   --prova-collega-vivo TESTO ESITO  il collegamento col QR dal vivo, senza finestra, contro --server
+///                              (scrive il testo del QR in TESTO, aspetta il telefono, l'esito in ESITO)
 /// Quelle per sé: --attendi PID (il riavvio dopo un aggiornamento aspetta che il
 /// programma vecchio si chiuda), --appena-installato (la prima apertura dopo
-/// l'installazione lo dice nella pagina), --disinstalla (da App installate).
+/// l'installazione lo dice nella pagina), --disinstalla (da App installate). E il percorso
+/// di un file .wisper (il doppio clic sul file dell'email): si collega e si apre.
 /// </summary>
 internal static class Program
 {
@@ -26,33 +37,47 @@ internal static class Program
     {
         var appData = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "WisperUfficio");
         var locale = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "WisperUfficio");
-        string? url = null, codice = null;
+        string? serverDiProva = null;
+        string? googleDiProva = null;
+        string? fileCollegamento = null;
         (string Html, string Pdf)? stampaProva = null;
         var indirizzoAggiornamenti = Aggiornamenti.IndirizzoPredefinito;
         int? attendi = null;
         var daRipetere = new List<string>();
         bool noInstalla = false, appenaInstallato = false, disinstalla = false;
-        // Il doppio clic sul file dell'email ("Collega Wisper Ufficio.wisper") apre il
-        // programma col percorso del file: si collega e il file non si ripete al riavvio.
-        string? fileCollegamento = null;
         string? installaIn = null;
         // Per strumenti\rilascio.ps1, prima di pubblicare: esce con 3 se dentro c'è l'indirizzo
-        // del foglio (un exe di casa), con 0 se no. Non apre niente e non si installa.
+        // del server (un exe di casa), con 0 se no. Non apre niente e non si installa.
         if (args.Length == 1 && args[0] == "--indirizzo-incluso")
         {
             Environment.Exit(Configurazione.IndirizzoPredefinito.Length > 0 ? 3 : 0);
+        }
+        // Per pc/prove/collega-exe.test.js: decifra il caso fisso di server/prove/casi-collega.json come farebbe col
+        // pacchetto vero del server, scrive l'esito ed esce (0 = tutto torna). Non apre niente, non si installa, non
+        // tocca la configurazione: anche --no-installa e --dati, se ci sono, si saltano.
+        var iProva = Array.IndexOf(args, "--prova-collega");
+        if (iProva >= 0 && iProva + 2 < args.Length)
+        {
+            Environment.Exit(CollegaQr.ProvaCasi(Path.GetFullPath(args[iProva + 1]), Path.GetFullPath(args[iProva + 2])));
         }
         for (int i = 0; i < args.Length; i++)
         {
             if (args[i] == "--attendi" && i + 1 < args.Length) { attendi = int.TryParse(args[++i], out var pid) ? pid : null; continue; }
             if (args[i] == "--appena-installato") { appenaInstallato = true; continue; }
             if (args[i] == "--disinstalla") { disinstalla = true; continue; }
-            if (args[i].EndsWith(Collegamento.Estensione, StringComparison.OrdinalIgnoreCase) && File.Exists(args[i])) { fileCollegamento = args[i]; continue; }
+            // Il doppio clic sul file dell'email ("Collega Wisper Ufficio.wisper"): dentro c'è la strada da
+            // fuori casa (la porta Google). Si usa e il file non si ripete al riavvio.
+            if (args[i].EndsWith(FileCollegamento.Estensione, StringComparison.OrdinalIgnoreCase))
+            {
+                if (File.Exists(args[i])) fileCollegamento = args[i];
+                continue;
+            }
             var prima = i;
             if (args[i] == "--no-installa") noInstalla = true;
             else if (args[i] == "--installa-in" && i + 1 < args.Length) installaIn = Path.GetFullPath(args[++i]);
             else if (args[i] == "--dati" && i + 1 < args.Length) appData = locale = Path.GetFullPath(args[++i]);
-            else if (args[i] == "--foglio" && i + 2 < args.Length) { url = args[++i]; codice = args[++i]; }
+            else if (args[i] == "--server" && i + 1 < args.Length) serverDiProva = args[++i];
+            else if (args[i] == "--google" && i + 1 < args.Length) googleDiProva = args[++i];
             else if (args[i] == "--stampa-prova" && i + 2 < args.Length) stampaProva = (Path.GetFullPath(args[++i]), Path.GetFullPath(args[++i]));
             else if (args[i] == "--aggiornamenti" && i + 1 < args.Length) indirizzoAggiornamenti = args[++i];
             // Al riavvio dopo un aggiornamento si riparte con le stesse opzioni.
@@ -61,6 +86,16 @@ internal static class Program
 
         Directory.CreateDirectory(locale);
         Log.File = Path.Combine(locale, "registro.txt");
+
+        // Per pc/prove/collega-exe.test.js: il collegamento col QR dal vivo contro il server di prova (--server), con la
+        // configurazione nella cartella di prova (--dati). Niente finestra, niente installazione.
+        var iVivo = Array.IndexOf(args, "--prova-collega-vivo");
+        if (iVivo >= 0 && iVivo + 2 < args.Length)
+        {
+            var configVivo = new Configurazione(Path.Combine(appData, "configurazione.json"));
+            if (serverDiProva != null || googleDiProva != null) configVivo.IndirizziDiProva(serverDiProva, googleDiProva);
+            Environment.Exit(CollegaQr.ProvaDalVivo(configVivo, new Server(configVivo), Path.GetFullPath(args[iVivo + 1]), Path.GetFullPath(args[iVivo + 2])));
+        }
 
         // Si installa (e si aggiorna da solo) solo il programma in un file solo, quello che si
         // distribuisce: una build di sviluppo ha le sue dll accanto e un exe da solo non basterebbe.
@@ -89,11 +124,11 @@ internal static class Program
         }
 
         // Il file dell'email si usa subito, prima di guardare se il programma è già aperto:
-        // se lo è, si accorge da solo del collegamento nuovo (Configurazione.RileggiSeCambiato).
+        // se lo è, si accorge da solo degli indirizzi nuovi (Configurazione.RileggiSeCambiato).
         var collegatoDaFile = false;
         if (fileCollegamento != null)
         {
-            var errore = Collegamento.Importa(fileCollegamento, new Configurazione(Path.Combine(appData, "configurazione.json")));
+            var errore = FileCollegamento.Importa(fileCollegamento, new Configurazione(Path.Combine(appData, "configurazione.json")));
             if (errore != null)
             {
                 MessageBox.Show(errore, "Wisper Ufficio", MessageBoxButtons.OK, MessageBoxIcon.Warning);
@@ -102,8 +137,8 @@ internal static class Program
             collegatoDaFile = true;
         }
 
-        // Un Wisper Ufficio alla volta per cartella di dati: due finestre sullo
-        // stesso foglio salverebbero una sopra l'altra.
+        // Un Wisper Ufficio alla volta per cartella di dati: due finestre con la stessa
+        // chiave d'accesso si pesterebbero i piedi (una esce, l'altra no).
         // (string.GetHashCode cambia a ogni avvio in .NET: serve un'impronta stabile.)
         var impronta = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
             System.Text.Encoding.UTF8.GetBytes(appData.ToLowerInvariant())))[..12];
@@ -117,7 +152,7 @@ internal static class Program
         if (!primo)
         {
             MessageBox.Show(collegatoDaFile
-                ? "Wisper Ufficio è collegato al foglio. Torna alla sua finestra e premi Riprova, o aprilo di nuovo."
+                ? "Wisper Ufficio adesso sa come arrivare al server anche da fuori casa. Torna alla sua finestra."
                 : "Wisper Ufficio è già aperto.", "Wisper Ufficio", MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
@@ -131,10 +166,10 @@ internal static class Program
         Application.ThreadException += (_, e) => Log.Errore("eccezione non gestita", e.Exception);
 
         var config = new Configurazione(Path.Combine(appData, "configurazione.json"));
-        if (url != null && codice != null) config.Imposta(url, codice);
-        var foglio = new Foglio(config);
+        if (serverDiProva != null || googleDiProva != null) config.IndirizziDiProva(serverDiProva, googleDiProva);
+        var server = new Server(config);
         var documenti = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "Wisper");
-        var ponte = new Ponte(config, foglio, Path.Combine(locale, "file"), documenti);
+        var ponte = new Ponte(config, server, Path.Combine(locale, "file"), documenti);
         var cartellaUi = Path.Combine(AppContext.BaseDirectory, "ui");
 
         ponte.AppenaInstallato = appenaInstallato;

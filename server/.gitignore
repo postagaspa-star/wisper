@@ -1,0 +1,8 @@
+# I dati veri e i segreti restano sul NAS.
+.env
+dati/
+dati-prova/
+*.db
+*.db-wal
+*.db-shm
+*.db.prima-*

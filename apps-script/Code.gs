@@ -199,6 +199,7 @@ var STATI_BLOCCATI = ['FIRMATO', 'INVIATO', 'FATTURATO'];
 
 function doGet(e) {
   var p = (e && e.parameter) || {};
+  p._metodo = 'GET';   // per il ponte (Ponte.gs): il server legge i parametri come una lettura
   return rispondi(p, function () {
     switch (p.azione) {
       case 'rapportini':
@@ -221,6 +222,10 @@ function doPost(e) {
     registraAccesso({}, 'richiesta non valida');
     return json({ ok: false, errore: 'Richiesta non valida' });
   }
+  // Il server sul NAS che chiede di mandare un'email o salvare una copia (Ponte.gs).
+  if (eRichiestaPostino(d)) return postino(d);
+  // La porta Google (Porta.gs): le app nuove, e il server sul NAS che viene a prendere il lavoro.
+  if (eRichiestaPorta(d)) return porta(d);
   return rispondi(d, function () {
     if (d.azione === 'anagrafiche') return rispostaAnagrafiche();
     if (d.azione === 'rapportini') return { ok: true, rapportini: leggiRapportini(d.da, d.a, d.tutti === true) };
@@ -250,6 +255,13 @@ function rispondi(d, lavoro) {
   } catch (err) {
     registraAccesso(d, messaggio(err) === 'Codice sbagliato' ? 'codice sbagliato' : 'rifiutato');
     return json({ ok: false, errore: messaggio(err) });
+  }
+  // Dopo il cambio i dati stanno sul server: una versione vecchia passa di qui e
+  // la sua richiesta va al server (Ponte.gs). Se il server non risponde, l'errore
+  // esce da qui apposta: le app lo trattano come rete e riprovano.
+  if (ponteAttivo()) {
+    registraAccesso(d, 'ponte');
+    return json(inoltraAlServer(d));
   }
   var risposta;
   try {
@@ -1745,7 +1757,7 @@ function registraAccesso(d, esito) {
     var nome = testo(d.dispNome).slice(0, 80);
     var app = testo(d.app).slice(0, 40);
     var azione = testo(d.azione).slice(0, 40) || 'anagrafiche';
-    var entrato = esito === 'ok' || esito === 'errore';
+    var entrato = esito === 'ok' || esito === 'errore' || esito === 'ponte';
     var cache = CacheService.getScriptCache();
 
     if (!entrato) {

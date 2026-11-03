@@ -19,13 +19,14 @@ import java.io.File
  * Il rischio e' lavorare su dati vecchi di qualche ora, ed e' piccolo: clienti
  * e commesse cambiano qualche volta al mese.
  */
-class CopiaLocale(cartella: File) {
+class CopiaLocale(private val cartella: File) {
 
     constructor(ctx: Context) : this(ctx.filesDir)
 
     private val fileAnagrafiche = File(cartella, "anagrafiche.json")
     private val fileRapportini = File(cartella, "rapportini.json")
     private val fileStorico = File(cartella, "storico.json")
+    private val fileDashboard = File(cartella, "dashboard.json")
 
     /** Le immagini dei PDF (firme, scontrini, la firma del compilatore) gia' scaricate: si chiedono una volta sola. */
     private val cartellaFile = File(cartella, "file-foglio")
@@ -71,6 +72,72 @@ class CopiaLocale(cartella: File) {
     /** Qui un elenco vuoto si scrive: e' la risposta di un foglio senza rapportini, non un errore. */
     fun scriviStorico(lista: List<Rapportino>) {
         scriviAtomico(fileStorico, JSONArray().apply { lista.forEach { put(it.aJson()) } }.toString())
+    }
+
+    /** L'ultima dashboard letta dal server, com'era (JSON), o null. */
+    fun dashboard(): JSONObject? = try {
+        if (!fileDashboard.exists()) null else JSONObject(fileDashboard.readText())
+    } catch (_: Exception) {
+        null
+    }
+
+    fun scriviDashboard(o: JSONObject) = scriviAtomico(fileDashboard, o.toString())
+
+    // ---- fase 2: preventivi, listino, attività (l'ultima lettura, per aprirsi anche senza rete)
+
+    private val filePreventivi = File(cartella, "preventivi.json")
+    private val fileDettagli = File(cartella, "preventivi-aperti.json")
+    private val fileListino = File(cartella, "listino.json")
+    private val fileAttivita = File(cartella, "attivita.json")
+
+    fun preventivi(): List<Preventivo> = elenco(filePreventivi).map(Preventivo::daJson)
+    fun scriviPreventivi(l: List<Preventivo>) = scriviAtomico(filePreventivi, JSONArray().apply { l.forEach { put(it.grezzo ?: it.aJson()) } }.toString())
+
+    /** I preventivi aperti per intero: al massimo gli ultimi 40. */
+    fun dettagliPreventivi(): Map<String, Preventivo> = elenco(fileDettagli).map(Preventivo::daJson).filter { it.id.isNotBlank() }.associateBy { it.id }
+    fun scriviDettagliPreventivi(m: Map<String, Preventivo>) =
+        scriviAtomico(fileDettagli, JSONArray().apply { m.values.toList().takeLast(40).forEach { put(it.grezzo ?: it.aJson()) } }.toString())
+
+    fun listino(): List<VoceListino> = elenco(fileListino).map(VoceListino::daJson)
+    fun scriviListino(l: List<VoceListino>) = scriviAtomico(fileListino, JSONArray().apply { l.forEach { put(it.aJson()) } }.toString())
+
+    fun attivita(): List<Attivita> = elenco(fileAttivita).map(Attivita::daJson)
+    fun scriviAttivita(l: List<Attivita>) = scriviAtomico(fileAttivita, JSONArray().apply {
+        l.forEach { a ->
+            put(a.aJson().put("id", a.id).put("fattaIl", a.fattaIl).put("creataDa", a.creataDa).put("creato", a.creato).put("modificato", a.modificato)
+                .put("allegati", JSONArray().apply { a.allegati.forEach { d -> put(JSONObject().put("id", d.id).put("nome", d.nome).put("url", d.url).put("mime", d.mime)) } }))
+        }
+    }.toString())
+
+    // ---- fase 3: ore, timer, spese, trasferte (l'ultima risposta del server, com'era)
+
+    private val nomiFase3 = listOf("ore", "timer", "spese", "trasferte")
+    private fun fileFase3(nome: String) = File(cartella, "fase3-$nome.json")
+
+    /** L'ultima risposta letta per [nome] ("ore", "timer", "spese", "trasferte"), o null. */
+    fun fase3(nome: String): JSONObject? = try {
+        val f = fileFase3(nome)
+        if (!f.exists()) null else JSONObject(f.readText())
+    } catch (_: Exception) {
+        null
+    }
+
+    fun scriviFase3(nome: String, o: JSONObject) = scriviAtomico(fileFase3(nome), o.toString())
+
+    private fun elenco(f: File): List<JSONObject> = try {
+        if (!f.exists()) emptyList() else JSONArray(f.readText()).oggetti()
+    } catch (_: Exception) {
+        emptyList()
+    }
+
+    /**
+     * Via tutto quello che si è letto (quando entra un'altra persona): ognuno vede
+     * solo il suo. La coda dei rapportini da mandare sta altrove e non si tocca.
+     */
+    fun svuota() {
+        (listOf(fileAnagrafiche, fileRapportini, fileStorico, fileDashboard, filePreventivi, fileDettagli, fileListino, fileAttivita) + nomiFase3.map(::fileFase3))
+            .forEach { runCatching { it.delete() } }
+        runCatching { cartellaFile.listFiles()?.forEach { it.delete() } }
     }
 
     /** Un file del foglio gia' scaricato: i byte e il tipo, o null. */
