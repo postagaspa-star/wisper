@@ -85,8 +85,10 @@ e l'una, uguali sul codice della 1.0.0: dipendono dall'ora della prova, non da q
 computer 316, giro dei progetti in Edge senza finestra 14 passi su 14 (anche il primo giorno col database vuoto), gli
 altri 11 giri cliccati tutti passati, `dotnet build` senza avvisi; telefono 403, anche col server di prova acceso.
 Il campanello provato con l'exe vero e sull'emulatore: una versione nuova annunciata, un controllo solo. Sul NAS: server
-0.12.0 acceso, migrazione 9 fatta (con la sua copia), "ultime versioni: telefono 1.0.0 (9), computer 1.0.0". Non
-provato: l'installazione vera di un aggiornamento annunciato (si vedrà con la prossima versione dopo questa).
+0.12.0 acceso, migrazione 9 fatta (con la sua copia); pubblicata la release, il NAS ha letto "telefono 1.1.0 (10),
+computer 1.1.0" e il campanello e le risposte del server (anche quelle di errore) la annunciano. I telefoni e i computer
+con la 1.0.0 la prendono col controllo di ogni ora, l'ultima volta. Non provata: l'installazione vera di un aggiornamento
+annunciato dal NAS (si vedrà con la prossima versione dopo questa).
 
 ![Wisper Ufficio: la pagina Progetti](docs/diario/1-1-0/computer-progetti.png)
 ![Il rapportino sul computer: commessa e progetto](docs/diario/1-1-0/computer-rapportino-progetto.png)
