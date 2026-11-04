@@ -70,7 +70,9 @@ tenuti di proposito. Se il salto si rivedesse, va ricontrollato sul computer di 
 sfumature giuste in cima, a metà e in fondo, rotellina, clic in fondo e a metà senza spostamenti, Rileggi, tastiera col
 fuoco che resta, voce mostrata se la pagina si apre da fuori, menu richiuso, schermo alto. Sul codice di prima la stessa
 prova trova la barra (10 pixel) e il fuoco perso. Rifatte: computer 316, giro dei progetti (14 passi), visita guidata
-(19), flussi principali (26).
+(19), flussi principali (26). Il programma costruito, provato a parte con i dati di prova, non ha la barra e tiene
+fermo il menu ai clic. Release **v1.1.1** su GitHub (APK uguale alla 1.1.0, stessa firma). Il NAS la annuncia dalle
+07:06 (giro 2): i computer con la 1.1.0 la scaricano da soli.
 
 ![Il menu laterale: in cima sfuma solo sotto, in fondo (tema scuro) solo sopra; niente barra](docs/diario/1-1-1/computer-menu-laterale.png)
 
