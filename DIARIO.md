@@ -11,6 +11,7 @@ mai dati veri di clienti.
 
 | Data | Versione | In breve |
 |------|----------|----------|
+| 04/11/2026 | 1.1.1 (computer) | [Il menu laterale resta dov'era e non ha più la barra grigia](#v1-1-1) |
 | 04/11/2026 | 1.1.0, server 0.12.0 | [Si riparte da zero: progetti, funzioni tutte spegnibili, aggiornamenti annunciati dal NAS](#v1-1-0) |
 | 03/11/2026 | 1.0.0 | [Il gestionale entra in uso: la sera del cambio](#v1-0-0) |
 | 03/11/2026 | gestionale, server 0.11.2 | [I dati veri sono nel server sul NAS](#dati-veri) |
@@ -39,6 +40,39 @@ mai dati veri di clienti.
 | 26/09–14/10/2026 | 0.1 | [Un rapportino confermato non si perde più](#coda) |
 | 7–9/08/2026 | 0.1.0 | [Hackathon NGN Hacks: la versione a voce, senza mani](#v0-1-0) |
 | marzo–giugno 2026 | prima del repository | [Le prime versioni](#prima) |
+
+---
+
+<a id="v1-1-1"></a>
+## 4 novembre 2026 · 1.1.1 (computer) · Il menu laterale resta dov'era e non ha più la barra grigia
+
+**Perché.** Andrea ha notato due cose nel menu laterale di Wisper Ufficio: cliccando una voce il menu tornava
+all'inizio, e la barra grigia per scorrerlo era brutta da vedere. Con la voce Progetti le voci del titolare sono 19, e su
+uno schermo normale non ci stanno tutte: il menu scorre, quindi entrambe le cose si vedono spesso.
+
+**Cosa cambia.**
+
+- **Il menu resta dov'era.** A ogni cambio di pagina le voci si ridisegnano (cambiano la voce evidenziata e i
+  numerini). Adesso il programma tiene il punto in cui era il menu e tiene il fuoco sulla voce cliccata. Prima il fuoco
+  si perdeva, e con la tastiera si ripartiva dall'inizio. Se una pagina si apre da fuori (dalla Dashboard, da un
+  collegamento) e la sua voce è nascosta, il menu scorre solo quel poco che serve per mostrarla.
+- **Niente barra grigia.** Il menu scorre con la rotellina come prima, ma senza barra. Al suo posto il bordo del menu
+  sfuma dove ci sono altre voci: in basso quando ce ne sono sotto, in alto quando ce ne sono sopra. Se le voci ci stanno
+  tutte, non sfuma niente. La barra delle pagine, a destra, è rimasta com'era.
+- Il telefono non cambia: resta 1.1.0 (codice 10) e non scarica niente.
+
+**Una cosa detta com'è.** Con i clic simulati delle prove il salto non si riproduceva, né nella 1.0.0 né nella 1.1.0,
+anche dentro il programma vero (avviato a parte, con i dati di prova). La causa più probabile è il fuoco perso quando
+le voci si ridisegnano, che nel programma vero può riportare il menu in cima. Adesso sia il punto sia il fuoco vengono
+tenuti di proposito. Se il salto si rivedesse, va ricontrollato sul computer di Manuel.
+
+**Prove.** Prova nuova `pc/prove/prova-menu-laterale.js` (9 passi, con le barre di scorrimento vere): nessuna barra,
+sfumature giuste in cima, a metà e in fondo, rotellina, clic in fondo e a metà senza spostamenti, Rileggi, tastiera col
+fuoco che resta, voce mostrata se la pagina si apre da fuori, menu richiuso, schermo alto. Sul codice di prima la stessa
+prova trova la barra (10 pixel) e il fuoco perso. Rifatte: computer 316, giro dei progetti (14 passi), visita guidata
+(19), flussi principali (26).
+
+![Il menu laterale: in cima sfuma solo sotto, in fondo (tema scuro) solo sopra; niente barra](docs/diario/1-1-1/computer-menu-laterale.png)
 
 ---
 

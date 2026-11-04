@@ -594,8 +594,12 @@
     const interf = (S.io && S.io.interfaccia) || {};
     const studio = interf.nomeBreve || (S.io && S.io.ragioneSociale) || S.ana.impostazioni.RAGIONE_SOCIALE || (S.locale && S.locale.studio) || 'Ufficio';
     $('#lato-studio').textContent = S.esempio ? 'Studio Tecnico GM' : studio;
-    const voci = svuota($('#voci'));
-    if (S.entrato === false && !S.esempio) return;
+    // Le voci si rifanno a ogni cambio di pagina: senza tenere il punto, il menu tornava in cima a ogni clic (04/11/2026).
+    const contenitore = $('#voci');
+    const cima = contenitore.scrollTop;
+    const aFuoco = contenitore.contains(document.activeElement) ? document.activeElement.getAttribute('href') : null;
+    const voci = svuota(contenitore);
+    if (S.entrato === false && !S.esempio) { sfumaVoci(); return; }
     const attiva = R.moduloDi(percorso());
     const esterno = eEsterno();
     // Fase 8 (§9.5): le funzioni spente spariscono dal menu di tutti.
@@ -618,12 +622,37 @@
         'data-nome': nomeV, 'data-visita': 'nav-' + v.modulo,
       }, icona(v.icona, 22, 2.2), h('span', { class: 'lab' }, nomeV), n ? h('span', { class: 'num-v', 'aria-label': n + ' da guardare' }, n) : null)]);
     });
+    voci.scrollTop = cima;
+    mostraVoceAttiva(voci);
+    if (aFuoco) { const f = voci.querySelector('a[href="' + aFuoco + '"]'); if (f) f.focus({ preventScroll: true }); }
+    sfumaVoci();
     disegnaChi();
     disegnaCampanella();
     aggiornaStatoServer();
     $('#richiudi .lab').textContent = S.latoChiuso ? 'Apri il menu' : 'Richiudi il menu';
     $('#richiudi').setAttribute('data-nome', S.latoChiuso ? 'Apri il menu' : 'Richiudi il menu');
   }
+
+  /** Se la pagina aperta è una voce tagliata dal bordo del menu (ci si arriva anche dalla Dashboard), il menu scorre quel poco che basta. */
+  function mostraVoceAttiva(voci) {
+    const el = voci.querySelector('.voce.attiva');
+    if (!el) return;
+    const r = el.getBoundingClientRect(), c = voci.getBoundingClientRect();
+    if (r.top < c.top) voci.scrollTop += r.top - c.top - 24;
+    else if (r.bottom > c.bottom) voci.scrollTop += r.bottom - c.bottom + 24;
+  }
+
+  /**
+   * Il menu scorre senza la barra grigia: dove ci sono altre voci sopra o sotto, il bordo sfuma (stile.css, .lato .voci).
+   * La rotellina e il trascinamento funzionano come prima.
+   */
+  function sfumaVoci() {
+    const v = $('#voci');
+    v.classList.toggle('piu-su', v.scrollTop > 1);
+    v.classList.toggle('piu-giu', v.scrollTop + v.clientHeight < v.scrollHeight - 1);
+  }
+  $('#voci').addEventListener('scroll', sfumaVoci, { passive: true });
+  if (window.ResizeObserver) new ResizeObserver(sfumaVoci).observe($('#voci'));
 
   /**
    * Il numerino giallo di Documenti (le revisioni da approvare, solo per chi approva) e di Ticket e

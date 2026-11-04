@@ -1716,7 +1716,21 @@ details.chiuso-f6 .scheda.coppie { border: none; padding: 0; }
 .riga-strumento { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 15px; font-weight: 700; }
 
 /* fase 6: con tre voci in più il menu scorre (il piede con lo stato e chi è entrato resta in vista) */
-.lato .voci { flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; scrollbar-width: thin; }
+.lato .voci { flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; }
+/* 04/11/2026: niente barra grigia di scorrimento. Al suo posto il bordo del menu sfuma solo dove ci sono altre voci
+   (sopra o sotto): si capisce che si può scorrere, con la rotellina come prima. Le classi le mette app.js (sfumaVoci). */
+@property --sfuma-su { syntax: '<length>'; inherits: false; initial-value: 0px; }
+@property --sfuma-giu { syntax: '<length>'; inherits: false; initial-value: 0px; }
+.lato .voci {
+  scrollbar-width: none;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 var(--sfuma-su), #000 calc(100% - var(--sfuma-giu)), transparent 100%);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 var(--sfuma-su), #000 calc(100% - var(--sfuma-giu)), transparent 100%);
+  transition: --sfuma-su .18s ease, --sfuma-giu .18s ease;
+}
+.lato .voci::-webkit-scrollbar { display: none; }
+.lato .voci.piu-su { --sfuma-su: 36px; }
+.lato .voci.piu-giu { --sfuma-giu: 36px; }
+@media (prefers-reduced-motion: reduce) { .lato .voci { transition: none; } }
 .lato .voce .lab { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .lato .voce .num-v { flex: none; }
 /* nel pannello stretto le pillole a destra vanno a capo invece di schiacciare il testo */

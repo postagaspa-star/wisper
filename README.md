@@ -35,6 +35,10 @@ times; after two or three Wisper finds the pattern by itself (fixed parts, the j
 year, one counter) and proposes the next one (`server/src/codici-progetto.js`, the same cases
 ported to the phone so it proposes the same code offline).
 
+Version 1.1.1 of the office program (4 November) keeps the side menu where it was when you click an item
+(scroll position and keyboard focus are kept across redraws). It also drops the grey scrollbar: the menu edge fades
+where more items are hidden (`pc/prove/prova-menu-laterale.js`).
+
 Phase 1 (October 2026) replaces the Google Sheet with a small server on
 the home NAS (`server/`: Node.js 24 with its built-in SQLite, no npm dependencies, in
 Docker). It speaks the same protocol as the sheet script, so the phone and the office
