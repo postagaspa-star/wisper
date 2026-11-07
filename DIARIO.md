@@ -113,6 +113,10 @@ guidata), con il testo controllato a 1024 e 1440 pixel, in tema chiaro e scuro. 
 di prova, e le schermate fatte con il carattere grande (1,3) a 360 dp. Da questa versione le prove cancellano le
 cartelle temporanee che creano. Prima restavano: il 6 novembre erano 12.194 cartelle, 29 GB sul disco C.
 
+**Pubblicata.** Il server 0.13.0 è sul NAS dalle 12:37 del 7 novembre. Prima ho fatto la copia intera dei dati. Gli 8
+rapportini che c'erano sono diventati 8 giornate, e non si è perso niente. Release **v1.2.0** su GitHub alle 12:42
+(APK con la stessa firma di sempre). Il NAS la annuncia dalle 12:47: telefoni e computer con la 1.1 la scaricano da soli.
+
 ![Il rapportino sul computer: i lavori a sinistra, il lavoro scelto a destra, il totale del giorno in basso](docs/diario/1-2-0/computer-rapportino-editor.png)
 ![L'elenco raggruppato per rapportino, con le caselle sempre visibili](docs/diario/1-2-0/computer-rapportino-elenco.png)
 ![L'invio diviso per cliente, con oggetto e frase del periodo](docs/diario/1-2-0/computer-invio-rapportini.png)
