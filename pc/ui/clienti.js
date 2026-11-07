@@ -361,7 +361,7 @@
         }
         if (campi.cliente && soldi()) {
           Object.assign(campi, {
-            tariffaFissa: C.numONull(v.tariffaFissa.value), ultimaTariffa: C.numONull(v.ultimaTariffa.value), costoFisso: C.numONull(v.costoFisso.value),
+            tariffaFissa: R.leggiCampo(v.tariffaFissa.value), ultimaTariffa: R.leggiCampo(v.ultimaTariffa.value), costoFisso: R.leggiCampo(v.costoFisso.value),
             pagaViaggio: scelte.pagaViaggio === 'SI', kmRimborsati: scelte.kmRimborsati === 'SI',
           });
           if (W.puo('fatturazione')) {

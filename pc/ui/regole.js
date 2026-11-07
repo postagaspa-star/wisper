@@ -919,6 +919,17 @@
     return String(Math.round(x * 100) / 100).replace('.', ',');
   }
 
+  /**
+   * Un numero scritto a mano in un campo di soldi o di ore: "2.500" (punto delle migliaia, come lo scrive
+   * chiunque) vale 2500, come sul telefono; il resto come C.numONull ("" e "sei" danno null). Con C.numONull
+   * da solo "2.500" valeva 2,5: un budget scritto così passava da 2.500 € a 2,50 € (correzione 0.3.6.1).
+   */
+  function leggiCampo(testo) {
+    const C = radice.WisperConti || (typeof require === 'function' ? require('./conti.js') : null);
+    const s = String(testo === null || testo === undefined ? '' : testo).trim().replace(/\s/g, '');
+    return C.numONull(/^\d{1,3}(\.\d{3})+(,\d+)?$/.test(s) ? s.replace(/\./g, '') : s);
+  }
+
   // ------------------------------------------------------------------ password e CSV
 
   /** Una password iniziale da dire a voce: XXXX-XXXX-XXXX, senza lettere che si confondono. */
@@ -967,7 +978,7 @@
     pezziFormato, formatoDaPezzi, formattaNumero, formatoAParole, erroreFormato, codiceDa, numeroDaFormato, prossimoDa,
     destinazione, testoAzione, classeGravita, vocePerLeOre, dashSenzaOre,
     NOMI_CAMPI, campiCambiati, fraseRegistro, primaDopo, valoreLeggibile, valoreCampo,
-    passwordIniziale, csv, nomeEsportazione, numeroCampo, costoOrarioDelConto,
+    passwordIniziale, csv, nomeEsportazione, numeroCampo, leggiCampo, costoOrarioDelConto,
   };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = Regole;
