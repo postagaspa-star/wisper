@@ -259,6 +259,8 @@ function importa(o) {
       scrivi('soggetti', soggetti);
       scrivi('commesse', commesse);
       scrivi('rapportini', rapportini);
+      // 06/11/2026: ogni riga del foglio e' un rapportino con un lavoro solo, col suo numero (come la migrazione 011).
+      w.giornateMancanti();
       const righeFile = file.map((f, i) => {
         const suDisco = nomiSuDisco[f.id];
         const meta = indice[f.id] || {};

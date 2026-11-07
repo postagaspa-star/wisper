@@ -14,6 +14,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
 const assert = require('node:assert/strict');
+const { portaDevtools, chiudiEdge: chiudiEdgeCdp } = require('./edge-prova.js');
 
 const arg = process.argv.slice(2);
 const opz = (n, d) => { const i = arg.indexOf(n); return i >= 0 ? arg[i + 1] : d; };
@@ -25,7 +26,7 @@ const aspetta = ms => new Promise(r => setTimeout(r, ms));
 
 async function main() {
   const profilo = fs.mkdtempSync(path.join(os.tmpdir(), 'wisper-edge-progetti-'));
-  const porta = 9650 + Math.floor(Math.random() * 150);
+  const porta = portaDevtools(9650, 150);
   const edge = spawn(EDGE, ['--headless=new', '--disable-gpu', '--no-first-run', '--hide-scrollbars', '--user-data-dir=' + profilo, '--remote-debugging-port=' + porta, 'about:blank'], { stdio: 'ignore' });
   let ws = null;
   const errori = [];
@@ -320,7 +321,9 @@ async function main() {
     await clicca('Rossi Impianti Srl', '.finestra', 500);
     await clicca('26ST002 · ', '.finestra', 500);
     pill = await pilloleProgetto();
-    assert.deepEqual(pill, ['+ Nuovo progetto'], 'la commessa non ha progetti: solo Nuovo progetto');
+    // 06/11/2026: il progetto è obbligatorio solo per Elettrodinamica; per gli altri c'è "Nessun progetto" (e "Senza commessa").
+    assert.deepEqual(pill, ['Nessun progetto *', '+ Nuovo progetto'], 'Rossi: il progetto si può lasciare (Nessun progetto, già scelto), c\'è Nuovo progetto: ' + pill.join(' | '));
+    assert.match(await testoFinestra(), /Senza commessa/, 'per Rossi c\'è di nuovo "Senza commessa"');
     await clicca('+ Nuovo progetto', '.finestra', 1200);
     assert.equal(await valuta("[...document.querySelectorAll('.finestra')].pop().querySelector('select').disabled"), true, 'dal rapportino la commessa è fissa');
     const propostoRossi = (await server('codiceProgetto?idCommessa=26ST002')).codice;
@@ -335,7 +338,21 @@ async function main() {
     const pRossi = (await server('progetti?idCommessa=26ST002')).progetti[0];
     rap = (await server('rapportini')).rapportini.find(r => r.descrizione === 'Rilievo del quadro generale');
     assert.ok(pRossi && rap && String(rap.idProgetto) === String(pRossi.id), 'progetto creato col rapportino e rapportino sotto di lui');
-    passo('Senza progetto il rapportino non si salva ("Scegli il progetto"); "Nuovo progetto" dentro il rapportino crea ' + pRossi.codice + ' e lo sceglie');
+    // Un altro rapportino di Rossi con "Nessun progetto": si salva senza progetto.
+    await clicca('Nuovo rapportino', '#principale', 800);
+    await valuta("(() => { const i = document.querySelector('.finestra input[type=search]'); i.value = 'Rossi'; i.dispatchEvent(new Event('input', { bubbles: true })); return true; })()");
+    await aspetta(400);
+    await clicca('Rossi Impianti Srl', '.finestra', 500);
+    await clicca('26ST002 · ', '.finestra', 500);
+    await clicca('Nessun progetto', '.finestra', 300);
+    pill = await pilloleProgetto();
+    assert.equal(pill[0], 'Nessun progetto *', 'Nessun progetto scelto: ' + pill.join(' | '));
+    await clicca('4 h', '.finestra', 300);
+    await scrivi('Cosa hai fatto', 'Sopralluogo senza progetto');
+    await clicca('Salva', '.finestra', 2200);
+    rap = (await server('rapportini')).rapportini.find(r => r.descrizione === 'Sopralluogo senza progetto');
+    assert.ok(rap && !rap.idProgetto, 'il rapportino di Rossi si salva senza progetto');
+    passo('Elettrodinamica: senza progetto non si salva ("Scegli il progetto"); "Nuovo progetto" dentro il rapportino crea ' + pRossi.codice + ' e lo sceglie; Rossi: "Nessun progetto" e si salva');
 
     // ------------------------------------------------------------- 7. Elenco: colonne, conti, ricerca; elenco rapportini col progetto
     await vai('#progetti');
@@ -387,7 +404,9 @@ async function main() {
     await vai('#rapportini/elenco');
     await valuta(`(() => { const r = [...document.querySelectorAll('.tab .r[data-chiave]')].find(x => x.textContent.includes('Cablaggio del quadro QE2')); r.click(); return true; })()`);
     await aspetta(1200);
-    await clicca('PDF', '.pannello', 4000);
+    await clicca('PDF', '.pannello', 300);
+    // L'avviso dura 3 s e arriva quando Edge ha finito di stampare: si guarda spesso, fino a 15 s.
+    for (let i = 0; i < 75 && !/PDF salvato in/.test(await testoAvvisi()); i++) await aspetta(200);
     assert.match(await testoAvvisi(), /PDF salvato in/, 'il PDF esce (Edge stampa nel finto ponte)');
     const html = await valuta(`(async () => {
       const rap = (await fetch('/server/rapportini').then(r => r.json())).rapportini.find(r => r.descrizione === 'Cablaggio del quadro QE2');
@@ -547,9 +566,9 @@ async function main() {
     console.log('\n' + passi + ' passi, tutti a posto');
   } finally {
     try { if (ws) ws.close(); } catch (e) { /* già chiuso */ }
-    edge.kill();
+    await chiudiEdgeCdp(porta, edge);
     await aspetta(500);
-    try { fs.rmSync(profilo, { recursive: true, force: true }); } catch (e) { /* Edge lo tiene ancora */ }
+    await require('./edge-prova.js').togliCartella(profilo); // Edge a volte tiene un file un attimo: riprova per qualche secondo
   }
 }
 

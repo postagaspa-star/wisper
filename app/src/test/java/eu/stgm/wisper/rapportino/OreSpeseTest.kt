@@ -10,7 +10,15 @@ import org.junit.Assert.fail
 import org.junit.Assume.assumeTrue
 import org.junit.Test
 import java.io.File
+import eu.stgm.wisper.ui.FiltroRapportini
+import eu.stgm.wisper.ui.Navigatore
+import eu.stgm.wisper.ui.Quali
+import eu.stgm.wisper.ui.RicordoRapportini
+import eu.stgm.wisper.ui.Sezione
+import eu.stgm.wisper.ui.SegmentoRapportini
+import eu.stgm.wisper.ui.apriCollegamento
 import java.time.LocalDate
+import java.time.YearMonth
 
 /**
  * I conti della fase 3 (architettura.md §14.15) sui casi condivisi di
@@ -502,6 +510,52 @@ class OreSpeseTest {
         assertNull(TestiCoda.inAttesa(listOf(op(CodaInvii.Tipo.ORE, "O-1", errore = "no"))))
         assertEquals("Il server non ha accettato una spesa", TestiCoda.rifiutata(CodaInvii.Tipo.FOTO_SPESA))
         assertEquals("Il server non ha accettato un rapportino", TestiCoda.rifiutata(CodaInvii.Tipo.STATO))
+    }
+
+    @Test
+    fun `senza le Ore, da approvare e Dashboard di un server di prima`() {
+        // 07/11/2026 (richiesta del titolare): le Ore non ci sono più. Un server di prima le manda ancora.
+        val d = DaApprovare.daJson(
+            JSONObject("""{"ok": true, "quante": 3, "conAnomalie": 2, "persone": [{"idUtente": 3, "nome": "Marco Collaboratore", "quante": 3, "conAnomalie": 2, "voci": [
+               {"tipo": "rapportino", "id": "RAP/2026/0006", "idUtente": 3, "cosa": "Rapportino", "dettaglio": "RAP/2026/0006", "quanto": 4.5, "unita": "ore", "anomalie": []},
+               {"tipo": "spesa", "id": 12, "idUtente": 3, "cosa": "Spesa", "dettaglio": "Albergo", "quanto": 230, "unita": "euro", "anomalie": [{"tipo": "sopra200", "testo": "Spesa sopra i 200 €"}]},
+               {"tipo": "ore", "id": 12, "idUtente": 3, "cosa": "Ore", "dettaglio": "26ST001", "quanto": 8, "unita": "ore", "anomalie": [{"tipo": "troppeOre", "testo": "13 ore in un giorno"}]}]}]}"""),
+        )
+        val s = d.senzaOre()
+        assertEquals(listOf("rapportino", "spesa"), s.voci.map { it.tipo })
+        assertEquals(2, s.quante)
+        assertEquals(1, s.conAnomalie)
+        assertTrue(s.senzaOre() === s)
+        // Il timer acceso e le ore respinte di un giorno non si mostrano; il resto sì, anche col segmento "ore".
+        val dash = Dashboard.daJson(JSONObject("""{"urgenti": [
+            {"tipo": "timer", "titolo": "Il timer è acceso da 11 ore", "collegamento": {"pagina": "rapportini", "filtro": {"segmento": "ore"}}},
+            {"tipo": "respinta", "titolo": "Ore del 21/10 respinte", "collegamento": {"pagina": "rapportini", "filtro": {"segmento": "ore", "giorno": "2026-10-21"}}},
+            {"tipo": "respinta", "titolo": "RAP/2026/0006 respinto", "collegamento": {"pagina": "rapportini", "filtro": {"segmento": "rapportini", "id": "RAP/2026/0006"}}},
+            {"tipo": "respinta", "titolo": "4 cose respinte da correggere", "collegamento": {"pagina": "rapportini", "filtro": {"segmento": "ore", "stato": "respinta"}}}],
+            "settimana": [{"tipo": "timer", "titolo": "Il timer di Marco è acceso da 12 ore"}], "pianificare": []}"""))
+        assertEquals(listOf("RAP/2026/0006 respinto", "4 cose respinte da correggere"), dash.urgenti.map { it.titolo })
+        assertTrue(dash.settimana.isEmpty())
+    }
+
+    @Test
+    fun `i collegamenti di prima alle Ore aprono i Rapportini`() {
+        val aperte = mutableListOf<Pair<Sezione, FiltroRapportini?>>()
+        val rotte = mutableListOf<String>()
+        val nav = Navigatore({ rotte += it }, {}, { s, f -> aperte += s to f }, { _, _ -> }, { _, _, _ -> })
+        // Server di prima: {segmento: 'ore'} (il riquadro Ore della settimana, il timer), anche col giorno.
+        apriCollegamento(Collegamento("rapportini", parametri = mapOf("segmento" to "ore")), nav, emptyList())
+        apriCollegamento(Collegamento("rapportini", parametri = mapOf("segmento" to "ore", "giorno" to "2026-10-21")), nav, emptyList())
+        apriCollegamento(Collegamento("rapportini", parametri = mapOf("segmento" to "ore", "stato" to "respinta")), nav, emptyList())
+        // Server nuovo: oreSettimana con {pagina: 'rapportini'}.
+        apriCollegamento(Collegamento("rapportini"), nav, emptyList())
+        assertTrue(rotte.isEmpty())
+        assertEquals(List(4) { Sezione.RAPPORTINI }, aperte.map { it.first })
+        assertEquals(YearMonth.now(), aperte[0].second?.mese)
+        assertEquals(YearMonth.of(2026, 10), aperte[1].second?.mese)
+        assertTrue(aperte.all { it.second?.quali == Quali.TUTTI })
+        apriCollegamento(Collegamento("rapportini", parametri = mapOf("segmento" to "daApprovare")), nav, emptyList())
+        assertEquals(SegmentoRapportini.APPROVARE, RicordoRapportini.segmento)
+        RicordoRapportini.segmento = SegmentoRapportini.RAPPORTINI
     }
 
 }

@@ -184,62 +184,7 @@ internal fun FoglioSceltaCommessa(ana: Anagrafiche, scelta: String, onScelta: (S
     }
 }
 
-/** I secondi del timer che scorrono, uno al secondo, dall'ultima lettura del server. */
-@Composable
-internal fun secondiDelTimer(t: TimerLetto?): Long {
-    var ora by remember { mutableLongStateOf(System.currentTimeMillis()) }
-    LaunchedEffect(t?.lettoAlMs, t?.acceso) {
-        while (t?.acceso == true) {
-            ora = System.currentTimeMillis()
-            delay(1000)
-        }
-    }
-    return t?.secondi(ora) ?: 0L
-}
-
-/**
- * La scheda del timer acceso (prototipo, schedaTimer): bordo giallo, la commessa,
- * il tempo che scorre in grande e Ferma col bordo (il giallo pieno resta a
- * Registra ore, l'azione principale della pagina). Toccata fuori da Ferma, [onApri].
- */
-@Composable
-internal fun SchedaTimerAcceso(t: TimerLetto, onFerma: () -> Unit, modifier: Modifier = Modifier, onApri: (() -> Unit)? = null, inCorso: Boolean = false) {
-    val c = W.colori
-    val timer = t.timer ?: return
-    val secondi = secondiDelTimer(t)
-    Column(
-        modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(c.scelta)
-            .border(2.dp, c.giallo, RoundedCornerShape(22.dp))
-            .let { if (onApri != null) it.clickable(onClick = onApri) else it }
-            .padding(18.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Text(
-            ("Timer acceso · " + timer.idCommessa.ifBlank { "Studio" }).uppercase(ITALIA),
-            style = Testi.etichetta, color = c.gialloTesto,
-        )
-        Text(
-            TimerAcceso.durata(secondi), style = Testi.totale.copy(fontSize = 44.sp, lineHeight = 50.sp, letterSpacing = (-1).sp),
-            color = c.testo, modifier = Modifier.semantics { contentDescription = "Acceso da ${secondi / 3600} ore e ${(secondi / 60) % 60} minuti" },
-        )
-        val sotto = listOfNotNull(
-            timer.commessa.ifBlank { if (timer.idCommessa.isBlank()) "Attività dello studio" else null },
-            timer.descrizione.ifBlank { null },
-            "dalle " + timer.dalle,
-        ).joinToString(" · ")
-        Text(sotto, style = Testi.secondario, color = c.tenue, maxLines = 2, overflow = TextOverflow.Ellipsis)
-        Row(
-            Modifier.fillMaxWidth().heightIn(min = 56.dp).clip(RoundedCornerShape(16.dp)).background(c.scheda)
-                .border(2.dp, c.testo, RoundedCornerShape(16.dp)).clickable(enabled = !inCorso, onClick = onFerma)
-                .semantics { role = Role.Button },
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(Icone.ferma, null, tint = c.testo, modifier = Modifier.size(18.dp))
-            Text(if (inCorso) "  Fermo il timer…" else "  Ferma", style = Testi.pulsanteSecondario.copy(fontSize = 17.sp), color = c.testo)
-        }
-    }
-}
+// 07/11/2026: via la scheda del timer acceso (le Ore non ci sono più).
 
 /** La casella di una riga da scegliere (Da approvare): vuota col bordo, piena e scura con la spunta. */
 @Composable

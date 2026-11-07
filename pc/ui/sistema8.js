@@ -94,15 +94,17 @@
           h('div', { class: 'scheda righe' }, feed.map(f => riga({ sinistra: quadrato('calendario'), titolo: f.nome, sotto: [f.persona, Q.letturaFeed(f, oggi())].filter(Boolean).join(' · '),
             destra: scrive() ? h('button', { type: 'button', class: 'btn piccolo', onclick: () => togliFeed(f) }, 'Togli') : null })))) : null;
         const giorni = h('input', { type: 'text', inputmode: 'numeric', class: 'num-in', value: String(s.sessioneGiorni || 180), disabled: !scrive(), 'aria-label': 'Un dispositivo esce da solo dopo' });
+        // Dal 06/11/2026 si salva da solo, quando smetti di scrivere e uscendo dal campo.
+        if (scrive()) B.salvaDaSolo(giorni, {
+          leggi: t => { const e = B.numeroAMeta(t) ? 'Durata degli accessi: scrivi un numero' : Q.erroreVoce({ tipo: 'numero', etichetta: 'Durata degli accessi', min: 30, max: 365 }, t); return e ? { errore: e } : { valore: Q.numeroScritto(t) }; },
+          salva: n => Rete.post('/server/salvaImpostazioni', { valori: { SESSIONE_GIORNI: n } }).then(r => {
+            s.sessioneGiorni = n;
+            S.ana.impostazioni = Object.assign({}, S.ana.impostazioni, (r && r.impostazioni) || { SESSIONE_GIORNI: n });
+            return r;
+          }),
+        });
         const durata = h('div', { class: 'scheda fila' }, h('h2', null, 'Durata degli accessi'),
-          h('div', { class: 'imp-riga' }, h('span', { class: 'lab' }, 'Un dispositivo esce da solo dopo'), B.conSuffisso(giorni, 'giorni senza uso')),
-          scrive() ? h('div', null, h('button', { type: 'button', class: 'btn', onclick: async () => {
-            const n = Q.numeroScritto(giorni.value);
-            const e = Q.erroreVoce({ tipo: 'numero', etichetta: 'Durata degli accessi', min: 30, max: 365 }, giorni.value);
-            if (e) { avviso(e, true); return; }
-            const r = await lavora('Salvo', () => Rete.post('/server/salvaImpostazioni', { valori: { SESSIONE_GIORNI: n } }));
-            if (r) { M.sicurezza = null; avviso('Salvato'); W.disegnaPagina(); }
-          } }, 'Salva')) : null);
+          h('div', { class: 'imp-riga', 'data-chiave': 'SESSIONE_GIORNI' }, h('span', { class: 'lab' }, 'Un dispositivo esce da solo dopo'), B.conSuffisso(giorni, 'giorni senza uso')));
         aggiungi(area, [due([schede], [listaDisp, listaFeed, durata,
           titolare() ? h('div', null, h('button', { type: 'button', class: 'btn grande bordo-rosso', onclick: scollegaTutti }, 'Scollega tutti i dispositivi')) : null])]);
       });
@@ -308,7 +310,7 @@
           W.puo('commesse') ? ['commesse', 'Commesse', S.ana.commesse.filter(m => !m.modello).length + ' commesse'] : null,
           W.puo('preventivi') ? ['preventivi', 'Preventivi', 'Tutti i preventivi'] : null,
           W.puo('attivita') ? ['attivita', 'Attività', 'Le attività aperte'] : null,
-          W.puo('rapportini') ? ['ore', 'Ore', 'Le ore di questa settimana'] : null,
+          // 07/11/2026: niente più Ore, quindi niente "Le ore di questa settimana".
           W.puo('spese') ? ['spese', 'Spese', 'Le spese di questo mese'] : null].filter(Boolean).map(x => riga({ sinistra: quadrato('scarica'), titolo: x[1], sotto: x[2], onclick: () => W.esporta(x[0]), freccia: false }))))]);
       if (W.puo('clienti')) {
         const zonaImp = h('div', { class: 'sezione' });
@@ -521,18 +523,19 @@
         segmenti([['tutte', 'Tutte'], ['dafare', 'Da fare'], ['nonvanno', 'Non vanno'], ['fatte', 'Fatte']], M.seg, x => { M.seg = x; W.ridisegna(); })]);
         const gruppi = Q.filtraControlli(c.gruppi || [], M.seg, ver);
         if (!gruppi.length) { aggiungi(area, [h('div', { class: 'calmo' }, icona('spunta', 20, 2.8), 'Niente qui')]); return; }
-        const col = '72px minmax(0, 3.2fr) 118px minmax(0, .8fr) 168px 60px minmax(0, 1fr)';
+        // Le colonne stanno in stile.css (.tab-controlli): il testo va a capo, e nella tabella stretta (1024) Tipo e Nota
+        // lasciano il posto al resto (si leggono nel pannello della riga). 07/11/2026: niente più testi coi puntini.
         gruppi.forEach(g => {
           const chiuso = !!M.chiusi[g.nome];
-          const tab = h('div', { class: 'tab tab-controlli' }, h('div', { class: 'r testa', style: { gridTemplateColumns: col } },
-            h('span', null, 'Chiave'), h('span', null, 'Controllo'), h('span', null, 'Tipo'), h('span', null, 'Chi'), h('span', null, 'Stato'), h('span', null, 'Il'), h('span', null, 'Nota')));
+          const tab = h('div', { class: 'tab tab-controlli' }, h('div', { class: 'r testa' },
+            h('span', null, 'Chiave'), h('span', null, 'Controllo'), h('span', { class: 'c-tipo' }, 'Tipo'), h('span', null, 'Chi'), h('span', null, 'Stato'), h('span', null, 'Il'), h('span', { class: 'c-nota' }, 'Nota')));
           g.righe.forEach(x => {
             const st = Q.STATI_CONTROLLO[Q.statoControllo(x, ver)];
-            aggiungi(tab, [h('div', { class: 'r cliccabile' + (M.aperta === x.chiave ? ' scelta' : ''), style: { gridTemplateColumns: col }, role: 'button', tabindex: '0', 'data-chiave': x.chiave,
+            aggiungi(tab, [h('div', { class: 'r cliccabile' + (M.aperta === x.chiave ? ' scelta' : ''), role: 'button', tabindex: '0', 'data-chiave': x.chiave,
               onclick: () => apriRiga(x, ver), onkeydown: e => { if (e.key === 'Enter') apriRiga(x, ver); } },
-            h('span', { class: 'chiave-c' }, x.chiave), h('span', { class: 'taglia-due', title: x.testo }, x.testo), h('span', { class: 't2' }, Q.TIPI_CONTROLLO[x.tipo] || x.tipo),
-            h('span', { class: 't2 taglia' }, x.chi || '—'), h('span', null, pill(st.parola, st.colore)), h('span', { class: 't2' }, x.il ? Q.giornoMese(x.il, oggi()) : '—'),
-            h('span', { class: 't2 taglia', title: x.nota || '' }, x.nota || ''))]);
+            h('span', { class: 'chiave-c' }, x.chiave), h('span', { class: 'a-capo' }, x.testo), h('span', { class: 't2 c-tipo' }, Q.TIPI_CONTROLLO[x.tipo] || x.tipo),
+            h('span', { class: 't2 a-capo' }, x.chi || '—'), h('span', null, pill(st.parola, st.colore)), h('span', { class: 't2' }, x.il ? Q.giornoMese(x.il, oggi()) : '—'),
+            h('span', { class: 't2 a-capo c-nota' }, x.nota || ''))]);
           });
           aggiungi(area, [h('div', { class: 'sezione gruppo-controlli' },
             h('button', { type: 'button', class: 'testa-gruppo', 'aria-expanded': chiuso ? 'false' : 'true', onclick: () => { M.chiusi[g.nome] = !chiuso; W.ridisegna(); } },

@@ -246,6 +246,8 @@ module.exports = {
     r.interfaccia.logo = testo(imp.STUDIO_LOGO) && this.db.riga('SELECT id FROM file WHERE id = ? AND cestinato IS NULL', testo(imp.STUDIO_LOGO)) ? '/file/' + testo(imp.STUDIO_LOGO) : '';
     r.interfaccia.oraServer = require('../utili').dataOraIso(new Date(adessoMs()));
     r.interfaccia.pdfLogo = imp.PDF_LOGO === true || imp.PDF_LOGO === 'true';
+    // 06/11/2026: il nome dello studio accanto al logo nei PDF (di base si').
+    r.interfaccia.pdfNome = !(imp.PDF_NOME === false || imp.PDF_NOME === 'false' || imp.PDF_NOME === 0 || imp.PDF_NOME === '0' || imp.PDF_NOME === 'NO');
     r.interfaccia.pdfPiede = testo(imp.PDF_PIEDE);
     r.interfaccia.silenzioSera = c.utente ? this.silenzioAdesso(c.utente.id) : false;
     if (d && testo(d.oraDispositivo)) {

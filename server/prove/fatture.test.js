@@ -87,7 +87,11 @@ test('Da fatturare: per cliente, voci in ordine, i rapportini del mese con le lo
   assert.ok(df.inBozza.some(f => f.riferimento === 'W-14' && f.stato === 'pronta'));
   assert.ok(df.riepiloghi.some(r => r.idCliente === 'C001' && r.mese === '2026-09' && r.rapportini === 6 && r.inviatoIl === '2026-09-30T18:05:00'));
   assert.deepEqual([df.raggruppa.C001, df.raggruppa.C002], ['mese', 'rapportino']);
-  assert.ok(df.daFirmare.length >= 1, 'i rapportini ancora da firmare, in fondo');
+  // 06/11/2026 (il rapportino senza firma): i lavori Da inviare (BOZZA) si fatturano; "da firmare" resta vuoto per le app 1.1.
+  assert.deepEqual(df.daFirmare, []);
+  const tutte = df.gruppi.flatMap(g => g.voci).filter(v => v.tipo === 'rapportino');
+  const bozze = db().righe("SELECT id FROM rapportini WHERE UPPER(stato) = 'BOZZA' AND stato_approvazione IN ('', 'approvato') AND id_cliente <> ''").map(r => r.id);
+  assert.ok(bozze.length >= 1 && bozze.some(id => tutte.some(v => v.id === id)), 'i lavori Da inviare sono fra le voci da fatturare');
   assert.equal(df.totale, Math.round(df.gruppi.reduce((t, g) => t + g.totale, 0) * 100) / 100);
   // Le riservate non ci sono: il 40% di 26ST003 e la pratica sono nella W-15.
   assert.equal(voci.some(v => v.tipo === 'scadenza' && v.titolo === '40% a fine progetto'), false);

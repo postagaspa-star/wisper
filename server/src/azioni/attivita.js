@@ -296,7 +296,7 @@ module.exports = {
     if (x.idCommessa !== undefined) {
       const codice = testo(x.idCommessa);
       if (codice) {
-        const m = this.db.riga('SELECT id FROM commesse WHERE id = ?', codice);
+        const m = this.db.riga('SELECT id FROM commesse WHERE id = ?', this.codiceCommessaVero(codice));
         if (!m) throw new Rifiuto('Commessa ' + codice + ' non trovata');
         v.commessa_id = m.id;
       } else v.commessa_id = '';

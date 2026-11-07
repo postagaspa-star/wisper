@@ -12,23 +12,79 @@
  * colonna "spese" resta il totale di quelle al cliente: sincronizzaSpeseRapportino
  * in spese.js), e un rapportino di chi deve farlo approvare non si manda al
  * cliente e non si fattura finche' non e' approvato.
+ *
+ * 06/11/2026 (docs/gestionale/rapportino-lavori.md): il rapportino e' la giornata (tabella giornate: numero, data,
+ * tecnico) con piu' LAVORI; ogni lavoro e' una riga di rapportini, quella che fino alla 1.1 era il rapportino intero.
+ * salvaRapportino ha la forma nuova {idLocale, id?, data, tecnico?, lavori: [...]} (salvaGiornata) e quella di prima
+ * (un lavoro solo, dalle app 1.1 e dalle loro code). Niente firma: Da inviare = BOZZA (e il FIRMATO di prima).
  */
 'use strict';
 
 const {
   Rifiuto, senzaPermesso, testo, numero, numeroONull, siNoONull, normalizza, adesso, dataIso, dataDaIso,
-  dataOraIso, oggi,
+  dataOraIso, oggi, centesimi,
 } = require('../utili');
 const { ELETTRODINAMICA, STATI, STATI_BLOCCATI, regoleDi, calcola, tariffaProposta } = require('../conti');
 const { diverso } = require('./ore');
 
 const urlFile = id => '/file/' + id;
 
+/** Nella forma nuova un lavoro Inviato o Fatturato non si cambia (il FIRMATO di prima e' Da inviare: si cambia). */
+const STATI_FERMI = ['INVIATO', 'FATTURATO'];
+const statoDi = r => testo(r.stato).toUpperCase() || 'BOZZA';
+/** Il numero del lavoro nel suo rapportino: RAP/2026/0153 -> 1 (il lavoro col numero del rapportino), RAP/2026/0153-2 -> 2. */
+function numeroNelRapportino(idLavoro, idGiornata) {
+  if (idLavoro === idGiornata) return 1;
+  const m = String(idLavoro).slice(String(idGiornata).length).match(/^-(\d+)$/);
+  return String(idLavoro).indexOf(idGiornata) === 0 && m ? Number(m[1]) : 0;
+}
+
 module.exports = {
   /** Il prossimo numero dell'anno della data (non di quando arriva): RAP/2026/0001, RAP/2026/0002... */
   prossimoNumeroRapportino(anno) {
-    const codici = this.db.righe('SELECT id FROM rapportini').map(r => r.id);
+    // 06/11/2026: contano i rapportini (giornate) e gli id delle righe di prima: un numero dato non torna mai.
+    const codici = this.db.righe('SELECT id FROM giornate').map(r => r.id).concat(this.db.righe('SELECT id FROM rapportini').map(r => r.id));
     return this.prossimoNumero('rapportino', codici, anno);
+  },
+
+  /**
+   * Le righe senza rapportino (scritte direttamente nel database: l'importazione del foglio, le prove) diventano un
+   * rapportino con un solo lavoro, col loro numero, come nella migrazione 011. Torna quanti rapportini sono nati.
+   */
+  giornateMancanti() {
+    const n = Number(this.db.esegui(
+      'INSERT OR IGNORE INTO giornate (id, id_locale, data, tecnico, utente_id, creato, modificato) ' +
+      'SELECT r.id, CASE WHEN r.id_locale IS NOT NULL AND NOT EXISTS (SELECT 1 FROM giornate g WHERE g.id_locale = r.id_locale) THEN r.id_locale ELSE NULL END, ' +
+      "COALESCE(r.data, ''), COALESCE(r.tecnico, ''), r.utente_id, COALESCE(r.creato, ''), COALESCE(r.modificato, '') FROM rapportini r WHERE r.id_giornata IS NULL").changes) || 0;
+    this.db.esegui('UPDATE rapportini SET id_giornata = id, posizione = 1 WHERE id_giornata IS NULL');
+    return n;
+  },
+
+  /** Il rapportino (giornata) per idLocale se c'e', altrimenti per numero. */
+  trovaGiornata(id, idLocale) {
+    if (testo(idLocale)) {
+      const g = this.db.riga('SELECT * FROM giornate WHERE id_locale = ?', testo(idLocale));
+      if (g) return g;
+    }
+    if (!testo(id)) return null;
+    if (this.db.riga('SELECT id FROM rapportini WHERE id = ? AND id_giornata IS NULL', testo(id))) this.giornateMancanti();
+    return this.db.riga('SELECT * FROM giornate WHERE id = ?', testo(id)) || null;
+  },
+
+  /** I lavori di un rapportino in ordine (anche gli annullati). */
+  lavoriDellaGiornata(idGiornata) {
+    return this.db.righe('SELECT * FROM rapportini WHERE id_giornata = ? ORDER BY posizione, id', idGiornata);
+  },
+
+  /** Il rapportino come lo manda salvaRapportino (forma nuova): {id, idLocale, data, tecnico, lavori, totale}. */
+  giornataPerId(idGiornata) {
+    const g = this.db.riga('SELECT * FROM giornate WHERE id = ?', idGiornata);
+    if (!g) return null;
+    const lavori = this.lavoriDellaGiornata(g.id).filter(r => statoDi(r) !== 'ANNULLATO').map(r => this.rapportinoDaRiga(r));
+    return {
+      id: g.id, idLocale: testo(g.id_locale), data: dataIso(g.data), tecnico: testo(g.tecnico), lavori,
+      totale: centesimi(lavori.reduce((s, l) => s + numero(l.totale), 0)),
+    };
   },
 
   /** Per idLocale se c'e', altrimenti per numero: come trovaRiga() di Code.gs. */
@@ -60,13 +116,168 @@ module.exports = {
    * campo) si creano qui, prima della riga.
    */
   salvaRapportino(r) {
+    r = r || {};
+    // 06/11/2026: la forma nuova, il rapportino coi suoi lavori.
+    if (Array.isArray(r.lavori)) return this.salvaGiornata(r);
     if (!r.idLocale && !r.id) throw new Rifiuto('Manca l\'identificativo del rapportino');
     const esistente = this.trovaRiga(r.id, r.idLocale);
+    if (esistente && !esistente.id_giornata) this.giornateMancanti();
+    return this.rapportinoPerId(this.salvaLavoro(r, { esistente: esistente ? this.db.riga('SELECT * FROM rapportini WHERE id = ?', esistente.id) : null }));
+  },
+
+  /**
+   * salvaRapportino, forma nuova (06/11/2026): {idLocale, id?, data, tecnico?, lavori: [{idLocale, id?, ...i campi di un
+   * rapportino della 1.1}]} -> {id, idLocale, data, tecnico, lavori, totale}. Lo stesso idLocale (del rapportino e dei
+   * lavori) non fa doppioni. Un lavoro che c'era e non e' piu' nell'elenco si toglie (annullato, come Elimina), solo se e'
+   * Da inviare e fuori dalle fatture. Un lavoro Inviato o Fatturato, o in una fattura, non si cambia: rimandato uguale va
+   * bene. La data del rapportino vale per i suoi lavori che si possono cambiare. Ogni lavoro tiene le regole di oggi.
+   */
+  salvaGiornata(g) {
+    if (!testo(g.idLocale) && !testo(g.id)) throw new Rifiuto('Manca l\'identificativo del rapportino');
+    const lavori = g.lavori.filter(l => l && typeof l === 'object');
+    if (!lavori.length) throw new Rifiuto('Aggiungi almeno un lavoro');
+    const c = this.chi();
+    const impostazioni = this.leggiImpostazioni();
+    // I lavori che ci sono gia' (per idLocale, poi per numero).
+    const trovati = lavori.map((l, i) => {
+      if (!testo(l.idLocale) && !testo(l.id)) throw this.rifiutoLavoro(new Rifiuto('Manca l\'identificativo del lavoro'), i, lavori.length);
+      const riga = this.trovaRiga(l.id, l.idLocale);
+      if (riga && !riga.id_giornata) this.giornateMancanti();
+      if (!riga && !testo(l.idLocale)) throw this.rifiutoLavoro(new Rifiuto('Lavoro ' + testo(l.id) + ' non trovato'), i, lavori.length);
+      return riga ? this.db.riga('SELECT * FROM rapportini WHERE id = ?', riga.id) : null;
+    });
+    trovati.forEach((r, i) => {
+      if (r && trovati.findIndex(x => x && x.id === r.id) !== i) throw this.rifiutoLavoro(new Rifiuto('Il lavoro ' + r.id + ' c\'è due volte'), i, lavori.length);
+    });
+    let giornata = this.trovaGiornata(g.id, g.idLocale);
+    // Il rapportino non si trova ma i suoi lavori si': e' il loro (un telefono che l'ha riscritto con un idLocale nuovo).
+    if (!giornata) {
+      const dei = Array.from(new Set(trovati.filter(Boolean).map(r => r.id_giornata)));
+      if (dei.length === 1) giornata = this.db.riga('SELECT * FROM giornate WHERE id = ?', dei[0]) || null;
+    }
+    if (giornata && this.soloSuoi() && giornata.utente_id !== c.utente.id) throw senzaPermesso('modificare i rapportini degli altri');
+    trovati.forEach((r, i) => {
+      if (r && (!giornata || r.id_giornata !== giornata.id)) {
+        throw this.rifiutoLavoro(new Rifiuto('Il lavoro ' + r.id + ' è del rapportino ' + r.id_giornata), i, lavori.length);
+      }
+    });
+    const data = testo(g.data) ? dataDaIso(g.data) : (giornata && giornata.data) || oggi();
+    const tecnico = this.soloSuoi() ? c.utente.nome : (testo(g.tecnico) || (giornata ? testo(giornata.tecnico) : '') || testo(impostazioni.TECNICO));
+    // Quelli tolti dall'elenco: si tolgono solo Da inviare e fuori dalle fatture (prima di scrivere qualunque cosa).
+    const tenuti = new Set(trovati.filter(Boolean).map(r => r.id));
+    const daTogliere = giornata ? this.lavoriDellaGiornata(giornata.id).filter(r => !tenuti.has(r.id) && statoDi(r) !== 'ANNULLATO') : [];
+    for (const r of daTogliere) {
+      this.controllaSuo(r, 'togliere i lavori degli altri');
+      this.controllaLavoroDaTogliere(r);
+    }
+    const ora = adesso();
+    if (!giornata) {
+      const numeroNuovo = this.prossimoNumeroRapportino(Number(data.slice(0, 4)));
+      const idLocale = testo(g.idLocale) && !this.db.riga('SELECT id FROM giornate WHERE id_locale = ?', testo(g.idLocale)) ? testo(g.idLocale) : null;
+      this.inserisci('giornate', { id: numeroNuovo.codice, id_locale: idLocale, data, tecnico, utente_id: c.utente ? c.utente.id : null, creato: ora, modificato: ora });
+      this.segnaNumero('rapportino', numeroNuovo.numero);
+      giornata = this.db.riga('SELECT * FROM giornate WHERE id = ?', numeroNuovo.codice);
+    }
+    const idG = giornata.id;
+    // Il numero dei lavori nuovi: dopo il piu' alto mai dato in questo rapportino (anche a un lavoro tolto).
+    let prossimo = this.lavoriDellaGiornata(idG).reduce((m, r) => Math.max(m, numeroNelRapportino(r.id, idG)), 0) + 1;
+    lavori.forEach((l, i) => {
+      const riga = trovati[i];
+      const posizione = i + 1;
+      try {
+        if (riga) {
+          const st = statoDi(riga);
+          // Tolto (da qui o dall'ufficio con Elimina): resta tolto.
+          if (st === 'ANNULLATO') return;
+          const fermo = STATI_FERMI.indexOf(st) >= 0 || !!this.sorgenteAttiva('rapportino', riga.id);
+          const uguale = this.lavoroUguale(riga, l);
+          if (uguale && (fermo || (dataIso(riga.data) === data && testo(riga.tecnico) === tecnico))) {
+            if (riga.posizione !== posizione) this.db.esegui('UPDATE rapportini SET posizione = ? WHERE id = ?', posizione, riga.id);
+            return;
+          }
+          if (STATI_FERMI.indexOf(st) >= 0) throw new Rifiuto('Il lavoro ' + riga.id + ' è già ' + (st === 'FATTURATO' ? 'fatturato' : 'inviato') + ': per modificarlo riportalo da inviare');
+          if (fermo) this.controllaSorgenteLibera('rapportino', riga.id);
+        } else {
+          while (this.db.riga('SELECT id FROM rapportini WHERE id = ?', idG + '-' + prossimo)) prossimo++;
+        }
+        const id = riga ? riga.id : idG + '-' + (prossimo++);
+        this.salvaLavoro(Object.assign({}, l, { data, tecnico }), { esistente: riga, id, idGiornata: idG, posizione, formaNuova: true });
+      } catch (err) {
+        throw this.rifiutoLavoro(err, i, lavori.length);
+      }
+    });
+    if (daTogliere.length) this.cambiaStato(daTogliere.map(r => r.id), 'ANNULLATO');
+    this.aggiorna('giornate', idG, { data, tecnico, modificato: ora });
+    return this.giornataPerId(idG);
+  },
+
+  /** "Lavoro 2: ..." (con piu' lavori) e il posto del lavoro nella risposta (lavoro: 2), per aprirlo. */
+  rifiutoLavoro(err, i, quanti) {
+    if (!(err instanceof Rifiuto) || err.extra.lavoro) return err;
+    const r = new Rifiuto(quanti > 1 ? 'Lavoro ' + (i + 1) + ': ' + err.message : err.message, Object.assign({}, err.extra, { lavoro: i + 1 }));
+    if (err.esito) r.esito = err.esito;
+    return r;
+  },
+
+  /** Un lavoro si toglie solo Da inviare e fuori dalle fatture. */
+  controllaLavoroDaTogliere(r) {
+    const st = statoDi(r);
+    const nome = testo(r.cliente) || testo(r.id_cliente) || 'senza cliente';
+    if (st === 'FATTURATO' || this.sorgenteAttiva('rapportino', r.id)) throw new Rifiuto('Il lavoro per ' + nome + ' è in una fattura: non si toglie', { idLavoro: r.id });
+    if (st === 'INVIATO') throw new Rifiuto('Il lavoro per ' + nome + ' è già inviato: non si toglie', { idLavoro: r.id });
+  },
+
+  /**
+   * Il lavoro mandato e' uguale a quello scritto? Gli stessi campi che salvaLavoro scriverebbe (un campo che manca vale
+   * vuoto, come oggi): cliente, commessa, progetto, ore, km, spese, descrizione, luogo, note, ticket, tariffa (solo per
+   * chi vede i prezzi e per i clienti senza tariffa fissa). Gli strumenti di un lavoro fermo non si guardano.
+   */
+  lavoroUguale(riga, l) {
+    const n = (a, b) => numero(a) === numero(b);
+    if (testo(l.idCliente)) {
+      if (testo(l.idCliente) !== testo(riga.id_cliente)) return false;
+    } else if (normalizza(l.cliente) !== normalizza(riga.cliente)) return false;
+    const progetto = l.progettoNuovo && typeof l.progettoNuovo === 'object'
+      ? (testo(l.progettoNuovo.idLocale) ? (this.db.riga('SELECT id FROM progetti WHERE id_locale = ?', testo(l.progettoNuovo.idLocale)) || {}).id : undefined)
+      : (l.idProgetto === null || l.idProgetto === undefined || testo(l.idProgetto) === '' ? null : Number(l.idProgetto));
+    if ((progetto === undefined ? -1 : progetto) !== (riga.id_progetto === null || riga.id_progetto === undefined ? null : riga.id_progetto)) return false;
+    if (testo(l.idCommessa)) {
+      if (this.codiceCommessaVero(l.idCommessa).toUpperCase() !== testo(riga.id_commessa).toUpperCase()) return false;
+    } else if (testo(l.commessa) || (progetto === null && testo(riga.id_commessa))) return false;
+    for (const [k, col] of [['descrizione', 'descrizione'], ['luogo', 'luogo'], ['noteSpese', 'note_spese'], ['noteInterne', 'note_interne']]) {
+      if (testo(l[k]) !== testo(riga[col])) return false;
+    }
+    for (const [k, col] of [['oreLavoro', 'ore_lavoro'], ['oreExtra', 'ore_extra'], ['oreViaggio', 'ore_viaggio'], ['km', 'km'], ['spese', 'spese']]) {
+      if (!n(l[k], riga[col])) return false;
+    }
+    if (testo(l.ticket) && testo(l.ticket) !== testo(riga.ticket)) return false;
+    if (l.idTicket !== undefined && l.idTicket !== null && testo(l.idTicket) !== '' && this.idTicketDa(l.idTicket) !== riga.ticket_id) return false;
+    if (this.vedeCosti() && numero(l.tariffa) > 0 && !n(l.tariffa, riga.tariffa)) {
+      const s = this.db.riga('SELECT tariffa_fissa FROM soggetti WHERE id = ?', riga.id_cliente);
+      if (!s || s.tariffa_fissa === null || s.tariffa_fissa === undefined || s.tariffa_fissa === '') return false;
+    }
+    if (Array.isArray(l.strumenti) && STATI_FERMI.indexOf(statoDi(riga)) < 0 && !this.sorgenteAttiva('rapportino', riga.id)) {
+      const voluti = new Set(l.strumenti.map(s => Number(s && typeof s === 'object' ? s.idAttrezzatura : s)).filter(Boolean));
+      const usati = new Set(this.db.righe('SELECT attrezzatura_id a FROM strumenti_usati WHERE rapportino_id = ?', riga.id).map(x => x.a));
+      if (voluti.size !== usati.size || Array.from(voluti).some(x => !usati.has(x))) return false;
+    }
+    return true;
+  },
+
+  /**
+   * Un lavoro (fino alla 1.1: il rapportino intero), con le regole di sempre. o.esistente: la riga che c'e' gia' (o
+   * null). Forma di prima (o.formaNuova assente): come la 1.1, e il rapportino del lavoro nasce o ne segue la data.
+   * Forma nuova: id, idGiornata e posizione li da' salvaGiornata; un FIRMATO di prima che cambia torna Da inviare senza
+   * la firma. Torna l'id del lavoro.
+   */
+  salvaLavoro(r, o) {
+    o = o || {};
+    const esistente = o.esistente || null;
     if (esistente) this.controllaSuo(esistente, 'modificare i rapportini degli altri');
     // Fase 4: un rapportino in una bozza o in una fattura non si tocca (prima la frase che dice dove sta).
     if (esistente) this.controllaSorgenteLibera('rapportino', esistente.id);
 
-    if (esistente && STATI_BLOCCATI.indexOf(testo(esistente.stato).toUpperCase()) >= 0) {
+    if (esistente && !o.formaNuova && STATI_BLOCCATI.indexOf(testo(esistente.stato).toUpperCase()) >= 0) {
       throw new Rifiuto('Il rapportino ' + esistente.id + ' e\' gia\' firmato: riportalo in bozza per modificarlo');
     }
 
@@ -85,9 +296,10 @@ module.exports = {
     const impostazioni = this.leggiImpostazioni();
     const commesse = this.leggiCommesse({ archiviati: true, modelli: true });
     const codiceScelto = testo(r.idCommessa).toUpperCase();
-    let commessa = !codiceScelto ? null : commesse.filter(m =>
-      // Anche col codice di prima dei 26ST: un rapportino rimasto in coda su un telefono.
-      m.id.toUpperCase() === codiceScelto || m.codicePrecedente.toUpperCase() === codiceScelto)[0] || null;
+    // Anche col codice di prima (quello dei 26ST, o uno cambiato con cambiaCodiceCommessa): un rapportino rimasto in coda
+    // su un telefono. Il codice di adesso vale prima di quello di prima; di due commesse col codice di prima, la piu' recente.
+    let commessa = !codiceScelto ? null : commesse.filter(m => m.id.toUpperCase() === codiceScelto)[0] ||
+      commesse.filter(m => m.codicePrecedente.toUpperCase() === codiceScelto).pop() || null;
     // 03/11/2026: il progetto (cliente -> commessa -> progetto -> rapportino). Scelto: la commessa e' la sua (se il
     // rapportino non la dice, la si prende dal progetto); nuovo (nato sul telefono): si crea dopo la commessa.
     const sceltaProgetto = this.progettoPerRapportino(r, commessa);
@@ -226,14 +438,37 @@ module.exports = {
     let id;
     if (esistente) {
       id = esistente.id;
-      this.aggiorna('rapportini', id, Object.assign(valori, this.approvazioneRapportinoDopo(esistente, esistente.utente_id, cambiato)));
+      // 06/11/2026: nella forma nuova un FIRMATO di prima che cambia torna Da inviare, e la firma (di quello di prima) cade.
+      const firmatoCambiato = !!o.formaNuova && cambiato && statoDi(esistente) === 'FIRMATO';
+      if (firmatoCambiato) Object.assign(valori, { stato: 'BOZZA', firma: '', firmatario: '', firmato_il: '' });
+      this.aggiorna('rapportini', id, Object.assign(valori, this.approvazioneRapportinoDopo(esistente, esistente.utente_id, cambiato)),
+        'id', firmatoCambiato ? 'cambiato: di nuovo da inviare, senza la firma di prima' : undefined);
+      if (firmatoCambiato) {
+        this.chiudiPubblicazioni('rapportino', id, 'annullato');
+        this.db.esegui("UPDATE rapportini SET firma_modo = '', firma_prova = NULL, firma_referente_id = NULL WHERE id = ?", id);
+      }
+      if (o.formaNuova && (esistente.posizione !== o.posizione || esistente.id_giornata !== o.idGiornata)) {
+        this.db.esegui('UPDATE rapportini SET posizione = ?, id_giornata = ? WHERE id = ?', o.posizione, o.idGiornata, id);
+      }
+      if (!o.formaNuova) this.seguiGiornata(this.db.riga('SELECT * FROM rapportini WHERE id = ?', id), ora);
     } else {
-      const numeroNuovo = this.prossimoNumeroRapportino(Number(data.slice(0, 4)));
-      id = numeroNuovo.codice;
       const autore = c.utente ? c.utente.id : null;
+      let numeroNuovo = null;
+      if (o.formaNuova) {
+        id = o.id;
+      } else {
+        numeroNuovo = this.prossimoNumeroRapportino(Number(data.slice(0, 4)));
+        id = numeroNuovo.codice;
+      }
       this.inserisci('rapportini', Object.assign({ id, stato: 'BOZZA', creato: ora, utente_id: autore }, valori,
+        { id_giornata: o.formaNuova ? o.idGiornata : id, posizione: o.formaNuova ? o.posizione : 1 },
         this.serveApprovazione(autore) ? { stato_approvazione: 'da_approvare' } : {}));
-      this.segnaNumero('rapportino', numeroNuovo.numero);
+      if (numeroNuovo) {
+        this.segnaNumero('rapportino', numeroNuovo.numero);
+        // La forma di prima: il rapportino nasce col lavoro, con lo stesso numero.
+        const idLocaleG = valori.id_locale && !this.db.riga('SELECT id FROM giornate WHERE id_locale = ?', valori.id_locale) ? valori.id_locale : null;
+        this.inserisci('giornate', { id, id_locale: idLocaleG, data, tecnico, utente_id: autore, creato: ora, modificato: ora });
+      }
     }
     // Le spese del passo 3 diventano (o restano) righe di spese al cliente che sommano alla colonna.
     this.sincronizzaSpeseRapportino(id, { noteCambiate });
@@ -253,7 +488,19 @@ module.exports = {
       this.aggiornaCommessa(commessa.id, { prezzoOrario: conto.tariffa });
     }
 
-    return this.rapportinoPerId(id);
+    return id;
+  },
+
+  /**
+   * La forma di prima cambia un lavoro alla volta: il rapportino con quel lavoro solo ne segue data e tecnico; con
+   * altri lavori cambia solo l'ora della modifica.
+   */
+  seguiGiornata(lavoro, ora) {
+    if (!lavoro || !lavoro.id_giornata) return;
+    const g = this.db.riga('SELECT * FROM giornate WHERE id = ?', lavoro.id_giornata);
+    if (!g) return;
+    const altri = this.db.riga("SELECT COUNT(*) n FROM rapportini WHERE id_giornata = ? AND id <> ? AND UPPER(stato) <> 'ANNULLATO'", lavoro.id_giornata, lavoro.id).n;
+    this.aggiorna('giornate', g.id, altri ? { modificato: ora } : { data: dataIso(lavoro.data) || g.data, tecnico: testo(lavoro.tecnico), modificato: ora });
   },
 
   /**
@@ -410,6 +657,10 @@ module.exports = {
     if (r.firma_referente_id) o.firmaReferente = (this.db.riga('SELECT nome FROM referenti WHERE id = ?', r.firma_referente_id) || {}).nome || '';
     const pp = this.portaleDi('rapportino', r.id);
     o.portale = { pubblicato: pp.pubblicato, daFirmare: pp.daFirmare, vistoIl: pp.vistoIl, pubblicazione: pp.pubblicazione };
+    // 06/11/2026: il rapportino (giornata) di cui e' un lavoro, il posto nel rapportino, il numero che si vede.
+    o.idGiornata = testo(r.id_giornata) || testo(r.id);
+    o.posizione = Number(r.posizione) || 1;
+    o.numero = o.idGiornata;
     return o;
   },
 
@@ -437,9 +688,20 @@ module.exports = {
     if (testo(f.statoApprovazione)) { condizioni.push('stato_approvazione = ?'); parametri.push(testo(f.statoApprovazione) === 'nessuno' ? '' : testo(f.statoApprovazione)); }
     const sql = 'SELECT * FROM rapportini' + (condizioni.length ? ' WHERE ' + condizioni.join(' AND ') : '');
     const aiuti = this.aiutiRapportini();
+    // 06/11/2026: i lavori di un rapportino stanno insieme, in ordine: prima per la data e la nascita del rapportino
+    // (per i rapportini di un lavoro solo sono quelle del lavoro: l'ordine di prima), poi per posizione.
+    const giornate = new Map(this.db.righe('SELECT id, data, creato FROM giornate').map(g => [g.id, g]));
+    const chiave = x => {
+      const g = giornate.get(x.idGiornata);
+      return { data: g ? dataIso(g.data) : x.data, creato: g ? dataOraIso(g.creato) : x.creato };
+    };
     return this.db.righe(sql, ...parametri)
       .map(r => this.rapportinoDaRiga(r, aiuti))
-      .sort((x, y) => (x.data < y.data ? 1 : x.data > y.data ? -1 : (x.creato < y.creato ? 1 : -1)));
+      .map(x => ({ x, k: chiave(x) }))
+      .sort((a, b) => (a.k.data < b.k.data ? 1 : a.k.data > b.k.data ? -1
+        : a.x.idGiornata !== b.x.idGiornata ? (a.k.creato < b.k.creato ? 1 : a.k.creato > b.k.creato ? -1 : (a.x.idGiornata < b.x.idGiornata ? 1 : -1))
+          : a.x.posizione - b.x.posizione || (a.x.id < b.x.id ? -1 : 1)))
+      .map(e => e.x);
   },
 
   /**
@@ -448,13 +710,32 @@ module.exports = {
    * firmato quello che c'era, e se il rapportino cambia quella firma non vale
    * piu'. Annullare ricorda lo stato di prima, per ripristinarlo.
    */
-  cambiaStato(ids, stato) {
+  cambiaStato(ids, stato, idGiornata) {
     const nuovo = testo(stato).toUpperCase();
     if (STATI.indexOf(nuovo) < 0) throw new Rifiuto('Stato non valido: ' + nuovo);
     if (nuovo === 'FIRMATO') throw new Rifiuto('Per firmare serve la firma: caricala dal rapportino');
     if (nuovo === 'FATTURATO' && this.livello('fatturazione') < 2) throw senzaPermesso('segnare i rapportini come fatturati');
     const ora = adesso();
-    return (ids || []).map(id => {
+    // 06/11/2026: un rapportino intero (idGiornata, o un numero che e' di un rapportino e non di un lavoro) vale per i suoi
+    // lavori non annullati. Togliere (ANNULLATO) un rapportino: solo se tutti i suoi lavori sono Da inviare e fuori dalle
+    // fatture. Un numero che e' anche di un lavoro (i rapportini di prima) e' il lavoro, come oggi.
+    const lista = [];
+    const giornate = testo(idGiornata) ? [testo(idGiornata)] : [];
+    for (const id of ids || []) {
+      if (testo(id) && !this.trovaRiga(id, id) && this.trovaGiornata(id, id)) giornate.push(this.trovaGiornata(id, id).id);
+      else lista.push(id);
+    }
+    for (const idG of giornate) {
+      const g = this.trovaGiornata(idG, idG);
+      if (!g) throw new Rifiuto('Rapportino ' + idG + ' non trovato');
+      const suoi = this.lavoriDellaGiornata(g.id).filter(r => statoDi(r) !== 'ANNULLATO');
+      for (const r of suoi) {
+        this.controllaSuo(r, 'cambiare lo stato dei rapportini degli altri');
+        if (nuovo === 'ANNULLATO') this.controllaLavoroDaTogliere(r);
+      }
+      for (const r of suoi) if (lista.indexOf(r.id) < 0) lista.push(r.id);
+    }
+    return lista.map(id => {
       const riga = this.trovaRiga(id, id);
       if (!riga) throw new Rifiuto('Rapportino ' + id + ' non trovato');
       this.controllaSuo(riga, 'cambiare lo stato dei rapportini degli altri');
@@ -511,6 +792,15 @@ module.exports = {
   /** Un rapportino annullato torna com'era prima (stato, firma, date: l'annullamento non le aveva toccate). */
   ripristinaRapportino(id) {
     const riga = this.trovaRiga(id, id);
+    // 06/11/2026: un rapportino intero tolto con Elimina torna con i lavori tolti in quella volta (stessa ora).
+    if (!riga && this.trovaGiornata(id, id)) {
+      const g = this.trovaGiornata(id, id);
+      const tolti = this.lavoriDellaGiornata(g.id).filter(r => statoDi(r) === 'ANNULLATO');
+      if (!tolti.length) throw new Rifiuto('Il rapportino ' + g.id + ' non è annullato');
+      const ultima = tolti.map(r => testo(r.modificato)).sort().pop();
+      for (const r of tolti.filter(x => testo(x.modificato) === ultima)) this.ripristinaRapportino(r.id);
+      return this.giornataPerId(g.id);
+    }
     if (!riga) throw new Rifiuto('Rapportino ' + id + ' non trovato');
     this.controllaSuo(riga, 'ripristinare i rapportini degli altri');
     if (testo(riga.stato).toUpperCase() !== 'ANNULLATO') throw new Rifiuto('Il rapportino ' + riga.id + ' non è annullato');

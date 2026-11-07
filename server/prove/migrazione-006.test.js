@@ -12,7 +12,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { cartellaNuova, COLONNE_DOPO_007: COLONNE_007 } = require('./aiuto');
+const { cartellaNuova, COLONNE_DOPO_007: COLONNE_007, valoreAtteso, numeriDashboardDopoLavori } = require('./aiuto');
 const { Database } = require('../src/db');
 const { Wisper } = require('../src/wisper');
 const PRIMA = require('./migrazione-006/prima.json');
@@ -81,6 +81,9 @@ function contiene(nuovo, vecchio, dove) {
   } else if (vecchio && typeof vecchio === 'object') {
     assert.ok(nuovo && typeof nuovo === 'object', dove);
     for (const k of Object.keys(vecchio)) contiene(nuovo[k], vecchio[k], dove + ' · ' + k);
+  } else if (typeof vecchio === 'string' && vecchio.includes(', già firmato: si cambiano solo')) {
+    // 07/11/2026 (niente firma): la frase della spesa bloccata dice "già inviato" invece di "già firmato".
+    assert.equal(nuovo, vecchio.replace(', già firmato: si cambiano solo', ', già inviato: si cambiano solo'), dove);
   } else assert.deepEqual(nuovo, vecchio, dove);
 }
 
@@ -88,7 +91,7 @@ const comeTitolare = fn => w.come({ utente: w.titolare(), permessi: w.permessiDi
 
 test('migrazione 006: versione 6, la copia wisper.db.prima-6 com\'era; le tabelle di prima riga per riga uguali (le colonne nuove vuote)', () => {
   assert.equal(PRIMA.versione, '0.8.0');
-  assert.equal(w.db.versione(), 9);
+  assert.equal(w.db.versione(), 11);
   const copia = new Database(path.join(cartella, 'wisper.db.prima-6'));
   assert.equal(copia.versione(), 5, 'la copia e\' com\'era prima');
   copia.chiudi();
@@ -123,7 +126,7 @@ test('migrazione 006: versione 6, la copia wisper.db.prima-6 com\'era; le tabell
         else if (t === 'veicoli' && c === 'tipo') assert.equal(r[c], 'auto', t + ' riga ' + i);
         else if (t === 'scadenze' && c === 'fine_mese') assert.equal(r[c], 0, t + ' riga ' + i);
         // Fase 7: le colonne della 007, col loro valore di base (niente portale, avvisi e notifiche accesi).
-        else if (COLONNE_007[t] && c in COLONNE_007[t]) assert.deepEqual(r[c], COLONNE_007[t][c], t + ' riga ' + i + ': ' + c);
+        else if (COLONNE_007[t] && c in COLONNE_007[t]) assert.deepEqual(r[c], valoreAtteso(COLONNE_007[t][c], r), t + ' riga ' + i + ': ' + c);
         else assert.ok(r[c] === null || r[c] === '', t + ' riga ' + i + ': ' + c + ' = ' + JSON.stringify(r[c]));
         delete r[c];
       }
@@ -192,7 +195,11 @@ test('il costo delle commesse: le parti di prima uguali al centesimo; il totale 
 
 test('i soldi della Dashboard del titolare uguali al centesimo (con l\'orologio di prima)', () => {
   const soldi = comeTitolare(() => w.dashboard({ tutto: true })).numeri.soldi;
-  contiene(soldi, PRIMA.soldi, 'soldi');
+  // 06/11/2026 (il rapportino con piu' lavori, senza firma): i lavori Da inviare (BOZZA) si fatturano anche senza firma.
+  // "Da fatturare" (e "dei mesi scorsi", e i clienti) crescono esattamente delle voci di quei lavori; il resto uguale al centesimo.
+  const prima = comeTitolare(() => numeriDashboardDopoLavori({ soldi: PRIMA.soldi }, w)).soldi;
+  assert.ok(prima.daFatturare > PRIMA.soldi.daFatturare, 'nel database di prova ci sono lavori Da inviare');
+  contiene(soldi, prima, 'soldi');
   assert.equal(soldi.compensiDaFatturare, 0, 'la voce nuova: nessun collaboratore');
 });
 
@@ -221,6 +228,6 @@ test('riaperto il server: la migrazione non si rifa\'', () => {
   const persone = w.db.riga('SELECT COUNT(*) n FROM persone').n;
   w.chiudi();
   w = new Wisper({ dati: cartella });
-  assert.equal(w.db.versione(), 9);
+  assert.equal(w.db.versione(), 11);
   assert.equal(w.db.riga('SELECT COUNT(*) n FROM persone').n, persone);
 });

@@ -260,6 +260,8 @@ module.exports = {
    * funzione che aspetta (Esporta tutto in sottofondo), fra una pagina da 20.000 righe e l'altra; senza, tutto di fila.
    */
   esportaRegistroIntero(pausa) {
+    // 06/11/2026: anche le righe dei salvataggi automatici ancora in attesa (wisper.js, scriviInAttesa).
+    this.db.transazione(() => this.scriviInAttesa({ tutte: true }));
     if (pausa) return this.esportaRegistroAPagine(pausa);
     const { togliCosti } = require('../permessi');
     const { cella } = require('./esporta');

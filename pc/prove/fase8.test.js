@@ -485,11 +485,15 @@ const DOCUMENTI = imp => ({
   contratto: () => D.contrattoAssistenza({ numero: 'CA/2026/001', dal: '2026-01-01', al: '2026-12-31', cliente: 'Rossi', titolo: 'Assistenza' }, imp),
 });
 // Le impronte dei PDF fatti col documenti.js di prima della fase 8 (stessi dati): senza logo devono restare queste.
-const PRIMA = { rapportino: '632fcc2a972891b5', riepilogo: 'bbcd34dd76670835', preventivo: '7c3df56de6a778b9', contratto: '3e004ffec6b44883', prospetto: '939e05a0d0fc89c3', avviso: '4da87281faef8a62' };
+// Rapportino e riepilogo cambiano il 06/11/2026 (riunione con Manuel: il progetto dove c'era la commessa, la commessa nel
+// Mittente): le loro impronte sono quelle nuove, sempre uguali con e senza logo spento, nome breve, sito o PDF_NOME.
+// Il rapportino cambia ancora il 06/11/2026 sera (rapportino-lavori.md): niente stato "Firmato" in testa e niente riquadro
+// per la firma del cliente quando il lavoro non ha una firma vera.
+const PRIMA = { rapportino: '52d5344417e0c3ae', riepilogo: '4759a76f1c08a206', preventivo: '7c3df56de6a778b9', contratto: '3e004ffec6b44883', prospetto: '939e05a0d0fc89c3', avviso: '4da87281faef8a62' };
 
 test('PDF senza logo identici a prima della fase 8, carattere per carattere (§9.3, §16, M18.3)', () => {
   const senza = [IMP, Object.assign({}, IMP, { STUDIO_LOGO: '', PDF_PIEDE: '', PDF_LOGO: true, STUDIO_NOME_BREVE: 'GM', STUDIO_SITO: 'www.esempio.it' }),
-    Object.assign({}, IMP, { STUDIO_LOGO: 'logoDiProva123', PDF_LOGO: false })];
+    Object.assign({}, IMP, { STUDIO_LOGO: 'logoDiProva123', PDF_LOGO: false }), Object.assign({}, IMP, { PDF_NOME: false })];
   senza.forEach((imp, i) => {
     const docs = DOCUMENTI(imp);
     Object.keys(docs).forEach(k => assert.equal(impronta(docs[k]()), PRIMA[k], k + ' (caso ' + i + ')'));

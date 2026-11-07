@@ -114,14 +114,13 @@ internal class EsempioFase3(private val oggi: LocalDate, private val ana: () -> 
 
     private val giornoIt = DateTimeFormatter.ofPattern("EEEE d", Locale.ITALY)
 
+    // 07/11/2026: le Ore non ci sono più: da approvare restano spese e rapportini.
     private var approvare = DaApprovare(
-        oggi = oggi, quante = 5, conAnomalie = 2,
+        oggi = oggi, quante = 3, conAnomalie = 1,
         persone = listOf(
             PersonaDaApprovare(
-                "3", "Marco Rossato", 5, 2,
+                "3", "Marco Rossato", 3, 1,
                 listOf(
-                    VoceDaApprovare("ore", "201", "3", lunedi.plusDays(1), "Ore", "26ST046 · Calcolo cabina MT · " + lunedi.plusDays(1).format(giornoIt), 7.0, "ore"),
-                    VoceDaApprovare("ore", "202", "3", lunedi.plusDays(2), "Ore", "26ST046 · Cablaggio quadri · " + lunedi.plusDays(2).format(giornoIt), 13.0, "ore", anomalie = listOf(Anomalia("troppeOre", "13 ore in un giorno"))),
                     VoceDaApprovare("spesa", "203", "3", lunedi.plusDays(1), "Spesa", "Pedaggio A4 · 26ST046 · " + lunedi.plusDays(1).format(giornoIt), 8.4, "euro"),
                     VoceDaApprovare("spesa", "204", "3", lunedi.plusDays(2), "Spesa", "Pranzo · senza commessa · " + lunedi.plusDays(2).format(giornoIt), 16.5, "euro", anomalie = listOf(Anomalia("senzaFoto", "Senza scontrino"))),
                     VoceDaApprovare("rapportino", "RAP/${oggi.year}/0142", "3", lunedi.plusDays(2), "Rapportino", "RAP/${oggi.year}/0142 · Linea 3 · " + lunedi.plusDays(2).format(giornoIt), 6.5, "ore", km = 22.0),
@@ -414,18 +413,12 @@ internal class EsempioFase3(private val oggi: LocalDate, private val ana: () -> 
             urgenti += VoceDashboard(
                 tipo = "approvare", gravita = "attenzione",
                 titolo = "${a.quante} ${if (a.quante == 1) "cosa" else "cose"} da approvare" + (p?.let { " di ${it.nome}" } ?: ""),
-                dettaglio = "Ore, spese e un rapportino" + if (a.conAnomalie > 0) " · ${a.conAnomalie} con un'anomalia" else "",
+                dettaglio = "Spese e un rapportino" + if (a.conAnomalie > 0) " · ${a.conAnomalie} con un'anomalia" else "",
                 quanto = a.quante.toDouble(), unita = "voci",
                 collegamento = Collegamento("rapportini", parametri = mapOf("segmento" to "daApprovare")),
             )
         }
-        timer.value?.timer?.let { t ->
-            val ore = timer.value!!.secondi(System.currentTimeMillis()) / 3600
-            if (ore >= 10) urgenti += VoceDashboard(
-                "timer", "Il timer è acceso da $ore ore", "${t.idCommessa.ifBlank { "Studio" }} · dalle ${t.dalle} · fermalo e correggi le ore", ore.toDouble(),
-                "attenzione", Collegamento("rapportini", parametri = mapOf("segmento" to "ore")), "ore",
-            )
-        }
+        // 07/11/2026: niente più voce del timer (le Ore non ci sono più).
         val r = rimborsi()
         if (r.totale > 0) settimana += VoceDashboard(
             "rimborsi", "Rimborsi da fare", r.persone.take(3).joinToString(", ") { it.nome + " " + eu.stgm.wisper.rapportino.Numeri.euro(it.totale) }, r.totale,

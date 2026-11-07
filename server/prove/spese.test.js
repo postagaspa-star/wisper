@@ -271,11 +271,12 @@ test('dashboard: cose da approvare, respinte per chi ha scritto, rimborsi; il co
   assert.deepEqual([rimb.gravita, rimb.unita, rimb.collegamento], ['soldi', 'euro', { pagina: 'spese', filtro: { segmento: 'rimborsi' } }]);
   assert.equal(rimb.quanto, d.numeri.rimborsi.daFare);
   assert.equal(typeof d.numeri.ore.settimana, 'number');
+  // 07/11/2026 (Manuel: "le Ore vanno tolte"): fra le cose da approvare niente piu' ore; i rapportini, le spese e la trasferta si'.
+  assert.match(appr.dettaglio, /^Spese, una trasferta e un rapportino · /);
   const m = await marco('dashboard', { tutto: true });
-  const resp = m.urgenti.find(v => v.tipo === 'respinta');
-  assert.ok(resp, 'le ore respinte dei dati di esempio');
-  assert.match(resp.titolo, /^Ore del \d{2}\/\d{2} respinte$/);
-  assert.equal(resp.dettaglio, 'Motivo: Il riordino del magazzino non si segna: è dentro le ore di studio · Manuel Gasparotto');
+  // Le ore respinte dei dati di esempio restano nel database ma non sono piu' una voce (le spese respinte si': ore.test.js).
+  assert.ok(s.wisper.db.riga("SELECT id FROM ore WHERE utente_id = ? AND stato = 'respinta' AND tolta IS NULL", MARCO), 'le ore respinte ci sono');
+  assert.equal(m.urgenti.some(v => v.tipo === 'respinta' && /^Ore del/.test(v.titolo)), false, 'niente voce delle ore respinte');
   assert.equal(m.urgenti.some(v => v.tipo === 'approvare'), false, 'il collaboratore non approva');
   assert.equal('rimborsi' in m.numeri, false);
   assert.equal('approvare' in m.numeri, false);
@@ -291,15 +292,15 @@ test('dashboard: cose da approvare, respinte per chi ha scritto, rimborsi; il co
   }
 });
 
-test('dashboard: il timer acceso da piu\' di 10 ore (per chi l\'ha acceso e per chi approva); a gennaio le tabelle ACI', async () => {
+test('dashboard: il timer acceso da piu\' di 10 ore non e\' piu\' una voce (07/11/2026, Ore tolte); a gennaio le tabelle ACI', async () => {
+  // 07/11/2026 (Manuel: "le Ore vanno tolte, non servono, metti solamente i Rapportini"): il timer era della parte Ore. Il
+  // timer acceso resta nel database (e l'azione timer per le app vecchie), ma nessuno lo vede piu' nella Dashboard.
   s.wisper.db.esegui('UPDATE timer SET partito_il = ? WHERE utente_id = ?', istante(new Date(adessoMs() - 11 * 3600000 - 60000)), MARCO);
-  const m = await marco('dashboard', { tutto: true });
-  const suo = m.urgenti.find(v => v.tipo === 'timer');
-  assert.ok(suo, 'il suo timer');
-  assert.equal(suo.titolo, 'Il timer è acceso da 11 ore');
-  assert.match(suo.dettaglio, /^26ST001 · dalle \d{1,2}:\d{2}( del \d{2}\/\d{2})? · fermalo e correggi le ore$/);
-  assert.equal((await manuel('dashboard', { tutto: true })).urgenti.find(v => v.tipo === 'timer').titolo, 'Il timer di Marco Rossato è acceso da 11 ore');
-  assert.equal((await laura('dashboard', { tutto: true })).urgenti.some(v => v.tipo === 'timer'), true, 'amministrazione approva: lo vede');
+  assert.ok((await marco('timer')).timer, 'il timer di Marco e\' acceso');
+  for (const [nome, chi] of [['marco', marco], ['manuel', manuel], ['laura', laura]]) {
+    const t = await chi('dashboard', { tutto: true });
+    assert.equal(t.urgenti.some(v => v.tipo === 'timer' || /timer/i.test(v.titolo)), false, nome + ': niente voce del timer');
+  }
   // L'anno nuovo: le tabelle ACI dei veicoli sono vecchie.
   const anno = Number(oggi().slice(0, 4));
   await manuel('salvaImpostazioni', { valori: { ACI_ANNO: anno - 1 } });

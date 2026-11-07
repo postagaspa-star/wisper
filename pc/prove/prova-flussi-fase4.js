@@ -15,6 +15,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
 const assert = require('node:assert/strict');
+const { portaDevtools, chiudiEdge: chiudiEdgeCdp } = require('./edge-prova.js');
 
 const C = require('../ui/conti.js');
 global.WisperConti = C;
@@ -33,7 +34,7 @@ const CASI = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'server
 
 async function main() {
   const profilo = fs.mkdtempSync(path.join(os.tmpdir(), 'wisper-edge-flussi4-'));
-  const porta = 9620 + Math.floor(Math.random() * 150);
+  const porta = portaDevtools(9620, 150);
   const edge = spawn(EDGE, ['--headless=new', '--disable-gpu', '--no-first-run', '--hide-scrollbars', '--user-data-dir=' + profilo, '--remote-debugging-port=' + porta, 'about:blank'], { stdio: 'ignore' });
   let ws = null;
   const errori = [];
@@ -293,14 +294,23 @@ async function main() {
     const annullata = (await server('fattura?id=' + idBozza)).fattura;
     assert.equal(annullata.daRestituire, 500, 'i 500,00 € incassati sono da restituire o compensare');
     await vai('#dashboard');
-    const voceDash = await valuta(`(() => {
-      const voce = [...document.querySelectorAll('.dash-corpo button.riga')].find(b => /da restituire/.test(b.textContent));
+    const cercaVoce = `(() => {
+      const voce = [...document.querySelectorAll('.dash-corpo button.riga, #principale .scheda.righe button.riga')].find(b => /da restituire/.test(b.textContent));
       if (voce) { voce.click(); return 'riga'; }
       const urgente = document.querySelector('.piu-urgente');
       if (urgente && /da restituire/.test(urgente.textContent)) { urgente.querySelector('button').click(); return 'la cosa più urgente'; }
       return 'manca';
-    })()`);
-    assert.notEqual(voceDash, 'manca', 'la Dashboard ha la voce dei soldi da restituire');
+    })()`;
+    let voceDash = await valuta(cercaVoce);
+    // Urgenti mostra al massimo 7 righe: dopo mezzanotte (attività e ticket di ieri in ritardo) la voce può stare in
+    // "Altre N", cioè in Tutto quello che c'è da fare.
+    if (voceDash === 'manca') {
+      await valuta("([...document.querySelectorAll('.sezione-dash')].find(s => /^Urgenti/.test(s.querySelector('.etichetta').textContent)) || document).querySelector('button.altre-righe').click(); true");
+      await aspetta(1800);
+      voceDash = await valuta(cercaVoce);
+      if (voceDash !== 'manca') voceDash = 'Tutto quello che c\'è da fare';
+    }
+    assert.notEqual(voceDash, 'manca', 'la Dashboard ha la voce dei soldi da restituire: ' + (await testoPagina()).slice(0, 1500));
     await aspetta(1800);
     testo = await testoPannello();
     assert.match(testo, /500,00 € da restituire o compensare/, 'la voce della Dashboard porta al pannello con la riga: ' + testo.slice(0, 200));
@@ -357,10 +367,10 @@ async function main() {
     console.log('\n' + passi + ' passi, tutto a posto.');
   } finally {
     if (ws) ws.close();
-    edge.kill();
+    await chiudiEdgeCdp(porta, edge);
     creati.forEach(f => { try { fs.unlinkSync(f); } catch (e) { /* già tolto */ } });
     await aspetta(500);
-    try { fs.rmSync(profilo, { recursive: true, force: true }); } catch (e) { /* Edge tiene un file ancora un attimo */ }
+    await require('./edge-prova.js').togliCartella(profilo); // Edge a volte tiene un file un attimo: riprova per qualche secondo
   }
 }
 

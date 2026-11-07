@@ -42,8 +42,9 @@
     // Fase 2 (docs/gestionale/fase2.md §5): voci 4 e 5 del menu.
     { modulo: 'preventivi', nome: 'Preventivi e contratti', spiega: 'Preventivi, listino, incarichi', icona: 'preventivo' },
     { modulo: 'attivita', nome: 'Attività e calendario', spiega: 'Le attività di tutti o solo le sue', icona: 'calendario' },
-    { modulo: 'rapportini', nome: 'Ore e rapportini', spiega: 'Ore, timer, rapportini e approvazioni', icona: 'rapportini' },
-    // Fase 3 (docs/gestionale/fase3.md §5): voce 7, tra Ore e rapportini e Fatturazione.
+    // 07/11/2026 (Manuel: "le Ore vanno tolte, non servono, metti solamente i Rapportini"): era "Ore e rapportini".
+    { modulo: 'rapportini', nome: 'Rapportini', spiega: 'Rapportini e approvazioni', icona: 'rapportini' },
+    // Fase 3 (docs/gestionale/fase3.md §5): voce 7, tra Rapportini e Fatturazione.
     { modulo: 'spese', nome: 'Spese e trasferte', spiega: 'Spese, trasferte, rimborsi', icona: 'scontrino' },
     { modulo: 'fatturazione', nome: 'Fatturazione', spiega: 'Da fatturare, fatture, ricevute, riepilogo', icona: 'fatturazione' },
     // Fase 4 (docs/gestionale/fase4.md §12): voce 9, subito dopo Fatturazione.
@@ -98,7 +99,7 @@
   const CON_SOLDI = ['fatturazione', 'banche'];
   const vede = (permessi, modulo) => puo(permessi, modulo, 1) && (CON_SOLDI.indexOf(modulo) < 0 || puo(permessi, 'costi', 1));
 
-  /** Per l'esterno il menu ridotto, nel suo ordine (fase6.md §12.7): Ore e rapportini prima di Attività. */
+  /** Per l'esterno il menu ridotto, nel suo ordine (fase6.md §12.7): Rapportini prima di Attività. */
   const ORDINE_ESTERNO = ['dashboard', 'commesse', 'progetti', 'rapportini', 'attivita', 'spese', 'documenti', 'ticket', 'collaboratori'];
   function vociMenu(permessi, esterno) {
     const voci = VOCI_MENU.filter(v => vede(permessi, v.modulo));
@@ -151,7 +152,7 @@
 
   /**
    * Cosa vedrà e cosa no chi passa a un ruolo: la frase della conferma.
-   * "Vedrà Dashboard, Progetti e commesse, Ore e rapportini (solo da leggere: ...), senza importi.
+   * "Vedrà Dashboard, Progetti e commesse, Rapportini (solo da leggere: ...), senza importi.
    *  Non vedrà Fatturazione, Amministrazione."
    */
   function descriviRuolo(permessiRuolo) {
@@ -662,7 +663,6 @@
     if (p === 'attivita' && collegamento.id) return 'Apri l\'attività';
     const seg = collegamento && collegamento.filtro ? collegamento.filtro.segmento : '';
     if (p === 'rapportini' && seg === 'daApprovare') return 'Apri Da approvare';
-    if (p === 'rapportini' && seg === 'ore') return 'Apri le ore';
     if (p === 'spese' && seg === 'rimborsi') return 'Apri i rimborsi';
     if (p === 'amministrazione' && collegamento.filtro && collegamento.filtro.sezione === 'veicoli') return 'Apri i veicoli';
     return {
@@ -684,6 +684,42 @@
       // fase 8
       integrazioni: 'Apri le Integrazioni', integrazione: 'Apri il collegamento', tutto: 'Apri', approvare: 'Apri Da approvare',
     }[p] || 'Apri';
+  }
+
+  /**
+   * Le Ore sono state tolte (07/11/2026, Manuel: "le Ore vanno tolte, non servono, metti solamente i Rapportini").
+   * Una voce della Dashboard che parla solo delle ore: il timer acceso, le ore respinte di un giorno (collegamento
+   * con segmento "ore" e senza stato). "N cose respinte" (segmento "ore", stato "respinta") resta: ha dentro anche
+   * rapportini e spese, e apre i Rapportini.
+   */
+  function vocePerLeOre(v) {
+    if (!v) return false;
+    if (v.tipo === 'timer') return true;
+    const f = (v.collegamento && v.collegamento.filtro) || {};
+    return v.tipo === 'respinta' && (v.collegamento || {}).pagina === 'rapportini' && f.segmento === 'ore' && !f.stato;
+  }
+
+  /**
+   * La Dashboard senza le voci delle ore: un server di prima le manda ancora, quello nuovo no (e allora non cambia
+   * niente). Si tolgono da Urgenti, Questa settimana e Da pianificare (anche dentro le voci di gruppo) e i numeri
+   * "quante" scendono di quante se ne tolgono.
+   */
+  function dashSenzaOre(d) {
+    if (!d || typeof d !== 'object') return d;
+    const fuori = {};
+    const pulisci = (k, lista) => {
+      if (!Array.isArray(lista)) return lista;
+      const tenute = lista.filter(v => !vocePerLeOre(v)).map(v => (Array.isArray(v.voci) ? Object.assign({}, v, { voci: v.voci.filter(x => !vocePerLeOre(x)) }) : v));
+      fuori[k] = lista.length - tenute.length;
+      return tenute;
+    };
+    const r = Object.assign({}, d, { urgenti: pulisci('urgenti', d.urgenti), settimana: pulisci('settimana', d.settimana), pianificare: pulisci('pianificare', d.pianificare) });
+    ['urgenti', 'settimana', 'pianificare'].forEach(k => { if (r[k] === undefined) delete r[k]; });
+    if (d.quante && typeof d.quante === 'object') {
+      r.quante = Object.assign({}, d.quante);
+      Object.keys(fuori).forEach(k => { if (typeof r.quante[k] === 'number') r.quante[k] = Math.max(0, r.quante[k] - fuori[k]); });
+    }
+    return r;
   }
 
   /** Il colore del quadrato dell'icona: urgente rosso, attenzione giallo, soldi blu, info grigio. */
@@ -760,7 +796,7 @@
     return String(v);
   }
 
-  const PAROLE_STATO = { BOZZA: 'Da firmare', FIRMATO: 'Firmato', INVIATO: 'Inviato', FATTURATO: 'Fatturato', ANNULLATO: 'Annullato',
+  const PAROLE_STATO = { BOZZA: 'Da inviare', FIRMATO: 'Da inviare', INVIATO: 'Inviato', FATTURATO: 'Fatturato', ANNULLATO: 'Annullato',
     APERTA: 'Aperta', SOSPESA: 'Sospesa', CHIUSA: 'Chiusa', da_fare: 'Da fare', in_corso: 'In corso', fatta: 'Fatta' };
   const SI_NO = ['archiviato', 'archiviata', 'attivo', 'paga_viaggio', 'pagaViaggio', 'km_rimborsati', 'kmRimborsati', 'cliente', 'fornitore', 'modello', 'annuale'];
 
@@ -929,7 +965,7 @@
     norm, aliasDi, trovaDoppione, filtraSoggetti, contaSoggetti, indirizzoCompleto,
     inRitardo, filtraCommesse, contaCommesse, statoPrestazione, NOMI_STATO_PRESTAZIONE, avanzamento, ordinaPrestazioni, sposta, totaliPrestazioni,
     pezziFormato, formatoDaPezzi, formattaNumero, formatoAParole, erroreFormato, codiceDa, numeroDaFormato, prossimoDa,
-    destinazione, testoAzione, classeGravita,
+    destinazione, testoAzione, classeGravita, vocePerLeOre, dashSenzaOre,
     NOMI_CAMPI, campiCambiati, fraseRegistro, primaDopo, valoreLeggibile, valoreCampo,
     passwordIniziale, csv, nomeEsportazione, numeroCampo, costoOrarioDelConto,
   };

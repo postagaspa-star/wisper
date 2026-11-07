@@ -163,8 +163,8 @@ module.exports = {
 
   /**
    * Tutto quello che si puo' fatturare adesso (anche "piu' avanti"), una voce
-   * per sorgente: scadenze di pagamento, rapportini firmati o inviati (non di una
-   * commessa a corpo), spese al cliente, ore fatturabili. Le riservate e le
+   * per sorgente: scadenze di pagamento, lavori dei rapportini da inviare o inviati
+   * (non di una commessa a corpo), spese al cliente, ore fatturabili. Le riservate e le
    * fatturate non ci sono.
    */
   sorgentiDaFatturare(filtro) {
@@ -212,9 +212,10 @@ module.exports = {
       });
     }
 
-    // Rapportini firmati o inviati (approvati, se serviva), non di una commessa a corpo.
+    // I lavori dei rapportini Da inviare (BOZZA, e il FIRMATO di prima) o inviati, approvati se serviva, non di una commessa
+    // a corpo. 06/11/2026: niente firma, un lavoro si fattura anche prima di mandarlo al cliente.
     const rapportini = {};
-    for (const r of this.db.righe("SELECT * FROM rapportini WHERE UPPER(stato) IN ('FIRMATO', 'INVIATO') AND stato_approvazione IN ('', 'approvato')")) {
+    for (const r of this.db.righe("SELECT * FROM rapportini WHERE UPPER(stato) IN ('BOZZA', 'FIRMATO', 'INVIATO') AND stato_approvazione IN ('', 'approvato')")) {
       rapportini[r.id] = r;
     }
     const speseDeiRapportini = {};
@@ -228,10 +229,12 @@ module.exports = {
       // Un rapportino di prima della fase 3 con spese e nessuna riga di spese le porta nel suo importo (§5.1).
       const speseSenzaRighe = numero(r.spese) > 0 && !speseDeiRapportini[r.id] ? centesimi(numero(r.spese)) : 0;
       const ore = C.orePagate({ oreLavoro: r.ore_lavoro, oreExtra: r.ore_extra, oreViaggio: r.ore_viaggio, pagaViaggio: r.paga_viaggio === 1 });
-      const dettaglio = [testo(r.id_commessa), ore > 0 ? C.numeroIt(ore) + (ore === 1 ? ' ora' : ' ore') : '',
+      // 06/11/2026: col progetto il suo codice ("progetto ED-003 · 6 ore · 40 km"), senza quello della commessa.
+      const dettaglio = [testo(r.progetto) ? C.testoProgetti([testo(r.progetto)]) : testo(r.id_commessa), ore > 0 ? C.numeroIt(ore) + (ore === 1 ? ' ora' : ' ore') : '',
         numero(r.km) > 0 && numero(r.rimborso_km) > 0 ? C.numeroIt(r.km) + ' km' : ''].filter(Boolean).join(' · ');
       const v = {
-        tipo: 'rapportino', id: r.id, idCliente: r.id_cliente, idCommessa: testo(r.id_commessa), data: dataIso(r.data), titolo: testo(r.descrizione) || 'Rapportino ' + r.id,
+        // 06/11/2026: il numero che si vede e' quello del rapportino (la giornata), non quello del lavoro.
+        tipo: 'rapportino', id: r.id, idCliente: r.id_cliente, idCommessa: testo(r.id_commessa), data: dataIso(r.data), titolo: testo(r.descrizione) || 'Rapportino ' + (testo(r.id_giornata) || r.id),
         dettaglio, pronta: true, importo: centesimi(numero(r.compenso_ore) + numero(r.rimborso_km) + speseSenzaRighe),
         anticipazione: false, gruppo: 'rapportini:' + r.id_cliente + ':' + String(dataIso(r.data)).slice(0, 7), riga: r, speseSenzaRighe, spese: [],
       };
@@ -247,16 +250,19 @@ module.exports = {
       const m = commessaDi(s.commessa_id);
       if (!idCliente && m) idCliente = m.cliente_id;
       let delRapportino = null;
+      let progetto = '';
       if (s.rapportino_id) {
         const r = this.db.riga('SELECT * FROM rapportini WHERE id = ?', s.rapportino_id);
-        if (!r || ['FIRMATO', 'INVIATO'].indexOf(testo(r.stato).toUpperCase()) < 0 || ['', 'approvato'].indexOf(r.stato_approvazione || '') < 0) continue;
+        if (!r || ['BOZZA', 'FIRMATO', 'INVIATO'].indexOf(testo(r.stato).toUpperCase() || 'BOZZA') < 0 || ['', 'approvato'].indexOf(r.stato_approvazione || '') < 0) continue;
         if (!idCliente) idCliente = testo(r.id_cliente);
         delRapportino = elencati[r.id] || null;
+        progetto = testo(r.progetto);
       }
       if (!idCliente || !soggetti[idCliente]) continue;
       const v = {
         tipo: 'spesa', id: s.id, idCliente, idCommessa: m ? m.id : testo(s.commessa_id), idRapportino: delRapportino ? delRapportino.id : '',
-        data: s.data, titolo: s.descrizione || 'Spesa', dettaglio: [m ? m.id : '', s.anticipazione === 1 ? 'ricevuta intestata al cliente' : s.categoria].filter(Boolean).join(' · '),
+        // 06/11/2026: la spesa di un rapportino col progetto dice il progetto, come il suo rapportino.
+        data: s.data, titolo: s.descrizione || 'Spesa', dettaglio: [progetto ? C.testoProgetti([progetto]) : m ? m.id : '', s.anticipazione === 1 ? 'ricevuta intestata al cliente' : s.categoria].filter(Boolean).join(' · '),
         pronta: true, importo: centesimi(numero(s.importo)), anticipazione: s.anticipazione === 1,
         gruppo: delRapportino ? delRapportino.gruppo : (m ? 'commessa:' + m.id : 'spese:' + idCliente), riga: s,
       };
@@ -381,13 +387,8 @@ module.exports = {
     }
     const raggruppa = {};
     for (const g of gruppi) raggruppa[g.idCliente] = this.raggruppaDi(soggetti[g.idCliente]);
-    // "Da far firmare" resta in fondo, come elenco: non si fatturano finche' non sono firmati.
-    const daFirmare = this.db.righe("SELECT * FROM rapportini WHERE UPPER(stato) = 'BOZZA' ORDER BY data, id")
-      .filter(r => (!testo(d.idCliente) || r.id_cliente === testo(d.idCliente)) && (!testo(d.idCommessa) || String(r.id_commessa).toUpperCase() === testo(d.idCommessa).toUpperCase()))
-      .map(r => ({
-        id: r.id, idCliente: r.id_cliente, cliente: r.cliente, idCommessa: testo(r.id_commessa), data: dataIso(r.data), descrizione: r.descrizione,
-        ore: Math.round((numero(r.ore_lavoro) + numero(r.ore_extra) + numero(r.ore_viaggio)) * 100) / 100,
-      }));
+    // 06/11/2026: niente piu' "Da far firmare" (i lavori Da inviare si fatturano). La chiave resta, vuota, per le app 1.1.
+    const daFirmare = [];
     return {
       ok: true, oggi: oggi(), totale: centesimi(gruppi.reduce((t, g) => t + g.totale, 0)), clienti: gruppi.filter(g => g.totale > 0 || g.voci.some(v => v.pronta)).length,
       gruppi, piuAvanti, inBozza, riepiloghi, raggruppa, daFirmare,
@@ -453,7 +454,9 @@ module.exports = {
           id: v.id, data: dataIso(v.riga.data), descrizione: v.riga.descrizione, oreLavoro: v.riga.ore_lavoro, oreExtra: v.riga.ore_extra,
           oreViaggio: v.riga.ore_viaggio, pagaViaggio: v.riga.paga_viaggio === 1, tariffa: v.riga.tariffa, maggExtra: v.riga.magg_extra,
           compensoOre: v.riga.compenso_ore, km: v.riga.km, euroKm: v.riga.euro_km, rimborsoKm: v.riga.rimborso_km,
-          speseSenzaRighe: v.speseSenzaRighe, idCommessa: testo(v.riga.id_commessa),
+          speseSenzaRighe: v.speseSenzaRighe, idCommessa: testo(v.riga.id_commessa), progetto: testo(v.riga.progetto),
+          // 06/11/2026: "Rapportino RAP/2026/0153 del ...": il numero del rapportino, non quello del lavoro.
+          numero: testo(v.riga.id_giornata) || v.id,
         })),
         spese: sue.map(v => ({ id: v.id, idRapportino: v.idRapportino, data: v.riga.data, descrizione: v.riga.descrizione, importo: v.importo, anticipazione: v.anticipazione, idCommessa: v.idCommessa })),
       });
@@ -610,21 +613,51 @@ module.exports = {
     return { ok: true, fattura: this.fatturaCompleta(this.db.riga('SELECT * FROM fatture WHERE id = ?', id)) };
   },
 
-  /** La causale proposta: "40% a fine progetto, commessa 26ST003", "Prestazioni di settembre 2026"... */
+  /**
+   * La causale proposta: "40% a fine progetto, commessa 26ST003", "Prestazioni di settembre 2026"... 06/11/2026 (Manuel):
+   * quando il lavoro fatturato sono solo rapportini e ognuno ha il suo progetto, al posto della commessa i progetti
+   * ("Prestazioni di settembre 2026, progetti ED-001, ED-002"); il codice della commessa va accanto al mittente nel PDF.
+   */
   causaleDa(gruppi, idCommessa) {
     // Contano i gruppi del compenso: una spesa anticipata accanto a un acconto non cambia la causale.
     const delCompenso = gruppi.filter(g => g.righe.some(r => r.tipo === 'compenso'));
+    const progetti = this.progettiDeiGruppi(delCompenso);
+    const coda = progetti ? ', ' + C.testoProgetti(progetti) : idCommessa ? ', commessa ' + idCommessa : '';
     if (delCompenso.length === 1) {
       const g = delCompenso[0].gruppo;
       if (g.indexOf('scadenza:') === 0) {
         const s = this.db.riga('SELECT descrizione FROM scadenze_pagamento WHERE id = ?', Number(g.slice(9)));
-        return (s ? s.descrizione : 'Pagamento') + (idCommessa ? ', commessa ' + idCommessa : '');
+        return (s ? s.descrizione : 'Pagamento') + coda;
       }
-      if (g.indexOf('rapportini:') === 0) return 'Prestazioni di ' + C.nomeMese(g.slice(-7)) + (idCommessa ? ', commessa ' + idCommessa : '');
-      if (g.indexOf('rapportino:') === 0) return 'Rapportino ' + g.slice(11) + (idCommessa ? ', commessa ' + idCommessa : '');
-      if (g.indexOf('ticket:') === 0) return 'Intervento ' + g.slice(7) + (idCommessa ? ', commessa ' + idCommessa : '');
+      if (g.indexOf('rapportini:') === 0) return 'Prestazioni di ' + C.nomeMese(g.slice(-7)) + coda;
+      if (g.indexOf('rapportino:') === 0) return 'Rapportino ' + this.numeroDelRapportino(g.slice(11)) + coda;
+      if (g.indexOf('ticket:') === 0) return 'Intervento ' + g.slice(7) + coda;
     }
-    return 'Prestazioni professionali' + (idCommessa ? ', commessa ' + idCommessa : '');
+    return 'Prestazioni professionali' + coda;
+  },
+
+  /** Il numero che si vede del rapportino di un lavoro (RAP/2026/0153 per il lavoro RAP/2026/0153-2). */
+  numeroDelRapportino(idLavoro) {
+    const r = this.db.riga('SELECT id_giornata FROM rapportini WHERE id = ?', idLavoro);
+    return (r && testo(r.id_giornata)) || idLavoro;
+  },
+
+  /**
+   * I progetti del lavoro di questi gruppi, o null: solo se il lavoro sono rapportini (con le loro spese) e tutti hanno il
+   * progetto. Scadenze di pagamento, ore registrate e ticket sono della commessa: con loro resta la commessa.
+   */
+  progettiDeiGruppi(gruppi) {
+    const ids = [];
+    for (const g of gruppi) {
+      for (const s of g.sorgenti || []) {
+        if (s.tipo === 'rapportino') ids.push(String(s.id));
+        else if (s.tipo !== 'spesa') return null;
+      }
+    }
+    if (!ids.length) return null;
+    const righe = this.db.righe('SELECT id, progetto FROM rapportini WHERE id IN (' + ids.map(() => '?').join(', ') + ')', ...ids);
+    if (righe.length !== new Set(ids).size) return null;
+    return C.progettiDi(righe);
   },
 
   /** nuovaFattura {idCliente}: una bozza vuota, da riempire con righe libere. */
@@ -904,6 +937,8 @@ module.exports = {
       tipo: s.tipo, id: s.sorgente_id, gruppo: s.gruppo, descrizione: this.descrizioneSorgente(s.tipo, s.sorgente_id), importo: s.importo,
       attiva: s.attiva === 1, liberataIl: dataOraIso(s.liberata_il), liberataPerche: s.liberata_perche,
     }));
+    // 06/11/2026: i codici delle commesse della fattura (il PDF li scrive accanto al Mittente: "Commessa 26ST014").
+    o.commesse = this.commesseDellaFattura(f);
     o.incassi = p.incassi;
     o.note = (a.note[f.id] || []).map(n => ({ id: n.id, numero: n.numero || n.riferimento, data: n.data, totale: n.totale, netto: n.netto, stato: n.stato }));
     o.fatturaCollegata = null;
@@ -1214,7 +1249,18 @@ module.exports = {
       causale: [(testo(f.causale) ? testo(f.causale) + '. ' : '') + 'Rif. Wisper ' + f.riferimento],
       fattureCollegate: collegata ? [{ idDocumento: collegata.numero || collegata.riferimento, data: collegata.data }] : [],
       regoleConfermate: confermate,
+      // 06/11/2026: i codici delle commesse (per il PDF, accanto al Mittente). Non vanno nell'XML.
+      commesse: this.commesseDellaFattura(f),
     };
+  },
+
+  /** I codici delle commesse di una fattura, nell'ordine delle righe e senza doppioni; senza righe, quella della fattura. */
+  commesseDellaFattura(f) {
+    const l = [];
+    const metti = c => { const x = testo(c); if (x && !l.some(y => y.toUpperCase() === x.toUpperCase())) l.push(x); };
+    for (const r of this.db.righe('SELECT commessa_id FROM fattura_righe WHERE fattura_id = ? ORDER BY ordine, id', f.id)) metti(r.commessa_id);
+    if (!l.length) metti(f.commessa_id);
+    return l;
   },
 
   /** Il pacchetto (§11.3): uscite, modello, mancano, prospetto, xml. */
@@ -1360,13 +1406,14 @@ module.exports = {
     }
   },
 
-  /** Il contrario: rapportino di nuovo INVIATO (o FIRMATO), scadenza prevista, spesa e ore senza data. */
+  /** Il contrario: rapportino di nuovo INVIATO (o Da inviare), scadenza prevista, spesa e ore senza data. */
   togliFatturata(tipo, id, nota) {
     const ora = adesso();
     if (tipo === 'rapportino') {
       const r = this.db.riga('SELECT * FROM rapportini WHERE id = ?', id);
       if (!r) return;
-      this.aggiorna('rapportini', r.id, { stato: testo(r.inviato_il) ? 'INVIATO' : 'FIRMATO', fatturato_il: '', modificato: ora }, 'id', nota);
+      // 06/11/2026: senza invio torna Da inviare: FIRMATO solo se ha la firma di prima.
+      this.aggiorna('rapportini', r.id, { stato: testo(r.inviato_il) ? 'INVIATO' : testo(r.firma) ? 'FIRMATO' : 'BOZZA', fatturato_il: '', modificato: ora }, 'id', nota);
       this.allineaSpeseRapportino(r.id);
     } else if (tipo === 'scadenza') {
       this.aggiorna('scadenze_pagamento', Number(id), { stato: 'prevista', fattura_id: null }, 'id', nota);
@@ -1533,7 +1580,8 @@ module.exports = {
         if (tipo === 'spesa' && riga.rapportino_id) throw new Rifiuto('La spesa ' + riga.id + ' è del rapportino ' + riga.rapportino_id + ': si segna fatturata col suo rapportino');
         if (tipo === 'rapportino') {
           if (this.livello('fatturazione') < 2) throw senzaPermesso('segnare i rapportini come fatturati');
-          if (['FIRMATO', 'INVIATO'].indexOf(testo(riga.stato).toUpperCase()) < 0) throw new Rifiuto('Il rapportino ' + riga.id + ' non è firmato: si segna fatturato solo un rapportino firmato o inviato');
+          // 06/11/2026: anche Da inviare (niente firma); un annullato no.
+          if ((testo(riga.stato).toUpperCase() || 'BOZZA') === 'ANNULLATO') throw new Rifiuto('Il rapportino ' + riga.id + ' è annullato');
         }
         this.segnaSorgenteFatturata(tipo, riga.id, oggi(), null, nota);
       }

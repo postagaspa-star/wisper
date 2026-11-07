@@ -47,7 +47,8 @@ object Riepiloghi {
             else -> null
         }?.takeIf { it.aperto }
         val usate = tutti
-            .filter { it.cliente.isNotBlank() && it.idCommessa !in chiuse && (!conProgetti || it.idCommessa.isNotBlank()) }
+            // Coi progetti accesi Elettrodinamica vuole la commessa; gli altri clienti no (06/11/2026).
+            .filter { it.cliente.isNotBlank() && it.idCommessa !in chiuse && (!conProgetti || it.idCommessa.isNotBlank() || !RegoleProgetti.progettoObbligatorio(it.cliente)) }
             .sortedWith(compareByDescending<Rapportino> { it.data }.thenByDescending { it.modificato })
             .map { r -> r to progettoDi(r) }
             .distinctBy { (r, p) ->
@@ -148,8 +149,8 @@ object Riepiloghi {
     @Suppress("UNUSED_PARAMETER")
     fun chiPaga(r: Rapportino, ana: Anagrafiche): String = r.cliente.ifBlank { "Senza cliente" }
 
-    /** Le bozze: sono i rapportini da far firmare. */
-    fun daFirmare(viste: List<Vista>): List<Vista> = viste.filter { it.rapportino.stato == Stato.BOZZA }
+    /** I lavori da inviare (BOZZA e il FIRMATO di prima; dal 06/11/2026 niente firma). */
+    fun daInviare(viste: List<Vista>): List<Vista> = viste.filter { it.rapportino.daInviare }
 
     fun saluto(ora: LocalTime = LocalTime.now()): String = when {
         ora.hour < 13 -> "Buongiorno"

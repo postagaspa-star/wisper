@@ -76,16 +76,13 @@ fun SchermataDashboard(
     val oggi = LocalDate.now()
     val nome = sessione.utente.nome.substringBefore(' ').trim()
     val scrive = perm.modifica(Moduli.RAPPORTINI)
-    val timer by dati.timer.collectAsStateWithLifecycle()
-    val avvisi = LocalAvvisi.current
-    val scope = rememberCoroutineScope()
-    var fermoInCorso by remember { mutableStateOf(false) }
     // Fase 8 (§8): i fogli Nascondi per 30 giorni, Da approvare e Cambia i riquadri.
     var nascondi by remember { mutableStateOf<VoceDashboard?>(null) }
     var approvare by remember { mutableStateOf<Pair<VoceDashboard?, String>?>(null) }
     var cambiaRiquadri by remember { mutableStateOf(false) }
 
-    LaunchedEffect(Unit) { dati.aggiornaDashboard(); if (perm.vede(Moduli.RAPPORTINI)) dati.aggiornaTimer() }
+    // 07/11/2026: niente piu' timer (le Ore non ci sono piu'), si rilegge solo la Dashboard.
+    LaunchedEffect(Unit) { dati.aggiornaDashboard() }
 
     fun apri(col: Collegamento?) = apriCollegamento(col, nav, viste.map { it.rapportino })
 
@@ -102,31 +99,6 @@ fun SchermataDashboard(
                 Text(Riepiloghi.saluto() + if (nome.isNotBlank()) ", $nome" else "", style = Testi.titoloPagina, color = c.testo)
             }
 
-            // Fase 3: il timer acceso si vede in cima (fase3.md §2, punto 2); Ferma apre la bozza da correggere.
-            val t = timer
-            if (t?.acceso == true && perm.vede(Moduli.RAPPORTINI)) {
-                SchedaTimerAcceso(
-                    t,
-                    onFerma = {
-                        if (!fermoInCorso) {
-                            fermoInCorso = true
-                            scope.launch {
-                                dati.fermaTimer()
-                                    .onSuccess { f ->
-                                        RicordoOre.riga = f.riga
-                                        avvisi.mostra(f.avviso.ifBlank { "Bozza di ${Numeri.ore(f.riga.ore)}: correggila e salva" })
-                                        nav.vai("ore-registra/" + f.riga.chiave)
-                                    }
-                                    .onFailure { avvisi.mostra(spiegaErrore2(it, "Il timer non si è fermato: riprova")) }
-                                fermoInCorso = false
-                            }
-                        }
-                    },
-                    onApri = { RicordoOre.segmento = SegmentoOre.ORE; nav.sezione(Sezione.RAPPORTINI) },
-                    inCorso = fermoInCorso,
-                )
-            }
-
             if (scrive) {
                 IlTuoGiorno(
                     dati = dati,
@@ -134,8 +106,9 @@ fun SchermataDashboard(
                     onNuovo = onNuovo,
                     onComeIeri = onComeIeri,
                     onApri = { nav.apriRapportino(it) },
+                    onApriLavoro = { nav.apriRapportino(it, lavoro = true) },
                     onMese = { nav.sezione(Sezione.RAPPORTINI, FiltroRapportini()) },
-                    onDaFirmare = { nav.sezione(Sezione.RAPPORTINI, FiltroRapportini(mese = null, quali = Quali.FIRMARE)) },
+                    onDaInviare = { nav.sezione(Sezione.RAPPORTINI, FiltroRapportini(mese = null, quali = Quali.INVIARE)) },
                 )
             }
 
@@ -279,23 +252,21 @@ fun apriCollegamento(col: Collegamento?, nav: Navigatore, rapportini: List<Rappo
         "cliente", "fornitore", "soggetto" -> if (col.id.isNotBlank()) nav.vai("cliente/${col.id}") else nav.sezione(Sezione.CLIENTI)
         "clienti", "fornitori", "soggetti" -> nav.sezione(Sezione.CLIENTI)
         "rapportini" -> {
-            // Fase 3 (§14.13): {segmento: ore | rapportini | daApprovare, giorno}.
-            when (p["segmento"]) {
-                "daApprovare" -> { RicordoOre.segmento = SegmentoOre.APPROVARE; nav.sezione(Sezione.RAPPORTINI); return }
-                "ore" -> {
-                    RicordoOre.segmento = SegmentoOre.ORE
-                    RicordoOre.giorno = p["giorno"]?.let { runCatching { LocalDate.parse(it.take(10)) }.getOrNull() }
-                    nav.sezione(Sezione.RAPPORTINI)
-                    return
-                }
-            }
+            // Fase 3 (§14.13): {segmento: rapportini | daApprovare, giorno}.
+            if (p["segmento"] == "daApprovare") { RicordoRapportini.segmento = SegmentoRapportini.APPROVARE; nav.sezione(Sezione.RAPPORTINI); return }
+            // 07/11/2026: le Ore non ci sono più. Un collegamento di prima con {segmento: 'ore'} (anche col giorno)
+            // apre i rapportini, del mese di quel giorno se c'è; il server nuovo manda solo {pagina: 'rapportini'}.
+            val giorno = p["giorno"]?.let { runCatching { LocalDate.parse(it.take(10)) }.getOrNull() }
             val f = col.filtro.lowercase()
             val stato = p["stato"]?.uppercase().orEmpty()
-            val mese = p["mese"]?.let { runCatching { YearMonth.parse(it.take(7)) }.getOrNull() }
+            val mese = p["mese"]?.let { runCatching { YearMonth.parse(it.take(7)) }.getOrNull() } ?: giorno?.let(YearMonth::from)
             nav.sezione(
                 Sezione.RAPPORTINI,
                 when {
-                    f.contains("firm") || stato == "BOZZA" -> FiltroRapportini(mese = mese, quali = Quali.FIRMARE)
+                    // 06/11/2026: {quali: 'inviare', a: '<7 giorni fa>'} ("N lavori da inviare da più di una settimana").
+                    f.contains("firm") || f.contains("inviar") || p["quali"] == "inviare" || p["quali"] == "firmare" || stato == "BOZZA" ->
+                        FiltroRapportini(mese = mese, quali = Quali.INVIARE, a = p["a"]?.let { runCatching { LocalDate.parse(it.take(10)) }.getOrNull() })
+                    p["quali"] == "fatturare" -> FiltroRapportini(mese = mese, quali = Quali.FATTURARE)
                     f.contains("fattur") || stato == "FIRMATO" || stato == "INVIATO" -> FiltroRapportini(mese = mese, quali = Quali.FATTURARE)
                     p["idCommessa"] != null -> FiltroRapportini(mese = mese, idCommessa = p["idCommessa"])
                     p["idCliente"] != null -> FiltroRapportini(mese = mese, idCliente = p["idCliente"])
@@ -356,7 +327,7 @@ fun apriCollegamento(col: Collegamento?, nav: Navigatore, rapportini: List<Rappo
         }
         "integrazione" -> if (col.id.isNotBlank()) nav.vai("integrazione/${col.id}") else nav.sezione(Sezione.INTEGRAZIONI)
         "tutto" -> { RicordoTutto.sezione = p["sezione"]?.ifBlank { null } ?: "urgenti"; RicordoTutto.area = p["area"].orEmpty(); nav.vai("tutto") }
-        "approvare" -> { RicordoOre.segmento = SegmentoOre.APPROVARE; nav.sezione(Sezione.RAPPORTINI) }
+        "approvare" -> { RicordoRapportini.segmento = SegmentoRapportini.APPROVARE; nav.sezione(Sezione.RAPPORTINI) }
         "amministrazione" -> when (p["sezione"]) {
             "sicurezza" -> nav.vai("amm/sicurezza")
             "copie" -> nav.vai("amm/copie")
@@ -529,7 +500,7 @@ private fun RigaDashboard(v: VoceDashboard, onClick: () -> Unit) {
 
 /**
  * Il numero a destra: un importo in euro o delle ore. Gli altri (giorni,
- * rapportini) li dice già il titolo ("3 rapportini da far firmare").
+ * lavori) li dice già il titolo ("3 lavori da inviare da più di una settimana").
  */
 private fun quantoDi(v: VoceDashboard): String? {
     val q = v.quanto ?: return null
@@ -545,7 +516,8 @@ internal fun iconaDashboard(v: VoceDashboard): ImageVector = when (v.tipo.lowerc
     "fine" -> Icone.commesse
     "firma", "firmare" -> Icone.firma
     "fatturare", "fatturazione", "soldi", "sdi", "cliente" -> Icone.fatturazione
-    "rapportini" -> if (v.gravita == "urgente" || v.titolo.contains("firm")) Icone.firma else Icone.ore
+    // 06/11/2026: niente firma; i lavori da inviare hanno la busta.
+    "rapportini" -> if (v.titolo.contains("inviare")) Icone.invia else if (v.titolo.contains("firm")) Icone.firma else Icone.ore
     "commessa" -> if (v.gravita == "urgente") Icone.allarme else Icone.commesse
     "prestazione", "prestazioni" -> Icone.lista
     "responsabile", "persone" -> Icone.clienti

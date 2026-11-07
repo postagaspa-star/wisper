@@ -10,6 +10,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
 const assert = require('node:assert/strict');
+const { portaDevtools, chiudiEdge: chiudiEdgeCdp } = require('./edge-prova.js');
 
 const arg = process.argv.slice(2);
 const opz = (n, d) => { const i = arg.indexOf(n); return i >= 0 ? arg[i + 1] : d; };
@@ -21,7 +22,7 @@ const aspetta = ms => new Promise(r => setTimeout(r, ms));
 
 async function main() {
   const profilo = fs.mkdtempSync(path.join(os.tmpdir(), 'wisper-edge-visita-'));
-  const porta = 9960 + Math.floor(Math.random() * 30);
+  const porta = portaDevtools(9960, 30);
   const edge = spawn(EDGE, ['--headless=new', '--disable-gpu', '--no-first-run', '--hide-scrollbars', '--user-data-dir=' + profilo, '--remote-debugging-port=' + porta, 'about:blank'], { stdio: 'ignore' });
   let ws = null;
   const errori = [];
@@ -56,6 +57,8 @@ async function main() {
     await valuta("localStorage.removeItem('wisper-visita-2'); fetch('/locale/esci', { method: 'POST', body: '{}' }).then(() => fetch('/locale/accedi', { method: 'POST', body: JSON.stringify({ email: '" + CHI + "@esempio.it', password: 'prova' }) })).then(r => r.json())");
     await cdp('Page.navigate', { url: 'http://localhost:' + PORTA + '/?g=1#dashboard' });
     await aspetta(2500);
+    // Con la macchina carica la visita può partire qualche secondo dopo: si aspetta il primo fumetto (fino a 20 s).
+    for (let i = 0; i < 80 && !(await valuta("!!document.querySelector('.visita .fumetto')")); i++) await aspetta(250);
     const visti = [];
     for (let giro = 0; giro < 30; giro++) {
       const stato = await valuta(`(() => {
@@ -101,9 +104,9 @@ async function main() {
     console.log('TUTTO BENE (' + visti.length + ' passi, ' + CHI + ')');
   } finally {
     if (ws) ws.close();
-    edge.kill();
+    await chiudiEdgeCdp(porta, edge);
     await aspetta(500);
-    try { fs.rmSync(profilo, { recursive: true, force: true }); } catch (e) { /* Edge tiene ancora un file */ }
+    await require('./edge-prova.js').togliCartella(profilo); // Edge a volte tiene un file un attimo: riprova per qualche secondo
   }
 }
 

@@ -68,7 +68,8 @@ enum class Sezione(val nome: String, val icona: ImageVector, val modulo: String)
     PROGETTI("Progetti", Icone.progetti, Moduli.PROGETTI),
     PREVENTIVI("Preventivi e contratti", Icone.preventivo, Moduli.PREVENTIVI),
     ATTIVITA("Attività e calendario", Icone.calendario, Moduli.ATTIVITA),
-    RAPPORTINI("Ore e rapportini", Icone.ore, Moduli.RAPPORTINI),
+    // 07/11/2026 (richiesta del titolare): le Ore non ci sono più, la voce è solo "Rapportini".
+    RAPPORTINI("Rapportini", Icone.ore, Moduli.RAPPORTINI),
     SPESE("Spese e trasferte", Icone.scontrino, Moduli.SPESE),
     FATTURAZIONE("Fatturazione", Icone.fatturazione, Moduli.FATTURAZIONE),
     BANCHE("Banche e scadenze", Icone.barre, Moduli.BANCHE),
@@ -87,7 +88,8 @@ enum class Sezione(val nome: String, val icona: ImageVector, val modulo: String)
 }
 
 /** I segmenti della sezione Rapportini, come sul computer. */
-enum class Quali { TUTTI, FATTURARE, FIRMARE }
+/** I segmenti dei rapportini (06/11/2026): Tutti | Da inviare | Da fatturare. */
+enum class Quali { TUTTI, INVIARE, FATTURARE }
 
 /** Il filtro della sezione Rapportini. Mese null = tutti i mesi. */
 data class FiltroRapportini(
@@ -96,6 +98,8 @@ data class FiltroRapportini(
     val idCliente: String? = null,
     val idCommessa: String? = null,
     val testo: String = "",
+    /** Solo i lavori di prima di questo giorno (dalla Dashboard: "da inviare da più di una settimana"). */
+    val a: java.time.LocalDate? = null,
 )
 
 /**
@@ -106,7 +110,7 @@ class Navigatore(
     private val onVai: (String) -> Unit,
     private val onIndietro: () -> Unit,
     private val onSezione: (Sezione, FiltroRapportini?) -> Unit,
-    private val onApriRapportino: (String) -> Unit,
+    private val onApriRapportino: (String, Boolean) -> Unit,
     private val onNuovoRapportino: (LocalDate, String?, String?) -> Unit,
     private val onFirmaPreventivo: (String) -> Unit = {},
     private val onRapportinoDaTicket: (eu.stgm.wisper.rapportino.Rapportino) -> Unit = {},
@@ -118,8 +122,11 @@ class Navigatore(
     /** Va a una sezione dalla sua prima pagina; per Rapportini si può dare il filtro. */
     fun sezione(s: Sezione, filtro: FiltroRapportini? = null) = onSezione(s, filtro)
 
-    /** Il rapportino a tutto schermo, come si apre dalla Dashboard (riepilogo, menu, firma). */
-    fun apriRapportino(idLocale: String) = onApriRapportino(idLocale)
+    /**
+     * Il rapportino a tutto schermo, coi suoi lavori, dal lavoro [idLocale] (06/11/2026). Con [lavoro] (l'elenco dei
+     * Rapportini) si apre anche quel lavoro, se il rapportino ne ha piu' d'uno.
+     */
+    fun apriRapportino(idLocale: String, lavoro: Boolean = false) = onApriRapportino(idLocale, lavoro)
 
     /** Un rapportino nuovo, già col cliente e la commessa quando si parte da una commessa. */
     fun nuovoRapportino(giorno: LocalDate = LocalDate.now(), idCliente: String? = null, idCommessa: String? = null) =
@@ -142,7 +149,7 @@ fun rottaCompito(rotta: String?): Boolean =
         rotta.startsWith("cliente-modifica/") || rotta.startsWith("cliente-nuovo") || rotta.startsWith("fornitore-nuovo") ||
         rotta.startsWith("preventivo-modifica/") || rotta.startsWith("preventivo-nuovo") ||
         rotta.startsWith("attivita-modifica/") || rotta.startsWith("attivita-nuova") ||
-        rotta.startsWith("ore-registra") || rotta.startsWith("spesa-nuova") || rotta.startsWith("spesa/") ||
+        rotta.startsWith("spesa-nuova") || rotta.startsWith("spesa/") ||
         rotta.startsWith("trasferta-nuova") || rotta.startsWith("trasferta/") || rotta.startsWith("amm/veicolo") ||
         // Fase 5: i moduli di ticket, contratti, documenti, scadenze e lettere.
         rotta.startsWith("ticket-nuovo") || rotta.startsWith("ticket-modifica/") || rotta.startsWith("contratto-ca-nuovo") ||
@@ -306,13 +313,14 @@ fun TestataInterna(onIndietro: () -> Unit, azioni: @Composable RowScope.() -> Un
     val c = W.colori
     Row(Modifier.fillMaxWidth().heightIn(min = 52.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         PulsanteTondo(Icone.indietro, "Indietro", onIndietro)
+        // 06/11/2026: il nome prende tutto lo spazio libero fino alle azioni; i puntini solo se davvero non ci sta
+        // (prima due pesi a meta' tagliavano "Amministrazione" con lo spazio vuoto accanto).
         if (g != null) {
             Text(
                 g.sezione.nome, style = Testi.piccolo.copy(fontWeight = FontWeight.Bold, letterSpacing = 0.26.sp), color = c.tenue,
-                maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false),
+                maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
             )
-        }
-        Spacer(Modifier.weight(1f))
+        } else Spacer(Modifier.weight(1f))
         azioni()
         if (g != null) { Campanella(g); CerchioTu(g) }
     }

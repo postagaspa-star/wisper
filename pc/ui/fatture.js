@@ -234,12 +234,8 @@
             destra: h('span', { class: 'pillole-destra' }, h('span', { class: 'quanto' }, euro(x.totale)), pillStato(x.stato === 'pronta' ? 'Pronta' : 'Bozza')),
             onclick: () => (x.stato === 'bozza' ? W.vai('#fatturazione/bozza/' + x.idFattura) : apriDaElenco(x.idFattura)),
           })))) : null;
-        const firmare = h('div', { class: 'sezione' }, h('span', { class: 'etichetta' }, 'Da far firmare · non si fatturano finché non sono firmati'),
-          (df.daFirmare || []).length ? h('div', { class: 'scheda righe' }, df.daFirmare.slice(0, 8).map(x => riga({
-            sinistra: quadrato('firma', 'ico-giallo'), titolo: x.cliente, sotto: [W.dataBreve(x.data), x.descrizione, C.ore(x.ore)].filter(Boolean).join(' · '),
-            onclick: () => W.vaiA({ pagina: 'rapportino', id: x.id }),
-          }))) : h('div', { class: 'calmo' }, icona('spunta', 20, 2.8), 'Tutti firmati'));
-        aggiungi(zona, [h('div', { class: 'due-colonne' }, h('div', { class: 'sezione' }, piu, bozze), firmare)]);
+        // 06/11/2026 (rapportino-lavori.md): niente firma, niente sezione "Da far firmare": i lavori da inviare si fatturano.
+        if (piu || bozze) aggiungi(zona, [h('div', { class: 'due-colonne' }, h('div', { class: 'sezione' }, piu), h('div', { class: 'sezione' }, bozze))]);
       }
 
       function schedaCliente(g, prima) {
@@ -694,7 +690,7 @@
     async function pdfProspetto(f, modello) {
       if (S.esempio) { avviso('Nella visita il PDF non si crea'); return; }
       const conf = imp().REGOLE_FISCALI_CONFERMATE;
-      const html = D.prospettoFattura(modello, { oggi: oggi(), confermateIl: conf && conf.data ? conf.data : '', logo: D.logoDi(S.ana.impostazioni) });
+      const html = D.prospettoFattura(modello, { oggi: oggi(), confermateIl: conf && conf.data ? conf.data : '', logo: D.logoDi(S.ana.impostazioni), conNome: D.nomeAccantoAlLogo(S.ana.impostazioni) });
       const ris = await lavora('Preparo il PDF', () => Rete.post('/locale/pdf', { html, nome: W.nomeFile('Prospetto ' + f.riferimento, f.cliente), apri: true }));
       if (ris) avviso('PDF salvato in ' + ris.percorso);
     }
@@ -715,9 +711,11 @@
       const oggetto = h('input', { type: 'text', value: 'Avviso di parcella · ' + (imp().RAGIONE_SOCIALE || '') });
       const messaggio = h('textarea', { rows: 5 });
       messaggio.value = 'Buongiorno,\nin allegato l\'avviso di parcella. La fattura arriva al pagamento.\n\nCordiali saluti\n' + (imp().TECNICO || imp().RAGIONE_SOCIALE || '');
-      const html = () => D.avvisoParcella(p.modello, { oggi: oggi(), logo: D.logoDi(S.ana.impostazioni) });
+      const html = () => D.avvisoParcella(p.modello, { oggi: oggi(), logo: D.logoDi(S.ana.impostazioni), conNome: D.nomeAccantoAlLogo(S.ana.impostazioni) });
       let chiudi;
       const zonaA = h('div', null, campo('A', a));
+      // Senza email in memoria si rilegge il cliente: un'email appena scritta (anche altrove) c'è già (06/11/2026).
+      W.emailFresca(a, () => (W.cliente(f.idCliente) || {}).email || '');
       const manda = async () => {
         if (!a.value.trim()) { aggiungi(svuota(zonaA), [campo('A', a, 'Manca l\'indirizzo: scrivilo qui (lo puoi salvare in Clienti)')]); a.focus(); return; }
         if (S.esempio) { chiudi(); avviso('Avviso inviato (esempio: non è partito niente)'); return; }
@@ -830,27 +828,29 @@
       W.esporta('fatture', filtri);
     }
 
-    const COLONNE_FATTURE = '132px 104px 64px minmax(0, 1.2fr) minmax(0, 1.4fr) 112px 60px 112px';
+    // Le colonne stanno in stile.css (.tab-fatture): nella tabella stretta (1024) la data va sotto il numero e la causale
+    // sotto il cliente (07/11/2026: prima a 1024 cliente e causale restavano larghi pochi pixel).
 
     function elenco(area) {
       svuota(area);
       const lista = filtraFatture((M.fatture && M.fatture.fatture) || []);
       if (!lista.length) { aggiungi(area, [h('p', { class: 'vuoto' }, M.filtri.tipo === 'nota' ? 'Nessuna nota di credito.' : 'Nessuna fattura con questi filtri.')]); return; }
-      const tab = h('div', { class: 'tab' }, h('div', { class: 'r testa', style: { gridTemplateColumns: COLONNE_FATTURE } },
-        h('span', null, 'Stato'), h('span', null, 'Numero'), h('span', null, 'Data'), h('span', null, 'Cliente'), h('span', null, 'Causale'),
+      const tab = h('div', { class: 'tab tab-fatture' }, h('div', { class: 'r testa' },
+        h('span', null, 'Stato'), h('span', null, 'Numero'), h('span', { class: 'c-data' }, 'Data'), h('span', null, 'Cliente'), h('span', { class: 'c-causale' }, 'Causale'),
         h('span', { class: 'n' }, M.filtri.tipo === 'nota' ? 'Totale' : 'Netto'), h('span', null, 'Scade'), h('span', { class: 'n' }, 'Residuo')));
       lista.forEach(x => {
         const k = x.conti || {};
         const scadenza = x.scadenze && x.scadenze[0] ? x.scadenze[0].data : '';
         const bozza = x.stato === 'bozza' || x.stato === 'pronta' || x.stato === 'scartata';
-        aggiungi(tab, [h('div', { class: 'r cliccabile' + (String(M.aperta) === String(x.id) ? ' scelta' : ''), style: { gridTemplateColumns: COLONNE_FATTURE }, role: 'button', tabindex: '0', 'data-id': String(x.id),
+        aggiungi(tab, [h('div', { class: 'r cliccabile' + (String(M.aperta) === String(x.id) ? ' scelta' : ''), role: 'button', tabindex: '0', 'data-id': String(x.id),
           onclick: () => (x.stato === 'bozza' ? W.vai('#fatturazione/bozza/' + x.id) : apriPannello(x.id)),
           onkeydown: e => { if (e.key === 'Enter') (x.stato === 'bozza' ? W.vai('#fatturazione/bozza/' + x.id) : apriPannello(x.id)); } },
         h('span', null, pillStato(x.statoVisto)),
-        bozza ? h('span', { class: 'tenue forte' }, x.riferimento) : h('span', { class: 'forte' }, x.numero || x.etichetta),
-        h('span', null, giornoBreve(x.data)),
-        h('span', { class: 'taglia' }, x.cliente),
-        h('span', { class: 'taglia t2', title: x.causale }, x.causale),
+        h('span', { class: 'cella-due' }, bozza ? h('span', { class: 'tenue forte' }, x.riferimento) : h('span', { class: 'forte' }, x.numero || x.etichetta),
+          h('span', { class: 'solo-stretto' }, giornoBreve(x.data))),
+        h('span', { class: 'c-data' }, giornoBreve(x.data)),
+        h('span', { class: 'cella-due' }, h('span', { class: 'taglia' }, x.cliente), x.causale ? h('span', { class: 'solo-stretto' }, x.causale) : null),
+        h('span', { class: 'taglia t2 c-causale' }, x.causale),
         h('span', { class: 'n' }, euro(x.tipo === 'nota' ? k.totale : k.netto)),
         h('span', { class: x.scaduta ? 'rosso-testo' : '' }, x.tipo === 'nota' ? '—' : giornoBreve(scadenza)),
         h('span', { class: 'n forte' + (x.scaduta ? ' rosso-testo' : '') }, x.tipo === 'nota' ? '—' : euro(x.residuo)))]);

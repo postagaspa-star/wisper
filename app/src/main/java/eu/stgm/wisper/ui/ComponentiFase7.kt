@@ -642,8 +642,8 @@ private fun cosaPlurale(tipo: String): String = when (tipo) {
 
 /**
  * Pubblica nel portale (§8.2): "Lo vedrà Rossi Impianti Srl: Sig. Ferretti, Anna Rossi" (i
- * referenti coi permessi e le sedi giusti, dall'ultima lettura), per un rapportino in
- * bozza Da firmare nel portale già scelto; Pubblica (giallo), o Pubblica lo stesso.
+ * referenti coi permessi e le sedi giusti, dall'ultima lettura); Pubblica (giallo), o Pubblica lo stesso.
+ * Dal 06/11/2026 (rapportino-lavori.md §3) niente "Da firmare nel portale": i rapportini non si firmano più.
  * Parte anche senza rete (in coda).
  */
 @Composable
@@ -651,7 +651,6 @@ fun FoglioPubblica(dati: Dati, tipo: String, id: String, idCliente: String, nome
     val c = W.colori
     val avvisi = LocalAvvisi.current
     val lettura = rememberLettura("pubblica-$idCliente", 0) { dati.fase7.portaleCliente(idCliente) }
-    var daFirmare by remember { mutableStateOf(inBozza) }
     val cp = (lettura as? Lettura.Pronta)?.dato ?: dati.fase7.portaleClienteLetto(idCliente)
     val t = tipoPermesso(tipo)
     val vedranno = cp?.referenti.orEmpty().filter { it.portale && it.statoVisto != "Tolto" && it.livello(t) >= 1 }.map { it.nome }
@@ -664,11 +663,10 @@ fun FoglioPubblica(dati: Dati, tipo: String, id: String, idCliente: String, nome
             vedranno.isEmpty() -> Text("Nessun referente di $nomeCliente può vedere ${cosaPlurale(tipo)}", style = Testi.testo, color = c.testo2)
             else -> Text("Lo vedrà $nomeCliente: " + vedranno.joinToString(", "), style = Testi.testo, color = c.testo2)
         }
-        if (tipo == "rapportino" && inBozza) RigaInterruttore("Da firmare nel portale", daFirmare, { daFirmare = it })
         val nessuno = cp != null && vedranno.isEmpty()
         PulsantePrincipale(if (nessuno) "Pubblica lo stesso" else "Pubblica", {
             if (dati.esempio) { avvisi.mostra(SOLO_ESEMPIO); onChiudi(); return@PulsantePrincipale }
-            dati.fase7.pubblica(tipo, id, daFirmare = daFirmare, conferma = nessuno)
+            dati.fase7.pubblica(tipo, id, daFirmare = false, conferma = nessuno)
             Giri7.tutto()
             avvisi.mostra("Pubblicato nel portale: parte appena c'è rete")
             onChiudi()
@@ -864,7 +862,7 @@ internal fun apriRiferimento(r: Riferimento7, nav: Navigatore, dati: Dati) {
 internal fun RigheNonCollegate(avvisi: Avvisi, conFrase: Boolean) {
     val voci = listOf(
         Triple(Icone.whatsapp, "WhatsApp Business", "Costa a messaggio e vuole un indirizzo aperto su internet: per ora i messaggi li manda Manuel"),
-        Triple(Icone.scontrino, "Ore e spese via messaggio", "Con WhatsApp servirebbe l'API a pagamento; l'app lo fa già in meno di un minuto, anche senza rete"),
+        Triple(Icone.scontrino, "Spese via messaggio", "Con WhatsApp servirebbe l'API a pagamento; l'app lo fa già in meno di un minuto, anche senza rete"),
         Triple(Icone.fumetto, "Assistente operativo", "I dati dei clienti andrebbero a un fornitore fuori dall'Europa: da decidere nella fase 8"),
     )
     SchedaElenco {

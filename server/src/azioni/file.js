@@ -146,7 +146,7 @@ module.exports = {
     }
 
     if (tipo === 'documento') {
-      const commessa = this.db.riga('SELECT id FROM commesse WHERE id = ?', testo(d.idCommessa));
+      const commessa = this.db.riga('SELECT id FROM commesse WHERE id = ?', this.codiceCommessaVero(d.idCommessa));
       if (!commessa) throw new Rifiuto('Commessa ' + d.idCommessa + ' non trovata');
       let f = this.fileGiaArrivato('documento', d.idFile, '', commessa.id);
       if (!f) {

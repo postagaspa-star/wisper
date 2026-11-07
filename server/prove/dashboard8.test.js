@@ -8,7 +8,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { serverDiProva, giornoDeiPrototipi } = require('./aiuto');
-const { accendiOrologioDiProva, oggi, piuGiorni } = require('../src/utili');
+const { accendiOrologioDiProva, oggi, piuGiorni, istante, adessoMs, numero } = require('../src/utili');
 const D8 = require('../src/azioni/dashboard8');
 
 const GIORNO = giornoDeiPrototipi();
@@ -91,7 +91,7 @@ test('i gruppi da 3 voci della stessa famiglia ("5 scadenze nei prossimi 30 gior
   assert.ok(!voci(t).some(v => /^gruppo:/.test(v.oggetto)));
 });
 
-test('Da approvare in una voce sola per chi approva, con le tre righe (ore e spese, ferie, documenti)', async () => {
+test('Da approvare in una voce sola per chi approva, con le tre righe (rapportini e spese, ferie, documenti)', async () => {
   // La voce sola sta fra le Urgenti dopo quelle "urgente" (ordine fisso): con i dati di tutte le fasi oltre il tetto di 7,
   // quindi si guarda il passaggio che la fa, sulle voci grezze del titolare.
   const w = s.wisper;
@@ -102,8 +102,9 @@ test('Da approvare in una voce sola per chi approva, con le tre righe (ore e spe
   assert.equal(a.length, 1);
   assert.ok(ok(await chi.manuel('dashboard')).quante.urgenti > 7, 'la voce c\'e\', oltre il tetto');
   assert.match(a[0].titolo, /^\d+ cose da approvare$/);
-  assert.match(a[0].dettaglio, /ore e spese di Marco Rossato, 1 ferie, 1 documento/);
-  assert.deepEqual(a[0].righe.map(r => r.nome), ['Ore e rapportini › Da approvare', 'Persone › Ferie da approvare', 'Documenti › Da approvare']);
+  // 07/11/2026 (Ore tolte): prima "N ore e spese" e la riga "Ore e rapportini › Da approvare".
+  assert.match(a[0].dettaglio, /^\d+ rapportini e spese di Marco Rossato, 1 ferie, 1 documento$/);
+  assert.deepEqual(a[0].righe.map(r => r.nome), ['Rapportini › Da approvare', 'Persone › Ferie da approvare', 'Documenti › Da approvare']);
   assert.equal(a[0].quanto, a[0].righe.reduce((t, r) => t + r.numero, 0));
   assert.deepEqual(a[0].collegamento, { pagina: 'approvare' });
   assert.ok(!voci(d).some(v => v.tipo === 'assenza' && / da approvare/.test(v.titolo)), 'le ferie da approvare dentro la voce sola');
@@ -199,4 +200,63 @@ test('i numerini del menu: contano le cose che aspettano te; niente su Dashboard
   // VIES in Errore (dati di esempio): il numerino di Integrazioni per il titolare.
   assert.equal(m.integrazioni, 1);
   assert.equal(ok(await chi.laura('dashboard')).numerini.integrazioni, undefined, 'amministrazione 1: no');
+});
+
+// 07/11/2026 (Manuel: "le Ore vanno tolte, non servono, metti solamente i Rapportini"): nelle app spariscono il segmento
+// Ore, l'inserimento delle ore e il timer. Nel database e nelle azioni restano (app vecchie); nella Dashboard no.
+test('Ore tolte: nessuna voce delle ore o del timer per nessun ruolo, nessun collegamento al segmento Ore; le Ore della settimana dai rapportini', async () => {
+  const w = s.wisper;
+  const idDi = email => w.db.riga('SELECT id FROM utenti WHERE email = ?', email).id;
+  const MARCO = idDi('marco@esempio.it');
+  // Le cose del vecchio modo, ancora nel database: il timer di Marco acceso da 11 ore, ore respinte e ore da approvare.
+  w.db.esegui('UPDATE timer SET partito_il = ? WHERE utente_id = ?', istante(new Date(adessoMs() - 11 * 3600000 - 60000)), MARCO);
+  assert.ok(w.db.riga('SELECT 1 x FROM timer WHERE utente_id = ?', MARCO), 'il timer di Marco e\' acceso');
+  assert.ok(w.db.riga("SELECT 1 x FROM ore WHERE utente_id = ? AND stato = 'respinta' AND tolta IS NULL", MARCO), 'ore respinte di Marco');
+  assert.ok(w.db.riga("SELECT 1 x FROM ore WHERE stato = 'da_approvare' AND tolta IS NULL"), 'ore da approvare');
+  for (const n of ['manuel', 'laura', 'marco', 'lettura', 'luca']) {
+    for (const tutto of [false, true]) {
+      const d = ok(await chi[n]('dashboard', { tutto }));
+      const dove = n + (tutto ? ' (tutto)' : '');
+      for (const v of voci(d)) {
+        assert.notEqual(v.tipo, 'timer', dove + ': ' + v.titolo);
+        assert.doesNotMatch(v.titolo, /^Ore del .* respinte$|timer/i, dove);
+        assert.doesNotMatch(v.dettaglio || '', /^Ore\b|\bore e spese\b/, dove + ': ' + v.titolo);
+        for (const r of v.righe || []) assert.doesNotMatch(r.nome, /^Ore\b/, dove);
+      }
+      // Da nessuna parte (voci, righe, riquadri) un collegamento al segmento Ore.
+      assert.doesNotMatch(JSON.stringify(d), /"segmento":"ore"/, dove + ': un collegamento al segmento Ore');
+    }
+  }
+  // Da approvare: niente righe della tabella ore.
+  const da = ok(await chi.manuel('daApprovare'));
+  assert.ok(da.quante > 0);
+  assert.ok(![].concat(...da.persone.map(p => p.voci)).some(v => v.tipo === 'ore'), 'nessuna riga delle ore da approvare');
+  // Le Ore della settimana: le ore dei rapportini di questa settimana (prima le ore registrate), e portano ai Rapportini
+  // senza segmento. Marco scrive un rapportino oggi (3 + 0,5 di viaggio).
+  ok(await chi.marco('salvaRapportino', { rapportino: { idLocale: 'ore-tolte-1', data: oggi(), idCliente: 'C002', idCommessa: '26ST002', oreLavoro: 3, oreViaggio: 0.5 } }));
+  const lunedi = piuGiorni(oggi(), -((new Date(oggi() + 'T12:00:00').getDay() + 6) % 7));
+  const dai = (sql, ...p) => Math.round(w.db.righe(sql, ...p).reduce((t, r) => t + (numero(r.ore_totali) || numero(r.ore_lavoro) + numero(r.ore_extra) + numero(r.ore_viaggio)), 0) * 100) / 100;
+  const deiRapportini = id => dai("SELECT * FROM rapportini WHERE utente_id = ? AND UPPER(stato) <> 'ANNULLATO' AND data >= ? AND data <= ?", id, lunedi, oggi());
+  const registrate = Math.round(w.db.righe('SELECT ore FROM ore WHERE utente_id = ? AND tolta IS NULL AND data >= ? AND data <= ?', MARCO, lunedi, oggi()).reduce((t, o) => t + numero(o.ore), 0) * 100) / 100;
+  const marco = ok(await chi.marco('dashboard'));
+  const sua = marco.riquadri.find(r => r.chiave === 'oreSettimana');
+  assert.ok(sua, 'il riquadro di base del collaboratore');
+  assert.deepEqual(sua.collegamento, { pagina: 'rapportini' });
+  assert.ok(deiRapportini(MARCO) >= 3.5, 'c\'e\' almeno il rapportino di oggi');
+  assert.equal(sua.numero, deiRapportini(MARCO));
+  assert.equal(sua.numero, marco.numeri.rapportini.oreSettimana);
+  assert.ok(registrate > 0 && registrate !== sua.numero, 'non le ore registrate (' + registrate + ')');
+  // L'esterno: le ore dei suoi rapportini (prima il numero non c'era).
+  const luca = ok(await chi.luca('dashboard'));
+  const suaL = luca.riquadri.find(r => r.chiave === 'oreSettimana');
+  assert.deepEqual([suaL.numero, suaL.collegamento], [deiRapportini(idDi('luca@esempio.it')), { pagina: 'rapportini' }]);
+  // Chi lo sceglie fra i suoi riquadri (titolare): le ore dei rapportini di tutto lo studio.
+  const tutti = dai("SELECT * FROM rapportini WHERE UPPER(stato) <> 'ANNULLATO' AND data >= ? AND data <= ?", lunedi, oggi());
+  ok(await chi.manuel('salvaRiquadri', { riquadri: ['oreSettimana', 'daFatturare', 'scaduto', 'ticketAperti'] }));
+  try {
+    const t = ok(await chi.manuel('dashboard')).riquadri.find(r => r.chiave === 'oreSettimana');
+    assert.deepEqual([t.numero, t.collegamento], [tutti, { pagina: 'rapportini' }]);
+  } finally {
+    w.db.esegui('UPDATE utenti SET riquadri = NULL WHERE email = ?', 'manuel@esempio.it');
+  }
 });

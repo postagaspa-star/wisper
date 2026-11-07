@@ -237,7 +237,8 @@
     }
 
     // La revisione sta nella pillola dello stato ("Valida rev. 2"): una colonna in meno, più spazio al titolo.
-    function colonneArchivio() { return 'minmax(0, 2fr) minmax(108px, 0.9fr) minmax(0, 1.2fr) 142px 122px 46px'; }
+    // Le colonne dell'archivio stanno in stile.css (.tab-archivio): nella tabella stretta (1024) la colonna Modif. lascia
+    // il posto al titolo (07/11/2026, niente puntini e niente titoli su quattro righe).
 
     function iconaDoc(d) {
       if (d.origine === 'collegamento') return h('span', { class: 'ico-riga piccola ico-blu' }, icona(d.cartella ? 'cartella' : 'link', 18, 2.2));
@@ -264,11 +265,10 @@
           scrive() ? h('span', { class: 'piccolo' }, 'Trascina qui un file o un link per aggiungerlo') : null)]);
         return;
       }
-      const col = colonneArchivio();
-      const tab = h('div', { class: 'tab tab-archivio' }, h('div', { class: 'r testa', style: { gridTemplateColumns: col } },
-        h('span', null, 'Titolo'), h('span', null, 'Categoria'), h('span', null, 'Legato a'), h('span', null, 'Stato'), h('span', null, 'Scadenza'), h('span', null, 'Modif.')));
+      const tab = h('div', { class: 'tab tab-archivio' }, h('div', { class: 'r testa' },
+        h('span', null, 'Titolo'), h('span', null, 'Categoria'), h('span', null, 'Legato a'), h('span', null, 'Stato'), h('span', null, 'Scadenza'), h('span', { class: 'c-modif' }, 'Modif.')));
       lista.forEach(d => aggiungi(tab, [h('div', {
-        class: 'r cliccabile' + (String(M.aperto) === String(d.id) ? ' scelta' : ''), style: { gridTemplateColumns: col }, role: 'button', tabindex: '0', 'data-id': d.id,
+        class: 'r cliccabile' + (String(M.aperto) === String(d.id) ? ' scelta' : ''), role: 'button', tabindex: '0', 'data-id': d.id,
         onclick: () => apriPannello(d.id), onkeydown: e => { if (e.key === 'Enter') apriPannello(d.id); },
       },
       h('span', { class: 'titolo-doc' }, iconaDoc(d), h('span', { class: 'doppia' }, h('span', { title: d.titolo }, d.titolo),
@@ -278,7 +278,7 @@
       h('span', { class: 't2 legato', title: legatoA(d) }, legatoA(d) || '—'),
       h('span', { class: 'stato-doppio' }, pillStatoDoc(d, true), d.daApprovare !== null && d.daApprovare !== undefined && d.statoVisto === 'Valida' ? h('span', { class: 'pill piccola p-giallo' }, 'rev. ' + d.daApprovare + ' da approvare') : null),
       h('span', null, d.scadenza ? h('span', { class: 'pill piccola p-' + T.coloreScadenza(d.scadenza.statoVisto), title: d.scadenza.statoVisto }, d.scadenza.statoVisto) : h('span', { class: 't2' }, '—')),
-      h('span', { class: 't2' }, C.data(String(d.modificato || d.creato || '').slice(0, 10)).slice(0, 5)),
+      h('span', { class: 't2 c-modif' }, C.data(String(d.modificato || d.creato || '').slice(0, 10)).slice(0, 5)),
       d.trovato ? h('span', { class: 'estratto-riga' }, estratto(d.trovato)) : null)]));
       aggiungi(area, [tab]);
       if (M.lista.pagine > 1) aggiungi(area, [h('p', { class: 'piccolo' }, 'Si vedono i 50 più recenti di ' + M.lista.quanti + ': cerca per trovare gli altri.')]);
@@ -843,8 +843,11 @@
 
     /** Manda per email: il file della revisione valida in allegato, o il collegamento nel messaggio. */
     function mandaPerEmail(d) {
-      const cli = d.idCliente ? W.cliente(d.idCliente) : null;
+      // Il cliente del documento; senza, quello della sua commessa (06/11/2026: l'email del cliente è già nel campo A).
+      const clienteDoc = () => (d.idCliente && W.cliente(d.idCliente)) || (d.idCommessa && W.commessa(d.idCommessa) && W.cliente(W.commessa(d.idCommessa).idCliente)) || null;
+      const cli = clienteDoc();
       const a = h('input', { type: 'email', value: (cli && cli.email) || '', placeholder: cli ? 'email di ' + cli.nome : 'indirizzo email' });
+      W.emailFresca(a, () => (clienteDoc() || {}).email || '');
       const cc = h('input', { type: 'text' });
       const oggetto = h('input', { type: 'text', placeholder: 'Quello dello studio' });
       const messaggio = h('textarea', { rows: 5, placeholder: 'Quello dello studio' });
@@ -1368,8 +1371,39 @@
         campo('Chi la vede', segmenti([['tutti', 'Tutti'], ['costi', 'Chi vede i prezzi'], ['riservati', 'Solo il titolare']], x.vede, y => { x.vede = y; disegna(); }, 'piccoli')),
         campo('Scadenza proposta', B.conSuffisso(v.mesi, 'mesi')),
         c0 && !c0.sistema ? campo('Si usa', segmenti([['si', 'Sì'], ['no', 'Non più']], x.attiva ? 'si' : 'no', y => { x.attiva = y === 'si'; disegna(); }, 'piccoli')) : null]);
-      disegna();
       let chiudi;
+      if (c0) {
+        // Una categoria che c'è già (06/11/2026): ogni campo si salva da solo, la finestra ha solo Chiudi.
+        // Al server va la categoria intera, con gli ultimi valori salvati degli altri campi.
+        const ora = { id: c0.id, nome: c0.nome || '', approvazione: x.approvazione, vede: x.vede, scadenzaMesi: c0.scadenzaMesi || null, attiva: x.attiva };
+        const manda = cambi => Rete.post('/server/salvaCategoria', { categoria: Object.assign({}, ora, cambi) }).then(r => { Object.assign(ora, cambi); M.categorie = (r && r.categorie) || null; return r; });
+        const scelta = (voci, chiave, da, a) => {
+          const z = h('div');
+          const rifai = () => aggiungi(svuota(z), [segmenti(voci, da(x[chiave]), async y => {
+            if (String(y) === String(da(x[chiave]))) return;
+            const prima = x[chiave];
+            x[chiave] = a(y);
+            rifai();
+            const ok = await B.salvaOra(z, () => manda({ [chiave]: x[chiave] }));
+            if (!ok) { x[chiave] = prima; rifai(); }
+          }, 'piccoli')]);
+          rifai();
+          return z;
+        };
+        const siNo = b => (b ? 'si' : 'no');
+        const comeE = y => y;
+        B.salvaDaSolo(v.nome, { leggi: t => (String(t || '').trim() ? { valore: String(t).trim() } : { errore: 'Nome: scrivi il nome della categoria' }), salva: n => manda({ nome: n }) });
+        B.salvaDaSolo(v.mesi, { leggi: B.leggiNumero({ nome: 'Scadenza proposta', intero: true, min: 0 }), salva: n => manda({ scadenzaMesi: n === '' || n === 0 ? null : n }) });
+        aggiungi(zona, [campo('Nome', v.nome),
+          campo('Le revisioni', scelta([['no', 'Senza approvazione'], ['si', 'Da approvare']], 'approvazione', siNo, y => y === 'si')),
+          campo('Chi la vede', scelta([['tutti', 'Tutti'], ['costi', 'Chi vede i prezzi'], ['riservati', 'Solo il titolare']], 'vede', comeE, comeE)),
+          campo('Scadenza proposta', B.conSuffisso(v.mesi, 'mesi')),
+          !c0.sistema ? campo('Si usa', scelta([['si', 'Sì'], ['no', 'Non più']], 'attiva', siNo, y => y === 'si')) : null]);
+        chiudi = finestra({ titolo: c0.nome, corpo: zona, fuoco: false, allaChiusura: () => B.inCoda(() => null).then(() => W.ridisegna()),
+          pulsanti: ['spazio', h('button', { type: 'button', class: 'btn grande', onclick: () => chiudi() }, 'Chiudi')] });
+        return;
+      }
+      disegna();
       const vai = async () => {
         errore = '';
         if (!v.nome.value.trim()) { errore = 'Nome: scrivi il nome della categoria'; disegna(); return; }
@@ -1407,7 +1441,7 @@
           box(mbTesto(s.file.mb), 'usati da Wisper'),
           box(mbTesto(cestino.mb), 'nel cestino'),
           box(String(troppo.length), troppo.length === 1 ? 'file solo sul NAS' : 'file solo sul NAS', troppo.length > 0))]);
-        if (s.disco.liberoMb < s.disco.minimoMb) aggiungi(area, [h('div', { class: 'banda' }, icona('avviso', 20), h('span', { class: 'spazio' }, 'Il disco è quasi pieno: i documenti nuovi non si caricano finché non si libera spazio. Foto e firme dei rapportini sì.'))]);
+        if (s.disco.liberoMb < s.disco.minimoMb) aggiungi(area, [h('div', { class: 'banda' }, icona('avviso', 20), h('span', { class: 'spazio' }, 'Il disco è quasi pieno: i documenti nuovi non si caricano finché non si libera spazio. Le foto dei rapportini sì.'))]);
         const massimo = Math.max(1, ...(s.perTipo || []).map(t => t.mb));
         aggiungi(area, [h('div', { class: 'scheda' }, h('span', { class: 'etichetta' }, 'Dove va lo spazio'),
           h('div', { class: 'barre-spazio' }, (s.perTipo || []).map(t => h('div', { class: 'barra-spazio' }, h('span', { class: 'nome' }, t.nome),

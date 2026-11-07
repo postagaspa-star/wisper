@@ -205,7 +205,7 @@ module.exports = {
       if (tariffa !== null && tariffa < 0) throw new Rifiuto('Tariffa fuori contratto: non può essere negativa');
       let idCommessa = x.idCommessa !== undefined ? testo(x.idCommessa) : prima ? prima.commessa_id : '';
       if (idCommessa) {
-        const m = this.db.riga('SELECT id, cliente_id FROM commesse WHERE id = ?', idCommessa);
+        const m = this.db.riga('SELECT id, cliente_id FROM commesse WHERE id = ?', this.codiceCommessaVero(idCommessa));
         if (!m) throw new Rifiuto('Commessa ' + idCommessa + ' non trovata');
         if (m.cliente_id !== idCliente) throw new Rifiuto('La commessa ' + m.id + ' è di un altro cliente');
         idCommessa = m.id;

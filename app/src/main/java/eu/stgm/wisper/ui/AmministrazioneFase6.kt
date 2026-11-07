@@ -3,6 +3,7 @@ package eu.stgm.wisper.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxSize
@@ -17,6 +18,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -29,7 +31,7 @@ import org.json.JSONObject
 
 /*
  * Amministrazione della fase 6 sul telefono (fase6.md §12.8): le impostazioni di persone,
- * mezzi e collaboratori, ognuna col suo Salva col bordo, e i tipi di formazione.
+ * mezzi e collaboratori (dal 06/11/2026 si salvano da sole, campo per campo), e i tipi di formazione.
  */
 
 /** I moduli che a un esterno non si danno (permessi.js VIETATI_ESTERNO): righe bloccate in Ruoli e permessi. */
@@ -44,6 +46,10 @@ private val DOCUMENTI_IDONEITA = listOf(
 
 private val TIPI_COLLABORATORE = listOf("impresa" to "Impresa", "professionista" to "Professionista", "occasionale" to "Occasionale")
 
+/** Le frasi di prima dopo "Salvato", dette una volta per pagina (06/11/2026: si salva da solo). */
+private const val CONFERMA_PRESENZE = "Vale per i conti di ferie e presenze"
+private const val CONFERMA_IDONEITA = "L'idoneità si rifà coi documenti nuovi"
+
 /**
  * Persone, mezzi e collaboratori: santo patrono, conservazione, saldo; tarature (ogni
  * quanto, preavviso, "Con la taratura scaduta: Avviso e conferma · Non si usa"); DURC,
@@ -56,16 +62,8 @@ fun PaginaImpostazioniFase6(dati: Dati, puo: Boolean, onIndietro: () -> Unit) {
     val avvisi = LocalAvvisi.current
     val ana by dati.anagrafiche.collectAsStateWithLifecycle()
     fun v(k: String) = ana.impostazione(k)
-    var patrono by remember { mutableStateOf(v("FESTA_PATRONO")) }
-    var conserva by remember { mutableStateOf(v("PERSONE_CONSERVA_ANNI")) }
-    var saldo by remember { mutableStateOf(v("SALDO_AVVISO_GIORNI")) }
-    var ogni by remember { mutableStateOf(v("TARATURA_OGNI_MESI")) }
-    var preavviso by remember { mutableStateOf(v("TARATURA_PREAVVISO_GIORNI")) }
+    val salva = rememberSalvaDaSolo()
     var blocco by remember { mutableStateOf(if (v("TARATURA_BLOCCO") == "blocco") "blocco" else "avviso") }
-    var durc by remember { mutableStateOf(v("DURC_GIORNI")) }
-    var visura by remember { mutableStateOf(v("VISURA_MESI")) }
-    var esterni by remember { mutableStateOf(v("ACCESSO_ESTERNI_GIORNI")) }
-    var tagliando by remember { mutableStateOf(v("KM_TAGLIANDO_AVVISO")) }
     var documenti by remember {
         mutableStateOf<Map<String, List<String>>>(
             runCatching { JSONObject(v("COLLAB_DOCUMENTI").ifBlank { "{}" }) }.getOrDefault(JSONObject()).let { o ->
@@ -73,11 +71,18 @@ fun PaginaImpostazioniFase6(dati: Dati, puo: Boolean, onIndietro: () -> Unit) {
             },
         )
     }
-    val soloCifre = { t: String -> t.all { it.isDigit() } }
-    fun salva(valori: Map<String, String>, frase: String) {
-        ambitoAmm.launch {
-            dati.salvaImpostazioni(valori).fold(onSuccess = { avvisi.mostra(frase) }, onFailure = { avvisi.mostra(spiegaErrore2(it, "Non si è salvato: riprova")) })
-        }
+    val soloCifre = { t: String -> t.filter { it.isDigit() } }
+    suspend fun scrivi(k: String, valore: String): Result<*> = dati.salvaImpostazioni(mapOf(k to valore))
+
+    /** Un numero intero della pagina, che si salva da solo; [conferma] detta una volta. */
+    @Composable
+    fun Numero(k: String, etichetta: String, suffisso: String, conferma: String? = null) = CampoSalvato(
+        salva, k, v(k), etichetta, abilitato = puo, tastiera = KeyboardType.Number, suffisso = suffisso, conferma = conferma, cambia = soloCifre,
+    ) { scrivi(k, it) }
+
+    fun salvaDocumenti(nuovi: Map<String, List<String>>) {
+        val o = JSONObject().apply { nuovi.forEach { (t, l) -> put(t, JSONArray(l)) } }
+        salva.subito("COLLAB_DOCUMENTI", CONFERMA_IDONEITA) { scrivi("COLLAB_DOCUMENTI", o.toString()) }
     }
     Column(
         Modifier.fillMaxSize().background(c.fondo).verticalScroll(rememberScrollState()).padding(MarginePagina).padding(bottom = 48.dp),
@@ -88,59 +93,68 @@ fun PaginaImpostazioniFase6(dati: Dati, puo: Boolean, onIndietro: () -> Unit) {
 
         Etichetta("Persone")
         Scheda(orizzontale = 18.dp, verticale = 16.dp, raggio = 22.dp, spazio = 12.dp) {
-            CampoTesto(patrono, { patrono = it }, "Santo patrono", segnaposto = "mm-gg, per esempio 07-01", abilitato = puo)
-            CampoTesto(conserva, { if (soloCifre(it)) conserva = it }, "Conservazione dopo l'uscita", tastiera = KeyboardType.Number, suffisso = "anni", abilitato = puo)
-            CampoTesto(saldo, { if (soloCifre(it)) saldo = it }, "Saldo da aggiornare dopo", tastiera = KeyboardType.Number, suffisso = "giorni", abilitato = puo)
-            if (puo) PulsanteBordo("Salva", {
-                if (patrono.isNotBlank() && !Regex("""\d{2}-\d{2}""").matches(patrono.trim())) avvisi.mostra("Santo patrono: scrivi mese e giorno, per esempio 07-01")
-                else salva(mapOf("FESTA_PATRONO" to patrono.trim(), "PERSONE_CONSERVA_ANNI" to conserva, "SALDO_AVVISO_GIORNI" to saldo), "Salvato: vale per i conti di ferie e presenze")
-            }, Modifier.fillMaxWidth(), altezza = 48.dp)
+            CampoSalvato(
+                salva, "FESTA_PATRONO", v("FESTA_PATRONO"), "Santo patrono", abilitato = puo, segnaposto = "07-01", conferma = CONFERMA_PRESENZE,
+                controlla = { t -> if (t.isEmpty() || Regex("""\d{2}-\d{2}""").matches(t)) null else "Mese e giorno, per esempio 07-01" },
+            ) { scrivi("FESTA_PATRONO", it) }
+            Numero("PERSONE_CONSERVA_ANNI", "Conservazione dopo l'uscita", "anni", CONFERMA_PRESENZE)
+            Numero("SALDO_AVVISO_GIORNI", "Saldo da aggiornare dopo", "giorni", CONFERMA_PRESENZE)
         }
 
         Etichetta("Tarature e verifiche")
         Scheda(orizzontale = 18.dp, verticale = 16.dp, raggio = 22.dp, spazio = 12.dp) {
-            CampoTesto(ogni, { if (soloCifre(it)) ogni = it }, "Ogni, per gli strumenti nuovi", tastiera = KeyboardType.Number, suffisso = "mesi", abilitato = puo)
-            CampoTesto(preavviso, { if (soloCifre(it)) preavviso = it }, "Preavviso", tastiera = KeyboardType.Number, suffisso = "giorni", abilitato = puo)
-            Etichetta("Con la taratura scaduta")
-            Segmenti(listOf("avviso" to "Avviso e conferma", "blocco" to "Non si usa"), blocco, { if (puo) blocco = it })
-            if (puo) PulsanteBordo("Salva", {
-                salva(
-                    mapOf("TARATURA_OGNI_MESI" to ogni, "TARATURA_PREAVVISO_GIORNI" to preavviso, "TARATURA_BLOCCO" to blocco),
-                    if (blocco == "blocco") "Salvato: uno strumento scaduto non si sceglie più nei rapportini" else "Salvato: uno strumento scaduto si usa solo confermando",
-                )
-            }, Modifier.fillMaxWidth(), altezza = 48.dp)
+            Numero("TARATURA_OGNI_MESI", "Ogni, per gli strumenti nuovi", "mesi")
+            Numero("TARATURA_PREAVVISO_GIORNI", "Preavviso", "giorni")
+            Column(Modifier.fillMaxWidth().evidenziabile("TARATURA_BLOCCO"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Etichetta("Con la taratura scaduta", Modifier.weight(1f))
+                    SegnoSalvato(salva, "TARATURA_BLOCCO")
+                }
+                Segmenti(listOf("avviso" to "Avviso e conferma", "blocco" to "Non si usa"), blocco, { nuovo ->
+                    if (!puo || nuovo == blocco) return@Segmenti
+                    val prima = blocco
+                    blocco = nuovo
+                    salva.subito("TARATURA_BLOCCO", onFallito = { blocco = prima }) {
+                        scrivi("TARATURA_BLOCCO", nuovo).onSuccess {
+                            avvisi.mostra(if (nuovo == "blocco") "Uno strumento scaduto non si sceglie più nei rapportini" else "Uno strumento scaduto si usa solo confermando")
+                        }
+                    }
+                })
+                salva.errori["TARATURA_BLOCCO"]?.let { Text(it, style = Testi.secondario, color = c.rossoTesto) }
+            }
         }
 
         Etichetta("Collaboratori esterni")
         Scheda(orizzontale = 18.dp, verticale = 16.dp, raggio = 22.dp, spazio = 12.dp) {
-            CampoTesto(durc, { if (soloCifre(it)) durc = it }, "Un DURC vale", tastiera = KeyboardType.Number, suffisso = "giorni", abilitato = puo)
-            CampoTesto(visura, { if (soloCifre(it)) visura = it }, "La visura al massimo di", tastiera = KeyboardType.Number, suffisso = "mesi", abilitato = puo)
-            CampoTesto(esterni, { if (soloCifre(it)) esterni = it }, "Accesso degli esterni senza incarichi", tastiera = KeyboardType.Number, suffisso = "giorni", abilitato = puo)
-            Text("I documenti che servono per l'idoneità", style = Testi.forte, color = c.testo)
-            TIPI_COLLABORATORE.forEach { (tipo, nome) ->
-                Etichetta(nome)
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    DOCUMENTI_IDONEITA.forEach { (k, n) ->
-                        val scelto = k in documenti[tipo].orEmpty()
-                        Pillola(n, scelto, {
-                            if (puo) documenti = documenti + (tipo to (if (scelto) documenti[tipo].orEmpty() - k else documenti[tipo].orEmpty() + k))
-                        }, altezza = 48.dp)
+            Numero("DURC_GIORNI", "Un DURC vale", "giorni", CONFERMA_IDONEITA)
+            Numero("VISURA_MESI", "La visura al massimo di", "mesi", CONFERMA_IDONEITA)
+            Numero("ACCESSO_ESTERNI_GIORNI", "Accesso degli esterni senza incarichi", "giorni")
+            Column(Modifier.fillMaxWidth().evidenziabile("COLLAB_DOCUMENTI"), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text("I documenti che servono per l'idoneità", style = Testi.forte, color = c.testo, modifier = Modifier.weight(1f))
+                    SegnoSalvato(salva, "COLLAB_DOCUMENTI")
+                }
+                TIPI_COLLABORATORE.forEach { (tipo, nome) ->
+                    Etichetta(nome)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        DOCUMENTI_IDONEITA.forEach { (k, n) ->
+                            val scelto = k in documenti[tipo].orEmpty()
+                            Pillola(n, scelto, {
+                                if (puo) {
+                                    documenti = documenti + (tipo to (if (scelto) documenti[tipo].orEmpty() - k else documenti[tipo].orEmpty() + k))
+                                    salvaDocumenti(documenti)
+                                }
+                            }, altezza = 48.dp)
+                        }
                     }
                 }
+                salva.errori["COLLAB_DOCUMENTI"]?.let { Text(it, style = Testi.secondario, color = c.rossoTesto) }
             }
-            if (puo) PulsanteBordo("Salva", {
-                val o = JSONObject().apply { documenti.forEach { (t, l) -> put(t, JSONArray(l)) } }
-                salva(
-                    mapOf("DURC_GIORNI" to durc, "VISURA_MESI" to visura, "ACCESSO_ESTERNI_GIORNI" to esterni, "COLLAB_DOCUMENTI" to o.toString()),
-                    "Salvato: l'idoneità si rifà coi documenti nuovi",
-                )
-            }, Modifier.fillMaxWidth(), altezza = 48.dp)
         }
 
         Etichetta("Mezzi")
         Scheda(orizzontale = 18.dp, verticale = 16.dp, raggio = 22.dp, spazio = 12.dp) {
-            CampoTesto(tagliando, { if (soloCifre(it)) tagliando = it }, "Avviso del tagliando a km", tastiera = KeyboardType.Number, suffisso = "km prima", abilitato = puo)
-            if (puo) PulsanteBordo("Salva", { salva(mapOf("KM_TAGLIANDO_AVVISO" to tagliando), "Salvato") }, Modifier.fillMaxWidth(), altezza = 48.dp)
+            Numero("KM_TAGLIANDO_AVVISO", "Avviso del tagliando a km", "km prima")
         }
     }
 }

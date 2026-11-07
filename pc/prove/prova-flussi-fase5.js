@@ -15,6 +15,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
 const assert = require('node:assert/strict');
+const { portaDevtools, chiudiEdge } = require('./edge-prova.js');
 
 const arg = process.argv.slice(2);
 const opz = (n, d) => { const i = arg.indexOf(n); return i >= 0 ? arg[i + 1] : d; };
@@ -26,7 +27,7 @@ const aspetta = ms => new Promise(r => setTimeout(r, ms));
 
 async function main() {
   const profilo = fs.mkdtempSync(path.join(os.tmpdir(), 'wisper-edge-flussi5-'));
-  const porta = 9640 + Math.floor(Math.random() * 150);
+  const porta = portaDevtools(9640, 150);
   const edge = spawn(EDGE, ['--headless=new', '--disable-gpu', '--no-first-run', '--hide-scrollbars', '--user-data-dir=' + profilo, '--remote-debugging-port=' + porta, 'about:blank'], { stdio: 'ignore' });
   let ws = null;
   const errori = [];
@@ -207,23 +208,22 @@ async function main() {
     await foto('3-calendario');
     passo('Pianifica l\'intervento: un\'attività tipo intervento domani, e il calendario la mostra');
 
-    // ------------------------------------------------------------- 4. ore e spesa materiale dal ticket
+    // ------------------------------------------------------------- 4. spesa materiale dal ticket (dal 07/11/2026 niente più "+ Ore")
     await vai('#ticket/tk/' + nuovo.id);
-    await clicca('+ Ore', '.pannello-ticket', 900);
-    await clicca('Salva', '.finestra', 1800);
+    assert.equal(await valuta("[...document.querySelectorAll('.pannello-ticket button')].some(b => b.textContent.trim() === '+ Ore')"), false, 'niente più + Ore');
     await clicca('+ Materiale o spesa', '.pannello-ticket', 900);
     await valuta(`(() => { const i = document.querySelector('.finestra input.importo-grande'); i.value = '18,50'; i.dispatchEvent(new Event('input', { bubbles: true })); return true; })()`);
     await scrivi('Descrizione', 'Fusibili e portafusibili');
     await clicca('Salva', '.finestra', 1800);
     tk = (await server('ticket?id=' + nuovo.id)).ticket;
-    assert.equal(tk.ore.length, 1, 'una riga di ore del ticket');
+    assert.equal((tk.ore || []).length, 0, 'nessuna riga di ore');
     assert.equal(tk.spese.length, 1, 'una spesa del ticket');
     assert.equal(tk.spese[0].categoria, 'materiale');
     assert.equal(tk.spese[0].destinazione, 'cliente');
     assert.equal(tk.spese[0].importo, 18.5);
     assert.equal(tk.somma.materiale, 18.5);
-    assert.match(await testoPannello('.pannello-ticket'), /materiale 18,50 €/, 'il pannello somma ore e materiale');
-    passo('Ore e materiale dal ticket: righe di ore e di spese della fase 3 col ticket (somma: materiale 18,50 €)');
+    assert.match(await testoPannello('.pannello-ticket'), /materiale 18,50 €/, 'il pannello somma il materiale');
+    passo('Materiale dal ticket: niente più + Ore, la spesa della fase 3 col ticket (somma: materiale 18,50 €)');
 
     // ------------------------------------------------------------- 5. rapportino → il lavoro è finito? → risolto
     await clicca('Altre azioni', '.pannello-ticket', 400);
@@ -261,18 +261,19 @@ async function main() {
     assert.ok(String(rap.ticket).indexOf(nuovo.numero) === 0, 'il campo Ticket del rapportino ha il numero (lo scrive il server)');
     passo('Rapportino del ticket (' + rap.id + ', campo Ticket "' + rap.ticket + '"), poi "Sì, è risolto"');
 
-    // Il rapportino va firmato per andare in fattura: il foglio firmato caricato dal computer.
+    // Dal 06/11/2026 (rapportino-lavori.md) niente firma: il lavoro è Da inviare e si fattura già così.
     await vai('#rapportini/elenco');
     await valuta(`(() => { const r = document.querySelector('.tab .r[data-chiave="${rap.id}"]'); r.click(); return true; })()`);
     await aspetta(900);
-    assert.match(await testoPannello('.pannello'), new RegExp('Ticket ' + nuovo.numero.replace(/\//g, '\\/')), 'il pannello del rapportino ha la pillola del ticket');
+    const pannRap = await testoPannello('.pannello');
+    assert.match(pannRap, new RegExp('Ticket ' + nuovo.numero.replace(/\//g, '\\/')), 'il pannello del rapportino ha la pillola del ticket');
+    assert.match(pannRap, /Da inviare/);
+    assert.ok(!/firm/i.test(pannRap), 'nessuna parola della firma');
     await clicca('Altre azioni', '.pannello', 400);
-    await clicca('Carica il foglio firmato', '.menu', 700);
-    await scrivi('Nome di chi ha firmato', 'R. Ferretti');
-    await clicca('Scegli il file', '.finestra', 2500);
-    const firmato = (await server('rapportini?idTicket=' + nuovo.id)).rapportini[0];
-    assert.equal(firmato.stato, 'FIRMATO');
-    passo('Foglio firmato caricato: ' + rap.id + ' firmato');
+    assert.ok(!/firm/i.test(await valuta("document.querySelector('.menu').innerText")), 'niente "Carica il foglio firmato"');
+    await valuta("document.body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })); true");
+    assert.equal((await server('rapportini?idTicket=' + nuovo.id)).rapportini[0].stato, 'BOZZA');
+    passo('Rapportino del ticket ' + rap.id + ': Da inviare, niente firma da caricare (si fattura anche da inviare)');
 
     // ------------------------------------------------------------- 6. chiudi con "una riga per l'intervento"
     await vai('#ticket/tk/' + nuovo.id);
@@ -286,7 +287,8 @@ async function main() {
     assert.match(testo, /La riga che nascerà/i);
     assert.match(testo, new RegExp('Intervento ' + nuovo.numero.replace(/\//g, '\\/') + ' del'), 'la riga di fattura che nascerà');
     const rigaPrevista = (testo.split(/la riga che nascerà\n/i)[1] || '').split('\n')[0].trim();
-    assert.match(rigaPrevista, /\(5 ore, materiale e spese 18,50 €, commessa /, 'la riga coi numeri del server: ' + rigaPrevista);
+    // 4 ore: quelle del rapportino del ticket (dal 07/11/2026 niente più "+ Ore" sul ticket).
+    assert.match(rigaPrevista, /\(4 ore, materiale e spese 18,50 €, commessa /, 'la riga coi numeri del server: ' + rigaPrevista);
     await unGiallo('Chiudi il ticket');
     await foto('6-chiudi');
     await valuta("[...document.querySelectorAll('.finestra .btn.giallo')].pop().click()");
@@ -439,9 +441,9 @@ async function main() {
     console.log('\n' + passi + ' passi, tutto a posto.');
   } finally {
     if (ws) ws.close();
-    edge.kill();
+    await chiudiEdge(porta, edge);
     await aspetta(500);
-    try { fs.rmSync(profilo, { recursive: true, force: true }); } catch (e) { /* Edge tiene un file ancora un attimo */ }
+    await require('./edge-prova.js').togliCartella(profilo); // Edge a volte tiene un file un attimo: riprova per qualche secondo
   }
 }
 

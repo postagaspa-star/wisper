@@ -92,11 +92,14 @@ test('progetti: con la funzione accesa il rapportino non si salva senza progetto
 test('funzioni: le 19 del computer sono quelle del server (nome, richiede, cosa cambia), con le stesse catene', () => {
   assert.equal(Q.FUNZIONI.length, 19);
   assert.deepEqual(Q.FUNZIONI.map(f => f.modulo).slice().sort(), A8.FUNZIONI.map(f => f.modulo).slice().sort());
+  // 07/11/2026: "Ore e rapportini" è diventata Rapportini, sul computer e sul server (le Ore sono state tolte).
+  assert.deepEqual((({ nome, cosaCambia }) => ({ nome, cosaCambia }))(Q.FUNZIONI.find(f => f.modulo === 'rapportini')),
+    { nome: 'Rapportini', cosaCambia: 'Sparisce dal menu di tutti; non si scrivono rapportini. I dati restano.' });
   A8.FUNZIONI.forEach(s => {
     const c = Q.FUNZIONI.find(f => f.modulo === s.modulo);
     assert.equal(c.nome, s.nome, s.modulo);
-    assert.deepEqual(c.richiede, s.richiede, s.modulo + ' richiede');
     assert.equal(c.cosaCambia, s.cosaCambia, s.modulo + ' cosa cambia');
+    assert.deepEqual(c.richiede, s.richiede, s.modulo + ' richiede');
   });
   assert.deepEqual(Q.chiLaUsa('clienti'), ['commesse', 'progetti', 'preventivi', 'rapportini', 'fatturazione', 'ticket', 'comunicazioni', 'portale', 'collaboratori']);
   assert.deepEqual(Q.chiLaUsa('commesse'), ['progetti', 'collaboratori']);

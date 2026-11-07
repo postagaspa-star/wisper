@@ -17,8 +17,9 @@ const ruolo = r => E.permessiDi(r);
 
 test('permessi: le voci del menu nell\'ordine delle specifiche, solo quelle del ruolo', () => {
   assert.deepEqual(R.vociMenu(ruolo('titolare')).map(v => v.nome),
-    ['Dashboard', 'Clienti e fornitori', 'Commesse', 'Progetti', 'Preventivi e contratti', 'Attività e calendario', 'Ore e rapportini', 'Spese e trasferte', 'Fatturazione', 'Banche e scadenze',
+    ['Dashboard', 'Clienti e fornitori', 'Commesse', 'Progetti', 'Preventivi e contratti', 'Attività e calendario', 'Rapportini', 'Spese e trasferte', 'Fatturazione', 'Banche e scadenze',
       'Persone e risorse umane', 'Documenti', 'Ticket e assistenza', 'Mezzi e attrezzature', 'WhatsApp e comunicazioni', 'Portale clienti', 'Collaboratori esterni', 'Integrazioni', 'Amministrazione']);
+  // 07/11/2026: "Ore e rapportini" è diventata Rapportini (le Ore sono state tolte).
   // 03/11/2026 (progetti.md §4): Progetti subito sotto Commesse (che non si chiama più "Progetti e commesse"), a tutti e quattro.
   // Fase 8 (fase8.md §15): Integrazioni, voce 17, dopo Collaboratori esterni; la vedono titolare, amministrazione e lettura.
   // Fase 2: il collaboratore vede Attività e calendario, non i preventivi. Fase 3: Spese e trasferte, voce 7.
@@ -26,7 +27,7 @@ test('permessi: le voci del menu nell\'ordine delle specifiche, solo quelle del 
   // Fase 7: WhatsApp e comunicazioni a tutti e quattro, Portale clienti a tutti tranne il collaboratore (fase7.md §11.2).
   assert.deepEqual(R.vociMenu(ruolo('collaboratore')).map(v => v.modulo), ['dashboard', 'clienti', 'commesse', 'progetti', 'attivita', 'rapportini', 'spese', 'persone', 'documenti', 'ticket', 'mezzi', 'comunicazioni']);
   assert.deepEqual(R.vociMenu(ruolo('lettura')).map(v => v.modulo), ['dashboard', 'clienti', 'commesse', 'progetti', 'preventivi', 'attivita', 'rapportini', 'spese', 'fatturazione', 'banche', 'persone', 'documenti', 'ticket', 'mezzi', 'comunicazioni', 'portale', 'collaboratori', 'integrazioni']);
-  // Fase 6: l'esterno ha il menu ridotto nel suo ordine (fase6.md §12.7), con Ore e rapportini prima di Attività.
+  // Fase 6: l'esterno ha il menu ridotto nel suo ordine (fase6.md §12.7), con Rapportini prima di Attività.
   const esterno = { dashboard: 1, clienti: 0, commesse: 1, progetti: 1, preventivi: 0, attivita: 2, rapportini: 2, spese: 2, fatturazione: 0, banche: 0, persone: 0, documenti: 1, ticket: 2, mezzi: 0, collaboratori: 1, amministrazione: 0, costi: 0, riservati: 0 };
   assert.deepEqual(R.vociMenu(esterno, true).map(v => v.modulo), ['dashboard', 'commesse', 'progetti', 'rapportini', 'attivita', 'spese', 'documenti', 'ticket', 'collaboratori']);
   assert.ok(!R.paginaPermessa(esterno, '#persone'));
@@ -78,7 +79,7 @@ test('permessi: cosa vedrà chi cambia ruolo, a parole', () => {
   const f = R.descriviRuolo(ruolo('collaboratore'));
   // Fase 5: il collaboratore lavora i ticket e legge i documenti.
   // Fase 7: e le sue comunicazioni (fase7.md §11.2).
-  assert.match(f, /Potrà cambiare: Attività e calendario, Ore e rapportini, Spese e trasferte, Ticket e assistenza, WhatsApp e comunicazioni\./);
+  assert.match(f, /Potrà cambiare: Attività e calendario, Rapportini, Spese e trasferte, Ticket e assistenza, WhatsApp e comunicazioni\./);
   // Fase 6: l'organico e i mezzi in lettura, niente collaboratori esterni.
   assert.match(f, /Solo da leggere: Dashboard, Clienti e fornitori, Commesse, Progetti, Persone e risorse umane, Documenti, Mezzi e attrezzature\./);
   assert.match(f, /Non vedrà: Preventivi e contratti, Fatturazione, Banche e scadenze, Portale clienti, Collaboratori esterni, Integrazioni, Amministrazione\./);
@@ -285,6 +286,31 @@ test('dashboard: ogni riga porta al suo elenco filtrato', () => {
   assert.equal(R.classeGravita('urgente'), 'ico-rosso');
   assert.equal(R.classeGravita('soldi'), 'ico-blu');
   assert.equal(R.classeGravita('qualcosa'), 'ico-grigio');
+});
+
+test('07/11/2026, niente Ore: la Dashboard toglie il timer e le ore respinte del server di prima, il resto uguale', () => {
+  const timer = { tipo: 'timer', gravita: 'attenzione', titolo: 'Il timer è acceso da 12 ore', collegamento: { pagina: 'rapportini', filtro: { segmento: 'ore' } } };
+  const oreRespinte = { tipo: 'respinta', gravita: 'attenzione', titolo: 'Ore del 05/11 respinte', collegamento: { pagina: 'rapportini', filtro: { segmento: 'ore', giorno: '2026-11-05' } } };
+  const oreEsterno = { tipo: 'respinta', gravita: 'attenzione', titolo: 'Ore del 05/11 respinte', collegamento: { pagina: 'rapportini', filtro: { segmento: 'ore' } } };
+  const tante = { tipo: 'respinta', gravita: 'attenzione', titolo: '4 cose respinte da correggere', collegamento: { pagina: 'rapportini', filtro: { segmento: 'ore', stato: 'respinta' } } };
+  const rap = { tipo: 'respinta', gravita: 'attenzione', titolo: 'RAP/2026/0006 respinto', collegamento: { pagina: 'rapportini', filtro: { segmento: 'rapportini', id: 'RAP/2026/0006' } } };
+  const spesa = { tipo: 'respinta', gravita: 'attenzione', titolo: 'Spesa del 04/11 respinta', collegamento: { pagina: 'spese', filtro: { segmento: 'spese', id: 3 } } };
+  const gruppo = { tipo: 'approvare', titolo: 'Da sistemare', voci: [timer, rap] };
+  [timer, oreRespinte, oreEsterno].forEach(v => assert.equal(R.vocePerLeOre(v), true, v.titolo));
+  [tante, rap, spesa, gruppo, { tipo: 'respinta', titolo: 'senza collegamento' }].forEach(v => assert.equal(R.vocePerLeOre(v), false, v.titolo));
+  const prima = { ok: true, urgenti: [timer, rap, oreRespinte, tante], settimana: [spesa, gruppo], pianificare: [], quante: { urgenti: 6, settimana: 2, pianificare: 0 }, numeri: { ore: { settimana: 12 } } };
+  const d = R.dashSenzaOre(prima);
+  assert.deepEqual(d.urgenti.map(v => v.titolo), ['RAP/2026/0006 respinto', '4 cose respinte da correggere']);
+  assert.deepEqual(d.settimana[1].voci.map(v => v.titolo), ['RAP/2026/0006 respinto'], 'anche dentro le voci di gruppo');
+  assert.deepEqual(d.quante, { urgenti: 4, settimana: 2, pianificare: 0 }, 'i numeri scendono di quante se ne tolgono');
+  assert.deepEqual(d.numeri, prima.numeri);
+  assert.equal(prima.urgenti.length, 4, 'la risposta del server non si tocca');
+  // Il server nuovo non le manda: uguale. Senza le sezioni (server delle fasi 1-2) niente da fare.
+  assert.deepEqual(R.dashSenzaOre(d), d);
+  assert.deepEqual(R.dashSenzaOre({ ok: true, numeri: {} }), { ok: true, numeri: {} });
+  assert.equal(R.dashSenzaOre(null), null);
+  // I collegamenti di prima alle ore portano ai Rapportini: il pulsante dice "Apri i rapportini".
+  assert.equal(R.testoAzione({ pagina: 'rapportini', filtro: { segmento: 'ore' } }), 'Apri i rapportini');
 });
 
 // ------------------------------------------------------------------ registro

@@ -15,6 +15,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
 const assert = require('node:assert/strict');
+const { portaDevtools, chiudiEdge } = require('./edge-prova.js');
 
 const arg = process.argv.slice(2);
 const opz = (n, d) => { const i = arg.indexOf(n); return i >= 0 ? arg[i + 1] : d; };
@@ -26,7 +27,7 @@ const aspetta = ms => new Promise(r => setTimeout(r, ms));
 
 async function main() {
   const profilo = fs.mkdtempSync(path.join(os.tmpdir(), 'wisper-edge-flussi6-'));
-  const porta = 9800 + Math.floor(Math.random() * 150);
+  const porta = portaDevtools(9800, 150);
   const edge = spawn(EDGE, ['--headless=new', '--disable-gpu', '--no-first-run', '--hide-scrollbars', '--user-data-dir=' + profilo, '--remote-debugging-port=' + porta, 'about:blank'], { stdio: 'ignore' });
   let ws = null;
   const errori = [];
@@ -377,7 +378,7 @@ async function main() {
     // ------------------------------------------------------------- 8. Luca, esterno: vede solo il suo
     await entra('luca@esempio.it');
     const menuLuca = await valuta("[...document.querySelectorAll('#voci .voce')].map(v => v.dataset.nome)");
-    assert.deepEqual(menuLuca, ['Dashboard', 'Commesse', 'Progetti', 'Ore e rapportini', 'Attività e calendario', 'Spese e trasferte', 'Documenti', 'Ticket e assistenza', 'La tua scheda'], 'il menu ridotto dell\'esterno');
+    assert.deepEqual(menuLuca, ['Dashboard', 'Commesse', 'Progetti', 'Rapportini', 'Attività e calendario', 'Spese e trasferte', 'Documenti', 'Ticket e assistenza', 'La tua scheda'], 'il menu ridotto dell\'esterno');
     testo = await testoPagina();
     assert.match(testo, /Esterno · Impianti Veneti di Sartori Luca/, 'la pillola dell\'esterno');
     assert.match(testo, /Scrivi il rapportino/);
@@ -409,9 +410,9 @@ async function main() {
     console.log('\n' + passi + ' passi, tutto a posto.');
   } finally {
     if (ws) ws.close();
-    edge.kill();
+    await chiudiEdge(porta, edge);
     await aspetta(500);
-    try { fs.rmSync(profilo, { recursive: true, force: true }); } catch (e) { /* Edge tiene un file ancora un attimo */ }
+    await require('./edge-prova.js').togliCartella(profilo); // Edge a volte tiene un file un attimo: riprova per qualche secondo
   }
 }
 

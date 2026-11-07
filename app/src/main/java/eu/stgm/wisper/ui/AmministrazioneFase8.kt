@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -32,6 +33,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
@@ -69,6 +71,7 @@ import eu.stgm.wisper.rapportino.Stampa
 import eu.stgm.wisper.rapportino.Testi8
 import eu.stgm.wisper.rapportino.istanteLocale
 import kotlinx.coroutines.Dispatchers
+import androidx.compose.runtime.saveable.rememberSaveable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
@@ -100,7 +103,7 @@ object FileImport {
 
 // ---------------------------------------------------------------------------------- l'elenco a gruppi (§9.2)
 
-private class VoceAmm8(val titolo: String, val stato: String, val icona: androidx.compose.ui.graphics.vector.ImageVector, val apri: () -> Unit, val tinta: String? = null)
+private class VoceAmm8(val titolo: String, val stato: String, val icona: androidx.compose.ui.graphics.vector.ImageVector, val apri: () -> Unit, val tinta: String? = null, val rotta: String = "")
 
 @Composable
 internal fun ElencoAmministrazione8(dati: Dati, nav: Navigatore) {
@@ -126,52 +129,92 @@ internal fun ElencoAmministrazione8(dati: Dati, nav: Navigatore) {
     val sic = pronto(sicurezza)
     val gruppi = listOf(
         "Lo studio" to listOfNotNull(
-            VoceAmm8("Dati dello studio", listOf(ana.impostazione("RAGIONE_SOCIALE").ifBlank { "Lo studio" }, if (ana.impostazione("STUDIO_LOGO").isNotBlank()) "logo sui PDF" else "").filter { it.isNotBlank() }.joinToString(" · "), Icone.immagine, { vai("studio") }),
-            VoceAmm8("Aspetto", "Tema, visita guidata, versione", Icone.pennello, { vai("aspetto") }),
-            VoceAmm8("Funzioni accese", pronto(funzioni)?.let { Funzione.riassunto(it) }?.ifBlank { null } ?: "Le parti che lo studio usa", Icone.interruttore, { vai("funzioni") }),
+            VoceAmm8("Dati dello studio", listOf(ana.impostazione("RAGIONE_SOCIALE").ifBlank { "Lo studio" }, if (ana.impostazione("STUDIO_LOGO").isNotBlank()) "logo sui PDF" else "").filter { it.isNotBlank() }.joinToString(" · "), Icone.immagine, { vai("studio") }, rotta = "studio"),
+            VoceAmm8("Aspetto", "Tema, visita guidata, versione", Icone.pennello, { vai("aspetto") }, rotta = "aspetto"),
+            VoceAmm8("Funzioni accese", pronto(funzioni)?.let { Funzione.riassunto(it) }?.ifBlank { null } ?: "Le parti che lo studio usa", Icone.interruttore, { vai("funzioni") }, rotta = "funzioni"),
         ),
         "Persone e accessi" to listOfNotNull(
-            VoceAmm8("Utenti", if (ana.utenti.isEmpty()) "Chi entra in Wisper e con quale ruolo" else Testi8.quanti(ana.utenti.count { it.attivo }, "attivo", "attivi"), Icone.clienti, { vai("utenti") }),
-            VoceAmm8("Ruoli e permessi", "Quattro ruoli più l'esterno", Icone.lucchetto, { vai("permessi") }),
-            VoceAmm8("Sicurezza", sic?.riassunto ?: "Accessi, dispositivi, copia cifrata", Icone.scudo, { vai("sicurezza") }, tinta = sic?.let { if (it.tuttoAPosto) "verde" else "rosso" }),
-            VoceAmm8("Notifiche", ana.impostazione("EMAIL_AVVISI").takeIf { it.isNotBlank() }?.let { "Avvisi del server a $it" } ?: "Le tue notifiche e gli avvisi del server", Icone.campanella, { vai("notifiche") }),
+            VoceAmm8("Utenti", if (ana.utenti.isEmpty()) "Chi entra in Wisper e con quale ruolo" else Testi8.quanti(ana.utenti.count { it.attivo }, "attivo", "attivi"), Icone.clienti, { vai("utenti") }, rotta = "utenti"),
+            VoceAmm8("Ruoli e permessi", "Quattro ruoli più l'esterno", Icone.lucchetto, { vai("permessi") }, rotta = "permessi"),
+            VoceAmm8("Sicurezza", sic?.riassunto ?: "Accessi, dispositivi, copia cifrata", Icone.scudo, { vai("sicurezza") }, rotta = "sicurezza", tinta = sic?.let { if (it.tuttoAPosto) "verde" else "rosso" }),
+            VoceAmm8("Notifiche", ana.impostazione("EMAIL_AVVISI").takeIf { it.isNotBlank() }?.let { "Avvisi del server a $it" } ?: "Le tue notifiche e gli avvisi del server", Icone.campanella, { vai("notifiche") }, rotta = "notifiche"),
         ),
         "Regole" to listOfNotNull(
-            VoceAmm8("Impostazioni generali", pronto(impostazioni)?.let { l -> "${l.sumOf { it.voci.size }} impostazioni in ${l.size} gruppi" } ?: "Tutte le regole in un posto", Icone.amministrazione, { vai("impostazioni") }),
+            VoceAmm8("Impostazioni generali", pronto(impostazioni)?.let { l -> "${l.sumOf { it.voci.size }} impostazioni in ${l.size} gruppi" } ?: "Tutte le regole in un posto", Icone.amministrazione, { vai("impostazioni") }, rotta = "impostazioni"),
             VoceAmm8(
                 "Impostazioni fiscali",
                 if (eu.stgm.wisper.rapportino.RegoleFiscali.da(ana.impostazioni).confermate) "Confermate dal commercialista" else "Da confermare col commercialista",
                 Icone.fatturazione, { vai("fiscale") },
             ).takeIf { perm.vede(Moduli.FATTURAZIONE) },
-            VoceAmm8("Numerazioni", "Prossima commessa $prossimaCommessa", Icone.numero, { vai("numerazioni") }),
-            VoceAmm8("Categorie dei documenti", "Approvazione, chi le vede, scadenza proposta", Icone.documento, { vai("categorie") }).takeIf { perm.vede(Moduli.DOCUMENTI) },
-            VoceAmm8("Tipi di formazione", "PES, PAV, PEI, primo soccorso", Icone.formazione, { vai("formazione") }).takeIf { perm.vede(Moduli.PERSONE) },
-            VoceAmm8("Veicoli e rimborso km", "Il veicolo, il suo €/km, le tabelle ACI", Icone.auto, { vai("veicoli") }).takeIf { perm.vede(Moduli.SPESE) },
+            VoceAmm8("Numerazioni", "Prossima commessa $prossimaCommessa", Icone.numero, { vai("numerazioni") }, rotta = "numerazioni"),
+            VoceAmm8("Categorie dei documenti", "Approvazione, chi le vede, scadenza proposta", Icone.documento, { vai("categorie") }, rotta = "categorie").takeIf { perm.vede(Moduli.DOCUMENTI) },
+            VoceAmm8("Tipi di formazione", "PES, PAV, PEI, primo soccorso", Icone.formazione, { vai("formazione") }, rotta = "formazione").takeIf { perm.vede(Moduli.PERSONE) },
+            VoceAmm8("Veicoli e rimborso km", "Il veicolo, il suo €/km, le tabelle ACI", Icone.auto, { vai("veicoli") }, rotta = "veicoli").takeIf { perm.vede(Moduli.SPESE) },
         ),
         "Dati" to listOfNotNull(
             VoceAmm8("Copie e ripristino", pronto(copie)?.let { k ->
                 listOfNotNull(k.copie.ultima?.let { u -> if (u.riuscita) quandoCopia8(u.quando) else "L'ultima copia non è riuscita" },
                     k.ultimaAutomatica?.takeIf { it.ok }?.let { "provata il " + dataCorta(it.quando) }).joinToString(" · ")
-            }?.ifBlank { null } ?: "Copie di sicurezza e ripristino provato", Icone.disco, { vai("copie") }),
-            VoceAmm8("Importa ed esporta", "Clienti da un file, tutti i dati in uno ZIP", Icone.importa, { vai("importa") }),
-            VoceAmm8("Registro attività", "Chi ha cambiato cosa", Icone.storia, { vai("registro") }),
-            VoceAmm8("Cestino", "File tolti, recuperabili", Icone.cestino, { vai("cestino") }),
-            VoceAmm8("Spazio sul NAS", "Dove va lo spazio, copia fuori casa", Icone.disco, { vai("spazio") }),
+            }?.ifBlank { null } ?: "Copie di sicurezza e ripristino provato", Icone.disco, { vai("copie") }, rotta = "copie"),
+            VoceAmm8("Importa ed esporta", "Clienti da un file, tutti i dati in uno ZIP", Icone.importa, { vai("importa") }, rotta = "importa"),
+            VoceAmm8("Registro attività", "Chi ha cambiato cosa", Icone.storia, { vai("registro") }, rotta = "registro"),
+            VoceAmm8("Cestino", "File tolti, recuperabili", Icone.cestino, { vai("cestino") }, rotta = "cestino"),
+            VoceAmm8("Spazio sul NAS", "Dove va lo spazio, copia fuori casa", Icone.disco, { vai("spazio") }, rotta = "spazio"),
         ),
         "Sistema" to listOfNotNull(
-            VoceAmm8("Stato del sistema", pronto(stato)?.let { s -> listOf("Server " + s.versione, s.accesoDa().takeIf { it.isNotBlank() }?.let { "acceso da $it" }).filterNotNull().joinToString(" · ") } ?: "Il server sta bene?", Icone.server, { vai("stato") }),
+            VoceAmm8("Stato del sistema", pronto(stato)?.let { s -> listOf("Server " + s.versione, s.accesoDa().takeIf { it.isNotBlank() }?.let { "acceso da $it" }).filterNotNull().joinToString(" · ") } ?: "Il server sta bene?", Icone.server, { vai("stato") }, rotta = "stato"),
             VoceAmm8("Integrazioni", errori?.let { if (it == 0) "Nessuno in Errore" else Testi8.quanti(it, "collegamento in Errore", "collegamenti in Errore") } ?: "Lo stato vero di ogni collegamento", Icone.spina,
-                { nav.sezione(Sezione.INTEGRAZIONI) }, tinta = errori?.let { if (it > 0) "rosso" else null }).takeIf { perm.vede(Moduli.INTEGRAZIONI) && Moduli.INTEGRAZIONI !in sessione.interfaccia.funzioniSpente },
-            VoceAmm8("Lista di controllo", pronto(controlli)?.let { "${it.fatti} di ${it.totale} fatti" } ?: "Il gestionale è completo?", Icone.controlli, { vai("controlli") }),
+                { nav.sezione(Sezione.INTEGRAZIONI) }, rotta = "integrazioni", tinta = errori?.let { if (it > 0) "rosso" else null }).takeIf { perm.vede(Moduli.INTEGRAZIONI) && Moduli.INTEGRAZIONI !in sessione.interfaccia.funzioniSpente },
+            VoceAmm8("Lista di controllo", pronto(controlli)?.let { "${it.fatti} di ${it.totale} fatti" } ?: "Il gestionale è completo?", Icone.controlli, { vai("controlli") }, rotta = "controlli"),
         ),
     )
+    // "Cerca nelle impostazioni" (06/11/2026): le pagine qui sotto e le impostazioni dentro le pagine.
+    var cerca by rememberSaveable { mutableStateOf("") }
+    val tutte = gruppi.flatMap { it.second }
+    fun apri(v: eu.stgm.wisper.rapportino.VoceCercabile) {
+        if (v.chiave.isNotBlank()) {
+            Evidenzia.chiave = v.chiave
+            // Se la pagina non ha quel punto (o non arriva), il segno non resta acceso per sempre.
+            ambitoAmm.launch { delay(6000); if (Evidenzia.chiave == v.chiave) Evidenzia.chiave = null }
+        }
+        val pagina = tutte.firstOrNull { it.rotta == v.rotta && it.rotta.isNotBlank() }
+        when {
+            pagina != null -> pagina.apri()
+            v.rotta == "integrazioni" -> nav.sezione(Sezione.INTEGRAZIONI)
+            else -> vai(v.rotta)
+        }
+    }
     Column(
         Modifier.fillMaxSize().background(c.fondo).verticalScroll(rememberScrollState()).padding(MarginePagina).padding(bottom = 40.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         Testata(onIndietro = { nav.indietro() })
         TitoloPagina("Amministrazione")
-        gruppi.forEach { (nome, voci) ->
+        CampoCerca(cerca, { cerca = it }, "Cerca nelle impostazioni", Modifier.bersaglio("cerca-impostazioni"))
+        if (cerca.isNotBlank()) {
+            val pagine = gruppi.flatMap { (nome, voci) ->
+                voci.map { eu.stgm.wisper.rapportino.VoceCercabile(it.titolo, nome, it.rotta, sotto = it.stato) }
+            }
+            val campi = (eu.stgm.wisper.rapportino.CercaImpostazioni.CAMPI +
+                eu.stgm.wisper.rapportino.CercaImpostazioni.daGenerali(pronto(impostazioni).orEmpty()) +
+                eu.stgm.wisper.rapportino.CercaImpostazioni.daFunzioni(pronto(funzioni).orEmpty()))
+                .filter { it.richiede.isBlank() || perm.vede(it.richiede) }
+            val trovate = eu.stgm.wisper.rapportino.CercaImpostazioni.trova(pagine + campi, cerca)
+            if (trovate.isEmpty()) RigaCalma("Niente con «${cerca.trim()}»")
+            else SchedaElenco {
+                trovate.forEachIndexed { i, v ->
+                    if (i > 0) LineaElenco()
+                    // L'icona della pagina dov'è (il codice delle commesse sta sotto Numerazioni).
+                    val dove = if (v.rotta == "formato-commessa") "numerazioni" else v.rotta
+                    val icona = tutte.firstOrNull { it.rotta == dove }?.icona ?: Icone.amministrazione
+                    RigaVoce(
+                        v.titolo, Modifier.bersaglio("trovata-$i"),
+                        sotto = if (v.chiave.isBlank() && v.sotto.isNotBlank()) v.dove + " · " + v.sotto else v.dove,
+                        icona = icona, onClick = { apri(v) },
+                    )
+                }
+            }
+        } else gruppi.forEach { (nome, voci) ->
             if (voci.isNotEmpty()) Sezione5(nome) {
                 SchedaElenco {
                     voci.forEachIndexed { i, v ->
@@ -242,7 +285,7 @@ internal fun PaginaFunzioni(dati: Dati, onIndietro: () -> Unit) {
             is Lettura.Pronta -> SchedaElenco {
                 lettura.dato.forEachIndexed { i, f ->
                     if (i > 0) LineaElenco()
-                    Row(Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(Modifier.fillMaxWidth().heightIn(min = 64.dp).evidenziabile("funzione-" + f.modulo).padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                             Text(f.nome, style = Testi.forte, color = c.testo)
                             primaFrase(f.cosaCambia).takeIf { it.isNotBlank() }?.let { Text(it, style = Testi.secondario, color = c.tenue) }
@@ -298,6 +341,14 @@ internal fun PaginaImpostazioniGenerali(dati: Dati, nav: Navigatore, onIndietro:
     val lettura = rememberLettura(Unit, giro + Giri8.amministrazione * 1000) { dati.fase8.impostazioniGenerali() }
     var cerca by remember { mutableStateOf("") }
     val aperte = remember { mutableStateMapOf<String, Boolean>() }
+    val salva = rememberSalvaDaSolo()
+    val avvisi = LocalAvvisi.current
+    val detto = remember { booleanArrayOf(false) }
+    // Arrivati dalla ricerca delle impostazioni: si apre la scheda che ha la voce cercata.
+    LaunchedEffect(lettura) {
+        val k = Evidenzia.chiave ?: return@LaunchedEffect
+        (lettura as? Lettura.Pronta)?.dato?.firstOrNull { g -> g.voci.any { it.chiave == k } }?.let { aperte[it.chiave] = true }
+    }
 
     Column(
         Modifier.fillMaxSize().background(c.fondo).verticalScroll(rememberScrollState()).padding(MarginePagina).padding(bottom = 40.dp),
@@ -312,7 +363,15 @@ internal fun PaginaImpostazioniGenerali(dati: Dati, nav: Navigatore, onIndietro:
                 if (gruppi.isEmpty()) RigaCalma("Nessuna impostazione con queste parole.")
                 gruppi.forEach { g ->
                     val aperta = cerca.isNotBlank() || aperte[g.chiave] == true
-                    SchedaImpostazioni(dati, nav, g, aperta, puo, onApri = { aperte[g.chiave] = !aperta }) { giro++ }
+                    SchedaImpostazioni(dati, nav, g, aperta, puo, salva, onApri = { aperte[g.chiave] = !aperta }, onSalvato = { giro++ }) { k, x ->
+                        dati.fase8.salvaImpostazioni(mapOf(k to x)).also {
+                            // Le regole del lavoro e dei rimborsi valgono per le cose nuove: si dice una volta.
+                            if (it.isSuccess && g.chiave in setOf("lavoro", "rimborsi") && !detto[0]) {
+                                detto[0] = true
+                                avvisi.mostra("Vale per le cose nuove: quelle già scritte restano come sono")
+                            }
+                        }
+                    }
                 }
             }
             else -> StatoLettura(lettura) { giro++ }
@@ -320,14 +379,19 @@ internal fun PaginaImpostazioniGenerali(dati: Dati, nav: Navigatore, onIndietro:
     }
 }
 
-/** Una scheda richiudibile di Impostazioni generali, col suo Salva col bordo (nessun giallo, §9.4). */
+/**
+ * Una scheda richiudibile di Impostazioni generali (§9.4). Dal 06/11/2026 niente Salva: ogni voce si salva da sola
+ * con [onSalvaVoce]. La scheda tiene quello che si scrive anche se intanto il server rilegge (si rifà solo per gruppo).
+ */
 @Composable
-private fun SchedaImpostazioni(dati: Dati, nav: Navigatore, g: GruppoImpostazioni, aperta: Boolean, puo: Boolean, onApri: () -> Unit, onSalvato: () -> Unit) {
+private fun SchedaImpostazioni(
+    dati: Dati, nav: Navigatore, g: GruppoImpostazioni, aperta: Boolean, puo: Boolean, salva: SalvaDaSolo,
+    onApri: () -> Unit, onSalvato: () -> Unit, onSalvaVoce: suspend (String, Any?) -> Result<*>,
+) {
     val c = W.colori
     val avvisi = LocalAvvisi.current
     val scope = rememberCoroutineScope()
-    val modifica = remember(g) { ModificaImpostazioni(g.voci) }
-    var salvo by remember { mutableStateOf(false) }
+    val modifica = remember(g.chiave) { ModificaImpostazioni(g.voci) }
     var spegniPortale by remember { mutableStateOf(false) }
     if (spegniPortale) FoglioConferma(
         "Spegnere il portale adesso?", "I clienti non entrano più finché non lo riaccendi. I dati restano.", "Spegni il portale",
@@ -347,7 +411,7 @@ private fun SchedaImpostazioni(dati: Dati, nav: Navigatore, g: GruppoImpostazion
             Icon(if (aperta) Icone.su else Icone.giu, null, tint = c.tenue, modifier = Modifier.padding(start = 8.dp).size(20.dp))
         }
         if (aperta) {
-            modifica.Campi(abilitato = { puo })
+            modifica.Campi(abilitato = { puo }, salva = if (puo && g.salvabile) salva else null, onSalva = onSalvaVoce)
             g.collegamenti.forEach { col ->
                 LineaElenco()
                 RigaVoce(col.nome, sotto = col.valore.ifBlank { null }, onClick = { apriCollegamentoImpostazione(col.pagina, col.sezione, nav, dati) })
@@ -356,24 +420,7 @@ private fun SchedaImpostazioni(dati: Dati, nav: Navigatore, g: GruppoImpostazion
             g.azioni.filter { it.second == "spegniPortale" }.forEach { (nome, _) ->
                 if (LocalPermessi.current.modifica(Moduli.PORTALE)) PulsantePericolo(nome, { spegniPortale = true }, Modifier.fillMaxWidth())
             }
-            val errori = modifica.errori()
-            errori.firstOrNull()?.let { Text(it, style = Testi.secondario, color = c.rossoTesto) }
-            if (puo && g.salvabile) PulsanteBordo(if (salvo) "Salvo…" else "Salva", {
-                if (salvo || errori.isNotEmpty()) return@PulsanteBordo
-                salvo = true
-                scope.launch {
-                    val valori = modifica.valori()
-                    if (valori.isEmpty()) { avvisi.mostra("Non hai cambiato niente"); salvo = false; return@launch }
-                    dati.fase8.salvaImpostazioni(valori)
-                        .onSuccess {
-                            avvisi.mostra(if (g.chiave in setOf("lavoro", "rimborsi")) "Fatto. Vale per le cose nuove: quelle già scritte restano come sono" else "Salvato")
-                            onSalvato()
-                        }
-                        .onFailure { avvisi.mostra(spiegaErrore2(it, "Non è stato salvato: riprova")) }
-                    salvo = false
-                }
-            }, Modifier.fillMaxWidth().padding(bottom = 10.dp))
-            else Box(Modifier.height(6.dp))
+            Box(Modifier.height(8.dp))
         }
     }
 }
@@ -399,14 +446,10 @@ internal fun PaginaNotifiche(dati: Dati, perLoStudio: Boolean, onIndietro: () ->
     val amm2 = scriveAmministrazione()
     var giro by remember { mutableStateOf(0) }
     val lettura = rememberLettura(Unit, giro) { dati.fase8.notifichePreferenze() }
-    var telefono by remember { mutableStateOf<Boolean?>(null) }
-    var silenzio by remember { mutableStateOf<Boolean?>(null) }
+    // Dal 06/11/2026 ogni interruttore si salva da solo; i tipi partono tutti insieme, con quelli già cambiati qui.
     val tipi = remember { mutableStateMapOf<String, Boolean>() }
-    var salvo by remember { mutableStateOf(false) }
-    var email by remember(ana.impostazione("EMAIL_AVVISI")) { mutableStateOf(ana.impostazione("EMAIL_AVVISI")) }
-    var ora by remember(ana.impostazione("NOTIFICHE_ORA")) { mutableStateOf(ana.impostazione("NOTIFICHE_ORA").ifBlank { "08:00" }) }
+    val salva = rememberSalvaDaSolo()
     var provo by remember { mutableStateOf(false) }
-    var salvoStudio by remember { mutableStateOf(false) }
 
     Column(
         Modifier.fillMaxSize().background(c.fondo).verticalScroll(rememberScrollState()).padding(MarginePagina).padding(bottom = 40.dp),
@@ -419,28 +462,22 @@ internal fun PaginaNotifiche(dati: Dati, perLoStudio: Boolean, onIndietro: () ->
                 val p: PreferenzeNotifiche = lettura.dato
                 Scheda(orizzontale = 18.dp, verticale = 16.dp, spazio = 6.dp) {
                     Text("Le tue notifiche", style = Testi.titoloSezione, color = c.testo)
-                    RigaInterruttore("Avvisami sul telefono", telefono ?: p.telefono) { telefono = it }
-                    Row(Modifier.fillMaxWidth().heightIn(min = 56.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) {
-                            Text("Di sera e nei festivi niente avvisi sul telefono", style = Testi.forte, color = c.testo)
-                            Text("Dalle 20 alle 7: restano nella campanella", style = Testi.secondario, color = c.tenue)
-                        }
-                        Interruttore(silenzio ?: p.silenzioSera, { silenzio = it }, "Di sera e nei festivi niente avvisi sul telefono")
+                    RigaInterruttoreSalvata(salva, "NOTIFICHE_TELEFONO", "Avvisami sul telefono", p.telefono) { si ->
+                        dati.fase8.salvaNotifichePreferenze(si, null, null)
                     }
+                    RigaInterruttoreSalvata(
+                        salva, "NOTIFICHE_SILENZIO", "Di sera e nei festivi niente avvisi sul telefono", p.silenzioSera,
+                        sotto = "Dalle 20 alle 7: restano nella campanella",
+                    ) { si -> dati.fase8.salvaNotifichePreferenze(null, si, null) }
                     PreferenzeNotifiche.gruppiDi(p.tipi).forEach { (gruppo, voci) ->
                         Etichetta(gruppo, Modifier.padding(top = 8.dp))
-                        voci.forEach { (k, nome) -> RigaInterruttore(nome, tipi[k] ?: p.tipi[k] ?: true) { tipi[k] = it } }
-                    }
-                    PulsanteBordo(if (salvo) "Salvo…" else "Salva", {
-                        if (salvo) return@PulsanteBordo
-                        salvo = true
-                        scope.launch {
-                            dati.fase8.salvaNotifichePreferenze(telefono, silenzio, p.tipi + tipi)
-                                .onSuccess { avvisi.mostra("Salvato") }
-                                .onFailure { avvisi.mostra(spiegaErrore2(it, "Non è stato salvato: riprova")) }
-                            salvo = false
+                        voci.forEach { (k, nome) ->
+                            RigaInterruttoreSalvata(salva, "NOTIFICA_$k", nome, p.tipi[k] ?: true) { si ->
+                                tipi[k] = si
+                                dati.fase8.salvaNotifichePreferenze(null, null, p.tipi + tipi).onFailure { tipi.remove(k) }
+                            }
                         }
-                    }, Modifier.fillMaxWidth().padding(top = 8.dp))
+                    }
                 }
             }
             else -> StatoLettura(lettura) { giro++ }
@@ -448,8 +485,15 @@ internal fun PaginaNotifiche(dati: Dati, perLoStudio: Boolean, onIndietro: () ->
         // Per lo studio (solo Amministrazione: Modifica): a chi vanno gli avvisi del server, l'ora del riepilogo.
         if (perLoStudio && amm2) Scheda(orizzontale = 18.dp, verticale = 16.dp) {
             Text("Per lo studio", style = Testi.titoloSezione, color = c.testo)
-            CampoTesto(email, { email = it }, "Avvisi del server a", Modifier.fillMaxWidth(), tastiera = KeyboardType.Email)
-            CampoTesto(ora, { ora = it }, "Ora del riepilogo del mattino", Modifier.fillMaxWidth(), tastiera = KeyboardType.Number)
+            CampoSalvato(salva, "EMAIL_AVVISI", ana.impostazione("EMAIL_AVVISI"), "Avvisi del server a", tastiera = KeyboardType.Email, cambia = { it.trim() }) {
+                dati.fase8.salvaImpostazioni(mapOf("EMAIL_AVVISI" to it))
+            }
+            CampoSalvato(
+                salva, "NOTIFICHE_ORA", ana.impostazione("NOTIFICHE_ORA").ifBlank { "08:00" }, "Ora del riepilogo del mattino", tastiera = KeyboardType.Number,
+                controlla = { t -> if (Regex("""^([01]?\d|2[0-3])[:.][0-5]\d$""").matches(t)) null else "Scrivila come 8:00" },
+            ) { t ->
+                dati.fase8.salvaImpostazioni(mapOf("NOTIFICHE_ORA" to t.replace('.', ':').let { if (it.length == 4) "0$it" else it }))
+            }
             PulsanteBordo(if (provo) "Mando…" else "Manda una prova", {
                 if (provo) return@PulsanteBordo
                 provo = true
@@ -458,18 +502,6 @@ internal fun PaginaNotifiche(dati: Dati, perLoStudio: Boolean, onIndietro: () ->
                         .onSuccess { a -> avvisi.mostra(if (a.isEmpty()) "Prova degli avvisi mandata" else "Prova degli avvisi mandata a " + a.joinToString(", ")) }
                         .onFailure { avvisi.mostra(spiegaErrore2(it, "La prova non è partita: riprova")) }
                     provo = false
-                }
-            }, Modifier.fillMaxWidth())
-            PulsanteBordo(if (salvoStudio) "Salvo…" else "Salva", {
-                if (salvoStudio) return@PulsanteBordo
-                if (!Regex("""^([01]?\d|2[0-3])[:.][0-5]\d$""").matches(ora.trim())) { avvisi.mostra("Ora del riepilogo: scrivila come 8:00"); return@PulsanteBordo }
-                salvoStudio = true
-                val o = ora.trim().replace('.', ':').let { if (it.length == 4) "0$it" else it }
-                scope.launch {
-                    dati.fase8.salvaImpostazioni(mapOf("EMAIL_AVVISI" to email.trim(), "NOTIFICHE_ORA" to o))
-                        .onSuccess { avvisi.mostra("Salvato") }
-                        .onFailure { avvisi.mostra(spiegaErrore2(it, "Non è stato salvato: riprova")) }
-                    salvoStudio = false
                 }
             }, Modifier.fillMaxWidth())
         }
@@ -494,7 +526,7 @@ internal fun PaginaSicurezza(dati: Dati, nav: Navigatore, onIndietro: () -> Unit
     var accendi by remember { mutableStateOf(false) }
     var spegniCifra by remember { mutableStateOf(false) }
     var chiave by remember { mutableStateOf<String?>(null) }
-    var giorni by remember { mutableStateOf<String?>(null) }
+    val salva = rememberSalvaDaSolo()
 
     fun scollega(id: String, nome: String) {
         scope.launch { dati.scollega(id).onSuccess { avvisi.mostra("Scollegato: $nome"); giro++ }.onFailure { avvisi.mostra(spiegaErrore2(it, "Non è stato scollegato: riprova")) } }
@@ -555,14 +587,11 @@ internal fun PaginaSicurezza(dati: Dati, nav: Navigatore, onIndietro: () -> Unit
                 }
                 Scheda(orizzontale = 18.dp, verticale = 16.dp) {
                     Text("Durata degli accessi", style = Testi.titoloSezione, color = c.testo)
-                    val testo = giorni ?: s.sessioneGiorni.toString()
-                    val n = testo.trim().toIntOrNull()
-                    val err = if (testo.isNotBlank() && (n == null || n < 30 || n > 365)) "Un dispositivo esce da solo dopo: da 30 a 365 giorni" else null
-                    CampoTesto(testo, { giorni = it }, "Un dispositivo esce da solo dopo", Modifier.fillMaxWidth(), tastiera = KeyboardType.Number, suffisso = "giorni senza uso", abilitato = amm2, errore = err)
-                    if (amm2) PulsanteBordo("Salva", {
-                        if (err != null || n == null) return@PulsanteBordo
-                        scope.launch { dati.fase8.salvaImpostazioni(mapOf("SESSIONE_GIORNI" to n)).onSuccess { avvisi.mostra("Salvato"); giorni = null; giro++ }.onFailure { avvisi.mostra(spiegaErrore2(it, "Non è stato salvato: riprova")) } }
-                    }, Modifier.fillMaxWidth())
+                    CampoSalvato(
+                        salva, "SESSIONE_GIORNI", s.sessioneGiorni.toString(), "Un dispositivo esce da solo dopo",
+                        abilitato = amm2, tastiera = KeyboardType.Number, suffisso = "giorni senza uso",
+                        controlla = { t -> t.toIntOrNull().let { n -> if (n == null || n < 30 || n > 365) "Da 30 a 365 giorni" else null } },
+                    ) { t -> dati.fase8.salvaImpostazioni(mapOf("SESSIONE_GIORNI" to t.toInt())) }
                 }
                 if (titolare) PulsantePericolo("Scollega tutti i dispositivi", { scollegaTutti = true }, Modifier.fillMaxWidth())
             }
@@ -1227,87 +1256,99 @@ internal fun PaginaListaControllo(dati: Dati, onIndietro: () -> Unit) {
             else -> StatoLettura(lettura) { giro++ }
         }
     }
-    aperta?.let { r -> FoglioSegnaControllo(dati, r) { fatto -> aperta = null; if (fatto) giro++ } }
-    cambio?.let { x -> FoglioSegnaCambio(dati, x) { fatto -> cambio = null; if (fatto) giro++ } }
+    aperta?.let { r -> FoglioSegnaControllo(dati, r, onSalvato = { giro++ }) { aperta = null } }
+    cambio?.let { x -> FoglioSegnaCambio(dati, x, onSalvato = { giro++ }) { cambio = null } }
 }
 
-/** Segna il cambio (§10.5, §13.6): Prima del cambio · Prova generale · Cambio fatto · Ritorno chiuso; giallo Salva. */
+/**
+ * Segna il cambio (§10.5, §13.6): Prima del cambio · Prova generale · Cambio fatto · Ritorno chiuso. Dal 06/11/2026
+ * la scelta si salva da sola appena si tocca; il foglio ha solo Chiudi.
+ */
 @Composable
-private fun FoglioSegnaCambio(dati: Dati, adesso: StatoCambio, onChiudi: (Boolean) -> Unit) {
+private fun FoglioSegnaCambio(dati: Dati, adesso: StatoCambio, onSalvato: () -> Unit, onChiudi: () -> Unit) {
     val c = W.colori
     val avvisi = LocalAvvisi.current
-    val scope = rememberCoroutineScope()
+    val salva = rememberSalvaDaSolo()
     var stato by remember { mutableStateOf(adesso.stato) }
-    var lavoro by remember { mutableStateOf(false) }
-    var errore by remember { mutableStateOf<String?>(null) }
-    FoglioDalBasso({ onChiudi(false) }) {
+    FoglioDalBasso(onChiudi) {
         Text("Segna il cambio", style = Testi.titoloScheda, color = c.testo)
         Coppia("Adesso", adesso.frase())
-        Domanda("A che punto è") { SceltePillole(StatoCambio.STATI, stato, { stato = it }) }
-        errore?.let { Text(it, style = Testi.secondario, color = c.rossoTesto) }
-        PulsantePrincipale(if (lavoro) "Salvo…" else "Salva", {
-            if (lavoro) return@PulsantePrincipale
-            if (stato == adesso.stato) { onChiudi(false); return@PulsantePrincipale }
-            lavoro = true
-            errore = null
-            scope.launch {
-                dati.fase8.segnaCambio(stato)
-                    .onSuccess { avvisi.mostra(it.frase()); onChiudi(true) }
-                    .onFailure { errore = spiegaErrore2(it, "Non è stato segnato: riprova") }
-                lavoro = false
-            }
-        }, abilitato = !lavoro)
+        Domanda("A che punto è") {
+            SceltePillole(StatoCambio.STATI, stato, { nuovo ->
+                if (nuovo == stato) return@SceltePillole
+                stato = nuovo
+                salva.subito("CAMBIO") { dati.fase8.segnaCambio(nuovo).onSuccess { avvisi.mostra(it.frase()); onSalvato() } }
+            })
+            SegnoSalvato(salva, "CAMBIO")
+        }
+        salva.errori["CAMBIO"]?.let { Text(it, style = Testi.secondario, color = c.rossoTesto) }
+        PulsanteBordo("Chiudi", onChiudi, Modifier.fillMaxWidth())
     }
 }
 
-/** Il foglio Segna (§11.1, §15.1): Fatto · Non va · Da fare, nota e Allega; giallo Salva. Le righe dal server non si segnano. */
+/**
+ * Il foglio Segna (§11.1, §15.1): Fatto · Non va · Da fare, nota e Allega. Le righe dal server non si segnano. Dal
+ * 06/11/2026 si salva da solo: l'esito appena si tocca, la nota dopo la pausa, l'allegato appena scelto (prima va
+ * nell'archivio). "Non va" vuole la nota: finché manca non parte niente.
+ */
 @Composable
-private fun FoglioSegnaControllo(dati: Dati, r: RigaControllo, onChiudi: (Boolean) -> Unit) {
+private fun FoglioSegnaControllo(dati: Dati, r: RigaControllo, onSalvato: () -> Unit, onChiudi: () -> Unit) {
     val c = W.colori
     val ctx = LocalContext.current
-    val avvisi = LocalAvvisi.current
-    val scope = rememberCoroutineScope()
     val puo = scriveAmministrazione()
-    var stato by remember { mutableStateOf(if (r.stato == "non_va") "non_va" else if (r.stato == "da_fare") "fatto" else r.stato.takeIf { it in setOf("fatto", "non_va", "da_fare") } ?: "fatto") }
+    val salva = rememberSalvaDaSolo()
+    var stato by remember { mutableStateOf(r.stato.takeIf { it in setOf("fatto", "non_va", "da_fare") }) }
     var nota by remember { mutableStateOf(r.nota) }
     var allegato by remember { mutableStateOf<Triple<String, String, ByteArray>?>(null) }
+    var idAllegato by remember { mutableStateOf<String?>(null) }
     var errore by remember { mutableStateOf<String?>(null) }
-    var lavoro by remember { mutableStateOf(false) }
-    val scegli = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) runCatching { leggiFileScelto(ctx, uri, 20) }.onSuccess { allegato = it }.onFailure { errore = it.message ?: "Il file non si legge" }
+
+    suspend fun segna(): Result<*> {
+        val s = stato ?: return Result.failure<Unit>(PonteServer.Rifiutato("Scegli l'esito"))
+        var id = idAllegato
+        val file = allegato
+        if (file != null && id == null) {
+            // L'allegato va nell'archivio, categoria Collaudo di Wisper (§11.1), poi la riga lo cita.
+            id = allegaCollaudo(dati, r.chiave, file.first, file.second, file.third).getOrElse { return Result.failure<Unit>(it) }
+            idAllegato = id
+        }
+        return dati.fase8.segnaControllo(r.chiave, s, nota.trim(), id).onSuccess { onSalvato() }
     }
-    FoglioDalBasso({ onChiudi(false) }) {
+
+    fun manda(subito: Boolean) {
+        errore = null
+        if (stato == null) return
+        if (stato == "non_va" && nota.isBlank()) { errore = "Nota: scrivi cosa non va"; salva.annulla(r.chiave); return }
+        if (subito) salva.subito(r.chiave) { segna() } else salva.piuTardi(r.chiave) { segna() }
+    }
+
+    val scegli = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) runCatching { leggiFileScelto(ctx, uri, 20) }.onSuccess { allegato = it; idAllegato = null; manda(subito = true) }.onFailure { errore = it.message ?: "Il file non si legge" }
+    }
+    FoglioDalBasso(onChiudi) {
         Text(r.chiave, style = Testi.titoloScheda, color = c.testo)
         Text(r.testo, style = Testi.forte, color = c.testo)
         if (r.dalServer) {
             Coppia("Stato", r.parola)
             Coppia("Come", "La controlla il server da solo, coi dati veri")
             Coppia("Adesso", r.nota.ifBlank { "Va bene" })
-            PulsanteTesto("Chiudi", { onChiudi(false) }, Modifier.fillMaxWidth(), colore = c.testo)
+            PulsanteTesto("Chiudi", onChiudi, Modifier.fillMaxWidth(), colore = c.testo)
             return@FoglioDalBasso
         }
         Coppia("Come", r.tipoVisto)
         Coppia("Chi", r.chi.ifBlank { null })
         Coppia("Ultima volta", r.il.takeIf { it.isNotBlank() }?.let { listOf(dataCorta(it), r.utente).filter { x -> x.isNotBlank() }.joinToString(" · ") } ?: "mai")
-        if (!puo) { PulsanteTesto("Chiudi", { onChiudi(false) }, Modifier.fillMaxWidth(), colore = c.testo); return@FoglioDalBasso }
-        Domanda("Esito") { SceltePillole(listOf("fatto" to "Fatto", "non_va" to "Non va", "da_fare" to "Da fare"), stato, { stato = it }) }
-        CampoTesto(nota, { nota = it }, "Nota", Modifier.fillMaxWidth(), righe = 2)
+        if (!puo) { PulsanteTesto("Chiudi", onChiudi, Modifier.fillMaxWidth(), colore = c.testo); return@FoglioDalBasso }
+        Domanda("Esito") {
+            SceltePillole(listOf("fatto" to "Fatto", "non_va" to "Non va", "da_fare" to "Da fare"), stato, { stato = it; manda(subito = true) })
+            SegnoSalvato(salva, r.chiave)
+        }
+        Box(Modifier.onFocusChanged { if (!it.hasFocus && salva.inAttesa(r.chiave)) salva.adesso(r.chiave) }) {
+            CampoTesto(nota, { nota = it; manda(subito = false) }, "Nota", Modifier.fillMaxWidth(), righe = 2)
+        }
         PulsanteBordo(allegato?.first?.let { "Allegato: $it" } ?: "Allega", { scegli.launch(arrayOf("*/*")) }, Modifier.fillMaxWidth(), icona = Icone.graffetta)
-        errore?.let { Text(it, style = Testi.secondario, color = c.rossoTesto) }
-        PulsantePrincipale(if (lavoro) "Salvo…" else "Salva", {
-            if (lavoro) return@PulsantePrincipale
-            if (stato == "non_va" && nota.isBlank()) { errore = "Nota: scrivi cosa non va"; return@PulsantePrincipale }
-            lavoro = true
-            errore = null
-            scope.launch {
-                // L'allegato va nell'archivio, categoria Collaudo di Wisper (§11.1), poi la riga lo cita.
-                val idDoc = allegato?.let { (n, mime, byte) -> allegaCollaudo(dati, r.chiave, n, mime, byte).getOrElse { e -> errore = spiegaErrore2(e, "L'allegato non si è caricato"); lavoro = false; return@launch } }
-                dati.fase8.segnaControllo(r.chiave, stato, nota, idDoc)
-                    .onSuccess { avvisi.mostra("Segnato: ${r.chiave}"); onChiudi(true) }
-                    .onFailure { errore = spiegaErrore2(it, "Non è stato segnato: riprova") }
-                lavoro = false
-            }
-        }, abilitato = !lavoro)
+        (errore ?: salva.errori[r.chiave])?.let { Text(it, style = Testi.secondario, color = c.rossoTesto) }
+        PulsanteTesto("Chiudi", onChiudi, Modifier.fillMaxWidth(), colore = c.testo)
     }
 }
 
@@ -1326,13 +1367,18 @@ private suspend fun allegaCollaudo(dati: Dati, chiave: String, nome: String, mim
 internal fun PaginaFormatoCommessa(dati: Dati, onIndietro: () -> Unit) {
     val c = W.colori
     val avvisi = LocalAvvisi.current
-    val scope = rememberCoroutineScope()
     val ana by dati.anagrafiche.collectAsStateWithLifecycle()
     val anno = LocalDate.now().year
     val n = ana.numerazione("commessa") ?: Numerazione("commessa", "{AA}ST{NNN}")
     var f by remember(n.formato) { mutableStateOf(FormatoCommessa.da(n.formato)) }
-    var conferma by remember { mutableStateOf(false) }
-    var lavoro by remember { mutableStateOf(false) }
+    // Dal 06/11/2026 si salva da solo: le scelte appena si toccano, il testo quando si lascia il campo.
+    val salva = rememberSalvaDaSolo()
+    suspend fun salvaFormato(formato: String): Result<*> =
+        dati.salvaNumerazione(n.copy(formato = formato, prossimo = "")).onSuccess { avvisi.mostra("Formato salvato: vale per le commesse nuove") }
+    fun scelto(nuovo: FormatoCommessa) {
+        f = nuovo
+        if (nuovo.formato == n.formato) salva.annulla("FORMATO_COMMESSA") else salva.subito("FORMATO_COMMESSA") { salvaFormato(nuovo.formato) }
+    }
     // Il numero continua dal più alto anche col formato di prima (§9.6, salvaNumerazione).
     val codici = ana.commesse.map { it.id }
     val prossimo = maxOf(n.ultimo + 1, CodiceCommessa.prossimo(listOf(n.formato, "{AA}ST{NNN}").distinct(), codici, n.ultimo))
@@ -1345,18 +1391,26 @@ internal fun PaginaFormatoCommessa(dati: Dati, onIndietro: () -> Unit) {
 
     Box(Modifier.fillMaxSize().background(c.fondo)) {
         Column(
-            Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(MarginePagina).padding(bottom = SpazioSottoBarra),
+            Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(MarginePagina).padding(bottom = 40.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             Testata(onIndietro = onIndietro)
             TitoloPagina("Il codice delle commesse")
             Scheda(orizzontale = 18.dp, verticale = 16.dp) {
-                Text("Come si scrive", style = Testi.titoloSezione, color = c.testo)
-                Domanda("Anno") { SceltePillole(listOf("AA" to "%02d".format(anno % 100), "AAAA" to anno.toString(), "" to "Niente"), f.anno, { f = f.copy(anno = it) }) }
-                Domanda("Ordine") { SceltePillole(listOf(true to "Anno prima", false to "Testo prima"), f.annoPrima, { f = f.copy(annoPrima = it) }) }
-                Domanda("Separatore") { SceltePillole(listOf("" to "Niente", "-" to "-", "/" to "/"), f.separatore, { f = f.copy(separatore = it) }) }
-                Domanda("Cifre del numero") { SceltePillole(listOf(3 to "3", 4 to "4"), f.cifre, { f = f.copy(cifre = it) }) }
-                CampoTesto(f.testo, { t -> f = f.copy(testo = t.filter { it.isLetterOrDigit() }.take(6).uppercase()) }, "Testo", Modifier.fillMaxWidth())
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text("Come si scrive", style = Testi.titoloSezione, color = c.testo, modifier = Modifier.weight(1f))
+                    SegnoSalvato(salva, "FORMATO_COMMESSA")
+                }
+                Domanda("Anno") { SceltePillole(listOf("AA" to "%02d".format(anno % 100), "AAAA" to anno.toString(), "" to "Niente"), f.anno, { scelto(f.copy(anno = it)) }) }
+                Domanda("Ordine") { SceltePillole(listOf(true to "Anno prima", false to "Testo prima"), f.annoPrima, { scelto(f.copy(annoPrima = it)) }) }
+                Domanda("Separatore") { SceltePillole(listOf("" to "Niente", "-" to "-", "/" to "/"), f.separatore, { scelto(f.copy(separatore = it)) }) }
+                Domanda("Cifre del numero") { SceltePillole(listOf(3 to "3", 4 to "4"), f.cifre, { scelto(f.copy(cifre = it)) }) }
+                CampoSalvato(
+                    salva, "FORMATO_COMMESSA_TESTO", FormatoCommessa.da(n.formato).testo, "Testo", soloAllUscita = true,
+                    cambia = { t -> t.filter { it.isLetterOrDigit() }.take(6).uppercase() },
+                    onScritto = { t -> f = f.copy(testo = t) },
+                ) { t -> salvaFormato(f.copy(testo = t).formato) }
+                salva.errori["FORMATO_COMMESSA"]?.let { Text(it, style = Testi.secondario, color = c.rossoTesto) }
             }
             Scheda(orizzontale = 18.dp, verticale = 18.dp, spazio = 6.dp) {
                 Etichetta("La prossima sarà")
@@ -1364,38 +1418,26 @@ internal fun PaginaFormatoCommessa(dati: Dati, onIndietro: () -> Unit) {
                 Text("$prima $continua", style = Testi.secondario, color = c.tenue)
             }
         }
-        FondoConPulsante(Modifier.align(Alignment.BottomCenter)) {
-            PulsantePrincipale("Salva il formato", { if (f.formato == n.formato) avvisi.mostra("È già questo il formato") else conferma = true }, abilitato = !lavoro)
-        }
     }
-    if (conferma) FoglioConferma(
-        "Salvare il formato?", "La prossima commessa sarà $anteprima. $prima", "Salva il formato",
-        onConferma = {
-            conferma = false
-            lavoro = true
-            scope.launch {
-                dati.salvaNumerazione(n.copy(formato = f.formato, prossimo = ""))
-                    .onSuccess { avvisi.mostra("Salvato. Vale solo per le commesse nuove"); onIndietro() }
-                    .onFailure { avvisi.mostra(spiegaErrore2(it, "Non è stato salvato: riprova")) }
-                lavoro = false
-            }
-        },
-        onAnnulla = { conferma = false },
-    )
 }
 
 // ---------------------------------------------------------------------------------- il logo dello studio (§9.3)
 
-/** Il logo e l'anteprima dell'intestazione dei PDF, in bianco e nero (si stampano così). */
+/**
+ * Il logo e l'anteprima dell'intestazione dei PDF, in bianco e nero (si stampano così). Dal 06/11/2026, con un logo,
+ * "Nome dello studio accanto al logo" (PDF_NOME, di base sì), e gli interruttori si salvano da soli.
+ */
 @Composable
-internal fun SchedaLogoStudio(dati: Dati, puo: Boolean) {
+internal fun SchedaLogoStudio(dati: Dati, puo: Boolean, salvaDaSolo: SalvaDaSolo? = null) {
     val c = W.colori
     val ctx = LocalContext.current
     val avvisi = LocalAvvisi.current
     val scope = rememberCoroutineScope()
+    val salva = salvaDaSolo ?: rememberSalvaDaSolo()
     val ana by dati.anagrafiche.collectAsStateWithLifecycle()
     val idLogo = ana.impostazione("STUDIO_LOGO")
-    val logoSuiPdf = ana.impostazione("PDF_LOGO").let { it.isBlank() || it.lowercase() in setOf("true", "1", "si", "sì") }
+    val logoSuiPdf = eu.stgm.wisper.rapportino.CampiStudio.acceso(ana.impostazione("PDF_LOGO"))
+    val nomeAccanto = eu.stgm.wisper.rapportino.CampiStudio.acceso(ana.impostazione(eu.stgm.wisper.rapportino.CampiStudio.PDF_NOME))
     var lavoro by remember { mutableStateOf(false) }
     var immagine by remember(idLogo) { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
     var misure by remember(idLogo) { mutableStateOf("") }
@@ -1425,7 +1467,7 @@ internal fun SchedaLogoStudio(dati: Dati, puo: Boolean) {
     }
     Scheda(orizzontale = 18.dp, verticale = 16.dp) {
         Text("Logo", style = Testi.titoloSezione, color = c.testo)
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+        Row(Modifier.evidenziabile("STUDIO_LOGO"), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
             Box(
                 Modifier.size(64.dp).clip(RoundedCornerShape(14.dp)).background(c.superficie2).let { if (idLogo.isBlank()) it.bordoTratteggiato(c.bordoCampo, 14.dp) else it },
                 contentAlignment = Alignment.Center,
@@ -1440,34 +1482,67 @@ internal fun SchedaLogoStudio(dati: Dati, puo: Boolean) {
                 scope.launch { dati.salvaImpostazioni(mapOf("STUDIO_LOGO" to "")).onSuccess { avvisi.mostra("Logo tolto: i PDF tornano come prima") }.onFailure { avvisi.mostra(spiegaErrore2(it, "Non è stato tolto: riprova")) } }
             }, Modifier.fillMaxWidth())
         }
-        Row(Modifier.fillMaxWidth().heightIn(min = 56.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("Logo sui PDF", style = Testi.forte, color = c.testo, modifier = Modifier.weight(1f))
-            Interruttore(logoSuiPdf, { si ->
-                if (puo) scope.launch { dati.salvaImpostazioni(mapOf("PDF_LOGO" to if (si) "true" else "false")).onFailure { avvisi.mostra(spiegaErrore2(it, "Non è stato salvato: riprova")) } }
-            }, "Logo sui PDF")
+        RigaInterruttoreSalvata(salva, "PDF_LOGO", "Logo sui PDF", logoSuiPdf, abilitato = puo) { si ->
+            dati.salvaImpostazioni(mapOf("PDF_LOGO" to if (si) "true" else "false"))
+        }
+        // Col logo, il nome dello studio accanto si può togliere (il Mittente e il piè di pagina lo tengono).
+        if (idLogo.isNotBlank()) {
+            RigaInterruttoreSalvata(
+                salva, eu.stgm.wisper.rapportino.CampiStudio.PDF_NOME, "Nome dello studio accanto al logo", nomeAccanto,
+                abilitato = puo && logoSuiPdf,
+            ) { si -> dati.salvaImpostazioni(mapOf(eu.stgm.wisper.rapportino.CampiStudio.PDF_NOME to if (si) "true" else "false")) }
         }
     }
-    // L'anteprima dell'intestazione (§9.3): logo a sinistra, ragione sociale e indirizzo a destra, il piè con la riga e "Pagina 1 / 2".
+    // L'anteprima dell'intestazione com'è nel PDF vero (pc/ui/documenti.js, intestazione): a sinistra il logo e,
+    // se acceso, il nome dello studio (senza logo il nome solo); a destra cosa è, il numero, la data; sotto la riga
+    // nera. In fondo ragione sociale e partita IVA, la riga del piè, "Pagina 1 / 2".
     Sezione5("Come esce il PDF") {
         val bianco = androidx.compose.ui.graphics.Color.White
         val nero = androidx.compose.ui.graphics.Color(0xFF1B1B1F)
+        val grigioScuro = androidx.compose.ui.graphics.Color(0xFF5F5F67)
         val grigio = androidx.compose.ui.graphics.Color(0xFF8A8A92)
+        val fondoParte = androidx.compose.ui.graphics.Color(0xFFF4F4F2)
+        val conLogo = logoSuiPdf && idLogo.isNotBlank() && immagine != null
+        val nome = ana.impostazione("RAGIONE_SOCIALE").ifBlank { "Lo studio" }
         Column(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(bianco).border(1.dp, c.bordoScheda, RoundedCornerShape(12.dp)).padding(16.dp),
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(bianco).border(1.dp, c.bordoScheda, RoundedCornerShape(12.dp)).padding(16.dp)
+                .semantics(mergeDescendants = true) { },
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.Top) {
-                if (logoSuiPdf && immagine != null) androidx.compose.foundation.Image(immagine!!, null, Modifier.size(44.dp), colorFilter = androidx.compose.ui.graphics.ColorFilter.colorMatrix(androidx.compose.ui.graphics.ColorMatrix().apply { setToSaturation(0f) }))
-                androidx.compose.foundation.layout.Spacer(Modifier.weight(1f))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Top) {
+                Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    if (conLogo) androidx.compose.foundation.Image(
+                        immagine!!, "Logo", Modifier.height(36.dp).widthIn(max = 110.dp),
+                        contentScale = androidx.compose.ui.layout.ContentScale.Fit,
+                        colorFilter = androidx.compose.ui.graphics.ColorFilter.colorMatrix(androidx.compose.ui.graphics.ColorMatrix().apply { setToSaturation(0f) }),
+                    )
+                    if (!conLogo || nomeAccanto) Text(nome, style = Testi.forte.copy(fontWeight = FontWeight.ExtraBold), color = nero)
+                }
                 Column(horizontalAlignment = Alignment.End) {
-                    Text(ana.impostazione("RAGIONE_SOCIALE").ifBlank { "Lo studio" }, style = Testi.forte, color = nero)
-                    Text(ana.impostazione("INDIRIZZO"), style = Testi.piccolo, color = nero)
-                    Text(listOf(ana.impostazione("PARTITA_IVA").takeIf { it.isNotBlank() }?.let { "P. IVA $it" }, ana.impostazione("TELEFONO").takeIf { it.isNotBlank() }).filterNotNull().joinToString(" · "), style = Testi.piccolo, color = nero)
+                    Text("RAPPORTINO DI LAVORO", style = Testi.piccolo.copy(fontSize = 9.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp), color = grigioScuro)
+                    Text("RAP/" + LocalDate.now().year + "/0001", style = Testi.forte.copy(fontWeight = FontWeight.ExtraBold), color = nero)
+                    Text("del " + LocalDate.now().format(DateTimeFormatter.ofPattern("dd/MM/yyyy")), style = Testi.piccolo, color = grigioScuro)
                 }
             }
-            listOf(0.6f, 1f, 0.8f, 0.7f).forEach { w -> Box(Modifier.fillMaxWidth(w).height(6.dp).clip(RoundedCornerShape(3.dp)).background(androidx.compose.ui.graphics.Color(0xFFE6E5E1))) }
-            Row(Modifier.fillMaxWidth().padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(ana.impostazione("PDF_PIEDE"), style = Testi.piccolo, color = grigio, modifier = Modifier.weight(1f))
+            Box(Modifier.fillMaxWidth().height(2.dp).background(nero))
+            Row(Modifier.fillMaxWidth().padding(top = 2.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf("MITTENTE", "SPETT.LE").forEach { t ->
+                    Column(Modifier.weight(1f).clip(RoundedCornerShape(6.dp)).background(fondoParte).padding(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(t, style = Testi.piccolo.copy(fontSize = 9.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp), color = grigioScuro)
+                        Box(Modifier.fillMaxWidth(0.8f).height(6.dp).clip(RoundedCornerShape(3.dp)).background(androidx.compose.ui.graphics.Color(0xFFE6E5E1)))
+                    }
+                }
+            }
+            listOf(0.6f, 1f, 0.8f).forEach { w -> Box(Modifier.fillMaxWidth(w).height(6.dp).clip(RoundedCornerShape(3.dp)).background(androidx.compose.ui.graphics.Color(0xFFE6E5E1))) }
+            Row(Modifier.fillMaxWidth().padding(top = 6.dp), verticalAlignment = Alignment.Bottom) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        listOf(ana.impostazione("RAGIONE_SOCIALE"), ana.impostazione("PARTITA_IVA").takeIf { it.isNotBlank() }?.let { "P.IVA $it" }.orEmpty())
+                            .filter { it.isNotBlank() }.joinToString(" · "),
+                        style = Testi.piccolo, color = grigio,
+                    )
+                    ana.impostazione("PDF_PIEDE").takeIf { it.isNotBlank() }?.let { Text(it, style = Testi.piccolo, color = grigio) }
+                }
                 Text("Pagina 1 / 2", style = Testi.piccolo, color = grigio)
             }
         }

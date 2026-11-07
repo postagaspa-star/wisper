@@ -140,15 +140,24 @@
   // Fase 8: il logo a sinistra, alto 14 mm, accanto alla ragione sociale (solo quando c'è).
   const STILE_LOGO = '.studio-logo { display: flex; align-items: center; gap: 4mm; } .studio-logo img { height: 14mm; max-width: 50mm; object-fit: contain; }';
 
-  /** La ragione sociale in cima, col logo davanti se c'è. */
-  function aziendaInTesta(nome, idLogo) {
+  /**
+   * 06/11/2026: col logo in cima, il nome dello studio accanto si può togliere (PDF_NOME, di base sì; spento come
+   * PDF_LOGO: false, 'false', 0 o 'NO'). Il Mittente e il piè di pagina tengono il nome.
+   */
+  function nomeAccantoAlLogo(imp) {
+    const v = (imp || {}).PDF_NOME;
+    return !(v === false || v === 'false' || v === 0 || v === 'NO');
+  }
+
+  /** La ragione sociale in cima, col logo davanti se c'è (senza nome se conNome è false). */
+  function aziendaInTesta(nome, idLogo, conNome) {
     const azienda = '<div class="azienda">' + esc(nome || '') + '</div>';
-    return idLogo ? '<div class="studio-logo"><img src="/file/' + encodeURIComponent(idLogo) + '" alt="">' + azienda + '</div>' : azienda;
+    return idLogo ? '<div class="studio-logo"><img src="/file/' + encodeURIComponent(idLogo) + '" alt="">' + (conNome === false ? '' : azienda) + '</div>' : azienda;
   }
 
   function intestazione(imp, etichetta, numero, sotto) {
     if (logoDi(imp)) {
-      return '<div class="testa">' + aziendaInTesta(imp.RAGIONE_SOCIALE, logoDi(imp)) +
+      return '<div class="testa">' + aziendaInTesta(imp.RAGIONE_SOCIALE, logoDi(imp), nomeAccantoAlLogo(imp)) +
         '<div class="tipo"><div class="etichetta">' + esc(etichetta) + '</div>' +
         '<div class="numero">' + esc(numero) + '</div><div class="sotto">' + esc(sotto) + '</div></div></div>';
     }
@@ -157,12 +166,25 @@
       '<div class="numero">' + esc(numero) + '</div><div class="sotto">' + esc(sotto) + '</div></div></div>';
   }
 
-  function mittente(imp) {
+  /** "Commessa 26ST001" o "Commesse 26ST001, 26ST004" ('' senza commesse), per la parte del Mittente. */
+  function rigaCommesse(codici) {
+    const l = [];
+    (Array.isArray(codici) ? codici : codici ? [codici] : []).forEach(c => { const x = String(c || '').trim(); if (x && l.indexOf(x) < 0) l.push(x); });
+    if (!l.length) return '';
+    return (l.length === 1 ? 'Commessa ' : 'Commesse ') + l.join(', ');
+  }
+
+  /**
+   * La parte del Mittente. commesse: i codici delle commesse del documento (06/11/2026, riunione con Manuel: il codice
+   * della commessa sta qui, dove prima c'era quello del progetto c'è il progetto); senza, il Mittente resta com'era.
+   */
+  function mittente(imp, commesse) {
     const righe = [
       imp.INDIRIZZO,
       imp.PARTITA_IVA ? 'P.IVA ' + imp.PARTITA_IVA : '',
       [imp.EMAIL, imp.TELEFONO].filter(Boolean).join(' · '),
       imp.PEC ? 'PEC ' + imp.PEC : '',
+      rigaCommesse(commesse),
     ].filter(Boolean);
     return '<div class="parte"><div class="etichetta">Mittente</div><div class="nome">' + esc(imp.RAGIONE_SOCIALE || '') + '</div>' +
       righe.map(r => '<div>' + esc(r) + '</div>').join('') + '</div>';
@@ -216,26 +238,134 @@
     }).filter(Boolean).join(' · ');
   }
 
+  // 06/11/2026 (rapportino-lavori.md): il rapportino con più lavori, una riga per lavoro nella tabella.
+  const STILE_LAVORI = 'table.lavori td.prog { width: 26%; } table.lavori td.desc { width: 34%; } table.lavori .cod-l { font-family: Consolas, monospace; font-weight: 700; }' +
+    'table.lavori td .nome-l { font-weight: 700; } table.lavori tfoot td:first-child { white-space: nowrap; }';
+
+  /** Le parole dello stato sul PDF: niente "da firmare" (06/11/2026); un lavoro da inviare non scrive niente. */
+  const STATO_PDF = { INVIATO: 'Inviato', FATTURATO: 'Fatturato' };
+
+  /** "4 h" com'è nelle tabelle: "" per lo zero (le colonne vuote si leggono meglio). */
+  const oreCella = n => (C.num(n) ? C.numero(n) : '');
+
   /**
-   * Il rapportino singolo.
-   * opzioni: conImporti (il conto, di solito no: al cliente serve il lavoro), conFoto (gli scontrini in fondo).
+   * Il rapportino con i suoi lavori (06/11/2026): g = { id (il numero del rapportino), data, tecnico, lavori: [i lavori
+   * dello stesso rapportino e dello STESSO destinatario] }. Una riga per lavoro: progetto (codice e descrizione, a chi è
+   * intestato), commessa, cosa si è fatto, ore di lavoro, extra e viaggio, km, spese, l'importo con "Con gli importi"; in
+   * fondo il totale del giorno. I codici delle commesse nel Mittente. Niente riquadro per la firma del cliente: solo un
+   * lavoro di prima che ha la firma la mostra ancora.
    */
-  function rapportino(r, ana, opzioni) {
-    const o = opzioni || {};
+  function rapportinoLavori(g, ana, o) {
     const imp = ana.impostazioni || {};
-    const cliente = (ana.clienti || []).find(c => c.id === r.idCliente) || { nome: r.cliente };
-    const commessa = (ana.commesse || []).find(m => m.id === r.idCommessa);
-    const stato = C.ETICHETTE_STATO[r.stato] || r.stato;
-    let corpo = intestazione(imp, 'Rapportino di lavoro', r.id || 'Rapportino', 'del ' + C.data(r.data) + ' · ' + stato);
-    corpo += '<div class="parti">' + mittente(imp) + destinatario(cliente.nome || r.cliente, [
+    const lavori = (g.lavori || []).map((l, i) => ({ l, i }))
+      .sort((a, b) => ((Number(a.l.posizione) || 0) - (Number(b.l.posizione) || 0)) || a.i - b.i).map(x => x.l);
+    const primo = lavori[0] || {};
+    const idCliente = g.idCliente || primo.idCliente;
+    const nomeCliente = g.cliente || primo.cliente || '';
+    const cliente = (ana.clienti || []).find(c => c.id === idCliente) || (ana.soggetti || []).find(c => c.id === idCliente) || { nome: nomeCliente };
+    const data = String(g.data || primo.data || '').slice(0, 10);
+    const tecnico = g.tecnico || primo.tecnico || imp.TECNICO || '';
+    const n = lavori.length;
+    const conImporti = !!o.conImporti;
+    let corpo = intestazione(imp, 'Rapportino di lavoro', g.id || primo.idGiornata || primo.id || 'Rapportino', 'del ' + C.data(data) + ' · ' + (n === 1 ? '1 lavoro' : n + ' lavori'));
+    corpo += '<div class="parti">' + mittente(imp, lavori.map(l => l.idCommessa)) + destinatario(cliente.nome || nomeCliente, [
       cliente.indirizzo,
       cliente.partitaIva ? 'P.IVA ' + cliente.partitaIva : '',
       cliente.email,
     ]) + '</div>';
-    // La commessa si indica col suo codice (26ST001), come vuole lo studio: la descrizione no.
-    corpo += '<div class="barra">' + (r.idCommessa ? '<span class="cod">' + esc(r.idCommessa) + '</span>' : 'Senza commessa') + '</div>';
+    const t = C.totali(lavori);
+    const oreGiorno = C.centesimi(t.oreLavoro + t.oreExtra + t.oreViaggio);
+    const luoghi = Array.from(new Set(lavori.map(l => String(l.luogo || '').trim()).filter(Boolean)));
+    corpo += '<div class="griglia">' +
+      cella('Data', C.data(data)) +
+      cella('Tecnico', tecnico) +
+      cella('Luogo', luoghi.length === 1 ? luoghi[0] : luoghi.length ? 'vedi i lavori' : '—') +
+      cella('Ore', C.ore(oreGiorno)) +
+      '</div>';
+    corpo += '<table class="lavori"><thead><tr><th>Progetto · Commessa</th><th>Lavoro svolto</th>' +
+      '<th class="n">Lavoro</th><th class="n">Extra</th><th class="n">Viaggio</th><th class="n">Km</th><th class="n">Spese</th>' +
+      (conImporti ? '<th class="n">Importo</th>' : '') + '</tr></thead><tbody>';
+    lavori.forEach(l => {
+      const p = progettoDi(l, ana);
+      const commessa = (ana.commesse || []).find(m => m.id === l.idCommessa);
+      const nomeCommessa = l.idCommessa ? 'Commessa ' + l.idCommessa : (l.commessa ? 'Commessa ' + l.commessa : '');
+      const sottoLavoro = [
+        luoghi.length > 1 && l.luogo ? 'Luogo: ' + l.luogo : '',
+        rigaStrumenti(l.strumenti) ? 'Strumenti: ' + rigaStrumenti(l.strumenti) : '',
+        l.ticket ? 'Ticket ' + l.ticket : '',
+      ].filter(Boolean);
+      corpo += '<tr><td class="prog">' +
+        (p && p.codice ? '<div><span class="cod-l">' + esc(p.codice) + '</span>' + (p.descrizione ? ' · ' + esc(p.descrizione) : '') + '</div>' : '') +
+        (p && p.intestatoA ? '<div class="sotto-riga">Intestato a ' + esc(p.intestatoA) + '</div>' : '') +
+        (nomeCommessa ? '<div' + (p && p.codice ? ' class="sotto-riga"' : ' class="nome-l"') + '>' + esc(nomeCommessa) + '</div>' : '') +
+        (commessa && commessa.descrizione && !(p && p.codice) ? '<div class="sotto-riga">' + esc(commessa.descrizione) + '</div>' : '') +
+        (!(p && p.codice) && !nomeCommessa ? '—' : '') + '</td>' +
+        '<td class="desc"><div class="testo-l">' + esc(l.descrizione || '') + '</div>' +
+        sottoLavoro.map(x => '<div class="sotto-riga">' + esc(x) + '</div>').join('') + '</td>' +
+        '<td class="n">' + esc(oreCella(l.oreLavoro)) + '</td><td class="n">' + esc(oreCella(l.oreExtra)) + '</td>' +
+        '<td class="n">' + esc(oreCella(l.oreViaggio)) + '</td><td class="n">' + esc(C.num(l.km) ? C.numero(l.km) : '') + '</td>' +
+        '<td class="n">' + esc(C.num(l.spese) ? C.euro(l.spese) : '') + (l.noteSpese && C.num(l.spese) ? '<div class="sotto-riga">' + esc(l.noteSpese) + '</div>' : '') + '</td>' +
+        (conImporti ? '<td class="n">' + esc(C.euro(l.totale)) + '</td>' : '') + '</tr>';
+    });
+    corpo += '</tbody><tfoot><tr><td colspan="2">Totale del giorno</td>' +
+      '<td class="n">' + esc(C.numero(t.oreLavoro)) + '</td><td class="n">' + esc(C.numero(t.oreExtra)) + '</td>' +
+      '<td class="n">' + esc(C.numero(t.oreViaggio)) + '</td><td class="n">' + esc(C.numero(t.km)) + '</td>' +
+      '<td class="n">' + esc(C.euro(t.spese)) + '</td>' + (conImporti ? '<td class="n">' + esc(C.euro(t.totale)) + '</td>' : '') +
+      '</tr></tfoot></table>';
+    if (conImporti) {
+      corpo += '<table class="conto"><tbody>' +
+        '<tr><td>Compenso ore<div class="sotto-riga">' + esc(C.ore(oreGiorno)) + '</div></td><td class="n">' + esc(C.euro(t.compenso)) + '</td></tr>' +
+        '<tr><td>Rimborso km<div class="sotto-riga">' + esc(C.numero(t.km)) + ' km</div></td><td class="n">' + esc(C.euro(t.rimborso)) + '</td></tr>' +
+        '<tr><td>Spese</td><td class="n">' + esc(C.euro(t.spese)) + '</td></tr>' +
+        '<tr class="tot"><td>Totale del giorno</td><td class="n">' + esc(C.euro(t.totale)) + '</td></tr>' +
+        '</tbody></table>';
+    }
+    // Le note per sé (noteInterne) non ci vanno MAI.
+    const firmaTecnico = idDaUrl(imp.FIRMA_TECNICO);
+    // Solo un lavoro di prima con la firma del cliente la mostra ancora (il primo che ce l'ha).
+    const vecchio = lavori.find(l => l.firma && l.firma.id);
+    corpo += '<div class="firme">' +
+      '<div class="firma"><div class="spazio">' + immagine(firmaTecnico, 'sig') + '</div>' +
+      '<div class="chi">Firma del compilatore · ' + esc(tecnico) + '</div></div>' +
+      (vecchio ? '<div class="firma"><div class="spazio">' + immagine(vecchio.firma.id, 'sig') + '</div>' +
+        '<div class="chi">Firma per accettazione' + (vecchio.firmatario ? ' · ' + esc(vecchio.firmatario) : '') +
+        (vecchio.firmatoIl ? ' · firmato il ' + esc(C.data(vecchio.firmatoIl)) : '') + '</div></div>' : '<div class="firma"></div>') +
+      '</div>';
+    const conFoto = lavori.filter(l => (l.foto || []).length);
+    if (o.conFoto && conFoto.length) {
+      corpo += '<div class="allegati"><h2>Scontrini · ' + esc(g.id || '') + '</h2><div class="foto">' +
+        conFoto.map(l => l.foto.map((f, i) => '<figure>' + immagine(f.id, '') + '<figcaption>' +
+          esc((l.cliente || '') + (l.noteSpese ? ' · ' + l.noteSpese : '') + (l.foto.length > 1 ? ' · ' + (i + 1) : '')) +
+          '</figcaption></figure>').join('')).join('') +
+        '</div></div>';
+    }
+    return pagina(imp, 'Rapportino ' + (g.id || ''), corpo, STILE_LAVORI);
+  }
+
+  /**
+   * Il rapportino. Con r.lavori (06/11/2026) è il rapportino con più lavori (rapportinoLavori: r = { id, data, tecnico,
+   * lavori }); senza, il rapportino di un lavoro solo come prima.
+   * opzioni: conImporti (il conto, di solito no: al cliente serve il lavoro), conFoto (gli scontrini in fondo).
+   */
+  function rapportino(r, ana, opzioni) {
+    const o = opzioni || {};
+    if (r && Array.isArray(r.lavori)) return rapportinoLavori(r, ana, o);
+    const imp = ana.impostazioni || {};
+    const cliente = (ana.clienti || []).find(c => c.id === r.idCliente) || { nome: r.cliente };
+    const commessa = (ana.commesse || []).find(m => m.id === r.idCommessa);
+    // 06/11/2026: niente firma, quindi niente "Bozza" o "Firmato" sul foglio; Inviato e Fatturato restano.
+    const stato = STATO_PDF[String(r.stato || '').toUpperCase()] || '';
+    let corpo = intestazione(imp, 'Rapportino di lavoro', r.id || 'Rapportino', 'del ' + C.data(r.data) + (stato ? ' · ' + stato : ''));
+    // 06/11/2026 (riunione con Manuel): il codice della commessa va nel Mittente ("Commessa 26ST001"); nella barra, dove
+    // c'era la commessa, il codice del progetto (niente barra senza progetto). La descrizione del progetto resta nella sua cella.
+    corpo += '<div class="parti">' + mittente(imp, r.idCommessa ? [r.idCommessa] : []) + destinatario(cliente.nome || r.cliente, [
+      cliente.indirizzo,
+      cliente.partitaIva ? 'P.IVA ' + cliente.partitaIva : '',
+      cliente.email,
+    ]) + '</div>';
     // 03/11/2026: il progetto (codice e descrizione) e, se c'è, a chi è intestato.
     const progetto = progettoDi(r, ana);
+    if (progetto && progetto.codice) corpo += '<div class="barra"><span class="cod">' + esc(progetto.codice) + '</span></div>';
     if (progetto) {
       corpo += '<div class="riga-progetto">' + cella('Progetto', [progetto.codice, progetto.descrizione].filter(Boolean).join(' · ')) +
         (progetto.intestatoA ? cella('Intestato a', progetto.intestatoA) : '') + '</div>';
@@ -244,7 +374,7 @@
       cella('Data', C.data(r.data)) +
       cella('Tecnico', r.tecnico || imp.TECNICO || '') +
       cella('Luogo', r.luogo || (commessa && commessa.indirizzo) || '—') +
-      (r.ticket ? cella('Ticket', r.ticket) : cella('Stato', stato)) +
+      (r.ticket ? cella('Ticket', r.ticket) : stato ? cella('Stato', stato) : '<div class="cella"></div>') +
       cella('Ore di lavoro', C.ore(r.oreLavoro)) +
       cella('Ore extra', C.ore(r.oreExtra)) +
       cella('Ore di viaggio', C.ore(r.oreViaggio)) +
@@ -266,15 +396,16 @@
 
     const firmaTecnico = idDaUrl(imp.FIRMA_TECNICO);
     const firmaCliente = r.firma && r.firma.id;
+    // 06/11/2026: il riquadro della firma del cliente solo per un rapportino di prima che la firma ce l'ha.
     corpo += '<div class="firme">' +
       '<div class="firma"><div class="spazio">' + immagine(firmaTecnico, 'sig') + '</div>' +
       '<div class="chi">Firma del compilatore · ' + esc(r.tecnico || imp.TECNICO || '') + '</div></div>' +
-      '<div class="firma"><div class="spazio">' + immagine(firmaCliente, 'sig') + '</div>' +
-      '<div class="chi">Firma per accettazione' + (r.firmatario ? ' · ' + esc(r.firmatario) : '') +
-      (r.firmatoIl ? ' · firmato il ' + esc(C.data(r.firmatoIl)) : '') + '</div>' +
-      // Fase 7 (fase7.md §3.7): firmato a distanza nel portale. Solo allora: i rapportini firmati sul telefono restano identici.
-      (r.firmaModo === 'portale' ? '<div class="chi">Firmato nel portale da ' + esc(r.firmatario || '') + ' · ' + esc(C.dataOra(r.firmatoIl)) + '</div>' : '') +
-      '</div>' +
+      (firmaCliente ? '<div class="firma"><div class="spazio">' + immagine(firmaCliente, 'sig') + '</div>' +
+        '<div class="chi">Firma per accettazione' + (r.firmatario ? ' · ' + esc(r.firmatario) : '') +
+        (r.firmatoIl ? ' · firmato il ' + esc(C.data(r.firmatoIl)) : '') + '</div>' +
+        // Fase 7 (fase7.md §3.7): firmato a distanza nel portale. Solo allora: i rapportini firmati sul telefono restano identici.
+        (r.firmaModo === 'portale' ? '<div class="chi">Firmato nel portale da ' + esc(r.firmatario || '') + ' · ' + esc(C.dataOra(r.firmatoIl)) + '</div>' : '') +
+        '</div>' : '<div class="firma"></div>') +
       '</div>';
 
     if (o.conFoto && (r.foto || []).length) {
@@ -296,17 +427,22 @@
     const imp = ana.impostazioni || {};
     const righe = C.ordina(lista, 'data', 1);
     const t = C.totali(righe);
+    // 06/11/2026: una riga per lavoro; il N° è quello del rapportino (numero / idGiornata), che più lavori condividono.
+    const numeroDi = r => r.numero || r.idGiornata || r.id || '';
+    const nr = new Set(righe.map(numeroDi)).size;
     let corpo = intestazione(imp, 'Riepilogo rapportini', periodo || '', intestatario.nome + ' · ' +
-      (t.n === 1 ? '1 rapportino' : t.n + ' rapportini'));
-    corpo += '<div class="parti">' + mittente(imp) + destinatario(intestatario.nome, intestatario.righe || []) + '</div>';
+      (nr === t.n ? (t.n === 1 ? '1 rapportino' : t.n + ' rapportini') : t.n + ' lavori in ' + (nr === 1 ? '1 rapportino' : nr + ' rapportini')));
+    // 06/11/2026: le commesse dei rapportini nel Mittente; nella tabella, al posto della commessa, il progetto.
+    corpo += '<div class="parti">' + mittente(imp, righe.map(r => r.idCommessa)) + destinatario(intestatario.nome, intestatario.righe || []) + '</div>';
 
     const conImporti = !!o.conImporti;
-    corpo += '<table><thead><tr><th>Data</th><th>N°</th><th>Commessa</th><th>Lavoro svolto</th>' +
+    corpo += '<table><thead><tr><th>Data</th><th>N°</th><th>Progetto</th><th>Lavoro svolto</th>' +
       '<th class="n">Lavoro</th><th class="n">Extra</th><th class="n">Viaggio</th><th class="n">Km</th><th class="n">Spese</th>' +
       (conImporti ? '<th class="n">Importo</th>' : '') + '</tr></thead><tbody>';
     righe.forEach(r => {
-      corpo += '<tr><td>' + esc(C.data(r.data)) + '</td><td>' + esc(r.id) + '</td>' +
-        '<td>' + esc(r.idCommessa || r.commessa || '') +
+      const progetto = progettoDi(r, ana);
+      corpo += '<tr><td>' + esc(C.data(r.data)) + '</td><td>' + esc(numeroDi(r)) + '</td>' +
+        '<td>' + esc((progetto && progetto.codice) || '—') +
         (intestatario.mostraCliente ? '<div class="sotto-riga">' + esc(r.cliente) + '</div>' : '') + '</td>' +
         '<td>' + esc(r.descrizione || '') + '</td>' +
         '<td class="n">' + esc(C.numero(r.oreLavoro)) + '</td><td class="n">' + esc(C.numero(r.oreExtra)) + '</td>' +
@@ -335,7 +471,7 @@
       if (conFoto.length) {
         corpo += '<div class="allegati"><h2>Scontrini</h2><div class="foto">' +
           conFoto.map(r => r.foto.map((f, i) => '<figure>' + immagine(f.id, '') + '<figcaption>' +
-            esc(r.id + ' · ' + C.data(r.data) + (r.noteSpese ? ' · ' + r.noteSpese : '') + (r.foto.length > 1 ? ' · ' + (i + 1) : '')) +
+            esc(numeroDi(r) + ' · ' + C.data(r.data) + (r.noteSpese ? ' · ' + r.noteSpese : '') + (r.foto.length > 1 ? ' · ' + (i + 1) : '')) +
             '</figcaption></figure>').join('')).join('') +
           '</div></div>';
       }
@@ -667,7 +803,7 @@
     const studio = (m.prestatore && m.prestatore.denominazione) || '';
     const sezioni = sezioniProspetto(m);
     const nota = m.tipoDocumento === 'TD04';
-    let corpo = '<div class="testa">' + (o.logo ? aziendaInTesta(studio, o.logo) : '<div class="azienda">' + esc(studio) + '</div>') + '<div class="tipo"><div class="etichetta">Prospetto per il programma delle fatture · non è una fattura</div>' +
+    let corpo = '<div class="testa">' + (o.logo ? aziendaInTesta(studio, o.logo, o.conNome) : '<div class="azienda">' + esc(studio) + '</div>') + '<div class="tipo"><div class="etichetta">Prospetto per il programma delle fatture · non è una fattura</div>' +
       '<div class="numero">Rif. ' + esc(m.riferimento || '') + '</div><div class="sotto">' + esc((nota ? 'Nota di credito' : TIPI_DOCUMENTO[m.tipoDocumento] || 'Fattura') + ' · ' + (m.numero ? m.numero + ' del ' + dataIt(m.data) : 'data proposta ' + dataIt(m.dataProposta))) + '</div></div></div>';
     if (!m.regoleConfermate) corpo += '<div class="avviso-p">' + esc(AVVISO_REGOLE) + '</div>';
     sezioni.forEach(s => {
@@ -692,10 +828,11 @@
     const piede = 'Documento senza valore fiscale: la fattura si emette al pagamento';
     const indirizzo = s => [s.indirizzo, [s.cap, s.comune, s.provincia ? '(' + s.provincia + ')' : ''].filter(Boolean).join(' ')].filter(Boolean).join(', ');
     const o = opzioni || {};
-    let corpo = '<div class="testa">' + (o.logo ? aziendaInTesta(p.denominazione, o.logo) : '<div class="azienda">' + esc(p.denominazione || '') + '</div>') + '<div class="tipo"><div class="etichetta">Avviso di parcella</div>' +
+    let corpo = '<div class="testa">' + (o.logo ? aziendaInTesta(p.denominazione, o.logo, o.conNome) : '<div class="azienda">' + esc(p.denominazione || '') + '</div>') + '<div class="tipo"><div class="etichetta">Avviso di parcella</div>' +
       '<div class="numero">Rif. ' + esc(m.riferimento || '') + '</div><div class="sotto">' + esc('del ' + dataIt(m.dataProposta || m.data)) + '</div></div></div>';
     corpo += '<div class="parti"><div class="parte"><div class="etichetta">Da</div><div class="nome">' + esc(p.denominazione || '') + '</div>' +
-      [indirizzo(sp), p.partitaIva ? 'P.IVA ' + p.partitaIva : '', p.pec ? 'PEC ' + p.pec : p.email].filter(Boolean).map(r => '<div>' + esc(r) + '</div>').join('') + '</div>' +
+      // 06/11/2026: le commesse della fattura nella parte di chi manda, solo se il modello le porta (m.commesse, codici).
+      [indirizzo(sp), p.partitaIva ? 'P.IVA ' + p.partitaIva : '', p.pec ? 'PEC ' + p.pec : p.email, rigaCommesse(m.commesse)].filter(Boolean).map(r => '<div>' + esc(r) + '</div>').join('') + '</div>' +
       '<div class="parte"><div class="etichetta">Spett.le</div><div class="nome">' + esc(c.denominazione || [c.nome, c.cognome].filter(Boolean).join(' ')) + '</div>' +
       [indirizzo(sc), c.partitaIva ? 'P.IVA ' + c.partitaIva : c.codiceFiscale ? 'C.F. ' + c.codiceFiscale : ''].filter(Boolean).map(r => '<div>' + esc(r) + '</div>').join('') + '</div></div>';
     corpo += '<table class="voci"><thead><tr><th>Descrizione</th><th class="n">Quantità</th><th class="n">Prezzo</th><th class="n">Importo</th></tr></thead><tbody>' +
@@ -777,7 +914,7 @@
     return pagina(imp, 'Contratto di assistenza ' + (k.numero || ''), corpo);
   }
 
-  const Documenti = { rapportino, rigaStrumenti, riepilogo, preventivo, incarico, numeroPreventivo, esc, idDaUrl, sezioniProspetto, prospettoFattura, avvisoParcella, lettera, contrattoAssistenza, logoDi };
+  const Documenti = { rapportino, rigaStrumenti, riepilogo, preventivo, incarico, numeroPreventivo, esc, idDaUrl, sezioniProspetto, prospettoFattura, avvisoParcella, lettera, contrattoAssistenza, logoDi, nomeAccantoAlLogo, rigaCommesse };
   if (typeof module !== 'undefined' && module.exports) module.exports = Documenti;
   else radice.WisperDocumenti = Documenti;
 })(typeof window !== 'undefined' ? window : globalThis);

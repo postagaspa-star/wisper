@@ -28,7 +28,8 @@ const FUNZIONI = [
   { modulo: 'progetti', nome: 'Progetti', richiede: ['commesse'], cosaCambia: 'Sparisce dal menu di tutti; i rapportini non chiedono più il progetto. I dati restano.' },
   { modulo: 'preventivi', nome: 'Preventivi', richiede: ['clienti'], cosaCambia: 'Sparisce dal menu di tutti. I dati restano.' },
   { modulo: 'attivita', nome: 'Attività e calendario', richiede: [], cosaCambia: 'Sparisce dal menu di tutti; niente promemoria delle attività. I dati restano.' },
-  { modulo: 'rapportini', nome: 'Ore e rapportini', richiede: ['clienti'], cosaCambia: 'Sparisce dal menu di tutti; non si scrivono rapportini né ore. I dati restano.' },
+  // 07/11/2026 (Manuel: "le Ore vanno tolte, non servono, metti solamente i Rapportini"): prima "Ore e rapportini".
+  { modulo: 'rapportini', nome: 'Rapportini', richiede: ['clienti'], cosaCambia: 'Sparisce dal menu di tutti; non si scrivono rapportini. I dati restano.' },
   { modulo: 'spese', nome: 'Spese e trasferte', richiede: [], cosaCambia: 'Sparisce dal menu di tutti. I dati restano.' },
   { modulo: 'fatturazione', nome: 'Fatturazione', richiede: ['clienti'], cosaCambia: 'Sparisce dal menu di tutti. I dati restano.' },
   { modulo: 'banche', nome: 'Banche e scadenze', richiede: [], cosaCambia: 'Sparisce dal menu di tutti. Segnare un incasso da una fattura funziona lo stesso. I dati restano.' },
@@ -69,6 +70,12 @@ const GRUPPI_NOTIFICHE = [
   { nome: 'Sistema', tipi: ['portale_irraggiungibile', 'integrazione_errore', 'copia_non_riuscita', 'ripristino_da_provare'] },
   { nome: 'Per te', tipi: ['esportazione_pronta', 'importazione_finita'] },
 ];
+
+/**
+ * I gruppi della lista di controllo col nome di oggi: nel database restano quelli scritti dalla migrazione 008 (i dati non
+ * si riscrivono), a schermo arriva il nome nuovo. 07/11/2026: "06 Ore e rapportini" diventa "06 Rapportini" (Ore tolte).
+ */
+const GRUPPI_CONTROLLI_RINOMINATI = { '06 Ore e rapportini': '06 Rapportini' };
 
 /** Le tabelle principali contate nella copia (§9.10). */
 const TABELLE_CONTATE = ['rapportini', 'soggetti', 'commesse', 'preventivi', 'fatture', 'ore', 'spese', 'documenti', 'file', 'registro'];
@@ -221,19 +228,26 @@ module.exports = {
     return { ok: true, telefono: u.notifiche_telefono !== 0, silenzioSera: u.notifiche_silenzio !== 0, tipi, gruppi };
   },
 
-  /** salvaNotifichePreferenze {telefono?, silenzioSera?, tipi?}: una notifica spenta non nasce per quella persona. */
+  /**
+   * salvaNotifichePreferenze {telefono?, silenzioSera?, tipi?}: una notifica spenta non nasce per quella persona.
+   * 06/11/2026 (le app salvano da sole, una parte per volta): una parte assente, null o vuota resta com'era; dei tipi
+   * cambiano solo quelli scritti (un tipo null resta com'era).
+   */
   salvaNotifichePreferenze(d) {
     const c = this.chi();
     if (!c.utente) throw new Rifiuto('Le preferenze sono di una persona');
+    const c_e = x => x !== undefined && x !== null && x !== '';
+    const acceso = x => x === true || x === 'true' || x === 1 || x === '1';
     const v = {};
-    if (d.telefono !== undefined) v.notifiche_telefono = d.telefono === true || d.telefono === 'true' || d.telefono === 1 ? 1 : 0;
-    if (d.silenzioSera !== undefined) v.notifiche_silenzio = d.silenzioSera === true || d.silenzioSera === 'true' || d.silenzioSera === 1 ? 1 : 0;
-    if (d.tipi && typeof d.tipi === 'object') {
+    if (c_e(d.telefono)) v.notifiche_telefono = acceso(d.telefono) ? 1 : 0;
+    if (c_e(d.silenzioSera)) v.notifiche_silenzio = acceso(d.silenzioSera) ? 1 : 0;
+    if (d.tipi && typeof d.tipi === 'object' && !Array.isArray(d.tipi)) {
       const possibili = new Set([].concat(...GRUPPI_NOTIFICHE.map(g => g.tipi)));
       const prima = json(this.db.riga('SELECT notifiche_tipi FROM utenti WHERE id = ?', c.utente.id).notifiche_tipi, null) || {};
       for (const k of Object.keys(d.tipi)) {
         if (!possibili.has(k)) throw new Rifiuto('Tipo di notifica sconosciuto: ' + k);
-        prima[k] = d.tipi[k] !== false && d.tipi[k] !== 'false' && d.tipi[k] !== 0;
+        if (!c_e(d.tipi[k])) continue;
+        prima[k] = d.tipi[k] !== false && d.tipi[k] !== 'false' && d.tipi[k] !== 0 && d.tipi[k] !== '0';
       }
       v.notifiche_tipi = Object.values(prima).some(x => x === false) ? JSON.stringify(prima) : null;
     }
@@ -618,8 +632,9 @@ module.exports = {
       // La M15.2 resta in attesa finche' il portale non e' acceso (§0.4).
       if (r.chiave === 'M15.2' && r.stato === 'attesa' && this.statoIntegrazione('portale').stato === 'collegato') stato = 'da_fare';
       const riga = { chiave: r.chiave, testo: r.testo, tipo: r.tipo, chi: r.chi, stato, il: r.il, utente: r.utente_id ? nomi[r.utente_id] || '' : '', versione: r.versione, nota, documento: r.documento_id };
-      let g = gruppi.find(x => x.nome === r.gruppo);
-      if (!g) { g = { nome: r.gruppo, righe: [] }; gruppi.push(g); }
+      const nomeGruppo = GRUPPI_CONTROLLI_RINOMINATI[r.gruppo] || r.gruppo;
+      let g = gruppi.find(x => x.nome === nomeGruppo);
+      if (!g) { g = { nome: nomeGruppo, righe: [] }; gruppi.push(g); }
       g.righe.push(riga);
       riassunto.totale++;
       if (stato === 'fatto') riassunto.fatti++;

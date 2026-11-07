@@ -20,6 +20,31 @@ const { ELETTRODINAMICA, prossimoCodice, partitaIvaItalianaValida } = require('.
 const vuoto = v => v === undefined || v === null || v === '';
 const numeroOVuoto = v => (vuoto(v) ? null : numero(v));
 
+/** La commessa che aveva questo codice prima (cambiaCodiceCommessa): la piu' recente, se fossero due. */
+const DOVE_CODICE_PRECEDENTE = " FROM commesse WHERE codice_precedente = ? COLLATE NOCASE AND codice_precedente <> '' ORDER BY rowid DESC LIMIT 1";
+
+/** Il codice di una commessa: lettere, numeri, - _ / e punto, al massimo 20 caratteri (cambiaCodiceCommessa). */
+const CODICE_COMMESSA = /^[A-Za-z0-9._/-]{1,20}$/;
+
+/**
+ * Le colonne di testo che tengono il codice di una commessa senza chiamarsi commessa_id o id_commessa (quelle le trova
+ * cambiaCodiceCommessa da sola, in ogni tabella): la copia del codice nel rapportino.
+ */
+const ALTRE_COLONNE_CODICE = [['rapportini', 'commessa']];
+
+/** Come si chiamano le tabelle nella nota del registro del cambio di codice (le altre: il nome senza trattini bassi). */
+const NOMI_COLLEGATI = {
+  commessa_persone: 'persone', fattura_righe: 'righe delle fatture', fattura_sorgenti: 'voci delle fatture', fatture_ricevute: 'fatture ricevute',
+  scadenze_pagamento: 'scadenze di pagamento', attivita: 'attività', ricorrenze: 'serie di attività', assegnazioni: 'mezzi e attrezzature',
+};
+
+/** Un codice dentro un testo, da solo (non dentro un altro codice come 26ST001-A o ED.26ST001): per le bozze delle fatture. */
+function cambiaCodiceNelTesto(t, vecchio, nuovo) {
+  const scappato = vecchio.replace(/[.*+?^${}()|[\]\\/-]/g, '\\$&');
+  const re = new RegExp('(^|[^A-Za-z0-9_./-])' + scappato + '(?![A-Za-z0-9_/-]|\\.[A-Za-z0-9])', 'gi');
+  return String(t === null || t === undefined ? '' : t).replace(re, (x, prima) => prima + nuovo);
+}
+
 /** Una partita IVA per confrontarla: senza spazi, punti e "IT" davanti. */
 function chiavePartitaIva(v) {
   return testo(v).toUpperCase().replace(/[\s.\-]/g, '').replace(/^IT(?=\d{11}$)/, '');
@@ -283,9 +308,22 @@ module.exports = {
       .filter(m => m.id !== '' && (o.archiviati || !m.archiviata) && (o.modelli || !m.modello));
   },
 
+  /**
+   * La commessa di un codice. 06/11/2026: anche col codice di prima (codice_precedente, dopo cambiaCodiceCommessa): una
+   * coda di un telefono senza rete puo' mandarlo ancora. Il codice di adesso vale sempre prima di quello di prima.
+   */
   commessa(id) {
-    const r = this.db.riga('SELECT * FROM commesse WHERE id = ?', testo(id));
+    let r = this.db.riga('SELECT * FROM commesse WHERE id = ?', testo(id));
+    if (!r && testo(id)) r = this.db.riga('SELECT *' + DOVE_CODICE_PRECEDENTE, testo(id));
     return r ? commessaDaRiga(r, this.personeDelleCommesse()[testo(r.id).toUpperCase()]) : null;
+  },
+
+  /** Il codice di adesso di una commessa dal codice che arriva (anche quello di prima); se non c'e', il codice com'e'. */
+  codiceCommessaVero(codice) {
+    const c = testo(codice);
+    if (!c) return '';
+    const r = this.db.riga('SELECT id FROM commesse WHERE id = ?', c) || this.db.riga('SELECT id' + DOVE_CODICE_PRECEDENTE, c);
+    return r ? r.id : c;
   },
 
   leggiPrestazioni(idCommessa) {
@@ -743,6 +781,102 @@ module.exports = {
     if (!r) throw new Rifiuto('Commessa ' + id + ' non trovata');
     this.aggiorna('commesse', r.id, { archiviata: archiviata ? 1 : 0, modificato: adesso() });
     return this.commessa(r.id);
+  },
+
+  /**
+   * cambiaCodiceCommessa {id, nuovoCodice} (06/11/2026): il codice di una commessa dopo che e' nata. Il codice e' la
+   * chiave della commessa e sta in tante tabelle: tutto in una transazione, e dopo ogni collegamento (rapportini, ore,
+   * spese, progetti, fatture anche emesse, documenti...) porta al codice nuovo. Il codice nuovo si scrive com'e'
+   * (anche solo le maiuscole cambiate: 26st001 -> 26ST001). Il vecchio va in codice_precedente, cosi' le code dei
+   * telefoni che lo mandano ancora trovano la commessa (un secondo cambio lo sostituisce: il primo non vale piu').
+   * Non si riscrive cio' che e' gia' uscito (XML, PDF, email, testi delle fatture emesse o passate al programma, il
+   * registro); nelle bozze delle fatture il codice si cambia dove compare da solo. I codici dei progetti restano.
+   */
+  cambiaCodiceCommessa(d) {
+    d = d || {};
+    const id = testo(d.id);
+    if (!id) throw new Rifiuto('Serve il codice della commessa');
+    const riga = this.db.riga('SELECT rowid AS _riga, * FROM commesse WHERE id = ?', this.codiceCommessaVero(id));
+    if (!riga) throw new Rifiuto('Commessa ' + id + ' non trovata');
+    const nuovo = testo(d.nuovoCodice);
+    if (!nuovo) throw new Rifiuto('Scrivi il nuovo codice');
+    if (!CODICE_COMMESSA.test(nuovo)) throw new Rifiuto('Il codice può avere lettere, numeri, - _ / e punto, al massimo 20 caratteri');
+    const vecchio = riga.id;
+    const risposta = () => {
+      const m = this.commessa(nuovo);
+      return { ok: true, commessa: Object.assign({ precedente: m.stato, cambiato: false }, m), vecchio };
+    };
+    if (nuovo === vecchio) return risposta();
+    if (this.db.riga('SELECT id FROM commesse WHERE id = ? AND rowid <> ?', nuovo, riga._riga)) {
+      throw new Rifiuto('Il codice ' + nuovo + ' è già di un\'altra commessa');
+    }
+    // Solo le maiuscole: e' lo stesso codice (le commesse non guardano le maiuscole), il codice di prima resta quello che era.
+    const stesso = nuovo.toUpperCase() === vecchio.toUpperCase();
+    const precedente = stesso ? testo(riga.codice_precedente) : vecchio;
+    return this.db.transazione(() => {
+      // I collegamenti veri (commessa_persone, prestazioni, progetti) si controllano alla fine della transazione: prima
+      // cambia la commessa, poi chi la guarda.
+      this.db.db.exec('PRAGMA defer_foreign_keys = ON');
+      const ora = adesso();
+      this.db.esegui('UPDATE commesse SET id = ?, codice_precedente = ?, modificato = ? WHERE rowid = ?', nuovo, precedente, ora, riga._riga);
+      const contati = {};
+      const conta = (nome, n) => { if (n > 0) contati[nome] = (contati[nome] || 0) + n; };
+      // Ogni colonna commessa_id / id_commessa di ogni tabella (anche quelle che verranno), e le copie del codice.
+      const colonne = [];
+      for (const t of this.db.righe("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name")) {
+        if (t.name === 'commesse') continue;
+        for (const c of this.db.righe('PRAGMA table_info("' + t.name + '")')) {
+          if (c.name === 'commessa_id' || c.name === 'id_commessa') colonne.push([t.name, c.name]);
+        }
+      }
+      const cambia = (t, c) => Number(this.db.esegui('UPDATE ' + t + ' SET ' + c + ' = ? WHERE ' + c + ' = ? COLLATE NOCASE', nuovo, vecchio).changes) || 0;
+      for (const [t, c] of colonne) conta(t, cambia(t, c));
+      for (const [t, c] of ALTRE_COLONNE_CODICE) cambia(t, c);
+      // La cartella principale nata dalla cartella della commessa (migrazione 005): il titolo e' solo il codice.
+      this.db.esegui('UPDATE documenti SET titolo = ? WHERE titolo = ? COLLATE NOCASE', 'Cartella della commessa ' + nuovo, 'Cartella della commessa ' + vecchio);
+      // Le serie delle attivita': le occorrenze che verranno copiano la commessa dal modello.
+      conta('ricorrenze', Number(this.db.esegui("UPDATE ricorrenze SET modello = json_set(modello, '$.commessa_id', ?) " +
+        "WHERE json_valid(modello) AND UPPER(json_extract(modello, '$.commessa_id')) = UPPER(?)", nuovo, vecchio).changes) || 0);
+      // I gruppi delle righe delle fatture ("ore:26ST001:2026-10:42"): legano righe e sorgenti, non escono dalla fattura.
+      for (const t of ['fattura_righe', 'fattura_sorgenti']) {
+        for (const pre of ['ore:', 'commessa:']) {
+          const vecchioPre = pre + vecchio;
+          this.db.esegui('UPDATE ' + t + ' SET gruppo = ? || substr(gruppo, ?) WHERE UPPER(substr(gruppo, 1, ?)) = UPPER(?) AND (length(gruppo) = ? OR substr(gruppo, ?, 1) = \':\')',
+            pre + nuovo, vecchioPre.length + 1, vecchioPre.length, vecchioPre, vecchioPre.length, vecchioPre.length + 1);
+        }
+      }
+      // Le bozze delle fatture (non ancora uscite): il codice nella causale e nelle righe, dove compare da solo.
+      let bozze = 0;
+      for (const f of this.db.righe("SELECT id, causale FROM fatture WHERE stato = 'bozza'")) {
+        let cambiata = false;
+        const causale = cambiaCodiceNelTesto(f.causale, vecchio, nuovo);
+        if (causale !== (f.causale || '')) { this.db.esegui('UPDATE fatture SET causale = ? WHERE id = ?', causale, f.id); cambiata = true; }
+        for (const r of this.db.righe("SELECT id, descrizione FROM fattura_righe WHERE fattura_id = ? AND origine = 'bozza'", f.id)) {
+          const descrizione = cambiaCodiceNelTesto(r.descrizione, vecchio, nuovo);
+          if (descrizione !== (r.descrizione || '')) { this.db.esegui('UPDATE fattura_righe SET descrizione = ? WHERE id = ?', descrizione, r.id); cambiata = true; }
+        }
+        if (cambiata) bozze++;
+      }
+      // Le voci "manca il budget" nascoste per 30 giorni nella Dashboard ("voce:commessa:pianificare:26ST001: manca ...").
+      const voce = 'voce:commessa:pianificare:' + vecchio + ':';
+      this.db.esegui("UPDATE OR REPLACE dashboard_nascoste SET oggetto = ? || substr(oggetto, ?) WHERE tipo = 'commessa' AND UPPER(substr(oggetto, 1, ?)) = UPPER(?)",
+        'voce:commessa:pianificare:' + nuovo + ':', voce.length + 1, voce.length, voce);
+      // Le notifiche che portano alla commessa (o a un elenco filtrato per commessa).
+      this.db.esegui("UPDATE notifiche SET collegamento = json_set(collegamento, '$.id', ?) WHERE json_valid(collegamento) AND " +
+        "json_extract(collegamento, '$.pagina') = 'commessa' AND UPPER(json_extract(collegamento, '$.id')) = UPPER(?)", nuovo, vecchio);
+      this.db.esegui("UPDATE notifiche SET collegamento = json_set(collegamento, '$.filtro.idCommessa', ?) WHERE json_valid(collegamento) AND " +
+        "UPPER(json_extract(collegamento, '$.filtro.idCommessa')) = UPPER(?)", nuovo, vecchio);
+      // La numerazione: un codice dato non si propone piu' (ne' il vecchio ne' il nuovo, se hanno la forma dei codici).
+      for (const c of [vecchio, nuovo]) {
+        const n = this.numeroDi('commessa', c);
+        if (n !== null) this.segnaNumero('commessa', n);
+      }
+      const seguono = Object.keys(contati).sort().map(t => (NOMI_COLLEGATI[t] || t.replace(/_/g, ' ')) + ' ' + contati[t])
+        .concat(bozze ? ['testi delle bozze delle fatture ' + bozze] : []);
+      this.annota('commesse', nuovo, { id: vecchio, codice_precedente: testo(riga.codice_precedente) }, { id: nuovo, codice_precedente: precedente },
+        'codice cambiato da ' + vecchio + ' a ' + nuovo + (seguono.length ? '; seguono il codice nuovo: ' + seguono.join(', ') : ''));
+      return risposta();
+    });
   },
 
   /**

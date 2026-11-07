@@ -10,6 +10,7 @@ import eu.stgm.wisper.rapportino.Progetto
 import eu.stgm.wisper.rapportino.ProgettoNuovo
 import eu.stgm.wisper.rapportino.Rapportino
 import eu.stgm.wisper.rapportino.Regole
+import eu.stgm.wisper.rapportino.RegoleProgetti
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -42,6 +43,12 @@ class ModuloStato(
      * sessione): un valore semplice, non uno stato, cosi' scriverlo mentre si disegna non fa ridisegnare niente.
      */
     var progettiAttivi = false
+
+    /**
+     * Dal 06/11/2026 il progetto (e la commessa) e' obbligatorio solo per Elettrodinamica, dal nome del cliente
+     * ([RegoleProgetti.progettoObbligatorio]); per gli altri clienti si sceglie ma si puo' lasciare "Nessun progetto".
+     */
+    val progettoRichiesto: Boolean get() = progettiAttivi && RegoleProgetti.progettoObbligatorio(cliente)
     var ricerca by mutableStateOf("")
     var extraAperto by mutableStateOf(base.oreExtra > 0)
     var speseAperte by mutableStateOf(base.spese > 0 || base.noteSpese.isNotBlank())
@@ -177,8 +184,9 @@ class ModuloStato(
     fun valida(regole: Regole, chiediTariffa: Boolean = true): Boolean {
         val e = mutableMapOf<String, String>()
         if (cliente.isBlank()) e["cliente"] = "Scegli il cliente"
-        // Progetti accesi (progetti.md §4.5): senza progetto il rapportino non si salva. Il progetto vuole la commessa.
-        else if (progettiAttivi && idProgetto.isBlank() && progettoNuovo == null) {
+        // Progetti accesi (progetti.md §4.5): per Elettrodinamica senza progetto il rapportino non si salva, e il progetto
+        // vuole la commessa. Per gli altri clienti (06/11/2026) progetto e commessa sono facoltativi.
+        else if (progettoRichiesto && idProgetto.isBlank() && progettoNuovo == null) {
             if (idCommessa.isBlank() && codiceProposto.isBlank()) e["cliente"] = "Scegli la commessa" else e["progetto"] = "Scegli il progetto"
         }
         if (descrizione.isBlank()) e["descrizione"] = "Scrivi che lavoro hai fatto"
@@ -224,20 +232,21 @@ class ModuloStato(
 }
 
 /**
- * Il modulo in corso, salvato su disco a ogni modifica.
+ * Il rapportino in corso (dal 06/11/2026 coi suoi lavori, [GiornataStato]), salvato su disco a ogni modifica.
  *
  * Fare la foto di uno scontrino apre la fotocamera, cioe' un'altra app, e su
  * un telefono con poca memoria Android puo' chiudere Wisper nel frattempo:
- * senza questa copia, al ritorno il rapportino a meta' sarebbe sparito.
+ * senza questa copia, al ritorno il rapportino a meta' sarebbe sparito. Il file
+ * di prima (un modulo solo) si legge ancora: diventa un rapportino col lavoro aperto.
  */
 class BozzaModulo(cartella: File) {
     private val file = File(cartella, "modulo-in-corso.json")
 
     fun esiste(): Boolean = file.exists()
 
-    fun leggi(): ModuloStato? = runCatching { ModuloStato.daJson(JSONObject(file.readText())) }.getOrNull()
+    fun leggi(): GiornataStato? = runCatching { GiornataStato.daJson(JSONObject(file.readText())) }.getOrNull()
 
-    fun scrivi(s: ModuloStato) {
+    fun scrivi(s: GiornataStato) {
         runCatching {
             val tmp = File(file.parentFile, file.name + ".tmp")
             tmp.writeText(s.aJson().toString())

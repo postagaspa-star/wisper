@@ -120,6 +120,18 @@
     return 'Scegli il progetto';
   }
 
+  /**
+   * Il progetto (e quindi la commessa) è obbligatorio nel rapportino solo per Elettrodinamica (06/11/2026, scelta di Andrea:
+   * "dal nome Elettrodinamica"): vero se il nome del cliente, in minuscolo, senza accenti e senza spazi, punti, trattini o
+   * altri segni, contiene "elettrodinamica". Per gli altri clienti progetto e commessa sono facoltativi. Casi condivisi col
+   * telefono in server/prove/casi-progetto-obbligatorio.json.
+   */
+  function progettoObbligatorio(nomeCliente) {
+    const pulito = String(nomeCliente === null || nomeCliente === undefined ? '' : nomeCliente).normalize('NFD').replace(/[̀-ͯ]/g, '')
+      .toLowerCase().replace(/[^a-z0-9]/g, '');
+    return pulito.indexOf('elettrodinamica') >= 0;
+  }
+
   /** Una funzione è accesa? (funzioniSpente di io.interfaccia; senza elenco sono tutte accese). */
   function accesa(funzioniSpente, modulo) {
     return !(Array.isArray(funzioniSpente) && funzioniSpente.indexOf(modulo) >= 0);
@@ -130,7 +142,7 @@
     return String((p && p.stato) || 'APERTO').toUpperCase() === 'CHIUSO' ? { testo: 'Chiuso', colore: 'grigio' } : { testo: 'Aperto', colore: 'verde' };
   }
 
-  const Regole = { etichetta, delRapportino, intestatoDelRapportino, conta, filtra, perRapportino, sceltoDaSolo, intestatiDelCliente, mancaProgetto, accesa, parolaStato };
+  const Regole = { etichetta, delRapportino, intestatoDelRapportino, conta, filtra, perRapportino, sceltoDaSolo, intestatiDelCliente, mancaProgetto, progettoObbligatorio, accesa, parolaStato };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = Regole;
   else radice.WisperRegoleProgetti = Regole;

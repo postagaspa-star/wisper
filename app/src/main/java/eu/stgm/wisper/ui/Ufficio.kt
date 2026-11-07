@@ -81,7 +81,7 @@ internal fun chiaveRotta(r: Rapportino, ana: Anagrafiche): String = Conti.chiPag
 /**
  * Fatturazione › Da fatturare (docs/gestionale/fase1-schermate.md §6): la fine del
  * mese di Wisper Ufficio, com'era nella 0.4.0. Quanto c'è da fatturare e a chi,
- * cosa manca da far firmare, quali commesse guardare. Le fatture vere arrivano
+ * cosa manca da inviare (06/11/2026: niente firma), quali commesse guardare. Le fatture vere arrivano
  * nella fase 4.
  */
 @Composable
@@ -105,7 +105,7 @@ fun SchermataUfficio(dati: Dati, nav: Navigatore) {
 
     val delMese = storico.filter { YearMonth.from(it.rapportino.data) == mese }
     val daFatturare = delMese.filter { Conti.daFatturare(it.rapportino) }.conConti()
-    val bozze = delMese.filter { it.rapportino.stato == Stato.BOZZA }.sortedByDescending { it.rapportino.data }
+    val bozze = delMese.filter { it.rapportino.daInviare }.sortedByDescending { it.rapportino.data }
     val fatturati = delMese.filter { it.rapportino.stato == Stato.FATTURATO }.conConti()
     val gruppi = Conti.perChiPaga(daFatturare, ana)
     // I mesi prima con qualcosa ancora da fatturare: non devono sparire dalla vista.
@@ -139,13 +139,13 @@ fun SchermataUfficio(dati: Dati, nav: Navigatore) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Riquadro(
                     "Da fatturare", Testo.euroTondi(totaleDi(daFatturare)), Modifier.weight(1f),
-                    nota = Testo.quanti(daFatturare.size, "rapportino", "rapportini"), acceso = daFatturare.isNotEmpty(),
+                    nota = Testo.quanti(daFatturare.size, "lavoro", "lavori"), acceso = daFatturare.isNotEmpty(),
                     onClick = { nav.sezione(Sezione.RAPPORTINI, FiltroRapportini(mese, Quali.FATTURARE)) },
                 )
                 Riquadro(
-                    "Da firmare", Testo.euroTondi(totaleDi(bozze.conConti())), Modifier.weight(1f),
-                    nota = Testo.quanti(bozze.size, "rapportino", "rapportini"),
-                    onClick = { nav.sezione(Sezione.RAPPORTINI, FiltroRapportini(mese, Quali.FIRMARE)) },
+                    "Da inviare", Testo.euroTondi(totaleDi(bozze.conConti())), Modifier.weight(1f),
+                    nota = Testo.quanti(bozze.size, "lavoro", "lavori"),
+                    onClick = { nav.sezione(Sezione.RAPPORTINI, FiltroRapportini(mese, Quali.INVIARE)) },
                 )
                 Riquadro(
                     "Fatturato", Testo.euroTondi(totaleDi(fatturati)), Modifier.weight(1f),
@@ -185,7 +185,7 @@ fun SchermataUfficio(dati: Dati, nav: Navigatore) {
                 val mesiPrima = prima.map { YearMonth.from(it.data) }.distinct().sorted()
                 val ultimo = mesiPrima.last()
                 RigaMesiPrima(
-                    titolo = "Restano da fatturare anche ${Testo.quanti(prima.size, "rapportino", "rapportini")} " +
+                    titolo = "Restano da fatturare anche ${Testo.quanti(prima.size, "lavoro", "lavori")} " +
                         if (mesiPrima.size == 1) "di ${meseMinuscolo(ultimo)}" else "dei mesi prima",
                     totale = Numeri.euro(totaleDi(prima)),
                     mese = Conti.nomeMese(ultimo).substringBefore(' '),
@@ -193,20 +193,20 @@ fun SchermataUfficio(dati: Dati, nav: Navigatore) {
                 )
             }
 
-            // ---- Da far firmare: le ultime bozze del mese
+            // ---- Da inviare: gli ultimi lavori del mese ancora da mandare
             if (bozze.isNotEmpty()) {
-                TitoloSezione("Da far firmare", valore = Numeri.euro(totaleDi(bozze.conConti())))
+                TitoloSezione("Da inviare", valore = Numeri.euro(totaleDi(bozze.conConti())))
                 SchedaElenco {
                     val mostrate = bozze.take(6)
                     mostrate.forEachIndexed { i, v ->
-                        RigaBozza(v) { nav.apriRapportino(v.rapportino.idLocale) }
+                        RigaBozza(v) { nav.apriRapportino(v.rapportino.idLocale, lavoro = true) }
                         if (i < mostrate.lastIndex) LineaElenco()
                     }
                 }
                 if (bozze.size > 6) {
                     PulsanteTesto(
                         "Vedi tutti i ${bozze.size}",
-                        { nav.sezione(Sezione.RAPPORTINI, FiltroRapportini(mese, Quali.FIRMARE)) },
+                        { nav.sezione(Sezione.RAPPORTINI, FiltroRapportini(mese, Quali.INVIARE)) },
                         Modifier.align(Alignment.CenterHorizontally),
                     )
                 }
@@ -239,7 +239,7 @@ fun SchermataUfficio(dati: Dati, nav: Navigatore) {
         daConfermare?.let { g ->
             val n = g.rapportini.size
             FoglioConferma(
-                titolo = "Segnare ${Testo.quanti(n, "rapportino", "rapportini")} di ${g.chi.nome} come ${if (n == 1) "fatturato" else "fatturati"}?",
+                titolo = "Segnare ${Testo.quanti(n, "lavoro", "lavori")} di ${g.chi.nome} come ${if (n == 1) "fatturato" else "fatturati"}?",
                 testo = "${Numeri.euro(g.totale)}. Spariscono da Da fatturare.",
                 azione = "Segna fatturati",
                 onConferma = {
@@ -310,8 +310,8 @@ private fun SchedaChiPaga(g: Conti.PerChiPaga, onVedi: () -> Unit, onPrepara: ()
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
                 Text(g.chi.nome, style = Testi.forteGrande, color = c.testo, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Text(
-                    "${Testo.quanti(g.rapportini.size, "rapportino", "rapportini")} · ${Numeri.ore(Conti.totali(g.rapportini).ore)}",
-                    style = Testi.secondario.copy(fontWeight = FontWeight.Medium), color = c.tenue, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    "${Testo.quanti(g.rapportini.size, "lavoro", "lavori")} · ${Numeri.ore(Conti.totali(g.rapportini).ore)}",
+                    style = Testi.secondario.copy(fontWeight = FontWeight.Medium), color = c.tenue,
                 )
             }
             Text(Numeri.euro(g.totale), style = Testi.titoloSezione.copy(fontSize = 20.sp, letterSpacing = (-0.3).sp), color = c.testo)
@@ -385,7 +385,7 @@ private fun RigaBozza(v: Vista, onClick: () -> Unit) {
             Text(
                 // Prima le ore: il lavoro può essere lungo e si taglia lui.
                 listOf(Numeri.ore(r.oreTotali), r.idCommessa.ifBlank { r.commessa }, r.descrizione).filter { it.isNotBlank() }.joinToString(" · "),
-                style = Testi.secondario.copy(fontWeight = FontWeight.Medium), color = c.tenue, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                style = Testi.secondario.copy(fontWeight = FontWeight.Medium), color = c.tenue, maxLines = 2, overflow = TextOverflow.Ellipsis,
             )
         }
         Spacer(Modifier.width(8.dp))

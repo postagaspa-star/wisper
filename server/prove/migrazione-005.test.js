@@ -83,6 +83,9 @@ function contiene(nuovo, vecchio, dove) {
   } else if (vecchio && typeof vecchio === 'object') {
     assert.ok(nuovo && typeof nuovo === 'object', dove);
     for (const k of Object.keys(vecchio)) contiene(nuovo[k], vecchio[k], dove + ' · ' + k);
+  } else if (typeof vecchio === 'string' && vecchio.includes(', già firmato: si cambiano solo')) {
+    // 07/11/2026 (niente firma): la frase della spesa bloccata dice "già inviato" invece di "già firmato".
+    assert.equal(nuovo, vecchio.replace(', già firmato: si cambiano solo', ', già inviato: si cambiano solo'), dove);
   } else assert.deepEqual(nuovo, vecchio, dove);
 }
 
@@ -90,7 +93,7 @@ const comeTitolare = fn => w.come({ utente: w.titolare(), permessi: w.permessiDi
 
 test('migrazione 005: versione 5, la copia wisper.db.prima-5 com\'era, le tabelle di prima riga per riga uguali', () => {
   // Fase 6: il server apre il database fino alla versione 6 (la 006 parte dopo la 005); la copia della 005 resta.
-  assert.equal(w.db.versione(), 9);
+  assert.equal(w.db.versione(), 11);
   const copia = new Database(path.join(cartella, 'wisper.db.prima-5'));
   assert.equal(copia.versione(), 4, 'la copia e\' com\'era prima');
   copia.chiudi();
@@ -144,7 +147,11 @@ test('i rapportini, i conti e i PDF di oggi sono identici a quelli del server 0.
     assert.deepEqual([nuovo.idTicket, nuovo.numeroTicket, nuovo.nonSiFattura, nuovo.ticketAperto], [null, '', '', false]);
   }
   assert.deepEqual(Object.keys(ora.pdf).sort(), Object.keys(PRIMA.pdf).sort());
-  for (const k of Object.keys(PRIMA.pdf)) assert.deepEqual(ora.pdf[k], PRIMA.pdf[k], 'il PDF ' + k);
+  // 06/11/2026 (il rapportino con piu' lavori, senza firma): il modello del PDF del rapportino e del riepilogo e' cambiato
+  // apposta (pc/ui/documenti.js); gli altri PDF restano identici al byte.
+  const cambiatiApposta = k => /^(rapportino|riepilogo) /.test(k);
+  assert.ok(Object.keys(PRIMA.pdf).some(k => !cambiatiApposta(k)), 'resta qualche PDF da confrontare');
+  for (const k of Object.keys(PRIMA.pdf).filter(k => !cambiatiApposta(k))) assert.deepEqual(ora.pdf[k], PRIMA.pdf[k], 'il PDF ' + k);
   // Fase 6 (fase6.md §8.6): il costo della commessa ha tre voci in piu' (collaboratori, collaboratoriPrevisto,
   // altreRicevute) e il totale (costo sostenuto) somma anche le fatture ricevute della commessa senza spesa; le parti di
   // prima restano uguali al centesimo. Il resto dei conti e' identico.
@@ -222,7 +229,7 @@ test('riaperto il server: la migrazione non si rifa\'', () => {
   const documenti = w.db.riga('SELECT COUNT(*) n FROM documenti').n;
   w.chiudi();
   w = new Wisper({ dati: cartella });
-  assert.equal(w.db.versione(), 9);
+  assert.equal(w.db.versione(), 11);
   assert.equal(w.db.riga('SELECT COUNT(*) n FROM documenti').n, documenti);
   assert.equal(w.db.riga('SELECT COUNT(*) n FROM documento_categorie').n, 25);
 });

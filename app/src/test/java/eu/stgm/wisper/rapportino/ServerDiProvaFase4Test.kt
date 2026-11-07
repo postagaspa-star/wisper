@@ -123,7 +123,9 @@ class ServerDiProvaFase4Test {
         // 1. Da fatturare: il rapportino di Rossi con le sue spese.
         val d = f4.daFatturare()
         val rossi = d.gruppi.first { it.idCliente == "C002" }
-        val rap = rossi.voci.first { it.tipo == "rapportino" }
+        // Dal 06/11/2026 Da fatturare ha anche i lavori da inviare (rapportino-lavori.md §3): si prende quello con le spese.
+        val rap = rossi.voci.filter { it.tipo == "rapportino" }.firstOrNull { SceltaDaFatturare.insieme(it, d.tutte).size >= 2 }
+            ?: rossi.voci.first { it.tipo == "rapportino" }
         val insieme = SceltaDaFatturare.insieme(rap, d.tutte).mapNotNull { k -> d.tutte.firstOrNull { it.chiave == k } }
         assertTrue("le spese vanno col rapportino", insieme.size >= 2)
 

@@ -182,8 +182,10 @@
     return h('span', { class: 'iniziali tinta-' + (somma % 6) + (piccole ? ' piccole' : '') + (classe ? ' ' + classe : ''), 'aria-hidden': 'true' }, lettere(nome));
   }
 
-  function stato(st, grande) {
-    const nomi = { BOZZA: 'Da firmare', FIRMATO: 'Firmato', INVIATO: 'Inviato', FATTURATO: 'Fatturato', APERTA: 'Aperta', SOSPESA: 'Sospesa', CHIUSA: 'Chiusa', APERTO: 'Aperto', CHIUSO: 'Chiuso' };
+  function stato(st0, grande) {
+    // 06/11/2026 (rapportino-lavori.md): niente firma. Il FIRMATO di prima si vede come Da inviare.
+    const st = st0 === 'FIRMATO' ? 'BOZZA' : st0;
+    const nomi = { BOZZA: 'Da inviare', INVIATO: 'Inviato', FATTURATO: 'Fatturato', APERTA: 'Aperta', SOSPESA: 'Sospesa', CHIUSA: 'Chiusa', APERTO: 'Aperto', CHIUSO: 'Chiuso' };
     return h('span', { class: 'stato ' + st + (grande ? ' grande' : '') }, nomi[st] || st);
   }
 
@@ -195,17 +197,24 @@
   // ======================================================================= avvisi e attese
 
   /**
-   * L'avviso in basso, scuro, 3,5 secondi. Con un'azione ({ testo: 'Annulla', fn })
-   * resta un po' di più e ha il suo pulsante. Gli errori restano finché non si chiudono.
+   * L'avviso in basso, scuro, 3 secondi; anche gli errori se ne vanno da soli dopo 3 secondi (riunione del 06/11/2026:
+   * prima restavano finché non si chiudevano). Con un'azione ({ testo: 'Annulla', fn }) resta 6 secondi e ha il suo
+   * pulsante. Col mouse sopra il tempo si ferma, e riparte da capo quando il mouse esce. La × per chiudere c'è sempre
+   * sugli errori.
    */
   function avviso(testo, errore, durata, azione) {
-    const chiudi = () => a.remove();
+    let timer = null;
+    const chiudi = () => { clearTimeout(timer); a.remove(); };
     const a = h('div', { class: 'avviso' + (errore ? ' errore' : ''), role: errore ? 'alert' : 'status' },
       errore ? icona('avviso', 18) : null, h('span', null, testo),
       azione ? h('button', { type: 'button', class: 'azione', onclick: () => { chiudi(); azione.fn(); } }, azione.testo) : null,
       errore ? h('button', { type: 'button', 'aria-label': 'Chiudi', onclick: chiudi }, icona('chiudi', 16)) : null);
     aggiungi($('#avvisi'), [a]);
-    if (!errore) setTimeout(chiudi, durata || (azione ? 6000 : 3500));
+    const ms = durata || (azione ? 6000 : 3000);
+    const parti = () => { clearTimeout(timer); timer = setTimeout(chiudi, ms); };
+    a.addEventListener('mouseenter', () => clearTimeout(timer));
+    a.addEventListener('mouseleave', parti);
+    parti();
   }
 
   let inAttesa = 0;
@@ -233,7 +242,8 @@
   function finestra(opzioni) {
     const o = opzioni || {};
     const velo = h('div', { class: 'velo' });
-    const chiudi = () => { velo.remove(); if (o.allaChiusura) o.allaChiusura(); };
+    // Prima di chiudere si esce dal campo: un'impostazione scritta da meno di 800 ms si salva lo stesso (anche con Esc).
+    const chiudi = () => { if (f.contains(document.activeElement)) document.activeElement.blur(); velo.remove(); if (o.allaChiusura) o.allaChiusura(); };
     const f = h('div', { class: 'finestra' + (o.larghezza ? ' ' + o.larghezza : ''), role: 'dialog', 'aria-label': o.titolo || '' });
     if (o.contenuto) {
       aggiungi(f, o.contenuto);
@@ -296,8 +306,15 @@
       errore ? h('div', { class: 'errore' }, errore) : null);
   }
 
+  /**
+   * Il campo col suo suffisso (€/h, km, giorni). Lo spazio a destra del numero segue la lunghezza del suffisso (06/11/2026:
+   * "0,76€/km" stava attaccato): un suffisso lungo ("giorni senza uso") va accanto al campo, fuori dal riquadro.
+   */
   function conSuffisso(input, suffisso) {
-    return h('div', { class: 'con-suffisso' }, input, h('span', null, suffisso));
+    const testo = String(suffisso || '');
+    const w = h('div', { class: 'con-suffisso' + (testo.length > 6 ? ' lungo' : '') }, input, h('span', null, testo));
+    w.style.setProperty('--suffisso', testo.length + 'ch');
+    return w;
   }
 
   function selezione(opzioni, valore, onchange, attr) {
@@ -342,6 +359,123 @@
       Array.from({ length: righe || 3 }, () => h('div', { class: 'segnaposto', style: { height: (alto || 64) + 'px' } })));
   }
 
+  // ======================================================================= impostazioni che si salvano da sole
+
+  /*
+   * Riunione del 06/11/2026: nelle impostazioni niente più "Salva". Testi e numeri si salvano 800 ms dopo l'ultima
+   * lettera e quando si esce dal campo, solo se il valore va bene (un numero scritto a metà non si salva); interruttori,
+   * segmenti e tendine subito. Accanto al titolo della scheda compare "Salvato" con la spunta per un secondo e mezzo; se
+   * il server rifiuta, il campo prende il bordo rosso, l'avviso dice la frase del server e il valore scritto resta.
+   * Le chiamate partono una alla volta, nell'ordine (una chiave, o un gruppetto, per volta).
+   */
+  let ultimoSalvataggio = Promise.resolve();
+  function inCoda(fn) {
+    const p = ultimoSalvataggio.then(fn, fn);
+    ultimoSalvataggio = p.catch(() => null);
+    return p;
+  }
+
+  /** "Salvato" con la spunta accanto al titolo (h2, h1) della scheda, della finestra o della pagina che contiene el. */
+  function segnaSalvato(el, testo) {
+    if (!el || !el.closest) return;
+    const box = el.closest('.scheda:not(.interna), .finestra, .pannello, .pagina') || el.closest('.scheda');
+    let titolo = box ? box.querySelector('h2, h1') : null;
+    // Una scheda senza titolo: l'etichetta subito sopra ("Impostazioni"), se no il titolo del pannello o della pagina.
+    const prima = box && box.previousElementSibling;
+    if (!titolo && prima && prima.classList.contains('etichetta')) titolo = prima;
+    if (!titolo && box && box.parentElement) { const fuori = box.parentElement.closest('.finestra, .pannello, .pagina'); titolo = fuori ? fuori.querySelector('h2, h1') : null; }
+    if (!titolo) return;
+    let s = titolo.querySelector('.salvato');
+    if (!s) {
+      s = h('span', { class: 'salvato', role: 'status' }, icona('spunta', 14, 3), h('span', null, ''));
+      titolo.append(s);
+    }
+    s.lastChild.textContent = testo || 'Salvato';
+    s.classList.add('visto');
+    clearTimeout(s.tempo);
+    s.tempo = setTimeout(() => s.classList.remove('visto'), testo ? 3000 : 1500);
+  }
+
+  /** Il riquadro del campo (per il bordo rosso): .campo, la riga dell'impostazione, o il campo stesso. */
+  const riquadroDi = el => (el.closest && el.closest('.campo, .imp-riga, .riga-int')) || el;
+  function segnaSbagliato(el, si) {
+    const r = riquadroDi(el);
+    r.classList.toggle('sbagliato', !!si);
+    if (si) el.setAttribute('aria-invalid', 'true'); else el.removeAttribute('aria-invalid');
+  }
+
+  /**
+   * Salva adesso (interruttori, segmenti, tendine, o un gruppetto di campi): fn() -> Promise che rifiuta con l'errore del
+   * server. true se è andata. dove: l'elemento vicino al cui titolo compare "Salvato"; frase: al posto di "Salvato".
+   */
+  async function salvaOra(dove, fn, frase) {
+    try {
+      await inCoda(fn);
+      if (dove) { segnaSbagliato(dove, false); segnaSalvato(dove, frase); }
+      return true;
+    } catch (e) {
+      if (e && e.accesso === false) return false;
+      if (dove) segnaSbagliato(dove, true);
+      avviso((e && e.message) || String(e), true);
+      return false;
+    }
+  }
+
+  /**
+   * Un campo di testo o di numero che si salva da solo.
+   * o: { leggi(testo) -> { valore } o { errore } (di base il testo senza spazi ai lati), salva(valore) -> Promise,
+   *      frase (al posto di "Salvato"), ritardo (800 ms), dove (l'elemento per "Salvato", di base il campo) }.
+   * Torna { prova(), valore } (valore = l'ultimo salvato).
+   */
+  function salvaDaSolo(input, o) {
+    const leggi = o.leggi || (t => ({ valore: String(t === null || t === undefined ? '' : t).trim() }));
+    const primo = leggi(input.value);
+    const stato = { valore: primo.errore ? undefined : primo.valore };
+    let timer = null;
+    const prova = async uscendo => {
+      clearTimeout(timer);
+      if (input.disabled) return;
+      const letto = leggi(input.value);
+      if (letto.errore) {
+        // Mentre si scrive si aspetta; uscendo dal campo si dice cosa non va.
+        if (uscendo) { segnaSbagliato(input, true); avviso(letto.errore, true); }
+        return;
+      }
+      if (JSON.stringify(letto.valore) === JSON.stringify(stato.valore)) { segnaSbagliato(input, false); return; }
+      const valore = letto.valore;
+      const ok = await salvaOra(null, () => o.salva(valore)).catch(() => false);
+      if (ok) { stato.valore = valore; segnaSbagliato(input, false); segnaSalvato(o.dove || input, o.frase); if (o.dopo) o.dopo(valore); }
+      else segnaSbagliato(input, true);
+    };
+    input.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(() => prova(false), o.ritardo || 800); });
+    input.addEventListener('blur', () => prova(true));
+    // Le tendine (giorno e mese) e i campi data: subito.
+    if (input.tagName === 'SELECT' || input.type === 'date') input.addEventListener('change', () => prova(true));
+    return { prova, stato };
+  }
+
+  /**
+   * Il lettore di un numero scritto all'italiana ("0,76", "1.200"): un numero a metà ("0,", "-") è un errore e non si salva.
+   * o: { nome (per l'errore), vuoto (si può lasciare vuoto: valore ''), min, max, intero }.
+   */
+  function leggiNumero(o) {
+    const x = o || {};
+    return t => {
+      const s = String(t === null || t === undefined ? '' : t).trim();
+      if (!s) return x.vuoto === false ? { errore: (x.nome ? x.nome + ': ' : '') + 'scrivi un numero' } : { valore: '' };
+      const pulito = s.replace(/\s/g, '').replace(/\.(?=\d{3}(\D|$))/g, '').replace(',', '.');
+      if (!/^-?\d+(\.\d+)?$/.test(pulito)) return { errore: (x.nome ? x.nome + ': ' : '') + 'non è un numero' };
+      const n = Number(pulito);
+      if (x.intero && !Number.isInteger(n)) return { errore: (x.nome ? x.nome + ': ' : '') + 'scrivi un numero intero' };
+      if (x.min !== undefined && n < x.min) return { errore: (x.nome ? x.nome + ': ' : '') + 'almeno ' + String(x.min).replace('.', ',') };
+      if (x.max !== undefined && n > x.max) return { errore: (x.nome ? x.nome + ': ' : '') + 'al massimo ' + String(x.max).replace('.', ',') };
+      return { valore: n };
+    };
+  }
+
+  /** Un numero scritto a metà: finisce con la virgola o il punto ("1,"), o è solo il meno. Non si salva finché non è finito. */
+  const numeroAMeta = t => /\d[.,]\s*$|^\s*-\s*$/.test(String(t === null || t === undefined ? '' : t));
+
   /** Copia negli appunti (la password iniziale). */
   async function copiaTesto(testo) {
     try {
@@ -362,5 +496,7 @@
   radice.WisperBase = {
     $, h, aggiungi, svuota, ICONE, icona, tondo, lettere, iniziali, stato, pillola, avviso, lavora,
     finestra, conferma, apriMenu, chiudiMenu, campo, conSuffisso, selezione, segmenti, cerca, riga, quadrato, segnaposto, copiaTesto,
+    // 06/11/2026: le impostazioni si salvano da sole.
+    inCoda, segnaSalvato, segnaSbagliato, salvaOra, salvaDaSolo, leggiNumero, numeroAMeta,
   };
 })(window);

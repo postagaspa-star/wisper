@@ -1,0 +1,55 @@
+{
+  "descrizione": "Il rapportino con più lavori sul computer (docs/gestionale/rapportino-lavori.md, 06/11/2026): come si raggruppano i lavori che manda il server, le parole degli stati, la divisione per destinatario all'invio e l'oggetto dell'email. Li prova pc/prove/rapportino-lavori.test.js con pc/ui/regole-lavori.js.",
+  "raggruppa": [
+    {
+      "nome": "i lavori di un rapportino stanno insieme in ordine di posizione; il rapportino più recente prima; a parità di data l'ordine del server; gli annullati no; un lavoro della 1.1 senza idGiornata è un rapportino da solo",
+      "lavori": [
+        { "id": "RAP/2026/0153-2", "idGiornata": "RAP/2026/0153", "posizione": 2, "data": "2026-11-05", "cliente": "Rossi Impianti", "stato": "BOZZA" },
+        { "id": "RAP/2026/0153", "idGiornata": "RAP/2026/0153", "posizione": 1, "data": "2026-11-05", "cliente": "Elettrodinamica", "stato": "BOZZA" },
+        { "id": "RAP/2026/0154", "idGiornata": "RAP/2026/0154", "posizione": 1, "data": "2026-11-06", "cliente": "Rossi Impianti", "stato": "INVIATO" },
+        { "id": "RAP/2026/0150", "data": "2026-11-05", "cliente": "Acme Spa", "stato": "FIRMATO" },
+        { "id": "RAP/2026/0153-3", "idGiornata": "RAP/2026/0153", "posizione": 3, "data": "2026-11-05", "cliente": "Acme Spa", "stato": "ANNULLATO" }
+      ],
+      "rapportini": [
+        { "id": "RAP/2026/0154", "data": "2026-11-06", "lavori": ["RAP/2026/0154"] },
+        { "id": "RAP/2026/0153", "data": "2026-11-05", "lavori": ["RAP/2026/0153", "RAP/2026/0153-2"] },
+        { "id": "RAP/2026/0150", "data": "2026-11-05", "lavori": ["RAP/2026/0150"] }
+      ]
+    }
+  ],
+  "stati": [
+    { "stati": ["BOZZA", "FIRMATO", "INVIATO"], "riassunto": "2 da inviare · 1 inviato", "parole": ["Da inviare", "Da inviare", "Inviato"] },
+    { "stati": ["FATTURATO", "FATTURATO"], "riassunto": "2 fatturati", "parole": ["Fatturato", "Fatturato"] },
+    { "stati": ["INVIATO", "FATTURATO", "BOZZA"], "riassunto": "1 da inviare · 1 inviato · 1 fatturato", "parole": ["Inviato", "Fatturato", "Da inviare"] }
+  ],
+  "lavoriEClienti": [
+    { "clienti": ["C001", "C002", "C001"], "testo": "3 lavori · 2 clienti" },
+    { "clienti": ["C001"], "testo": "1 lavoro" },
+    { "clienti": ["C001", "C001"], "testo": "2 lavori · 1 cliente" }
+  ],
+  "destinatari": [
+    {
+      "nome": "un rapportino con due clienti e un altro rapportino: due email, ognuna solo coi suoi lavori, nell'ordine in cui i clienti compaiono",
+      "lavori": [
+        { "id": "RAP/2026/0153", "idGiornata": "RAP/2026/0153", "data": "2026-11-05", "idCliente": "C001", "cliente": "Elettrodinamica" },
+        { "id": "RAP/2026/0153-2", "idGiornata": "RAP/2026/0153", "data": "2026-11-05", "idCliente": "C002", "cliente": "Rossi Impianti" },
+        { "id": "RAP/2026/0153-3", "idGiornata": "RAP/2026/0153", "data": "2026-11-05", "idCliente": "C001", "cliente": "Elettrodinamica" },
+        { "id": "RAP/2026/0155", "idGiornata": "RAP/2026/0155", "data": "2026-11-06", "idCliente": "C002", "cliente": "Rossi Impianti" }
+      ],
+      "email": [
+        { "chiave": "c:C001", "lavori": ["RAP/2026/0153", "RAP/2026/0153-3"], "oggetto": "Rapportino RAP/2026/0153 del 05/11/2026", "frase": "il rapportino del 05/11/2026" },
+        { "chiave": "c:C002", "lavori": ["RAP/2026/0153-2", "RAP/2026/0155"], "oggetto": "Rapportini della settimana dal 5 al 6 novembre 2026", "frase": "il riepilogo dei rapportini della settimana dal 5 al 6 novembre 2026" }
+      ]
+    },
+    {
+      "nome": "un cliente senza codice (scritto a mano) si riconosce dal nome, anche con maiuscole e accenti diversi; due rapportini dello stesso giorno",
+      "lavori": [
+        { "id": "RAP/2026/0160", "idGiornata": "RAP/2026/0160", "data": "2026-11-10", "cliente": "Caffè Centrale" },
+        { "id": "RAP/2026/0161", "idGiornata": "RAP/2026/0161", "data": "2026-11-10", "cliente": "CAFFE CENTRALE" }
+      ],
+      "email": [
+        { "chiave": "n:caffe centrale", "lavori": ["RAP/2026/0160", "RAP/2026/0161"], "oggetto": "Rapportini del 10 novembre 2026", "frase": "il riepilogo dei rapportini del 10 novembre 2026" }
+      ]
+    }
+  ]
+}

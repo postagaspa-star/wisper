@@ -42,6 +42,8 @@ import eu.stgm.wisper.rapportino.Immagini
 import eu.stgm.wisper.rapportino.Numeri
 import eu.stgm.wisper.rapportino.PonteServer
 import eu.stgm.wisper.rapportino.Rapportino
+import eu.stgm.wisper.rapportino.Giornata
+import eu.stgm.wisper.rapportino.Giornate
 import eu.stgm.wisper.rapportino.Salvataggio
 import eu.stgm.wisper.rapportino.Stato
 import eu.stgm.wisper.rapportino.Dashboard
@@ -399,7 +401,7 @@ class Archivio(private val ctx: Context) : Dati {
             // leggono solo quando li si sfoglia, o quando l'ufficio li vuole tutti.
             val oggi = LocalDate.now()
             val inizio = contatore.get()
-            // Dal 03/11/2026 ogni funzione si spegne (progetti.md §5): con Ore e rapportini spenta (o senza il permesso)
+            // Dal 03/11/2026 ogni funzione si spegne (progetti.md §5): con Rapportini spenta (o senza il permesso)
             // i rapportini non si chiedono, il server direbbe di no. Restano quelli già sul telefono.
             val leggeRapportini = _sessione.value.permessi.let { it.livelli.isEmpty() || it.vede(Moduli.RAPPORTINI) }
             if (leggeRapportini && tutti) {
@@ -434,8 +436,7 @@ class Archivio(private val ctx: Context) : Dati {
             if (!tutti) {
                 provaONull { leggiPreventivi() }
                 provaONull { leggiAttivita() }
-                // Fase 3: il timer (si vede in cima alla Dashboard) e gli elenchi già aperti.
-                provaONull { leggiTimer() }
+                // Fase 3: gli elenchi già aperti. 07/11/2026: il timer non si legge più (le Ore non ci sono più).
                 periodoOre?.let { (da, a) -> provaONull { leggiOre(da, a) } }
                 meseSpese?.let { provaONull { leggiSpese(it) } }
             }
@@ -489,8 +490,14 @@ class Archivio(private val ctx: Context) : Dati {
         if (nome.isEmpty()) return null
         fun suo(r: Rapportino) = (cliente != null && r.idCliente == cliente.id) ||
             Anagrafiche.normalizza(r.cliente) == nome
-        _coda.value.lastOrNull { it.tipo == CodaInvii.Tipo.SALVA && it.rapportino?.let(::suo) == true }
-            ?.rapportino?.tariffa?.takeIf { it > 0 }?.let { return it }
+        // Anche i lavori dei rapportini in coda (06/11/2026): il piu' recente scritto per lui.
+        _coda.value.flatMap { op ->
+            when (op.tipo) {
+                CodaInvii.Tipo.SALVA -> listOfNotNull(op.rapportino)
+                CodaInvii.Tipo.GIORNATA -> op.giornata()?.lavori.orEmpty()
+                else -> emptyList()
+            }
+        }.lastOrNull(::suo)?.tariffa?.takeIf { it > 0 }?.let { return it }
         cliente?.ultimaTariffa?.takeIf { it > 0 }?.let { return it }
         return _dalFoglio.value.filter(::suo).maxByOrNull { it.data }?.tariffa?.takeIf { it > 0 }
     }
@@ -501,6 +508,23 @@ class Archivio(private val ctx: Context) : Dati {
 
     override fun salva(r: Rapportino) {
         coda.salva(r)
+        dopoModifica()
+    }
+
+    /** Il rapportino coi suoi lavori (06/11/2026): in coda tutto insieme, parte una volta sola. */
+    override fun salvaGiornata(g: Giornata) {
+        coda.giornata(g)
+        dopoModifica()
+    }
+
+    /**
+     * Elimina il rapportino intero (solo se i lavori sono tutti da inviare: lo decide chi chiama). Quello mai arrivato al
+     * server sparisce dalla coda con le foto dei suoi lavori; i lavori gia' sul server diventano annullati e si
+     * recuperano da li'.
+     */
+    override fun eliminaGiornata(g: Giornata) {
+        coda.tutte().filter { it.tipo == CodaInvii.Tipo.GIORNATA && it.idLocale == g.idLocale }.forEach { coda.togli(it.idOp) }
+        g.lavori.map { it.idLocale }.distinct().forEach { id -> eliminaSenzaInvio(id) }
         dopoModifica()
     }
 
@@ -724,6 +748,29 @@ class Archivio(private val ctx: Context) : Dati {
         salvata
     }
 
+    override suspend fun cambiaCodiceCommessa(id: String, nuovoCodice: String): Result<Commessa> = inDiretta {
+        val (nuova, vecchio) = try {
+            ponte.cambiaCodiceCommessa(id, nuovoCodice)
+        } catch (e: java.io.IOException) {
+            // Niente rete: la frase di questa azione. Il resto (server lento, porta Google) si spiega come sempre.
+            if (e is java.net.UnknownHostException || e is java.net.ConnectException || e is java.net.NoRouteToHostException)
+                throw PonteServer.Rifiutato("Serve la rete per cambiare il codice")
+            throw e
+        }
+        val conPrima = nuova.copy(codicePrecedente = nuova.codicePrecedente.ifBlank { vecchio })
+        // Subito anche qui: la commessa col codice nuovo, che si trova anche col vecchio (Anagrafiche.commessa).
+        mettiInAnagrafica { a ->
+            a.copy(
+                commesse = sostituisci(a.commesse.filterNot { it.id.equals(vecchio, ignoreCase = true) }, conPrima) { it.id.equals(conPrima.id, ignoreCase = true) },
+                progetti = a.progetti.map { if (it.idCommessa.equals(vecchio, ignoreCase = true)) it.copy(idCommessa = conPrima.id) else it },
+            )
+        }
+        rileggiAnagrafiche()
+        // I rapportini del server col codice nuovo; quelli ancora in coda partono col vecchio, e il server li riconosce.
+        aggiorna()
+        conPrima
+    }
+
     override suspend fun salvaImpostazioni(valori: Map<String, String>): Result<Map<String, String>> = inDiretta {
         val pronti = valori.mapValues { (k, v) ->
             val t = v.trim()
@@ -894,9 +941,12 @@ class Archivio(private val ctx: Context) : Dati {
      */
     private suspend fun prontiSulFoglio(idLocali: Collection<String>, cosaNonEPartito: String) {
         val ids = idLocali.toSet()
-        if (coda.tutte().none { it.idLocale in ids }) return
+        // Anche il rapportino in coda che ha dentro uno di questi lavori (06/11/2026).
+        fun riguarda(op: CodaInvii.Operazione) = op.idLocale in ids ||
+            (op.tipo == CodaInvii.Tipo.GIORNATA && op.giornata()?.lavori?.any { it.idLocale in ids } == true)
+        if (coda.tutte().none(::riguarda)) return
         mandaCoda()
-        if (coda.tutte().none { it.idLocale in ids }) return
+        if (coda.tutte().none(::riguarda)) return
         throw PonteServer.Rifiutato(
             if (coda.tutte().any { it.rifiutata }) {
                 "Prima va sistemata una modifica che il server ha rifiutato (la vedi nella Dashboard). $cosaNonEPartito"
@@ -1865,8 +1915,9 @@ class Archivio(private val ctx: Context) : Dati {
                     }
                     // Ore e spese escono da sole (CodaInvii.completa): se intanto sono state
                     // cambiate di nuovo restano, e ripartono come modifica.
-                    if (op.fase3) fase3 = true else gruppo.forEach { coda.togli(it.idOp) }
-                    if (op.tipo == CodaInvii.Tipo.SALVA) salvati = true
+                    // Il rapportino coi lavori esce da solo (CodaInvii.completaGiornata): cambiato intanto, riparte.
+                    if (op.fase3) fase3 = true else if (op.tipo != CodaInvii.Tipo.GIORNATA) gruppo.forEach { coda.togli(it.idOp) }
+                    if (op.tipo == CodaInvii.Tipo.SALVA || op.tipo == CodaInvii.Tipo.GIORNATA) salvati = true
                     if (op.fase5) fase5 = true
                     if (op.fase6) fase6 = true
                     if (op.fase7) fase7 = true
@@ -1921,6 +1972,17 @@ class Archivio(private val ctx: Context) : Dati {
     private suspend fun esegui(op: CodaInvii.Operazione) {
         when (op.tipo) {
             CodaInvii.Tipo.SALVA -> sostituisciRemoto(ponte.salva(op.rapportino!!))
+
+            CodaInvii.Tipo.GIORNATA -> {
+                val g = op.giornata() ?: throw PonteServer.Rifiutato("Il rapportino in coda non si legge più")
+                val tornata = ponte.salvaGiornata(g)
+                // I lavori tengono l'idLocale del rapportino del telefono: se e' ancora in coda (cambiato intanto) si ritrovano.
+                val lavori = tornata.lavori.map { it.copy(idLocaleGiornata = g.idLocale) }
+                // I lavori tolti dal rapportino (il server li ha annullati) escono anche dal telefono.
+                togliTolti(tornata.id, g.idLocale, chiavi(lavori))
+                sostituisciRemoti(lavori)
+                coda.completaGiornata(op.idOp, op.corpo, tornata.id)
+            }
 
             CodaInvii.Tipo.FOTO -> {
                 val file = File(op.percorso)
@@ -2003,6 +2065,20 @@ class Archivio(private val ctx: Context) : Dati {
         }
     }
 
+    /** Toglie dai rapportini letti i lavori del rapportino [idGiornata] / [idLocaleGiornata] che non sono fra [tenuti]. */
+    private fun togliTolti(idGiornata: String, idLocaleGiornata: String, tenuti: Set<String>) {
+        fun tolto(r: Rapportino) = !r.dentro(tenuti) &&
+            ((idGiornata.isNotBlank() && Giornate.chiaveDi(r) == idGiornata) || (idLocaleGiornata.isNotBlank() && r.idLocaleGiornata == idLocaleGiornata))
+        if (_dalFoglio.value.any(::tolto)) {
+            _dalFoglio.update { l -> l.filterNot(::tolto) }
+            copia.scriviRapportini(_dalFoglio.value)
+        }
+        if (_storicoFoglio.value.any(::tolto)) {
+            _storicoFoglio.update { l -> l.filterNot(::tolto) }
+            copia.scriviStorico(_storicoFoglio.value)
+        }
+    }
+
     private fun aggiornaRemoto(idLocale: String, cambia: (Rapportino) -> Rapportino) {
         scrittoAl[idLocale] = contatore.incrementAndGet()
         _dalFoglio.update { lista -> lista.map { if (it.idLocale == idLocale) cambia(it) else it } }
@@ -2029,6 +2105,34 @@ class Archivio(private val ctx: Context) : Dati {
         remoti.forEach { viste[it.idLocale] = Vista(it) }
 
         for (op in operazioni) {
+            // 06/11/2026: il rapportino coi lavori mette (o cambia) tutti i suoi lavori, e toglie quelli che non ha piu'.
+            if (op.tipo == CodaInvii.Tipo.GIORNATA) {
+                val g = op.giornata() ?: continue
+                val idNoto = g.id.ifBlank { remoti.firstOrNull { it.idLocaleGiornata == g.idLocale && it.idGiornata.isNotBlank() }?.idGiornata.orEmpty() }
+                val lavori = g.copy(id = idNoto).lavoriAllineati()
+                val dentro = lavori.map { it.idLocale }.toSet()
+                // Un no del server che dice il lavoro ("Lavoro 2: scegli il progetto") va su quel lavoro soltanto.
+                val errore = if (op.rifiutata) Giornate.erroreDelLavoro(op.errore) else null
+                viste.keys.toList().forEach { k ->
+                    val r = viste[k]!!.rapportino
+                    if (k !in dentro && (r.idLocaleGiornata == g.idLocale || (idNoto.isNotBlank() && Giornate.chiaveDi(r) == idNoto))) viste.remove(k)
+                }
+                lavori.forEach { scritto ->
+                    val attuale = viste[scritto.idLocale]
+                    val unito = attuale?.rapportino?.let { b -> unisciScritto(scritto, b) } ?: scritto.copy(conto = null)
+                    viste[scritto.idLocale] = (attuale ?: Vista(unito)).copy(
+                        rapportino = unito.copy(idGiornata = unito.idGiornata.ifBlank { idNoto }, idLocaleGiornata = g.idLocale, posizione = scritto.posizione),
+                        cambiatoQui = true, inCoda = true,
+                        errore = when {
+                            !op.rifiutata -> attuale?.errore.orEmpty()
+                            errore == null -> op.errore
+                            errore.first == scritto.posizione -> errore.second
+                            else -> ""
+                        },
+                    )
+                }
+                continue
+            }
             val attuale = viste[op.idLocale]
             val nuova: Vista? = when (op.tipo) {
                 CodaInvii.Tipo.SALVA -> {
@@ -2036,17 +2140,7 @@ class Archivio(private val ctx: Context) : Dati {
                     val base = attuale?.rapportino
                     // Del rapportino scritto qui contano i campi compilati; numero,
                     // foto, firma e stato restano quelli che sa il foglio.
-                    val unito = base?.let { b ->
-                        scritto.soloCompilato().copy(
-                            id = b.id, gruppo = b.gruppo, foto = b.foto, firma = b.firma,
-                            firmatario = b.firmatario, firmatoIl = b.firmatoIl, stato = b.stato,
-                            modificato = b.modificato, inviatoIl = b.inviatoIl, fatturatoIl = b.fatturatoIl,
-                            creato = b.creato, costoOrario = b.costoOrario,
-                            statoApprovazione = b.statoApprovazione, motivoRifiuto = b.motivoRifiuto,
-                            firmaModo = b.firmaModo, firmaReferente = b.firmaReferente, portalePubblicato = b.portalePubblicato,
-                            portaleDaFirmare = b.portaleDaFirmare, portaleVistoIl = b.portaleVistoIl, portaleId = b.portaleId,
-                        )
-                    } ?: scritto.copy(conto = null)
+                    val unito = base?.let { b -> unisciScritto(scritto, b) } ?: scritto.copy(conto = null)
                     (attuale ?: Vista(unito)).copy(rapportino = unito, cambiatoQui = true)
                 }
                 CodaInvii.Tipo.FOTO -> attuale?.copy(fotoInAttesa = attuale.fotoInAttesa + File(op.percorso))
@@ -2081,6 +2175,8 @@ class Archivio(private val ctx: Context) : Dati {
                 CodaInvii.Tipo.FOTO_GUASTO, CodaInvii.Tipo.PRESTITO, CodaInvii.Tipo.RESTITUISCI, CodaInvii.Tipo.FIRMA_DPI -> null
                 // Messaggi e portale della fase 7: li mostra fase7 (InCoda7).
                 CodaInvii.Tipo.AZIONE7 -> null
+                // Il rapportino coi lavori lo mette il ramo qui sopra (prima del when).
+                CodaInvii.Tipo.GIORNATA -> null
             }
             if (nuova != null) {
                 viste[op.idLocale] = nuova.copy(
@@ -2100,6 +2196,18 @@ class Archivio(private val ctx: Context) : Dati {
             .filter { it.rapportino.stato != Stato.ANNULLATO }
             .sortedWith(compareByDescending<Vista> { it.rapportino.data }.thenByDescending { it.rapportino.id })
     }
+
+    /** Un lavoro scritto qui sopra quello che sa il server: i campi compilati di qui, numero, foto, stato e il resto di la'. */
+    private fun unisciScritto(scritto: Rapportino, b: Rapportino): Rapportino = scritto.soloCompilato().copy(
+        id = b.id, gruppo = b.gruppo, foto = b.foto, firma = b.firma,
+        firmatario = b.firmatario, firmatoIl = b.firmatoIl, stato = b.stato,
+        modificato = b.modificato, inviatoIl = b.inviatoIl, fatturatoIl = b.fatturatoIl,
+        creato = b.creato, costoOrario = b.costoOrario,
+        statoApprovazione = b.statoApprovazione, motivoRifiuto = b.motivoRifiuto,
+        firmaModo = b.firmaModo, firmaReferente = b.firmaReferente, portalePubblicato = b.portalePubblicato,
+        portaleDaFirmare = b.portaleDaFirmare, portaleVistoIl = b.portaleVistoIl, portaleId = b.portaleId,
+        idGiornata = b.idGiornata, idLocaleGiornata = b.idLocaleGiornata.ifBlank { scritto.idLocaleGiornata }, posizione = b.posizione,
+    )
 
     // ------------------------------------------------------------- avvisi
 

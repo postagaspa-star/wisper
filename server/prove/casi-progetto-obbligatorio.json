@@ -1,0 +1,16 @@
+{
+  "descrizione": "Quando il progetto è obbligatorio nel rapportino (06/11/2026, scelta di Andrea: 'dal nome Elettrodinamica'). Solo con la funzione Progetti accesa, e solo se il nome del cliente, in minuscolo, senza accenti e senza spazi, punti, trattini o altri segni, contiene 'elettrodinamica'. Per tutti gli altri clienti il progetto (e la commessa) sono facoltativi. Uguale per il computer (pc/ui) e il telefono (Kotlin).",
+  "casi": [
+    { "cliente": "Elettrodinamica", "obbligatorio": true },
+    { "cliente": "ELETTRODINAMICA SRL", "obbligatorio": true },
+    { "cliente": "Elettro Dinamica s.r.l.", "obbligatorio": true },
+    { "cliente": "Elettro-Dinamica", "obbligatorio": true },
+    { "cliente": "  elettrodinamica  ", "obbligatorio": true },
+    { "cliente": "Elèttrodinàmica", "obbligatorio": true },
+    { "cliente": "Nuova Elettrodinamica Veneta", "obbligatorio": true },
+    { "cliente": "Elettrodinamiche Venete", "obbligatorio": false },
+    { "cliente": "Elettro", "obbligatorio": false },
+    { "cliente": "Rossi Impianti", "obbligatorio": false },
+    { "cliente": "", "obbligatorio": false }
+  ]
+}

@@ -35,6 +35,7 @@ import eu.stgm.wisper.Dati
 import eu.stgm.wisper.NuoveVersioni
 import eu.stgm.wisper.Riepiloghi
 import eu.stgm.wisper.Riepiloghi.TipoGiorno
+import eu.stgm.wisper.rapportino.Giornate
 import eu.stgm.wisper.rapportino.Numeri
 import eu.stgm.wisper.rapportino.Rapportino
 import java.time.LocalDate
@@ -58,9 +59,9 @@ private fun comeQuando(d: LocalDate, oggi: LocalDate = LocalDate.now()): String 
 /*
  * "Il tuo giorno" (docs/gestionale/fase1-schermate.md §3, punto 2): la vecchia
  * casa Oggi, com'era, in cima alla Dashboard di chi scrive rapportini. La
- * settimana coi giorni che mancano, il rapportino di oggi con Scrivi il
- * rapportino e Come ieri, quello che c'è da far firmare, il mese, e la pillola
- * della rete in fondo alla pagina.
+ * settimana coi giorni che mancano, il rapportino di oggi coi suoi lavori (o Scrivi
+ * il rapportino e Come ieri), i lavori da inviare, il mese, e la pillola della rete
+ * in fondo alla pagina.
  */
 
 /** Il foglio (dalla fase 1 il server) ha rifiutato qualcosa: una scheda rossa tenue in cima, con Riprova e Scarta. */
@@ -83,8 +84,9 @@ fun AvvisoRifiuto(dati: Dati) {
 }
 
 /**
- * La scheda "Il tuo giorno": la settimana e, sotto, il rapportino di oggi. Poi
- * le righe "da far firmare", il mese e la versione nuova.
+ * La scheda "Il tuo giorno": la settimana e, sotto, il rapportino di oggi coi suoi
+ * lavori (rapportino-lavori.md §5.3). Poi la riga dei lavori da inviare, il mese e
+ * la versione nuova.
  *
  * @param costi senza il permesso dei soldi i totali non si scrivono.
  */
@@ -95,8 +97,9 @@ fun IlTuoGiorno(
     onNuovo: (LocalDate) -> Unit,
     onComeIeri: (Rapportino) -> Unit,
     onApri: (String) -> Unit,
+    onApriLavoro: (String) -> Unit,
     onMese: () -> Unit,
-    onDaFirmare: () -> Unit,
+    onDaInviare: () -> Unit,
 ) {
     val c = W.colori
     val visita = LocalVisita.current
@@ -118,7 +121,7 @@ fun IlTuoGiorno(
         dati.fase6.giorniLiberi(lunedi, lunedi.plusDays(6), sessione.idPersona, ana.impostazione("FESTA_PATRONO"), assenze, chiusure)
     }
     val settimana = Riepiloghi.settimana(viste, oggi, liberi)
-    val daFirmare = Riepiloghi.daFirmare(viste)
+    val daInviare = Riepiloghi.daInviare(viste)
     val delMese = viste.filter { YearMonth.from(it.rapportino.data) == YearMonth.from(oggi) }
 
     Scheda(Modifier.bersaglio("giorno"), orizzontale = 18.dp, verticale = 18.dp, raggio = 22.dp, spazio = 14.dp) {
@@ -156,16 +159,19 @@ fun IlTuoGiorno(
                         Text(
                             listOf(ieri.cliente, ieri.commessa.takeIf { it.isNotBlank() }, Numeri.ore(ieri.oreTotali), "${Numeri.scrivi(ieri.km)} km")
                                 .filterNotNull().joinToString(" · "),
-                            style = Testi.secondario, color = c.tenue, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                            style = Testi.secondario, color = c.tenue,
                         )
                     }
                     Icon(Icone.freccia, null, tint = c.tenue, modifier = Modifier.size(18.dp))
                 }
             }
         } else {
-            diOggi.forEach { v ->
+            // Il rapportino di oggi (di solito uno: il tuo; chi vede tutto vede anche quelli dei colleghi) coi suoi lavori.
+            Giornate.raggruppa(diOggi) { it.rapportino }.forEach { g ->
+                val lavori = g.voci.map { it.rapportino }
                 Row(
-                    Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).clickable { onApri(v.rapportino.idLocale) }.padding(vertical = 4.dp),
+                    Modifier.fillMaxWidth().heightIn(min = 56.dp).clip(RoundedCornerShape(16.dp)).clickable { onApri(lavori.first().idLocale) }
+                        .padding(vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Box(Modifier.size(40.dp).clip(CircleShape).background(c.testo), contentAlignment = Alignment.Center) {
@@ -173,38 +179,67 @@ fun IlTuoGiorno(
                     }
                     Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {
-                        Text("Fatto: ${v.rapportino.cliente}", style = Testi.titoloSezione, color = c.testo, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text(
-                            Numeri.ore(v.rapportino.oreTotali) + (if (costi) v.conto?.let { " · " + Numeri.euro(it.totale) } ?: "" else ""),
-                            style = Testi.secondario, color = c.tenue,
+                        val diAltri = g.tecnico.isNotBlank() && dati.tecnico.isNotBlank() && g.tecnico != dati.tecnico
+                        Text(if (diAltri) "Rapportino di ${g.tecnico}" else "Il rapportino di oggi", style = Testi.titoloSezione, color = c.testo)
+                        RigaAPezzi(
+                            listOf(
+                                Giornate.lavori(lavori.size), Giornate.perClienti(Giornate.quantiClienti(lavori)), Numeri.ore(lavori.sumOf { it.oreTotali }),
+                                if (costi) Numeri.euro(g.voci.sumOf { it.conto?.totale ?: 0.0 }) else "",
+                            ),
+                            Testi.secondario, c.tenue,
                         )
                     }
-                    ParolaStato(v.rapportino.stato)
+                    Icon(Icone.freccia, null, tint = c.tenue, modifier = Modifier.size(18.dp))
+                }
+                g.voci.forEach { v ->
+                    val r = v.rapportino
+                    Row(
+                        Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(RoundedCornerShape(12.dp)).clickable { onApriLavoro(r.idLocale) }
+                            .padding(start = 52.dp, top = 4.dp, bottom = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(r.cliente.ifBlank { "Senza cliente" }, style = Testi.forte, color = c.testo)
+                            Text(
+                                listOfNotNull(Numeri.ore(r.oreTotali), r.descrizione.takeIf { it.isNotBlank() }).joinToString(" · "),
+                                style = Testi.secondario, color = c.tenue,
+                            )
+                        }
+                        // Lo stato solo se non e' piu' da inviare (come le schede dei lavori nel rapportino).
+                        if (!r.daInviare) {
+                            Spacer(Modifier.width(8.dp))
+                            ParolaStato(r.stato)
+                        }
+                    }
                 }
             }
-            PulsanteBordo("Aggiungi un altro rapportino", { onNuovo(oggi) }, Modifier.fillMaxWidth(), icona = Icone.piu)
+            PulsanteBordo("Aggiungi un lavoro", { onNuovo(oggi) }, Modifier.fillMaxWidth(), icona = Icone.piu)
         }
     }
 
-    // ---------------------------------------------------------- da far firmare
-    if (daFirmare.isNotEmpty()) {
-        val clienti = daFirmare.map { it.rapportino.cliente }.distinct()
-        val giorni = daFirmare.sortedBy { it.rapportino.data }.map { it.rapportino.data.dayOfMonth.toString() }
+    // ---------------------------------------------------------- da inviare
+    if (daInviare.isNotEmpty()) {
+        val clienti = daInviare.map { it.rapportino.cliente.ifBlank { "Senza cliente" } }.distinct()
         Row(
             Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(c.scheda)
-                .border(1.dp, c.bordoScheda, RoundedCornerShape(20.dp)).clickable(onClick = onDaFirmare)
+                .border(1.dp, c.bordoScheda, RoundedCornerShape(20.dp)).clickable(onClick = onDaInviare)
                 .padding(horizontal = 16.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(Modifier.size(44.dp).clip(CircleShape).background(c.gialloTenue), contentAlignment = Alignment.Center) {
-                Icon(Icone.firma, null, tint = c.gialloTesto, modifier = Modifier.size(22.dp))
+                Icon(Icone.invia, null, tint = c.gialloTesto, modifier = Modifier.size(22.dp))
             }
             Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
-                Text(if (daFirmare.size == 1) "1 da far firmare" else "${daFirmare.size} da far firmare", style = Testi.forte, color = c.testo)
+                Text(Giornate.lavori(daInviare.size) + " da inviare", style = Testi.forte, color = c.testo)
+                // I primi due clienti e quanti altri: si legge tutto, niente puntini.
                 Text(
-                    clienti.take(2).joinToString(", ") + ", " + giorni.joinToString(" e ").let { if (giorni.size > 3) giorni.take(3).joinToString(", ") + "…" else it },
-                    style = Testi.secondario, color = c.tenue, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    clienti.take(2).joinToString(", ") + when (val altri = clienti.size - 2) {
+                        in Int.MIN_VALUE..0 -> ""
+                        1 -> " e un altro"
+                        else -> " e altri $altri"
+                    },
+                    style = Testi.secondario, color = c.tenue,
                 )
             }
             Icon(Icone.freccia, null, tint = c.tenue, modifier = Modifier.size(18.dp))

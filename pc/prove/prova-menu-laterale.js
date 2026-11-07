@@ -13,6 +13,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
 const assert = require('node:assert/strict');
+const { portaDevtools, chiudiEdge: chiudiEdgeCdp } = require('./edge-prova.js');
 
 const arg = process.argv.slice(2);
 const opz = (n, d) => { const i = arg.indexOf(n); return i >= 0 ? arg[i + 1] : d; };
@@ -24,7 +25,7 @@ const aspetta = ms => new Promise(r => setTimeout(r, ms));
 
 async function main() {
   const profilo = fs.mkdtempSync(path.join(os.tmpdir(), 'wisper-edge-menu-'));
-  const porta = 9650 + Math.floor(Math.random() * 150);
+  const porta = portaDevtools(9650, 150);
   const edge = spawn(EDGE, ['--headless=new', '--disable-gpu', '--no-first-run', '--user-data-dir=' + profilo, '--remote-debugging-port=' + porta, 'about:blank'], { stdio: 'ignore' });
   let ws = null;
   let chiudiEdge = async () => {};
@@ -212,9 +213,9 @@ async function main() {
   } finally {
     try { if (ws) ws.close(); } catch (e) { /* già chiuso */ }
     try { await chiudiEdge(); } catch (e) { /* già chiuso */ }
-    try { edge.kill(); } catch (e) { /* già chiuso */ }
+    await chiudiEdgeCdp(porta, edge);
     await aspetta(500);
-    try { fs.rmSync(profilo, { recursive: true, force: true }); } catch (e) { /* Edge tiene ancora qualcosa: resta nella cartella temporanea */ }
+    await require('./edge-prova.js').togliCartella(profilo); // Edge a volte tiene un file un attimo: riprova per qualche secondo
   }
 }
 

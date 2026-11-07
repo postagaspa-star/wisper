@@ -47,7 +47,8 @@
       const lista = R.filtraSoggetti(S.ana.soggetti, f);
       const n = R.contaSoggetti(S.ana.soggetti);
       const archiviati = fornitori ? n.archiviatiFornitori : n.archiviatiClienti;
-      const colonne = '52px minmax(0, 2fr) minmax(0, 1.2fr) minmax(0, 1.2fr) minmax(0, 1.4fr) 110px';
+      // 07/11/2026: la partita IVA (11 cifre) sta su una riga anche a 1024; il testo delle altre celle va a capo.
+      const colonne = '52px minmax(0, 2fr) minmax(0, 1.2fr) minmax(116px, 1.1fr) minmax(0, 1.4fr) 96px';
       if (!lista.length) {
         aggiungi(area, [h('p', { class: 'vuoto' }, f.testo ? 'Nessuno con questa ricerca.' : f.archiviati ? 'Nessuno archiviato.' : fornitori ? 'Ancora nessun fornitore.' : 'Ancora nessun cliente.')]);
       } else {

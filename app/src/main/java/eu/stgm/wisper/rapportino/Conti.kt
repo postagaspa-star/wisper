@@ -115,8 +115,11 @@ object Conti {
         )
     }
 
-    /** Firmati o inviati, non ancora fatturati: quello che si mette nella fattura. */
-    fun daFatturare(r: Rapportino): Boolean = r.stato == Stato.FIRMATO || r.stato == Stato.INVIATO
+    /**
+     * Non ancora fatturati: quello che si mette nella fattura. Dal 06/11/2026 (rapportino-lavori.md §3) anche i lavori
+     * Da inviare: senza firma non c'e' piu' niente da aspettare.
+     */
+    fun daFatturare(r: Rapportino): Boolean = r.stato == Stato.BOZZA || r.stato == Stato.FIRMATO || r.stato == Stato.INVIATO
 
     // ------------------------------------------------------------------ cruscotto della commessa
 
@@ -341,10 +344,27 @@ object Conti {
         return Intestatario(VARI_CLIENTI, emptyList(), "", mostraCliente = true)
     }
 
-    /** Il rapportino singolo va al suo cliente (o, senza la sua email, a chi paga): come preparaInvio() del computer. */
-    fun intestatarioRapportino(r: Rapportino, ana: Anagrafiche): Intestatario {
-        val c = ana.cliente(r.idCliente)
-        return Intestatario(r.cliente, emptyList(), c?.email?.takeIf { it.isNotBlank() } ?: chiPaga(r, ana).email, false)
+    /**
+     * Il rapportino singolo va al suo cliente (o, senza la sua email, a chi paga): come preparaInvio() del computer.
+     * Dal 06/11/2026 il cliente si trova anche per nome (un rapportino ancora sul telefono non ha il suo codice).
+     */
+    fun intestatarioRapportino(r: Rapportino, ana: Anagrafiche): Intestatario =
+        Intestatario(r.cliente, emptyList(), emailDi(r, ana), false)
+
+    /** L'email del cliente del rapportino; se non ce l'ha, quella di chi paga. */
+    fun emailDi(r: Rapportino, ana: Anagrafiche): String =
+        ana.cliente(r.idCliente, r.cliente)?.email?.trim()?.takeIf { it.isNotBlank() } ?: chiPaga(r, ana).email.trim()
+
+    /**
+     * A chi va l'email di più rapportini (riunione del 06/11/2026): l'indirizzo che hanno tutti, se tutti hanno lo
+     * stesso cliente o chi paga, anche quando il riepilogo è intestato a "Vari clienti" (uno ancora senza codice, due
+     * schede con la stessa email). Vuoto se sono indirizzi diversi o se uno non ce l'ha.
+     */
+    fun emailComune(lista: List<Rapportino>, ana: Anagrafiche): String {
+        if (lista.isEmpty()) return ""
+        val email = lista.map { emailDi(it, ana) }
+        if (email.any { it.isBlank() }) return ""
+        return email.first().takeIf { e -> email.all { it.equals(e, ignoreCase = true) } }.orEmpty()
     }
 
     const val VARI_CLIENTI = "Vari clienti"

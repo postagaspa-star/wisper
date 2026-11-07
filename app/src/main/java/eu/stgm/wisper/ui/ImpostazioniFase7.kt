@@ -35,7 +35,8 @@ import java.time.LocalDate
  * clienti (indirizzo con lo stato e Prova adesso, lo script del portale, Portale acceso,
  * durate, file, email lasciate allo studio, informativa, Spegni il portale adesso) e la
  * scheda Comunicazioni (WhatsApp sul telefono, promemoria, i Non collegati col perché).
- * Ognuna col suo Salva col bordo; niente giallo.
+ * Dal 06/11/2026 i campi si salvano da soli; l'informativa resta un foglio a parte, perché
+ * una versione nuova la rivedono tutti i clienti. Niente giallo.
  */
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -48,17 +49,12 @@ fun PaginaPortaleImpostazioni(dati: Dati, puo: Boolean, onIndietro: () -> Unit) 
     var giro by remember { mutableIntStateOf(0) }
     val portale = rememberLettura("portale-imp", giro) { dati.fase7.portale() }
     val stato = (portale as? Lettura.Pronta)?.dato?.stato
-    var indirizzo by remember { mutableStateOf(v("PORTALE_INDIRIZZO")) }
+    val salvaDaSolo = rememberSalvaDaSolo()
     var attivo by remember { mutableStateOf<Boolean?>(null) }
-    var link by remember { mutableStateOf(v("PORTALE_LINK_MINUTI").ifBlank { "10" }) }
-    var sessione by remember { mutableStateOf(v("PORTALE_SESSIONE_MINUTI").ifBlank { "30" }) }
-    var ore by remember { mutableStateOf(v("PORTALE_SESSIONE_ORE").ifBlank { "8" }) }
-    var mb by remember { mutableStateOf(v("PORTALE_FILE_MAX_MB").ifBlank { "20" }) }
-    var riserva by remember { mutableStateOf(v("PORTALE_EMAIL_RISERVA").ifBlank { "20" }) }
     var provo by remember { mutableStateOf(false) }
     var spegni by remember { mutableStateOf<String?>(null) }
     var informativa by remember { mutableStateOf(false) }
-    val soloCifre = { t: String -> t.all { it.isDigit() } }
+    val soloCifre = { t: String -> t.filter { it.isDigit() } }
     val acceso = attivo ?: stato?.attivo ?: (v("PORTALE_ATTIVO") == "true")
     fun salva(valori: Map<String, String>, frase: String) {
         if (dati.esempio) { avvisi.mostra(SOLO_ESEMPIO); return }
@@ -66,6 +62,13 @@ fun PaginaPortaleImpostazioni(dati: Dati, puo: Boolean, onIndietro: () -> Unit) 
             dati.salvaImpostazioni(valori).fold(onSuccess = { avvisi.mostra(frase); giro++; Giri7.portale++ }, onFailure = { avvisi.mostra(spiegaErrore2(it, "Non si è salvato: riprova")) })
         }
     }
+    suspend fun scrivi(k: String, valore: String): Result<*> = dati.salvaImpostazioni(mapOf(k to valore)).onSuccess { giro++; Giri7.portale++ }
+
+    /** Un numero del portale che si salva da solo; vuoto = quello di base. */
+    @Composable
+    fun Numero(k: String, base: String, etichetta: String, suffisso: String) = CampoSalvato(
+        salvaDaSolo, k, v(k).ifBlank { base }, etichetta, abilitato = puo, tastiera = KeyboardType.Number, suffisso = suffisso, cambia = soloCifre,
+    ) { scrivi(k, it) }
     Column(
         Modifier.fillMaxSize().background(c.fondo).verticalScroll(rememberScrollState()).padding(MarginePagina).padding(bottom = 48.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
@@ -73,7 +76,15 @@ fun PaginaPortaleImpostazioni(dati: Dati, puo: Boolean, onIndietro: () -> Unit) 
         Testata(onIndietro = onIndietro)
         TitoloPagina("Portale clienti", sopra = "Impostazioni")
         Scheda(orizzontale = 18.dp, verticale = 16.dp, raggio = 22.dp, spazio = 12.dp) {
-            CampoTesto(indirizzo, { indirizzo = it.trim() }, "Indirizzo del portale", Modifier.fillMaxWidth(), segnaposto = "https://studiogm-portale.netlify.app", tastiera = KeyboardType.Uri, abilitato = puo)
+            CampoSalvato(
+                salvaDaSolo, "PORTALE_INDIRIZZO", v("PORTALE_INDIRIZZO"), "Indirizzo del portale", abilitato = puo,
+                segnaposto = "https://studiogm-portale.netlify.app", tastiera = KeyboardType.Uri, cambia = { it.trim() },
+                controlla = { t -> if (t.isEmpty() || t.startsWith("https://")) null else "Deve cominciare con https://" },
+            ) { t ->
+                scrivi("PORTALE_INDIRIZZO", t.trimEnd('/')).onSuccess {
+                    avvisi.mostra(if (t.isBlank()) "Il portale è Non collegato" else "Provo a raggiungerlo da fuori")
+                }
+            }
             FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 // La pillola e "provato il" in mezzo all'altezza di Prova adesso (48 dp).
                 Box(Modifier.align(Alignment.CenterVertically)) {
@@ -107,34 +118,29 @@ fun PaginaPortaleImpostazioni(dati: Dati, puo: Boolean, onIndietro: () -> Unit) 
                 }
             }
             if (stato != null && stato.script != "attivo" && stato.script != "non risponde") Text("Mancano WISPER_PORTALE_URL e SEGRETO_PORTALE sul NAS", style = Testi.secondario, color = c.tenue)
-            RigaInterruttore("Portale acceso", acceso, { si ->
-                if (!puo) return@RigaInterruttore
-                if (!si) { spegni = ""; return@RigaInterruttore }
-                attivo = true
-                salva(mapOf("PORTALE_ATTIVO" to "true"), "Portale acceso")
-            })
-            if (puo) PulsanteBordo("Salva", {
-                if (indirizzo.isNotBlank() && !indirizzo.startsWith("https://")) { avvisi.mostra("Indirizzo: deve cominciare con https://"); return@PulsanteBordo }
-                salva(mapOf("PORTALE_INDIRIZZO" to indirizzo.trimEnd('/')), if (indirizzo.isBlank()) "Salvato: il portale è Non collegato" else "Salvato: provo a raggiungerlo da fuori")
-            }, Modifier.fillMaxWidth(), altezza = 48.dp)
+            Box(Modifier.evidenziabile("PORTALE_ATTIVO")) {
+                RigaInterruttore("Portale acceso", acceso, { si ->
+                    if (!puo) return@RigaInterruttore
+                    if (!si) { spegni = ""; return@RigaInterruttore }
+                    attivo = true
+                    salva(mapOf("PORTALE_ATTIVO" to "true"), "Portale acceso")
+                })
+            }
         }
 
         Etichetta("Ingresso e file")
         Scheda(orizzontale = 18.dp, verticale = 16.dp, raggio = 22.dp, spazio = 12.dp) {
-            CampoTesto(link, { if (soloCifre(it)) link = it }, "Link e codice valgono", tastiera = KeyboardType.Number, suffisso = "minuti", abilitato = puo)
-            CampoTesto(sessione, { if (soloCifre(it)) sessione = it }, "Sessione senza uso", tastiera = KeyboardType.Number, suffisso = "minuti", abilitato = puo)
-            CampoTesto(ore, { if (soloCifre(it)) ore = it }, "Sessione al massimo", tastiera = KeyboardType.Number, suffisso = "ore", abilitato = puo)
+            Numero("PORTALE_LINK_MINUTI", "10", "Link e codice valgono", "minuti")
+            Numero("PORTALE_SESSIONE_MINUTI", "30", "Sessione senza uso", "minuti")
+            Numero("PORTALE_SESSIONE_ORE", "8", "Sessione al massimo", "ore")
             Coppia("File dal cliente", "PDF, foto, DWG, DXF, Word, Excel")
-            CampoTesto(mb, { if (soloCifre(it)) mb = it }, "Grandezza massima di un file", tastiera = KeyboardType.Number, suffisso = "MB", abilitato = puo)
-            CampoTesto(riserva, { if (soloCifre(it)) riserva = it }, "Email lasciate allo studio", tastiera = KeyboardType.Number, suffisso = "al giorno", abilitato = puo)
+            Numero("PORTALE_FILE_MAX_MB", "20", "Grandezza massima di un file", "MB")
+            Numero("PORTALE_EMAIL_RISERVA", "20", "Email lasciate allo studio", "al giorno")
             stato?.emailRimaste?.let { Coppia("Email che Google lascia mandare oggi", "$it") }
-            if (puo) PulsanteBordo("Salva", {
-                salva(mapOf("PORTALE_LINK_MINUTI" to link, "PORTALE_SESSIONE_MINUTI" to sessione, "PORTALE_SESSIONE_ORE" to ore, "PORTALE_FILE_MAX_MB" to mb, "PORTALE_EMAIL_RISERVA" to riserva), "Salvato")
-            }, Modifier.fillMaxWidth(), altezza = 48.dp)
         }
 
         Etichetta("Informativa per i clienti")
-        Scheda(orizzontale = 18.dp, verticale = 16.dp, raggio = 22.dp, spazio = 12.dp) {
+        Scheda(Modifier.evidenziabile("PORTALE_INFORMATIVA"), orizzontale = 18.dp, verticale = 16.dp, raggio = 22.dp, spazio = 12.dp) {
             val data = v("PORTALE_INFORMATIVA_DATA").ifBlank { "2026-10-22" }
             Coppia("Versione", "del " + dataVista(data))
             if (puo) PulsanteBordo("Cambia", { informativa = true }, Modifier.fillMaxWidth(), altezza = 48.dp)
@@ -166,7 +172,8 @@ fun PaginaPortaleImpostazioni(dati: Dati, puo: Boolean, onIndietro: () -> Unit) 
             Column(Modifier.heightIn(max = 460.dp).verticalScroll(rememberScrollState())) {
                 CampoTesto(testo, { testo = it }, "Testo", Modifier.fillMaxWidth(), righe = 10)
             }
-            PulsantePrincipale("Salva l'informativa", {
+            // Non si salva da sola: una versione nuova la rivedono tutti i clienti al prossimo ingresso.
+            PulsantePrincipale("Pubblica la versione nuova", {
                 informativa = false
                 salva(mapOf("PORTALE_INFORMATIVA" to testo, "PORTALE_INFORMATIVA_DATA" to LocalDate.now().toString()), "Salvata: i clienti la rivedono al prossimo ingresso")
             }, altezza = 56.dp)
@@ -181,10 +188,14 @@ fun PaginaComunicazioniImpostazioni(dati: Dati, puo: Boolean, onIndietro: () -> 
     val ana by dati.anagrafiche.collectAsStateWithLifecycle()
     fun v(k: String) = ana.impostazione(k)
     var app by remember { mutableStateOf(v("WHATSAPP_APP").ifBlank { "chiedi" }) }
-    var giorniPrima by remember { mutableStateOf(v("PROMEMORIA_GIORNI_PRIMA").ifBlank { "1" }) }
-    var dopo by remember { mutableStateOf(v("SOLLECITO_DOPO_GIORNI").ifBlank { "7" }) }
-    var secondo by remember { mutableStateOf(v("SOLLECITO_SECONDO_GIORNI").ifBlank { "30" }) }
-    val soloCifre = { t: String -> t.all { it.isDigit() } }
+    val salvaDaSolo = rememberSalvaDaSolo()
+    val soloCifre = { t: String -> t.filter { it.isDigit() } }
+    suspend fun scrivi(k: String, valore: String): Result<*> = dati.salvaImpostazioni(mapOf(k to valore)).onSuccess { Giri7.comunicazioni++ }
+
+    @Composable
+    fun Numero(k: String, base: String, etichetta: String, suffisso: String) = CampoSalvato(
+        salvaDaSolo, k, v(k).ifBlank { base }, etichetta, abilitato = puo, tastiera = KeyboardType.Number, suffisso = suffisso, cambia = soloCifre,
+    ) { scrivi(k, it) }
     Column(
         Modifier.fillMaxSize().background(c.fondo).verticalScroll(rememberScrollState()).padding(MarginePagina).padding(bottom = 48.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
@@ -192,18 +203,22 @@ fun PaginaComunicazioniImpostazioni(dati: Dati, puo: Boolean, onIndietro: () -> 
         Testata(onIndietro = onIndietro)
         TitoloPagina("Comunicazioni", sopra = "Impostazioni")
         Scheda(orizzontale = 18.dp, verticale = 16.dp, raggio = 22.dp, spazio = 12.dp) {
-            Etichetta("WhatsApp sul telefono")
-            Segmenti(listOf("business" to "Business", "normale" to "Normale", "chiedi" to "Chiedi"), app, { if (puo) app = it })
-            CampoTesto(giorniPrima, { if (soloCifre(it)) giorniPrima = it }, "Promemoria degli appuntamenti", tastiera = KeyboardType.Number, suffisso = "giorno lavorativo prima", abilitato = puo)
-            CampoTesto(dopo, { if (soloCifre(it)) dopo = it }, "Promemoria di pagamento dopo", tastiera = KeyboardType.Number, suffisso = "giorni", abilitato = puo)
-            CampoTesto(secondo, { if (soloCifre(it)) secondo = it }, "Il secondo dopo", tastiera = KeyboardType.Number, suffisso = "giorni", abilitato = puo)
-            if (puo) PulsanteBordo("Salva", {
-                if (dati.esempio) { avvisi.mostra(SOLO_ESEMPIO); return@PulsanteBordo }
-                ambitoAmm.launch {
-                    dati.salvaImpostazioni(mapOf("WHATSAPP_APP" to app, "PROMEMORIA_GIORNI_PRIMA" to giorniPrima, "SOLLECITO_DOPO_GIORNI" to dopo, "SOLLECITO_SECONDO_GIORNI" to secondo))
-                        .fold(onSuccess = { avvisi.mostra("Salvato"); Giri7.comunicazioni++ }, onFailure = { avvisi.mostra(spiegaErrore2(it, "Non si è salvato: riprova")) })
+            Column(Modifier.fillMaxWidth().evidenziabile("WHATSAPP_APP"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Etichetta("WhatsApp sul telefono", Modifier.weight(1f))
+                    SegnoSalvato(salvaDaSolo, "WHATSAPP_APP")
                 }
-            }, Modifier.fillMaxWidth(), altezza = 48.dp)
+                Segmenti(listOf("business" to "Business", "normale" to "Normale", "chiedi" to "Chiedi"), app, { nuovo ->
+                    if (!puo || nuovo == app) return@Segmenti
+                    val prima = app
+                    app = nuovo
+                    salvaDaSolo.subito("WHATSAPP_APP", onFallito = { app = prima }) { scrivi("WHATSAPP_APP", nuovo) }
+                })
+                salvaDaSolo.errori["WHATSAPP_APP"]?.let { Text(it, style = Testi.secondario, color = c.rossoTesto) }
+            }
+            Numero("PROMEMORIA_GIORNI_PRIMA", "1", "Promemoria degli appuntamenti", "giorno lavorativo prima")
+            Numero("SOLLECITO_DOPO_GIORNI", "7", "Promemoria di pagamento dopo", "giorni")
+            Numero("SOLLECITO_SECONDO_GIORNI", "30", "Il secondo dopo", "giorni")
         }
         Etichetta("Non collegati")
         RigheNonCollegate(avvisi, conFrase = true)

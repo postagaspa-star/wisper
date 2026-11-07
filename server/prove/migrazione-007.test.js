@@ -11,7 +11,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { cartellaNuova, COLONNE_DOPO_007: COLONNE_007 } = require('./aiuto');
+const { cartellaNuova, COLONNE_DOPO_007: COLONNE_007, valoreAtteso, numeriDashboardDopoLavori, numeriDashboardSenzaOre } = require('./aiuto');
 const { Database } = require('../src/db');
 const { Wisper } = require('../src/wisper');
 const PRIMA = require('./migrazione-007/prima.json');
@@ -79,6 +79,9 @@ function contiene(nuovo, vecchio, dove) {
   } else if (vecchio && typeof vecchio === 'object') {
     assert.ok(nuovo && typeof nuovo === 'object', dove);
     for (const k of Object.keys(vecchio)) contiene(nuovo[k], vecchio[k], dove + ' · ' + k);
+  } else if (typeof vecchio === 'string' && vecchio.includes(', già firmato: si cambiano solo')) {
+    // 07/11/2026 (niente firma): la frase della spesa bloccata dice "già inviato" invece di "già firmato".
+    assert.equal(nuovo, vecchio.replace(', già firmato: si cambiano solo', ', già inviato: si cambiano solo'), dove);
   } else assert.deepEqual(nuovo, vecchio, dove);
 }
 
@@ -86,7 +89,7 @@ const comeTitolare = fn => w.come({ utente: w.titolare(), permessi: w.permessiDi
 
 test('migrazione 007: versione 7, la copia wisper.db.prima-7 com\'era; le tabelle di prima riga per riga uguali (le colonne nuove col valore di base)', () => {
   assert.equal(PRIMA.versione, '0.9.0');
-  assert.equal(w.db.versione(), 9);
+  assert.equal(w.db.versione(), 11);
   const copia = new Database(path.join(cartella, 'wisper.db.prima-7'));
   assert.equal(copia.versione(), 6, 'la copia e\' com\'era prima');
   copia.chiudi();
@@ -110,7 +113,7 @@ test('migrazione 007: versione 7, la copia wisper.db.prima-7 com\'era; le tabell
     dopo.slice(0, prima.length).forEach((r, i) => {
       for (const c of nuove) {
         assert.ok(COLONNE_007[t] && c in COLONNE_007[t], t + ': colonna nuova non prevista ' + c);
-        assert.deepEqual(r[c], COLONNE_007[t][c], t + ' riga ' + i + ': ' + c);
+        assert.deepEqual(r[c], valoreAtteso(COLONNE_007[t][c], r), t + ' riga ' + i + ': ' + c);
         delete r[c];
       }
       assert.deepEqual(r, prima[i], t + ' riga ' + i);
@@ -197,7 +200,9 @@ test('le azioni di prima rispondono uguali campo per campo: rapportini, preventi
   contiene(ora.anagrafiche, anag, 'anagrafiche');
   // I numeri della Dashboard: quelli di prima uguali (si aggiungono i numeri del portale e delle comunicazioni).
   // (Lo spazio sul disco dipende dal computer delle prove: non si confronta.)
-  const dash = Object.assign({}, PRIMA.dashboard);
+  // 06/11/2026: coi soli cambi voluti del rapportino senza firma (le bozze Da inviare e da fatturare: aiuto.js).
+  // 07/11/2026: e coi soli cambi voluti delle Ore tolte (le ore registrate non sono piu' da approvare: aiuto.js).
+  const dash = comeTitolare(() => numeriDashboardSenzaOre(numeriDashboardDopoLavori(PRIMA.dashboard, w), w));
   delete dash.spazio;
   contiene(ora.dashboard, dash, 'dashboard');
   // I campi nuovi, vuoti: nessun cliente col portale, nessun referente con l'accesso.
@@ -226,6 +231,6 @@ test('riaperto il server: la migrazione non si rifa\'', () => {
   const n = w.db.riga('SELECT COUNT(*) n FROM comunicazioni').n;
   w.chiudi();
   w = new Wisper({ dati: cartella });
-  assert.equal(w.db.versione(), 9);
+  assert.equal(w.db.versione(), 11);
   assert.equal(w.db.riga('SELECT COUNT(*) n FROM comunicazioni').n, n);
 });

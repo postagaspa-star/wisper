@@ -22,14 +22,17 @@ const { spawn } = require('node:child_process');
 const assert = require('node:assert/strict');
 const K = require('../ui/regole-collegamento.js');
 const { leggi, daSvg } = require('./leggi-qr.js');
+const { portaDevtools, chiudiEdge } = require('./edge-prova.js');
 
 const arg = process.argv.slice(2);
 const opz = (n, d) => { const i = arg.indexOf(n); return i >= 0 ? arg[i + 1] : d; };
 const USCITA = opz('--uscita', '');
 const GIA_ACCESI = arg.includes('--gia-accesi');
-const SERVER = 'http://localhost:8761';
-const BASE = 'http://localhost:8762';
-const BASE_LONTANO = 'http://localhost:8763';
+// --porte <n>: le quattro porte da n a n+3 al posto di 8761-8764 (per tenere le prove in un giro di porte deciso).
+const PRIMA = Number(opz('--porte', 8761));
+const SERVER = 'http://localhost:' + PRIMA;
+const BASE = 'http://localhost:' + (PRIMA + 1);
+const BASE_LONTANO = 'http://localhost:' + (PRIMA + 2);
 const EDGE = 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';
 const RADICE = path.join(__dirname, '..', '..');
 const aspetta = ms => new Promise(r => setTimeout(r, ms));
@@ -54,12 +57,12 @@ async function accendi(argomenti, prova) {
 async function main() {
   if (!GIA_ACCESI) {
     datiServer = fs.mkdtempSync(path.join(os.tmpdir(), 'wisper-collega-server-'));
-    await accendi(['server/src/avvio.js', '--prova', '--porta', '8761', '--dati', datiServer], SERVER + '/salute');
-    await accendi(['pc/prove/finto-ponte.js', '8762', '--server', SERVER], BASE + '/locale/stato');
-    await accendi(['pc/prove/finto-ponte.js', '8763', '--server', 'http://127.0.0.1:8764'], BASE_LONTANO + '/locale/stato');
+    await accendi(['server/src/avvio.js', '--prova', '--porta', String(PRIMA), '--dati', datiServer], SERVER + '/salute');
+    await accendi(['pc/prove/finto-ponte.js', String(PRIMA + 1), '--server', SERVER], BASE + '/locale/stato');
+    await accendi(['pc/prove/finto-ponte.js', String(PRIMA + 2), '--server', 'http://127.0.0.1:' + (PRIMA + 3)], BASE_LONTANO + '/locale/stato');
   }
   const profilo = fs.mkdtempSync(path.join(os.tmpdir(), 'wisper-edge-collega-'));
-  const porta = 9650 + Math.floor(Math.random() * 150);
+  const porta = portaDevtools(9650, 150);
   const edge = spawn(EDGE, ['--headless=new', '--disable-gpu', '--no-first-run', '--hide-scrollbars', '--user-data-dir=' + profilo, '--remote-debugging-port=' + porta, 'about:blank'], { stdio: 'ignore' });
   let ws = null;
   const errori = [];
@@ -170,7 +173,7 @@ async function main() {
     assert.match(testo, /Nel menu tocca Collega un computer/);
     assert.match(testo, /Inquadra questo codice/);
     assert.match(testo, /Entra con email e password/);
-    assert.match(testo, /In casa: localhost:8761/);
+    assert.match(testo, new RegExp('In casa: localhost:' + PRIMA));
     assert.ok(!/!/.test(testo), 'niente punti esclamativi');
     const misure = await valuta(`(() => { const b = document.querySelector('.qr-box').getBoundingClientRect(); const c = document.querySelector('.carta-accesso').getBoundingClientRect();
       return { qr: [Math.round(b.width), Math.round(b.height)], carta: Math.round(c.width), fondo: getComputedStyle(document.querySelector('.qr-box')).backgroundColor }; })()`);
@@ -294,10 +297,10 @@ async function main() {
     console.log('\n' + passi + ' passi, tutto bene' + (USCITA ? ' · schermate in ' + USCITA : ''));
   } finally {
     if (ws) ws.close();
-    edge.kill();
+    await chiudiEdge(porta, edge);
     for (const p of accesi) p.kill();
     await aspetta(500);
-    try { fs.rmSync(profilo, { recursive: true, force: true }); } catch (e) { /* Edge a volte tiene un file ancora un attimo */ }
+    await require('./edge-prova.js').togliCartella(profilo); // Edge a volte tiene un file un attimo: riprova per qualche secondo
     try { if (datiServer) fs.rmSync(datiServer, { recursive: true, force: true }); } catch (e) { /* il server lascia andare i file con calma */ }
   }
 }

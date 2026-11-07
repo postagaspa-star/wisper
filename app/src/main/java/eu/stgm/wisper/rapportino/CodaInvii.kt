@@ -73,6 +73,14 @@ class CodaInvii(private val file: File) {
          * accettare o rifiutare un file. Ripetute uguali, il server non le rifà.
          */
         AZIONE7,
+
+        /**
+         * 06/11/2026 (rapportino-lavori.md §3): il rapportino coi suoi lavori (salvaRapportino, forma nuova). Un'operazione
+         * per rapportino, chiave = il suo idLocale "G-...", corpo = [Giornata.aJson]: salvato due volte prima di partire
+         * resta una, col contenuto dell'ultima; cambiato mentre e' in viaggio resta in coda e riparte (il server lo
+         * riconosce dall'idLocale: niente doppioni).
+         */
+        GIORNATA,
     }
 
     /**
@@ -120,6 +128,9 @@ class CodaInvii(private val file: File) {
         /** Le cose della fase 7 (messaggi, portale): non sono di un rapportino. */
         val fase7: Boolean get() = tipo in TIPI_FASE7
 
+        /** Il rapportino coi lavori, letto dal corpo (null se il corpo non si legge). */
+        fun giornata(): Giornata? = if (tipo != Tipo.GIORNATA) null else runCatching { Giornata.daJson(JSONObject(corpo)) }.getOrNull()
+
         /** Nessuna fase dopo la prima: è un rapportino (salvato, foto, firma, stato). */
         val delRapportino: Boolean get() = !fase3 && !fase5 && !fase6 && !fase7
 
@@ -135,7 +146,7 @@ class CodaInvii(private val file: File) {
      */
     fun aggiungi(op: Operazione): Operazione = synchronized(lucchetto) {
         val attuali = leggi()
-        val doppione = if (op.tipo == Tipo.SALVA || op.tipo == Tipo.ORE || op.tipo == Tipo.SPESA || op.tipo == Tipo.TICKET || op.tipo == Tipo.ASSENZA || op.tipo == Tipo.AZIONE7) {
+        val doppione = if (op.tipo == Tipo.SALVA || op.tipo == Tipo.GIORNATA || op.tipo == Tipo.ORE || op.tipo == Tipo.SPESA || op.tipo == Tipo.TICKET || op.tipo == Tipo.ASSENZA || op.tipo == Tipo.AZIONE7) {
             attuali.firstOrNull { it.tipo == op.tipo && it.idLocale == op.idLocale && !it.rifiutata }
         } else null
         if (doppione != null) {
@@ -149,6 +160,25 @@ class CodaInvii(private val file: File) {
     }
 
     fun salva(r: Rapportino) = aggiungi(Operazione(nuovoId(), Tipo.SALVA, r.idLocale, rapportino = r))
+
+    /** Il rapportino coi suoi lavori (06/11/2026): una sola operazione per rapportino, l'ultima versione. */
+    fun giornata(g: Giornata) = aggiungi(Operazione(nuovoId(), Tipo.GIORNATA, g.idLocale, corpo = g.aJson().toString(), quando = adesso()))
+
+    /**
+     * Il server ha risposto al rapportino [idOp] mandato con [corpoInviato]: esce dalla coda. Se intanto e' stato
+     * salvato di nuovo (corpo diverso) resta, e riparte con le modifiche nuove.
+     */
+    fun completaGiornata(idOp: String, corpoInviato: String, idGiornata: String = "") = synchronized(lucchetto) {
+        val attuali = leggi()
+        val op = attuali.firstOrNull { it.idOp == idOp } ?: return@synchronized
+        if (op.corpo == corpoInviato) { scrivi(attuali.filterNot { it.idOp == idOp }); return@synchronized }
+        // Riparte come modifica: col numero che il server ha appena dato, i lavori nuovi stanno nel rapportino giusto.
+        val corpo = if (idGiornata.isBlank()) op.corpo else runCatching { JSONObject(op.corpo).put("id", idGiornata).toString() }.getOrDefault(op.corpo)
+        scrivi(attuali.map { if (it.idOp == idOp) it.copy(tentativi = 0, corpo = corpo) else it })
+    }
+
+    /** Il rapportino in coda (non rifiutato) con l'idLocale [idLocale], se c'e'. */
+    fun giornataInCoda(idLocale: String): Operazione? = tutte().lastOrNull { it.tipo == Tipo.GIORNATA && it.idLocale == idLocale }
 
     fun foto(idLocale: String, idFile: String, percorso: String) =
         aggiungi(Operazione(nuovoId(), Tipo.FOTO, idLocale, idFile = idFile, percorso = percorso))

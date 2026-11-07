@@ -112,7 +112,7 @@
       const nc = (titolo, sotto, ico, perche) => riga({ sinistra: quadrato(ico), titolo, sotto, destra: pill('Non collegato'), onclick: () => avviso(perche, false, 7000), freccia: false });
       aggiungi(zona, [h('div', { class: 'sezione-dash' }, h('span', { class: 'etichetta' }, 'Non collegati'), h('div', { class: 'scheda righe' },
         nc('WhatsApp Business', 'Messaggi mandati dal server', 'whatsapp', 'Costa a messaggio (circa 0,036 $ un promemoria) e vuole un indirizzo aperto su internet: per ora i messaggi li manda Manuel'),
-        nc('Ore e spese via messaggio', 'Lo fa già l\'app, anche senza rete', 'scontrino', 'Con WhatsApp servirebbe l\'API a pagamento; l\'app lo fa già in meno di un minuto, anche senza rete'),
+        nc('Spese via messaggio', 'Lo fa già l\'app, anche senza rete', 'scontrino', 'Con WhatsApp servirebbe l\'API a pagamento; l\'app lo fa già in meno di un minuto, anche senza rete'),
         nc('Assistente operativo', 'Domande sul gestionale', 'fumetto', 'I dati dei clienti andrebbero a un fornitore fuori dall\'Europa; un modello sul NAS è troppo lento: da decidere nella fase 8')))]);
     }
 
@@ -451,23 +451,25 @@
       });
     }
 
-    const COLONNE_STORICO = '132px 120px minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) 118px';
+    // Le colonne stanno in stile.css (.tab-storico): nella tabella stretta (1024) cliente e riferimento vanno sotto
+    // "a chi" e il tipo (07/11/2026, prima a 1024 le celle erano larghe 60 px).
     function tabellaStorico(area) {
       svuota(area);
       const lista = K.filtraStorico((M.storico && M.storico.comunicazioni) || [], M.filtro);
       if (!lista.length) { aggiungi(area, [h('div', { class: 'calmo' }, icona('fumetto', 20, 2.2), M.testo ? 'Nessun messaggio con queste parole' : 'Nessun messaggio')]); return; }
-      const tab = h('div', { class: 'tab' }, h('div', { class: 'r testa', style: { gridTemplateColumns: COLONNE_STORICO } },
-        h('span', null, 'Quando'), h('span', null, 'Canale'), h('span', null, 'Tipo'), h('span', null, 'A chi'), h('span', null, 'Cliente'), h('span', null, 'Riferimento'), h('span', null, 'Stato')));
+      const tab = h('div', { class: 'tab tab-storico' }, h('div', { class: 'r testa' },
+        h('span', null, 'Quando'), h('span', null, 'Canale'), h('span', null, 'Tipo'), h('span', null, 'A chi'), h('span', { class: 'c-largo' }, 'Cliente'), h('span', { class: 'c-largo' }, 'Riferimento'), h('span', null, 'Stato')));
       lista.forEach(c => {
         const ic = K.iconaCanale(c.canale);
-        aggiungi(tab, [h('div', { class: 'r cliccabile' + (M.aperta && String(M.aperta.id) === String(c.id) ? ' scelta' : ''), style: { gridTemplateColumns: COLONNE_STORICO }, role: 'button', tabindex: '0', 'data-id': c.id,
+        const rif = c.riferimento ? c.riferimento.etichetta || '' : '';
+        aggiungi(tab, [h('div', { class: 'r cliccabile' + (M.aperta && String(M.aperta.id) === String(c.id) ? ' scelta' : ''), role: 'button', tabindex: '0', 'data-id': c.id,
           onclick: () => apriPannello(c), onkeydown: e => { if (e.key === 'Enter') apriPannello(c); } },
         h('span', { class: 't2' }, quando(c.quando)),
         h('span', { class: 'canale-cella' }, h('span', { class: 'ico-mini ' + ic[1] }, icona(c.direzione === 'entrata' ? 'entrata' : ic[0], 15, 2.4)), K.nomeCanale(c.canale)),
-        h('span', { class: 'forte taglia' }, K.nomeTipo(c)),
-        h('span', { class: 'taglia' }, c.referente || c.a || ''),
-        h('span', { class: 'taglia t2' }, c.cliente || ''),
-        h('span', { class: 'taglia' }, c.riferimento ? c.riferimento.etichetta || '' : ''),
+        h('span', { class: 'cella-due' }, h('span', { class: 'forte taglia' }, K.nomeTipo(c)), rif ? h('span', { class: 'solo-stretto' }, rif) : null),
+        h('span', { class: 'cella-due' }, h('span', { class: 'taglia' }, c.referente || c.a || ''), c.cliente ? h('span', { class: 'solo-stretto' }, c.cliente) : null),
+        h('span', { class: 'taglia t2 c-largo' }, c.cliente || ''),
+        h('span', { class: 'taglia c-largo' }, rif),
         h('span', null, pillStato(c)))]);
       });
       aggiungi(area, [tab]);
@@ -567,7 +569,8 @@
         const tab = h('div', { class: 'tab' }, h('div', { class: 'r testa', style: { gridTemplateColumns: col } }, h('span', null, 'Nome'), h('span', null, 'Canale'), h('span', null, 'Uso'), h('span', null, 'Testo'), h('span', null, 'Stato')));
         (M.modelli || []).forEach(m => aggiungi(tab, [h('div', { class: 'r cliccabile', style: { gridTemplateColumns: col }, role: 'button', tabindex: '0', 'data-chiave': m.chiave, onclick: () => finestraModello(m) },
           h('span', { class: 'forte taglia' }, m.nome), h('span', null, pill(K.nomeCanaleModello(m.canale))), h('span', { class: 't2' }, (K.USI.find(u => u[0] === m.uso) || [m.uso, m.uso])[1]),
-          h('span', { class: 'taglia t2', title: m.testo }, m.testo), h('span', null, m.attivo === false || m.attivo === 0 ? pill('Spento') : pill('Attivo', 'verde')))]));
+          // Il testo del modello è un'anteprima di una riga (tutto passandoci sopra e nella finestra del modello).
+          h('span', { class: 't2 una-riga', title: m.testo }, m.testo), h('span', null, m.attivo === false || m.attivo === 0 ? pill('Spento') : pill('Attivo', 'verde')))]));
         aggiungi(pagina, [(M.modelli || []).length ? tab : h('div', { class: 'calmo' }, 'Nessun modello')]);
         if (apri) { const m = (M.modelli || []).find(x => x.chiave === apri); if (m) setTimeout(() => finestraModello(m), 50); }
       });

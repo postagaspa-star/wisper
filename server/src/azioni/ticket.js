@@ -241,8 +241,8 @@ module.exports = {
     for (const r of c.rapportini) {
       const stato = testo(r.stato).toUpperCase();
       if (stato === 'FATTURATO') continue;
-      if (stato === 'BOZZA') perche.push(r.id + ' da far firmare');
-      else if (r.stato_approvazione === 'da_approvare') perche.push(r.id + ' da approvare');
+      // 06/11/2026: niente firma, un lavoro Da inviare non ferma il ticket.
+      if (r.stato_approvazione === 'da_approvare') perche.push(r.id + ' da approvare');
       else if (r.stato_approvazione === 'respinto') perche.push(r.id + ' respinto');
       rapportini.push(r);
     }
@@ -633,7 +633,7 @@ module.exports = {
     else if (prima && idContratto === prima.contratto_id) idCommessa = prima.commessa_id;
     else idCommessa = contratto ? contratto.commessa_id : '';
     if (idCommessa) {
-      const m = this.db.riga('SELECT id, cliente_id FROM commesse WHERE id = ?', idCommessa);
+      const m = this.db.riga('SELECT id, cliente_id FROM commesse WHERE id = ?', this.codiceCommessaVero(idCommessa));
       if (!m) throw new Rifiuto('Commessa ' + idCommessa + ' non trovata');
       if (m.cliente_id && m.cliente_id !== idCliente) throw new Rifiuto('La commessa ' + m.id + ' è di un altro cliente');
       idCommessa = m.id;

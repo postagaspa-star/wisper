@@ -248,8 +248,12 @@ select.scelta:focus, .campo input:focus, .campo select:focus, .campo textarea:fo
 .spunta-campo { display: flex; align-items: center; gap: 10px; font-size: 16px; font-weight: 600; cursor: pointer; }
 .spunta-campo input { width: 22px; height: 22px; accent-color: var(--testo); margin: 0; }
 .con-suffisso { position: relative; }
-.con-suffisso input { padding-right: 52px; text-align: right; font-weight: 800; }
-.con-suffisso span { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); color: var(--tenue); font-weight: 700; pointer-events: none; }
+.con-suffisso input { padding-right: calc(var(--suffisso, 3ch) + 28px); text-align: right; font-weight: 800; }
+.con-suffisso span { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); color: var(--tenue); font-weight: 700; pointer-events: none; white-space: nowrap; }
+/* un suffisso lungo ("giorni senza uso") sta accanto al campo, non dentro */
+.con-suffisso.lungo { display: flex; align-items: center; gap: 10px; }
+.con-suffisso.lungo input { padding-right: 16px; flex: 1 1 auto; min-width: 72px; }
+.con-suffisso.lungo span { position: static; transform: none; }
 
 /* ------------------------------------------------------------ schede e riquadri */
 .scheda { background: var(--scheda); border: 1px solid var(--bordo-scheda); border-radius: 22px; padding: 20px 22px; }
@@ -388,6 +392,8 @@ select.scelta:focus, .campo input:focus, .campo select:focus, .campo textarea:fo
 .tab .t2 { color: var(--testo2); }
 .tab .casella { width: 20px; height: 20px; accent-color: var(--testo); margin: 0; opacity: 0; transition: opacity .12s; cursor: pointer; }
 .tab .r:hover .casella, .tab .casella:checked, .tab.con-scelti .casella { opacity: 1; }
+/* 06/11/2026: la casella dei rapportini si vede sempre, non solo passando sopra la riga. */
+.tab .casella.casella-rap { opacity: 1; }
 .colonne-rap { grid-template-columns: 22px 112px minmax(0, 1.3fr) minmax(0, 2fr) 54px 54px 84px 100px 104px; }
 .colonne-rap-semplici { grid-template-columns: 112px minmax(0, 1.3fr) minmax(0, 2fr) 54px 54px 84px 100px 104px; }
 .colonne-com { grid-template-columns: 80px minmax(0, 2fr) 96px minmax(150px, 1.2fr) 100px 110px 100px; }
@@ -490,6 +496,7 @@ select.scelta:focus, .campo input:focus, .campo select:focus, .campo textarea:fo
 .foglio-a4 .parti-a4 span { flex: 1; min-height: 34px; background: #F3F3F1; border-radius: 4px; font-size: 7.5px; font-weight: 700; padding: 5px; color: #3F3F46; overflow: hidden; }
 .foglio-a4 .riga-a4 { display: flex; justify-content: space-between; gap: 6px; font-size: 7.5px; color: #3F3F46; border-bottom: 1px solid #EFEEEB; padding-bottom: 3px; }
 .foglio-a4 .riga-a4 span:first-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.foglio-a4 .riga-a4 span:last-child:not(:first-child) { white-space: nowrap; flex: none; }
 .foglio-a4 .tot-a4 { align-self: flex-end; margin-top: 8px; font-size: 12px; font-weight: 800; border-top: 1.5px solid #1B1B1F; padding-top: 4px; }
 .riepilogo-f .scelte { flex: 1 1 360px; padding: 26px 28px 24px; display: flex; flex-direction: column; gap: 16px; }
 .riepilogo-f .scelte .bottoni { display: flex; gap: 10px; margin-top: auto; flex-wrap: wrap; align-items: center; }
@@ -989,7 +996,7 @@ body.fuori .pagina { max-width: none; width: 100%; }
 .numeri-voce { display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); gap: 8px; }
 .numeri-voce .campo > label { font-size: 12px; color: var(--tenue); font-weight: 700; }
 .numeri-voce .campo input, .numeri-voce .campo select { height: 40px; border-radius: 12px; font-size: 14px; }
-.numeri-voce .con-suffisso input { padding-right: 34px; }
+.numeri-voce .con-suffisso input { padding-right: calc(var(--suffisso, 3ch) + 18px); }
 .numeri-voce .con-suffisso span { right: 10px; font-size: 13px; }
 .opzioni-voce { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
 .spunta-campo.piccola { font-size: 14px; font-weight: 700; gap: 8px; }
@@ -1731,7 +1738,10 @@ details.chiuso-f6 .scheda.coppie { border: none; padding: 0; }
 .lato .voci.piu-su { --sfuma-su: 36px; }
 .lato .voci.piu-giu { --sfuma-giu: 36px; }
 @media (prefers-reduced-motion: reduce) { .lato .voci { transition: none; } }
-.lato .voce .lab { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+/* 06/11/2026: niente puntini nel menu. Un nome lungo ("Persone e risorse umane") va su due righe; icona e numerino restano
+   al centro. Mentre il menu si apre il nome non si stringe sotto 118 px (il menu lo taglia, poi si vede intero). */
+.lato .voce { white-space: normal; padding-top: 5px; padding-bottom: 5px; }
+.lato .voce .lab { flex: 1 1 auto; min-width: 118px; line-height: 1.2; overflow-wrap: break-word; }
 .lato .voce .num-v { flex: none; }
 /* nel pannello stretto le pillole a destra vanno a capo invece di schiacciare il testo */
 .pannello-f6 .riga .pillole-destra, .pannello-f6 .riga > .pill { max-width: 150px; flex-wrap: wrap; justify-content: flex-end; }
@@ -1749,7 +1759,6 @@ details.chiuso-f6 .scheda.coppie { border: none; padding: 0; }
 /* fase 6: dentro le tabelle le pillole restano nella loro colonna */
 .tab .r .pill { max-width: 100%; }
 .campo .cerca input { border: none; height: auto; padding: 0; background: transparent; border-radius: 0; }
-.imp-f6 .con-suffisso input { padding-right: 78px; }
 .pillola > svg { margin-right: 6px; vertical-align: -3px; }
 
 /* ============================================================ fase 7: WhatsApp e comunicazioni, Portale clienti */
@@ -1967,3 +1976,227 @@ button.imp-riga.collegamento-imp:hover .lab { text-decoration: underline; text-u
 .pannello-integrazione .scheda.fila { gap: 10px; }
 .pannello-integrazione .scheda.fila h3 { font-size: 16px; }
 .tab-integrazioni .r { min-height: 58px; }
+
+/* ------------------------------------------------------------ 06/11/2026: le impostazioni si salvano da sole */
+/* "Salvato" con la spunta accanto al titolo della scheda, per un secondo e mezzo; tranquillo, senza colore pieno. */
+.salvato { display: inline-flex; align-items: center; gap: 4px; margin-left: 12px; vertical-align: middle; font-size: 13px; font-weight: 700; letter-spacing: 0; text-transform: none; color: var(--firmato); opacity: 0; transition: opacity .2s ease; pointer-events: none; }
+.salvato.visto { opacity: 1; }
+.salvato svg { stroke: currentColor; }
+.imp-riga.sbagliato input, .imp-riga.sbagliato textarea, .imp-riga.sbagliato select, .riga-int.sbagliato .interruttore { border-color: var(--rosso); }
+.imp-riga.sbagliato .lab { color: var(--rosso-testo); }
+@media (prefers-reduced-motion: reduce) { .salvato { transition: none; } }
+
+/* La ricerca nelle impostazioni (Amministrazione): il campo trovato si tinge di giallo chiaro per un momento. */
+.trovato-qui { background-color: var(--giallo-tenue) !important; border-radius: 12px; transition: background-color .5s ease; }
+.ricerca-amm { margin-bottom: 4px; }
+.ricerca-amm .cerca { max-width: 520px; }
+.elenco-amm[hidden], .risultati-amm[hidden] { display: none; }
+
+/* ------------------------------------------------------------ 06/11/2026: il rapportino con più lavori (rapportino-lavori.md) */
+/* L'elenco: la riga del rapportino (numero, giorno, lavori e clienti, stati, totali) e sotto i suoi lavori. Nella tabella
+   larga commessa e progetto hanno la loro colonna; sotto gli 860 px della tabella vanno sotto il cliente. Niente puntini:
+   i testi lunghi vanno a capo (al massimo due righe per il lavoro svolto, il resto nel suggerimento). */
+.tab.lavori { container-type: inline-size; }
+.tab.lavori .r { grid-template-columns: var(--col-cas, ) minmax(120px, 1.1fr) minmax(120px, 1.2fr) minmax(80px, .7fr) minmax(0, 1.8fr) 48px 48px var(--col-sol, ) 104px; }
+.tab.lavori.con-casella { --col-cas: 22px; }
+.tab.lavori.con-soldi { --col-sol: 92px; }
+.tab.lavori .r > * { overflow-wrap: anywhere; }
+.tab.lavori .r.lavoro { min-height: 54px; padding-top: 8px; padding-bottom: 8px; }
+.tab.lavori .c-cliente { display: flex; flex-direction: column; gap: 2px; line-height: 1.3; }
+.tab.lavori .r:not(.testa) .c-commessa, .tab.lavori .r:not(.testa) .c-progetto { line-height: 1.3; font-size: 14px; }
+.tab.lavori .solo-stretto { display: none; font-size: 13px; color: var(--tenue); }
+.tab .due-righe { line-height: 1.35; overflow-wrap: anywhere; }
+.tab.lavori .r.rap { background: var(--superficie-tenue); min-height: 50px; }
+.tab.lavori .r.rap:hover { background: var(--fondo); }
+.tab.lavori .r.rap.scelta { background: var(--giallo-scelto); }
+.tab.lavori .c-rap { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 14px; font-size: 14px; }
+.tab.lavori .c-rap b { font-size: 15px; font-weight: 800; }
+.tab.lavori .c-rap span:nth-child(2) { font-weight: 700; color: var(--testo2); }
+.tab.lavori .c-rap .tenue { color: var(--tenue); font-weight: 600; }
+@container (max-width: 860px) {
+  .tab.lavori .r { grid-template-columns: var(--col-cas, ) minmax(130px, 1.3fr) minmax(0, 1.7fr) 44px 44px var(--col-sol, ) 100px; }
+  .tab.lavori .c-commessa, .tab.lavori .c-progetto { display: none; }
+  .tab.lavori .solo-stretto { display: block; }
+}
+/* La tabella semplice (scheda della commessa e del progetto): data e numero, cliente, lavoro, ore, km, totale, stato. */
+.tab.lavori.semplice .r { grid-template-columns: 112px minmax(120px, 1fr) minmax(0, 2fr) 48px 48px var(--col-sol, ) 104px; }
+.tab.lavori.semplice .doppia > :first-child, .tab.lavori.semplice .doppia > :last-child:not(:first-child) { white-space: normal; overflow: visible; text-overflow: clip; }
+@container (max-width: 860px) {
+  .tab.lavori.semplice .r { grid-template-columns: 112px minmax(0, 1fr) minmax(0, 1.4fr) 44px var(--col-sol, ) 100px; }
+  .tab.lavori.semplice .c-km { display: none; }
+}
+
+/* Il pannello del rapportino: i lavori come schede che si aprono; in fondo Invia ai clienti, poi Modifica, PDF, altro. */
+.pannello .testa-rap { display: flex; flex-direction: column; gap: 3px; margin-top: -6px; }
+.pannello .testa-rap b { font-size: 17px; font-weight: 800; }
+.pannello .testa-rap span { font-size: 14px; font-weight: 600; color: var(--tenue); }
+.lavori-p { display: flex; flex-direction: column; gap: 10px; }
+.lavoro-p { border: 1.5px solid var(--bordo-scheda); border-radius: 18px; background: var(--scheda); }
+.lavoro-p.aperto { border-color: var(--bordo-campo); }
+.lavoro-testa { display: flex; align-items: flex-start; gap: 12px; width: 100%; padding: 12px 14px; border: none; background: none; text-align: left; border-radius: 16px; color: var(--testo); }
+.lavoro-testa:hover { background: var(--superficie-tenue); }
+.lavoro-testa .testi { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.lavoro-testa .testi b { font-size: 16px; font-weight: 800; overflow-wrap: anywhere; line-height: 1.3; }
+.lavoro-testa .testi span { font-size: 13px; font-weight: 600; color: var(--tenue); overflow-wrap: anywhere; line-height: 1.35; }
+.lavoro-testa .testi .una-riga, .card-lavoro .una-riga { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--testo2); font-weight: 500; }
+.lavoro-testa .destra { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; flex: none; }
+.lavoro-testa .destra b { font-size: 16px; font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.lavoro-dettagli { padding: 2px 14px 14px; display: flex; flex-direction: column; gap: 12px; }
+.lavoro-dettagli .lavoro { font-size: 15px; }
+.azioni-lavoro { display: flex; }
+.pannello .piede.piede-rap { flex-direction: column; }
+.piede-rap .fila-piede { display: flex; gap: 10px; }
+.piede-rap .fila-piede .btn:not([aria-label]) { flex: 1; }
+.pannello .piede.piede-rap > .btn { width: 100%; flex: none; }
+
+/* La finestra del rapportino: larga quasi quanto lo schermo, i lavori a sinistra e il lavoro scelto a destra. */
+.finestra.piena { width: min(1320px, 100%); }
+.velo:has(> .finestra.editor) { padding-top: 24px; padding-bottom: 16px; }
+.finestra.editor .testa-f h2 { flex: none; }
+.finestra.editor .corpo-f { padding: 0; max-height: none; overflow: hidden; margin-top: 16px; border-top: 1px solid var(--riga); }
+.data-rap { flex: 1; min-width: 0; display: flex; align-items: center; flex-wrap: wrap; gap: 6px 14px; font-size: 16px; font-weight: 700; color: var(--testo2); }
+.data-rap .quando { white-space: nowrap; }
+.data-rap input { height: 40px; border-radius: 12px; border: 1.5px solid var(--bordo-campo); background: var(--scheda); color: var(--testo); padding: 0 10px; font-size: 15px; font-weight: 700; }
+.editor-rap { display: grid; grid-template-columns: 300px minmax(0, 1fr); height: calc(100vh - 230px); min-height: 380px; }
+.editor-rap .col-elenco { overflow: auto; border-right: 1px solid var(--riga); background: var(--superficie-tenue); padding: 18px 16px 18px 22px; }
+.elenco-lavori { display: flex; flex-direction: column; gap: 10px; }
+.card-lavoro { display: flex; align-items: flex-start; gap: 12px; width: 100%; text-align: left; border: 1.5px solid var(--bordo-scheda); border-radius: 18px; background: var(--scheda); padding: 12px 14px; color: var(--testo); }
+.card-lavoro:hover { border-color: var(--bordo-campo); }
+.card-lavoro.scelta { border-color: var(--testo); background: var(--giallo-scelto); }
+.card-lavoro.sbagliata { border-color: var(--rosso); }
+.card-lavoro .num-lav { flex: none; width: 30px; height: 30px; border-radius: 15px; background: var(--testo); color: var(--scheda); display: inline-flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 800; }
+.card-lavoro.sbagliata .num-lav { background: var(--rosso); color: #fff; }
+.card-lavoro .testi { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.card-lavoro .testi b { font-size: 15px; font-weight: 800; line-height: 1.3; overflow-wrap: anywhere; }
+.card-lavoro .testi > span { font-size: 13px; font-weight: 600; color: var(--tenue); line-height: 1.35; overflow-wrap: anywhere; }
+.card-lavoro .numeri { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.card-lavoro .numeri b { font-size: 15px; color: var(--testo); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.aggiungi-lavoro { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 52px; width: 100%; border: 1.5px dashed var(--bordo-campo); border-radius: 18px; background: transparent; color: var(--testo); font-size: 15px; font-weight: 800; }
+.aggiungi-lavoro:hover { border-color: var(--testo2); background: var(--scheda); }
+.aggiungi-lavoro svg { stroke: currentColor; }
+.elenco-lavori > .btn.collegamento { align-self: center; padding: 6px 0; }
+.zona-lavoro { overflow: auto; padding: 18px 26px 24px; container-type: inline-size; min-width: 0; }
+.testa-lavoro { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+.testa-lavoro h3 { flex: 1; font-size: 20px; }
+.btn.collegamento.rosso { color: var(--rosso-testo); }
+.lavoro-fermo { display: flex; flex-direction: column; gap: 14px; max-width: 640px; }
+@container (max-width: 760px) {
+  .zona-lavoro .modulo { grid-template-columns: minmax(0, 1fr); }
+  .zona-lavoro .modulo .col:last-child { position: static; }
+}
+.riassunto-giorno { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 18px; min-width: 0; }
+.riassunto-giorno .conti-giorno { font-size: 15px; font-weight: 700; color: var(--testo2); }
+.riassunto-giorno .tot-giorno { display: inline-flex; align-items: baseline; gap: 10px; font-size: 15px; font-weight: 700; color: var(--testo2); }
+.riassunto-giorno .tot-giorno b { font-size: 24px; font-weight: 800; color: var(--testo); font-variant-numeric: tabular-nums; letter-spacing: -0.4px; }
+/* I nomi lunghi nelle schede da scegliere vanno a capo (niente puntini). */
+.finestra.editor .scelta-card .testi b, .finestra.editor .scelta-card .testi span { white-space: normal; overflow-wrap: anywhere; }
+
+/* Invio: una scheda per destinatario, l'anteprima del suo foglio a sinistra. */
+.invio-f .destinatari { display: flex; flex-direction: column; gap: 10px; max-height: calc(100vh - 420px); min-height: 120px; overflow: auto; padding: 2px; }
+.invio-f .dest { display: flex; flex-direction: column; gap: 10px; border: 1.5px solid var(--bordo-scheda); border-radius: 18px; padding: 12px 14px; cursor: pointer; background: var(--scheda); }
+.invio-f .dest:hover { border-color: var(--bordo-campo); }
+.invio-f .dest.scelta { border-color: var(--testo); }
+.invio-f .dest.inviata { background: var(--superficie-tenue); }
+.invio-f .dest-testa { display: flex; align-items: center; gap: 12px; }
+.invio-f .dest-testa .testi { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.invio-f .dest-testa .testi b { font-size: 16px; font-weight: 800; overflow-wrap: anywhere; line-height: 1.3; }
+.invio-f .dest-testa .testi span { font-size: 13px; font-weight: 600; color: var(--tenue); }
+.invio-f .allegato { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; color: var(--testo2); overflow-wrap: anywhere; }
+.invio-f .allegato svg { stroke: currentColor; flex: none; }
+.invio-f .oggetto-dest { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 12px; font-size: 14px; }
+.invio-f .oggetto-dest .tenue { flex: 1 1 200px; color: var(--tenue); font-weight: 600; overflow-wrap: anywhere; }
+.invio-f .spunte-invio { display: flex; flex-wrap: wrap; gap: 8px 22px; }
+.invio-f .titolo-r b { overflow-wrap: anywhere; }
+/* La barra dei lavori scelti: quanti sopra, clienti e soldi sotto; Deseleziona è la x (sta tutto anche a 1024). */
+.barra-scelti .scelti-testo { margin-right: auto; display: flex; flex-direction: column; line-height: 1.25; min-width: 0; }
+.barra-scelti .scelti-testo b { margin: 0; }
+.barra-scelti .scelti-testo span { font-size: 13px; font-weight: 600; opacity: .8; }
+.barra-scelti .btn.solo-icona { width: 40px; padding: 0; justify-content: center; }
+.barra-scelti .btn.solo-icona svg { stroke: currentColor; }
+/* Fatturazione › Da fatturare: il mese coi suoi rapportini va a capo invece dei puntini (06/11/2026, il testo sta tutto). */
+.tab .doppia > .apri-mese:first-child { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; }
+/* La tabella semplice dei lavori: un po' d'aria sopra e sotto, il numero del rapportino su una riga. */
+.tab.lavori.semplice .r:not(.testa) { padding-top: 8px; padding-bottom: 8px; }
+.tab.lavori .c-cliente .tenue { font-size: 13px; color: var(--tenue); }
+.tab.lavori.semplice .doppia .num { white-space: nowrap; overflow-wrap: normal; }
+/* Amministrazione › Lista di controllo (07/11/2026): le colonne qui, il testo va a capo (niente puntini); nella tabella
+   stretta (1024) Tipo e Nota si leggono nel pannello della riga. */
+.tab.tab-controlli { container-type: inline-size; }
+.tab.tab-controlli .r { grid-template-columns: 72px minmax(0, 3.2fr) 118px minmax(0, .8fr) 168px 60px minmax(0, 1fr); }
+.tab.tab-controlli .r:not(.testa) { padding-top: 10px; padding-bottom: 10px; }
+.tab.tab-controlli .a-capo { white-space: normal; overflow-wrap: anywhere; line-height: 1.35; }
+@container (max-width: 900px) {
+  .tab.tab-controlli .r { grid-template-columns: 64px minmax(0, 2fr) minmax(0, .9fr) 168px 52px; }
+  .tab.tab-controlli .c-tipo, .tab.tab-controlli .c-nota { display: none; }
+}
+/* Integrazioni: cosa fa ogni servizio va a capo sotto il nome, intero. */
+.tab-integrazioni .nome-e-cosa .cosa { white-space: normal; overflow: visible; text-overflow: clip; line-height: 1.35; }
+.tab-integrazioni .r:not(.testa) { padding-top: 8px; padding-bottom: 8px; }
+/* Commesse: le colonne qui, il testo va a capo (07/11/2026, niente puntini); nella tabella stretta (1024) il
+   responsabile passa sotto il cliente. */
+.tab.tab-commesse { container-type: inline-size; }
+.tab.tab-commesse.con-soldi { --col-sol: 110px; }
+.tab.tab-commesse .r { grid-template-columns: 110px minmax(0, 2fr) minmax(0, 1.4fr) minmax(0, 1.2fr) minmax(150px, 1.6fr) var(--col-sol, ); }
+.tab.tab-commesse .r:not(.testa) { padding-top: 10px; padding-bottom: 10px; }
+.tab.tab-commesse .a-capo { white-space: normal; overflow-wrap: anywhere; line-height: 1.3; }
+.tab.tab-commesse .c-cliente { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.tab.tab-commesse .solo-stretto { display: none; font-size: 13px; }
+.tab.tab-commesse .r.testa > span { white-space: normal; overflow-wrap: anywhere; line-height: 1.25; }
+@container (max-width: 860px) {
+  .tab.tab-commesse .r { grid-template-columns: 104px minmax(0, 2fr) minmax(0, 1.5fr) minmax(130px, 1.2fr) var(--col-sol, ); }
+  .tab.tab-commesse .c-resp { display: none; }
+  .tab.tab-commesse .solo-stretto { display: block; }
+}
+/* 07/11/2026 (Andrea: "il testo deve stare tutto nei contenitori"): nelle tabelle niente più puntini, il testo va a
+   capo dentro la sua cella e la riga si allunga. */
+.tab .taglia, .tab .doppia > :first-child, .tab .doppia > :last-child:not(:first-child) { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; line-height: 1.3; }
+.tab .r:not(.testa) { padding-top: 6px; padding-bottom: 6px; }
+/* Preventivi: le colonne qui; nella tabella stretta (1024) cliente e scadenza vanno sotto oggetto e numero. */
+.tab.tab-prev { container-type: inline-size; }
+.tab.tab-prev.con-soldi { --col-sol: 120px; }
+.tab.tab-prev .r { grid-template-columns: 190px minmax(0, 2fr) minmax(0, 1.3fr) 156px var(--col-sol, ) 108px; }
+.tab.tab-prev .cella-due { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; min-width: 0; }
+.tab.tab-prev .solo-stretto { display: none; font-size: 13px; font-weight: 600; color: var(--tenue); overflow-wrap: anywhere; }
+@container (max-width: 900px) {
+  .tab.tab-prev .r { grid-template-columns: 168px minmax(0, 1fr) var(--col-sol, ) 104px; }
+  .tab.tab-prev .c-cli, .tab.tab-prev .c-scad { display: none; }
+  .tab.tab-prev .solo-stretto { display: block; }
+}
+/* Le celle "su due righe" (legato a, cosa esce dal NAS, costo) mostrano tutto, a capo, senza puntini (07/11/2026). */
+.tab .legato, .tab .taglia-due { display: block; -webkit-line-clamp: unset; overflow: visible; overflow-wrap: anywhere; }
+/* Fatturazione › Fatture: le colonne qui; nella tabella stretta (1024) la data sotto il numero, la causale sotto il cliente. */
+.tab.tab-fatture { container-type: inline-size; }
+.tab.tab-fatture .r { grid-template-columns: 150px 104px 64px minmax(0, 1.2fr) minmax(0, 1.4fr) 112px 60px 112px; }
+.tab.tab-fatture .cella-due { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.tab.tab-fatture .solo-stretto { display: none; font-size: 13px; font-weight: 600; color: var(--tenue); overflow-wrap: anywhere; }
+@container (max-width: 900px) {
+  .tab.tab-fatture .r { grid-template-columns: 120px 92px minmax(0, 1fr) 100px 56px 104px; }
+  .tab.tab-fatture .c-data, .tab.tab-fatture .c-causale { display: none; }
+  .tab.tab-fatture .solo-stretto { display: block; }
+}
+/* Le pillole nelle tabelle vanno a capo invece dei puntini ("Pronta · già pagata", "Visto il 19/10 alle 20:15"). */
+.tab .pill { white-space: normal; overflow: visible; text-overflow: clip; max-width: 100%; overflow-wrap: anywhere; line-height: 1.25; height: auto; min-height: 26px; padding-top: 3px; padding-bottom: 3px; flex: 0 1 auto; }
+.tab .pill.piccola { min-height: 22px; padding-top: 2px; padding-bottom: 2px; }
+/* WhatsApp e comunicazioni › Storico: le colonne qui; nella tabella stretta (1024) cliente e riferimento vanno sotto. */
+.tab.tab-storico { container-type: inline-size; }
+.tab.tab-storico .r { grid-template-columns: 132px 120px minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) 118px; }
+.tab.tab-storico .cella-due { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.tab.tab-storico .solo-stretto { display: none; font-size: 13px; font-weight: 600; color: var(--tenue); overflow-wrap: anywhere; }
+@container (max-width: 900px) {
+  .tab.tab-storico .r { grid-template-columns: 112px 104px minmax(0, 1.2fr) minmax(0, 1fr) 112px; }
+  .tab.tab-storico .c-largo { display: none; }
+  .tab.tab-storico .solo-stretto { display: block; }
+}
+/* Un'anteprima di una riga in una cella (il testo di un modello): tutto passandoci sopra. */
+.tab .una-riga { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+/* Documenti: le colonne qui; nella tabella stretta (1024) la colonna Modif. lascia il posto al titolo. */
+.tab.tab-archivio { container-type: inline-size; }
+.tab.tab-archivio .r { grid-template-columns: minmax(0, 2fr) minmax(108px, 0.9fr) minmax(0, 1.2fr) 142px 122px 46px; }
+@container (max-width: 900px) {
+  .tab.tab-archivio .r { grid-template-columns: minmax(0, 2fr) minmax(92px, .8fr) minmax(0, 1fr) 128px 108px; }
+  .tab.tab-archivio .c-modif { display: none; }
+}
+
+/* 07/11/2026: la ricerca dei Rapportini ha la scritta lunga ("Cliente, commessa, lavoro, numero"): a 1024 px il campo
+   non si stringe sotto la sua misura, e i segmenti vanno a capo sotto (.filtri va già a capo). */
+.cerca.cerca-rapportini { min-width: 310px; }

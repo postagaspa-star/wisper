@@ -814,15 +814,15 @@ private fun PanoramicaCommessa(m: Commessa, k: Cruscotto, costi: Boolean) {
         k.margineDaBudget -> Text("Il margine conta già ${Testo.euroTondi(k.costoAtteso)} di costi previsti", style = Testi.secondario, color = c.tenue)
     }
 
-    // Fatturazione: fatturato, pronto da fatturare, ancora da firmare.
+    // Fatturazione: fatturato, inviato (pronto da fatturare), ancora da inviare (06/11/2026: niente firma).
     if (costi) Scheda(spazio = 14.dp) {
         Text("Fatturazione", style = Testi.titoloSezione, color = c.testo)
         BarraFatturazione(k.fatturato, k.prontoDaFatturare, k.inBozza)
         Legenda(
             listOf(
                 Triple(c.testo, "Fatturato", k.fatturato),
-                Triple(c.budget, "Da fatturare", k.prontoDaFatturare),
-                Triple(c.bordoCampo, "Da firmare", k.inBozza),
+                Triple(c.budget, "Inviato", k.prontoDaFatturare),
+                Triple(c.bordoCampo, "Da inviare", k.inBozza),
             ),
         )
     }
@@ -896,7 +896,7 @@ private fun BarraFatturazione(fatturato: Double, pronto: Double, inBozza: Double
     val tot = fatturato + pronto + inBozza
     Row(
         Modifier.fillMaxWidth().height(12.dp).clip(RoundedCornerShape(6.dp)).background(c.superficie2)
-            .semantics { contentDescription = "Fatturato ${Testo.euro(fatturato)}, da fatturare ${Testo.euro(pronto)}, da firmare ${Testo.euro(inBozza)}" },
+            .semantics { contentDescription = "Fatturato ${Testo.euro(fatturato)}, inviato ${Testo.euro(pronto)}, da inviare ${Testo.euro(inBozza)}" },
     ) {
         if (tot > 0) {
             listOf(fatturato to c.testo, pronto to c.budget, inBozza to c.bordoCampo).forEach { (v, colore) ->
@@ -1088,18 +1088,20 @@ private fun RigaCosto(etichetta: String, valore: String) {
 @Composable
 private fun DaFatturareCommessa(dati: Dati, k: Cruscotto, viste: Map<String, Vista>, nav: Navigatore) {
     val avvisi = LocalAvvisi.current
-    val da = k.rapportini.filter { it.stato == Stato.FIRMATO || it.stato == Stato.INVIATO }.sortedBy { it.data }
-    val inBozza = k.rapportini.filter { it.stato == Stato.BOZZA }
+    // 06/11/2026 (rapportino-lavori.md §3): si fatturano anche i lavori da inviare.
+    val da = k.rapportini.filter { eu.stgm.wisper.rapportino.Conti.daFatturare(it) }.sortedBy { it.data }
+    val inviati = da.filter { !it.daInviare }
+    val inBozza = da.filter { it.daInviare }
     var conferma by remember { mutableStateOf(false) }
 
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         RiquadroConti(
-            "Pronto", Testo.euroTondi(k.prontoDaFatturare), Modifier.weight(1f),
-            nota = if (da.isEmpty()) "niente" else Testo.quanti(da.size, "rapportino", "rapportini"),
+            "Da inviare", Testo.euroTondi(k.inBozza), Modifier.weight(1f),
+            nota = if (inBozza.isEmpty()) "nessuno" else Testo.quanti(inBozza.size, "lavoro", "lavori"),
         )
         RiquadroConti(
-            "Da firmare", Testo.euroTondi(k.inBozza), Modifier.weight(1f),
-            nota = if (inBozza.isEmpty()) "nessuno" else Testo.quanti(inBozza.size, "rapportino", "rapportini"),
+            "Inviato", Testo.euroTondi(k.prontoDaFatturare), Modifier.weight(1f),
+            nota = if (inviati.isEmpty()) "nessuno" else Testo.quanti(inviati.size, "lavoro", "lavori"),
         )
         RiquadroConti("Fatturato", Testo.euroTondi(k.fatturato), Modifier.weight(1f))
     }
@@ -1116,19 +1118,19 @@ private fun DaFatturareCommessa(dati: Dati, k: Cruscotto, viste: Map<String, Vis
     if (conferma) {
         val somma = da.sumOf { totaleDi(it) }
         FoglioConferma(
-            titolo = if (da.size == 1) "Segnare 1 rapportino come fatturato?" else "Segnare ${da.size} rapportini come fatturati?",
+            titolo = if (da.size == 1) "Segnare 1 lavoro come fatturato?" else "Segnare ${da.size} lavori come fatturati?",
             testo = "${Testo.euro(somma)}. Spariscono da Da fatturare.",
             azione = "Segna fatturati",
             onConferma = {
                 conferma = false
                 val cambio = dati.cambiaStato(da.map { it.idLocale }, Stato.FATTURATO)
                 if (cambio.quanti > 0) {
-                    avvisi.mostra(if (cambio.quanti == 1) "Segnato fatturato" else "${cambio.quanti} rapportini segnati fatturati") {
-                        // Ognuno torna com'era dove si può: un firmato già partito come fatturato il foglio non lo rifà firmato.
+                    avvisi.mostra(if (cambio.quanti == 1) "Segnato fatturato" else "${cambio.quanti} lavori segnati fatturati") {
+                        // Ognuno torna com'era dove si può: uno già partito come fatturato il server non lo riporta indietro.
                         val tornati = dati.annullaCambioStato(cambio)
                         val restano = cambio.quanti - tornati
-                        if (restano == 1) avvisi.mostra("1 rapportino resta fatturato: il server non lo riporta a firmato")
-                        else if (restano > 1) avvisi.mostra("$restano rapportini restano fatturati: il server non li riporta a firmati")
+                        if (restano == 1) avvisi.mostra("1 lavoro resta fatturato: il server non lo riporta indietro")
+                        else if (restano > 1) avvisi.mostra("$restano lavori restano fatturati: il server non li riporta indietro")
                     }
                 }
             },
@@ -1306,6 +1308,8 @@ fun SchermataModificaCommessa(dati: Dati, nav: Navigatore, id: String?, idClient
     var salvo by remember { mutableStateOf(false) }
     var sceltaCliente by remember { mutableStateOf(false) }
     var calendario by remember { mutableStateOf<String?>(null) }
+    // Il codice di una commessa che c'è già si cambia (06/11/2026): prima si chiede, perché cambia anche altrove.
+    var confermaCodice by remember { mutableStateOf(false) }
 
     val cli = ana.cliente(idCli)
     // Un cliente a tariffa fissa (Elettrodinamica) ha già prezzo e, se scritto, costo:
@@ -1331,6 +1335,15 @@ fun SchermataModificaCommessa(dati: Dati, nav: Navigatore, id: String?, idClient
     val erroreCliente = if (provato && cli == null) "Scegli il cliente" else null
     val erroreNome = if (provato && nome.isBlank()) "Scrivi come si chiama" else null
     val erroreFine = if (dataInizio != null && dataFine != null && dataFine.isBefore(dataInizio)) "Viene prima dell'inizio" else null
+    val codiceScritto = codice.trim().uppercase()
+    val codiceCambiato = esistente != null && !codiceScritto.equals(esistente.id, ignoreCase = true)
+    val erroreCodice = when {
+        esistente == null -> null
+        codiceScritto.isBlank() -> if (provato) "Scrivi il codice" else null
+        codiceCambiato && ana.commesse.any { it !== esistente && it.id.equals(codiceScritto, ignoreCase = true) } ->
+            "Il codice $codiceScritto è già di un'altra commessa"
+        else -> null
+    }
     val erroriNumeri = listOf(ore, prezzoMostrato, budget, costoMostrato, km, contratto).map { erroreNumero(it) }
 
     // Il margine si rifà a ogni tasto, con le stesse regole della pagina della commessa.
@@ -1340,15 +1353,19 @@ fun SchermataModificaCommessa(dati: Dati, nav: Navigatore, id: String?, idClient
     )
     val b = Conti.budgetDi(prova, cli, ana.impostazioni)
 
-    fun salva() {
+    fun salva(codiceConfermato: Boolean = false) {
         if (salvo) return
         provato = true
-        if (cli == null || nome.isBlank()) {
+        if (cli == null || nome.isBlank() || (esistente != null && codiceScritto.isBlank())) {
             scope.launch { scorri.animateScrollTo(0) }
             return
         }
-        if (erroreFine != null || erroriNumeri.any { it != null }) return
-        val scritto = codice.trim().uppercase()
+        if (erroreCodice != null || erroreFine != null || erroriNumeri.any { it != null }) return
+        if (codiceCambiato && !codiceConfermato) {
+            confermaCodice = true
+            return
+        }
+        val scritto = codiceScritto
         val m = (esistente ?: Commessa(id = "", idCliente = "", descrizione = "")).copy(
             // Il codice proposto si lascia scegliere al foglio: se il computer intanto l'ha usato, il foglio dà il primo libero.
             id = esistente?.id ?: if (scritto == proposto) "" else scritto,
@@ -1376,7 +1393,16 @@ fun SchermataModificaCommessa(dati: Dati, nav: Navigatore, id: String?, idClient
         }.copy(modoFatturazione = if (costi && vedeFatture) modo else esistente?.modoFatturazione)
         salvo = true
         scope.launch {
-            dati.salvaCommessa(m, nuova)
+            // Prima il codice (il server può dire di no: formato, già usato), poi il resto col codice nuovo.
+            val daSalvare = if (codiceCambiato && esistente != null) {
+                val cambiata = dati.cambiaCodiceCommessa(esistente.id, scritto).getOrElse {
+                    avvisi.mostra(messaggioErrore(it, "Il codice non è cambiato: riprova"))
+                    salvo = false
+                    return@launch
+                }
+                m.copy(id = cambiata.id, codicePrecedente = cambiata.codicePrecedente)
+            } else m
+            dati.salvaCommessa(daSalvare, nuova)
                 .onSuccess { s ->
                     val fatta = s.dato.id
                     avvisi.mostra(
@@ -1412,7 +1438,10 @@ fun SchermataModificaCommessa(dati: Dati, nav: Navigatore, id: String?, idClient
             if (nuova) {
                 CampoTesto(codice, { codice = it.uppercase().trim() }, "Codice", tastiera = KeyboardType.Ascii, segnaposto = proposto)
             } else {
-                CampoBloccato("Codice", esistente?.id.orEmpty())
+                CampoTesto(
+                    codice, { codice = it.uppercase().trim() }, "Codice", tastiera = KeyboardType.Ascii,
+                    segnaposto = esistente?.id.orEmpty(), errore = erroreCodice,
+                )
             }
             CampoTesto(indirizzo, { indirizzo = it }, "Indirizzo del cantiere")
             val sediCliente = cli?.let { ana.sediDi(it.id) }.orEmpty()
@@ -1467,7 +1496,7 @@ fun SchermataModificaCommessa(dati: Dati, nav: Navigatore, id: String?, idClient
             CampoTesto(note, { note = it }, "Note", righe = 3)
         }
         FondoConPulsante(Modifier.align(Alignment.BottomCenter), sopraBarra = false) {
-            PulsantePrincipale(if (salvo) "Salvo…" else "Salva", ::salva, icona = Icone.spunta, abilitato = !salvo)
+            PulsantePrincipale(if (salvo) "Salvo…" else "Salva", { salva() }, icona = Icone.spunta, abilitato = !salvo)
         }
     }
 
@@ -1570,6 +1599,15 @@ fun SchermataModificaCommessa(dati: Dati, nav: Navigatore, id: String?, idClient
             if (quale == "inizio") dataInizio else dataFine ?: dataInizio,
             onScelto = { g -> if (quale == "inizio") inizio = g.toString() else fine = g.toString() },
             onChiudi = { calendario = null },
+        )
+    }
+    if (confermaCodice) {
+        FoglioConferma(
+            titolo = "Cambio il codice in $codiceScritto?",
+            testo = "Il codice cambia anche in rapportini, progetti, ore, spese e fatture. I documenti già mandati restano col codice vecchio.",
+            azione = "Cambia il codice",
+            onConferma = { confermaCodice = false; salva(codiceConfermato = true) },
+            onAnnulla = { confermaCodice = false },
         )
     }
 }

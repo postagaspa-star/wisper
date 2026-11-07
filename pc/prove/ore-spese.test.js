@@ -171,6 +171,25 @@ test('approvazioni: il numero a destra e le frasi dopo', () => {
   assert.equal(RO.fraseDecisione(2, 'annulla'), '2 rimesse da approvare');
 });
 
+test('07/11/2026, niente Ore: Da approvare toglie le voci "ore" del server di prima e rifà i conti', () => {
+  const anomalia = [{ tipo: 'troppeOre', testo: '13 ore in un giorno' }];
+  const prima = { ok: true, quante: 5, conAnomalie: 2, persone: [
+    { idUtente: 3, nome: 'Marco Rossato', quante: 3, conAnomalie: 2, voci: [
+      { tipo: 'ore', id: 1, idUtente: 3, anomalie: anomalia },
+      { tipo: 'rapportino', id: 'RAP/2026/0006', idUtente: 3, anomalie: anomalia },
+      { tipo: 'spesa', id: 1, idUtente: 3, anomalie: [] }] },
+    { idUtente: 4, nome: 'Laura Bianchi', quante: 2, conAnomalie: 0, voci: [{ tipo: 'ore', id: 2, idUtente: 4, anomalie: [] }, { tipo: 'ore', id: 3, idUtente: 4 }] }] };
+  const d = RO.approvareSenzaOre(prima);
+  assert.equal(d.quante, 2);
+  assert.equal(d.conAnomalie, 1);
+  assert.deepEqual(d.persone.map(p => [p.nome, p.quante, p.conAnomalie, p.voci.map(RO.chiaveVoce)]), [['Marco Rossato', 2, 1, ['rapportino:RAP/2026/0006', 'spesa:1']]], 'Laura aveva solo ore: sparisce');
+  assert.equal(prima.persone[0].voci.length, 3, 'la risposta del server non si tocca');
+  // Il server nuovo non le manda: non cambia niente.
+  const nuovo = RO.approvareSenzaOre(d);
+  assert.deepEqual(nuovo, d);
+  assert.deepEqual(RO.approvareSenzaOre(null), { persone: [], quante: 0, conAnomalie: 0 });
+});
+
 test('periodi: i mesi e i loro giorni', () => {
   assert.deepEqual(RO.periodoMese('2026-02'), { da: '2026-02-01', a: '2026-02-28' });
   assert.deepEqual(RO.periodoMese('2026-10'), { da: '2026-10-01', a: '2026-10-31' });
@@ -241,13 +260,16 @@ test('esempio: il titolare approva, Annulla rimette da approvare; respingere vuo
   const g = esempio('manuel');
   const d = g('/server/daApprovare');
   assert.ok(d.quante > 0 && d.conAnomalie > 0, 'ci sono cose da approvare, qualcuna con un\'anomalia');
-  const v = d.persone[0].voci.find(x => x.tipo === 'ore');
+  // 07/11/2026: niente Ore; da approvare restano rapportini, spese e trasferte.
+  const tutte = d.persone.reduce((a, p) => a.concat(p.voci), []);
+  assert.ok(!tutte.some(x => x.tipo === 'ore'), 'nessuna voce di ore');
+  const v = tutte.find(x => x.tipo === 'spesa') || tutte[0];
+  const c = RO.chiaveVoce(v);
+  const ancora = () => g('/server/daApprovare').persone.reduce((a, p) => a.concat(p.voci), []).some(x => RO.chiaveVoce(x) === c);
   assert.equal(g('/server/approva', { voci: [{ tipo: v.tipo, id: v.id }] }).fatte, 1);
-  // Tutto il periodo: senza date l'elenco è la settimana di oggi, e il lunedì le ore da approvare sono della settimana prima.
-  const oreDi = () => g('/server/ore?utente=' + d.persone[0].idUtente + '&da=2000-01-01&a=2100-12-31').ore;
-  assert.equal(oreDi().find(o => o.id === v.id).stato, 'approvata');
+  assert.equal(ancora(), false, 'approvata: esce da Da approvare');
   g('/server/annullaApprovazione', { voci: [{ tipo: v.tipo, id: v.id }] });
-  assert.equal(oreDi().find(o => o.id === v.id).stato, 'da_approvare');
+  assert.equal(ancora(), true, 'Annulla la rimette');
   assert.equal(g('/server/respingi', { voci: [{ tipo: v.tipo, id: v.id }], motivo: ' ' }).errore, 'Scrivi il motivo: arriva a chi l\'ha scritta');
 });
 

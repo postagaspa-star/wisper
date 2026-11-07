@@ -28,7 +28,8 @@ const ascolta = (server, porta) => new Promise((ok, no) => {
 const chiudi = server => new Promise(r => { server.close(() => r()); if (server.closeAllConnections) server.closeAllConnections(); });
 
 /**
- * Accende tutto. opzioni: portaGoogle, portaCasa, portaServer (di base porte libere a caso),
+ * Accende tutto. opzioni: portaGoogle, portaCasa, portaServer, portaDiretto (il finto Google senza rimbalzo), portaEco
+ * (il rimbalzo) (di base porte libere a caso),
  * attesaNas (secondi della chiamata lunga del server, di base 3).
  */
 async function avviaPorta(opzioni) {
@@ -41,7 +42,7 @@ async function avviaPorta(opzioni) {
   finto.proprieta.set('SEGRETO_SERVER', SEGRETO);
 
   // 1. Il finto Google, diretto (lo chiama il server, come il NAS).
-  const google = finto.ascoltaHttp(0, { host: '127.0.0.1', parla: false });
+  const google = finto.ascoltaHttp(opzioni.portaDiretto || 0, { host: '127.0.0.1', parla: false });
   await new Promise(r => google.on('listening', r));
   const googleDiretto = 'http://127.0.0.1:' + google.address().port + '/exec';
 
@@ -60,7 +61,7 @@ async function avviaPorta(opzioni) {
     rs.writeHead(200, { 'Content-Type': r.tipo });
     rs.end(r.testo);
   });
-  const urlEco = await ascolta(eco, 0);
+  const urlEco = await ascolta(eco, opzioni.portaEco);
   const entrata = http.createServer(async (rq, rs) => {
     const pezzi = [];
     for await (const p of rq) pezzi.push(p);

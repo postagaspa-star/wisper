@@ -36,8 +36,21 @@ function giornoDeiPrototipi() {
 
 const SEGRETO = 'segreto-di-prova';
 
+// Pulizia del disco. Ogni prova crea cartelle in %TEMP% (database, posta finta) e prima restavano tutte: il
+// 06/11/2026 erano 12.194 cartelle wisper-* per 29 GB, con il disco C al 99%. Ora le cartelle fatte da cartellaNuova
+// le toglie il processo stesso quando finisce. WISPER_TIENI_CARTELLE=1 le tiene (per capire una prova che fallisce).
+const tieniCartelle = !!process.env.WISPER_TIENI_CARTELLE;
+const cartelleDaTogliere = [];
+process.on('exit', () => {
+  for (const c of cartelleDaTogliere.splice(0)) {
+    try { fs.rmSync(c, { recursive: true, force: true }); } catch (e) { /* ancora aperta: resta */ }
+  }
+});
+
 function cartellaNuova(nome) {
-  return fs.mkdtempSync(path.join(os.tmpdir(), 'wisper-' + (nome || 'prove') + '-'));
+  const c = fs.mkdtempSync(path.join(os.tmpdir(), 'wisper-' + (nome || 'prove') + '-'));
+  if (!tieniCartelle) cartelleDaTogliere.push(c);
+  return c;
 }
 
 function ascolta(server) {
@@ -200,13 +213,106 @@ const COLONNE_009 = {
   rapportini: { id_progetto: null, progetto: '' },
 };
 
+/**
+ * Le colonne nuove della 011 (06/11/2026, il rapportino con piu' lavori): ogni riga e' il lavoro di un rapportino col suo
+ * stesso numero, al primo posto. Un valore funzione si calcola dalla riga (valoreAtteso).
+ */
+const COLONNE_011 = {
+  rapportini: { id_giornata: r => r.id, posizione: 1 },
+};
+
+/** Il valore di base atteso di una colonna nuova in quella riga (un numero, un testo, o una funzione della riga). */
+function valoreAtteso(v, riga) {
+  return typeof v === 'function' ? v(riga) : v;
+}
+
 /** Le colonne nuove dalla 007 in poi, insieme: le prove delle migrazioni di prima (003-007) le tolgono prima di confrontare. */
 const COLONNE_DOPO_007 = {};
-for (const gruppo of [COLONNE_007, COLONNE_008, COLONNE_009]) {
+for (const gruppo of [COLONNE_007, COLONNE_008, COLONNE_009, COLONNE_011]) {
   for (const [t, c] of Object.entries(gruppo)) COLONNE_DOPO_007[t] = Object.assign({}, COLONNE_DOPO_007[t] || {}, c);
 }
 
+/**
+ * 06/11/2026 (il rapportino con piu' lavori, senza firma, rapportino-lavori.md): i numeri della Dashboard di prima coi soli
+ * cambi voluti. Le bozze non sono piu' "da far firmare" (daFirmare 0): sono Da inviare insieme ai firmati (daMandare, e
+ * daInviare), e si fatturano (rapportini.daFatturare; nei soldi Da fatturare, dei mesi scorsi e i clienti); Wisper non propone
+ * piu' il messaggio "rapportino da firmare" (comunicazioni.proposti: meno quelli che la regola di prima, §9.5 della fase 7,
+ * avrebbe proposto: bozze di piu' di 7 giorni con un cliente che ha un recapito, non gia' usate). Le differenze si
+ * contano sulle righe del database (e sulle voci pronte di sorgentiDaFatturare per gli euro), non col codice della Dashboard.
+ * Va chiamata come il titolare (vede tutto), con l'orologio della prova.
+ */
+function numeriDashboardDopoLavori(numeri, w) {
+  const mese = require('../src/utili').oggi().slice(0, 7);
+  const out = JSON.parse(JSON.stringify(numeri));
+  const bozze = w.db.righe("SELECT * FROM rapportini WHERE UPPER(stato) <> 'ANNULLATO' AND UPPER(stato) IN ('', 'BOZZA')");
+  const trattenuti = new Set(w.db.righe("SELECT id FROM ticket WHERE stato IN ('aperto', 'in_carico', 'in_attesa', 'risolto') OR (stato = 'chiuso' AND fatturazione IN ('contratto', 'no'))").map(x => x.id));
+  if (out.rapportini) {
+    const daInviare = out.rapportini.daMandare + bozze.filter(r => r.stato_approvazione !== 'da_approvare' && r.stato_approvazione !== 'respinto').length;
+    out.rapportini.daFirmare = 0;
+    out.rapportini.daMandare = daInviare;
+    out.rapportini.daInviare = daInviare;
+    out.rapportini.daFatturare += bozze.filter(r => !(r.ticket_id && trattenuti.has(r.ticket_id))).length;
+  }
+  if (out.comunicazioni && typeof out.comunicazioni.proposti === 'number') {
+    const u = require('../src/utili');
+    const settimanaFa = u.piuGiorni(u.oggi(), -7);
+    const usate = new Set(w.db.righe("SELECT DISTINCT proposta FROM comunicazioni WHERE proposta <> ''").map(r => r.proposta));
+    const conRecapito = id => w.db.righe('SELECT * FROM referenti WHERE soggetto_id = ?', id).some(x => (x.telefono || '') + (x.whatsapp || '') + (x.email || '') !== '');
+    const diPrima = bozze.filter(r => r.data < settimanaFa && r.id_cliente && !usate.has('rapportino:' + r.id) && conRecapito(r.id_cliente));
+    out.comunicazioni.proposti -= diPrima.length;
+  }
+  if (out.soldi && 'fattureInBozza' in out.soldi) {
+    const voci = w.sorgentiDaFatturare({}).filter(v => v.pronta);
+    const inBozza = new Set(bozze.map(r => r.id));
+    const nuove = voci.filter(v => v.tipo === 'rapportino' && inBozza.has(v.id));
+    const euro = l => l.reduce((s, v) => s + v.importo, 0);
+    const cent = n => Math.round(n * 100) / 100;
+    out.soldi.daFatturare = cent(out.soldi.daFatturare + euro(nuove));
+    out.soldi.daFatturareMesiPrima = cent(out.soldi.daFatturareMesiPrima + euro(nuove.filter(v => v.data && v.data.slice(0, 7) < mese)));
+    out.soldi.clientiDaFatturare = new Set(voci.map(v => v.idCliente)).size;
+    if (out.soldi.clientiDaFatturare < numeri.soldi.clientiDaFatturare) throw new Error('meno clienti da fatturare di prima');
+  }
+  return out;
+}
+
+/**
+ * 07/11/2026 (Manuel: "le Ore vanno tolte, non servono, metti solamente i Rapportini"): i numeri della Dashboard di prima
+ * coi soli cambi voluti delle Ore. Le righe della tabella ore non sono piu' fra le cose da approvare (approvare.voci: meno
+ * quelle da approvare) e non contano piu' nelle ore del giorno (approvare.conAnomalie: meno le righe di ore che con la
+ * regola di prima avevano un'anomalia, "troppe ore" o "in un giorno di assenza", e meno i rapportini che avevano "troppe
+ * ore" solo per le ore registrate dello stesso giorno e ora non hanno anomalie). Le righe si contano sul database con la
+ * regola di prima (ORE_GIORNALIERE + 4, ore da approvare o approvate + rapportini non annullati), non col codice nuovo.
+ * Va chiamata come il titolare (vede tutto), con l'orologio della prova.
+ */
+function numeriDashboardSenzaOre(numeri, w) {
+  const { numero, dataIso } = require('../src/utili');
+  const out = JSON.parse(JSON.stringify(numeri));
+  if (!out.approvare) return out;
+  const soglia = (numero(w.leggiImpostazioni().ORE_GIORNALIERE) || 8) + 4;
+  const k = (u, g) => u + '|' + g;
+  const registrate = {};
+  const deiRapportini = {};
+  for (const o of w.db.righe("SELECT utente_id, data, ore FROM ore WHERE tolta IS NULL AND stato IN ('da_approvare', 'approvata')")) {
+    registrate[k(o.utente_id, o.data)] = (registrate[k(o.utente_id, o.data)] || 0) + numero(o.ore);
+  }
+  for (const r of w.db.righe("SELECT utente_id, data, ore_lavoro, ore_extra, ore_viaggio, ore_totali FROM rapportini WHERE UPPER(stato) <> 'ANNULLATO'")) {
+    const x = k(r.utente_id, dataIso(r.data));
+    deiRapportini[x] = (deiRapportini[x] || 0) + (numero(r.ore_totali) || numero(r.ore_lavoro) + numero(r.ore_extra) + numero(r.ore_viaggio));
+  }
+  const troppePrima = (u, g) => Math.round(((registrate[k(u, g)] || 0) + (deiRapportini[k(u, g)] || 0)) * 100) / 100 > soglia;
+  const persona = {};
+  w.db.righe('SELECT id, utente_id FROM persone WHERE utente_id IS NOT NULL').forEach(p => { persona[p.utente_id] = p.id; });
+  const ore = w.db.righe("SELECT utente_id, data FROM ore WHERE stato = 'da_approvare' AND tolta IS NULL");
+  const conAnomaliaPrima = o => troppePrima(o.utente_id, o.data) || !!(persona[o.utente_id] && w.giornoNonLavorato(persona[o.utente_id], o.data));
+  const rapportiniSenzaPiu = [].concat(...w.daApprovare().persone.map(p => p.voci))
+    .filter(v => v.tipo === 'rapportino' && !v.anomalie.length && troppePrima(v.idUtente, v.data));
+  out.approvare.voci -= ore.length;
+  out.approvare.conAnomalie -= ore.filter(conAnomaliaPrima).length + rapportiniSenzaPiu.length;
+  return out;
+}
+
 module.exports = {
+  numeriDashboardDopoLavori, numeriDashboardSenzaOre,
   serverDiProva, postinoFinto, viesFinto, cartellaNuova, ascolta, chiudi, SEGRETO, PNG, giornoDeiPrototipi, GIORNO_DEI_PROTOTIPI, COLONNE_007,
-  COLONNE_008, COLONNE_009, COLONNE_DOPO_007,
+  COLONNE_008, COLONNE_009, COLONNE_011, COLONNE_DOPO_007, valoreAtteso,
 };

@@ -1,4 +1,4 @@
-// I flussi della fase 3 (ore, timer, approvazioni, spese, trasferte, rimborsi) fatti con
+// I flussi della fase 3 (approvazioni, spese, trasferte, rimborsi; dal 07/11/2026 niente più Ore né timer) fatti con
 // l'interfaccia vera, cliccando come una persona, contro il server di prova; dopo ogni
 // passo si controlla col server che sia successo davvero. Edge senza finestra, profilo
 // temporaneo (mai il browser di chi lavora).
@@ -15,10 +15,11 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
 const assert = require('node:assert/strict');
+const { portaDevtools, chiudiEdge } = require('./edge-prova.js');
 
 const C = require('../ui/conti.js');
 global.WisperConti = C;
-const RO = require('../ui/regole-ore-spese.js');
+
 
 const arg = process.argv.slice(2);
 const opz = (n, d) => { const i = arg.indexOf(n); return i >= 0 ? arg[i + 1] : d; };
@@ -31,7 +32,7 @@ const GIRO = Date.now().toString(36).slice(-4).toUpperCase();
 
 async function main() {
   const profilo = fs.mkdtempSync(path.join(os.tmpdir(), 'wisper-edge-flussi3-'));
-  const porta = 9450 + Math.floor(Math.random() * 150);
+  const porta = portaDevtools(9450, 150);
   const edge = spawn(EDGE, ['--headless=new', '--disable-gpu', '--no-first-run', '--hide-scrollbars', '--user-data-dir=' + profilo, '--remote-debugging-port=' + porta, 'about:blank'], { stdio: 'ignore' });
   let ws = null;
   const errori = [];
@@ -111,8 +112,6 @@ async function main() {
       await valuta(`(() => { const f = document.querySelector('.accesso'); f.querySelector('input[type=email]').value = ${JSON.stringify(email)}; f.querySelector('input[type=password]').value = 'prova'; f.requestSubmit(); return true; })()`);
       await aspetta(2500);
     };
-    const sett = RO.settimanaDi(C.oggiIso());
-    const oreDellaSettimana = () => server('ore?da=' + sett[0] + '&a=' + sett[6]);
     // Un elemento cliccabile che contiene un testo (le righe della Dashboard cominciano col numero).
     const cliccaCon = async (testo, dove, attesa) => {
       const ok = await valuta(`(() => {
@@ -142,96 +141,45 @@ async function main() {
     // ============================================================ il collaboratore (Marco)
     await entra('marco@esempio.it');
     const vociMarco = await valuta("[...document.querySelectorAll('#voci .voce')].map(x => x.dataset.nome)");
-    // Fase 5: dopo vengono Documenti e Ticket e assistenza; Spese e trasferte resta subito dopo Ore e rapportini.
-    assert.equal(vociMarco[vociMarco.indexOf('Ore e rapportini') + 1], 'Spese e trasferte', 'Spese e trasferte dopo Ore e rapportini: ' + vociMarco.join(', '));
-    passo('menu: Spese e trasferte al suo posto, dopo Ore e rapportini');
+    // 07/11/2026 (Manuel: "le Ore vanno tolte, non servono, metti solamente i Rapportini"): la voce è Rapportini.
+    // Fase 5: dopo vengono Documenti e Ticket e assistenza; Spese e trasferte resta subito dopo Rapportini.
+    assert.ok(vociMarco.indexOf('Ore e rapportini') < 0, 'niente più Ore e rapportini: ' + vociMarco.join(', '));
+    assert.equal(vociMarco[vociMarco.indexOf('Rapportini') + 1], 'Spese e trasferte', 'Spese e trasferte dopo Rapportini: ' + vociMarco.join(', '));
+    passo('menu: Rapportini (non più Ore e rapportini), Spese e trasferte subito dopo');
     // Un rapportino di Marco: nasce da approvare (il titolare lo guarda più avanti).
     const rapMarco = (await server('salvaRapportino', { rapportino: { idLocale: 'fase3-marco-' + GIRO, data: C.oggiIso(), idCliente: 'C002', idCommessa: '26ST002',
       descrizione: 'Rapportino da approvare ' + GIRO, oreLavoro: 1, oreExtra: 0, oreViaggio: 0, km: 0, spese: 0 } })).rapportino;
     assert.equal(rapMarco.statoApprovazione, 'da_approvare', 'il rapportino del collaboratore va approvato');
 
-    // ------------------------------------------------------------ timer: ferma -> la bozza
-    await vai('#rapportini/ore');
-    const segmentiMarco = await valuta("[...document.querySelectorAll('.segmenti button')].map(b => b.textContent)");
-    assert.ok(!segmentiMarco.some(s => /Da approvare/.test(s)), 'il collaboratore non vede Da approvare');
-    assert.equal(await valuta("!!document.querySelector('select[aria-label=\"Di chi\"]')"), false, 'niente scelta della persona');
-    if ((await server('timer')).timer) {
-      // Quello acceso dai dati di prova (da stanotte): Ferma apre la bozza da correggere.
-      await clicca('26ST', '.zona-timer', 1500);
-      assert.match(await testoFinestra(), /Le ore dal timer/);
-      // Fermato nello stesso minuto in cui era partito (un giro di prima rimasto acceso): fine vuota, si scrivono le ore.
-      if (await valuta("!!document.querySelector('.finestra .anteprima-ore.errore')")) { await clicca('Ore', '.finestra', 300); await clicca('1 h', '.finestra', 300); }
-      await scrivi('Cosa hai fatto', 'Dal timer di prova ' + GIRO);
-      await clicca('Salva', '.finestra .piede-f', 1500);
-      const r = (await oreDellaSettimana()).ore.find(o => o.descrizione === 'Dal timer di prova ' + GIRO);
-      assert.ok(r && r.dalTimer && r.stato === 'da_approvare', 'la bozza del timer corretta e mandata');
+    // ------------------------------------------------------------ niente Ore: i collegamenti di prima aprono i Rapportini
+    const paginaRapportini = async hash => {
+      await vai(hash);
+      return valuta(`({ h1: document.querySelector('#principale h1').textContent, dove: [...document.querySelectorAll('#principale .testata .dove')].map(x => x.textContent),
+        segmenti: [...document.querySelectorAll('#principale .segmenti button')].map(b => b.textContent),
+        ore: !!document.querySelector('.zona-timer, .timesheet, .cella-ore, .timer-scheda'),
+        pulsanti: [...document.querySelectorAll('#principale button')].map(b => b.textContent.trim()).filter(x => /timer|Registra ore|Statistiche|^Ore$/.test(x)) })`);
+    };
+    for (const hash of ['#rapportini', '#rapportini/ore', '#rapportini/statistiche', '#rapportini/approvare']) {
+      const x = await paginaRapportini(hash);
+      assert.equal(x.h1, 'Rapportini', hash + ': si apre l\'elenco dei rapportini');
+      assert.deepEqual(x.dove, [], hash + ': niente "Ore e rapportini" sopra il titolo');
+      assert.deepEqual(x.segmenti.filter(s => !/^(Tutti|Da inviare|Da fatturare)$/.test(s)), [], hash + ': il collaboratore non ha né Ore né Da approvare');
+      assert.equal(x.ore, false, hash + ': niente timer né settimana delle ore');
+      assert.deepEqual(x.pulsanti, [], hash + ': niente pulsanti delle ore');
     }
-    await clicca('Avvia il timer', '.zona-timer', 700);
-    await clicca('26ST001', '.finestra', 300);
-    await scrivi('Cosa fai', 'Timer ' + GIRO);
-    await clicca('Avvia', '.finestra .piede-f', 1200);
-    const acceso = await server('timer');
-    assert.ok(acceso.timer && acceso.timer.idCommessa === '26ST001', 'il timer è acceso sul server');
-    assert.match(await valuta("document.querySelector('.zona-timer').innerText"), /26ST001 ·\s*\d\d:\d\d:\d\d\s*· Ferma/);
-    await foto('timer-acceso');
-    await clicca('26ST001', '.zona-timer', 1500);
-    assert.equal((await server('timer')).timer, null, 'fermato');
-    assert.match(await testoFinestra(), /Le ore dal timer/);
-    const bozza = (await oreDellaSettimana()).ore.find(o => o.dalTimer && o.descrizione === 'Timer ' + GIRO);
-    assert.ok(bozza && bozza.stato === 'bozza', 'fermarlo crea la riga in bozza');
-    // La bozza si corregge: le ore a mano, un'ora, e si manda.
-    await clicca('Ore', '.finestra', 300);
-    await clicca('1 h', '.finestra', 300);
-    await clicca('Salva', '.finestra .piede-f', 1500);
-    const corretta = (await oreDellaSettimana()).ore.find(o => o.id === bozza.id);
-    assert.equal(corretta.ore, 1);
-    assert.equal(corretta.inizio, '', 'passata alle ore scritte a mano');
-    assert.equal(corretta.stato, 'da_approvare');
-    passo('timer: Avvia con la commessa, il tempo che scorre, Ferma -> la bozza, corretta e mandata');
-
-    // ------------------------------------------------------------ registra ore (inizio, fine, pausa)
-    await clicca('Registra ore', null, 700);
-    await clicca('26ST002', '.finestra', 300);
-    await clicca('Inizio e fine', '.finestra', 300);
-    await scrivi('Inizio', '8.00');
-    await scrivi('Fine', '12:30');
-    await scrivi('Pausa', '15');
-    assert.match(await valuta("document.querySelector('.finestra .anteprima-ore').innerText"), /4,25 h/, 'le ore calcolate subito, come il server');
-    await scrivi('Cosa hai fatto', 'Registrate ' + GIRO);
-    await clicca('Salva', '.finestra .piede-f', 1500);
-    const registrata = (await oreDellaSettimana()).ore.find(o => o.descrizione === 'Registrate ' + GIRO);
-    assert.ok(registrata, 'salvata sul server');
-    assert.deepEqual([registrata.inizio, registrata.fine, registrata.pausaMinuti, registrata.ore, registrata.idCommessa, registrata.stato], ['08:00', '12:30', 15, 4.25, '26ST002', 'da_approvare']);
-    passo('registra ore: 8.00-12:30 con 15 minuti di pausa = 4,25 h, da approvare');
-
-    // ------------------------------------------------------------ una cella del timesheet
-    const cella = await valuta(`(() => { const i = [...document.querySelectorAll('input.cella-ore')].find(x => x.dataset.cella.indexOf('26ST002|') === 0 && !x.value); return i ? i.dataset.cella : ''; })()`);
-    assert.ok(cella, 'una cella vuota di 26ST002 da scrivere');
-    await valuta(`(() => { const i = document.querySelector('[data-cella="${cella}"]'); i.value = '2,5'; i.dispatchEvent(new Event('change', { bubbles: true })); return true; })()`);
-    await aspetta(1500);
-    const daCella = (await oreDellaSettimana()).ore.filter(o => o.data === cella.split('|')[1] && o.idCommessa === '26ST002');
-    assert.equal(daCella.length, 1, 'nasce una riga sola');
-    assert.equal(daCella[0].ore, 2.5);
-    assert.match(await testoAvvisi(), /Ore salvate/);
-    // La stessa cella a 3: cambia quella riga (la descrizione resta), non ne nasce un'altra.
-    await server('salvaOre', { riga: { id: daCella[0].id, descrizione: 'Descrizione da tenere ' + GIRO } });
-    await vai('#rapportini/elenco');
-    await vai('#rapportini/ore');
-    await valuta(`(() => { const i = document.querySelector('[data-cella="${cella}"]'); i.value = '3'; i.dispatchEvent(new Event('change', { bubbles: true })); return true; })()`);
-    await aspetta(1500);
-    const cambiata = (await oreDellaSettimana()).ore.filter(o => o.data === cella.split('|')[1] && o.idCommessa === '26ST002');
-    assert.equal(cambiata.length, 1);
-    assert.equal(cambiata[0].ore, 3);
-    assert.equal(cambiata[0].descrizione, 'Descrizione da tenere ' + GIRO, 'la descrizione non si perde');
-    // Una cella con inizio e fine non si scrive: si apre il giorno.
-    const conOrari = await valuta(`(() => { const b = document.querySelector('button.cella-ore.apri[data-cella="26ST002|${registrata.data}"]'); return b ? b.dataset.cella : ''; })()`);
-    assert.ok(conOrari, 'la cella delle ore con inizio e fine è un pulsante');
-    await valuta(`document.querySelector('[data-cella="${conOrari}"]').click(); true`);
-    await aspetta(500);
-    assert.match(await testoFinestra(), /Registrate /);
-    await valuta("document.querySelectorAll('.velo').forEach(v => v.remove()); true");
-    await foto('timesheet');
-    passo('timesheet: la cella vuota crea la riga, quella con una riga cambia solo le ore, quella con inizio e fine apre il giorno');
+    await vai('#dashboard');
+    assert.equal(await valuta("!!document.querySelector('.timer-scheda')"), false, 'niente timer sulla Dashboard');
+    assert.ok(!/timer/i.test(await testoPagina()), 'la Dashboard non parla del timer');
+    // Il riquadro "ore della settimana" del collaboratore: col server di adesso porta al segmento "ore" di prima, col server
+    // nuovo a { pagina: 'rapportini' }; tutti e due aprono i Rapportini, senza errori.
+    let riquadroOre = false;
+    if (await valuta("!!document.querySelector('[data-riquadro=\"oreSettimana\"]')")) {
+      await valuta("document.querySelector('[data-riquadro=\"oreSettimana\"]').click(); true");
+      await aspetta(1300);
+      assert.equal(await valuta("document.querySelector('#principale h1').textContent"), 'Rapportini', 'il riquadro delle ore apre i Rapportini');
+      riquadroOre = true;
+    }
+    passo('niente Ore: #rapportini, /ore, /statistiche e /approvare aprono i Rapportini, senza timer, settimana o Registra ore; Dashboard senza timer' + (riquadroOre ? '; il riquadro "ore della settimana" apre i Rapportini' : ''));
 
     // ------------------------------------------------------------ spesa con la foto, poi Allo studio
     await vai('#spese');
@@ -273,17 +221,12 @@ async function main() {
     passo('trasferta: 25 km andata e ritorno a 0,76 = 38,00 €, da approvare');
 
     // ------------------------------------------------------------ il collaboratore non vede gli altri
-    const sueOre = (await oreDellaSettimana()).ore;
-    assert.ok(sueOre.length && sueOre.every(o => o.idUtente === 3), 'solo le sue ore');
     const sueSpese = (await server('spese')).spese;
     assert.ok(sueSpese.every(s => s.idUtente === 3), 'solo le sue spese');
     assert.ok(sueSpese.every(s => typeof s.importo === 'number'), 'gli importi delle sue spese li vede');
     assert.equal((await server('daApprovare')).permesso, false, 'non approva');
-    await vai('#rapportini/approvare');
-    assert.match(await valuta("document.querySelector('h1').textContent"), /La settimana/, 'Da approvare non c\'è: torna alle ore');
-    await vai('#rapportini/statistiche');
-    assert.ok(!/Costo/.test(await testoPagina()), 'niente costi nelle statistiche');
-    passo('collaboratore: solo le sue ore e spese (con gli importi), niente Da approvare, niente costi');
+    // #rapportini/approvare per lui apre i Rapportini (provato sopra, coi collegamenti delle ore).
+    passo('collaboratore: solo le sue spese (con gli importi), niente Da approvare');
 
     // ============================================================ il titolare (Manuel)
     await entra('manuel@esempio.it');
@@ -319,21 +262,24 @@ async function main() {
     await valuta(daApprovareDash + '.click(); true');
     await aspetta(1500);
     // Fase 8 (§8.2 punto 5): "N cose da approvare" è una voce sola che apre il foglio con le tre righe.
-    if (await valuta("!!document.querySelector('.velo .finestra')")) await cliccaCon('Ore e rapportini', '.velo .finestra', 1500);
+    // La riga dice dove porta: "Rapportini › Da approvare" (il server di prima scrive ancora "Ore e rapportini › ...").
+    if (await valuta("!!document.querySelector('.velo .finestra')")) await cliccaCon('rapportini › Da approvare', '.velo .finestra', 1500);
     assert.match(await valuta("document.querySelector('h1').textContent"), /Da approvare/);
     await foto('da-approvare');
 
     // ------------------------------------------------------------ approva con Annulla
+    // 07/11/2026: niente righe di ore in Da approvare (il server di prima le manda ancora: il programma non le mostra).
+    const vociApp = await valuta("[...document.querySelectorAll('.voce-app .t1')].map(x => x.textContent)");
+    assert.ok(vociApp.length && !vociApp.some(x => /^Ore\b/.test(x)), 'niente righe di ore: ' + vociApp.join(' | '));
     await clicca('Togli la selezione', null, 300);
-    await clicca('Ore · 26ST002 · Registrate ' + GIRO, '.sezione', 300);
+    await cliccaCon('Rapportino da approvare ' + GIRO, '#principale', 300);
     await clicca('Approva (1)', null, 1500);
-    let o = (await server('ore?da=' + sett[0] + '&a=' + sett[6] + '&utente=3')).ore.find(x => x.id === registrata.id);
-    assert.equal(o.stato, 'approvata');
+    const statoRap = async () => ((await server('rapportini')).rapportini.find(r => r.id === rapMarco.id) || {}).statoApprovazione;
+    assert.notEqual(await statoRap(), 'da_approvare', 'approvato');
     assert.match(await testoAvvisi(), /1 approvata/);
     await annullaUltimo();
-    o = (await server('ore?da=' + sett[0] + '&a=' + sett[6] + '&utente=3')).ore.find(x => x.id === registrata.id);
-    assert.equal(o.stato, 'da_approvare', 'Annulla la rimette da approvare');
-    passo('approvazioni: Approva (1) e poi Annulla, che la rimette da approvare');
+    assert.equal(await statoRap(), 'da_approvare', 'Annulla lo rimette da approvare');
+    passo('approvazioni: niente righe di ore; il rapportino di Marco con Approva (1) e poi Annulla, che lo rimette da approvare');
 
     // ------------------------------------------------------------ respingi senza motivo: no
     await vai('#rapportini/approvare');
@@ -393,20 +339,21 @@ async function main() {
     passo('spesa del rapportino spostata Allo studio: esce dal conto (' + C.euro(totalePrima) + ' -> ' + C.euro(rapDopo.totale) + ')');
 
     // ------------------------------------------------------------ esportazione e veicoli
-    await vai('#rapportini/ore');
-    await clicca('Esporta per Excel', null, 1500);
-    assert.match(await testoAvvisi(), /Salvato in /);
+    await vai('#amministrazione/importa');
+    const esporta = await testoPagina();
+    assert.match(esporta, /Le spese di questo mese/);
+    assert.ok(!/Le ore di questa settimana/.test(esporta), 'niente più l\'esportazione delle ore');
     await vai('#amministrazione/veicoli');
     assert.match(await testoPagina(), /0,76 €\/km/);
-    passo('esportazione delle ore per Excel; Amministrazione › Veicoli e rimborso km');
+    passo('Esporta per Excel senza le ore; Amministrazione › Veicoli e rimborso km');
 
     if (errori.length) throw new Error('Errori di JavaScript nella pagina:\n' + errori.join('\n'));
     console.log('TUTTO BENE (' + passi + ' passi)');
   } finally {
     if (ws) ws.close();
-    edge.kill();
+    await chiudiEdge(porta, edge);
     await aspetta(500);
-    try { fs.rmSync(profilo, { recursive: true, force: true }); } catch (e) { /* Edge a volte tiene un file un attimo */ }
+    await require('./edge-prova.js').togliCartella(profilo); // Edge a volte tiene un file un attimo: riprova per qualche secondo
   }
 }
 

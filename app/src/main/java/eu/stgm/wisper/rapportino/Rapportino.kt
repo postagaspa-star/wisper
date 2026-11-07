@@ -113,7 +113,19 @@ data class Rapportino(
     val portaleDaFirmare: Boolean = false,
     val portaleVistoIl: String = "",
     val portaleId: String = "",
+    /**
+     * Dal 06/11/2026 (docs/gestionale/rapportino-lavori.md) questa riga e' un **lavoro**: il rapportino e' la giornata
+     * coi suoi lavori. [idGiornata] il numero del rapportino (RAP/2026/0153, lo da' il server: per le righe di prima e'
+     * il loro id), [idLocaleGiornata] quello nato sul telefono ("G-...", finche' il server non ha risposto), [posizione]
+     * l'ordine nel rapportino (1, 2...; 0 = non detto).
+     */
+    val idGiornata: String = "",
+    val idLocaleGiornata: String = "",
+    val posizione: Int = 0,
 ) {
+    /** Da inviare: scritto e non ancora mandato (il FIRMATO di prima vale come Da inviare: la firma non c'e' piu'). */
+    val daInviare: Boolean get() = stato == Stato.BOZZA || stato == Stato.FIRMATO
+
     /** Ha un progetto (scelto, o nato qui e ancora in coda). */
     val conProgetto: Boolean get() = idProgetto.isNotBlank() || progettoNuovo != null
 
@@ -136,7 +148,7 @@ data class Rapportino(
             else -> null
         }
 
-    /** Firmato, inviato o fatturato: il lavoro non si tocca piu', si riporta in bozza. */
+    /** Inviato o fatturato: il lavoro non si tocca piu', si riporta da inviare (dal 06/11/2026 il FIRMATO di prima si cambia). */
     val bloccato: Boolean get() = stato in Stato.BLOCCATI
 
     val oreTotali: Double get() = oreLavoro + oreExtra + oreViaggio
@@ -209,6 +221,7 @@ data class Rapportino(
         .put("firmaReferente", firmaReferente)
         .put("portale", JSONObject().put("pubblicato", portalePubblicato).put("daFirmare", portaleDaFirmare).put("vistoIl", portaleVistoIl).put("pubblicazione", portaleId))
         .put("progetto", progetto).put("progettoDescrizione", progettoDescrizione).put("progettoIntestatoA", progettoIntestatoA)
+        .put("idGiornata", idGiornata).put("idLocaleGiornata", idLocaleGiornata).put("posizione", posizione)
         .apply {
             // Sul telefono il progetto nato qui resta anche dopo che il server l'ha creato (finché non arriva la risposta).
             progettoNuovo?.let { if (!has("progettoNuovo")) put("progettoNuovo", it.aJson()) }
@@ -320,6 +333,9 @@ data class Rapportino(
                 portaleDaFirmare = o.optJSONObject("portale")?.vero("daFirmare") == true,
                 portaleVistoIl = o.optJSONObject("portale")?.testo("vistoIl").orEmpty(),
                 portaleId = o.optJSONObject("portale")?.primoTesto("pubblicazione", "id", "idPubblicazione").orEmpty(),
+                idGiornata = o.testo("idGiornata"),
+                idLocaleGiornata = o.testo("idLocaleGiornata"),
+                posizione = o.numero("posizione")?.toInt() ?: 0,
             )
         }
     }
@@ -388,6 +404,10 @@ data class Rapportino(
         .put("modificato", modificato)
         // Fase 6 (§3.9): la riga Strumenti del PDF la fa pc/ui/documenti.js, solo quando ce ne sono.
         .put("strumenti", JSONArray().apply { strumenti.orEmpty().forEach { put(it.aJson()) } })
+        // 06/11/2026: il rapportino del lavoro (la colonna N° del riepilogo) e il posto nel rapportino.
+        .put("idGiornata", idGiornata.ifBlank { id })
+        .put("numero", idGiornata.ifBlank { id })
+        .put("posizione", posizione)
 }
 
 /** I conti di un rapportino, come li ha fatti il foglio o [Calcolo] sul telefono. */
@@ -424,14 +444,15 @@ data class FileRemoto(val id: String, val url: String) {
 }
 
 enum class Stato(val etichetta: String) {
-    BOZZA("Bozza"),
-    FIRMATO("Firmato"),
+    // 06/11/2026: niente piu' firma. BOZZA e il FIRMATO di prima sono tutti e due "Da inviare".
+    BOZZA("Da inviare"),
+    FIRMATO("Da inviare"),
     INVIATO("Inviato"),
     FATTURATO("Fatturato"),
     ANNULLATO("Annullato");
 
     companion object {
-        val BLOCCATI = setOf(FIRMATO, INVIATO, FATTURATO)
+        val BLOCCATI = setOf(INVIATO, FATTURATO)
 
         fun da(testo: String?): Stato =
             entries.firstOrNull { it.name.equals(testo?.trim(), ignoreCase = true) } ?: BOZZA

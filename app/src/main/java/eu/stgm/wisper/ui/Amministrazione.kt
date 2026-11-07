@@ -38,6 +38,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -648,62 +649,74 @@ private fun PaginaNumerazioni(dati: Dati, puo: Boolean, onIndietro: () -> Unit, 
         }
         SchedaElenco { RigaVoce("Fatture", sotto = "Il numero lo dà il programma delle fatture", icona = Icone.fatturazione) }
     }
-    modifica?.let { n ->
-        FoglioNumerazione(n, onSalva = { nuova, fatto ->
-            ambitoAmm.launch {
-                dati.salvaNumerazione(nuova)
-                    .onSuccess { fatto(null); avvisi.mostra("Salvato. Vale solo per i numeri nuovi: quelli già dati non cambiano") }
-                    .onFailure { fatto(it.message ?: "Non è stato salvato: riprova") }
-            }
-        }, onChiudi = { modifica = null })
-    }
+    modifica?.let { n -> FoglioNumerazione(dati, n, onChiudi = { modifica = null }) }
 }
 
 /**
  * Il formato coi pezzi da toccare: testo prima, anno (4 o 2 cifre, o niente),
  * testo in mezzo, il numero con N cifre; riparte a gennaio sì o no; l'anteprima.
+ * Dal 06/11/2026 si salva da solo: scelte e cifre subito, i testi dopo la pausa o
+ * lasciando il campo. Il foglio ha solo Fatto.
  */
 @Composable
-private fun FoglioNumerazione(n: Numerazione, onSalva: (Numerazione, (String?) -> Unit) -> Unit, onChiudi: () -> Unit) {
+private fun FoglioNumerazione(dati: Dati, n: Numerazione, onChiudi: () -> Unit) {
     val c = W.colori
+    val salva = rememberSalvaDaSolo()
+    val chiave = "NUMERAZIONE_" + n.tipo
     val pezzi = remember(n.formato) { Regex("""^(.*?)(\{AAAA\}|\{AA\})?(.*?)\{(N+)\}(.*)$""").find(n.formato) }
     var prima by remember { mutableStateOf(pezzi?.groupValues?.get(1).orEmpty()) }
     var anno by remember { mutableStateOf(when (pezzi?.groupValues?.get(2)) { "{AAAA}" -> "4"; "{AA}" -> "2"; else -> if (pezzi == null) "2" else "0" }) }
     var mezzo by remember { mutableStateOf(pezzi?.groupValues?.get(3) ?: "ST") }
     var cifre by remember { mutableIntStateOf(pezzi?.groupValues?.get(4)?.length ?: 3) }
     var annuale by remember { mutableStateOf(n.annuale) }
-    var salvo by remember { mutableStateOf(false) }
-    var errore by remember { mutableStateOf<String?>(null) }
+    // Quello che il server ha adesso: se si torna lì, non parte niente.
+    var salvata by remember { mutableStateOf(n.formato to n.annuale) }
     val dopo = pezzi?.groupValues?.get(5).orEmpty()
-    val formato = prima + when (anno) { "4" -> "{AAAA}"; "2" -> "{AA}"; else -> "" } + mezzo + "{" + "N".repeat(cifre) + "}" + dopo
-    val anteprima = Numerazione.applica(formato, n.ultimo + 1, LocalDate.now().year)
+    fun formatoAdesso() = prima + when (anno) { "4" -> "{AAAA}"; "2" -> "{AA}"; else -> "" } + mezzo + "{" + "N".repeat(cifre) + "}" + dopo
+    val anteprima = Numerazione.applica(formatoAdesso(), n.ultimo + 1, LocalDate.now().year)
+
+    fun manda(subito: Boolean) {
+        if ((formatoAdesso() to annuale) == salvata) { salva.annulla(chiave); return }
+        val lavoro: suspend () -> Result<*> = {
+            val f = formatoAdesso()
+            val a = annuale
+            dati.salvaNumerazione(n.copy(formato = f, annuale = a, prossimo = "")).onSuccess { salvata = f to a }
+        }
+        if (subito) salva.subito(chiave, CONFERMA_NUMERI, lavoro = lavoro) else salva.piuTardi(chiave, CONFERMA_NUMERI, lavoro = lavoro)
+    }
+
     FoglioDalBasso(onChiudi) {
-        Text(if (n.tipo == "commessa") "Numero delle commesse" else "Numero dei rapportini", style = Testi.titoloScheda, color = c.testo)
-        Column(Modifier.heightIn(max = 560.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(if (n.tipo == "commessa") "Numero delle commesse" else "Numero dei rapportini", style = Testi.titoloScheda, color = c.testo, modifier = Modifier.weight(1f))
+            SegnoSalvato(salva, chiave)
+        }
+        Column(
+            Modifier.heightIn(max = 560.dp).verticalScroll(rememberScrollState())
+                .onFocusChanged { if (!it.hasFocus && salva.inAttesa(chiave)) salva.adesso(chiave) },
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
             Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(c.fondo).padding(vertical = 16.dp), contentAlignment = Alignment.Center) {
                 Text(anteprima, style = Testi.numeroGrande, color = c.testo)
             }
-            CampoTesto(prima, { prima = it.take(8) }, "Testo prima", Modifier.fillMaxWidth(), segnaposto = "—")
+            CampoTesto(prima, { prima = it.take(8); manda(subito = false) }, "Testo prima", Modifier.fillMaxWidth(), segnaposto = "—")
             Text("Anno", style = Testi.secondarioGrande.copy(fontWeight = FontWeight.Bold), color = c.testo)
-            Segmenti(listOf("4" to "4 cifre", "2" to "2 cifre", "0" to "Niente"), anno, { anno = it })
-            CampoTesto(mezzo, { mezzo = it.take(8) }, "Testo in mezzo", Modifier.fillMaxWidth(), segnaposto = "—")
+            Segmenti(listOf("4" to "4 cifre", "2" to "2 cifre", "0" to "Niente"), anno, { anno = it; manda(subito = true) })
+            CampoTesto(mezzo, { mezzo = it.take(8); manda(subito = false) }, "Testo in mezzo", Modifier.fillMaxWidth(), segnaposto = "—")
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("Cifre del numero", style = Testi.forte, color = c.testo, modifier = Modifier.weight(1f))
-                PulsanteTondo(Icone.meno, "Una cifra in meno", { cifre = (cifre - 1).coerceAtLeast(1) }, dimensione = 48.dp)
+                PulsanteTondo(Icone.meno, "Una cifra in meno", { cifre = (cifre - 1).coerceAtLeast(1); manda(subito = true) }, dimensione = 48.dp)
                 Text("$cifre", style = Testi.numeroGrande, color = c.testo, textAlign = TextAlign.Center, modifier = Modifier.width(44.dp))
-                PulsanteTondo(Icone.piu, "Una cifra in più", { cifre = (cifre + 1).coerceAtMost(6) }, dimensione = 48.dp)
+                PulsanteTondo(Icone.piu, "Una cifra in più", { cifre = (cifre + 1).coerceAtMost(6); manda(subito = true) }, dimensione = 48.dp)
             }
-            RigaInterruttore("Riparte a gennaio", annuale) { annuale = it }
+            RigaInterruttore("Riparte a gennaio", annuale) { annuale = it; manda(subito = true) }
         }
-        errore?.let { Text(it, style = Testi.secondario, color = c.rossoTesto) }
-        PulsantePrincipale(if (salvo) "Salvo…" else "Salva", {
-            if (salvo) return@PulsantePrincipale
-            salvo = true
-            errore = null
-            onSalva(n.copy(formato = formato, annuale = annuale, prossimo = "")) { e -> salvo = false; if (e == null) onChiudi() else errore = e }
-        }, altezza = 56.dp, abilitato = !salvo)
+        salva.errori[chiave]?.let { Text(it, style = Testi.secondario, color = c.rossoTesto) }
+        PulsanteBordo("Fatto", onChiudi, Modifier.fillMaxWidth())
     }
 }
+
+/** Detto una volta, al primo salvataggio di una numerazione. */
+private const val CONFERMA_NUMERI = "Vale solo per i numeri nuovi: quelli già dati non cambiano"
 
 // ---------------------------------------------------------------------------------- registro
 

@@ -587,6 +587,14 @@ data class VoceDashboard(
     /** "Da approvare" in una voce sola (§8.2 punto 5): le righe del foglio. */
     val pezzi: List<PezzoDaApprovare> = emptyList(),
 ) {
+    /**
+     * 07/11/2026: le Ore non ci sono più. Un server di prima manda ancora il timer acceso
+     * e le ore respinte di un giorno, che non si possono più sistemare: non si mostrano.
+     */
+    val delleOre: Boolean
+        get() = tipo == "timer" ||
+            (tipo == "respinta" && collegamento?.parametri?.get("segmento") == "ore" && collegamento.parametri["giorno"] != null)
+
     companion object {
         fun daJson(o: JSONObject) = VoceDashboard(
             tipo = o.testo("tipo"),
@@ -652,9 +660,9 @@ data class Dashboard(
 
     companion object {
         fun daJson(o: JSONObject) = Dashboard(
-            urgenti = o.optJSONArray("urgenti").oggetti().map(VoceDashboard::daJson),
-            settimana = o.optJSONArray("settimana").oggetti().map(VoceDashboard::daJson),
-            pianificare = o.optJSONArray("pianificare").oggetti().map(VoceDashboard::daJson),
+            urgenti = o.optJSONArray("urgenti").oggetti().map(VoceDashboard::daJson).filterNot { it.delleOre },
+            settimana = o.optJSONArray("settimana").oggetti().map(VoceDashboard::daJson).filterNot { it.delleOre },
+            pianificare = o.optJSONArray("pianificare").oggetti().map(VoceDashboard::daJson).filterNot { it.delleOre },
             commesse = NumeriCommesse.daJson(o.optJSONObject("numeri")?.optJSONObject("commesse") ?: o.optJSONObject("commesse")),
             fase3 = NumeriFase3.daJson(o.optJSONObject("numeri")),
             fase4 = NumeriFase4.daJson(o.optJSONObject("numeri")?.optJSONObject("soldi")),

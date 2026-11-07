@@ -436,11 +436,15 @@ class DatiEsempio(oggi: LocalDate = LocalDate.now(), private val cartella: File?
     /**
      * Ogni giorno lavorativo passato della settimana ha il suo rapportino, tranne
      * l'ultimo: così nella settimana si vede un giorno che manca, come capita
-     * davvero. Due bozze vecchie da far firmare (Rossi e Mario Bianchi), e quello
-     * che serve all'ufficio: firmati da fatturare, inviati, fatturati, anche dei
+     * davvero. Lavori vecchi da inviare (Rossi e Mario Bianchi), e quello
+     * che serve all'ufficio: da inviare, inviati, fatturati, anche dei
      * mesi prima. Le ore delle commesse sono quelle del prototipo (74 su 120, 46
      * su 40, 20 su 24, 6 senza budget). I rapportini nuovi stanno tutti prima
      * delle bozze: i primi "recenti" della visita restano quelli di sempre.
+     *
+     * Dal 06/11/2026 (rapportino-lavori.md) alcuni rapportini hanno più lavori: l'ultimo giorno della settimana tre
+     * lavori di due clienti (Elettrodinamica già inviato, due per Rossi da inviare), quello vecchio da inviare due lavori
+     * di due clienti (Rossi e Mario Bianchi), e uno del mese con Rossi e Bianchi da inviare.
      */
     private fun iniziali(oggi: LocalDate): List<Vista> {
         val passati = (0L until 5L).map { lunedi.plusDays(it) }.filter { it.isBefore(oggi) }
@@ -451,11 +455,33 @@ class DatiEsempio(oggi: LocalDate = LocalDate.now(), private val cartella: File?
                 idCommessa = "26ST044", commessa = "Nuovo magazzino automatico",
                 idProgetto = "1", progetto = "ED-001", progettoDescrizione = "Quadro di linea QL1", progettoIntestatoA = "Batokyo Srl",
                 descrizione = if (i % 2 == 0) "Cablaggio quadro di linea" else "Collaudo sensori del nastro",
-                oreLavoro = if (i % 2 == 0) 6.5 else 8.0, oreViaggio = 1.0, km = 96.0, id = "RAP/${d.year}/01${30 + i}",
+                oreLavoro = if (i == fatti.lastIndex && i > 0) 4.0 else if (i % 2 == 0) 6.5 else 8.0, oreViaggio = 1.0, km = 96.0, id = "RAP/${d.year}/01${30 + i}",
                 stato = Stato.INVIATO, costoOrario = 22.0, inviatoIl = d.atTime(18, 0).format(ISO_ORA),
             )
+        }.let { lista ->
+            // L'ultimo giorno fatto: dopo Elettrodinamica, due lavori per Rossi Impianti ancora da inviare.
+            if (lista.size < 2) lista else {
+                val ultimo = lista.last()
+                lista.dropLast(1) + inGiornata(
+                    ultimo,
+                    Rapportino(
+                        idLocale = "esempio-s${lista.lastIndex}b", data = ultimo.data, tecnico = tecnico, idCliente = "C002",
+                        cliente = "Rossi Impianti Srl", idCommessa = "26ST045", commessa = "Quadro capannone",
+                        idProgetto = "3", progetto = "RS-01", progettoDescrizione = "Quadro generale QG2",
+                        descrizione = "Verifica dei differenziali del quadro generale e prova di intervento su tutte le linee",
+                        oreLavoro = 2.0, oreViaggio = 0.5, km = 18.0, tariffa = 42.0, costoOrario = 25.0,
+                    ),
+                    Rapportino(
+                        idLocale = "esempio-s${lista.lastIndex}c", data = ultimo.data, tecnico = tecnico, idCliente = "C002",
+                        cliente = "Rossi Impianti Srl", idCommessa = "26ST045", commessa = "Quadro capannone",
+                        idProgetto = "3", progetto = "RS-01", progettoDescrizione = "Quadro generale QG2",
+                        descrizione = "Etichette delle linee in partenza",
+                        oreLavoro = 1.5, tariffa = 42.0, costoOrario = 25.0,
+                    ),
+                )
+            }
         }
-        val bozze = listOf(
+        val bozze = inGiornata(
             Rapportino(
                 idLocale = "esempio-b1", data = feriale(oggi.minusDays(9)), tecnico = tecnico, idCliente = "C002",
                 cliente = "Rossi Impianti Srl", idCommessa = "26ST045",
@@ -463,6 +489,14 @@ class DatiEsempio(oggi: LocalDate = LocalDate.now(), private val cartella: File?
                 descrizione = "Sostituzione interruttore generale",
                 oreLavoro = 3.5, km = 22.0, tariffa = 42.0, id = "RAP/${oggi.year}/0128", costoOrario = 25.0,
             ),
+            // Lo stesso giorno, dopo Rossi: un controllo per Mario Bianchi (un altro cliente, un'altra email).
+            Rapportino(
+                idLocale = "esempio-b1b", data = feriale(oggi.minusDays(9)), tecnico = tecnico, idCliente = "C003",
+                cliente = "Mario Bianchi", idCommessa = "26ST047",
+                commessa = "Impianto fotovoltaico", descrizione = "Controllo dell'inverter e lettura degli allarmi",
+                oreLavoro = 1.5, oreViaggio = 0.5, km = 14.0, tariffa = 38.0, costoOrario = 22.0,
+            ),
+        ) + listOf(
             Rapportino(
                 idLocale = "esempio-b2", data = feriale(oggi.minusDays(10)), tecnico = tecnico, idCliente = "C003",
                 cliente = "Mario Bianchi", idCommessa = "26ST047",
@@ -480,7 +514,8 @@ class DatiEsempio(oggi: LocalDate = LocalDate.now(), private val cartella: File?
             val m = ana.commessa(commessa)!!
             val p = if (progetto.isBlank()) null else ana.progetto(progetto)
             val d = feriale(data)
-            val firmato = stato != Stato.BOZZA
+            // 06/11/2026: niente firma nei rapportini (quelli di esempio non ne hanno).
+            val firmato = false
             return Rapportino(
                 idLocale = "esempio-u$n", data = d, tecnico = tecnico, idCliente = c.id, cliente = c.nome,
                 idCommessa = m.id, commessa = m.descrizione, descrizione = lavoro, oreLavoro = ore, oreViaggio = viaggio,
@@ -497,18 +532,21 @@ class DatiEsempio(oggi: LocalDate = LocalDate.now(), private val cartella: File?
         val giorniMese = YearMonth.from(oggi).atDay(1)
         fun questoMese(giorniFa: Long): LocalDate = oggi.minusDays(giorniFa).let { if (it.isBefore(giorniMese)) giorniMese else it }
         val perUfficio = listOf(
-            // Questo mese: firmati e inviati da fatturare.
-            ufficio(1, questoMese(14), "C001", "26ST044", "Posa canaline e passerelle", 8.0, Stato.FIRMATO, km = 96.0, progetto = "2"),
-            ufficio(2, questoMese(13), "C002", "26ST045", "Montaggio quadro di distribuzione", 6.0, Stato.FIRMATO, km = 30.0, progetto = "3"),
-            ufficio(3, questoMese(15), "C003", "26ST047", "Posa staffe dei pannelli", 3.5, Stato.FIRMATO, km = 12.0,
-                spese = 24.5, noteSpese = "Raccordi"),
+            // Questo mese: da inviare e inviati, da fatturare.
+            ufficio(1, questoMese(14), "C001", "26ST044", "Posa canaline e passerelle", 8.0, Stato.BOZZA, km = 96.0, progetto = "2"),
+        ) + inGiornata(
+            // Un rapportino con due lavori di due clienti, tutti e due da inviare.
+            ufficio(2, questoMese(13), "C002", "26ST045", "Montaggio quadro di distribuzione", 6.0, Stato.BOZZA, km = 30.0, progetto = "3"),
+            ufficio(3, questoMese(13), "C003", "26ST047", "Posa staffe dei pannelli", 3.5, Stato.BOZZA, km = 12.0,
+                spese = 24.5, noteSpese = "Raccordi", viaggio = 0.0),
+        ) + listOf(
             ufficio(4, questoMese(16), "C002", "26ST045", "Cablaggio quadro di distribuzione", 6.0, Stato.INVIATO, km = 30.0),
             ufficio(5, questoMese(17), "C001", "26ST044", "Tracciamento linee e sopralluogo", 7.5, Stato.INVIATO, km = 96.0, progetto = "2"),
-            ufficio(6, questoMese(12), "C001", "26ST046", "Cablaggio cabina", 6.0, Stato.FIRMATO, km = 40.0),
+            ufficio(6, questoMese(12), "C001", "26ST046", "Cablaggio cabina", 6.0, Stato.BOZZA, km = 40.0),
             // Il mese prima: Rossi ancora da fatturare (la cosa piu' urgente), il resto fatturato.
             ufficio(7, mesePrima.atDay(8), "C002", "26ST045", "Progetto del quadro", 8.0, Stato.INVIATO, viaggio = 0.0),
             ufficio(8, mesePrima.atDay(15), "C002", "26ST045", "Disegno dei fronti quadro", 8.0, Stato.INVIATO, viaggio = 0.0),
-            ufficio(9, mesePrima.atDay(22), "C002", "26ST045", "Sopralluogo e misure", 7.5, Stato.FIRMATO, km = 30.0),
+            ufficio(9, mesePrima.atDay(22), "C002", "26ST045", "Sopralluogo e misure", 7.5, Stato.BOZZA, km = 30.0),
             ufficio(10, mesePrima.atDay(6), "C001", "26ST044", "Sopralluogo e rilievi", 6.0, Stato.FATTURATO, km = 96.0),
             ufficio(11, mesePrima.atDay(13), "C001", "26ST044", "Progetto quadro di linea", 8.0, Stato.FATTURATO, viaggio = 0.0, progetto = "1"),
             ufficio(12, mesePrima.atDay(20), "C001", "26ST044", "Preparazione materiali", 8.0, Stato.FATTURATO, viaggio = 0.0),
@@ -523,6 +561,22 @@ class DatiEsempio(oggi: LocalDate = LocalDate.now(), private val cartella: File?
             ufficio(20, oggi.minusMonths(5).withDayOfMonth(17), "C001", "25ST118", "Collaudo linea nuova", 8.0, Stato.FATTURATO, km = 40.0),
         )
         return (settimana + bozze + perUfficio).map(::conConto).sortedByDescending { it.rapportino.data }
+    }
+
+    /**
+     * Un rapportino coi suoi lavori, come lo scrive il server: il numero è quello del primo lavoro (RAP/2026/0128), gli
+     * altri lavori RAP/2026/0128-2, -3; tutti col giorno del primo e il loro posto.
+     */
+    private fun inGiornata(vararg lavori: Rapportino): List<Rapportino> {
+        val numero = lavori.first().id
+        return lavori.mapIndexed { i, l ->
+            l.copy(
+                id = if (i == 0) numero else "$numero-${i + 1}",
+                data = lavori.first().data,
+                idGiornata = numero,
+                posizione = i + 1,
+            )
+        }
     }
 
     /** Un sabato o una domenica diventa il venerdi' prima: i rapportini finti sono di giorni di lavoro. */
@@ -650,6 +704,47 @@ class DatiEsempio(oggi: LocalDate = LocalDate.now(), private val cartella: File?
         contaProgetti()
     }
 
+    /**
+     * Il rapportino coi lavori, come lo scrive il server (rapportino-lavori.md §3): il numero se e' nuovo, l'id dei
+     * lavori nuovi (RAP/2026/0153-2), lo stato di quelli che c'erano; i lavori tolti spariscono.
+     */
+    override fun salvaGiornata(g: eu.stgm.wisper.rapportino.Giornata) {
+        val prima = _viste.value.filter {
+            it.rapportino.idLocaleGiornata == g.idLocale || (g.id.isNotBlank() && eu.stgm.wisper.rapportino.Giornate.chiaveDi(it.rapportino) == g.id)
+        }
+        val numero = g.id.ifBlank { prossimoNumeroRapportino(g.data.year) }
+        val usati = _viste.value.map { it.rapportino.id }.toMutableSet()
+        val lavori = g.copy(id = numero).lavoriAllineati().map { l ->
+            val vecchio = prima.firstOrNull { it.rapportino.idLocale == l.idLocale }?.rapportino
+            val id = vecchio?.id?.takeIf { it.isNotBlank() } ?: run {
+                // Come il server (rapportini.js): i lavori nuovi sono <numero>-1, -2... (il numero solo è una riga di prima).
+                generateSequence(1) { it + 1 }.map { "$numero-$it" }.first { it !in usati }
+            }
+            usati += id
+            val base = if (vecchio != null && vecchio.bloccato) vecchio else l
+            conProgettoCreato(base.copy(id = id, idGiornata = numero, idLocaleGiornata = g.idLocale, posizione = l.posizione,
+                stato = vecchio?.stato?.let { if (it == Stato.FIRMATO) Stato.BOZZA else it } ?: Stato.BOZZA,
+                inviatoIl = vecchio?.inviatoIl.orEmpty(), fatturatoIl = vecchio?.fatturatoIl.orEmpty(), creato = vecchio?.creato ?: adesso(),
+                costoOrario = vecchio?.costoOrario ?: l.costoOrario))
+        }
+        val tolti = prima.map { it.rapportino.idLocale }.toSet()
+        _viste.value = (_viste.value.filterNot { it.rapportino.idLocale in tolti } + lavori.map(::conConto)).sortedByDescending { it.rapportino.data }
+        contaProgetti()
+    }
+
+    override fun eliminaGiornata(g: eu.stgm.wisper.rapportino.Giornata) {
+        val via = g.lavori.map { it.idLocale }.toSet()
+        _viste.value = _viste.value.filterNot { it.rapportino.idLocale in via }
+    }
+
+    /** Il prossimo RAP/anno/NNNN dei rapportini di esempio. */
+    private fun prossimoNumeroRapportino(anno: Int): String {
+        val n = _viste.value.mapNotNull { v ->
+            Regex("""^RAP/$anno/(\d+)""").find(eu.stgm.wisper.rapportino.Giornate.chiaveDi(v.rapportino))?.groupValues?.get(1)?.toIntOrNull()
+        }.maxOrNull() ?: 0
+        return "RAP/$anno/" + (n + 1).toString().padStart(4, '0')
+    }
+
     /** Un progetto nato nel rapportino diventa un progetto vero, come quando il server riceve il rapportino (progetti.md §2). */
     private fun conProgettoCreato(r: Rapportino): Rapportino {
         val nuovo = r.progettoNuovo ?: return r
@@ -770,6 +865,20 @@ class DatiEsempio(oggi: LocalDate = LocalDate.now(), private val cartella: File?
         }
         _ana.value = ana.copy(commesse = commesse.map { if (it.id.equals(commessa.id, ignoreCase = true)) commessa else it })
         return Result.success(Salvataggio(commessa))
+    }
+
+    override suspend fun cambiaCodiceCommessa(id: String, nuovoCodice: String): Result<Commessa> {
+        val nuovo = nuovoCodice.trim().uppercase()
+        val m = ana.commessa(id) ?: return errore("La commessa $id non c'è")
+        if (nuovo.isBlank()) return errore("Scrivi il codice nuovo")
+        if (ana.commesse.any { it.id.equals(nuovo, ignoreCase = true) && it !== m }) return errore("Il codice $nuovo è già di un'altra commessa")
+        val fatta = m.copy(id = nuovo, codicePrecedente = m.id)
+        _ana.value = ana.copy(
+            commesse = ana.commesse.map { if (it === m) fatta else it },
+            progetti = ana.progetti.map { if (it.idCommessa.equals(m.id, ignoreCase = true)) it.copy(idCommessa = nuovo) else it },
+        )
+        _viste.value = _viste.value.map { v -> if (v.rapportino.idCommessa.equals(m.id, ignoreCase = true)) v.copy(rapportino = v.rapportino.copy(idCommessa = nuovo)) else v }
+        return Result.success(fatta)
     }
 
     private fun conUltimo(tipo: String): List<Numerazione> = ana.numerazioni.map { if (it.tipo == tipo) it.copy(ultimo = it.ultimo + 1, prossimo = "") else it }
@@ -1462,7 +1571,7 @@ internal fun nomeModulo(modulo: String): String = when (modulo) {
     Moduli.PROGETTI -> "Progetti"
     Moduli.PREVENTIVI -> "Preventivi e contratti"
     Moduli.ATTIVITA -> "Attività e calendario"
-    Moduli.RAPPORTINI -> "Ore e rapportini"
+    Moduli.RAPPORTINI -> "Rapportini"
     Moduli.FATTURAZIONE -> "Fatturazione"
     Moduli.BANCHE -> "Banche e scadenze"
     Moduli.SPESE -> "Spese e trasferte"

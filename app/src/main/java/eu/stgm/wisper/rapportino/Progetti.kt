@@ -301,6 +301,18 @@ object RegoleProgetti {
     fun attivi(s: Sessione): Boolean =
         s.permessi.livelli.containsKey(Moduli.PROGETTI) && Moduli.PROGETTI !in s.interfaccia.funzioniSpente
 
+    /**
+     * Il progetto (e quindi la commessa) è obbligatorio solo per Elettrodinamica (06/11/2026, scelta di Andrea: "dal
+     * nome Elettrodinamica"): il nome del cliente in minuscolo, senza accenti e senza spazi, punti, trattini o altri
+     * segni contiene "elettrodinamica". Per tutti gli altri progetto e commessa sono facoltativi. Gli stessi casi del
+     * computer in server/prove/casi-progetto-obbligatorio.json. Vale solo con la funzione Progetti accesa ([attivi]).
+     */
+    fun progettoObbligatorio(nomeCliente: String): Boolean =
+        java.text.Normalizer.normalize(nomeCliente.lowercase(), java.text.Normalizer.Form.NFD)
+            .replace(Regex("\\p{M}+"), "")
+            .replace(Regex("[^a-z0-9]"), "")
+            .contains("elettrodinamica")
+
     /** I progetti nati sul telefono e ancora in coda (dentro i rapportini non ancora arrivati), uno per idLocale. */
     fun inAttesa(ana: Anagrafiche, rapportini: List<Rapportino>): List<Progetto> {
         val noti = ana.progetti.map { it.idLocale }.filter { it.isNotBlank() }.toSet()

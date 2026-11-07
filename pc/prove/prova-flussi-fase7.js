@@ -17,6 +17,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
 const assert = require('node:assert/strict');
+const { portaDevtools, chiudiEdge: chiudiEdgeCdp } = require('./edge-prova.js');
 
 const arg = process.argv.slice(2);
 const opz = (n, d) => { const i = arg.indexOf(n); return i >= 0 ? arg[i + 1] : d; };
@@ -30,7 +31,7 @@ const K = require('../ui/regole-comunicazioni.js');
 
 async function main() {
   const profilo = fs.mkdtempSync(path.join(os.tmpdir(), 'wisper-edge-flussi7-'));
-  const porta = 9800 + Math.floor(Math.random() * 150);
+  const porta = portaDevtools(9800, 150);
   const edge = spawn(EDGE, ['--headless=new', '--disable-gpu', '--no-first-run', '--hide-scrollbars', '--user-data-dir=' + profilo, '--remote-debugging-port=' + porta, 'about:blank'], { stdio: 'ignore' });
   let ws = null;
   const errori = [];
@@ -192,7 +193,8 @@ async function main() {
     if (st0.collegato === 'non_collegato') {
       await vai('#amministrazione/portale');
       await scrivi('Indirizzo del portale', INDIRIZZO_PROVA, '#principale');
-      await clicca('Salva', '#principale .scheda-indirizzo', 2500);
+      // 06/11/2026: niente Salva, l'indirizzo si salva da solo (800 ms dopo l'ultima lettera) e poi si prova da fuori.
+      await aspetta(2500);
       const imp = (await server('anagrafiche')).impostazioni || {};
       assert.equal(imp.PORTALE_INDIRIZZO, INDIRIZZO_PROVA, 'l\'indirizzo del portale è salvato');
       const st1 = (await server('portale')).stato;
@@ -298,7 +300,8 @@ async function main() {
       passo('Preventivo ' + (prev.numero || prev.id) + ': Pubblica nel portale, Togli dal portale, Annulla');
     }
 
-    // ------------------------------------------------------------- 6. Un rapportino in bozza di Rossi: Fallo firmare nel portale
+    // ------------------------------------------------------------- 6. Un lavoro da inviare di Rossi: Pubblica nel portale
+    // Dal 06/11/2026 (rapportino-lavori.md) i rapportini non si firmano più: si pubblicano da guardare, dal menu del lavoro.
     const bozza = ((await server('rapportini')).rapportini || []).find(r => r.idCliente === rossi.id && r.stato === 'BOZZA' && !(r.portale && r.portale.pubblicato));
     if (bozza) {
       await valuta(`location.hash = '#rapportini/elenco'; true`);
@@ -308,17 +311,18 @@ async function main() {
       await aspetta(600);
       await valuta(`(() => { const r = [...document.querySelectorAll('.tab .r.cliccabile')].find(x => x.dataset.chiave === ${JSON.stringify(bozza.id)}); if (r) r.click(); return !!r; })()`);
       await aspetta(700);
-      await clicca('Altre azioni', '.pannello', 500);
-      await clicca('Fallo firmare nel portale', '.menu', 1500);
+      await clicca('Altro su questo lavoro', '.pannello', 500);
+      assert.ok(!/firm/i.test(await valuta("document.querySelector('.menu').innerText")), 'niente "Fallo firmare"');
+      await clicca('Pubblica nel portale', '.menu', 1500);
       testo = await testoFinestra();
-      assert.match(testo, /Da firmare nel portale/, 'già scelto Da firmare nel portale');
+      assert.ok(!/firm/i.test(testo), 'niente "Da firmare nel portale"');
       await clicca('Pubblica', '.finestra', 2200);
       const rr = ((await server('rapportini')).rapportini || []).find(r => r.id === bozza.id);
-      assert.ok(rr.portale && rr.portale.pubblicato && rr.portale.daFirmare, 'pubblicato da firmare');
+      assert.ok(rr.portale && rr.portale.pubblicato && !rr.portale.daFirmare, 'pubblicato da guardare');
       testo = await testoPannello('.pannello');
-      assert.match(testo, /Da firmare nel portale/, 'la pillola nel pannello del rapportino');
-      await foto('09-rapportino-da-firmare');
-      passo('Rapportino ' + bozza.id + ': Fallo firmare nel portale (pillola Da firmare nel portale)');
+      assert.match(testo, /Nel portale/, 'la pillola nel pannello del rapportino');
+      await foto('09-rapportino-nel-portale');
+      passo('Lavoro ' + bozza.id + ': Pubblica nel portale (pillola Nel portale, niente firma)');
     }
 
     // ------------------------------------------------------------- 7. WhatsApp: il sì, il messaggio preparato, wa.me fuori, L'hai mandato?
@@ -503,9 +507,9 @@ async function main() {
     console.log('\n' + passi + ' passi, tutto a posto.');
   } finally {
     if (ws) ws.close();
-    edge.kill();
+    await chiudiEdgeCdp(porta, edge);
     await aspetta(500);
-    try { fs.rmSync(profilo, { recursive: true, force: true }); } catch (e) { /* Edge tiene un file ancora un attimo */ }
+    await require('./edge-prova.js').togliCartella(profilo); // Edge a volte tiene un file un attimo: riprova per qualche secondo
   }
 }
 

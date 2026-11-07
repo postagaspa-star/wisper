@@ -316,8 +316,9 @@
                 onclick: x.portale ? () => accessoReferente(idc, x) : null, freccia: !!x.portale,
               }))) : h('p', { class: 'vuoto sinistra' }, 'Nessuno entra ancora.')),
               h('div', { class: 'sezione-dash' }, h('span', { class: 'etichetta' }, 'Cosa si pubblica da solo'), h('div', { class: 'scheda righe' },
-                regola('Preventivi quando partono', 'preventivi'), regola('Contratti quando si attivano', 'contratti'), regola('Rapportini firmati', 'rapportiniFirmati'),
-                regola('Rapportini da firmare', 'rapportiniDaFirmare'), regola('Fatture emesse', 'fatture'),
+                regola('Preventivi quando partono', 'preventivi'), regola('Contratti quando si attivano', 'contratti'),
+                // 06/11/2026: i rapportini non si firmano più; la regola di sempre ("firmati") vale per i rapportini mandati.
+                regola('Rapportini inviati', 'rapportiniFirmati'), regola('Fatture emesse', 'fatture'),
                 h('div', { class: 'riga riga-int' }, h('span', { class: 'corpo' }, h('span', { class: 't1' }, 'Richieste')),
                   segmenti([['portale', 'Solo dal portale'], ['tutte', 'Tutte']], regole.richieste, v => { if (scrive() && v !== regole.richieste) salvaCliente(idc, { regole: Object.assign({}, regole, { richieste: v }) }); }, 'piccoli')),
                 interruttore('Importi nei rapportini', '', !!c.importi, v => salvaCliente(idc, { importi: v }), !scrive())),
@@ -501,7 +502,7 @@
       return h('div', { class: 'riga' + (apri ? ' cliccabile-riga' : ''), role: apri ? 'button' : null, tabindex: apri ? '0' : null, onclick: apri ? () => W.vaiA(apri) : null },
         quadrato(K.ICONE_PUBBLICAZIONE[p.tipo] || 'file'),
         h('span', { class: 'corpo' }, h('span', { class: 't1' }, p.titolo), h('span', { class: 't2' }, [conCliente ? p.cliente : '', (p.origine === 'regola' ? 'pubblicato da solo' : 'pubblicato a mano') + ' il ' + C.data(String(p.pubblicataIl || '').slice(0, 10))].filter(Boolean).join(' · ')),
-          h('span', { class: 'pillole-testa sotto-riga' }, p.vistoIl ? pill(K.vistoTesto(p.vistoIl) + (p.vistoDa ? ' · ' + p.vistoDa : ''), 'verde') : pill('Non ancora visto', 'giallo'), p.daFirmare ? pill('Da firmare nel portale', 'giallo') : null)),
+          h('span', { class: 'pillole-testa sotto-riga' }, p.vistoIl ? pill(K.vistoTesto(p.vistoIl) + (p.vistoDa ? ' · ' + p.vistoDa : ''), 'verde') : pill('Non ancora visto', 'giallo'), p.daFirmare && p.tipo !== 'rapportino' ? pill('Da firmare nel portale', 'giallo') : null)),
         altro);
     }
 
@@ -532,7 +533,7 @@
             h('span', { class: 'taglia' }, p.cliente || ''),
             h('span', { class: 't2' }, C.data(String(p.pubblicataIl || '').slice(0, 10))),
             h('span', { class: 't2' }, p.origine === 'regola' ? 'da solo' : 'a mano'),
-            h('span', { class: 'pillole-testa' }, p.vistoIl ? pill(K.vistoTesto(p.vistoIl), 'verde') : pill('Non ancora visto', 'giallo'), p.daFirmare ? pill('Da firmare nel portale', 'giallo') : null),
+            h('span', { class: 'pillole-testa' }, p.vistoIl ? pill(K.vistoTesto(p.vistoIl), 'verde') : pill('Non ancora visto', 'giallo'), p.daFirmare && p.tipo !== 'rapportino' ? pill('Da firmare nel portale', 'giallo') : null),
             scrive() ? h('button', { type: 'button', class: 'tondo piccolo', 'aria-label': 'Togli dal portale', title: 'Togli dal portale', onclick: e => { e.stopPropagation(); togli(p.id, () => { M.pubblicati = null; W.disegnaPagina(); }); } }, icona('chiudi', 16)) : h('span'))]);
         });
         aggiungi(zona, [tab]);

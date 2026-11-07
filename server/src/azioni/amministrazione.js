@@ -237,6 +237,8 @@ module.exports = {
 
   /** registro {da, a, utente, tabella, idRiga, pagina}: le modifiche, le piu' recenti prima. */
   leggiRegistro(d) {
+    // 06/11/2026: chi apre il registro vede anche le righe dei salvataggi automatici ancora in attesa (wisper.js).
+    this.db.transazione(() => this.scriviInAttesa({ tutte: true }));
     const cond = [];
     const par = [];
     if (testo(d.da)) { cond.push('substr(quando, 1, 10) >= ?'); par.push(testo(d.da)); }

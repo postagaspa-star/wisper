@@ -205,28 +205,43 @@ test('il timer sopravvive al riavvio del server; acceso da piu\' di un giorno no
 
 // ------------------------------------------------------------------ approvazioni
 
-test('da approvare: per persona, con le anomalie (troppe ore, senza scontrino, sopra 200 euro, km diversi)', async () => {
-  const d = await manuel('daApprovare');
-  assert.equal(d.ok, true, d.errore);
-  const marcoP = d.persone.find(p => p.idUtente === MARCO);
-  assert.ok(marcoP && marcoP.quante >= 6);
-  const voci = tutteLeVoci(d);
-  const anomalie = new Set([].concat(...voci.map(v => v.anomalie.map(a => a.tipo))));
-  for (const a of ['troppeOre', 'senzaFoto', 'sopra200', 'kmDiversi']) assert.ok(anomalie.has(a), a);
-  const tredici = voci.filter(v => v.anomalie.some(a => a.testo === '13 ore in un giorno'));
-  assert.equal(tredici.length, 2, 'le due righe di quel giorno');
-  assert.ok(voci.some(v => v.tipo === 'rapportino' && v.id === 'RAP/2026/0006'));
-  assert.ok(voci.some(v => v.tipo === 'trasferta' && v.anomalie.some(a => /^Km diversi dal solito: 180 invece di circa 96$/.test(a.testo))));
-  // Fase 6: anche le richieste di ferie e permessi (tipo "assenza").
-  assert.ok(voci.every(v => ['ore', 'rapportino', 'spesa', 'trasferta', 'assenza'].includes(v.tipo) && typeof v.dettaglio === 'string' && typeof v.quanto === 'number'));
-  assert.equal(d.conAnomalie, voci.filter(v => v.anomalie.length).length);
-  // Chi non approva.
-  assert.equal((await marco('daApprovare')).permesso, false);
-  assert.equal((await lettura('daApprovare')).permesso, false);
-  assert.equal((await laura('daApprovare')).ok, true, 'amministrazione approva');
-  const unaOra = voci.find(v => v.tipo === 'ore');
-  assert.equal((await marco('approva', { voci: [{ tipo: 'ore', id: unaOra.id }] })).permesso, false);
-  assert.equal((await marco('respingi', { voci: [{ tipo: 'ore', id: unaOra.id }], motivo: 'x' })).permesso, false);
+test('da approvare: per persona, con le anomalie (troppe ore, senza scontrino, sopra 200 euro, km diversi); le ore registrate no (07/11/2026)', async () => {
+  // 07/11/2026 (Manuel: "le Ore vanno tolte, non servono, metti solamente i Rapportini"): le righe della tabella ore non
+  // sono piu' fra le cose da approvare e non contano nelle ore del giorno. "Troppe ore" viene solo dai rapportini: Marco
+  // scrive un rapportino da 13 ore e, lo stesso giorno, 3 ore registrate (che non si vedono e non si sommano).
+  const g = giorno('2026-11-12');
+  const lungo = (await marco('salvaRapportino', { rapportino: { idLocale: 'marco-troppe-1', data: g, idCliente: 'C002', idCommessa: '26ST002', oreLavoro: 9, oreExtra: 4 } })).rapportino;
+  assert.equal(lungo.statoApprovazione, 'da_approvare');
+  const registrate = (await marco('salvaOre', { riga: { data: g, idCommessa: '26ST002', ore: 3, descrizione: 'Ore del vecchio modo' } })).riga;
+  assert.equal(registrate.stato, 'da_approvare', 'nel database restano da approvare');
+  try {
+    const d = await manuel('daApprovare');
+    assert.equal(d.ok, true, d.errore);
+    const marcoP = d.persone.find(p => p.idUtente === MARCO);
+    assert.ok(marcoP && marcoP.quante >= 6);
+    const voci = tutteLeVoci(d);
+    const anomalie = new Set([].concat(...voci.map(v => v.anomalie.map(a => a.tipo))));
+    for (const a of ['troppeOre', 'senzaFoto', 'sopra200', 'kmDiversi']) assert.ok(anomalie.has(a), a);
+    const tredici = voci.filter(v => v.anomalie.some(a => a.testo === '13 ore in un giorno'));
+    assert.deepEqual(tredici.map(v => [v.tipo, v.id]), [['rapportino', lungo.id]], 'il rapportino di quel giorno, senza le 3 ore registrate');
+    assert.ok(voci.some(v => v.tipo === 'rapportino' && v.id === 'RAP/2026/0006'));
+    assert.ok(voci.some(v => v.tipo === 'trasferta' && v.anomalie.some(a => /^Km diversi dal solito: 180 invece di circa 96$/.test(a.testo))));
+    // Fase 6: anche le richieste di ferie e permessi (tipo "assenza"). Le ore registrate (dati di esempio e queste) no.
+    assert.ok(voci.every(v => ['rapportino', 'spesa', 'trasferta', 'assenza'].includes(v.tipo) && typeof v.dettaglio === 'string' && typeof v.quanto === 'number'));
+    assert.ok(s.wisper.db.riga("SELECT COUNT(*) n FROM ore WHERE stato = 'da_approvare' AND tolta IS NULL").n >= 4, 'le righe restano nel database');
+    assert.equal(d.conAnomalie, voci.filter(v => v.anomalie.length).length);
+    // Chi non approva.
+    assert.equal((await marco('daApprovare')).permesso, false);
+    assert.equal((await lettura('daApprovare')).permesso, false);
+    assert.equal((await laura('daApprovare')).ok, true, 'amministrazione approva');
+    // approva/respingi {tipo: 'ore'} restano per le app vecchie, coi loro permessi.
+    assert.equal((await marco('approva', { voci: [{ tipo: 'ore', id: registrate.id }] })).permesso, false);
+    assert.equal((await marco('respingi', { voci: [{ tipo: 'ore', id: registrate.id }], motivo: 'x' })).permesso, false);
+  } finally {
+    // Le prove dopo (approvazioni, statistiche) non devono vedere queste due righe.
+    s.wisper.db.esegui("UPDATE rapportini SET stato = 'ANNULLATO' WHERE id = ?", lungo.id);
+    s.wisper.db.esegui('UPDATE ore SET tolta = ? WHERE id = ?', istante(new Date()), registrate.id);
+  }
 });
 
 test('respingi vuole il motivo, che arriva a chi ha scritto (registro e Dashboard); Annulla rimette da approvare', async () => {

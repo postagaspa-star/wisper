@@ -94,13 +94,15 @@ fun PulsantePrincipale(
     altezza: Dp = 64.dp,
 ) {
     val c = W.colori
+    // Alto almeno [altezza]: con i caratteri grandi un testo lungo va a capo e il pulsante cresce, non si taglia.
     Row(
         modifier
             .fillMaxWidth()
-            .height(altezza)
+            .heightIn(min = altezza)
             .clip(RoundedCornerShape(18.dp))
             .background(if (abilitato) c.giallo else c.superficie2)
-            .clickable(onClick = onClick),
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 6.dp),
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -108,7 +110,7 @@ fun PulsantePrincipale(
             Icon(icona, null, tint = if (abilitato) c.suGiallo else c.moltoTenue, modifier = Modifier.size(22.dp))
             Spacer(Modifier.width(10.dp))
         }
-        Text(testo, style = Testi.pulsante, color = if (abilitato) c.suGiallo else c.moltoTenue)
+        Text(testo, style = Testi.pulsante, color = if (abilitato) c.suGiallo else c.moltoTenue, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
     }
 }
 
@@ -209,19 +211,34 @@ fun Pillola(testo: String, scelta: Boolean, onClick: () -> Unit, modifier: Modif
     }
 }
 
+/**
+ * Una riga di pezzi separati da " · " ("N° RAP/2026/0016 · 4 lavori · 3 clienti") che, se non sta, va a capo fra un
+ * pezzo e l'altro e mai dentro un pezzo: niente "3" da solo in fondo e "clienti" sotto (06/11/2026, i testi stanno nei
+ * loro contenitori). I pezzi vuoti si saltano.
+ */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+fun RigaAPezzi(pezzi: List<String>, stile: TextStyle, colore: Color, modifier: Modifier = Modifier) {
+    val pieni = pezzi.filter { it.isNotBlank() }
+    androidx.compose.foundation.layout.FlowRow(modifier) {
+        pieni.forEachIndexed { i, p -> Text(if (i < pieni.lastIndex) "$p · " else p, style = stile, color = colore) }
+    }
+}
+
 /** UNA parola di stato, mai solo un colore. */
 @Composable
 fun ParolaStato(stato: Stato, modifier: Modifier = Modifier) {
     val c = W.colori
     val (parola, testo, fondo) = when (stato) {
-        Stato.BOZZA -> Triple("Da firmare", c.gialloTesto, c.gialloTenue)
-        Stato.FIRMATO -> Triple("Firmato", c.firmatoTesto, c.firmatoFondo)
+        // 06/11/2026: niente firma. BOZZA e il FIRMATO di prima sono "Da inviare".
+        Stato.BOZZA, Stato.FIRMATO -> Triple("Da inviare", c.gialloTesto, c.gialloTenue)
         Stato.INVIATO -> Triple("Inviato", c.inviatoTesto, c.inviatoFondo)
         Stato.FATTURATO -> Triple("Fatturato", c.fatturatoTesto, c.fatturatoFondo)
         Stato.ANNULLATO -> Triple("Annullato", c.rossoTesto, c.rossoTenue)
     }
     Text(
         parola, style = Testi.pillola, color = testo,
+        maxLines = 1, softWrap = false,
         modifier = modifier.clip(RoundedCornerShape(50)).background(fondo).padding(horizontal = 9.dp, vertical = 3.dp),
     )
 }
@@ -316,8 +333,8 @@ fun CampoTesto(
 @Composable
 fun Passi(stato: Stato, modifier: Modifier = Modifier) {
     val c = W.colori
-    val passi = listOf(Stato.BOZZA to "Da firmare", Stato.FIRMATO to "Firmato", Stato.INVIATO to "Inviato", Stato.FATTURATO to "Fatturato")
-    val indice = passi.indexOfFirst { it.first == stato }.coerceAtLeast(0)
+    val passi = listOf(Stato.BOZZA to "Da inviare", Stato.INVIATO to "Inviato", Stato.FATTURATO to "Fatturato")
+    val indice = passi.indexOfFirst { it.first == (if (stato == Stato.FIRMATO) Stato.BOZZA else stato) }.coerceAtLeast(0)
     Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         passi.forEachIndexed { i, (_, nome) ->
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {

@@ -82,6 +82,16 @@ interface Dati {
     fun aggiorna(mese: YearMonth? = null)
     fun tariffaProposta(cliente: Cliente?, nomeCliente: String): Double?
     fun salva(r: Rapportino)
+
+    /**
+     * Il rapportino della giornata coi suoi lavori (06/11/2026, docs/gestionale/rapportino-lavori.md): in coda tutto
+     * insieme, una sola operazione per rapportino, e parte quando c'e' rete. I lavori che c'erano e non sono piu'
+     * nell'elenco il server li toglie (solo Da inviare).
+     */
+    fun salvaGiornata(g: eu.stgm.wisper.rapportino.Giornata)
+
+    /** Elimina il rapportino intero (tutti i lavori Da inviare): quello mai partito sparisce, gli altri diventano annullati. */
+    fun eliminaGiornata(g: eu.stgm.wisper.rapportino.Giornata)
     fun accodaFoto(idLocale: String, file: File)
     suspend fun preparaFoto(sorgente: Uri): File
     fun togliFoto(idLocale: String, remota: FileRemoto?, locale: File?)
@@ -142,6 +152,14 @@ interface Dati {
      * giaEsisteva = true. Dopo, le anagrafiche si rileggono.
      */
     suspend fun salvaCommessa(commessa: Commessa, nuova: Boolean): Result<Salvataggio<Commessa>>
+
+    /**
+     * Cambia il codice di una commessa che c'è già (06/11/2026): il server lo cambia anche in rapportini, progetti, ore,
+     * spese e fatture; i documenti già mandati restano col codice vecchio, che resta in codicePrecedente (un rapportino
+     * ancora in coda col codice vecchio trova la commessa). In diretta: senza rete "Serve la rete per cambiare il codice".
+     * Un no del server arriva com'è. Dopo, anagrafiche e rapportini si rileggono.
+     */
+    suspend fun cambiaCodiceCommessa(id: String, nuovoCodice: String): Result<Commessa>
 
     /**
      * Scrive le impostazioni date (CHIAVE -> valore, vedi le chiavi in

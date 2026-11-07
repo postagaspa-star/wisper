@@ -261,8 +261,8 @@
           sotto: [x.idRapportino, x.data ? C.data(x.data).slice(0, 5) : '', x.matricola ? 'matr. ' + x.matricola : ''].filter(Boolean).join(' · '), destra: st.parola ? pill(st.parola, st.colore) : null });
       })), t.tarataScaduta ? h('div', { class: 'banda' }, icona('avviso', 18), h('span', { class: 'spazio' }, 'Taratura scaduta: in uno dei suoi interventi è stato usato uno strumento con la taratura scaduta')) : null) : null;
       const s = t.somma || {};
-      const righeOS = (t.ore || []).map(o => riga({ sinistra: quadrato('orologio'), titolo: C.ore(o.ore) + (o.descrizione ? ' · ' + o.descrizione : ''), sotto: [C.data(o.data).slice(0, 5), o.utente].filter(Boolean).join(' · '),
-        onclick: W.Ore ? () => W.Ore.moduloOre(o, { dopo: () => aggiorna() }) : null }))
+      // 07/11/2026: niente più Ore; quelle già scritte sul ticket si vedono, non si aprono.
+      const righeOS = (t.ore || []).map(o => riga({ sinistra: quadrato('orologio'), titolo: C.ore(o.ore) + (o.descrizione ? ' · ' + o.descrizione : ''), sotto: [C.data(o.data).slice(0, 5), o.utente].filter(Boolean).join(' · '), freccia: false }))
         .concat((t.spese || []).map(x => riga({ sinistra: quadrato(x.categoria === 'materiale' ? 'materiale' : 'scontrino'), titolo: (x.descrizione || x.categoria) + ' · ' + C.euro(x.importo),
           sotto: [C.data(x.data).slice(0, 5), x.utente, x.destinazione === 'cliente' ? 'al cliente' : x.destinazione === 'personale' ? 'mia' : 'dello studio', x.idRapportino ? 'nel ' + x.idRapportino : ''].filter(Boolean).join(' · '),
           onclick: W.Spese ? () => W.Spese.moduloSpesa(x, { dopo: () => aggiorna() }) : null })));
@@ -271,7 +271,6 @@
         h('div', { class: 'somma-tk' }, h('span', null, T.sommaTesto(s) || 'Niente ancora'),
           soldi() && s.costo !== undefined ? h('span', { class: 'secondario' }, 'costo ' + C.euro(s.costo) + (s.importo ? ' · in fattura ' + C.euro(s.importo) : '')) : null),
         puoQui ? h('div', { class: 'pillole' },
-          puo('rapportini', 2) && W.Ore ? h('button', { type: 'button', class: 'pillola tratteggiata', onclick: () => W.Ore.moduloOre(null, { idCommessa: t.idCommessa || '', idTicket: t.id, dopo: () => aggiorna() }) }, '+ Ore') : null,
           puo('spese', 2) && W.Spese ? h('button', { type: 'button', class: 'pillola tratteggiata', onclick: () => W.Spese.moduloSpesa(null, { categoria: 'materiale', idCommessa: t.idCommessa || '', idCliente: t.idCliente, destinazione: 'cliente', idTicket: t.id, dopo: () => aggiorna() }) }, '+ Materiale o spesa') : null) : null);
       const foto = sezione('Foto', h('div', { class: 'miniature foto-tk' },
         (t.foto || []).map(f => {
@@ -780,7 +779,7 @@
 
     /**
      * Dopo il rapportino di un ticket non ancora risolto (fase5.md §3.3): Sì, è risolto (giallo) o
-     * Serve un altro intervento. Sul computer il rapportino si salva da firmare: lo si dice.
+     * Serve un altro intervento. Il lavoro salvato è da inviare: lo si dice.
      */
     async function lavoroFinito(rapportino) {
       if (!rapportino || !rapportino.idTicket || !scrive()) return;
@@ -788,9 +787,9 @@
       const t = r && r.ticket;
       if (!t || ['aperto', 'in_carico', 'in_attesa'].indexOf(t.stato) < 0 || t.puoScrivere === false) return;
       let chiudi;
-      const firmato = rapportino.firmatario && rapportino.stato !== 'BOZZA';
+      // 06/11/2026: niente firma; il lavoro salvato è da inviare al cliente.
       chiudi = finestra({ titolo: 'Il lavoro è finito?', fuoco: false,
-        corpo: [h('p', { class: 'testo-forte' }, (rapportino.id || 'Il rapportino') + (firmato ? ' firmato da ' + rapportino.firmatario : ' salvato: va ancora fatto firmare')),
+        corpo: [h('p', { class: 'testo-forte' }, (rapportino.idGiornata || rapportino.id || 'Il rapportino') + ' salvato: è da inviare al cliente'),
           h('p', { class: 'secondario' }, t.numero + ' · ' + t.titolo)],
         pulsanti: [h('button', { type: 'button', class: 'btn grande', onclick: async () => {
           chiudi();
@@ -866,7 +865,7 @@
             h('div', { class: 'riga-fattura' }, h('span', { class: 'etichetta' }, 'La riga che nascerà'), h('div', null, riga0)))]);
         } else if (x.modo === 'separati') {
           aggiungi(destra, [h('div', { class: 'scheda in-fattura' }, h('span', { class: 'etichetta' }, 'Cosa succede'),
-            h('div', null, 'Rapportini, ore e spese del ticket vanno in Da fatturare come sempre, con le regole del cliente.'), h('div', { class: 'secondario' }, T.sommaTesto(s)))]);
+            h('div', null, 'Rapportini e spese del ticket vanno in Da fatturare come sempre, con le regole del cliente.'), h('div', { class: 'secondario' }, T.sommaTesto(s)))]);
         } else if (x.modo === 'contratto') {
           aggiungi(destra, [h('div', { class: 'scheda in-fattura' }, h('span', { class: 'etichetta' }, 'Cosa succede'),
             h('div', null, 'Niente da fatturare: è coperto dal canone del contratto ' + t.contratto + '.'),

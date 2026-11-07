@@ -217,7 +217,7 @@ internal fun FoglioDaApprovare(v: VoceDashboard?, numero: String, nav: Navigator
         val righe = v?.pezzi.orEmpty().ifEmpty {
             // Il server non ha mandato le righe: le tre strade dell'accordo, quelle che la persona vede.
             buildList {
-                if (sessione.puoApprovare) add(eu.stgm.wisper.rapportino.PezzoDaApprovare("Ore e spese", "Ore e rapportini › Da approvare", Collegamento("rapportini", parametri = mapOf("segmento" to "daApprovare"))))
+                if (sessione.puoApprovare) add(eu.stgm.wisper.rapportino.PezzoDaApprovare("Rapportini e spese", "Rapportini › Da approvare", Collegamento("rapportini", parametri = mapOf("segmento" to "daApprovare"))))
                 if (sessione.puoApprovareAssenze) add(eu.stgm.wisper.rapportino.PezzoDaApprovare("Ferie e permessi", "Persone › Ferie da approvare", Collegamento("persone", parametri = mapOf("segmento" to "ferie"))))
                 if (sessione.puoApprovareDocumenti) add(eu.stgm.wisper.rapportino.PezzoDaApprovare("Documenti", "Documenti › Da approvare", Collegamento("documenti", parametri = mapOf("segmento" to "approvare"))))
             }

@@ -201,6 +201,24 @@ class PonteServerTest {
     }
 
     @Test
+    fun `cambiare il codice di una commessa manda nuovoCodice, mai codice, e il vecchio si ritrova`() = runBlocking {
+        risposta = """{"ok":true,"vecchio":"26ST044","commessa":{"id":"26ST100","idCliente":"C002","descrizione":"Capannone","codicePrecedente":"26ST044"}}"""
+        val (m, vecchio) = ponte.cambiaCodiceCommessa("26ST044", " 26ST100 ")
+        val o = corpo()
+        assertEquals("cambiaCodiceCommessa", o.getString("azione"))
+        assertEquals("26ST044", o.getString("id"))
+        assertEquals("26ST100", o.getString("nuovoCodice"))
+        assertFalse(o.has("codice"))
+        assertEquals("26ST100", m.id)
+        assertEquals("26ST044", vecchio)
+        // Un rapportino ancora in coda col codice vecchio trova la commessa col codice nuovo.
+        val ana = Anagrafiche(commesse = listOf(m))
+        assertEquals("26ST100", ana.commessa("26ST044")?.id)
+        assertEquals("26ST100", ana.commessa("26st044")?.id)
+        assertEquals("26ST100", ana.commessa("26ST100")?.id)
+    }
+
+    @Test
     fun `impostazioni, i numeri come numeri`() = runBlocking {
         risposta = """{"ok":true,"impostazioni":{"EURO_KM":0.8,"COSTO_ORARIO":22,"PARTITA_IVA":"01234567890","TICKET_ATTIVO":"SI"}}"""
         val imp = ponte.salvaImpostazioni(mapOf("EURO_KM" to 0.8, "PARTITA_IVA" to "01234567890"))

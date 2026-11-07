@@ -347,7 +347,8 @@ test('stampa: il rapportino della vista con documenti.js, firmato nel portale, s
   assert.ok(!senza.includes(P.SEGNAPOSTO_FIRMA) && !senza.includes('text/html'), 'un\'immagine che non è PNG o JPEG non entra');
   const daFirmare = P.perStampaRapportino(Object.assign({}, vista, { statoVisto: 'Da firmare', daFirmare: true, firma: null, firmaModo: '', firmatario: '', firmatoIl: '' }), STUDIO, 'Rossi');
   html = D.rapportino(daFirmare.rapportino, daFirmare.ana, daFirmare.opzioni);
-  assert.ok(html.includes('Da firmare') && !html.includes('Firmato nel portale') && !html.includes('/file/'));
+  // 06/11/2026 (niente firma del cliente): un rapportino senza firma non ha più la casella "Da firmare".
+  assert.ok(!html.includes('Da firmare') && !html.includes('Firmato nel portale') && !html.includes('/file/'));
   const conImporti = P.perStampaRapportino(Object.assign({}, vista, { importi: { tariffa: 45, compensoOre: 135, km: 24, euroKm: 0.76, rimborsoKm: 18.24, spese: 0, totale: 153.24 } }), STUDIO, 'Rossi');
   html = D.rapportino(conImporti.rapportino, conImporti.ana, conImporti.opzioni);
   assert.ok(html.includes('Compenso ore') && html.includes('153,24 €') && html.includes('3 h × 45,00 €'));

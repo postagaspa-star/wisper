@@ -151,62 +151,77 @@
       return m ? m[1] : W.D.idDaUrl(s);
     }
 
-    // ===================================================================== dati dello studio
+    // ===================================================================== le impostazioni si salvano da sole (06/11/2026)
 
-    function studio(pagina) {
-      const imp = S.ana.impostazioni;
-      const sola = !scrive();
-      const campi = {};
-      const input = (chiave, etichetta) => {
-        const valore = imp[chiave] === undefined || imp[chiave] === null ? '' : imp[chiave];
-        campi[chiave] = h('input', { type: 'text', value: String(valore), disabled: sola });
-        return campo(etichetta, campi[chiave]);
-      };
-      const firma = idFirma(imp.FIRMA_TECNICO);
-      const areaTitoli = h('textarea', { rows: 3, disabled: sola });
-      areaTitoli.value = imp.TITOLI || '';
-      campi.TITOLI = areaTitoli;
-      aggiungi(pagina, [h('div', { class: 'testata' }, h('h1', null, 'Dati dello studio')),
-        h('div', { class: 'stretta-820 sezione' },
-          h('div', { class: 'scheda' }, h('h2', null, 'Intestazione dei PDF'),
-            h('div', { class: 'fila' },
-              h('div', { class: 'riga-campi' }, input('RAGIONE_SOCIALE', 'Ragione sociale'), input('TECNICO', 'Chi firma i rapportini')),
-              h('div', { class: 'riga-campi' }, input('INDIRIZZO', 'Indirizzo'), input('PARTITA_IVA', 'Partita IVA')),
-              h('div', { class: 'riga-campi' }, input('EMAIL', 'Email per le risposte'), input('TELEFONO', 'Telefono'), input('PEC', 'PEC')),
-              sola ? null : h('div', null, h('button', { type: 'button', class: 'btn giallo', onclick: () => salvaImpostazioni(campi, ['RAGIONE_SOCIALE', 'TECNICO', 'INDIRIZZO', 'PARTITA_IVA', 'EMAIL', 'TELEFONO', 'PEC']) }, 'Salva')))),
-          // Fase 4 (§4.1): i dati che servono alla fattura, separati (l'indirizzo qui sopra è via e numero).
-          h('div', { class: 'scheda' }, h('h2', null, 'Per le fatture'),
-            h('div', { class: 'fila' },
-              h('div', { class: 'riga-campi' }, input('CODICE_FISCALE', 'Codice fiscale'), input('STUDIO_CAP', 'CAP'), input('STUDIO_COMUNE', 'Comune'), input('STUDIO_PROVINCIA', 'Provincia')),
-              h('div', { class: 'riga-campi' }, input('ALBO', 'Albo'), input('ALBO_PROVINCIA', 'Provincia dell\'albo'), input('ALBO_NUMERO', 'Numero di iscrizione'), input('ALBO_DATA', 'Iscritto dal')),
-              sola ? null : h('div', null, h('button', { type: 'button', class: 'btn', onclick: () => salvaImpostazioni(campi, ['CODICE_FISCALE', 'STUDIO_CAP', 'STUDIO_COMUNE', 'STUDIO_PROVINCIA', 'ALBO', 'ALBO_PROVINCIA', 'ALBO_NUMERO', 'ALBO_DATA'],
-                'Salvato: vale per le fatture che passi al programma da adesso') }, 'Salva')))),
-          h('div', { class: 'scheda' }, h('h2', null, 'Polizza e titoli'),
-            h('div', { class: 'fila' },
-              h('div', { class: 'riga-campi' }, input('POLIZZA_COMPAGNIA', 'Compagnia della polizza professionale'), input('POLIZZA_NUMERO', 'Numero della polizza'), input('POLIZZA_MASSIMALE', 'Massimale')),
-              campo('Titoli e specializzazioni', areaTitoli),
-              sola ? null : h('div', null, h('button', { type: 'button', class: 'btn', onclick: () => salvaImpostazioni(campi, ['POLIZZA_COMPAGNIA', 'POLIZZA_NUMERO', 'POLIZZA_MASSIMALE', 'TITOLI'],
-                'Salvato: polizza e titoli vanno nei preventivi nuovi') }, 'Salva')))),
-          h('div', { class: 'scheda' }, h('h2', null, 'La tua firma'),
-            h('div', { class: 'fila' },
-              firma ? h('img', { class: 'firma-tecnico', src: '/file/' + firma, alt: 'La tua firma' }) : h('div', { class: 'secondario' }, 'Non ancora caricata: sui rapportini resta lo spazio vuoto.'),
-              sola ? null : h('div', null, h('button', { type: 'button', class: 'btn', onclick: async () => {
-                const scelto = await Rete.post('/locale/scegli-file', { filtro: 'immagini' }).catch(() => null);
-                if (!scelto || !scelto.ok) return;
-                const ris = await lavora('Carico la firma', () => Rete.post('/server/caricaFile', { tipo: 'firmaTecnico', mime: scelto.mime, base64: scelto.base64 }));
-                if (ris) { await W.ricaricaAnagrafiche(); avviso('Firma caricata'); W.ridisegna(); }
-              } }, firma ? 'Cambia la firma' : 'Carica la firma')))))]);
+    /**
+     * Salva una o più chiavi (salvaImpostazioni) e le tiene in memoria. Rifiuta con la frase del server: chi chiama
+     * (B.salvaDaSolo, B.salvaOra) la mostra nell'avviso e mette il bordo rosso. Niente "Salvo…": si salva da solo.
+     */
+    async function salvaChiavi(valori) {
+      const ris = await Rete.post('/server/salvaImpostazioni', { valori });
+      S.ana.impostazioni = Object.assign({}, S.ana.impostazioni, (ris && ris.impostazioni) || valori);
+      return ris;
     }
 
-    async function salvaImpostazioni(campi, chiavi, conferma) {
-      const valori = {};
-      chiavi.forEach(k => {
-        let x = campi[k].type === 'checkbox' ? (campi[k].checked ? 'SI' : 'NO') : campi[k].value.trim();
-        if (['EURO_KM', 'COSTO_ORARIO', 'IVA', 'EPPI_INTEGRATIVO', 'RITENUTA', 'PREVENTIVO_VALIDITA_GIORNI', 'ACI_ANNO', 'INDENNITA_TRASFERTA', 'ORE_GIORNALIERE'].indexOf(k) >= 0 && x !== '') x = C.num(x);
-        valori[k] = x;
-      });
-      const ris = await lavora('Salvo', () => Rete.post('/server/salvaImpostazioni', { valori }));
-      if (ris) { S.ana.impostazioni = Object.assign({}, S.ana.impostazioni, ris.impostazioni || valori); avviso(conferma || 'Salvato'); W.disegnaPagina(); }
+    /**
+     * Un campo di un'impostazione che si salva da solo (riunione del 06/11/2026: niente più "Salva").
+     * o: { numero: true | { min, max, intero }, suffisso, frase (al posto di "Salvato"), area (testo lungo), righe, attr,
+     *      valore (quello da mostrare, se diverso dall'impostazione: i valori di base), leggi, trasforma(v), dopo(v), salva(v) }.
+     * data-chiave serve alla ricerca nelle impostazioni (regole-impostazioni.js).
+     */
+    function campoVivo(chiave, etichetta, o) {
+      const x = o || {};
+      const imp = S.ana.impostazioni;
+      const grezzo = x.valore !== undefined ? x.valore : imp[chiave];
+      const mostra = grezzo === undefined || grezzo === null ? '' : (x.numero && typeof grezzo === 'number' ? R.numeroCampo(grezzo) : String(grezzo));
+      const sola = !scrive();
+      const el = x.area ? h('textarea', { rows: x.righe || 4, disabled: sola })
+        : h('input', Object.assign({ type: 'text', value: mostra, disabled: sola, inputmode: x.numero ? (x.numero.intero ? 'numeric' : 'decimal') : null }, x.attr || {}));
+      if (x.area) el.value = mostra;
+      if (!sola) {
+        B.salvaDaSolo(el, {
+          leggi: x.leggi || (x.numero ? B.leggiNumero(Object.assign({ nome: etichetta }, typeof x.numero === 'object' ? x.numero : {})) : null),
+          frase: x.frase, dopo: x.dopo,
+          salva: v => (x.salva ? x.salva(v) : salvaChiavi({ [chiave]: x.trasforma ? x.trasforma(v) : v })),
+        });
+      }
+      const c = campo(etichetta, x.suffisso ? conSuffisso(el, x.suffisso) : el);
+      c.setAttribute('data-chiave', chiave);
+      return c;
+    }
+
+    /** I segmenti che si salvano subito; se il server rifiuta tornano com'erano. salva(valore) -> Promise. */
+    function segmentiVivi(voci, scelto, salva, frase, classe) {
+      const zona = h('div');
+      let valore = scelto;
+      const rifai = () => aggiungi(svuota(zona), [segmenti(voci, valore, async y => {
+        if (!scrive() || String(y) === String(valore)) return;
+        const prima = valore;
+        valore = y;
+        rifai();
+        const ok = await B.salvaOra(zona, () => salva(y), typeof frase === 'function' ? frase(y) : frase);
+        if (!ok) { valore = prima; rifai(); }
+      }, classe)]);
+      rifai();
+      return zona;
+    }
+
+    /** Le pillole a scelta multipla (tipi di file, documenti dei collaboratori) che si salvano subito. */
+    function pilloleVive(voci, scelte, salva, minimo, frase) {
+      const zona = h('div', { class: 'pillole' });
+      const rifai = () => aggiungi(svuota(zona), voci.map(([k, nome]) => h('button', { type: 'button', class: 'pillola piccola' + (scelte.indexOf(k) >= 0 ? ' scelta' : ''), disabled: !scrive(),
+        'aria-pressed': scelte.indexOf(k) >= 0 ? 'true' : 'false',
+        onclick: async () => {
+          const i = scelte.indexOf(k);
+          if (i >= 0 && minimo && scelte.length <= minimo.quanti) { avviso(minimo.frase, true); return; }
+          const prima = scelte.slice();
+          if (i >= 0) scelte.splice(i, 1); else scelte.push(k);
+          rifai();
+          const ok = await B.salvaOra(zona, () => salva(scelte.slice()), frase);
+          if (!ok) { scelte.splice(0, scelte.length, ...prima); rifai(); }
+        } }, nome)));
+      rifai();
+      return zona;
     }
 
     // ===================================================================== tariffe e rimborsi
@@ -214,21 +229,15 @@
     function tariffe(pagina) {
       const imp = S.ana.impostazioni;
       const sola = !scrive();
-      const campi = {};
-      const input = (chiave, etichetta, suffisso) => {
-        const valore = imp[chiave] === undefined || imp[chiave] === null ? '' : imp[chiave];
-        // I numeri alla italiana: 0,76 e non 0.76.
-        campi[chiave] = h('input', { type: 'text', value: typeof valore === 'number' ? R.numeroCampo(valore) : String(valore), disabled: sola, inputmode: suffisso ? 'decimal' : null });
-        return campo(etichetta, suffisso ? conSuffisso(campi[chiave], suffisso) : campi[chiave]);
-      };
-      campi.TICKET_ATTIVO = h('input', { type: 'checkbox', checked: imp.TICKET_ATTIVO === 'SI', disabled: sola });
+      const frase = 'Salvato: vale per i rapportini nuovi';
+      const ticket = h('input', { type: 'checkbox', checked: imp.TICKET_ATTIVO === 'SI', disabled: sola });
+      if (!sola) ticket.addEventListener('change', async () => { const ok = await B.salvaOra(ticket, () => salvaChiavi({ TICKET_ATTIVO: ticket.checked ? 'SI' : 'NO' })); if (!ok) ticket.checked = !ticket.checked; });
       aggiungi(pagina, [h('div', { class: 'testata' }, h('h1', null, 'Tariffe e rimborsi')),
         h('div', { class: 'stretta-820' }, h('div', { class: 'scheda' }, h('h2', null, 'Rimborso km e costi'),
           h('div', { class: 'fila' },
-            h('div', { class: 'riga-campi' }, input('EURO_KM', 'Rimborso km (tabella ACI)', '€/km'), input('AUTO', 'Auto'), input('COSTO_ORARIO', 'Quanto costa un\'ora', '€/h')),
-            h('label', { class: 'spunta-campo' }, campi.TICKET_ATTIVO, 'Campo ticket nei rapportini'),
-            sola ? null : h('div', null, h('button', { type: 'button', class: 'btn giallo', onclick: () => salvaImpostazioni(campi, ['EURO_KM', 'AUTO', 'COSTO_ORARIO', 'TICKET_ATTIVO'],
-              'Salvato. Vale per i rapportini nuovi: quelli già scritti tengono il rimborso con cui sono nati') }, 'Salva')))))]);
+            h('div', { class: 'riga-campi' }, campoVivo('EURO_KM', 'Rimborso km (tabella ACI)', { numero: { min: 0 }, suffisso: '€/km', frase }), campoVivo('AUTO', 'Auto', { frase }),
+              campoVivo('COSTO_ORARIO', 'Quanto costa un\'ora', { numero: { min: 0 }, suffisso: '€/h', frase })),
+            h('label', { class: 'spunta-campo', 'data-chiave': 'TICKET_ATTIVO' }, ticket, 'Campo ticket nei rapportini'))))]);
     }
 
     // ===================================================================== fisco e preventivi
@@ -240,15 +249,7 @@
      */
     function fisco(pagina) {
       const imp = S.ana.impostazioni;
-      const sola = !scrive();
-      const campi = {};
-      const input = (chiave, etichetta, suffisso) => {
-        const valore = imp[chiave] === undefined || imp[chiave] === null ? '' : imp[chiave];
-        campi[chiave] = h('input', { type: 'text', value: typeof valore === 'number' ? R.numeroCampo(valore) : String(valore), disabled: sola, inputmode: suffisso ? 'decimal' : null });
-        return campo(etichetta, suffisso ? conSuffisso(campi[chiave], suffisso) : campi[chiave]);
-      };
-      campi.PREVENTIVO_CONDIZIONI = h('textarea', { rows: 4, disabled: sola });
-      campi.PREVENTIVO_CONDIZIONI.value = imp.PREVENTIVO_CONDIZIONI || '';
+      const frase = 'Salvato: vale per i preventivi nuovi';
       aggiungi(pagina, [h('div', { class: 'testata' }, h('h1', null, 'Fisco e preventivi')),
         h('div', { class: 'stretta-820 sezione' },
           // Fase 4: IVA, contributo e ritenuta sono regole fiscali: stanno in Impostazioni fiscali (cambiarle toglie la conferma del commercialista).
@@ -257,16 +258,15 @@
           sotto: 'Si cambiano in Impostazioni fiscali', onclick: () => W.vai('#amministrazione/fiscale') })) : null,
           h('div', { class: 'scheda' }, h('h2', null, 'Preventivi'),
             h('div', { class: 'fila' },
-              h('div', { class: 'riga-campi' }, input('PREVENTIVO_VALIDITA_GIORNI', 'Validità di un preventivo', 'giorni'), h('span')),
-              campo('Condizioni che si propongono', campi.PREVENTIVO_CONDIZIONI),
-              sola ? null : h('div', null, h('button', { type: 'button', class: 'btn', onclick: () => salvaImpostazioni(campi, ['PREVENTIVO_VALIDITA_GIORNI', 'PREVENTIVO_CONDIZIONI'],
-                'Salvato: vale per i preventivi nuovi') }, 'Salva')))))]);
+              h('div', { class: 'riga-campi' }, campoVivo('PREVENTIVO_VALIDITA_GIORNI', 'Validità di un preventivo', { numero: { intero: true, min: 1 }, suffisso: 'giorni', frase }), h('span')),
+              campoVivo('PREVENTIVO_CONDIZIONI', 'Condizioni che si propongono', { area: true, frase }))))]);
     }
 
     // ===================================================================== veicoli e rimborso km (fase 3)
 
     /** L'euro al km con tutti i decimali (fino a 4, come le tabelle ACI): 0,5432 e non 0,54. */
     const euroKmCampo = n => (n === null || n === undefined || n === '' ? '' : String(Math.round(Number(n) * 10000) / 10000).replace('.', ','));
+    const leggiAnno = t => { const s = String(t || '').trim(); if (!s) return { valore: '' }; return /^\d{4}$/.test(s) ? { valore: Number(s) } : { errore: 'Anno ACI: scrivi l\'anno delle tabelle, per esempio 2026' }; };
 
     /**
      * I veicoli con cui si fanno le trasferte: il nome, l'alimentazione, l'euro al km
@@ -280,10 +280,7 @@
       aggiungi(pagina, [h('div', { class: 'testata' }, h('h1', { class: 'spazio' }, 'Veicoli e rimborso km'),
         scrive() ? h('button', { type: 'button', class: 'btn giallo', onclick: () => moduloVeicolo(null) }, icona('piu', 18, 2.6), 'Nuovo veicolo') : null), area]);
       leggi(area, 'veicoli', '/server/veicoli?tutti=1', ris => {
-        const campi = {
-          ACI_ANNO: h('input', { type: 'text', inputmode: 'numeric', value: String(imp.ACI_ANNO || ris.aciAnno || ''), disabled: !scrive() }),
-          INDENNITA_TRASFERTA: h('input', { type: 'text', inputmode: 'decimal', value: imp.INDENNITA_TRASFERTA === '' || imp.INDENNITA_TRASFERTA === null || imp.INDENNITA_TRASFERTA === undefined ? '' : R.numeroCampo(imp.INDENNITA_TRASFERTA), disabled: !scrive() }),
-        };
+        const frase = 'Salvato: vale per le trasferte nuove';
         const lista = ris.veicoli || [];
         aggiungi(area, [
           // Fase 6: i veicoli sono diventati i mezzi, con la loro scheda completa (scadenze, km, guasti, costi).
@@ -291,10 +288,9 @@
             h('button', { type: 'button', class: 'btn', onclick: () => W.vai('#mezzi/mezzi') }, 'Apri i mezzi')) : null,
           h('div', { class: 'scheda' }, h('h2', null, 'Tabelle ACI e trasferte'),
             h('div', { class: 'fila' },
-              h('div', { class: 'riga-campi' }, campo('Anno delle tabelle ACI', campi.ACI_ANNO), campo('Indennità di trasferta al giorno', conSuffisso(campi.INDENNITA_TRASFERTA, '€'))),
-              h('div', { class: 'pillole' },
-                ris.paginaAci ? h('a', { class: 'btn', href: ris.paginaAci, target: '_blank', rel: 'noopener' }, 'Apri le tabelle ACI') : null,
-                scrive() ? h('button', { type: 'button', class: 'btn', onclick: () => salvaImpostazioni(campi, ['ACI_ANNO', 'INDENNITA_TRASFERTA'], 'Salvato: vale per le trasferte nuove') }, 'Salva') : null))),
+              h('div', { class: 'riga-campi' }, campoVivo('ACI_ANNO', 'Anno delle tabelle ACI', { valore: String(imp.ACI_ANNO || ris.aciAnno || ''), leggi: leggiAnno, attr: { inputmode: 'numeric' }, frase }),
+                campoVivo('INDENNITA_TRASFERTA', 'Indennità di trasferta al giorno', { numero: { min: 0 }, suffisso: '€', frase })),
+              ris.paginaAci ? h('div', { class: 'pillole' }, h('a', { class: 'btn', href: ris.paginaAci, target: '_blank', rel: 'noopener' }, 'Apri le tabelle ACI')) : null)),
           lista.length ? h('div', { class: 'scheda righe' }, lista.map(v => riga({
             sinistra: quadrato('auto'), titolo: v.nome,
             sotto: [v.alimentazione, 'tabelle ACI ' + (v.annoAci || '—'), v.trasferte ? (v.trasferte === 1 ? '1 trasferta' : v.trasferte + ' trasferte') : 'nessuna trasferta'].filter(Boolean).join(' · '),
@@ -304,6 +300,10 @@
       });
     }
 
+    /**
+     * Il veicolo. Nuovo: il modulo con Annulla e Salva (crea). Uno che c'è già: ogni campo si salva da solo (06/11/2026)
+     * e la finestra ha solo Chiudi; chiudendo si rilegge l'elenco.
+     */
     function moduloVeicolo(v0) {
       const v = v0 || { nome: '', alimentazione: '', euroKm: '', annoAci: S.ana.impostazioni.ACI_ANNO || new Date().getFullYear(), attivo: true };
       const c = {
@@ -313,6 +313,8 @@
         annoAci: h('input', { type: 'text', inputmode: 'numeric', value: String(v.annoAci || ''), autocomplete: 'off' }),
         attivo: h('input', { type: 'checkbox', checked: v.attivo !== false }),
       };
+      const leggiNome = t => (String(t || '').trim() ? { valore: String(t).trim() } : { errore: 'Nome: scrivi il nome del veicolo' });
+      const leggiEuro = t => { const n = C.numONull(t); return n === null ? { errore: 'Euro al km: scrivi quanto, per esempio 0,76' } : { valore: n }; };
       let errori = {};
       const zona = h('div', { class: 'fila' });
       const disegna = () => aggiungi(svuota(zona), [campo('Nome', c.nome, errori.nome), campo('Alimentazione', c.alimentazione),
@@ -320,24 +322,39 @@
         v0 ? h('label', { class: 'spunta-campo' }, c.attivo, 'In uso') : null]);
       disegna();
       let chiudi;
+      if (v0) {
+        // Ogni campo si salva da solo: al server va il veicolo intero, con gli ultimi valori salvati degli altri campi.
+        const ora = { id: v0.id, nome: v0.nome || '', alimentazione: v0.alimentazione || '', euroKm: v0.euroKm, annoAci: v0.annoAci || undefined, attivo: v0.attivo !== false };
+        const manda = cambi => Rete.post('/server/salvaVeicolo', { veicolo: Object.assign({}, ora, cambi) }).then(r => { Object.assign(ora, cambi); return r; });
+        B.salvaDaSolo(c.nome, { leggi: leggiNome, salva: x => manda({ nome: x }) });
+        B.salvaDaSolo(c.alimentazione, { salva: x => manda({ alimentazione: x }) });
+        B.salvaDaSolo(c.euroKm, { leggi: leggiEuro, salva: x => manda({ euroKm: x }), frase: 'Salvato: vale per le trasferte nuove' });
+        B.salvaDaSolo(c.annoAci, { leggi: leggiAnno, salva: x => manda({ annoAci: x === '' ? undefined : x }) });
+        c.attivo.addEventListener('change', async () => { const ok = await B.salvaOra(c.attivo, () => manda({ attivo: c.attivo.checked })); if (!ok) c.attivo.checked = !c.attivo.checked; });
+        chiudi = finestra({ titolo: v0.nome, corpo: zona,
+          allaChiusura: async () => { await B.inCoda(() => null); M.veicoli = null; await W.ricaricaAnagrafiche().catch(() => null); W.disegnaPagina(); },
+          pulsanti: ['spazio', h('button', { type: 'button', class: 'btn grande', onclick: () => chiudi() }, 'Chiudi')] });
+        return;
+      }
       const salva = async () => {
         errori = {};
-        const euro = C.numONull(c.euroKm.value);
-        if (!c.nome.value.trim()) errori.nome = 'Nome: scrivi il nome del veicolo';
-        if (euro === null) errori.euroKm = 'Euro al km: scrivi quanto, per esempio 0,76';
-        if (c.annoAci.value.trim() && !/^\d{4}$/.test(c.annoAci.value.trim())) errori.annoAci = 'Anno ACI: scrivi l\'anno delle tabelle, per esempio 2026';
+        const nome = leggiNome(c.nome.value);
+        const euro = leggiEuro(c.euroKm.value);
+        const anno = leggiAnno(c.annoAci.value);
+        if (nome.errore) errori.nome = nome.errore;
+        if (euro.errore) errori.euroKm = euro.errore;
+        if (anno.errore) errori.annoAci = anno.errore;
         if (Object.keys(errori).length) { disegna(); return; }
-        const corpo = { nome: c.nome.value.trim(), alimentazione: c.alimentazione.value.trim(), euroKm: euro, annoAci: c.annoAci.value.trim() ? Number(c.annoAci.value.trim()) : undefined, attivo: c.attivo.checked };
-        if (v0) corpo.id = v0.id;
+        const corpo = { nome: nome.valore, alimentazione: c.alimentazione.value.trim(), euroKm: euro.valore, annoAci: anno.valore === '' ? undefined : anno.valore, attivo: c.attivo.checked };
         const ris = await lavora('Salvo il veicolo', () => Rete.post('/server/salvaVeicolo', { veicolo: corpo }));
         if (!ris) return;
         chiudi();
         M.veicoli = null;
         await W.ricaricaAnagrafiche().catch(() => null);
-        avviso(v0 && C.num(v0.euroKm) !== euro ? 'Salvato. Vale per le trasferte nuove: quelle già scritte tengono il rimborso con cui sono nate' : 'Veicolo salvato');
+        avviso('Veicolo salvato');
         W.disegnaPagina();
       };
-      chiudi = finestra({ titolo: v0 ? v0.nome : 'Nuovo veicolo', corpo: zona,
+      chiudi = finestra({ titolo: 'Nuovo veicolo', corpo: zona,
         pulsanti: ['spazio', h('button', { type: 'button', class: 'btn testo grande', onclick: () => chiudi() }, 'Annulla'),
           h('button', { type: 'button', class: 'btn giallo grande', onclick: salva }, 'Salva')] });
     }
@@ -345,51 +362,38 @@
     // ===================================================================== fase 6: persone, mezzi e collaboratori
 
     /**
-     * Le impostazioni della fase 6 (fase6.md §4.1, §12.8), ognuna col suo Salva col bordo: santo patrono, conservazione,
-     * saldo, taratura (preavviso, ogni quanto, "Con la taratura scaduta: Avviso e conferma · Non si usa"), DURC e
-     * visura, documenti che servono ai collaboratori, giorni senza incarichi degli esterni, tagliando.
+     * Le impostazioni della fase 6 (fase6.md §4.1, §12.8), che si salvano da sole: santo patrono, conservazione, saldo,
+     * taratura (preavviso, ogni quanto, "Con la taratura scaduta: Avviso e conferma · Non si usa"), DURC e visura,
+     * documenti che servono ai collaboratori, giorni senza incarichi degli esterni, tagliando.
      */
     function impostazioniFase6(pagina) {
       const imp = S.ana.impostazioni;
-      const sola = !scrive();
-      const inp = (k, extra) => h('input', Object.assign({ type: 'text', value: imp[k] === undefined || imp[k] === null ? '' : String(imp[k]), disabled: sola }, extra || {}));
-      const salvaValori = async (valori, frase) => {
-        const ris = await lavora('Salvo', () => Rete.post('/server/salvaImpostazioni', { valori }));
-        if (ris) { S.ana.impostazioni = Object.assign({}, S.ana.impostazioni, ris.impostazioni || valori); avviso(frase || 'Salvato'); W.disegnaPagina(); }
-      };
-      const num = i => (i.value.trim() === '' ? '' : C.num(i.value));
-      const c = { patrono: inp('FESTA_PATRONO', { placeholder: 'mm-gg, per esempio 07-01' }), conserva: inp('PERSONE_CONSERVA_ANNI', { inputmode: 'numeric' }), saldo: inp('SALDO_AVVISO_GIORNI', { inputmode: 'numeric' }),
-        ogni: inp('TARATURA_OGNI_MESI', { inputmode: 'numeric' }), preavviso: inp('TARATURA_PREAVVISO_GIORNI', { inputmode: 'numeric' }), durc: inp('DURC_GIORNI', { inputmode: 'numeric' }),
-        visura: inp('VISURA_MESI', { inputmode: 'numeric' }), esterni: inp('ACCESSO_ESTERNI_GIORNI', { inputmode: 'numeric' }), tagliando: inp('KM_TAGLIANDO_AVVISO', { inputmode: 'numeric' }) };
-      let blocco = imp.TARATURA_BLOCCO === 'blocco' ? 'blocco' : 'avviso';
+      const intero = { intero: true, min: 0 };
+      const ferie = 'Salvato: vale per i conti di ferie e presenze';
+      const idoneita = 'Salvato: l\'idoneità si rifà coi documenti nuovi';
+      const leggiPatrono = t => { const s = String(t || '').trim(); if (!s) return { valore: '' }; return /^\d{2}-\d{2}$/.test(s) ? { valore: s } : { errore: 'Santo patrono: scrivi mese e giorno, per esempio 07-01' }; };
       let docs = {};
       try { docs = typeof imp.COLLAB_DOCUMENTI === 'string' ? JSON.parse(imp.COLLAB_DOCUMENTI) : (imp.COLLAB_DOCUMENTI || {}); } catch (e) { docs = {}; }
       docs = { impresa: (docs.impresa || []).slice(), professionista: (docs.professionista || []).slice(), occasionale: (docs.occasionale || []).slice() };
-      const zonaBlocco = h('div');
-      const disegnaBlocco = () => aggiungi(svuota(zonaBlocco), [segmenti([['avviso', 'Avviso e conferma'], ['blocco', 'Non si usa']], blocco, k => { if (!sola) { blocco = k; disegnaBlocco(); } })]);
-      disegnaBlocco();
-      const zonaDocs = h('div', { class: 'fila' });
-      const disegnaDocs = () => aggiungi(svuota(zonaDocs), [['impresa', 'Impresa'], ['professionista', 'Professionista'], ['occasionale', 'Occasionale']].map(([t, nome]) => h('div', { class: 'campo' }, h('label', null, nome),
-        h('div', { class: 'pillole' }, [['durc', 'DURC'], ['visura', 'Visura'], ['idoneita', 'Autocertificazione di idoneità'], ['polizza', 'Polizza'], ['albo', 'Iscrizione all\'albo']].map(([k, n]) => h('button', { type: 'button', class: 'pillola piccola' + (docs[t].indexOf(k) >= 0 ? ' scelta' : ''), disabled: sola,
-          onclick: () => { const i = docs[t].indexOf(k); if (i >= 0) docs[t].splice(i, 1); else docs[t].push(k); disegnaDocs(); } }, n))))));
-      disegnaDocs();
-      const salvaBtn = fn => (sola ? null : h('div', null, h('button', { type: 'button', class: 'btn', onclick: fn }, 'Salva')));
+      const DOC = [['durc', 'DURC'], ['visura', 'Visura'], ['idoneita', 'Autocertificazione di idoneità'], ['polizza', 'Polizza'], ['albo', 'Iscrizione all\'albo']];
+      const zonaDocs = h('div', { class: 'fila', 'data-chiave': 'COLLAB_DOCUMENTI' }, [['impresa', 'Impresa'], ['professionista', 'Professionista'], ['occasionale', 'Occasionale']].map(([t, nome]) => h('div', { class: 'campo' }, h('label', null, nome),
+        pilloleVive(DOC, docs[t], l => { docs[t] = l; return salvaChiavi({ COLLAB_DOCUMENTI: JSON.stringify(docs) }); }, null, idoneita))));
       aggiungi(pagina, [h('div', { class: 'testata' }, h('h1', null, 'Persone, mezzi e collaboratori')),
         h('div', { class: 'stretta-820 sezione imp-f6' },
           h('div', { class: 'scheda' }, h('h2', null, 'Persone'), h('div', { class: 'fila' },
-            h('div', { class: 'riga-campi' }, campo('Santo patrono', c.patrono), campo('Conservazione dopo l\'uscita', conSuffisso(c.conserva, 'anni')), campo('Saldo da aggiornare dopo', conSuffisso(c.saldo, 'giorni'))),
-            salvaBtn(() => { if (c.patrono.value.trim() && !/^\d{2}-\d{2}$/.test(c.patrono.value.trim())) { avviso('Santo patrono: scrivi mese e giorno, per esempio 07-01', true); return; } salvaValori({ FESTA_PATRONO: c.patrono.value.trim(), PERSONE_CONSERVA_ANNI: num(c.conserva), SALDO_AVVISO_GIORNI: num(c.saldo) }, 'Salvato: vale per i conti di ferie e presenze'); }))),
+            h('div', { class: 'riga-campi' }, campoVivo('FESTA_PATRONO', 'Santo patrono', { leggi: leggiPatrono, attr: { placeholder: 'mm-gg, per esempio 07-01' }, frase: ferie }),
+              campoVivo('PERSONE_CONSERVA_ANNI', 'Conservazione dopo l\'uscita', { numero: intero, suffisso: 'anni' }), campoVivo('SALDO_AVVISO_GIORNI', 'Saldo da aggiornare dopo', { numero: intero, suffisso: 'giorni', frase: ferie })))),
           h('div', { class: 'scheda' }, h('h2', null, 'Tarature e verifiche'), h('div', { class: 'fila' },
-            h('div', { class: 'riga-campi' }, campo('Ogni, per gli strumenti nuovi', conSuffisso(c.ogni, 'mesi')), campo('Preavviso', conSuffisso(c.preavviso, 'giorni'))),
-            h('div', { class: 'campo' }, h('label', null, 'Con la taratura scaduta'), zonaBlocco),
-            salvaBtn(() => salvaValori({ TARATURA_OGNI_MESI: num(c.ogni), TARATURA_PREAVVISO_GIORNI: num(c.preavviso), TARATURA_BLOCCO: blocco }, blocco === 'blocco' ? 'Salvato: uno strumento scaduto non si sceglie più nei rapportini' : 'Salvato: uno strumento scaduto si usa solo confermando')))),
+            h('div', { class: 'riga-campi' }, campoVivo('TARATURA_OGNI_MESI', 'Ogni, per gli strumenti nuovi', { numero: intero, suffisso: 'mesi' }), campoVivo('TARATURA_PREAVVISO_GIORNI', 'Preavviso', { numero: intero, suffisso: 'giorni' })),
+            h('div', { class: 'campo', 'data-chiave': 'TARATURA_BLOCCO' }, h('label', null, 'Con la taratura scaduta'),
+              segmentiVivi([['avviso', 'Avviso e conferma'], ['blocco', 'Non si usa']], imp.TARATURA_BLOCCO === 'blocco' ? 'blocco' : 'avviso', k => salvaChiavi({ TARATURA_BLOCCO: k }),
+                k => (k === 'blocco' ? 'Salvato: uno strumento scaduto non si sceglie più nei rapportini' : 'Salvato: uno strumento scaduto si usa solo confermando'))))),
           h('div', { class: 'scheda' }, h('h2', null, 'Collaboratori esterni'), h('div', { class: 'fila' },
-            h('div', { class: 'riga-campi' }, campo('Un DURC vale', conSuffisso(c.durc, 'giorni')), campo('La visura al massimo di', conSuffisso(c.visura, 'mesi')), campo('Accesso degli esterni senza incarichi', conSuffisso(c.esterni, 'giorni'))),
-            h('h3', null, 'I documenti che servono per l\'idoneità'), zonaDocs,
-            salvaBtn(() => salvaValori({ DURC_GIORNI: num(c.durc), VISURA_MESI: num(c.visura), ACCESSO_ESTERNI_GIORNI: num(c.esterni), COLLAB_DOCUMENTI: JSON.stringify(docs) }, 'Salvato: l\'idoneità si rifà coi documenti nuovi')))),
+            h('div', { class: 'riga-campi' }, campoVivo('DURC_GIORNI', 'Un DURC vale', { numero: intero, suffisso: 'giorni', frase: idoneita }), campoVivo('VISURA_MESI', 'La visura al massimo di', { numero: intero, suffisso: 'mesi', frase: idoneita }),
+              campoVivo('ACCESSO_ESTERNI_GIORNI', 'Accesso degli esterni senza incarichi', { numero: intero, suffisso: 'giorni' })),
+            h('h3', null, 'I documenti che servono per l\'idoneità'), zonaDocs)),
           h('div', { class: 'scheda' }, h('h2', null, 'Mezzi'), h('div', { class: 'fila' },
-            campo('Avviso del tagliando a km', conSuffisso(c.tagliando, 'km prima')),
-            salvaBtn(() => salvaValori({ KM_TAGLIANDO_AVVISO: num(c.tagliando) }, 'Salvato'))))) ]);
+            campoVivo('KM_TAGLIANDO_AVVISO', 'Avviso del tagliando a km', { numero: intero, suffisso: 'km prima' }))))]);
     }
 
     // ===================================================================== fase 7: portale clienti e comunicazioni
@@ -404,6 +408,7 @@
     /**
      * Amministrazione › Impostazioni › Portale clienti (§0.5, §12.6): l'indirizzo con lo stato e Prova adesso, lo script del
      * portale, Portale acceso, le durate, i file dal cliente, le email lasciate allo studio, l'informativa, Spegni il portale adesso.
+     * Dal 06/11/2026 tutto si salva da solo.
      */
     function impostazioniPortale(pagina) {
       const K = radice.WisperRegoleComunicazioni;
@@ -411,23 +416,16 @@
       const sola = !scrive();
       // I valori iniziali dell'accordo (§5.1), se il server non li ha ancora.
       const BASE = { PORTALE_LINK_MINUTI: 10, PORTALE_LINK_AVVISO_ORE: 72, PORTALE_SESSIONE_MINUTI: 30, PORTALE_SESSIONE_ORE: 8, PORTALE_FILE_MAX_MB: 20, PORTALE_EMAIL_RISERVA: 20 };
-      const inp = (k, extra) => h('input', Object.assign({ type: 'text', value: imp[k] === undefined || imp[k] === null || imp[k] === '' ? (BASE[k] !== undefined ? String(BASE[k]) : '') : String(imp[k]), disabled: sola }, extra || {}));
-      const num = i => (i.value.trim() === '' ? '' : C.num(i.value));
-      const c = { indirizzo: inp('PORTALE_INDIRIZZO', { type: 'url', placeholder: 'https://studiogm-portale.netlify.app', spellcheck: 'false' }),
-        link: inp('PORTALE_LINK_MINUTI', { inputmode: 'numeric' }), avviso: inp('PORTALE_LINK_AVVISO_ORE', { inputmode: 'numeric' }),
-        sessMin: inp('PORTALE_SESSIONE_MINUTI', { inputmode: 'numeric' }), sessOre: inp('PORTALE_SESSIONE_ORE', { inputmode: 'numeric' }),
-        mb: inp('PORTALE_FILE_MAX_MB', { inputmode: 'numeric' }), riserva: inp('PORTALE_EMAIL_RISERVA', { inputmode: 'numeric' }) };
+      const durata = (k, etichetta, suffisso) => campoVivo(k, etichetta, { numero: { intero: true, min: 0 }, suffisso, valore: imp[k] === undefined || imp[k] === null || imp[k] === '' ? BASE[k] : imp[k],
+        frase: 'Salvato: vale per i prossimi ingressi', dopo: () => { if (W.Portale) W.Portale.daRileggere(); } });
       const TIPI = ['pdf', 'jpg', 'jpeg', 'png', 'heic', 'dwg', 'dxf', 'docx', 'xlsx'];
       let tipi = [];
       try { tipi = Array.isArray(imp.PORTALE_TIPI_FILE) ? imp.PORTALE_TIPI_FILE.slice() : JSON.parse(imp.PORTALE_TIPI_FILE || '[]'); } catch (e) { tipi = []; }
       if (!tipi.length) tipi = TIPI.slice();
       const attivo = vero(imp.PORTALE_ATTIVO);
       const zonaStato = h('div', { class: 'stato-portale' }, segnaposto(1, 26));
-      const zonaTipi = h('div', { class: 'pillole' });
       // Si può solo togliere (§5.1): il server non accetta tipi fuori dall'elenco.
-      const disegnaTipi = () => aggiungi(svuota(zonaTipi), TIPI.map(t => h('button', { type: 'button', class: 'pillola piccola' + (tipi.indexOf(t) >= 0 ? ' scelta' : ''), disabled: sola,
-        onclick: () => { const i = tipi.indexOf(t); if (i >= 0) tipi.splice(i, 1); else tipi.push(t); disegnaTipi(); } }, t.toUpperCase())));
-      disegnaTipi();
+      const zonaTipi = pilloleVive(TIPI.map(t => [t, t.toUpperCase()]), tipi, l => salvaChiavi({ PORTALE_TIPI_FILE: TIPI.filter(t => l.indexOf(t) >= 0) }), { quanti: 1, frase: 'Lascia almeno un tipo di file' }, 'Salvato: vale per i prossimi ingressi');
       const statoDa = st => {
         const s = K.statoPortale(Object.assign({ attivo: true }, st || {}));
         const sc = st && st.script ? K.statoScript(st.script) : null;
@@ -437,7 +435,7 @@
         aggiungi(zonaScript, sc ? [h('span', { class: 'pill p-' + sc.colore }, sc.parola), sc.frase ? h('span', { class: 'secondario' }, sc.frase) : null] : [h('span', { class: 'pill p-grigio' }, 'Non collegato'), h('span', { class: 'secondario' }, 'mancano WISPER_PORTALE_URL e SEGRETO_PORTALE sul NAS')]);
       };
       const zonaScript = h('div', { class: 'stato-portale' });
-      const leggiStato = () => (W.puo('portale') ? Rete.get('/server/portale').then(r => r.stato) : Promise.resolve({ collegato: imp.PORTALE_INDIRIZZO ? (S.io.interfaccia.portaleCollegato ? 'si' : 'no') : 'non_collegato', indirizzo: imp.PORTALE_INDIRIZZO }));
+      const leggiStato = () => (W.puo('portale') ? Rete.get('/server/portale').then(r => r.stato) : Promise.resolve({ collegato: S.ana.impostazioni.PORTALE_INDIRIZZO ? (S.io.interfaccia.portaleCollegato ? 'si' : 'no') : 'non_collegato', indirizzo: S.ana.impostazioni.PORTALE_INDIRIZZO }));
       leggiStato().then(st => { svuota(zonaScript); statoDa(st); }).catch(() => { svuota(zonaScript); statoDa({ collegato: imp.PORTALE_INDIRIZZO ? 'no' : 'non_collegato' }); });
       async function provaAdesso() {
         const r = await lavora('Provo il portale da fuori', () => Rete.post('/server/controllaPortale', {}));
@@ -461,42 +459,34 @@
         avviso('Portale spento: nessun cliente può entrare. Si riaccende da qui.');
         W.disegnaPagina();
       }
+      // L'informativa: la finestra la salva da sola (cambiando la data, al prossimo ingresso tutti i referenti la rivedono, §3.19).
       const cambiaInformativa = () => {
         const t = h('textarea', { rows: 14, disabled: sola });
-        t.value = imp.PORTALE_INFORMATIVA || '';
+        t.value = S.ana.impostazioni.PORTALE_INFORMATIVA || '';
+        if (!sola) B.salvaDaSolo(t, { leggi: x => (String(x || '').trim() ? { valore: String(x).trim() } : { errore: 'Scrivi il testo dell\'informativa' }),
+          salva: x => salvaChiavi({ PORTALE_INFORMATIVA: x, PORTALE_INFORMATIVA_DATA: C.oggiIso() }).then(r => { if (W.Portale) W.Portale.daRileggere(); return r; }),
+          frase: 'Salvato: al prossimo ingresso i clienti la rivedono' });
         let chiudi;
-        chiudi = finestra({ titolo: 'Informativa per i clienti', corpo: campo('Testo dell\'informativa', t), larghezza: 'media', fuoco: false,
-          pulsanti: ['spazio', h('button', { type: 'button', class: 'btn testo grande', onclick: () => chiudi() }, sola ? 'Chiudi' : 'Annulla'),
-            sola ? null : h('button', { type: 'button', class: 'btn giallo grande', onclick: async () => {
-              if (!t.value.trim()) { avviso('Scrivi il testo dell\'informativa', true); return; }
-              // Cambiando la data, al prossimo ingresso tutti i referenti la rivedono (§3.19).
-              const r = await salvaValori7({ PORTALE_INFORMATIVA: t.value.trim(), PORTALE_INFORMATIVA_DATA: C.oggiIso() }, 'Informativa cambiata: al prossimo ingresso i clienti la rivedono');
-              if (r) chiudi();
-            } }, 'Salva l\'informativa')].filter(Boolean) });
+        chiudi = finestra({ titolo: 'Informativa per i clienti', corpo: campo('Testo dell\'informativa', t), larghezza: 'media', fuoco: false, allaChiusura: () => B.inCoda(() => null).then(() => W.disegnaPagina()),
+          pulsanti: ['spazio', h('button', { type: 'button', class: 'btn grande', onclick: () => chiudi() }, 'Chiudi')] });
       };
       const interr = W.Portale ? W.Portale.interruttore('Portale acceso', attivo ? 'I clienti col portale possono entrare' : 'Nessun cliente può entrare', attivo, accendi, sola) : null;
+      if (interr) interr.setAttribute('data-chiave', 'PORTALE_ATTIVO');
+      const leggiIndirizzo = x => { const s = String(x || '').trim(); if (s && !/^https:\/\/[^\s/]+/.test(s)) return { errore: 'L\'indirizzo del portale comincia con https://' }; return { valore: s.replace(/\/+$/, '') }; };
       aggiungi(pagina, [h('div', { class: 'testata' }, h('h1', null, 'Portale clienti')),
         h('div', { class: 'stretta-820 sezione imp-f6' },
           h('div', { class: 'scheda scheda-indirizzo' }, h('h2', null, 'Su internet'), h('div', { class: 'fila' },
-            campo('Indirizzo del portale', c.indirizzo), zonaStato,
-            h('div', { class: 'campo' }, h('label', null, 'Script del portale'), zonaScript),
-            sola ? null : h('div', null, h('button', { type: 'button', class: 'btn', onclick: () => {
-              const v = c.indirizzo.value.trim();
-              if (v && !/^https:\/\/[^\s/]+/.test(v)) { avviso('L\'indirizzo del portale comincia con https://', true); return; }
-              salvaValori7({ PORTALE_INDIRIZZO: v.replace(/\/+$/, '') }, v ? 'Salvato: provo il portale da fuori' : 'Salvato: il portale è Non collegato').then(r => { if (r && v) provaAdesso(); });
-            } }, 'Salva')))),
+            campoVivo('PORTALE_INDIRIZZO', 'Indirizzo del portale', { leggi: leggiIndirizzo, attr: { type: 'url', placeholder: 'https://studiogm-portale.netlify.app', spellcheck: 'false' },
+              dopo: v => { if (W.Portale) W.Portale.daRileggere(); if (v) provaAdesso(); else leggiStato().then(st => { svuota(zonaScript); statoDa(st); }).catch(() => null); } }),
+            zonaStato,
+            h('div', { class: 'campo' }, h('label', null, 'Script del portale'), zonaScript))),
           h('div', { class: 'scheda righe' }, interr),
           h('div', { class: 'scheda' }, h('h2', null, 'Ingresso e file'), h('div', { class: 'fila' },
-            h('div', { class: 'riga-campi' }, campo('Link e codice valgono', conSuffisso(c.link, 'minuti')), campo('Link negli avvisi', conSuffisso(c.avviso, 'ore'))),
-            h('div', { class: 'riga-campi' }, campo('Sessione senza uso', conSuffisso(c.sessMin, 'minuti')), campo('Sessione al massimo', conSuffisso(c.sessOre, 'ore'))),
-            h('div', { class: 'riga-campi' }, campo('File dal cliente al massimo', conSuffisso(c.mb, 'MB')), campo('Email lasciate allo studio', conSuffisso(c.riserva, 'al giorno'))),
-            h('div', { class: 'campo' }, h('label', null, 'Tipi di file dal cliente'), zonaTipi),
-            sola ? null : h('div', null, h('button', { type: 'button', class: 'btn', onclick: () => {
-              if (!tipi.length) { avviso('Lascia almeno un tipo di file', true); return; }
-              salvaValori7({ PORTALE_LINK_MINUTI: num(c.link), PORTALE_LINK_AVVISO_ORE: num(c.avviso), PORTALE_SESSIONE_MINUTI: num(c.sessMin), PORTALE_SESSIONE_ORE: num(c.sessOre),
-                PORTALE_FILE_MAX_MB: num(c.mb), PORTALE_EMAIL_RISERVA: num(c.riserva), PORTALE_TIPI_FILE: TIPI.filter(t => tipi.indexOf(t) >= 0) }, 'Salvato: vale per i prossimi ingressi');
-            } }, 'Salva')))),
-          h('div', { class: 'scheda' }, h('h2', null, 'Informativa per i clienti'), h('div', { class: 'fila' },
+            h('div', { class: 'riga-campi' }, durata('PORTALE_LINK_MINUTI', 'Link e codice valgono', 'minuti'), durata('PORTALE_LINK_AVVISO_ORE', 'Link negli avvisi', 'ore')),
+            h('div', { class: 'riga-campi' }, durata('PORTALE_SESSIONE_MINUTI', 'Sessione senza uso', 'minuti'), durata('PORTALE_SESSIONE_ORE', 'Sessione al massimo', 'ore')),
+            h('div', { class: 'riga-campi' }, durata('PORTALE_FILE_MAX_MB', 'File dal cliente al massimo', 'MB'), durata('PORTALE_EMAIL_RISERVA', 'Email lasciate allo studio', 'al giorno')),
+            h('div', { class: 'campo', 'data-chiave': 'PORTALE_TIPI_FILE' }, h('label', null, 'Tipi di file dal cliente'), zonaTipi))),
+          h('div', { class: 'scheda', 'data-chiave': 'PORTALE_INFORMATIVA' }, h('h2', null, 'Informativa per i clienti'), h('div', { class: 'fila' },
             h('div', { class: 'coppia' }, h('span', { class: 'k' }, 'Versione'), h('span', { class: 'v' }, imp.PORTALE_INFORMATIVA_DATA ? 'versione del ' + C.data(imp.PORTALE_INFORMATIVA_DATA) : 'da scrivere')),
             h('div', null, h('button', { type: 'button', class: 'btn', onclick: cambiaInformativa }, sola ? 'Leggi' : 'Cambia')))),
           K.Permessi.impostazioniPortale(W.perm()) && attivo ? h('div', null, h('button', { type: 'button', class: 'btn grande bordo-rosso', onclick: spegni }, 'Spegni il portale adesso')) : null)]);
@@ -505,26 +495,20 @@
     /** Amministrazione › Impostazioni › Comunicazioni (§12.6): WhatsApp sul telefono, i promemoria, le righe Non collegato col perché (§3.17). */
     function impostazioniComunicazioni(pagina) {
       const imp = S.ana.impostazioni;
-      const sola = !scrive();
-      const inp = (k, d) => h('input', { type: 'text', inputmode: 'numeric', value: imp[k] === undefined || imp[k] === null || imp[k] === '' ? String(d) : String(imp[k]), disabled: sola });
-      const num = i => (i.value.trim() === '' ? '' : C.num(i.value));
-      let app = ['business', 'normale', 'chiedi'].indexOf(imp.WHATSAPP_APP) >= 0 ? imp.WHATSAPP_APP : 'chiedi';
-      const c = { prima: inp('PROMEMORIA_GIORNI_PRIMA', 1), dopo: inp('SOLLECITO_DOPO_GIORNI', 7), secondo: inp('SOLLECITO_SECONDO_GIORNI', 30) };
-      const zonaApp = h('div');
-      const disegnaApp = () => aggiungi(svuota(zonaApp), [segmenti([['business', 'Business'], ['normale', 'Normale'], ['chiedi', 'Chiedi']], app, k => { if (!sola) { app = k; disegnaApp(); } }, 'piccoli')]);
-      disegnaApp();
+      const frase = 'Salvato: vale per le proposte nuove';
+      const giorni = (k, etichetta, d, suffisso) => campoVivo(k, etichetta, { numero: { intero: true, min: 0 }, suffisso, frase,
+        valore: imp[k] === undefined || imp[k] === null || imp[k] === '' ? d : imp[k] });
+      const app = ['business', 'normale', 'chiedi'].indexOf(imp.WHATSAPP_APP) >= 0 ? imp.WHATSAPP_APP : 'chiedi';
       const nc = (titolo, perche, ico) => riga({ sinistra: quadrato(ico), titolo, sotto: perche, destra: h('span', { class: 'pill p-grigio' }, 'Non collegato') });
       aggiungi(pagina, [h('div', { class: 'testata' }, h('h1', null, 'Comunicazioni')),
         h('div', { class: 'stretta-820 sezione imp-f6' },
           h('div', { class: 'scheda' }, h('h2', null, 'WhatsApp e promemoria'), h('div', { class: 'fila' },
-            h('div', { class: 'campo' }, h('label', null, 'WhatsApp sul telefono'), zonaApp),
-            h('div', { class: 'riga-campi' }, campo('Promemoria degli appuntamenti', conSuffisso(c.prima, 'giorni lavorativi prima')),
-              campo('Promemoria di pagamento dopo', conSuffisso(c.dopo, 'giorni')), campo('Il secondo dopo', conSuffisso(c.secondo, 'giorni'))),
-            sola ? null : h('div', null, h('button', { type: 'button', class: 'btn', onclick: () => salvaValori7({ WHATSAPP_APP: app, PROMEMORIA_GIORNI_PRIMA: num(c.prima), SOLLECITO_DOPO_GIORNI: num(c.dopo), SOLLECITO_SECONDO_GIORNI: num(c.secondo) },
-              'Salvato: vale per le proposte di Da mandare da adesso') }, 'Salva')))),
+            h('div', { class: 'campo', 'data-chiave': 'WHATSAPP_APP' }, h('label', null, 'WhatsApp sul telefono'), segmentiVivi([['business', 'Business'], ['normale', 'Normale'], ['chiedi', 'Chiedi']], app, k => salvaChiavi({ WHATSAPP_APP: k }), frase, 'piccoli')),
+            h('div', { class: 'riga-campi' }, giorni('PROMEMORIA_GIORNI_PRIMA', 'Promemoria degli appuntamenti', 1, 'giorni lavorativi prima'),
+              giorni('SOLLECITO_DOPO_GIORNI', 'Promemoria di pagamento dopo', 7, 'giorni'), giorni('SOLLECITO_SECONDO_GIORNI', 'Il secondo dopo', 30, 'giorni')))),
           h('div', { class: 'scheda righe' },
             nc('WhatsApp Business', 'Costa a messaggio (circa 0,036 $ un promemoria) e vuole un indirizzo aperto su internet per le risposte: per ora i messaggi li manda Manuel', 'whatsapp'),
-            nc('Ore e spese via messaggio', 'Con WhatsApp servirebbe l\'API a pagamento; l\'app lo fa già in meno di un minuto, anche senza rete', 'scontrino'),
+            nc('Spese via messaggio', 'Con WhatsApp servirebbe l\'API a pagamento; l\'app lo fa già in meno di un minuto, anche senza rete', 'scontrino'),
             nc('Assistente operativo', 'I dati dei clienti andrebbero a un fornitore fuori dall\'Europa; un modello sul NAS è troppo lento', 'fumetto')))]);
     }
 
@@ -541,21 +525,43 @@
       });
     }
 
+    /**
+     * Il tipo di formazione. Nuovo: Annulla e Salva (crea). Uno che c'è già: si salva da solo campo per campo (06/11/2026),
+     * la finestra ha solo Chiudi.
+     */
     function moduloTipo(t0) {
       const t = t0 || { nome: '', gruppo: 'sicurezza', ogniMesi: '', preavvisoGiorni: 60, attivo: true };
       const v = { nome: h('input', { type: 'text', value: t.nome || '' }), ogni: h('input', { type: 'text', inputmode: 'numeric', value: t.ogniMesi || '' }), preavviso: h('input', { type: 'text', inputmode: 'numeric', value: t.preavvisoGiorni || '' }) };
       let gruppo = t.gruppo || 'sicurezza';
-      let attivo = t.attivo !== false;
-      const zona = h('div', { class: 'fila' });
-      const disegna = () => aggiungi(svuota(zona), [campo('Nome', v.nome), h('div', { class: 'campo' }, h('label', null, 'Gruppo'), segmenti([['elettrico', 'Lavori elettrici'], ['sicurezza', 'Sicurezza'], ['emergenza', 'Emergenza'], ['altro', 'Altro']], gruppo, k => { gruppo = k; disegna(); })),
+      const attivo = h('input', { type: 'checkbox', checked: t.attivo !== false });
+      const leggiNome = x => (String(x || '').trim() ? { valore: String(x).trim() } : { errore: 'Nome: scrivi il nome della formazione o abilitazione' });
+      const leggiN = B.leggiNumero({ intero: true, min: 0 });
+      const n = x => (x === '' ? null : x);
+      const ora = t0 ? { chiave: t0.chiave, nome: t0.nome || '', gruppo, ogniMesi: t0.ogniMesi || null, preavvisoGiorni: t0.preavvisoGiorni || null, attivo: t0.attivo !== false } : null;
+      const manda = cambi => Rete.post('/server/salvaQualificaTipo', { tipo: Object.assign({}, ora, cambi) }).then(r => { Object.assign(ora, cambi); return r; });
+      const GRUPPI = [['elettrico', 'Lavori elettrici'], ['sicurezza', 'Sicurezza'], ['emergenza', 'Emergenza'], ['altro', 'Altro']];
+      const zonaGruppo = t0 ? segmentiVivi(GRUPPI, gruppo, k => manda({ gruppo: k })) : h('div');
+      const rifaiGruppo = () => { if (!t0) aggiungi(svuota(zonaGruppo), [segmenti(GRUPPI, gruppo, k => { gruppo = k; rifaiGruppo(); })]); };
+      rifaiGruppo();
+      const zona = h('div', { class: 'fila' }, campo('Nome', v.nome), h('div', { class: 'campo' }, h('label', null, 'Gruppo'), zonaGruppo),
         h('div', { class: 'riga-campi' }, campo('Ogni', conSuffisso(v.ogni, 'mesi')), campo('Preavviso', conSuffisso(v.preavviso, 'giorni'))),
-        t0 ? h('label', { class: 'spunta-campo' }, h('input', { type: 'checkbox', checked: attivo, onchange: e => { attivo = e.target.checked; } }), 'In uso') : null]);
-      disegna();
+        t0 ? h('label', { class: 'spunta-campo' }, attivo, 'In uso') : null);
       let chiudi;
+      if (t0) {
+        B.salvaDaSolo(v.nome, { leggi: leggiNome, salva: x => manda({ nome: x }) });
+        B.salvaDaSolo(v.ogni, { leggi: leggiN, salva: x => manda({ ogniMesi: n(x) }), frase: 'Salvato: vale per la formazione nuova' });
+        B.salvaDaSolo(v.preavviso, { leggi: leggiN, salva: x => manda({ preavvisoGiorni: n(x) }) });
+        attivo.addEventListener('change', async () => { const ok = await B.salvaOra(attivo, () => manda({ attivo: attivo.checked })); if (!ok) attivo.checked = !attivo.checked; });
+        chiudi = finestra({ titolo: t0.nome, corpo: zona, fuoco: false, allaChiusura: async () => { await B.inCoda(() => null); M.tipi = null; W.disegnaPagina(); },
+          pulsanti: ['spazio', h('button', { type: 'button', class: 'btn grande', onclick: () => chiudi() }, 'Chiudi')] });
+        return;
+      }
       const salva = async () => {
         if (!v.nome.value.trim()) { v.nome.focus(); avviso('Nome: scrivi il nome della formazione o abilitazione', true); return; }
-        const tipo = { nome: v.nome.value.trim(), gruppo, ogniMesi: v.ogni.value.trim() ? Number(v.ogni.value) : null, preavvisoGiorni: v.preavviso.value.trim() ? Number(v.preavviso.value) : null, attivo };
-        if (t0) tipo.chiave = t0.chiave;
+        const ogni = leggiN(v.ogni.value);
+        const pre = leggiN(v.preavviso.value);
+        if (ogni.errore || pre.errore) { avviso('Ogni e preavviso: scrivi un numero intero', true); return; }
+        const tipo = { nome: v.nome.value.trim(), gruppo, ogniMesi: n(ogni.valore), preavvisoGiorni: n(pre.valore), attivo: true };
         const r = await lavora('Salvo', () => Rete.post('/server/salvaQualificaTipo', { tipo }));
         if (!r) return;
         chiudi();
@@ -563,7 +569,7 @@
         avviso('Salvato: vale per la formazione nuova');
         W.disegnaPagina();
       };
-      chiudi = finestra({ titolo: t0 ? t0.nome : 'Nuovo tipo', corpo: zona, fuoco: false,
+      chiudi = finestra({ titolo: 'Nuovo tipo', corpo: zona, fuoco: false,
         pulsanti: ['spazio', h('button', { type: 'button', class: 'btn testo grande', onclick: () => chiudi() }, 'Annulla'), h('button', { type: 'button', class: 'btn giallo grande', onclick: salva }, 'Salva')] });
     }
 
@@ -843,72 +849,61 @@
     /**
      * Impostazioni fiscali (fase4.md §13.6): la scheda "Regole confermate dal commercialista"
      * (Non ancora / Confermate il … da …) col giallo Segna confermate (solo il titolare); le schede
-     * Aliquote, Bollo, Documento, Pagamento, ognuna col suo Salva col bordo. Cambiare una regola
-     * toglie la conferma (lo fa il server, qui si dice).
+     * Aliquote, Bollo, Documento, Pagamento. Dal 06/11/2026 ogni campo si salva da solo. Cambiare una regola
+     * toglie la conferma (lo fa il server): qui si dice e la scheda della conferma si rifà al suo posto.
      */
     function fiscale(pagina) {
       const imp = S.ana.impostazioni;
-      const sola = !scrive();
       const titolare = !!(S.io && S.io.utente && S.io.utente.ruolo === 'titolare') && scrive();
-      const conf = regoleConfermate();
       const v = (k, d) => (imp[k] === undefined || imp[k] === null || imp[k] === '' ? d : imp[k]);
-      const numero = (k, d) => h('input', { type: 'text', inputmode: 'decimal', value: R.numeroCampo(Number(v(k, d))), disabled: sola });
-      const testo = (k, d) => h('input', { type: 'text', value: String(v(k, d)), disabled: sola });
-      const scelte = { BOLLO_RIVALSA: v('BOLLO_RIVALSA', true) !== false && v('BOLLO_RIVALSA', true) !== 'NO', PAGAMENTO_FINE_MESE: v('PAGAMENTO_FINE_MESE', false) === true || v('PAGAMENTO_FINE_MESE', false) === 'SI',
-        TIPO_DOCUMENTO: v('TIPO_DOCUMENTO', 'TD01'), REGIME_FISCALE: v('REGIME_FISCALE', 'RF01'), MODALITA_PAGAMENTO: v('MODALITA_PAGAMENTO', 'MP05') };
-      const c = {
-        IVA: numero('IVA', 22), EPPI_INTEGRATIVO: numero('EPPI_INTEGRATIVO', 5), RITENUTA: numero('RITENUTA', 20),
-        RITENUTA_TIPO: testo('RITENUTA_TIPO', 'RT01'), RITENUTA_CAUSALE: testo('RITENUTA_CAUSALE', 'A'), EPPI_TIPO_CASSA: testo('EPPI_TIPO_CASSA', 'TC17'),
-        BOLLO_SOGLIA: numero('BOLLO_SOGLIA', 77.47), BOLLO_IMPORTO: numero('BOLLO_IMPORTO', 2), GIORNI_PAGAMENTO: numero('GIORNI_PAGAMENTO', 30), SOGLIA_CASSA: numero('SOGLIA_CASSA', 3000),
-      };
-      const salva = async chiavi => {
-        const valori = {};
-        chiavi.forEach(k => {
-          if (c[k]) valori[k] = ['RITENUTA_TIPO', 'RITENUTA_CAUSALE', 'EPPI_TIPO_CASSA'].indexOf(k) >= 0 ? c[k].value.trim() : C.num(c[k].value);
-          else valori[k] = scelte[k];
-        });
-        const prima = regoleConfermate();
-        const ris = await lavora('Salvo', () => Rete.post('/server/salvaImpostazioni', { valori }));
-        if (!ris) return;
-        S.ana.impostazioni = Object.assign({}, S.ana.impostazioni, ris.impostazioni || valori);
-        if (!ris.impostazioni) await W.ricaricaAnagrafiche();
-        avviso(prima && !regoleConfermate() ? 'Fatto. La conferma del commercialista va rifatta' : 'Salvato');
-        W.disegnaPagina();
-      };
-      const scheda = (titolo, corpo, chiavi) => h('div', { class: 'scheda' }, h('h2', null, titolo), h('div', { class: 'fila' }, corpo,
-        sola ? null : h('div', null, h('button', { type: 'button', class: 'btn', onclick: () => salva(chiavi) }, 'Salva'))));
-      const disegnaScelte = (k, voci) => {
-        const zona = h('div');
-        const rifai = () => aggiungi(svuota(zona), [segmenti(voci, scelte[k], x => { if (sola) return; scelte[k] = x; rifai(); }, 'piccoli')]);
-        rifai();
-        return zona;
-      };
-      const siNoZona = k => {
-        const zona = h('div');
-        const rifai = () => aggiungi(svuota(zona), [segmenti([['si', 'Sì'], ['no', 'No']], scelte[k] ? 'si' : 'no', x => { if (sola) return; scelte[k] = x === 'si'; rifai(); }, 'piccoli')]);
-        rifai();
-        return zona;
-      };
-      aggiungi(pagina, [h('div', { class: 'testata alta' }, h('h1', null, 'Impostazioni fiscali'),
-        !conf && titolare ? h('button', { type: 'button', class: 'btn giallo', onclick: segnaConfermate }, 'Segna confermate') : null),
-      h('div', { class: 'stretta-900 sezione' },
-        h('div', { class: 'scheda conferma-regole' + (conf ? ' confermate' : '') }, h('span', { class: 'etichetta' }, 'Regole confermate dal commercialista'),
+      const bottoneConferma = () => (!regoleConfermate() && titolare ? h('button', { type: 'button', class: 'btn giallo', onclick: segnaConfermate }, 'Segna confermate') : null);
+      const schedaConferma = () => {
+        const conf = regoleConfermate();
+        return h('div', { class: 'scheda conferma-regole' + (conf ? ' confermate' : '') }, h('span', { class: 'etichetta' }, 'Regole confermate dal commercialista'),
           conf ? h('div', { class: 'pillole-testa' }, pillola('Confermate', 'verde'), h('b', null, 'il ' + C.data(conf.data) + ' da ' + conf.commercialista))
             : h('div', { class: 'pillole-testa' }, pillola('Non ancora', 'giallo'), h('b', null, 'Contributo EPPI, ritenuta, bollo e tipo di documento vanno confermati')),
-          conf && titolare ? h('button', { type: 'button', class: 'btn collegamento', style: { alignSelf: 'flex-start' }, onclick: togliConferma }, 'Togli la conferma') : null),
-        h('div', { class: 'due-colonne' },
-          h('div', { class: 'sezione' },
-            scheda('Aliquote', [h('div', { class: 'riga-campi' }, campo('IVA', conSuffisso(c.IVA, '%')), campo('Contributo integrativo EPPI', conSuffisso(c.EPPI_INTEGRATIVO, '%')), campo('Ritenuta', conSuffisso(c.RITENUTA, '%'))),
-              h('div', { class: 'riga-campi' }, campo('Codice della ritenuta', c.RITENUTA_TIPO), campo('Causale', c.RITENUTA_CAUSALE), campo('Cassa nella fattura', c.EPPI_TIPO_CASSA))],
-            ['IVA', 'EPPI_INTEGRATIVO', 'RITENUTA', 'RITENUTA_TIPO', 'RITENUTA_CAUSALE', 'EPPI_TIPO_CASSA']),
-            scheda('Saldo e scadenziario', [campo('Soglia del saldo: sotto, il giorno è rosso', conSuffisso(c.SOGLIA_CASSA, '€'))], ['SOGLIA_CASSA'])),
-          h('div', { class: 'sezione' },
-            scheda('Bollo', [h('div', { class: 'riga-campi' }, campo('Scatta sopra (senza IVA)', conSuffisso(c.BOLLO_SOGLIA, '€')), campo('Importo', conSuffisso(c.BOLLO_IMPORTO, '€'))),
-              h('div', { class: 'campo' }, h('label', null, 'Lo riaddebito al cliente'), siNoZona('BOLLO_RIVALSA'))], ['BOLLO_SOGLIA', 'BOLLO_IMPORTO', 'BOLLO_RIVALSA']),
-            scheda('Documento', [h('div', { class: 'campo' }, h('label', null, 'Tipo'), disegnaScelte('TIPO_DOCUMENTO', [['TD01', 'Fattura (TD01)'], ['TD06', 'Parcella (TD06)']])),
-              h('div', { class: 'campo' }, h('label', null, 'Regime'), disegnaScelte('REGIME_FISCALE', [['RF01', 'Ordinario (RF01)'], ['RF19', 'Forfettario (RF19)']]))], ['TIPO_DOCUMENTO', 'REGIME_FISCALE']),
-            scheda('Pagamento', [h('div', { class: 'riga-campi' }, campo('Giorni', conSuffisso(c.GIORNI_PAGAMENTO, 'giorni')), h('div', { class: 'campo' }, h('label', null, 'Fine mese'), siNoZona('PAGAMENTO_FINE_MESE'))),
-              h('div', { class: 'campo' }, h('label', null, 'Modo'), disegnaScelte('MODALITA_PAGAMENTO', [['MP05', 'Bonifico'], ['MP12', 'RIBA'], ['MP02', 'Assegno'], ['MP01', 'Contanti']]))], ['GIORNI_PAGAMENTO', 'PAGAMENTO_FINE_MESE', 'MODALITA_PAGAMENTO']))))]);
+          conf && titolare ? h('button', { type: 'button', class: 'btn collegamento', style: { alignSelf: 'flex-start' }, onclick: togliConferma }, 'Togli la conferma') : null);
+      };
+      const testata = h('div', { class: 'testata alta' }, h('h1', null, 'Impostazioni fiscali'), bottoneConferma());
+      let cartaConferma = schedaConferma();
+      // Una regola alla volta; se la conferma c'era e il server l'ha tolta, la scheda e il giallo si rifanno senza ridisegnare la pagina
+      // (chi sta scrivendo nel campo accanto non perde il cursore).
+      const salvaRegola = async valori => {
+        const prima = regoleConfermate();
+        const ris = await salvaChiavi(valori);
+        if (!(ris && ris.impostazioni)) await W.ricaricaAnagrafiche().catch(() => null);
+        if (prima && !regoleConfermate()) {
+          const nuova = schedaConferma();
+          cartaConferma.replaceWith(nuova);
+          cartaConferma = nuova;
+          aggiungi(svuota(testata), [h('h1', null, 'Impostazioni fiscali'), bottoneConferma()]);
+          avviso('Fatto. La conferma del commercialista va rifatta');
+        }
+        return ris;
+      };
+      const numero = (k, etichetta, d, suffisso, limiti) => campoVivo(k, etichetta, { numero: Object.assign({ vuoto: false, min: 0 }, limiti || {}), suffisso, valore: Number(v(k, d)), salva: x => salvaRegola({ [k]: x }) });
+      const testo = (k, etichetta, d) => campoVivo(k, etichetta, { valore: String(v(k, d)), salva: x => salvaRegola({ [k]: x }) });
+      const scelte = (k, etichetta, voci, scelto, valoreDi) => h('div', { class: 'campo', 'data-chiave': k }, h('label', null, etichetta),
+        segmentiVivi(voci, scelto, x => salvaRegola({ [k]: valoreDi ? valoreDi(x) : x }), undefined, 'piccoli'));
+      const siNo = (k, etichetta, si) => scelte(k, etichetta, [['si', 'Sì'], ['no', 'No']], si ? 'si' : 'no', x => x === 'si');
+      const scheda = (titolo, corpo) => h('div', { class: 'scheda' }, h('h2', null, titolo), h('div', { class: 'fila' }, corpo));
+      const percento = { max: 100 };
+      aggiungi(pagina, [testata,
+        h('div', { class: 'stretta-900 sezione' },
+          cartaConferma,
+          h('div', { class: 'due-colonne' },
+            h('div', { class: 'sezione' },
+              scheda('Aliquote', [h('div', { class: 'riga-campi' }, numero('IVA', 'IVA', 22, '%', percento), numero('EPPI_INTEGRATIVO', 'Contributo integrativo EPPI', 5, '%', percento), numero('RITENUTA', 'Ritenuta', 20, '%', percento)),
+                h('div', { class: 'riga-campi' }, testo('RITENUTA_TIPO', 'Codice della ritenuta', 'RT01'), testo('RITENUTA_CAUSALE', 'Causale', 'A'), testo('EPPI_TIPO_CASSA', 'Cassa nella fattura', 'TC17'))]),
+              scheda('Saldo e scadenziario', [numero('SOGLIA_CASSA', 'Soglia del saldo: sotto, il giorno è rosso', 3000, '€')])),
+            h('div', { class: 'sezione' },
+              scheda('Bollo', [h('div', { class: 'riga-campi' }, numero('BOLLO_SOGLIA', 'Scatta sopra (senza IVA)', 77.47, '€'), numero('BOLLO_IMPORTO', 'Importo', 2, '€')),
+                siNo('BOLLO_RIVALSA', 'Lo riaddebito al cliente', v('BOLLO_RIVALSA', true) !== false && v('BOLLO_RIVALSA', true) !== 'NO')]),
+              scheda('Documento', [scelte('TIPO_DOCUMENTO', 'Tipo', [['TD01', 'Fattura (TD01)'], ['TD06', 'Parcella (TD06)']], v('TIPO_DOCUMENTO', 'TD01')),
+                scelte('REGIME_FISCALE', 'Regime', [['RF01', 'Ordinario (RF01)'], ['RF19', 'Forfettario (RF19)']], v('REGIME_FISCALE', 'RF01'))]),
+              scheda('Pagamento', [h('div', { class: 'riga-campi' }, numero('GIORNI_PAGAMENTO', 'Giorni', 30, 'giorni', { intero: true }),
+                siNo('PAGAMENTO_FINE_MESE', 'Fine mese', v('PAGAMENTO_FINE_MESE', false) === true || v('PAGAMENTO_FINE_MESE', false) === 'SI')),
+                scelte('MODALITA_PAGAMENTO', 'Modo', [['MP05', 'Bonifico'], ['MP12', 'RIBA'], ['MP02', 'Assegno'], ['MP01', 'Contanti']], v('MODALITA_PAGAMENTO', 'MP05'))]))))]);
     }
 
     function segnaConfermate() {
@@ -945,13 +940,31 @@
       W.disegnaPagina();
     }
 
-    /** Il formato coi pezzi da toccare: anno a 4 o 2 cifre, testo fisso, numero con N cifre. */
+    /**
+     * Il formato coi pezzi da toccare: anno a 4 o 2 cifre, testo fisso, numero con N cifre.
+     * Dal 06/11/2026 si salva da solo a ogni cambio che va bene (il testo 800 ms dopo l'ultima lettera); un formato che non
+     * va resta nella finestra con l'errore e non si salva. La finestra ha solo Chiudi.
+     */
     function modificaNumerazione(n) {
       const anno = new Date().getFullYear();
       let pezzi = R.pezziFormato(n.formato);
       let annuale = !!n.annuale;
-      let errore = '';
+      const salvato = { formato: n.formato, annuale: !!n.annuale };
+      const sola = !scrive();
       const zona = h('div', { class: 'fila' });
+      const zonaErrore = h('div');
+      let timer = null;
+      const prova = async () => {
+        clearTimeout(timer);
+        if (sola) return;
+        const formato = R.formatoDaPezzi(pezzi);
+        const errore = R.erroreFormato(formato, annuale);
+        aggiungi(svuota(zonaErrore), [errore ? h('div', { class: 'campo sbagliato' }, h('div', { class: 'errore' }, errore)) : null]);
+        if (errore || (formato === salvato.formato && annuale === salvato.annuale)) return;
+        const ok = await B.salvaOra(zona, () => Rete.post('/server/salvaNumerazione', { tipo: n.tipo, formato, annuale }), 'Salvato: vale per i numeri nuovi');
+        if (ok) { salvato.formato = formato; salvato.annuale = annuale; }
+      };
+      const cambiato = subito => { clearTimeout(timer); timer = setTimeout(prova, subito ? 0 : 800); };
       const disegna = () => {
         const formato = R.formatoDaPezzi(pezzi);
         const anteprima = R.formattaNumero(formato, prossimoNumero(n), anno);
@@ -959,22 +972,25 @@
           h('div', { class: 'anteprima-numero' }, h('span', { class: 'etichetta' }, 'Anteprima'), h('span', { class: 'codice grande' }, anteprima || '—')),
           h('div', { class: 'pezzi' }, pezzi.map((p, i) => h('div', { class: 'pezzo' },
             h('span', { class: 'nome-pezzo' }, p.tipo === 'anno' ? 'Anno' : p.tipo === 'numero' ? 'Numero' : 'Testo'),
-            p.tipo === 'anno' ? segmenti([[4, '4 cifre'], [2, '2 cifre']], p.cifre, x => { p.cifre = Number(x); disegna(); }, 'piccoli')
-              : p.tipo === 'numero' ? h('span', { class: 'stepper' }, tondo('meno', 'Una cifra in meno', () => { p.cifre = Math.max(1, p.cifre - 1); disegna(); }, 'piccolo'),
-                h('span', { class: 'valore piccolo' }, p.cifre + ' cifre'), tondo('piu', 'Una cifra in più', () => { p.cifre = Math.min(8, p.cifre + 1); disegna(); }, 'piccolo'))
-                : h('input', { type: 'text', class: 'campo-solo', value: p.testo, maxlength: '12', 'aria-label': 'Testo fisso', oninput: e => { p.testo = e.target.value; aggiorna(); } }),
+            p.tipo === 'anno' ? segmenti([[4, '4 cifre'], [2, '2 cifre']], p.cifre, x => { p.cifre = Number(x); rifai(); }, 'piccoli')
+              : p.tipo === 'numero' ? h('span', { class: 'stepper' }, tondo('meno', 'Una cifra in meno', () => { p.cifre = Math.max(1, p.cifre - 1); rifai(); }, 'piccolo'),
+                h('span', { class: 'valore piccolo' }, p.cifre + ' cifre'), tondo('piu', 'Una cifra in più', () => { p.cifre = Math.min(8, p.cifre + 1); rifai(); }, 'piccolo'))
+                : h('input', { type: 'text', class: 'campo-solo', value: p.testo, maxlength: '12', 'aria-label': 'Testo fisso', disabled: sola,
+                  oninput: e => { p.testo = e.target.value; aggiorna(); cambiato(false); }, onblur: () => cambiato(true) }),
             h('span', { class: 'spazio' }),
-            i > 0 ? tondo('indietro', 'Sposta prima', () => { pezzi = R.sposta(pezzi, i, i - 1); disegna(); }, 'piccolo') : null,
-            i < pezzi.length - 1 ? tondo('avanti', 'Sposta dopo', () => { pezzi = R.sposta(pezzi, i, i + 1); disegna(); }, 'piccolo') : null,
-            tondo('chiudi', 'Togli', () => { pezzi.splice(i, 1); disegna(); }, 'piccolo')))),
+            i > 0 ? tondo('indietro', 'Sposta prima', () => { pezzi = R.sposta(pezzi, i, i - 1); rifai(); }, 'piccolo') : null,
+            i < pezzi.length - 1 ? tondo('avanti', 'Sposta dopo', () => { pezzi = R.sposta(pezzi, i, i + 1); rifai(); }, 'piccolo') : null,
+            tondo('chiudi', 'Togli', () => { pezzi.splice(i, 1); rifai(); }, 'piccolo')))),
           h('div', { class: 'pillole' },
-            pezzi.some(p => p.tipo === 'anno') ? null : h('button', { type: 'button', class: 'pillola tratteggiata', onclick: () => { pezzi.push({ tipo: 'anno', cifre: 4 }); disegna(); } }, '+ Anno'),
-            h('button', { type: 'button', class: 'pillola tratteggiata', onclick: () => { pezzi.push({ tipo: 'testo', testo: '/' }); disegna(); } }, '+ Testo'),
-            pezzi.some(p => p.tipo === 'numero') ? null : h('button', { type: 'button', class: 'pillola tratteggiata', onclick: () => { pezzi.push({ tipo: 'numero', cifre: 3 }); disegna(); } }, '+ Numero')),
-          h('label', { class: 'spunta-campo' }, h('input', { type: 'checkbox', checked: annuale, onchange: e => { annuale = e.target.checked; disegna(); } }), 'Il numero riparte a gennaio'),
-          errore ? h('div', { class: 'campo sbagliato' }, h('div', { class: 'errore' }, errore)) : null,
+            pezzi.some(p => p.tipo === 'anno') ? null : h('button', { type: 'button', class: 'pillola tratteggiata', onclick: () => { pezzi.push({ tipo: 'anno', cifre: 4 }); rifai(); } }, '+ Anno'),
+            h('button', { type: 'button', class: 'pillola tratteggiata', onclick: () => { pezzi.push({ tipo: 'testo', testo: '/' }); rifai(); } }, '+ Testo'),
+            pezzi.some(p => p.tipo === 'numero') ? null : h('button', { type: 'button', class: 'pillola tratteggiata', onclick: () => { pezzi.push({ tipo: 'numero', cifre: 3 }); rifai(); } }, '+ Numero')),
+          h('label', { class: 'spunta-campo' }, h('input', { type: 'checkbox', checked: annuale, disabled: sola, onchange: e => { annuale = e.target.checked; rifai(); } }), 'Il numero riparte a gennaio'),
+          zonaErrore,
           h('div', { class: 'secondario' }, 'Vale solo per i numeri nuovi: quelli già dati non cambiano.')]);
       };
+      // Un pezzo cambiato: si ridisegna e si salva subito, se il formato va bene.
+      const rifai = () => { if (sola) return; disegna(); cambiato(true); };
       // Scrivendo nel testo si aggiorna solo l'anteprima, senza perdere il cursore.
       const aggiorna = () => {
         const a = zona.querySelector('.anteprima-numero .codice');
@@ -982,20 +998,15 @@
       };
       disegna();
       let chiudi;
-      const salva = async () => {
-        const formato = R.formatoDaPezzi(pezzi);
-        errore = R.erroreFormato(formato, annuale);
-        if (errore) { disegna(); return; }
-        const ris = await lavora('Salvo la numerazione', () => Rete.post('/server/salvaNumerazione', { tipo: n.tipo, formato, annuale }));
-        if (!ris) return;
-        await W.ricaricaAnagrafiche().catch(() => null);
-        chiudi();
-        avviso('Numerazione salvata: vale per i numeri nuovi');
-        W.disegnaPagina();
-      };
       chiudi = finestra({ titolo: NOMI_NUMERAZIONE[n.tipo] || n.tipo, corpo: zona, fuoco: false,
-        pulsanti: ['spazio', h('button', { type: 'button', class: 'btn testo grande', onclick: () => chiudi() }, 'Annulla'),
-          h('button', { type: 'button', class: 'btn giallo grande', onclick: salva }, 'Salva')] });
+        allaChiusura: async () => {
+          // Un testo scritto da meno di 800 ms parte adesso; poi si rilegge, così l'elenco mostra il formato nuovo.
+          if (timer) await prova();
+          await B.inCoda(() => null);
+          await W.ricaricaAnagrafiche().catch(() => null);
+          W.disegnaPagina();
+        },
+        pulsanti: ['spazio', h('button', { type: 'button', class: 'btn grande', onclick: () => chiudi() }, 'Chiudi')] });
     }
 
     // ===================================================================== registro attività
@@ -1197,7 +1208,6 @@
               // fase 2 e 3: lo stesso CSV, coi periodi di base degli elenchi
               puo('preventivi') ? ['preventivi', 'Preventivi', 'Tutti i preventivi'] : null,
               puo('attivita') ? ['attivita', 'Attività', 'Le attività aperte'] : null,
-              puo('rapportini') ? ['ore', 'Ore', 'Le ore di questa settimana'] : null,
               puo('spese') ? ['spese', 'Spese', 'Le spese di questo mese'] : null,
               puo('spese') ? ['trasferte', 'Trasferte', 'Le trasferte di questo mese'] : null,
               puo('spese') ? ['rimborsi', 'Rimborsi', 'I rimborsi da fare'] : null].filter(Boolean).map(x => riga({

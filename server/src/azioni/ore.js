@@ -662,7 +662,7 @@ module.exports = {
       }
       // Prima il permesso (dal tipo), poi la riga: chi non approva non scopre nemmeno se c'e'.
       const modulo = tipo === 'ore' || tipo === 'rapportino' ? 'rapportini' : 'spese';
-      if (!this.puoApprovare(modulo)) throw senzaPermesso(modulo === 'spese' ? 'approvare spese e trasferte' : 'approvare ore e rapportini');
+      if (!this.puoApprovare(modulo)) throw senzaPermesso(modulo === 'spese' ? 'approvare spese e trasferte' : 'approvare i rapportini');
       const v = this.voceApprovabile(tipo, x.id);
       const rap = v.tipo === 'rapportino';
       let nuovo;
@@ -699,33 +699,33 @@ module.exports = {
   /**
    * daApprovare {}: per chi approva, le cose in attesa raggruppate per persona,
    * con le anomalie da guardare prima: troppe ore in un giorno (piu' di
-   * ORE_GIORNALIERE + 4, contando ore registrate e rapportini), spesa senza
-   * scontrino, spesa sopra i 200 euro, km diversi dal solito per la commessa.
+   * ORE_GIORNALIERE + 4, contando i rapportini), spesa senza scontrino, spesa
+   * sopra i 200 euro, km diversi dal solito per la commessa.
+   * 07/11/2026 (Manuel: "le Ore vanno tolte, non servono, metti solamente i
+   * Rapportini"): le righe della tabella ore non sono piu' fra le cose da
+   * approvare e non contano piu' nelle ore del giorno; restano rapportini,
+   * spese, trasferte e assenze. approva/respingi {tipo: 'ore'} funzionano ancora
+   * (app vecchie), le righe e i dati restano.
    */
   daApprovare() {
     const ore = this.puoApprovare('rapportini');
     const spese = this.puoApprovare('spese');
     const assenze = this.puoApprovareAssenze();
-    if (!ore && !spese && !assenze) throw senzaPermesso('approvare ore, rapportini e spese');
+    if (!ore && !spese && !assenze) throw senzaPermesso('approvare rapportini e spese');
     const imp = this.leggiImpostazioni();
     const soglia = (numero(imp.ORE_GIORNALIERE) || 8) + 4;
     const a = this.nomiFase3();
     const codice = id => (id ? (a.commesse[String(id).toUpperCase()] || { id }).id : '');
     const voci = [];
-    const righeOre = ore ? this.db.righe("SELECT * FROM ore WHERE stato = 'da_approvare' AND tolta IS NULL") : [];
     const righeRap = ore ? this.db.righe("SELECT * FROM rapportini WHERE stato_approvazione = 'da_approvare' AND UPPER(stato) <> 'ANNULLATO'") : [];
     const righeSpese = spese ? this.db.righe("SELECT * FROM spese WHERE stato = 'da_approvare' AND tolta IS NULL AND rapportino_id IS NULL") : [];
     const righeTr = spese ? this.db.righe("SELECT * FROM trasferte WHERE stato = 'da_approvare' AND tolta IS NULL") : [];
 
-    // Le ore di ogni persona in ogni giorno toccato: ore registrate che contano + rapportini non annullati.
+    // Le ore di ogni persona in ogni giorno toccato: i rapportini non annullati (07/11/2026: non piu' le ore registrate).
     const chiave = (u, g) => u + '|' + g;
-    const giorni = new Set(righeOre.map(r => chiave(r.utente_id, r.data)).concat(righeRap.map(r => chiave(r.utente_id, dataIso(r.data)))));
+    const giorni = new Set(righeRap.map(r => chiave(r.utente_id, dataIso(r.data))));
     const oreDelGiorno = {};
     if (giorni.size) {
-      for (const r of this.db.righe("SELECT utente_id, data, ore FROM ore WHERE tolta IS NULL AND stato IN ('da_approvare', 'approvata')")) {
-        const k = chiave(r.utente_id, r.data);
-        if (giorni.has(k)) oreDelGiorno[k] = (oreDelGiorno[k] || 0) + numero(r.ore);
-      }
       for (const r of this.db.righe("SELECT utente_id, data, ore_lavoro, ore_extra, ore_viaggio, ore_totali FROM rapportini WHERE UPPER(stato) <> 'ANNULLATO'")) {
         const k = chiave(r.utente_id, dataIso(r.data));
         if (giorni.has(k)) oreDelGiorno[k] = (oreDelGiorno[k] || 0) + (numero(r.ore_totali) || numero(r.ore_lavoro) + numero(r.ore_extra) + numero(r.ore_viaggio));
@@ -770,13 +770,6 @@ module.exports = {
       if (f.rapportino_id) fotoSpesa['r' + f.rapportino_id] = (fotoSpesa['r' + f.rapportino_id] || 0) + 1;
     }
 
-    for (const r of righeOre) {
-      voci.push({
-        tipo: 'ore', id: r.id, idUtente: r.utente_id, data: r.data, cosa: 'Ore',
-        dettaglio: [codice(r.commessa_id) || 'Studio', r.descrizione, nomeGiorno(r.data)].filter(Boolean).join(' · '),
-        quanto: numero(r.ore), unita: 'ore', anomalie: troppe(r.utente_id, r.data),
-      });
-    }
     for (const r of righeRap) {
       const g = dataIso(r.data);
       const sueSpese = this.db.righe('SELECT importo FROM spese WHERE rapportino_id = ? AND tolta IS NULL', r.id);

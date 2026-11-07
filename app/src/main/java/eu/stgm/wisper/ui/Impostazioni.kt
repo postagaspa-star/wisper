@@ -83,6 +83,8 @@ import eu.stgm.wisper.BuildConfig
 import eu.stgm.wisper.Dati
 import eu.stgm.wisper.NuoveVersioni
 import eu.stgm.wisper.rapportino.Anagrafiche
+import eu.stgm.wisper.rapportino.CampiStudio
+import eu.stgm.wisper.rapportino.CampoImpostazione
 import eu.stgm.wisper.rapportino.Numeri
 import eu.stgm.wisper.rapportino.Indirizzi
 import eu.stgm.wisper.rapportino.PonteServer
@@ -103,6 +105,8 @@ import kotlin.math.max
  * Amministrazione › Dati dello studio (docs/gestionale/fase1-schermate.md §7):
  * l'intestazione dei PDF e la tua firma, come le Impostazioni di prima. Valgono
  * anche per il computer. Chi vede Amministrazione solo in lettura non cambia niente.
+ * Dal 06/11/2026 i campi stanno sulla pagina e si salvano da soli (SalvaDaSolo), nell'ordine
+ * di CampiStudio: lo studio, poi l'iscrizione all'albo, il logo, i preventivi, la firma.
  */
 @Composable
 fun PaginaStudio(dati: Dati, puoCambiare: Boolean, onIndietro: () -> Unit) {
@@ -111,7 +115,7 @@ fun PaginaStudio(dati: Dati, puoCambiare: Boolean, onIndietro: () -> Unit) {
     val avvisi = LocalAvvisi.current
     val scope = rememberCoroutineScope()
     val ana by dati.anagrafiche.collectAsStateWithLifecycle()
-    var modifica by remember { mutableStateOf<Modifica?>(null) }
+    val salva = rememberSalvaDaSolo()
     var firmaColDito by remember { mutableStateOf(false) }
     var caricoFirma by remember { mutableStateOf(false) }
 
@@ -146,33 +150,18 @@ fun PaginaStudio(dati: Dati, puoCambiare: Boolean, onIndietro: () -> Unit) {
         Testata(onIndietro = onIndietro)
         TitoloPagina("Dati dello studio")
         TitoloSezione("Lo studio")
-        SchedaElenco {
-            VOCI_STUDIO.forEachIndexed { i, v ->
-                if (i > 0) LineaElenco()
-                RigaVoce(v.titolo, sotto = ana.impostazione(v.chiave).ifBlank { "—" }, freccia = puoCambiare, onClick = if (puoCambiare) ({
-                    modifica = Modifica(v.titolo, ana.impostazione(v.chiave), chiave = v.chiave, tastiera = v.tastiera)
-                }) else null)
-            }
-        }
-        // Fase 8 (fase8.md §9.3): il logo, sui PDF sì o no, e l'anteprima dell'intestazione.
-        SchedaLogoStudio(dati, puoCambiare)
+        CampiSalvati(salva, CampiStudio.STUDIO, ana, puoCambiare) { k, v -> dati.salvaImpostazioni(mapOf(k to v)) }
+        TitoloSezione("Iscrizione all'albo")
+        CampiSalvati(salva, CampiStudio.ALBO, ana, puoCambiare) { k, v -> dati.salvaImpostazioni(mapOf(k to v)) }
+        // Fase 8 (fase8.md §9.3): il logo, sui PDF sì o no, il nome accanto, e l'anteprima dell'intestazione.
+        SchedaLogoStudio(dati, puoCambiare, salva)
         TitoloSezione("Per i preventivi")
-        SchedaElenco {
-            VOCI_PREVENTIVI.forEachIndexed { i, v ->
-                if (i > 0) LineaElenco()
-                val valore = ana.impostazione(v.chiave)
-                RigaVoce(
-                    v.titolo, sotto = valore.ifBlank { "—" }.let { if (v.suffisso != null && valore.isNotBlank()) "$it ${v.suffisso}" else it },
-                    freccia = puoCambiare,
-                    onClick = if (puoCambiare) ({
-                        modifica = Modifica(v.titolo, valore, chiave = v.chiave, tastiera = v.tastiera, righe = v.righe, suffisso = v.suffisso,
-                            conferma = if (v.chiave in listOf("IVA", "EPPI_INTEGRATIVO")) "Salvato. Vale per i preventivi nuovi: quelli già scritti tengono la percentuale con cui sono nati" else "Salvato")
-                    }) else null,
-                )
-            }
-        }
+        CampiSalvati(
+            salva, CampiStudio.PREVENTIVI, ana, puoCambiare,
+            conferma = { k -> if (k in listOf("IVA", "EPPI_INTEGRATIVO")) CONFERMA_PERCENTUALI else null },
+        ) { k, v -> dati.salvaImpostazioni(mapOf(k to v)) }
         TitoloSezione("La tua firma")
-        Scheda(orizzontale = 20.dp, verticale = 18.dp, raggio = 24.dp, spazio = 14.dp) {
+        Scheda(Modifier.evidenziabile("FIRMA_TECNICO"), orizzontale = 20.dp, verticale = 18.dp, raggio = 24.dp, spazio = 14.dp) {
             FirmaTecnico(dati, ana.idFirmaTecnico)
             if (puoCambiare) {
                 // Uno sotto l'altro: affiancati, su un telefono da 360 i due testi si taglierebbero.
@@ -186,11 +175,6 @@ fun PaginaStudio(dati: Dati, puoCambiare: Boolean, onIndietro: () -> Unit) {
         }
     }
 
-    modifica?.let { m ->
-        FoglioModifica(m, scope, onChiudi = { if (modifica === m) modifica = null }) { valore ->
-            dati.salvaImpostazioni(mapOf(m.chiave!! to valore)).fold(onSuccess = { avvisi.mostra(m.conferma); null }, onFailure = { spiegaErrore(it) })
-        }
-    }
     if (firmaColDito) {
         FoglioFirma(
             caricando = caricoFirma,
@@ -212,18 +196,14 @@ fun PaginaStudio(dati: Dati, puoCambiare: Boolean, onIndietro: () -> Unit) {
 /**
  * Amministrazione › Tariffe e rimborsi: rimborso km con l'auto, quanto costa
  * un'ora, il campo ticket. Le tariffe dei clienti stanno sulle loro schede.
+ * Dal 06/11/2026 si salvano da soli.
  */
 @Composable
 fun PaginaTariffe(dati: Dati, puoCambiare: Boolean, onIndietro: () -> Unit) {
     val c = W.colori
-    val avvisi = LocalAvvisi.current
-    val scope = rememberCoroutineScope()
     val ana by dati.anagrafiche.collectAsStateWithLifecycle()
-    var modifica by remember { mutableStateOf<Modifica?>(null) }
-    // L'interruttore si sposta subito; se il server non risponde torna com'era.
-    var ticket by remember { mutableStateOf<Boolean?>(null) }
-    val ticketAcceso = ticket ?: ana.ticketAttivo
-    LaunchedEffect(ana.ticketAttivo) { if (ticket == ana.ticketAttivo) ticket = null }
+    val salva = rememberSalvaDaSolo()
+    val numero = { t: String -> if (t.isNotEmpty() && Numeri.leggi(t) == null) "Non è un numero" else null }
 
     Column(
         Modifier.fillMaxSize().background(c.fondo).verticalScroll(rememberScrollState()).padding(MarginePagina).padding(bottom = 48.dp),
@@ -231,48 +211,21 @@ fun PaginaTariffe(dati: Dati, puoCambiare: Boolean, onIndietro: () -> Unit) {
     ) {
         Testata(onIndietro = onIndietro)
         TitoloPagina("Tariffe e rimborsi")
-        SchedaElenco {
-            val euroKm = ana.impostazione(Anagrafiche.EURO_KM)
-            RigaVoce("Rimborso km", sotto = Numeri.leggi(euroKm)?.let { "${Numeri.scrivi(it)} €/km · tabella ACI" } ?: "—", freccia = puoCambiare, onClick = if (puoCambiare) ({
-                modifica = Modifica(
-                    "Rimborso km", preciso(Numeri.leggi(euroKm)), chiave = Anagrafiche.EURO_KM,
-                    tastiera = KeyboardType.Decimal, suffisso = "€/km", conferma = CONFERMA_RIMBORSI,
-                )
-            }) else null)
-            LineaElenco()
-            RigaVoce("Auto", sotto = ana.impostazione(Anagrafiche.AUTO).ifBlank { "—" }, freccia = puoCambiare, onClick = if (puoCambiare) ({
-                modifica = Modifica("Auto", ana.impostazione(Anagrafiche.AUTO), chiave = Anagrafiche.AUTO, conferma = CONFERMA_RIMBORSI)
-            }) else null)
-            LineaElenco()
-            val costo = ana.costoOrario
-            RigaVoce("Quanto ti costa un'ora", sotto = costo?.let { "${Numeri.scrivi(it)} €/h" } ?: "—", freccia = puoCambiare, onClick = if (puoCambiare) ({
-                modifica = Modifica(
-                    "Quanto ti costa un'ora", preciso(costo), chiave = Anagrafiche.COSTO_ORARIO,
-                    tastiera = KeyboardType.Decimal, suffisso = "€/h", conferma = CONFERMA_RIMBORSI,
-                )
-            }) else null)
-            LineaElenco()
-            Box(Modifier.padding(vertical = 4.dp)) {
-                if (puoCambiare) {
-                    RigaInterruttore("Campo ticket nei rapportini", ticketAcceso) { nuovo ->
-                        ticket = nuovo
-                        scope.launch {
-                            dati.salvaImpostazioni(mapOf(Anagrafiche.TICKET_ATTIVO to if (nuovo) "SI" else "NO")).fold(
-                                onSuccess = { avvisi.mostra("Salvato") },
-                                onFailure = { ticket = null; avvisi.mostra(spiegaErrore(it)) },
-                            )
-                        }
-                    }
-                } else {
-                    RigaVoce("Campo ticket nei rapportini", valore = if (ticketAcceso) "sì" else "no")
-                }
+        Scheda(orizzontale = 18.dp, verticale = 16.dp, spazio = 14.dp) {
+            CampoSalvato(
+                salva, Anagrafiche.EURO_KM, preciso(Numeri.leggi(ana.impostazione(Anagrafiche.EURO_KM))), "Rimborso km",
+                abilitato = puoCambiare, tastiera = KeyboardType.Decimal, suffisso = "€/km", conferma = CONFERMA_RIMBORSI, controlla = numero,
+            ) { dati.salvaImpostazioni(mapOf(Anagrafiche.EURO_KM to it)) }
+            CampoSalvato(salva, Anagrafiche.AUTO, ana.impostazione(Anagrafiche.AUTO), "Auto", abilitato = puoCambiare, conferma = CONFERMA_RIMBORSI) {
+                dati.salvaImpostazioni(mapOf(Anagrafiche.AUTO to it))
             }
-        }
-    }
-
-    modifica?.let { m ->
-        FoglioModifica(m, scope, onChiudi = { if (modifica === m) modifica = null }) { valore ->
-            dati.salvaImpostazioni(mapOf(m.chiave!! to valore)).fold(onSuccess = { avvisi.mostra(m.conferma); null }, onFailure = { spiegaErrore(it) })
+            CampoSalvato(
+                salva, Anagrafiche.COSTO_ORARIO, preciso(ana.costoOrario), "Quanto ti costa un'ora",
+                abilitato = puoCambiare, tastiera = KeyboardType.Decimal, suffisso = "€/h", conferma = CONFERMA_RIMBORSI, controlla = numero,
+            ) { dati.salvaImpostazioni(mapOf(Anagrafiche.COSTO_ORARIO to it)) }
+            RigaInterruttoreSalvata(salva, Anagrafiche.TICKET_ATTIVO, "Campo ticket nei rapportini", ana.ticketAttivo, abilitato = puoCambiare) { nuovo ->
+                dati.salvaImpostazioni(mapOf(Anagrafiche.TICKET_ATTIVO to if (nuovo) "SI" else "NO"))
+            }
         }
     }
 }
@@ -409,49 +362,68 @@ fun PaginaApp(
     }
 }
 
-/** La conferma del computer: il rimborso di un rapportino si fissa quando nasce. */
-private const val CONFERMA_RIMBORSI = "Salvato. Vale per i rapportini nuovi: quelli già scritti tengono il rimborso con cui sono nati"
+/** La conferma del computer: il rimborso di un rapportino si fissa quando nasce (detta una volta per pagina). */
+private const val CONFERMA_RIMBORSI = "Vale per i rapportini nuovi: quelli già scritti tengono il rimborso con cui sono nati"
 
-/** Una voce dei dati dello studio, come le chiama il computer. */
-private class VoceStudio(val titolo: String, val chiave: String, val tastiera: KeyboardType = KeyboardType.Text, val righe: Int = 1, val suffisso: String? = null)
+/** Come sopra, per le percentuali dei preventivi. */
+private const val CONFERMA_PERCENTUALI = "Vale per i preventivi nuovi: quelli già scritti tengono la percentuale con cui sono nati"
+
+/** La tastiera di un campo di CampiStudio. */
+internal fun tastieraDi(tipo: String): KeyboardType = when (tipo) {
+    "cifre" -> KeyboardType.Number
+    "decimale" -> KeyboardType.Decimal
+    "email" -> KeyboardType.Email
+    "telefono" -> KeyboardType.Phone
+    "sito" -> KeyboardType.Uri
+    else -> KeyboardType.Text
+}
 
 /**
- * Quello che la legge chiede in ogni preventivo (fase2.md §2.1, §3): polizza e
- * titoli, e le percentuali che il preventivo congela quando nasce.
+ * I campi di una scheda di Dati dello studio, che si salvano da soli: il codice SDI in maiuscolo e da 7 lettere o
+ * cifre, i numeri (IVA, EPPI, giorni) come numeri. Chi non può cambiare li legge.
  */
-private val VOCI_PREVENTIVI = listOf(
-    VoceStudio("Polizza professionale: compagnia", "POLIZZA_COMPAGNIA"),
-    VoceStudio("Numero della polizza", "POLIZZA_NUMERO"),
-    VoceStudio("Massimale", "POLIZZA_MASSIMALE"),
-    VoceStudio("Titoli e specializzazioni", "TITOLI", righe = 3),
-    VoceStudio("IVA", "IVA", KeyboardType.Decimal, suffisso = "%"),
-    VoceStudio("Contributo integrativo EPPI", "EPPI_INTEGRATIVO", KeyboardType.Decimal, suffisso = "%"),
-    VoceStudio("Validità dei preventivi", "PREVENTIVO_VALIDITA_GIORNI", KeyboardType.Number, suffisso = "giorni"),
-    VoceStudio("Condizioni dei preventivi", "PREVENTIVO_CONDIZIONI", righe = 5),
-)
-
-private val VOCI_STUDIO = listOf(
-    VoceStudio("Ragione sociale", Anagrafiche.RAGIONE_SOCIALE),
-    VoceStudio("Chi compila", Anagrafiche.TECNICO),
-    VoceStudio("Indirizzo", Anagrafiche.INDIRIZZO),
-    VoceStudio("Partita IVA", Anagrafiche.PARTITA_IVA, KeyboardType.Number),
-    VoceStudio("Email per le risposte", Anagrafiche.EMAIL, KeyboardType.Email),
-    VoceStudio("Telefono", Anagrafiche.TELEFONO, KeyboardType.Phone),
-    VoceStudio("PEC", Anagrafiche.PEC, KeyboardType.Email),
-    // Fase 4 (fase4.md §4.1): servono alla fattura (il passaggio al programma li chiede).
-    VoceStudio("Codice fiscale", "CODICE_FISCALE"),
-    VoceStudio("CAP", "STUDIO_CAP", KeyboardType.Number),
-    VoceStudio("Comune", "STUDIO_COMUNE"),
-    VoceStudio("Provincia", "STUDIO_PROVINCIA"),
-    VoceStudio("Albo", "ALBO"),
-    VoceStudio("Provincia dell'albo", "ALBO_PROVINCIA"),
-    VoceStudio("Numero di iscrizione all'albo", "ALBO_NUMERO"),
-    VoceStudio("Data di iscrizione all'albo", "ALBO_DATA"),
-    // Fase 8 (fase8.md §9.3): nome breve (menu, email, portale), sito, la riga in fondo ai PDF.
-    VoceStudio("Nome breve", "STUDIO_NOME_BREVE"),
-    VoceStudio("Sito", "STUDIO_SITO", KeyboardType.Uri),
-    VoceStudio("Riga in fondo ai PDF", "PDF_PIEDE", righe = 2),
-)
+@Composable
+private fun CampiSalvati(
+    salva: SalvaDaSolo,
+    campi: List<CampoImpostazione>,
+    ana: Anagrafiche,
+    puo: Boolean,
+    conferma: (String) -> String? = { null },
+    onSalva: suspend (String, String) -> Result<*>,
+) {
+    if (!puo) {
+        SchedaElenco {
+            campi.forEachIndexed { i, v ->
+                if (i > 0) LineaElenco()
+                val valore = ana.impostazione(v.chiave)
+                RigaVoce(
+                    v.titolo, Modifier.evidenziabile(v.chiave),
+                    sotto = valore.ifBlank { "—" }.let { if (v.suffisso != null && valore.isNotBlank()) "$it ${v.suffisso}" else it }, freccia = false,
+                )
+            }
+        }
+        return
+    }
+    Scheda(orizzontale = 18.dp, verticale = 16.dp, spazio = 14.dp) {
+        campi.forEach { v ->
+            val numero = v.chiave in Anagrafiche.IMPOSTAZIONI_NUMERICHE
+            val sdi = v.chiave == CampiStudio.STUDIO_SDI
+            val valore = ana.impostazione(v.chiave).let { t -> if (numero) Numeri.leggi(t)?.let { preciso(it) } ?: t else t }
+            CampoSalvato(
+                salva, v.chiave, valore, v.titolo,
+                tastiera = tastieraDi(v.tipo), righe = v.righe, suffisso = v.suffisso, conferma = conferma(v.chiave),
+                cambia = if (sdi) CampiStudio::sdi else { t -> t },
+                controlla = { t ->
+                    when {
+                        sdi -> CampiStudio.erroreSdi(t)
+                        numero && t.isNotEmpty() && Numeri.leggi(t) == null -> "Non è un numero"
+                        else -> null
+                    }
+                },
+            ) { t -> onSalva(v.chiave, t) }
+        }
+    }
+}
 
 /**
  * Quello che si sta cambiando. [locale] = una voce di questo telefono ("tecnico",

@@ -15,7 +15,7 @@ const path = require('node:path');
 const { AsyncLocalStorage } = require('node:async_hooks');
 const { Database } = require('./db');
 const P = require('./permessi');
-const { testo, adesso, partitaIvaDalFoglio, telefonoDalFoglio, senzaApostrofo, Rifiuto } = require('./utili');
+const { testo, adesso, adessoMs, partitaIvaDalFoglio, telefonoDalFoglio, senzaApostrofo, Rifiuto } = require('./utili');
 const { schemaFormato, formatta, controllaFormato } = require('./formati');
 const { preparaRicordo } = require('./ricordo');
 
@@ -68,7 +68,9 @@ const REGISTRO_RISERVATI = {
 /** Le colonne che sono sempre testo, anche quando dentro ci sono solo cifre. */
 const SEMPRE_TESTO = ['partitaIva', 'telefono', 'PARTITA_IVA', 'TELEFONO',
   // Fase 4: i dati dello studio per le fatture (un CAP o un numero d'albo restano testo).
-  'CODICE_FISCALE', 'STUDIO_CAP', 'ALBO_NUMERO', 'ALBO_PROVINCIA', 'ALBO_DATA'];
+  'CODICE_FISCALE', 'STUDIO_CAP', 'ALBO_NUMERO', 'ALBO_PROVINCIA', 'ALBO_DATA',
+  // 06/11/2026: il codice SDI dello studio (1234567 resta un codice, non un numero).
+  'STUDIO_SDI'];
 
 const NUMERAZIONI_INIZIALI = [
   { tipo: 'commessa', formato: '{AA}ST{NNN}', annuale: 0 },
@@ -92,6 +94,22 @@ const CAMPI_SEGRETI = ['password_hash', 'token_hash'];
 
 /** Un campo che cambia a ogni salvataggio: nel registro sarebbe solo rumore. */
 const CAMPI_RUMORE = ['modificato'];
+
+/**
+ * 06/11/2026: il salvataggio automatico delle app (una impostazione alla volta, anche ogni secondo mentre si scrive).
+ * I salvataggi di fila della stessa impostazione, della stessa persona dallo stesso dispositivo, a meno di 2 minuti uno
+ * dall'altro, fanno una riga sola nel registro (tabella registro_in_attesa, migrazione 010).
+ */
+const SERIE_MS = 2 * 60 * 1000;
+
+/**
+ * Le impostazioni che a ogni cambio hanno la loro riga subito, anche di fila: le regole fiscali (la conferma del
+ * commercialista), chi riceve gli avvisi di sicurezza, le sessioni, la copia, le funzioni, cio' che apre Wisper verso
+ * fuori (portale, calendario), logo e firma (hanno anche la loro riga "logo cambiato"). Sono quasi tutte un si'/no o una
+ * scelta: un salvataggio solo, niente da raggruppare.
+ */
+const SEMPRE_UNA_RIGA = new Set(REGOLE_FISCALI.concat(['REGOLE_FISCALI_CONFERMATE', 'EMAIL_AVVISI', 'SESSIONE_GIORNI', 'COPIA_CIFRATA',
+  'MODULI_SPENTI', 'CALENDARIO_PUBBLICO', 'PORTALE_ATTIVO', 'PORTALE_INDIRIZZO', 'CAMBIO', 'STUDIO_LOGO', 'FIRMA_TECNICO', 'PASSAGGIO_USCITE']));
 
 class Wisper {
   /**
@@ -117,6 +135,10 @@ class Wisper {
     // Le scritture gia' fatte, per non rifarle quando la risposta si perde (ricordo.js, la porta Google).
     preparaRicordo(this);
     this.prepara();
+    // 06/11/2026: le righe del registro rimaste in attesa (salvataggi automatici) quando il server si e' spento.
+    this.db.transazione(() => this.scriviInAttesa({ tutte: true }));
+    // 06/11/2026: le righe dei rapportini senza il loro rapportino (scritte direttamente nel database) ne prendono uno.
+    this.db.transazione(() => this.giornateMancanti());
     // Fase 7: il router del portale clienti (src/portale/): w.portale.richiesta(lavoro), dallo script del portale o da --porta-portale.
     this.portale = require('./portale').creaPortale(this);
   }
@@ -170,6 +192,8 @@ class Wisper {
     if (this.portaPortale) this.portaPortale.ferma();
     // La porta Google (porta.js): la chiamata aperta verso lo script si chiude subito.
     if (this.porta) this.porta.ferma();
+    // Le righe del registro in attesa (salvataggi automatici) ci vanno adesso; se non riesce, ci vanno alla riaccensione.
+    try { this.db.transazione(() => this.scriviInAttesa({ tutte: true })); } catch (err) { /* restano in attesa */ }
     this.db.chiudi();
   }
 
@@ -237,6 +261,8 @@ class Wisper {
    * o token: al loro posto "(cambiata)".
    */
   annota(tabella, idRiga, prima, dopo, nota) {
+    // 06/11/2026: prima le righe in attesa gia' finite (2 minuti fermi), cosi' il registro resta in ordine di tempo.
+    this.scriviInAttesa({});
     const c = this.chi();
     // Fase 6: i valori personali e riservati diventano "(riservato)" (quelli dei documenti solo se sono di una persona).
     let riservati = REGISTRO_RISERVATI[tabella] || null;
@@ -343,11 +369,15 @@ class Wisper {
       const chiave = testo(k);
       if (!chiave) continue;
       const v = JSON.stringify(comeLaCella(chiave, valori[k]));
-      if (this.db.riga('SELECT chiave FROM impostazioni WHERE chiave = ?', chiave)) {
-        this.aggiorna('impostazioni', chiave, { valore: v }, 'chiave');
-      } else {
+      const riga = this.db.riga('SELECT chiave, valore FROM impostazioni WHERE chiave = ?', chiave);
+      if (!riga) {
         this.inserisci('impostazioni', { chiave, valore: v, descrizione: '' }, 'chiave');
+        continue;
       }
+      // Come aggiorna(), ma la riga del registro passa da annotaImpostazione (i salvataggi automatici di fila: una riga).
+      if (uguali(riga.valore, v)) continue;
+      this.db.esegui('UPDATE impostazioni SET valore = ? WHERE chiave = ?', v, riga.chiave);
+      this.annotaImpostazione(riga.chiave, riga.valore, v);
     }
     // Fase 4: cambiare una regola fiscale toglie la conferma del commercialista (fase4.md §3.4 e §4.1).
     const dopo = this.leggiImpostazioni();
@@ -357,6 +387,56 @@ class Wisper {
       return this.leggiImpostazioni();
     }
     return dopo;
+  }
+
+  /**
+   * La riga del registro di un'impostazione cambiata (06/11/2026). Le app salvano da sole mentre si scrive: i salvataggi
+   * di fila della stessa impostazione, della stessa persona dallo stesso dispositivo, a meno di 2 minuti uno dall'altro,
+   * fanno UNA riga (prima = il valore di prima del primo, dopo = l'ultimo). Il registro non si modifica, quindi la riga
+   * aspetta in registro_in_attesa finche' la serie e' finita. Subito, come prima: il sistema, il ponte, SEMPRE_UNA_RIGA.
+   */
+  annotaImpostazione(chiave, prima, dopo) {
+    const c = this.chi();
+    if (c.sistema || !c.utente || c.ponte) return this.annota('impostazioni', chiave, { valore: prima }, { valore: dopo });
+    const disp = testo(c.dispNome || c.disp).slice(0, 80);
+    const persona = c.utente.id + '|' + disp;
+    const k = persona + '|impostazioni|' + chiave;
+    // La serie di un'altra impostazione della stessa persona e' finita (e quelle ferme da 2 minuti).
+    this.scriviInAttesa({ persona, tranne: k });
+    if (SEMPRE_UNA_RIGA.has(chiave)) return this.annota('impostazioni', chiave, { valore: prima }, { valore: dopo });
+    const ora = adesso();
+    const dopoJson = JSON.stringify({ valore: dopo });
+    if (this.db.riga('SELECT chiave FROM registro_in_attesa WHERE chiave = ?', k)) {
+      this.db.esegui('UPDATE registro_in_attesa SET dopo = ?, quando = ?, ultimo_ms = ?, volte = volte + 1, azione = ? WHERE chiave = ?',
+        dopoJson, ora, adessoMs(), testo(c.azione).slice(0, 40), k);
+    } else {
+      this.db.esegui('INSERT INTO registro_in_attesa (chiave, ultimo_ms, quando, volte, utente_id, utente, disp, azione, tabella, id_riga, prima, dopo) ' +
+        'VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?)', k, adessoMs(), ora, c.utente.id, c.utente.nome, disp, testo(c.azione).slice(0, 40),
+        'impostazioni', chiave, JSON.stringify({ valore: prima }), dopoJson);
+    }
+    return null;
+  }
+
+  /**
+   * Le righe in attesa che vanno nel registro: quelle ferme da 2 minuti; con persona, anche le altre di quella persona
+   * (tranne la chiave "tranne"); con tutte, tutte (chi apre il registro, lo spegnimento, la riaccensione). Una serie che e'
+   * tornata al valore di partenza non lascia righe. Torna quante righe ha scritto nel registro.
+   */
+  scriviInAttesa(o) {
+    o = o || {};
+    const righe = o.tutte ? this.db.righe('SELECT * FROM registro_in_attesa ORDER BY ultimo_ms, chiave')
+      : this.db.righe('SELECT * FROM registro_in_attesa WHERE ultimo_ms < ? OR (? <> \'\' AND substr(chiave, 1, ?) = ? AND chiave <> ?) ORDER BY ultimo_ms, chiave',
+        adessoMs() - SERIE_MS, o.persona || '', (o.persona || '').length + 1, (o.persona || '') + '|', o.tranne || '');
+    let n = 0;
+    for (const r of righe) {
+      this.db.esegui('DELETE FROM registro_in_attesa WHERE chiave = ?', r.chiave);
+      if (r.prima === r.dopo) continue;
+      this.db.esegui(
+        'INSERT INTO registro (quando, utente_id, utente, disp, azione, tabella, id_riga, prima, dopo, nota) VALUES (?,?,?,?,?,?,?,?,?,?)',
+        r.quando, r.utente_id, r.utente, r.disp, r.azione, r.tabella, r.id_riga, r.prima, r.dopo, r.volte > 1 ? 'salvata ' + r.volte + ' volte di fila' : '');
+      n++;
+    }
+    return n;
   }
 
   // ------------------------------------------------------------------ numerazioni

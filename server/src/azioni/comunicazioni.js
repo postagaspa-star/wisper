@@ -3,7 +3,7 @@
  *
  *  - lo storico per cliente e per commessa (comunicazioni): email mandate da Wisper, WhatsApp preparati e segnati
  *    mandati, telefonate e note, messaggi del portale;
- *  - Da mandare: le proposte si CALCOLANO a ogni lettura (promemoria degli appuntamenti, rapportini da firmare,
+ *  - Da mandare: le proposte si CALCOLANO a ogni lettura (promemoria degli appuntamenti, [rapportini da firmare: tolti il 06/11/2026],
  *    promemoria di pagamento) e non si salvano; usata o scartata, la comunicazione porta la chiave della proposta e la
  *    proposta non torna piu';
  *  - i modelli coi segnaposti, il messaggio pronto per wa.me (lo manda Manuel: niente invii automatici);
@@ -208,7 +208,7 @@ module.exports = {
       ultimoMovimento = mov && mov.d ? mov.d : '';
     }
     if (!vuoto(d.idCommessa)) {
-      const m = this.db.riga('SELECT id, cliente_id, descrizione FROM commesse WHERE id = ?', testo(d.idCommessa));
+      const m = this.db.riga('SELECT id, cliente_id, descrizione FROM commesse WHERE id = ?', this.codiceCommessaVero(d.idCommessa));
       if (!m) throw new Rifiuto('Commessa ' + d.idCommessa + ' non trovata');
       legami.commessa_id = m.id;
       legami.cliente_id = legami.cliente_id || m.cliente_id;
@@ -460,28 +460,8 @@ module.exports = {
       out[gruppo].push(p);
     }
 
-    // ---- i rapportini da firmare da piu' di 7 giorni (§9.5)
-    const settimanaFa = piuGiorni(t, -7);
-    const bozze = this.db.righe("SELECT * FROM rapportini WHERE UPPER(stato) = 'BOZZA' AND data < ? AND id_cliente <> '' ORDER BY data, id", settimanaFa);
-    for (const r of bozze) {
-      if (soloSuoi && r.utente_id !== io) continue;
-      const chiave = 'rapportino:' + r.id;
-      if (usate.has(chiave)) continue;
-      const refs = this.db.righe('SELECT * FROM referenti WHERE soggetto_id = ? ORDER BY ordine, id', r.id_cliente)
-        .filter(x => testo(x.telefono) || testo(x.whatsapp) || testo(x.email));
-      if (!refs.length) continue;
-      // Il referente della firma dell'ultimo rapportino firmato di quel cliente, se no il primo.
-      const ultimo = this.db.riga("SELECT firmatario FROM rapportini WHERE id_cliente = ? AND firmatario <> '' ORDER BY firmato_il DESC, data DESC LIMIT 1", r.id_cliente);
-      const ref = (ultimo && refs.find(x => x.nome === ultimo.firmatario)) || refs[0];
-      const canale = ref.whatsapp_ok === 1 ? 'whatsapp' : (testo(ref.email) ? 'email' : 'whatsapp');
-      let p;
-      try { p = this.propostaDaMandare(chiave, 'rapportino_da_firmare', canale, { idRapportino: r.id, idReferente: ref.id }); } catch (e) { continue; }
-      if (!p) continue;
-      const giorni = Math.round((Date.parse(t + 'T12:00:00') - Date.parse(dataIso(r.data) + 'T12:00:00')) / 86400000);
-      p.dettaglio = r.id + ' · ' + K.dataIt(dataIso(r.data)) + ' · da firmare da ' + giorni + ' giorni';
-      delete p.luogo;
-      out.proposti.push(p);
-    }
+    // ---- i rapportini da firmare da piu' di 7 giorni (§9.5): 06/11/2026, niente firma, niente piu' proposte (il
+    // modello "Rapportino da firmare" resta, per un messaggio scritto a mano).
 
     // ---- i promemoria di pagamento (§3.15): solo chi ha fatturazione 2 e costi
     if (this.vedePagamenti() && !soloSuoi) {

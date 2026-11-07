@@ -1001,7 +1001,8 @@ module.exports = {
     const mia = this.miaPersonaId();
     const scrive = this.livello('mezzi') >= 2;
     let personaId = vuoto(d.idPersona) ? null : Number(d.idPersona);
-    const commessaId = testo(d.idCommessa);
+    // 06/11/2026: anche col codice di prima della commessa (una coda del telefono).
+    const commessaId = this.codiceCommessaVero(d.idCommessa);
     const soggettoId = testo(d.idSoggetto);
     if (!scrive) {
       // "Lo prendo io": solo un prestito a me di una cosa disponibile.

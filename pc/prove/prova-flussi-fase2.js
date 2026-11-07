@@ -14,6 +14,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
 const assert = require('node:assert/strict');
+const { portaDevtools, chiudiEdge } = require('./edge-prova.js');
 
 const C = require('../ui/conti.js');
 
@@ -30,7 +31,7 @@ const OGGETTO = 'Quadro di automazione ' + GIRO;
 
 async function main() {
   const profilo = fs.mkdtempSync(path.join(os.tmpdir(), 'wisper-edge-flussi2-'));
-  const porta = 9650 + Math.floor(Math.random() * 150);
+  const porta = portaDevtools(9650, 150);
   const edge = spawn(EDGE, ['--headless=new', '--disable-gpu', '--no-first-run', '--hide-scrollbars', '--user-data-dir=' + profilo, '--remote-debugging-port=' + porta, 'about:blank'], { stdio: 'ignore' });
   let ws = null;
   const errori = [];
@@ -354,9 +355,9 @@ async function main() {
     console.log('TUTTO BENE (' + passi + ' passi)');
   } finally {
     if (ws) ws.close();
-    edge.kill();
+    await chiudiEdge(porta, edge);
     await aspetta(500);
-    try { fs.rmSync(profilo, { recursive: true, force: true }); } catch (e) { /* Edge a volte tiene un file un attimo */ }
+    await require('./edge-prova.js').togliCartella(profilo); // Edge a volte tiene un file un attimo: riprova per qualche secondo
   }
 }
 

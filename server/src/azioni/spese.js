@@ -74,7 +74,7 @@ module.exports = {
     const fermo = this.rapportinoFermo(r.rapportino_id);
     if (fermo) {
       return {
-        bloccata: 'È nel rapportino ' + fermo.id + ', già firmato: si cambiano solo categoria, descrizione e chi l\'ha pagata',
+        bloccata: 'È nel rapportino ' + fermo.id + ', già inviato: si cambiano solo categoria, descrizione e chi l\'ha pagata',
         soloCampi: CAMPI_SEMPRE,
       };
     }
@@ -337,7 +337,7 @@ module.exports = {
       if (cambia.length) throw new Rifiuto(blocco.bloccata);
     }
     const nuovoFermo = rap && (!prima || prima.rapportino_id !== rap.id) ? this.rapportinoFermo(rap.id) : null;
-    if (nuovoFermo) throw new Rifiuto('Il rapportino ' + rap.id + ' è già firmato: per aggiungere spese riportalo in bozza');
+    if (nuovoFermo) throw new Rifiuto('Il rapportino ' + rap.id + ' è già inviato: per aggiungere spese riportalo da inviare');
     const cambiato = !prima || Object.keys(v).some(k => diverso(prima[k], v[k]));
     if (rap) {
       // Le spese di un rapportino seguono la sua approvazione.
@@ -409,7 +409,7 @@ module.exports = {
       if (t) this.controllaTicketLibero(t, false);
     }
     const b = this.speseBloccate(Object.assign({}, r, { tolta: null }));
-    if (b.bloccata) throw new Rifiuto(b.soloCampi ? 'Il rapportino ' + r.rapportino_id + ' è già firmato: per togliere la spesa riportalo in bozza' : b.bloccata);
+    if (b.bloccata) throw new Rifiuto(b.soloCampi ? 'Il rapportino ' + r.rapportino_id + ' è già inviato: per togliere la spesa riportalo da inviare' : b.bloccata);
     this.aggiorna('spese', r.id, { tolta: annulla ? null : adesso(), modificato: adesso() });
     this.dopoCambioSpesa(r, r.id);
     return this.spesaPerId(r.id);

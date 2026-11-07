@@ -7,6 +7,7 @@ import eu.stgm.wisper.rapportino.SegmentoIntegrazioni
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.After
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.nio.file.Files
@@ -20,6 +21,12 @@ import java.time.LocalDate
 class DatiEsempioFase8Test {
     private val cartella = Files.createTempDirectory("wisper-f8").toFile()
     private val dati = DatiEsempio(LocalDate.of(2026, 10, 22), cartella)
+
+    // 07/11/2026: la cartella temporanea si toglie dopo ogni prova (ne restavano sei a ogni giro).
+    @After
+    fun pulisci() {
+        cartella.deleteRecursively()
+    }
 
     @Test
     fun `le integrazioni di esempio, una in Errore, e la pagina di un collegamento`() = runBlocking {

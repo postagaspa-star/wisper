@@ -36,7 +36,7 @@
   const IMPATTI = [['fermo', 'Fermo'], ['ridotto', 'Va a metà'], ['nessuno', 'Funziona']];
   const URGENZE = [['subito', 'Subito'], ['presto', 'Entro domani'], ['quando_si_puo', 'Quando si può']];
   const FATTURAZIONI = [
-    ['ticket', 'Una riga per l\'intervento', 'Una voce in Da fatturare con rapportini, ore e spese'],
+    ['ticket', 'Una riga per l\'intervento', 'Una voce in Da fatturare con rapportini e spese'],
     ['separati', 'Con gli altri rapportini', 'I rapportini e le ore vanno in Da fatturare come sempre'],
     ['contratto', 'Nel contratto', 'Lo copre il canone del contratto'],
     ['no', 'Non si fattura', 'Garanzia o cortesia, col motivo'],

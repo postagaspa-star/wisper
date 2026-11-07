@@ -142,16 +142,22 @@ test('"Non si fattura": il motivo, la conferma per le spese al cliente; "una rig
   ok(await manuel('scartaFattura', { id: f.id }));
 });
 
-test('un rapportino da firmare: si chiude lo stesso, la voce resta in Più avanti finché non è firmato', async () => {
+// 06/11/2026 (il rapportino senza firma, rapportino-lavori.md): un lavoro Da inviare non ferma piu' il ticket; uno da
+// approvare si' (come prima).
+test('un lavoro Da inviare: il ticket chiuso si fattura subito; uno da approvare resta in Più avanti finché non è approvato', async () => {
   const t = ok(await manuel('salvaTicket', { ticket: { idCliente: 'C003', idSede: 8, titolo: 'Controllo stringhe', responsabileId: 1 } })).ticket;
   const r = ok(await manuel('salvaRapportino', { rapportino: { idLocale: 'piu-avanti', idTicket: t.id, idCliente: 'C003', data: oggi(), tariffa: 45, oreLavoro: 1 } })).rapportino;
+  assert.equal(r.stato, 'BOZZA');
   const chiuso = ok(await manuel('chiudiTicket', { id: t.id, fatturazione: 'ticket' }));
-  assert.deepEqual([chiuso.daFatturare.pronta, chiuso.daFatturare.perche], [false, r.id + ' da far firmare']);
+  assert.deepEqual([chiuso.daFatturare.pronta, chiuso.daFatturare.perche], [true, '']);
+  assert.ok(vociDi(await daFatturare('C003'), 'C003').some(v => v.id === t.numero && v.pronta));
+  // Da approvare: non e' pronto finche' non e' approvato.
+  s.wisper.db.esegui("UPDATE rapportini SET stato_approvazione = 'da_approvare' WHERE id = ?", r.id);
   const df = await daFatturare('C003');
   const voce = df.piuAvanti.find(v => v.id === t.numero);
-  assert.deepEqual([voce.tipo, voce.pronta, voce.perche, voce.cliente], ['ticket', false, r.id + ' da far firmare', 'Mario Bianchi']);
-  assert.equal((await manuel('preparaFattura', { idCliente: 'C003', voci: [{ tipo: 'ticket', id: t.numero }] })).errore, 'Il ticket ' + t.numero + ' non è ancora pronto: ' + r.id + ' da far firmare');
-  ok(await firma(manuel, r.id));
+  assert.deepEqual([voce.tipo, voce.pronta, voce.perche, voce.cliente], ['ticket', false, r.id + ' da approvare', 'Mario Bianchi']);
+  assert.equal((await manuel('preparaFattura', { idCliente: 'C003', voci: [{ tipo: 'ticket', id: t.numero }] })).errore, 'Il ticket ' + t.numero + ' non è ancora pronto: ' + r.id + ' da approvare');
+  s.wisper.db.esegui("UPDATE rapportini SET stato_approvazione = 'approvato' WHERE id = ?", r.id);
   assert.ok(vociDi(await daFatturare('C003'), 'C003').some(v => v.id === t.numero && v.pronta));
 });
 

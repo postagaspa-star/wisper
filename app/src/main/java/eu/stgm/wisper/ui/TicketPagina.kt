@@ -292,15 +292,16 @@ fun SchermataDettaglioTicket(dati: Dati, nav: Navigatore, chiave: String) {
                 SchedaElenco {
                     t.rapportini.forEachIndexed { i, r ->
                         if (i > 0) LineaElenco()
-                        val stato = when { r.firmato -> eu.stgm.wisper.rapportino.Stato.da(r.stato).etichetta; else -> "Da firmare" }
+                        // 06/11/2026: niente firma. Da inviare, Inviato, Fatturato.
+                        val stato = eu.stgm.wisper.rapportino.Stato.da(r.stato).etichetta
                         RigaVoce(
                             listOf(r.id.ifBlank { "Rapportino" }, dataIt(r.data).take(5)).joinToString(" · "),
-                            sotto = listOf(Numeri.ore(r.ore), "${Numeri.scrivi(r.km)} km", if (r.firmatario.isNotBlank()) "firmato da ${r.firmatario}" else "").filter { it.isNotBlank() }.joinToString(" · "),
-                            icona = Icone.firma,
+                            sotto = listOf(Numeri.ore(r.ore), "${Numeri.scrivi(r.km)} km").filter { it.isNotBlank() }.joinToString(" · "),
+                            icona = Icone.ore,
                             fine = { Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) { Parola5(stato); if (r.inCoda) NuvolaInCoda() } },
                             onClick = {
                                 val v = (viste + storico).firstOrNull { (r.idLocale.isNotBlank() && it.rapportino.idLocale == r.idLocale) || (r.id.isNotBlank() && it.rapportino.id == r.id) }
-                                if (v != null) nav.apriRapportino(v.rapportino.idLocale)
+                                if (v != null) nav.apriRapportino(v.rapportino.idLocale, lavoro = true)
                                 else if (!r.apribile) avvisi.mostra("È un rapportino di ${r.tecnico}: lo apre lui")
                                 else nav.sezione(Sezione.RAPPORTINI, FiltroRapportini(mese = null, testo = r.id))
                             },
@@ -332,9 +333,9 @@ fun SchermataDettaglioTicket(dati: Dati, nav: Navigatore, chiave: String) {
                     }
                     if (scrive && t.id.isNotBlank()) {
                         LineaElenco()
-                        Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            PulsanteBordo("Ore", { RicordoTicket.perOreSpese = t; nav.vai("ore-registra/nuova") }, Modifier.weight(1f), icona = Icone.piu, altezza = 48.dp)
-                            PulsanteBordo("Materiale o spesa", { RicordoTicket.perOreSpese = t; nav.vai("spesa-nuova") }, Modifier.weight(1.4f), icona = Icone.piu, altezza = 48.dp)
+                        // 07/11/2026: le Ore non ci sono più (le ore si scrivono nel rapportino); resta Materiale o spesa.
+                        Row(Modifier.fillMaxWidth().padding(vertical = 10.dp)) {
+                            PulsanteBordo("Materiale o spesa", { RicordoTicket.perOreSpese = t; nav.vai("spesa-nuova") }, Modifier.fillMaxWidth(), icona = Icone.piu, altezza = 48.dp)
                         }
                     }
                 }

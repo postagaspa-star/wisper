@@ -260,7 +260,9 @@ module.exports = {
       if (!sede && r.id_commessa) sede = (this.db.riga('SELECT sede_id FROM commesse WHERE id = ?', r.id_commessa) || {}).sede_id || null;
       const base = { soggettoId: r.id_cliente, sedeId: sede, titolo: 'Rapportino del ' + K.dataIt(dataIso(r.data)), etichetta: r.id, modificato: r.modificato };
       if (st === 'ANNULLATO') return Object.assign(base, { mostrabile: false, errore: 'Il rapportino ' + r.id + ' è annullato' });
-      if (st === 'BOZZA') return Object.assign(base, { mostrabile: !!daFirmare, bozza: !daFirmare, errore: daFirmare ? '' : 'Il rapportino ' + r.id + ' è da firmare: pubblicalo con «Da firmare nel portale»' });
+      // 06/11/2026 (rapportino-lavori.md §3): niente firma, un lavoro Da inviare (BOZZA) si pubblica anche senza "Da firmare
+      // nel portale" (prima: "è da firmare: pubblicalo con «Da firmare nel portale»"). Da firmare resta possibile.
+      if (st === 'BOZZA') return Object.assign(base, { mostrabile: true });
       return Object.assign(base, { mostrabile: true });
     }
     if (tipo === 'fattura') {
@@ -1116,11 +1118,7 @@ module.exports = {
           collegamento: { pagina: 'portaleCliente', id: rf.soggetto_id } });
       }
     }
-    const pubblicateDaFirmare = new Set(this.db.righe("SELECT rif FROM portale_pubblicazioni WHERE tipo = 'rapportino' AND da_firmare = 1 AND tolta_il IS NULL").map(x => x.rif));
-    for (const rp of this.db.righe("SELECT r.* FROM rapportini r JOIN soggetti s ON s.id = r.id_cliente WHERE s.portale = 1 AND UPPER(r.stato) = 'BOZZA' AND r.data < ? ORDER BY r.data LIMIT 5", piuGiorni(t, -7))) {
-      if (pubblicateDaFirmare.has(rp.id)) continue;
-      voce(pianificare, { tipo: 'portale', gravita: 'info', titolo: rp.id + ' da far firmare: fallo firmare nel portale', dettaglio: rp.cliente + ' · ' + K.dataIt(dataIso(rp.data)), collegamento: { pagina: 'rapportino', id: rp.id } });
-    }
+    // 06/11/2026: niente piu' "fallo firmare nel portale" (la firma nel portale resta possibile, ma nessuno la propone).
     return r;
   },
 

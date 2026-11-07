@@ -64,6 +64,8 @@ fun SchermataInvioPreventivo(dati: Dati, nav: Navigatore, id: String) {
     val ana by dati.anagrafiche.collectAsStateWithLifecycle()
     val dettagli by dati.dettagliPreventivi.collectAsStateWithLifecycle()
     LaunchedEffect(id) { if (dettagli[id] == null) dati.preventivo(id) }
+    // 06/11/2026: l'email del cliente com'è adesso (il campo A la prende da solo finché non la si scrive a mano).
+    LaunchedEffect(Unit) { if (!dati.esempio) dati.aggiorna() }
     val p = dettagli[id]
     val puoWhatsapp = scriveComunicazioni()
 

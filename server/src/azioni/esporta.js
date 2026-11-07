@@ -42,7 +42,8 @@ function csv(colonne, righe) {
 /** [intestazione, valore(riga), soloConCosti] */
 const COLONNE = {
   rapportini: [
-    ['Numero', r => r.id], ['Data', r => data(r.data)], ['Tecnico', r => r.tecnico], ['Codice cliente', r => r.idCliente],
+    // 06/11/2026: Numero e' il lavoro, Rapportino il rapportino di cui fa parte (RAP/2026/0153).
+    ['Numero', r => r.id], ['Rapportino', r => r.idGiornata], ['Data', r => data(r.data)], ['Tecnico', r => r.tecnico], ['Codice cliente', r => r.idCliente],
     ['Cliente', r => r.cliente], ['Codice commessa', r => r.idCommessa], ['Commessa', r => r.commessa],
     ['Codice progetto', r => r.progetto], ['Progetto', r => r.progettoDescrizione], ['Intestato a', r => r.progettoIntestatoA], ['Ticket', r => r.ticket],
     ['Luogo', r => r.luogo], ['Descrizione', r => r.descrizione], ['Ore lavoro', r => r.oreLavoro], ['Ore extra', r => r.oreExtra],

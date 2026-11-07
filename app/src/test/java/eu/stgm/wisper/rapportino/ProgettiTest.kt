@@ -208,4 +208,46 @@ class ProgettiTest {
         assertEquals("1", copia.idProgetto)
         assertEquals("ED-001", copia.progetto)
     }
+
+    @Test
+    fun `progetto obbligatorio solo per Elettrodinamica, su ogni caso di casi-progetto-obbligatorio json`() {
+        val f = listOf("../server/prove/casi-progetto-obbligatorio.json", "server/prove/casi-progetto-obbligatorio.json").map(::File).firstOrNull { it.exists() }
+        assumeTrue("Manca server/prove/casi-progetto-obbligatorio.json", f != null)
+        val casi = JSONObject(f!!.readText(Charsets.UTF_8)).getJSONArray("casi")
+        assertTrue("ci sono dei casi", casi.length() > 0)
+        var provati = 0
+        for (i in 0 until casi.length()) {
+            val caso = casi.getJSONObject(i)
+            assertEquals("«${caso.getString("cliente")}»", caso.getBoolean("obbligatorio"), RegoleProgetti.progettoObbligatorio(caso.getString("cliente")))
+            provati++
+        }
+        assertEquals("tutti i casi", casi.length(), provati)
+    }
+
+    @Test
+    fun `coi progetti accesi un cliente qualunque si salva senza progetto e senza commessa, Elettrodinamica no`() {
+        val regole = Regole(tariffaFissa = 30.0)
+        val m = ModuloStato(rapportino().copy(idCliente = "C002", cliente = "Rossi Impianti Srl", idCommessa = "26ST045", commessa = "Capannone"), nuovo = true)
+        m.progettiAttivi = true
+        assertFalse(m.progettoRichiesto)
+        assertTrue("Nessun progetto", m.valida(regole))
+        m.idCommessa = ""; m.commessa = ""
+        assertTrue("Senza commessa", m.valida(regole))
+        // Lo stesso modulo con Elettrodinamica vuole di nuovo commessa e progetto, con le parole di sempre.
+        m.idCliente = "C001"; m.cliente = "Elettrodinamica"
+        assertTrue(m.progettoRichiesto)
+        assertFalse(m.valida(regole))
+        assertEquals("Scegli la commessa", m.errori["cliente"])
+        m.idCommessa = "26ST044"; m.commessa = "Magazzino"
+        assertFalse(m.valida(regole))
+        assertEquals("Scegli il progetto", m.errori["progetto"])
+        // I recenti: un rapportino senza commessa di un cliente qualunque torna fra i recenti anche coi progetti.
+        val viste = listOf(
+            Vista(rapportino("W-1").copy(idCliente = "C002", cliente = "Rossi Impianti Srl", idCommessa = "", commessa = "")),
+            Vista(rapportino("W-2").copy(idCommessa = "", commessa = "")),
+        )
+        val recenti = Riepiloghi.recenti(viste, ana, conProgetti = true)
+        assertTrue(recenti.any { it.cliente == "Rossi Impianti Srl" && it.idCommessa.isBlank() })
+        assertTrue(recenti.none { it.cliente == "Elettrodinamica" && it.idCommessa.isBlank() })
+    }
 }

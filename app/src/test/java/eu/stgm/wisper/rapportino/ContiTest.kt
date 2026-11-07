@@ -214,4 +214,27 @@ class ContiTest {
         // Chi paga: prima chi ha il totale piu' alto.
         assertEquals(listOf("c:C001", "c:C002"), Conti.perChiPaga(rapportini.take(3), ana).map { it.chi.chiave })
     }
+
+    @Test
+    fun `l'email di piu' rapportini c'e' quando hanno tutti lo stesso indirizzo`() {
+        val ana = Anagrafiche(
+            clienti = listOf(
+                Cliente("C001", "Batokyo", email = "a@b.it"),
+                Cliente("C002", "Rossi", email = ""),
+                Cliente("C003", "Batokyo Sede 2", email = "A@B.it"),
+            ),
+        )
+        assertEquals("a@b.it", Conti.emailComune(luglio, ana))
+        // Uno ancora sul telefono, senza il codice del cliente: si trova per nome. Il riepilogo è "Vari clienti", l'email c'è.
+        val senzaCodice = luglio + luglio[0].copy(idLocale = "L9", idCliente = "", cliente = "Batokyo")
+        assertEquals(Conti.VARI_CLIENTI, Conti.intestatarioRiepilogo(senzaCodice, ana).nome)
+        assertEquals("a@b.it", Conti.emailComune(senzaCodice, ana))
+        // Due schede diverse con la stessa email: un destinatario solo.
+        assertEquals("a@b.it", Conti.emailComune(luglio + luglio[0].copy(idLocale = "L8", idCliente = "C003", cliente = "Batokyo Sede 2"), ana))
+        // Clienti diversi, o uno senza email: niente.
+        assertEquals("", Conti.emailComune(rapportini.take(3), ana))
+        assertEquals("", Conti.emailComune(emptyList(), ana))
+        // Il rapportino solo: l'email del cliente, anche trovato per nome.
+        assertEquals("a@b.it", Conti.intestatarioRapportino(luglio[0].copy(idCliente = ""), ana).email)
+    }
 }

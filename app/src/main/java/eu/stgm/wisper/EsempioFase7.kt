@@ -51,12 +51,8 @@ class EsempioFase7(private val oggi: LocalDate = LocalDate.now()) : TrasportoFas
         "Buongiorno Mario Bianchi, le scrivo per un promemoria: la fattura 41/2026 del 25/09/2026, di 162,36 €, risultava da saldare entro il 10/10/2026. Se il pagamento è già partito, non tenga conto di questo messaggio. Grazie. Manuel Gasparotto · Studio Tecnico GM",
         "Promemoria: fattura 41/2026",
     )
-    private val daFirmare = proposta(
-        "rapportino:153", "rapportino_da_firmare", "Rapportino da firmare", "Rapportino del 21/10/2026 · già nel portale", ferretti,
-        JSONObject().put("tipo", "rapportino").put("id", 153).put("etichetta", "RAP/2026/0153"),
-        "Buongiorno Sig. Ferretti, il rapportino del 21/10/2026 (Ricerca guasto sul quadro QG2, sostituito il differenziale) è ancora da firmare.\nPuò firmarlo nel portale: $portale\nAltrimenti lo firmiamo alla prossima visita. Manuel Gasparotto · Studio Tecnico GM",
-        "Rapportino del 21/10/2026 da firmare",
-    )
+    // 06/11/2026 (rapportino-lavori.md): il server non propone piu' "Rapportino da firmare" (il modello resta, per un
+    // messaggio scritto a mano).
 
     private fun com(id: Int, quando: String, canale: String, dir: String, tipo: String, nomeTipo: String, cliente: String, idCliente: String, ref: String, idRef: Int, a: String, testo: String, stato: String, rif: JSONObject?, chi: String, errore: String = "") =
         JSONObject().put("id", id).put("quando", quando).put("canale", canale).put("direzione", dir).put("tipo", tipo).put("tipoNome", nomeTipo).put("cliente", cliente)
@@ -69,7 +65,7 @@ class EsempioFase7(private val oggi: LocalDate = LocalDate.now()) : TrasportoFas
         com(60, ora(0, 9, 12), "portale", "entrata", "messaggio", "Messaggio", "Rossi Impianti Srl", "C002", "Sig. Ferretti", 5, "", "Da stamattina alle 8 scatta ogni dieci minuti, la linea 4 è ferma.", "ricevuto", rif("ticket", 16, "TK/2026/0016"), "Sig. Ferretti"),
         com(59, ora(0, 8, 15), "portale", "entrata", "messaggio", "Messaggio", "Rossi Impianti Srl", "C002", "Sig. Ferretti", 5, "", "Va bene, vi aspetta il custode al cancello nord.", "ricevuto", rif("ticket", 14, "TK/2026/0014"), "Sig. Ferretti"),
         com(58, ora(-1, 16, 42), "portale", "uscita", "messaggio", "Messaggio", "Rossi Impianti Srl", "C002", "Sig. Ferretti", 5, "", "Veniamo giovedì alle 9 con il misuratore.", "mandato", rif("ticket", 14, "TK/2026/0014"), "Manuel Gasparotto"),
-        com(57, ora(-1, 11, 45), "email", "uscita", "rapportino", "Rapportino", "Mario Bianchi", "C003", "Mario Bianchi", 7, "mario.bianchi@esempio.it", "Rapportino RAP/2026/0151 firmato, in allegato.", "mandato", rif("rapportino", 151, "RAP/2026/0151"), "Manuel Gasparotto"),
+        com(57, ora(-1, 11, 45), "email", "uscita", "rapportino", "Rapportino", "Mario Bianchi", "C003", "Mario Bianchi", 7, "mario.bianchi@esempio.it", "Rapportino RAP/2026/0151, in allegato.", "mandato", rif("rapportino", 151, "RAP/2026/0151"), "Manuel Gasparotto"),
         com(56, ora(-2, 8, 2), "whatsapp", "uscita", "promemoria_appuntamento", "Promemoria appuntamento", "Mario Bianchi", "C003", "Mario Bianchi", 7, "+39 340 000 4455", "Buongiorno Mario Bianchi, le ricordo l'appuntamento di domani alle 10:00 presso Casa di Marostica: Intervento TK/2026/0012. Se non va più bene mi scriva pure. Manuel Gasparotto · Studio Tecnico GM", "mandato", rif("ticket", 12, "TK/2026/0012"), "Manuel Gasparotto"),
         com(55, ora(-2, 7, 55), "whatsapp", "uscita", "promemoria_appuntamento", "Promemoria appuntamento", "Rossi Impianti Srl", "C002", "Sig. Ferretti", 5, "+39 333 000 1122", "Buongiorno Sig. Ferretti, le ricordo l'appuntamento di oggi alle 9:00 presso Capannone di Thiene: prova delle protezioni.", "preparato", rif("attivita", 28, "Attività del giorno"), "Manuel Gasparotto"),
         com(54, ora(-7, 10, 0), "email", "uscita", "preventivo", "Preventivo", "Rossi Impianti Srl", "C002", "Sig. Ferretti", 5, "f.ferretti@rossi.example", "Preventivo PR/2026/012 rev. 1, in allegato.", "mandato", rif("preventivo", 12, "PR/2026/012 rev. 1"), "Manuel Gasparotto"),
@@ -105,7 +101,7 @@ class EsempioFase7(private val oggi: LocalDate = LocalDate.now()) : TrasportoFas
 
     private val pubblicati = listOf(
         pub(12, "preventivo", "Preventivo PR/2026/012 rev. 1", ora(-7, 10, 0), "regola", ora(-1, 17, 40), "Sig. Ferretti", "Rossi Impianti Srl"),
-        pub(15, "rapportino", "Rapportino del 21/10/2026", ora(-1, 17, 12), "mano", "", "", "Rossi Impianti Srl", daFirmare = true),
+        pub(15, "rapportino", "Rapportino del 21/10/2026", ora(-1, 17, 12), "mano", "", "", "Rossi Impianti Srl"),
         pub(9, "documento", "Schema unifilare cabina MT rev. 2", ora(-2, 11, 2), "mano", "", "", "Rossi Impianti Srl"),
         pub(21, "ticket", "Richiesta TK/2026/0014", ora(-2, 8, 40), "mano", ora(-1, 17, 2), "Sig. Ferretti", "Rossi Impianti Srl"),
         pub(40, "preventivo", "Preventivo PR/2026/011", ora(-24, 9, 0), "regola", "", "", "Mario Bianchi"),
@@ -173,7 +169,7 @@ class EsempioFase7(private val oggi: LocalDate = LocalDate.now()) : TrasportoFas
         val p = parametri.toMap()
         val ok = JSONObject().put("ok", true)
         return when (azione) {
-            "daMandare" -> ok.put("oggi", arr(promemoria)).put("domani", JSONArray()).put("proposti", arr(pagamento, daFirmare))
+            "daMandare" -> ok.put("oggi", arr(promemoria)).put("domani", JSONArray()).put("proposti", arr(pagamento))
                 .put("preparati", JSONArray().apply { storico.filter { it.optString("stato") == "preparato" }.forEach { put(it) } })
             "comunicazioni" -> {
                 val canale = p["canale"].orEmpty()

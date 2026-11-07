@@ -43,11 +43,15 @@ const rapportino = id => w.db.riga('SELECT * FROM rapportini WHERE id = ?', id);
 /**
  * 03/11/2026 (server 0.12.0): il CSV dei rapportini ha tre colonne in piu' subito dopo la commessa (Codice progetto,
  * Progetto, Intestato a), vuote per i rapportini di prima. Controllate vuote e tolte, il resto deve essere identico.
+ * 06/11/2026 (il rapportino con piu' lavori): e una colonna Rapportino subito dopo il Numero, che per una riga di prima e'
+ * il suo stesso numero (un rapportino con un lavoro solo). Controllata e tolta anche lei.
  */
 function senzaProgetti(csv) {
   return csv.split('\r\n').map((riga, n) => {
     if (!riga) return riga;
     const c = riga.split(';');
+    assert.equal(c[1], n === 0 ? 'Rapportino' : c[0], 'colonna Rapportino, riga ' + n);
+    c.splice(1, 1);
     assert.deepEqual(c.slice(7, 10), n === 0 ? ['Codice progetto', 'Progetto', 'Intestato a'] : ['', '', ''], 'colonne dei progetti, riga ' + n);
     return c.slice(0, 7).concat(c.slice(10)).join(';');
   }).join('\r\n');
@@ -60,7 +64,7 @@ function stessiCampi(ora, prima, chi) {
 
 test('migrazione 003: versione 3, la copia wisper.db.prima-3, i rapportini non si toccano', () => {
   // Dalla fase 4 (e dalla 5 e dalla 6) il database va avanti fino all'ultima migrazione: la 003 c'e' (la sua copia prima-3 anche).
-  assert.equal(w.db.versione(), 9);
+  assert.equal(w.db.versione(), 11);
   assert.ok(fs.existsSync(path.join(cartella, 'wisper.db.prima-3')), 'la copia prima della migrazione');
   const dopo = w.db.righe('SELECT * FROM rapportini ORDER BY id');
   assert.equal(dopo.length, righePrima.length);
@@ -94,8 +98,13 @@ test('i rapportini gia\' scritti danno gli stessi identici numeri del server 0.5
     stessiCampi(nuovo, vecchio, vecchio.id);
   }
   assert.equal(senzaProgetti(ora.csv), PRIMA.csv, 'il CSV per Excel e\' uguale carattere per carattere');
-  assert.deepEqual(ora.soldi, PRIMA.soldi, 'da fatturare e in bozza');
-  assert.deepEqual(ora.contiRapportini, PRIMA.contiRapportini);
+  // 06/11/2026 (il rapportino con piu' lavori, senza firma): i lavori Da inviare (BOZZA) si fatturano anche senza firma, quindi
+  // "Da fatturare" cresce esattamente di "In bozza"; In bozza resta uguale.
+  assert.deepEqual(ora.soldi, { daFatturare: Math.round((PRIMA.soldi.daFatturare + PRIMA.soldi.inBozza) * 100) / 100, inBozza: PRIMA.soldi.inBozza }, 'da fatturare e in bozza');
+  // 06/11/2026: niente piu' "da firmare": le bozze (di prima "da firmare") e i firmati sono tutti Da inviare (daMandare), e si
+  // fatturano anche le bozze.
+  const c = PRIMA.contiRapportini;
+  assert.deepEqual(ora.contiRapportini, { daFirmare: 0, daMandare: c.daFirmare + c.daMandare, daFatturare: c.daFatturare + c.daFirmare });
   // I casi limite, con le parole: vuote, zero, testo con la virgola, tre decimali, negativo.
   const r = id => ora.rapportini.find(x => x.id === id);
   assert.deepEqual([r('RAP/2026/0003').spese, r('RAP/2026/0008').spese, r('RAP/2026/0004').spese], [0, 0, 0]);
@@ -146,7 +155,7 @@ test('riaperto il server: la migrazione non si rifa\' e i numeri restano quelli 
   const quante = w.db.riga('SELECT COUNT(*) n FROM spese').n;
   w.chiudi();
   w = new Wisper({ dati: cartella });
-  assert.equal(w.db.versione(), 9);
+  assert.equal(w.db.versione(), 11);
   assert.equal(w.db.riga('SELECT COUNT(*) n FROM spese').n, quante);
   assert.equal(w.db.riga('SELECT COUNT(*) n FROM veicoli').n, 1);
   const ora = numeri(w);
@@ -216,13 +225,13 @@ test('da firmato in poi le spese del rapportino non cambiano conto: niente spost
   const s = spese('RAP/2026/0005')[0];
   const sposta = await ponte('salvaSpesa', { spesa: { id: s.id, destinazione: 'studio' } });
   assert.equal(sposta.ok, false);
-  assert.equal(sposta.errore, 'È nel rapportino RAP/2026/0005, già firmato: si cambiano solo categoria, descrizione e chi l\'ha pagata');
+  assert.equal(sposta.errore, 'È nel rapportino RAP/2026/0005, già inviato: si cambiano solo categoria, descrizione e chi l\'ha pagata');
   const importo = await ponte('salvaSpesa', { spesa: { id: s.id, importo: 99 } });
   assert.equal(importo.ok, false);
   const toglie = await ponte('togliSpesa', { id: spese('RAP/2026/0001')[0].id });
-  assert.equal(toglie.errore, 'Il rapportino RAP/2026/0001 è già firmato: per togliere la spesa riportalo in bozza');
+  assert.equal(toglie.errore, 'Il rapportino RAP/2026/0001 è già inviato: per togliere la spesa riportalo da inviare');
   const aggiunge = await ponte('salvaSpesa', { spesa: { idRapportino: 'RAP/2026/0011', importo: 5, categoria: 'parcheggio' } });
-  assert.equal(aggiunge.errore, 'Il rapportino RAP/2026/0011 è già firmato: per aggiungere spese riportalo in bozza');
+  assert.equal(aggiunge.errore, 'Il rapportino RAP/2026/0011 è già inviato: per aggiungere spese riportalo da inviare');
   const pagata = await ponte('salvaSpesa', { spesa: { id: s.id, pagataDaMe: true, categoria: 'vitto' } });
   assert.equal(pagata.ok, true, pagata.errore);
   assert.deepEqual([pagata.spesa.pagataDaMe, pagata.spesa.categoria, pagata.spesa.importo], [true, 'vitto', 14.5]);

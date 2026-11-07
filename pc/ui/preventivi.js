@@ -100,7 +100,8 @@
       tabella(area);
     }
 
-    const COLONNE = () => '190px minmax(0, 2fr) minmax(0, 1.3fr) 156px ' + (soldi() ? '120px ' : '') + '108px';
+    // Le colonne stanno in stile.css (.tab-prev): il testo va a capo; nella tabella stretta (1024) cliente e scadenza
+    // vanno sotto oggetto e numero (07/11/2026, niente puntini nelle celle).
 
     function tabella(area) {
       svuota(area);
@@ -109,17 +110,19 @@
         aggiungi(area, [h('p', { class: 'vuoto' }, M.lista.some(p => !p.modello) ? 'Nessun preventivo con questi filtri.' : 'Ancora nessun preventivo.')]);
         return;
       }
-      const tab = h('div', { class: 'tab' }, h('div', { class: 'r testa', style: { gridTemplateColumns: COLONNE() } },
-        h('span', null, 'Numero'), h('span', null, 'Oggetto'), h('span', null, 'Cliente'), h('span', null, 'Scadenza'),
+      const tab = h('div', { class: 'tab tab-prev' + (soldi() ? ' con-soldi' : '') }, h('div', { class: 'r testa' },
+        h('span', null, 'Numero'), h('span', null, 'Oggetto'), h('span', { class: 'c-cli' }, 'Cliente'), h('span', { class: 'c-scad' }, 'Scadenza'),
         soldi() ? h('span', { class: 'n' }, 'Totale') : null, h('span', null, 'Stato')));
       lista.forEach((p, i) => {
         const apri = () => W.vai('#preventivi/' + encodeURIComponent(p.id));
-        aggiungi(tab, [h('div', { class: 'r cliccabile alta', style: { gridTemplateColumns: COLONNE() }, role: 'button', tabindex: '0', 'data-visita': i === 0 ? 'riga-preventivo' : null,
+        const chi = p.cliente || nomeCliente(p.idCliente);
+        const scad = RP.scadenzaAParole(p) || (p.idCommessa ? 'commessa ' + p.idCommessa : '—');
+        aggiungi(tab, [h('div', { class: 'r cliccabile alta', role: 'button', tabindex: '0', 'data-visita': i === 0 ? 'riga-preventivo' : null,
           onclick: apri, onkeydown: e => { if (e.key === 'Enter') apri(); } },
-        h('span', null, pillNumero(p)),
-        h('span', { class: 'forte taglia' }, p.oggetto),
-        h('span', { class: 'taglia t2' }, p.cliente || nomeCliente(p.idCliente)),
-        h('span', { class: 'taglia t2' }, RP.scadenzaAParole(p) || (p.idCommessa ? 'commessa ' + p.idCommessa : '—')),
+        h('span', { class: 'cella-due' }, pillNumero(p), h('span', { class: 'solo-stretto' }, scad)),
+        h('span', { class: 'cella-due' }, h('span', { class: 'forte taglia' }, p.oggetto), h('span', { class: 'solo-stretto' }, chi)),
+        h('span', { class: 'taglia t2 c-cli' }, chi),
+        h('span', { class: 'taglia t2 c-scad' }, scad),
         soldi() ? h('span', { class: 'n forte' }, p.totale !== undefined ? C.euro(p.totale) : '') : null,
         h('span', null, pillStato(p)))]);
       });
@@ -416,6 +419,8 @@
       messaggio.value = 'Buongiorno,\nin allegato il preventivo per ' + String(p.oggetto || '').toLowerCase() + (p.scadenza ? ', valido fino al ' + C.data(p.scadenza) : '') + '.\n' +
         'Per accettarlo basta rispondere a questa email o rimandarlo firmato.\n\nCordiali saluti\n' + (imp.TECNICO || imp.RAGIONE_SOCIALE || '');
       const campoA = h('div', null, campo('A', a));
+      // Senza email in memoria si rileggono cliente e referenti: un'email appena scritta c'è già (06/11/2026).
+      W.emailFresca(a, () => { const rf = S.ana.referenti.find(r => String(r.id) === String(p.idReferente)); return (rf && rf.email) || (W.cliente(p.idCliente) || {}).email || ''; });
       const zonaMessaggio = h('div', { class: 'fila nascosto' }, campo('Oggetto', oggetto), campo('Copia anche a', cc), campo('Messaggio', messaggio));
       const cambia = h('button', { type: 'button', class: 'btn collegamento', style: { alignSelf: 'flex-start' }, onclick: () => { zonaMessaggio.classList.remove('nascosto'); cambia.remove(); oggetto.focus(); } }, 'Cambia il messaggio');
       const voci = C.vociDelPreventivo(p);

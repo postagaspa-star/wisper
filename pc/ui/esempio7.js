@@ -75,7 +75,7 @@
       pubblicati: [
         { id: 12, soggetto: 'C002', tipo: 'preventivo', rif: 12, titolo: 'Preventivo PR/2026/012 rev. 1', pubblicataIl: istante(oggi, -9, '11:20'), origine: 'regola', vistoIl: istante(oggi, -1, '17:40'), vistoDa: 'Sig. Ferretti', daFirmare: false },
         { id: 7, soggetto: 'C002', tipo: 'preventivo', rif: 7, titolo: 'Preventivo PR/2026/007', pubblicataIl: istante(oggi, -46, '09:00'), origine: 'regola', vistoIl: istante(oggi, -45, '08:12'), vistoDa: 'Sig. Ferretti', daFirmare: false },
-        rapRossi ? { id: 21, soggetto: 'C002', tipo: 'rapportino', rif: rapRossi.id, titolo: 'Rapportino del ' + dataIt(rapRossi.data), pubblicataIl: istante(oggi, -1, '16:00'), origine: 'mano', vistoIl: '', vistoDa: '', daFirmare: true } : null,
+        rapRossi ? { id: 21, soggetto: 'C002', tipo: 'rapportino', rif: rapRossi.id, titolo: 'Rapportino del ' + dataIt(rapRossi.data), pubblicataIl: istante(oggi, -1, '16:00'), origine: 'mano', vistoIl: '', vistoDa: '', daFirmare: false } : null,
         { id: 15, soggetto: 'C003', tipo: 'preventivo', rif: 10, titolo: 'Preventivo PR/2026/010', pubblicataIl: istante(oggi, -20, '09:00'), origine: 'regola', vistoIl: istante(oggi, -19, '20:15'), vistoDa: 'Mario Bianchi', daFirmare: false },
       ].filter(Boolean),
       prossimaPub: 30,
@@ -230,13 +230,8 @@
       if (!r) return;
       out[gruppo].push(proposta(dati, chiave, 'promemoria_appuntamento', (gruppo === 'oggi' ? 'Domani' : 'Dopodomani') + ' alle ' + ora(x.inizio) + ' · ' + x.titolo + (x.luogo ? ' · ' + x.luogo : ''), r.whatsappOk ? 'whatsapp' : 'email', r, { idAttivita: x.id }));
     });
-    // Un rapportino in bozza da più di 7 giorni di un cliente col portale (o col referente).
-    dati.rapportini.filter(x => x.stato === 'BOZZA' && x.data <= giorno(oggi, -7) && (!coll || x.idUtente === io.id)).slice(0, 1).forEach(x => {
-      const chiave = 'rapportino:' + x.id;
-      if (usate[chiave]) return;
-      const r = dati.ana.referenti.find(y => y.idSoggetto === x.idCliente);
-      if (r) out.proposti.push(proposta(dati, chiave, 'rapportino_da_firmare', 'Rapportino del ' + dataIt(x.data) + ' · ' + x.cliente, r.whatsappOk ? 'whatsapp' : 'email', r, { idRapportino: x.id }));
-    });
+    // I rapportini da firmare da più di 7 giorni: dal 06/11/2026 niente firma, niente più proposte (come il server,
+    // server/src/azioni/comunicazioni.js; il modello resta per un messaggio scritto a mano).
     // Il promemoria di pagamento (§3.15): solo con fatturazione 2 e costi, al referente che paga.
     const vedePag = Number(dati.permessiIo.fatturazione) >= 2 && Number(dati.permessiIo.costi) >= 1;
     if (vedePag && dati.f4) {

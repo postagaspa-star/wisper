@@ -408,8 +408,8 @@ module.exports = {
 
   /**
    * La Dashboard dell'esterno (fase6.md §8.4 e §12.7): i suoi incarichi in corso con l'avanzamento, i suoi documenti in
-   * scadenza ("Il DURC scade fra 7 giorni: carica quello nuovo"), i suoi rapportini da far firmare, le sue cose
-   * respinte. Niente soldi dello studio, niente clienti, niente persone.
+   * scadenza ("Il DURC scade fra 7 giorni: carica quello nuovo"), i suoi lavori da inviare da piu' di una settimana
+   * (06/11/2026: niente firma), le sue cose respinte. Niente soldi dello studio, niente clienti, niente persone.
    */
   dashboardEsterno() {
     const c = this.chi();
@@ -429,24 +429,30 @@ module.exports = {
         titolo: (scaduto(nome) === 'scaduta' ? 'La ' : 'Il ') + nome + (d.giorni < 0 ? ' è ' + scaduto(nome) + ' il ' + dataBreve(d.scade) : ' scade ' + (d.giorni === 0 ? 'oggi' : 'fra ' + plurale(d.giorni, 'giorno', 'giorni'))) + ': carica ' + (scaduto(nome) === 'scaduta' ? 'quella nuova' : 'quello nuovo'),
         dettaglio: '', collegamento: { pagina: 'collaboratore', id: sog } });
     }
-    const rapportini = this.db.righe("SELECT * FROM rapportini WHERE utente_id = ? AND UPPER(stato) = 'BOZZA'", io);
-    if (rapportini.length) {
-      voce(settimana, { tipo: 'rapportini', gravita: 'info', titolo: plurale(rapportini.length, 'rapportino da far firmare', 'rapportini da far firmare'),
-        dettaglio: rapportini.slice(0, 3).map(r => r.id).join(', '), quanto: rapportini.length, unita: 'rapportini', collegamento: { pagina: 'rapportini', filtro: { stato: 'BOZZA' } } });
+    const rapportini = this.db.righe("SELECT * FROM rapportini WHERE utente_id = ? AND UPPER(stato) IN ('BOZZA', 'FIRMATO') AND stato_approvazione NOT IN ('da_approvare', 'respinto')", io);
+    const settimanaFa = piuGiorni(adesso, -7);
+    const vecchi = rapportini.filter(r => r.data && r.data < settimanaFa);
+    if (vecchi.length) {
+      voce(settimana, { tipo: 'rapportini', gravita: 'info', titolo: plurale(vecchi.length, 'lavoro da inviare', 'lavori da inviare') + ' da più di una settimana',
+        dettaglio: vecchi.slice(0, 3).map(r => r.id).join(', '), quanto: vecchi.length, unita: 'lavori', collegamento: { pagina: 'rapportini', filtro: { quali: 'inviare', a: settimanaFa } } });
     }
+    // 07/11/2026 (Ore tolte): le ore respinte non sono piu' una voce; restano i rapportini e le spese respinte.
     const respinte = [].concat(
       this.db.righe("SELECT 'rapportino' t, id, data, motivo m FROM rapportini WHERE utente_id = ? AND stato_approvazione = 'respinto'", io),
-      this.db.righe("SELECT 'ore' t, id, data, motivo m FROM ore WHERE utente_id = ? AND stato = 'respinta' AND tolta IS NULL", io),
       this.db.righe("SELECT 'spesa' t, id, data, motivo m FROM spese WHERE utente_id = ? AND stato = 'respinta' AND tolta IS NULL", io));
     for (const r of respinte.slice(0, 5)) {
-      voce(urgenti, { tipo: 'respinta', gravita: 'attenzione', titolo: (r.t === 'rapportino' ? r.id + ' respinto' : r.t === 'ore' ? 'Ore del ' + dataBreve(r.data) + ' respinte' : 'Spesa del ' + dataBreve(r.data) + ' respinta'),
-        dettaglio: 'Motivo: ' + r.m, collegamento: { pagina: r.t === 'spesa' ? 'spese' : 'rapportini', filtro: { segmento: r.t === 'rapportino' ? 'rapportini' : r.t === 'ore' ? 'ore' : 'spese' } } });
+      voce(urgenti, { tipo: 'respinta', gravita: 'attenzione', titolo: (r.t === 'rapportino' ? r.id + ' respinto' : 'Spesa del ' + dataBreve(r.data) + ' respinta'),
+        dettaglio: 'Motivo: ' + r.m, collegamento: { pagina: r.t === 'spesa' ? 'spese' : 'rapportini', filtro: { segmento: r.t === 'rapportino' ? 'rapportini' : 'spese' } } });
     }
+    // 07/11/2026: le ore della settimana (riquadro "Ore della settimana") dai suoi rapportini, come per chi lavora nello studio.
+    const lunedi = piuGiorni(adesso, -((new Date(adesso + 'T12:00:00').getDay() + 6) % 7));
+    const oreSettimana = Math.round(this.db.righe("SELECT ore_lavoro, ore_extra, ore_viaggio, ore_totali FROM rapportini WHERE utente_id = ? AND UPPER(stato) <> 'ANNULLATO' AND data >= ? AND data <= ?", io, lunedi, adesso)
+      .reduce((t, r) => t + (numero(r.ore_totali) || numero(r.ore_lavoro) + numero(r.ore_extra) + numero(r.ore_viaggio)), 0) * 100) / 100;
     const ordine = { urgente: 0, soldi: 1, attenzione: 2, info: 3 };
     const ordina = l => l.sort((a, b) => ordine[a.gravita] - ordine[b.gravita]).slice(0, 20);
     return {
       ok: true, per: 'esterno', oggi: adesso,
-      numeri: { incarichi: { inCorso: incarichi.length }, rapportini: { daFirmare: rapportini.length } },
+      numeri: { incarichi: { inCorso: incarichi.length }, rapportini: { daFirmare: 0, daInviare: rapportini.length, oreSettimana } },
       incarichi: incarichi.map(i => ({ id: i.id, numero: i.numero, idCommessa: i.commessa_id, commessa: commesse[String(i.commessa_id).toUpperCase()] || '', titolo: i.titolo,
         modo: i.modo, avanzamento: i.avanzamento, dal: i.dal, al: i.al })),
       urgenti: ordina(urgenti), settimana: ordina(settimana), pianificare: ordina(pianificare),

@@ -14,6 +14,25 @@
 // Tolto prima del confronto un solo campo, numeri.spazio.liberoMb: lo spazio libero vero del disco, che cambia fra un
 // giro e l'altro anche col codice di prima (due fotografie di fila sono uguali in tutto il resto). Nessun campo dipende
 // dall'ora, perche' l'orologio e' fermo.
+// 06/11/2026 (il rapportino con piu' lavori, senza firma, docs/gestionale/rapportino-lavori.md §8): fotografia RIFATTA
+// apposta, una volta, perche' la Dashboard cambia di proposito. Prima di rifarla: (1) lo spazio libero fisso (sotto, in
+// giro) e il codice di prima (il commit 012440c) danno ancora la fotografia di prima identica; (2) le
+// risposte intere del codice di prima e di quello nuovo, sulle 64 chiamate, confrontate campo per campo: diversi SOLO i
+// numeri dei rapportini (daFirmare 0, daMandare = daInviare, daFatturare), i soldi da fatturare (anche dei mesi scorsi, i
+// clienti, il riquadro Da fatturare), comunicazioni.proposti (niente piu' "rapportino da firmare"), le voci della firma
+// ("da far firmare", "firmati da mandare") sostituite da "N lavori da inviare da più di una settimana", gli euro e i clienti
+// delle voci Da fatturare e, senza "tutto", la voce appena sotto il tetto che prende il posto lasciato libero. La
+// fotografia di prima resta nella storia di git.
+// 07/11/2026 (Manuel: "le Ore vanno tolte, non servono, metti solamente i Rapportini"): fotografia RIFATTA apposta, una
+// volta. Prima di rifarla: (1) il codice di prima dava ancora la fotografia di prima identica (64 chiamate su 64); (2) le
+// risposte intere del codice di prima e di quello nuovo confrontate campo per campo: diversi SOLO le voci "Ore del ...
+// respinte" di Marco (sparite, 7 risposte; nessuna voce del timer nei dati: il timer di esempio e' acceso da un'ora e
+// mezza), quante.urgenti di Marco (una in meno), il riquadro Ore della settimana (collegamento {pagina: 'rapportini'}
+// senza segmento e numero dalle ore dei rapportini invece che dalle ore registrate; per l'esterno prima mancava, ora c'e',
+// anche in numeri.rapportini.oreSettimana) e, perche' le ore registrate non sono piu' fra le cose da approvare, i numeri
+// di Da approvare coi dati di esempio (numeri.approvare 9 -> 6 voci e 6 -> 4 con un'anomalia, il numerino dei Rapportini
+// 9 -> 6, il riquadro Da approvare 11 -> 8, la voce "N cose da approvare di Marco Rossato" di Tutto: "Ore, spese, ..." ->
+// "Spese, una trasferta e un rapportino"). Tutto il resto identico.
 //   node --test server/prove/      (rifare la fotografia, SOLO col codice di prima: WISPER_RIFAI_FOTOGRAFIA=si)
 'use strict';
 
@@ -54,6 +73,9 @@ function ferma(istante) {
 }
 
 async function giro(s, emails, chiave, fuori) {
+  // 06/11/2026: lo spazio libero e' quello di un disco con posto (500 GB), come il giorno della fotografia: sul computer
+  // delle prove sotto i 10 GB liberi arrivavano l'avviso e la voce del disco, anche col codice di prima.
+  s.wisper.spazioFintoMb = 512000;
   for (const e of emails) {
     const chi = await s.come(e, 'prova');
     for (const tutto of [false, true]) {

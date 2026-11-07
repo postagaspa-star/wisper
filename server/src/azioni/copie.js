@@ -238,7 +238,7 @@ module.exports = {
       const f = this.db.riga('SELECT drive_url FROM file WHERE id = ?', id);
       return (f && f.drive_url) || '/file/' + id;
     };
-    const rapportini = this.db.righe('SELECT * FROM rapportini ORDER BY data, creato, id').map(r => [
+    const rapportini = this.db.righe('SELECT * FROM rapportini ORDER BY data, creato, posizione, id').map(r => [
       r.id, vuotoSeNull(r.id_locale), vuotoSeNull(r.data), r.tecnico, r.id_cliente, r.cliente, r.gruppo, r.id_commessa, r.commessa,
       r.ticket, r.luogo, r.descrizione, vuotoSeNull(r.ore_lavoro), vuotoSeNull(r.ore_extra), vuotoSeNull(r.ore_viaggio),
       vuotoSeNull(r.ore_totali), vuotoSeNull(r.km), vuotoSeNull(r.spese), r.note_spese, (foto[r.id] || []).join('\n'),
@@ -246,6 +246,8 @@ module.exports = {
       vuotoSeNull(r.compenso_ore), vuotoSeNull(r.rimborso_km), vuotoSeNull(r.totale), vuotoSeNull(r.costo_orario), r.note_interne,
       urlFirma(r.firma), r.firmatario, quandoFoglio(r.firmato_il), r.stato, quandoFoglio(r.inviato_il), quandoFoglio(r.fatturato_il),
       quandoFoglio(r.creato), quandoFoglio(r.modificato),
+      // 06/11/2026: il rapportino di cui e' un lavoro, in fondo (le colonne di prima restano dove sono).
+      r.id_giornata || r.id,
     ]);
     const clienti = this.db.righe('SELECT * FROM soggetti WHERE cliente = 1 ORDER BY rowid').map(s => [
       s.id, s.nome, s.alias, s.gruppo, s.email, s.telefono, s.indirizzo, s.partita_iva, vuotoSeNull(s.tariffa_fissa),
@@ -265,7 +267,7 @@ module.exports = {
       { scheda: 'Rapportini', intestazioni: ['ID', 'ID_LOCALE', 'DATA', 'TECNICO', 'ID_CLIENTE', 'CLIENTE', 'GRUPPO', 'ID_COMMESSA', 'COMMESSA',
         'TICKET', 'LUOGO', 'DESCRIZIONE', 'ORE_LAVORO', 'ORE_EXTRA', 'ORE_VIAGGIO', 'ORE_TOTALI', 'KM', 'SPESE', 'NOTE_SPESE', 'FOTO_SPESE',
         'TARIFFA', 'PAGA_VIAGGIO', 'KM_RIMBORSATI', 'EURO_KM', 'MAGG_EXTRA', 'COMPENSO_ORE', 'RIMBORSO_KM', 'TOTALE', 'COSTO_ORARIO',
-        'NOTE_INTERNE', 'FIRMA', 'FIRMATARIO', 'FIRMATO_IL', 'STATO', 'INVIATO_IL', 'FATTURATO_IL', 'CREATO', 'MODIFICATO'], righe: rapportini },
+        'NOTE_INTERNE', 'FIRMA', 'FIRMATARIO', 'FIRMATO_IL', 'STATO', 'INVIATO_IL', 'FATTURATO_IL', 'CREATO', 'MODIFICATO', 'RAPPORTINO'], righe: rapportini },
       { scheda: 'Clienti', intestazioni: ['ID_CLIENTE', 'RAGIONE_SOCIALE', 'ALIAS', 'GRUPPO', 'EMAIL', 'TELEFONO', 'INDIRIZZO', 'PARTITA_IVA',
         'TARIFFA_FISSA', 'COSTO_FISSO', 'ULTIMA_TARIFFA', 'PAGA_VIAGGIO', 'KM_RIMBORSATI', 'MAGG_EXTRA', 'ACCORPATO_IN', 'NOTE'], righe: clienti },
       { scheda: 'Commesse', intestazioni: ['ID_COMMESSA', 'ID_CLIENTE', 'DESCRIZIONE', 'STATO', 'INDIRIZZO', 'BUDGET_ORE', 'BUDGET_EURO',

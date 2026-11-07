@@ -237,17 +237,7 @@ private fun PaginaDaFatturare(
                     }
                 }
             }
-            if (d.daFirmare.isNotEmpty()) {
-                TitoloSezione("Da far firmare")
-                Text("Non si fatturano finché non sono firmati", style = Testi.secondario, color = c.tenue)
-                SchedaElenco {
-                    d.daFirmare.forEachIndexed { i, r ->
-                        if (i > 0) LineaElenco()
-                        RigaVoce(r.cliente, sotto = listOf(r.id, dataBreve(r.data), r.descrizione).filter { it.isNotBlank() }.joinToString(" · "), valore = Numeri4.ore(r.ore),
-                            freccia = false, onClick = { nav.sezione(Sezione.RAPPORTINI, FiltroRapportini(mese = null, quali = Quali.FIRMARE)) })
-                    }
-                }
-            }
+            // 06/11/2026 (rapportino-lavori.md §3): sparisce "Da far firmare": i lavori da inviare si fatturano come gli altri.
         }
     }
     fuori?.let { v ->

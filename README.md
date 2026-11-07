@@ -39,6 +39,18 @@ Version 1.1.1 of the office program (4 November) keeps the side menu where it wa
 (scroll position and keyboard focus are kept across redraws). It also drops the grey scrollbar: the menu edge fades
 where more items are hidden (`pc/prove/prova-menu-laterale.js`).
 
+Version 1.2.0 with server 0.13.0 (7 November) comes from a meeting with my father
+(`docs/gestionale/rapportino-lavori.md`). A work report is now **the day**: one number (RAP/2026/0018) with
+several jobs inside, even for different clients, each with its own job code, project, description, hours,
+kilometres, rate and expenses (new table `giornate`, the old rows become the jobs). The client's signature is gone:
+a job is *to send*, *sent* or *invoiced*. Sending is split per recipient, and the subject adapts to the period
+(same day, same Monday-to-Sunday week, same month, several months; shared cases in
+`server/prove/casi-invio.json`). Documents print the project code, with the job code in the sender block. Also:
+job codes can be changed by hand later, a project is required only for Elettrodinamica, settings save themselves and
+can be searched, notices fade after 3 seconds, the studio has an SDI code, and the logo can stand without the
+studio's name. The separate hours page and the timer were removed ("only work reports"): old hours stay in the
+database and older apps can still send them, but nothing shows them.
+
 Phase 1 (October 2026) replaces the Google Sheet with a small server on
 the home NAS (`server/`: Node.js 24 with its built-in SQLite, no npm dependencies, in
 Docker). It speaks the same protocol as the sheet script, so the phone and the office

@@ -66,8 +66,12 @@ test('copia adesso: il database sul NAS, compresso fuori casa, i file nuovi, e i
   // Il foglio: le schede di oggi con le loro intestazioni.
   const rap = JSON.parse(fs.readFileSync(path.join(postino.cartella, 'foglio', 'Rapportini.json'), 'utf8'));
   assert.deepEqual(rap.intestazioni.slice(0, 4), ['ID', 'ID_LOCALE', 'DATA', 'TECNICO']);
-  assert.equal(rap.intestazioni.length, 38);
+  // 06/11/2026: in fondo la colonna RAPPORTINO (il numero del rapportino di cui la riga e' un lavoro).
+  assert.equal(rap.intestazioni.length, 39);
+  assert.equal(rap.intestazioni[38], 'RAPPORTINO');
   const riga = rap.righe.find(x => x[0] === r.rapportino.id);
+  assert.equal(riga[38], r.rapportino.idGiornata);
+  assert.equal(riga[38], r.rapportino.id, 'col modo di prima: un rapportino con un lavoro solo, lo stesso numero');
   assert.equal(riga[rap.intestazioni.indexOf('FOTO_SPESE')], '/file/' + foto.file.id);
   assert.equal(riga[rap.intestazioni.indexOf('PAGA_VIAGGIO')], 'NO');
   const cli = JSON.parse(fs.readFileSync(path.join(postino.cartella, 'foglio', 'Clienti.json'), 'utf8'));

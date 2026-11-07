@@ -12,11 +12,11 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { cartellaNuova, COLONNE_008: SOLO_008, COLONNE_009 } = require('./aiuto');
+const { cartellaNuova, COLONNE_008: SOLO_008, COLONNE_009, COLONNE_011, valoreAtteso, numeriDashboardDopoLavori, numeriDashboardSenzaOre } = require('./aiuto');
 
 // 03/11/2026: la prova arriva fino all'ultima migrazione: anche le colonne della 009 (i progetti) partono col valore di base.
 const COLONNE_008 = {};
-for (const g of [SOLO_008, COLONNE_009]) for (const [t, c] of Object.entries(g)) COLONNE_008[t] = Object.assign({}, COLONNE_008[t] || {}, c);
+for (const g of [SOLO_008, COLONNE_009, COLONNE_011]) for (const [t, c] of Object.entries(g)) COLONNE_008[t] = Object.assign({}, COLONNE_008[t] || {}, c);
 const { Database } = require('../src/db');
 const { Wisper } = require('../src/wisper');
 const PRIMA = require('./migrazione-008/prima.json');
@@ -84,6 +84,9 @@ function contiene(nuovo, vecchio, dove) {
   } else if (vecchio && typeof vecchio === 'object') {
     assert.ok(nuovo && typeof nuovo === 'object', dove);
     for (const k of Object.keys(vecchio)) contiene(nuovo[k], vecchio[k], dove + ' · ' + k);
+  } else if (typeof vecchio === 'string' && vecchio.includes(', già firmato: si cambiano solo')) {
+    // 07/11/2026 (niente firma): la frase della spesa bloccata dice "già inviato" invece di "già firmato".
+    assert.equal(nuovo, vecchio.replace(', già firmato: si cambiano solo', ', già inviato: si cambiano solo'), dove);
   } else assert.deepEqual(nuovo, vecchio, dove);
 }
 
@@ -91,7 +94,7 @@ const comeTitolare = fn => w.come({ utente: w.titolare(), permessi: w.permessiDi
 
 test('migrazione 008: versione 8, la copia wisper.db.prima-8 com\'era; le tabelle di prima riga per riga uguali (le colonne nuove col valore di base)', () => {
   assert.equal(PRIMA.versione, '0.10.0');
-  assert.equal(w.db.versione(), 9);
+  assert.equal(w.db.versione(), 11);
   const copia = new Database(path.join(cartella, 'wisper.db.prima-8'));
   assert.equal(copia.versione(), 7, 'la copia e\' com\'era prima');
   copia.chiudi();
@@ -109,7 +112,7 @@ test('migrazione 008: versione 8, la copia wisper.db.prima-8 com\'era; le tabell
     d2.slice(0, p2.length).forEach((r, i) => {
       for (const c of nuove) {
         assert.ok(COLONNE_008[t] && c in COLONNE_008[t], t + ': colonna nuova non prevista ' + c);
-        assert.deepEqual(r[c], COLONNE_008[t][c], t + ' riga ' + i + ': ' + c);
+        assert.deepEqual(r[c], valoreAtteso(COLONNE_008[t][c], r), t + ' riga ' + i + ': ' + c);
         delete r[c];
       }
       assert.deepEqual(r, p2[i], t + ' riga ' + i);
@@ -184,7 +187,9 @@ test('le azioni di prima rispondono uguali campo per campo, coi dati dei PDF del
   contiene(ora.attivita, PRIMA.attivita, 'attivita');
   contiene(ora.anagrafiche, PRIMA.anagrafiche, 'anagrafiche');
   contiene(ora.comunicazioni, PRIMA.comunicazioni, 'comunicazioni');
-  const numeri = Object.assign({}, PRIMA.dashboard.numeri);
+  // 06/11/2026: coi soli cambi voluti del rapportino senza firma (le bozze Da inviare e da fatturare: aiuto.js).
+  // 07/11/2026: e coi soli cambi voluti delle Ore tolte (le ore registrate non sono piu' da approvare: aiuto.js).
+  const numeri = comeTitolare(() => numeriDashboardSenzaOre(numeriDashboardDopoLavori(PRIMA.dashboard.numeri, w), w));
   delete numeri.spazio;
   contiene(ora.dashboard.numeri, numeri, 'numeri della Dashboard');
   // I campi nuovi: la riga calma della lettura del file (da leggere) nella pagina del documento.
@@ -195,7 +200,28 @@ test('la Dashboard: le stesse voci di prima, meno i doppioni di §8.1 elencati u
   const d = comeTitolare(() => w.dashboard({ tutto: true }));
   const tutte = [].concat(d.urgenti, d.settimana, d.pianificare);
   const prima = [].concat(PRIMA.dashboard.urgenti, PRIMA.dashboard.settimana, PRIMA.dashboard.pianificare);
-  const sparite = prima.filter(v => !tutte.some(x => x.titolo === v.titolo || (v.tipo === 'spazio' && x.tipo === 'sistema' && x.titolo === v.titolo)));
+  // 06/11/2026 (il rapportino con piu' lavori, senza firma): spariscono apposta le voci della firma ("da far firmare",
+  // "firmati da mandare"); al loro posto una voce sola, "N lavori da inviare da più di una settimana" (bozze e firmati).
+  const DELLA_FIRMA = /^\d+ rapportin[oi] (da far firmare|firmat[oi] da mandare)/;
+  assert.ok(prima.filter(v => DELLA_FIRMA.test(v.titolo)).length >= 2, 'nei dati della fase 7 c\'erano le voci della firma');
+  assert.ok(!tutte.some(v => /firm/.test(v.titolo)), 'nessuna voce parla piu\' di firma');
+  const daInviare = tutte.find(v => /^\d+ lavor[oi] da inviare da più di una settimana$/.test(v.titolo));
+  assert.ok(daInviare, 'la voce nuova dei lavori da inviare');
+  assert.deepEqual(daInviare.collegamento, { pagina: 'rapportini', filtro: { quali: 'inviare', a: '2026-10-15' } });
+  assert.ok(daInviare.quanto >= prima.find(v => /da far firmare da più di una settimana/.test(v.titolo)).quanto);
+  // 07/11/2026 (Ore tolte): le ore registrate non sono piu' fra le cose da approvare. La voce di Marco resta, col numero
+  // nuovo (quello di numeri.approvare, controllato con le righe del database nella prova sopra) e senza "Ore" davanti.
+  const approvarePrima = prima.find(v => v.tipo === 'approvare');
+  const approvareOra = tutte.find(v => v.tipo === 'approvare');
+  assert.match(approvarePrima.dettaglio, /^Ore, /, 'nei dati della fase 7 c\'erano ore da approvare');
+  assert.ok(approvareOra, 'la voce delle cose da approvare');
+  assert.equal(approvareOra.titolo, approvarePrima.titolo.replace(/^\d+ cose/, d.numeri.approvare.voci + ' cose'));
+  assert.equal(approvareOra.quanto, d.numeri.approvare.voci);
+  assert.ok(approvareOra.quanto < approvarePrima.quanto);
+  assert.equal(approvareOra.dettaglio.split(' · ')[0], approvarePrima.dettaglio.split(' · ')[0].replace(/^Ore, (.)/, (x, c) => c.toUpperCase()));
+  assert.deepEqual(approvareOra.collegamento, approvarePrima.collegamento);
+  const sparite = prima.filter(v => !DELLA_FIRMA.test(v.titolo) && v !== approvarePrima)
+    .filter(v => !tutte.some(x => x.titolo === v.titolo || (v.tipo === 'spazio' && x.tipo === 'sistema' && x.titolo === v.titolo)));
   // I doppioni di §8.1 nei dati della fase 7: [titolo della voce che sparisce, oggetto della voce che resta, coda].
   const doppioni = sparite.map(v => {
     const oggetto = v.collegamento && v.collegamento.id !== undefined ? ({ ticket: 'ticket', preventivo: 'preventivo', rapportino: 'rapportino' }[v.collegamento.pagina] || '') + ':' + v.collegamento.id : '';
@@ -232,7 +258,7 @@ test('riaperto il server: la migrazione non si rifa\'', () => {
   const r = w.db.riga('SELECT COUNT(*) n FROM registro').n;
   w.chiudi();
   w = new Wisper({ dati: cartella });
-  assert.equal(w.db.versione(), 9);
+  assert.equal(w.db.versione(), 11);
   assert.equal(w.db.riga('SELECT COUNT(*) n FROM controlli_finali').n, n);
   assert.equal(w.db.riga('SELECT COUNT(*) n FROM registro').n, r);
 });

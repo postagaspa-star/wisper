@@ -17,26 +17,30 @@ const crypto = require('node:crypto');
 const { spawn } = require('node:child_process');
 const assert = require('node:assert/strict');
 const { avviaPorta } = require('./porta-di-prova.js');
+const { portaDevtools, chiudiEdge } = require('./edge-prova.js');
 
 const arg = process.argv.slice(2);
 const opz = (n, d) => { const i = arg.indexOf(n); return i >= 0 ? arg[i + 1] : d; };
 const USCITA = opz('--uscita', '');
 const EDGE = 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';
 const STAMPE = path.join(__dirname, 'stampe');
-const PORTA = 8870 + Math.floor(Math.random() * 90);
+// --porte <n>: tutte le porte da n a n+5 (ponte, Google, casa, server, Google diretto, rimbalzo) al posto di porte a caso,
+// per tenere le prove in un giro di porte deciso; DevTools da WISPER_DEVTOOLS_PORTA.
+const PRIME = Number(opz('--porte', 0));
+const PORTA = PRIME || 8870 + Math.floor(Math.random() * 90);
 const BASE = 'http://localhost:' + PORTA;
 const GIRO = crypto.randomBytes(3).toString('hex');
 const aspetta = ms => new Promise(r => setTimeout(r, ms));
 
 async function main() {
-  const p = await avviaPorta();
+  const p = await avviaPorta(PRIME ? { portaGoogle: PRIME + 1, portaCasa: PRIME + 2, portaServer: PRIME + 3, portaDiretto: PRIME + 4, portaEco: PRIME + 5 } : {});
   p.modoCasa('spento');
   const ponte = spawn(process.execPath, [path.join(__dirname, 'finto-ponte.js'), String(PORTA), '--google', p.google, '--casa', p.casa], { stdio: ['ignore', 'pipe', 'pipe'] });
   const voci = [];
   ponte.stdout.on('data', d => voci.push(String(d)));
   ponte.stderr.on('data', d => voci.push(String(d)));
   const profilo = fs.mkdtempSync(path.join(os.tmpdir(), 'wisper-edge-porta-'));
-  const portaEdge = 9700 + Math.floor(Math.random() * 150);
+  const portaEdge = portaDevtools(9700, 150);
   let edge = null;
   let ws = null;
   const errori = [];
@@ -119,6 +123,8 @@ async function main() {
     await valuta("localStorage.setItem('wisper-visita-2', '1'); true");
     await cdp('Page.navigate', { url: BASE + '/?g=1#dashboard' });
     await aspetta(1500);
+    // Con la macchina carica la pagina di accesso può arrivare qualche secondo dopo: si aspetta la sua riga (fino a 20 s).
+    for (let i = 0; i < 80 && !(await valuta("!!(document.querySelector('.riga-server') && document.querySelector('.riga-server').innerText.trim())")); i++) await aspetta(250);
 
     // ------------------------------------------------------------ 1. apri: la pagina di accesso dice dove sta il server
     const riga = await valuta("document.querySelector('.riga-server') ? document.querySelector('.riga-server').innerText : ''");
@@ -178,7 +184,7 @@ async function main() {
     await scrivi('Cosa hai fatto', descrizione);
     await clicca('Salva', '.finestra', 500);
     await aspettaChe("/Salvato: RAP/.test(document.querySelector('#avvisi').innerText)", 20000, 'l\'avviso Salvato');
-    const rap = p.wisper.db.riga('SELECT id, id_locale FROM rapportini WHERE descrizione = ?', descrizione);
+    const rap = p.wisper.db.riga('SELECT id, id_locale, id_giornata FROM rapportini WHERE descrizione = ?', descrizione);
     assert.ok(rap, 'il rapportino è sul server');
     assert.equal(conta('SELECT COUNT(*) n FROM rapportini WHERE descrizione = ?', descrizione), 1);
     passo('rapportino salvato da Google: ' + rap.id);
@@ -187,8 +193,8 @@ async function main() {
     await vai('#rapportini/elenco');
     await valuta(`(() => { const r = [...document.querySelectorAll('[data-chiave], [role=button]')].find(x => x.textContent.includes(${JSON.stringify(descrizione)})); if (!r) return document.querySelector('#principale').innerText.slice(0, 400); r.click(); return true; })()`);
     await aspetta(1200);
-    await valuta("document.querySelector('.pannello button[aria-label=\"Altre azioni\"]').click(); true");
-    await aspetta(300);
+    // Dal 06/11/2026 il pannello è del rapportino: lo scontrino si aggiunge dal menu del lavoro (aperto col clic sulla riga).
+    await clicca('Altro su questo lavoro', '.pannello', 300);
     await clicca('Aggiungi uno scontrino', '.menu', 500);
     await aspettaChe("/Scontrino aggiunto/.test(document.querySelector('#avvisi').innerText)", 25000, 'Scontrino aggiunto');
     const scontrini = conta("SELECT COUNT(*) n FROM file WHERE rapportino_id = ? AND tipo = 'spesa'", rap.id);
@@ -214,7 +220,7 @@ async function main() {
     // ------------------------------------------------------------ 6. il PDF del rapportino (le immagini passano da Google)
     // Il finto ponte riscrive un PDF con lo stesso nome: conta quello scritto da adesso in poi.
     const pdfDa = Date.now() - 1000;
-    const scritti = () => (fs.existsSync(STAMPE) ? fs.readdirSync(STAMPE) : []).filter(x => /\.pdf$/.test(x) && x.indexOf(rap.id.replace(/\//g, '-')) === 0 &&
+    const scritti = () => (fs.existsSync(STAMPE) ? fs.readdirSync(STAMPE) : []).filter(x => /\.pdf$/.test(x) && x.indexOf((rap.id_giornata || rap.id).replace(/\//g, '-')) === 0 &&
       fs.statSync(path.join(STAMPE, x)).mtimeMs >= pdfDa && fs.statSync(path.join(STAMPE, x)).size > 1000);
     await clicca('PDF', '.pannello', 1000);
     let nuovi = [];
@@ -273,11 +279,11 @@ async function main() {
     console.log('TUTTO BENE (' + passi + ' passi, ' + p.rimbalzi.post + ' richieste dallo script)');
   } finally {
     if (ws) ws.close();
-    if (edge) edge.kill();
+    if (edge) await chiudiEdge(portaEdge, edge);
     ponte.kill();
     await aspetta(500);
     await p.ferma();
-    try { fs.rmSync(profilo, { recursive: true, force: true }); } catch (e) { /* Edge tiene ancora un file */ }
+    await require('./edge-prova.js').togliCartella(profilo); // Edge a volte tiene un file un attimo: riprova per qualche secondo
   }
 }
 

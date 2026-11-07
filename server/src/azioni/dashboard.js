@@ -14,7 +14,7 @@
  */
 'use strict';
 
-const { testo, numero, centesimi, oggi, piuGiorni, dataOraIso, dataIso, adessoMs } = require('../utili');
+const { testo, numero, centesimi, oggi, piuGiorni, dataOraIso, dataIso } = require('../utili');
 const { budgetDi } = require('../conti');
 const { giornoAttivita } = require('./attivita');
 const { etichettaPreventivo, statoVistoPreventivo } = require('./preventivi');
@@ -132,30 +132,21 @@ module.exports = {
     // una commessa, non una cosa da sistemare (riempivano la sezione di righe inutili).
 
     // ------------------------------------------------------------ rapportini
+    // 06/11/2026 (rapportino-lavori.md): niente firma. Da inviare = BOZZA (e il FIRMATO di prima); una voce sola, per i
+    // lavori da inviare da piu' di una settimana (non quelli che aspettano l'approvazione: stanno fra le cose da approvare).
     const settimanaFa = piuGiorni(adesso, -7);
     const bozze = rapportini.filter(r => (testo(r.stato).toUpperCase() || 'BOZZA') === 'BOZZA');
-    const vecchie = bozze.filter(r => r.data && r.data < settimanaFa);
-    const recenti = bozze.filter(r => !(r.data && r.data < settimanaFa));
-    // Fase 3: uno che aspetta l'approvazione non si manda ancora (sta tra le cose da approvare).
-    const firmati = rapportini.filter(r => testo(r.stato).toUpperCase() === 'FIRMATO' &&
+    const daInviare = rapportini.filter(r => ['BOZZA', 'FIRMATO'].indexOf(testo(r.stato).toUpperCase() || 'BOZZA') >= 0 &&
       r.stato_approvazione !== 'da_approvare' && r.stato_approvazione !== 'respinto');
+    const vecchie = daInviare.filter(r => r.data && r.data < settimanaFa);
     // Fase 5: i rapportini di un ticket aperto (aspettano la chiusura) o chiuso nel contratto o senza fattura non contano qui.
     const trattenuti = new Set(this.db.righe("SELECT id FROM ticket WHERE stato IN ('aperto', 'in_carico', 'in_attesa', 'risolto') OR (stato = 'chiuso' AND fatturazione IN ('contratto', 'no'))").map(t => t.id));
-    const daFatturare = rapportini.filter(r => ['FIRMATO', 'INVIATO'].indexOf(testo(r.stato).toUpperCase()) >= 0 && !(r.ticket_id && trattenuti.has(r.ticket_id)));
-    // Fase 8: le voci di gruppo portano i loro oggetti, cosi' "fallo firmare nel portale" dello stesso rapportino non si ripete (§8.1).
+    const daFatturare = rapportini.filter(r => ['BOZZA', 'FIRMATO', 'INVIATO'].indexOf(testo(r.stato).toUpperCase() || 'BOZZA') >= 0 && !(r.ticket_id && trattenuti.has(r.ticket_id)));
+    // Fase 8: le voci di gruppo portano i loro oggetti (§8.1).
     if (vecchie.length) {
-      voce(urgenti, { tipo: 'rapportini', gravita: 'urgente', titolo: plurale(vecchie.length, 'rapportino da far firmare', 'rapportini da far firmare') + ' da più di una settimana',
-        dettaglio: 'Il più vecchio è del ' + dataBreve(vecchie.map(r => r.data).sort()[0]), quanto: vecchie.length, unita: 'rapportini',
-        collegamento: { pagina: 'rapportini', filtro: { stato: 'BOZZA', a: settimanaFa } }, oggetti: vecchie.map(r => 'rapportino:' + r.id) });
-    }
-    if (recenti.length) {
-      voce(settimana, { tipo: 'rapportini', gravita: 'info', titolo: plurale(recenti.length, 'rapportino da far firmare', 'rapportini da far firmare'),
-        dettaglio: 'Questa settimana', quanto: recenti.length, unita: 'rapportini', collegamento: { pagina: 'rapportini', filtro: { stato: 'BOZZA' } },
-        oggetti: recenti.map(r => 'rapportino:' + r.id) });
-    }
-    if (firmati.length) {
-      voce(settimana, { tipo: 'rapportini', gravita: 'attenzione', titolo: plurale(firmati.length, 'rapportino firmato da mandare', 'rapportini firmati da mandare'),
-        dettaglio: 'Al cliente, con il PDF', quanto: firmati.length, unita: 'rapportini', collegamento: { pagina: 'rapportini', filtro: { stato: 'FIRMATO' } } });
+      voce(urgenti, { tipo: 'rapportini', gravita: 'urgente', titolo: plurale(vecchie.length, 'lavoro da inviare', 'lavori da inviare') + ' da più di una settimana',
+        dettaglio: 'Il più vecchio è del ' + dataBreve(vecchie.map(r => r.data).sort()[0]), quanto: vecchie.length, unita: 'lavori',
+        collegamento: { pagina: 'rapportini', filtro: { quali: 'inviare', a: settimanaFa } }, oggetti: vecchie.map(r => 'rapportino:' + r.id) });
     }
 
     // I giorni lavorativi (lunedi'-venerdi') degli ultimi 14 senza nessun rapportino: i suoi per il
@@ -189,12 +180,12 @@ module.exports = {
       if (deiMesiPrima.length && !fase4) {
         const mesePiuVecchio = deiMesiPrima.map(r => r.data.slice(0, 7)).sort()[0];
         voce(urgenti, { tipo: 'fatturazione', gravita: 'soldi', titolo: 'Da fatturare dei mesi scorsi',
-          dettaglio: plurale(deiMesiPrima.length, 'rapportino firmato o mandato', 'rapportini firmati o mandati') + ', dal ' + mesePiuVecchio.slice(5, 7) + '/' + mesePiuVecchio.slice(0, 4),
+          dettaglio: plurale(deiMesiPrima.length, 'lavoro', 'lavori') + ', dal ' + mesePiuVecchio.slice(5, 7) + '/' + mesePiuVecchio.slice(0, 4),
           quanto: somma(deiMesiPrima), unita: 'euro', collegamento: { pagina: 'fatturazione', filtro: { mese: mesePiuVecchio } } });
       }
       if (diQuestoMese.length && !fase4) {
         voce(settimana, { tipo: 'fatturazione', gravita: 'soldi', titolo: 'Da fatturare questo mese',
-          dettaglio: plurale(diQuestoMese.length, 'rapportino firmato o mandato', 'rapportini firmati o mandati'), quanto: somma(diQuestoMese), unita: 'euro',
+          dettaglio: plurale(diQuestoMese.length, 'lavoro', 'lavori'), quanto: somma(diQuestoMese), unita: 'euro',
           collegamento: { pagina: 'fatturazione', filtro: { mese } } });
       }
       // I clienti con commesse aperte senza codice SDI e PEC: serviranno per le fatture.
@@ -233,8 +224,10 @@ module.exports = {
       numeri: {
         commesse: numeriCommesse,
         rapportini: {
-          daFirmare: bozze.length,
-          daMandare: firmati.length,
+          // 06/11/2026: niente firma. daFirmare e daMandare restano per le app 1.1 (0 e i lavori da inviare); daInviare e' quello nuovo.
+          daFirmare: 0,
+          daMandare: daInviare.length,
+          daInviare: daInviare.length,
           daFatturare: daFatturare.length,
           oreSettimana: oreDa(lunedi),
           oreMese: oreDa(mese + '-01'),
@@ -669,13 +662,15 @@ module.exports = {
   /**
    * Le voci della fase 3:
    *  - per chi approva: le cose da approvare (urgenti), con quante hanno
-   *    un'anomalia; i timer degli altri accesi da piu' di 10 ore;
-   *  - per chi ha scritto: le sue cose respinte, col motivo (urgenti), e il suo
-   *    timer acceso da piu' di 10 ore;
+   *    un'anomalia;
+   *  - per chi ha scritto: le sue cose respinte, col motivo (urgenti);
    *  - per chi segna i rimborsi (con "costi"): i rimborsi da fare;
    *  - per chi cambia i veicoli: dall'anno nuovo, finche' non si fa,
    *    "Aggiorna il rimborso km con le tabelle ACI {anno}".
-   * Il collaboratore: le sue ore, le sue respinte e il suo timer; niente soldi.
+   * Il collaboratore: le sue respinte; niente soldi.
+   * 07/11/2026 (Manuel: "le Ore vanno tolte, non servono, metti solamente i Rapportini"): niente piu' voci delle ore
+   * registrate e del timer (ore respinte, timer acceso da piu' di 10 ore, collegamenti al segmento Ore). numeri.ore resta
+   * per le app vecchie (1.1.x), ma le app nuove non lo usano: le ore della settimana sono quelle dei rapportini.
    */
   dashboardFase3({ mie, costi, io, adesso, lunedi, mese, voce, urgenti, settimana, pianificare }) {
     const fuori = {};
@@ -684,7 +679,7 @@ module.exports = {
     const vedeOre = this.livello('rapportini') > 0;
     const vedeSpese = this.livello('spese') > 0;
 
-    // I numeri delle ore registrate: le mie (collaboratore) o di tutto lo studio.
+    // I numeri delle ore registrate: le mie (collaboratore) o di tutto lo studio. 07/11/2026: solo per le app vecchie.
     if (vedeOre) {
       // Fase 8 (prova di carico): le ore del mese e della settimana da una lettura sola (filtrate, stesso ordine).
       const daGiorno = lunedi < mese + '-01' ? lunedi : mese + '-01';
@@ -708,29 +703,29 @@ module.exports = {
       if (da.quante) {
         const conta = t => da.persone.reduce((n, p) => n + p.voci.filter(v => v.tipo === t).length, 0);
         const pezzi = [];
-        if (conta('ore')) pezzi.push('ore');
+        // 07/11/2026: le ore registrate non sono piu' fra le cose da approvare (daApprovare in ore.js).
         if (conta('spesa')) pezzi.push(conta('spesa') === 1 ? 'una spesa' : 'spese');
         if (conta('trasferta')) pezzi.push(conta('trasferta') === 1 ? 'una trasferta' : conta('trasferta') + ' trasferte');
         if (conta('rapportino')) pezzi.push(conta('rapportino') === 1 ? 'un rapportino' : conta('rapportino') + ' rapportini');
         const elenco = pezzi.length > 1 ? pezzi.slice(0, -1).join(', ') + ' e ' + pezzi[pezzi.length - 1] : pezzi[0];
-        voce(urgenti, {
-          tipo: 'approvare', gravita: 'attenzione',
-          titolo: plurale(da.quante, 'cosa da approvare', 'cose da approvare') + (da.persone.length === 1 ? ' di ' + da.persone[0].nome : ''),
-          dettaglio: elenco.charAt(0).toUpperCase() + elenco.slice(1) + (da.conAnomalie ? ' · ' + da.conAnomalie + ' con un\'anomalia' : ''),
-          quanto: da.quante, unita: 'voci', collegamento: { pagina: 'rapportini', filtro: { segmento: 'daApprovare' } },
-        });
+        // 07/11/2026: con le sole ferie da approvare (le ore non ci sono piu') l'elenco era vuoto e la Dashboard si rompeva
+        // ("charAt" di niente). Le ferie hanno gia' la loro voce (fase 6, "ferie da approvare"): qui niente voce.
+        if (elenco) {
+          voce(urgenti, {
+            tipo: 'approvare', gravita: 'attenzione',
+            titolo: plurale(da.quante, 'cosa da approvare', 'cose da approvare') + (da.persone.length === 1 ? ' di ' + da.persone[0].nome : ''),
+            dettaglio: elenco.charAt(0).toUpperCase() + elenco.slice(1) + (da.conAnomalie ? ' · ' + da.conAnomalie + ' con un\'anomalia' : ''),
+            quanto: da.quante, unita: 'voci', collegamento: { pagina: 'rapportini', filtro: { segmento: 'daApprovare' } },
+          });
+        }
       }
     }
 
-    // Le mie cose respinte, col motivo: una per una fino a 3, poi una voce sola.
+    // Le mie cose respinte, col motivo: una per una fino a 3, poi una voce sola. 07/11/2026: le ore respinte no (Ore tolte).
     if (io) {
       const respinte = [];
       const chi = id => (id && nomi[id] ? ' · ' + nomi[id] : '');
       if (vedeOre) {
-        for (const o of this.db.righe("SELECT * FROM ore WHERE utente_id = ? AND stato = 'respinta' AND tolta IS NULL ORDER BY data", io)) {
-          respinte.push({ titolo: 'Ore del ' + dataBreve(o.data) + ' respinte', dettaglio: 'Motivo: ' + o.motivo + chi(o.approvata_da),
-            collegamento: { pagina: 'rapportini', filtro: { segmento: 'ore', giorno: o.data } } });
-        }
         for (const r of this.db.righe("SELECT * FROM rapportini WHERE utente_id = ? AND stato_approvazione = 'respinto' AND UPPER(stato) <> 'ANNULLATO' ORDER BY data", io)) {
           respinte.push({ titolo: r.id + ' respinto', dettaglio: 'Motivo: ' + r.motivo + chi(r.approvato_da),
             collegamento: { pagina: 'rapportini', filtro: { segmento: 'rapportini', id: r.id } } });
@@ -751,27 +746,11 @@ module.exports = {
       } else if (respinte.length) {
         voce(urgenti, { tipo: 'respinta', gravita: 'attenzione', titolo: respinte.length + ' cose respinte da correggere',
           dettaglio: respinte.slice(0, 3).map(r => r.titolo).join(', '), quanto: respinte.length, unita: 'voci',
-          collegamento: { pagina: 'rapportini', filtro: { segmento: 'ore', stato: 'respinta' } } });
+          collegamento: { pagina: 'rapportini', filtro: { segmento: 'rapportini', stato: 'respinta' } } });
       }
     }
 
-    // I timer accesi da piu' di 10 ore: il mio sempre, quelli degli altri per chi approva.
-    if (vedeOre) {
-      const altri = !mie && this.puoApprovare('rapportini');
-      for (const t of this.db.righe('SELECT * FROM timer ORDER BY partito_il')) {
-        if (t.utente_id !== io && !altri) continue;
-        const ore = (adessoMs() - Date.parse(t.partito_il)) / 3600000;
-        if (ore <= 10) continue;
-        const da = dataOraIso(t.partito_il);
-        const quando = 'dalle ' + Number(da.slice(11, 13)) + ':' + da.slice(14, 16) + (da.slice(0, 10) === adesso ? '' : ' del ' + dataBreve(da.slice(0, 10)));
-        voce(urgenti, {
-          tipo: 'timer', gravita: 'attenzione',
-          titolo: (t.utente_id === io ? 'Il timer è acceso da ' : 'Il timer di ' + (nomi[t.utente_id] || '') + ' è acceso da ') + Math.floor(ore) + ' ore',
-          dettaglio: [t.commessa_id, quando, t.utente_id === io ? 'fermalo e correggi le ore' : ''].filter(Boolean).join(' · '),
-          quanto: Math.floor(ore), unita: 'ore', collegamento: { pagina: 'rapportini', filtro: { segmento: 'ore' } },
-        });
-      }
-    }
+    // 07/11/2026: niente piu' la voce del timer acceso da piu' di 10 ore (il timer era della parte Ore, tolta).
 
     // I rimborsi da fare: per chi li segna, e solo con "costi".
     if (!mie && costi && vedeSpese && this.puoSegnareRimborsi()) {

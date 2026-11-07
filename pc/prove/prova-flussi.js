@@ -14,6 +14,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
 const assert = require('node:assert/strict');
+const { portaDevtools, chiudiEdge: chiudiEdgeCdp } = require('./edge-prova.js');
 
 const arg = process.argv.slice(2);
 const opz = (n, d) => { const i = arg.indexOf(n); return i >= 0 ? arg[i + 1] : d; };
@@ -41,7 +42,7 @@ const EMAIL = 'giorgio.' + GIRO.toLowerCase() + '@esempio.it';
 
 async function main() {
   const profilo = fs.mkdtempSync(path.join(os.tmpdir(), 'wisper-edge-flussi-'));
-  const porta = 9800 + Math.floor(Math.random() * 150);
+  const porta = portaDevtools(9800, 150);
   const edge = spawn(EDGE, ['--headless=new', '--disable-gpu', '--no-first-run', '--hide-scrollbars', '--user-data-dir=' + profilo, '--remote-debugging-port=' + porta, 'about:blank'], { stdio: 'ignore' });
   let ws = null;
   const errori = [];
@@ -342,13 +343,13 @@ async function main() {
     await valuta(`(() => { const c = [...document.querySelectorAll('.campo')].find(x => x.querySelector('label') && x.querySelector('label').textContent === 'Cifre del numero'); [...c.querySelectorAll('button')].find(b => b.textContent.trim() === '4').click(); return true; })()`);
     await aspetta(300);
     assert.match(await valuta("document.querySelector('#anteprima-formato').textContent"), /^\d{2}ST\d{4}$/);
-    await clicca('Salva il formato');
-    await aspetta(600);
-    await clicca('Salva il formato', '.finestra');
+    // 06/11/2026: niente più "Salva il formato" né foglio di conferma: si salva da solo e lo dice accanto al titolo.
     await aspetta(1200);
+    assert.equal(await valuta("[...document.querySelectorAll('button')].some(b => /Salva il formato/.test(b.textContent))"), false, 'niente pulsante Salva');
+    assert.match(await valuta("(document.querySelector('.salvato.visto') || {}).textContent || ''"), /Formato salvato: vale per le commesse nuove/);
     const num = (await server('numerazioni')).numerazioni.find(x => x.tipo === 'commessa');
     assert.equal(num.formato, '{AA}ST{NNNN}');
-    passo('numerazione: una cifra in più, anteprima ' + num.prossimo);
+    passo('numerazione: una cifra in più, si salva da sola, anteprima ' + num.prossimo);
     await server('salvaNumerazione', { tipo: 'commessa', formato: '{AA}ST{NNN}' });
 
     await vai('#amministrazione/registro');
@@ -383,9 +384,9 @@ async function main() {
     console.log('TUTTO BENE (' + passi + ' passi)');
   } finally {
     if (ws) ws.close();
-    edge.kill();
+    await chiudiEdgeCdp(porta, edge);
     await aspetta(500);
-    try { fs.rmSync(profilo, { recursive: true, force: true }); } catch (e) { /* Edge tiene ancora un file */ }
+    await require('./edge-prova.js').togliCartella(profilo); // Edge a volte tiene un file un attimo: riprova per qualche secondo
   }
 }
 

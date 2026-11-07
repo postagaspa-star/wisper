@@ -81,18 +81,18 @@ import eu.stgm.wisper.ui.SchermataAccesso
 import eu.stgm.wisper.ui.SchermataCommessa
 import eu.stgm.wisper.ui.SchermataCommesse
 import eu.stgm.wisper.ui.SchermataDashboard
-import eu.stgm.wisper.ui.SchermataFirma
 import eu.stgm.wisper.ui.SchermataInvio
 import eu.stgm.wisper.ui.SchermataModificaCliente
 import eu.stgm.wisper.ui.SchermataModificaCommessa
-import eu.stgm.wisper.ui.SchermataOreERapportini
-import eu.stgm.wisper.ui.SchermataRegistraOre
+import eu.stgm.wisper.ui.SchermataSezioneRapportini
 import eu.stgm.wisper.ui.SchermataRiepilogoSpese
-import eu.stgm.wisper.ui.SchermataStatisticheOre
 import eu.stgm.wisper.ui.SchermataSpesa
 import eu.stgm.wisper.ui.SchermataSpese
 import eu.stgm.wisper.ui.SchermataTrasferta
-import eu.stgm.wisper.ui.SchermataRapportino
+import eu.stgm.wisper.ui.SchermataGiornata
+import eu.stgm.wisper.ui.GiornataStato
+import eu.stgm.wisper.rapportino.Giornata
+import eu.stgm.wisper.rapportino.Giornate
 import eu.stgm.wisper.ui.SchermataSoggettiArchiviati
 import eu.stgm.wisper.ui.SchermataUfficio
 import eu.stgm.wisper.ui.Sezione
@@ -283,8 +283,7 @@ class MainActivity : ComponentActivity() {
  *
  *  - "accesso"       entrare con email e password (primo avvio, accesso scaduto, Esci)
  *  - "sezioni"       le voci del menu laterale, ognuna con la sua pila; la casa è la Dashboard
- *  - "rapportino"    il rapportino aperto (stato in [modulo], su disco in [BozzaModulo])
- *  - "firma:<id>"    la firma del cliente
+ *  - "rapportino"    il rapportino della giornata aperto, coi suoi lavori (stato in [modulo], su disco in [BozzaModulo])
  *  - "collega"       Collega un computer: la fotocamera che legge il QR di Wisper Ufficio (collega-qr.md §7)
  */
 @Composable
@@ -357,7 +356,7 @@ private fun Wisper(archivio: Archivio, attivita: ComponentActivity) {
         visita.vaiA = { p ->
             when (p) {
                 "dashboard" -> { modulo = null; scope.launch { cassetto.close() }; aCasa() }
-                // Fase 3: la visita passa da Spese e trasferte (Nuova spesa) e da Ore e rapportini (il timer).
+                // Fase 3: la visita passa da Spese e trasferte (Nuova spesa) e dai Rapportini (07/11/2026: niente più timer).
                 // Fase 4: la visita passa da Fatturazione e da Banche e scadenze.
                 "fatturazione", "banche" -> {
                     modulo = null
@@ -369,12 +368,12 @@ private fun Wisper(archivio: Archivio, attivita: ComponentActivity) {
                     sezioneNome = s.name
                     pagina = "sezioni"
                 }
-                "spese", "ore" -> {
+                "spese", "rapportini" -> {
                     modulo = null
                     scope.launch { cassetto.close() }
                     val s = if (p == "spese") Sezione.SPESE else Sezione.RAPPORTINI
                     if (p == "spese") eu.stgm.wisper.ui.RicordoSpese.segmento = eu.stgm.wisper.ui.SegmentoSpese.SPESE
-                    else eu.stgm.wisper.ui.RicordoOre.segmento = eu.stgm.wisper.ui.SegmentoOre.ORE
+                    else eu.stgm.wisper.ui.RicordoRapportini.segmento = eu.stgm.wisper.ui.SegmentoRapportini.RAPPORTINI
                     mettiPila(s, emptyList())
                     sezioneNome = s.name
                     pagina = "sezioni"
@@ -435,11 +434,24 @@ private fun Wisper(archivio: Archivio, attivita: ComponentActivity) {
             if (permessi.livelli.isNotEmpty() && sezione !in vociMenu(sessione)) aCasa()
         }
 
+        /**
+         * Il rapportino della giornata [giorno] (06/11/2026: uno al giorno, coi suoi lavori): quello che c'e' gia' (scritto
+         * da chi e' entrato), o uno nuovo.
+         */
+        fun giornataDel(giorno: LocalDate): GiornataStato {
+            val miei = (dati.storico.value + dati.viste.value).distinctBy { it.rapportino.idLocale }.map { it.rapportino }
+                .filter { it.data == giorno && it.stato != Stato.ANNULLATO && (it.tecnico.isBlank() || it.tecnico == dati.tecnico) }
+            val gruppo = Giornate.raggruppa(miei) { it }.firstOrNull()
+            return if (gruppo != null) GiornataStato(Giornate.giornataDi(gruppo), nuova = false)
+            else GiornataStato(Giornata.nuova(dati.tecnico, giorno), nuova = true)
+        }
+
         fun nuovo(giorno: LocalDate, idCliente: String? = null, idCommessa: String? = null) {
             val anag = dati.anagrafiche.value
             val com = idCommessa?.let { id -> anag.commesse.firstOrNull { it.id == id } }
             val cli = (idCliente ?: com?.idCliente)?.let { id -> anag.clienti.firstOrNull { it.id == id } }
-            var r = Rapportino.nuovo(dati.tecnico, giorno)
+            val g = giornataDel(giorno)
+            var r = g.lavoroNuovo()
             if (cli != null) r = r.copy(idCliente = cli.id, cliente = cli.nome)
             if (com != null) r = r.copy(idCommessa = com.id, commessa = com.descrizione)
             // Dalla commessa coi progetti accesi (progetti.md §4.6): un solo progetto aperto e' gia' scelto; con piu'
@@ -447,9 +459,10 @@ private fun Wisper(archivio: Archivio, attivita: ComponentActivity) {
             val aperti = if (com != null && eu.stgm.wisper.rapportino.RegoleProgetti.attivi(dati.sessione.value))
                 eu.stgm.wisper.rapportino.RegoleProgetti.apertiDi(anag, dati.viste.value.map { it.rapportino }, com.id) else null
             if (aperti?.size == 1) r = eu.stgm.wisper.ui.rapportinoDelProgetto(r, anag, aperti.first())
-            modulo = ModuloStato(r, nuovo = true).also { m ->
+            g.aperto = ModuloStato(r, nuovo = true).also { m ->
                 if (aperti != null && aperti.size != 1) { m.sceltaCommessa = true; m.sceltaProgetto = true }
             }
+            modulo = g
             pagina = "rapportino"
         }
 
@@ -458,16 +471,23 @@ private fun Wisper(archivio: Archivio, attivita: ComponentActivity) {
             val anag = dati.anagrafiche.value
             val p = eu.stgm.wisper.rapportino.RegoleProgetti.tutti(anag, dati.viste.value.map { it.rapportino })
                 .firstOrNull { it.id == idProgetto || (it.idLocale.isNotBlank() && it.idLocale == idProgetto) } ?: return
-            val r = eu.stgm.wisper.ui.rapportinoDelProgetto(Rapportino.nuovo(dati.tecnico, LocalDate.now()), anag, p)
-            modulo = ModuloStato(r, nuovo = true, passoIniziale = 2)
+            val g = giornataDel(LocalDate.now())
+            val r = eu.stgm.wisper.ui.rapportinoDelProgetto(g.lavoroNuovo(), anag, p)
+            g.aperto = ModuloStato(r, nuovo = true, passoIniziale = 2)
+            modulo = g
             pagina = "rapportino"
         }
 
-        fun apri(idLocale: String) {
-            (dati.viste.value.firstOrNull { it.rapportino.idLocale == idLocale } ?: dati.storico.value.firstOrNull { it.rapportino.idLocale == idLocale })?.let { v ->
-                modulo = ModuloStato(v.rapportino, nuovo = false)
-                pagina = "rapportino"
+        /** Il rapportino del lavoro [idLocale], coi suoi lavori; con [lavoro] anche quel lavoro aperto. */
+        fun apri(idLocale: String, lavoro: Boolean) {
+            val tutti = (dati.storico.value + dati.viste.value).associateBy { it.rapportino.idLocale }.values.map { it.rapportino }
+            val r = tutti.firstOrNull { it.idLocale == idLocale } ?: return
+            val chiave = Giornate.chiaveDi(r)
+            val gruppo = Giornate.raggruppa(tutti.filter { Giornate.chiaveDi(it) == chiave && it.stato != Stato.ANNULLATO }) { it }.firstOrNull() ?: return
+            modulo = GiornataStato(Giornate.giornataDi(gruppo), nuova = false).also { g ->
+                if (lavoro && gruppo.voci.size > 1) g.aperto = ModuloStato(r, nuovo = false)
             }
+            pagina = "rapportino"
         }
 
         val nav = Navigatore(
@@ -477,16 +497,18 @@ private fun Wisper(archivio: Archivio, attivita: ComponentActivity) {
                 avanti = true
                 if (f != null) filtro = f
                 // Un filtro dei rapportini (dalla Dashboard, da una commessa) apre il segmento Rapportini.
-                if (s == Sezione.RAPPORTINI && f != null) eu.stgm.wisper.ui.RicordoOre.segmento = eu.stgm.wisper.ui.SegmentoOre.RAPPORTINI
+                if (s == Sezione.RAPPORTINI && f != null) eu.stgm.wisper.ui.RicordoRapportini.segmento = eu.stgm.wisper.ui.SegmentoRapportini.RAPPORTINI
                 mettiPila(s, emptyList())
                 sezioneNome = s.name
                 pagina = "sezioni"
             },
-            onApriRapportino = ::apri,
+            onApriRapportino = { id, lavoro -> apri(id, lavoro) },
             onNuovoRapportino = { g, cli, com -> nuovo(g, cli, com) },
             onFirmaPreventivo = { id -> pagina = "firma-preventivo:$id" },
             onRapportinoDaTicket = { r ->
-                modulo = ModuloStato(r, nuovo = true, passoIniziale = 2)
+                val g = giornataDel(r.data)
+                g.aperto = ModuloStato(r.copy(idLocaleGiornata = g.idLocale, idGiornata = g.id), nuovo = true, passoIniziale = 2)
+                modulo = g
                 pagina = "rapportino"
             },
             onNuovoRapportinoProgetto = ::nuovoDaProgetto,
@@ -666,7 +688,8 @@ private fun Wisper(archivio: Archivio, attivita: ComponentActivity) {
                                         CompositionLocalProvider(LocalGuscio provides guscio) {
                                             Box(
                                                 Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()
-                                                    .let { if (rottaCompito(rotta)) it.imePadding() else it },
+                                                    // 06/11/2026: anche Amministrazione, dove i campi stanno sulla pagina e si salvano da soli.
+                                                    .let { if (rottaCompito(rotta) || rotta?.startsWith("amm/") == true) it.imePadding() else it },
                                             ) {
                                                 PaginaSezione(
                                                     s, rotta, dati, archivio, nav, filtro, { filtro = it }, tema,
@@ -676,7 +699,10 @@ private fun Wisper(archivio: Archivio, attivita: ComponentActivity) {
                                                     onVisita = { visita.inizia() },
                                                     onNuovo = { g -> nuovo(g) },
                                                     onComeIeri = { r ->
-                                                        modulo = ModuloStato(Riepiloghi.comeIeri(r), nuovo = true, tariffaToccata = true, passoIniziale = 4)
+                                                        // Il lavoro di ieri entra nel rapportino di oggi: si guarda e si salva.
+                                                        val g = giornataDel(LocalDate.now())
+                                                        g.lavori.add(Riepiloghi.comeIeri(r).copy(idLocaleGiornata = g.idLocale, idGiornata = g.id, data = g.data))
+                                                        modulo = g
                                                         pagina = "rapportino"
                                                     },
                                                 )
@@ -698,15 +724,15 @@ private fun Wisper(archivio: Archivio, attivita: ComponentActivity) {
                         )
 
                         p == "rapportino" -> modulo?.let { m ->
-                            SchermataRapportino(
+                            SchermataGiornata(
                                 dati = dati,
                                 stato = m,
                                 bozza = bozza,
-                                onFirma = { idLocale -> pagina = "firma:$idLocale" },
                                 onChiudi = { modulo = null; pagina = "sezioni" },
-                                // "Invia al cliente": si chiude il rapportino e si prepara l'invio nella voce aperta.
-                                onInvia = { idLocale -> modulo = null; pagina = "sezioni"; nav.vai("invio/rapportino/$idLocale") },
-                                onSalvatoSenzaFirma = { r -> if (r.conTicket && !dati.esempio) lavoroFinito = r },
+                                // "Invia ai clienti": si chiude il rapportino e si prepara l'invio nella voce aperta, diviso per destinatario.
+                                onInvia = { ids -> modulo = null; pagina = "sezioni"; nav.vai("invio/scelti/" + ids.joinToString(",") { android.net.Uri.encode(it) }) },
+                                // Fase 5 (§3.3): un lavoro col ticket chiede "Il lavoro è finito?".
+                                onSalvata = { g -> if (!dati.esempio) g.lavori.firstOrNull { it.conTicket }?.let { lavoroFinito = it } },
                             )
                         }
 
@@ -735,25 +761,7 @@ private fun Wisper(archivio: Archivio, attivita: ComponentActivity) {
                             )
                         }
 
-                        p.startsWith("firma:") -> {
-                            val idLocale = p.removePrefix("firma:")
-                            val r = (dati.viste.value.firstOrNull { it.rapportino.idLocale == idLocale } ?: dati.storico.value.firstOrNull { it.rapportino.idLocale == idLocale })?.rapportino
-                            SchermataFirma(
-                                rapportino = r,
-                                onConferma = { disegno, nome ->
-                                    scope.launch { dati.firma(idLocale, disegno, nome) }
-                                    modulo = null
-                                    pagina = "sezioni"
-                                    // Fase 5 (§3.3): col ticket, "Il lavoro è finito?".
-                                    if (r != null && r.conTicket && !dati.esempio) lavoroFinito = r.copy(firmatario = nome)
-                                },
-                                onAnnulla = {
-                                    // Si torna al rapportino, già salvato.
-                                    modulo = r?.let { ModuloStato(it, nuovo = false) }
-                                    pagina = if (modulo != null) "rapportino" else "sezioni"
-                                },
-                            )
-                        }
+                        // 06/11/2026: niente piu' firma del cliente nei rapportini (la pagina "firma:" non c'e' piu').
                     }
                 }
                 lavoroFinito?.let { r -> eu.stgm.wisper.ui.FoglioLavoroFinito(dati, r) { lavoroFinito = null } }
@@ -822,7 +830,7 @@ private fun PaginaSezione(
             Sezione.PROGETTI -> eu.stgm.wisper.ui.SchermataProgetti(dati, nav)
             Sezione.PREVENTIVI -> SchermataPreventivi(dati, nav)
             Sezione.ATTIVITA -> SchermataAttivita(dati, nav)
-            Sezione.RAPPORTINI -> SchermataOreERapportini(dati, nav, filtro, onFiltro)
+            Sezione.RAPPORTINI -> SchermataSezioneRapportini(dati, nav, filtro, onFiltro)
             Sezione.SPESE -> SchermataSpese(dati, nav)
             Sezione.FATTURAZIONE -> eu.stgm.wisper.ui.SchermataFatturazione(dati, nav)
             Sezione.BANCHE -> eu.stgm.wisper.ui.SchermataBanche(dati, nav)
@@ -906,14 +914,14 @@ private fun PaginaSezione(
         rotta.startsWith("commessa/") -> SchermataCommessa(dati, nav, rotta.removePrefix("commessa/"))
         rotta.startsWith("commessa-modifica/") -> SchermataModificaCommessa(dati, nav, rotta.removePrefix("commessa-modifica/"), null)
         rotta.startsWith("commessa-nuova") -> SchermataModificaCommessa(dati, nav, null, rotta.removePrefix("commessa-nuova").removePrefix("/").ifBlank { null })
-        // Fase 3: ore, spese, trasferte (docs/gestionale/fase3.md)
-        rotta.startsWith("ore-registra/") -> SchermataRegistraOre(dati, nav, rotta.removePrefix("ore-registra/"))
+        // Fase 3: spese e trasferte (docs/gestionale/fase3.md). 07/11/2026: le Ore non ci sono più; una pagina
+        // delle ore rimasta in una pila di prima (Registra ore, statistiche) torna subito ai Rapportini.
+        rotta.startsWith("ore-") -> androidx.compose.runtime.LaunchedEffect(rotta) { nav.indietro() }
         rotta.startsWith("spesa-nuova") -> SchermataSpesa(dati, nav, "nuova" + rotta.removePrefix("spesa-nuova"))
         rotta.startsWith("spesa/") -> SchermataSpesa(dati, nav, rotta.removePrefix("spesa/"))
         rotta == "trasferta-nuova" -> SchermataTrasferta(dati, nav, "nuova")
         rotta.startsWith("trasferta/") -> SchermataTrasferta(dati, nav, rotta.removePrefix("trasferta/"))
         rotta == "spese-riepilogo" -> SchermataRiepilogoSpese(dati, nav)
-        rotta == "ore-statistiche" -> SchermataStatisticheOre(dati, nav)
         // Fase 4: fatture, ricevute, importazione dell'XML, banche (docs/gestionale/fase4.md)
         rotta.startsWith("fattura/") -> eu.stgm.wisper.ui.SchermataFattura(dati, nav, rotta.removePrefix("fattura/"))
         rotta.startsWith("fattura-passa/") -> eu.stgm.wisper.ui.SchermataPassa(dati, nav, rotta.removePrefix("fattura-passa/"))

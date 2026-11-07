@@ -11,6 +11,7 @@ mai dati veri di clienti.
 
 | Data | Versione | In breve |
 |------|----------|----------|
+| 07/11/2026 | 1.2.0, server 0.13.0 | [Il rapportino diventa la giornata: più lavori, niente firma, niente Ore](#v1-2-0) |
 | 04/11/2026 | 1.1.1 (computer) | [Il menu laterale resta dov'era e non ha più la barra grigia](#v1-1-1) |
 | 04/11/2026 | 1.1.0, server 0.12.0 | [Si riparte da zero: progetti, funzioni tutte spegnibili, aggiornamenti annunciati dal NAS](#v1-1-0) |
 | 03/11/2026 | 1.0.0 | [Il gestionale entra in uso: la sera del cambio](#v1-0-0) |
@@ -40,6 +41,86 @@ mai dati veri di clienti.
 | 26/09–14/10/2026 | 0.1 | [Un rapportino confermato non si perde più](#coda) |
 | 7–9/08/2026 | 0.1.0 | [Hackathon NGN Hacks: la versione a voce, senza mani](#v0-1-0) |
 | marzo–giugno 2026 | prima del repository | [Le prime versioni](#prima) |
+
+---
+
+<a id="v1-2-0"></a>
+## 7 novembre 2026 · 1.2.0, server 0.13.0 · Il rapportino diventa la giornata: più lavori, niente firma, niente Ore
+
+**Perché.** Il 6 novembre Andrea e Manuel hanno fatto una riunione sul gestionale e ne è uscito un elenco di 19
+modifiche. Quella più grande: "un rapportino deve essere l'insieme di più lavori dello stesso giorno", ognuno con la sua
+commessa, il suo progetto, la sua descrizione, i suoi km e le sue ore. Le risposte di Andrea alle domande aperte: i
+lavori possono essere anche di clienti diversi; "la firma non ha più senso, bisogna toglierla"; il codice della
+commessa si cambia anche dopo; il progetto è obbligatorio solo per Elettrodinamica; le fatture restano come sono
+(Wisper le prepara, le emette il programma di Manuel). Il 7 novembre è arrivata un'ultima richiesta: "le Ore vanno
+tolte, non servono, metti solamente i Rapportini". L'accordo tecnico è `docs/gestionale/rapportino-lavori.md`.
+
+**Cosa cambia.**
+
+- **Il rapportino è la giornata.** Ha un numero solo (RAP/2026/0018) e dentro tanti lavori, uno sotto l'altro, anche
+  per clienti diversi. Ogni lavoro ha il suo cliente, la sua commessa, il suo progetto, quello che si è fatto, le ore,
+  i km, la tariffa e le spese. Sul computer la pagina è nuova: i lavori a sinistra, il lavoro scelto a destra, in basso
+  il totale del giorno. Ci sono anche "Aggiungi un lavoro" e "Copia il lavoro scelto". Sul telefono il rapportino è una
+  pagina con le schede dei lavori, e ogni lavoro si apre con i suoi passi. Un errore dice quale lavoro sistemare
+  ("Lavoro 2: …") e lo apre.
+- **Niente firma del cliente.** Gli stati sono tre: Da inviare → Inviato → Fatturato. I rapportini già firmati con le
+  versioni di prima compaiono come Da inviare. Nei PDF vecchi la firma resta; in quelli nuovi c'è solo la riga del
+  tecnico che compila. Un lavoro inviato o fatturato non si cambia: prima si riporta da inviare.
+- **L'elenco è raggruppato per rapportino.** In alto c'è la riga del giorno, con il numero, quanti lavori e quanti
+  clienti; sotto, i suoi lavori. La casella per scegliere è sempre visibile e non serve più "Seleziona". Scelti dei
+  lavori, la barra in basso dice quanti sono, per quanti clienti e quanto fanno. Il pulsante che prima si chiamava
+  Riepilogo ora si chiama "Da inviare".
+- **Si invia a ogni cliente il suo.** Se i lavori scelti sono di due clienti, partono due email, e ognuno riceve solo i
+  suoi lavori. Il titolo della finestra è "Invio rapportino" o "Invio rapportini". L'email del cliente è già scritta.
+  L'oggetto e la frase capiscono il periodo: "Rapportino RAP/2026/0153 del 05/11/2026", "Rapportini del 5 novembre
+  2026", "Rapportini della settimana dal 2 all'8 novembre 2026", "Rapportini di novembre 2026", "Rapportini da
+  ottobre a novembre 2026". I casi sono gli stessi per computer e telefono (`server/prove/casi-invio.json`).
+- **I documenti.** Nel rapportino e nel riepilogo c'è il codice del progetto dove prima c'era quello della commessa. Il
+  codice della commessa va nel blocco del Mittente ("Commessa 26ST001"). Il riepilogo ha una riga per lavoro. Con il
+  logo caricato si può togliere il nome dello studio accanto al logo (interruttore in Dati dello studio).
+- **Selezionare e inviare non dipendono più da Fatturazione.** Bastano i Rapportini. "Segna fatturato" e "Prepara la
+  bozza" restano sotto Fatturazione.
+- **Il progetto è obbligatorio solo per Elettrodinamica.** Il programma lo riconosce dal nome del cliente, anche
+  scritto "Elettro Dinamica s.r.l.". Gli altri clienti hanno "Nessun progetto".
+- **Il codice della commessa si cambia a mano, anche dopo.** Wisper chiede conferma e aggiorna tutto quello che usa il
+  codice: rapportini, progetti, preventivi, fatture, documenti. Il codice di prima resta come "codice precedente". Due
+  commesse non possono avere lo stesso codice.
+- **Gli avvisi in basso spariscono da soli dopo 3 secondi**, anche gli errori; dopo 5 quelli con Annulla.
+- **Dati dello studio.** Indirizzo, CAP, comune e provincia ora stanno sotto il codice fiscale. C'è il **Codice SDI**
+  (7 lettere o cifre).
+- **Amministrazione.** In cima c'è "Cerca nelle impostazioni": scrivendo, trova le pagine e i campi e li evidenzia.
+  Tutte le impostazioni **si salvano da sole**: i pulsanti Salva non ci sono più e compare "Salvato".
+- **Niente più Ore.** Nel menu la voce si chiama solo "Rapportini", con le schede Rapportini e Da approvare. Da
+  approvare serve ai rapportini scritti dai collaboratori. Non ci sono più il segmento Ore, il timer e le statistiche
+  delle ore. Sulla Dashboard le "Ore della settimana" si contano dai rapportini. Le ore già salvate restano nel
+  database e le app vecchie le possono ancora mandare, ma non si vedono più.
+
+**Le domande della riunione.** "Da approvare" sono i rapportini dei collaboratori che aspettano il sì del titolare
+(Amministrazione › Approvazioni). Le tre tariffe del cliente: tariffa fissa (Elettrodinamica 30 €/h), ultima tariffa
+libera (si ricorda da sola) e costo orario fisso (il costo dello studio, serve per il margine). Fatture e banca: Wisper
+non parla con nessuna banca e non manda niente allo SDI. Si potrebbe fare gratis con una PEC, ma per ora resta così.
+
+**Una cosa detta com'è.** Sul telefono non ho ripercorso sull'emulatore la visita guidata dopo il taglio delle Ore,
+né ho visto a schermo le ore rimaste in coda e la scomparsa degli avvisi dopo 3 secondi. Il codice della coda è lo
+stesso di prima. Un timer lasciato acceso con la 1.1 non si ferma più dall'app; resta nel database e non dà fastidio.
+La pagina Fattura del telefono mostra una commessa sola, mentre il PDF le ha tutte.
+
+**Prove.** Server: le prove del rapportino a più lavori, del codice commessa, delle impostazioni dello studio e delle
+fatture coi progetti, e quella che controlla che dalla Dashboard non escano più ore e timer. La fotografia della
+Dashboard è stata rifatta solo dopo aver controllato che le uniche differenze fossero quelle volute. Computer: 345
+prove e 14 giri cliccati (rapportino a più lavori, tutte le fasi, collegamento col QR, porta Google, menu, visita
+guidata), con il testo controllato a 1024 e 1440 pixel, in tema chiaro e scuro. Telefono: 434 prove contro il server
+di prova, e le schermate fatte con il carattere grande (1,3) a 360 dp. Da questa versione le prove cancellano le
+cartelle temporanee che creano. Prima restavano: il 6 novembre erano 12.194 cartelle, 29 GB sul disco C.
+
+![Il rapportino sul computer: i lavori a sinistra, il lavoro scelto a destra, il totale del giorno in basso](docs/diario/1-2-0/computer-rapportino-editor.png)
+![L'elenco raggruppato per rapportino, con le caselle sempre visibili](docs/diario/1-2-0/computer-rapportino-elenco.png)
+![L'invio diviso per cliente, con oggetto e frase del periodo](docs/diario/1-2-0/computer-invio-rapportini.png)
+![Il PDF del rapportino con più lavori](docs/diario/1-2-0/computer-pdf-rapportino.png)
+![La ricerca nelle impostazioni](docs/diario/1-2-0/computer-cerca-impostazioni.png)
+![Il rapportino sul telefono: tre lavori per due clienti](docs/diario/1-2-0/telefono-rapportino-pagina.png)
+![L'elenco sul telefono, con le caselle e la barra dei lavori scelti](docs/diario/1-2-0/telefono-rapportini-caselle.png)
+![Dati dello studio sul telefono, col Codice SDI](docs/diario/1-2-0/telefono-dati-studio.png)
 
 ---
 

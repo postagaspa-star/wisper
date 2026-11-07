@@ -17,6 +17,8 @@
     const puo = W.puo;
     const soldi = W.soldi;
     const RO = radice.WisperRegoleOreSpese;
+    // 06/11/2026: niente firma; si fattura anche quello da inviare (regole-lavori.js).
+    const RL = radice.WisperRegoleLavori;
 
     /*
      * Fase 3 (architettura.md §14.11): il costo della commessa con le ore registrate, le
@@ -59,7 +61,8 @@
       tabella(area);
     }
 
-    const COLONNE = () => '110px minmax(0, 2fr) minmax(0, 1.4fr) minmax(0, 1.2fr) minmax(150px, 1.6fr)' + (soldi() ? ' 110px' : '');
+    // Le colonne stanno in stile.css (.tab-commesse): il testo va a capo; nella tabella stretta (1024) il responsabile
+    // passa sotto il cliente (07/11/2026, niente puntini nelle celle).
 
     function tabella(area) {
       svuota(area);
@@ -69,20 +72,21 @@
         aggiungi(area, [h('p', { class: 'vuoto' }, f.stato === 'ARCHIVIO' ? 'Nessuna commessa archiviata.' : 'Nessuna commessa.')]);
         return;
       }
-      const tab = h('div', { class: 'tab' }, h('div', { class: 'r testa', style: { gridTemplateColumns: COLONNE() } },
-        h('span', null, 'Codice'), h('span', null, 'Commessa'), h('span', null, 'Cliente'), h('span', null, 'Responsabile'), h('span', null, 'Ore sul budget'),
+      const tab = h('div', { class: 'tab tab-commesse' + (soldi() ? ' con-soldi' : '') }, h('div', { class: 'r testa' },
+        h('span', null, 'Codice'), h('span', null, 'Commessa'), h('span', null, 'Cliente'), h('span', { class: 'c-resp' }, 'Responsabile'), h('span', null, 'Ore sul budget'),
         soldi() ? h('span', { class: 'n' }, 'Margine') : null));
       lista.forEach(m => {
         const c = W.cliente(m.idCliente);
         const k = C.cruscotto(m, S.rapportini, S.ana.impostazioni, null, c);
         const resp = m.responsabileId ? W.utente(m.responsabileId) : null;
         const perc = k.budgetOre ? Math.min(100, Math.round(k.percOre * 100)) : 0;
-        aggiungi(tab, [h('div', { class: 'r cliccabile alta', style: { gridTemplateColumns: COLONNE() }, role: 'button', tabindex: '0',
+        const chi = () => (resp ? resp.nome : h('span', { class: 'da-scegliere' }, 'da scegliere'));
+        aggiungi(tab, [h('div', { class: 'r cliccabile alta', role: 'button', tabindex: '0',
           onclick: () => W.vai('#commesse/' + encodeURIComponent(m.id)), onkeydown: e => { if (e.key === 'Enter') W.vai('#commesse/' + encodeURIComponent(m.id)); } },
         h('span', null, h('span', { class: 'codice' }, m.id)),
-        h('span', { class: 'forte taglia' }, m.descrizione),
-        h('span', { class: 'taglia t2' }, c ? c.nome : m.idCliente),
-        h('span', { class: 'taglia' }, resp ? resp.nome : h('span', { class: 'da-scegliere' }, 'da scegliere')),
+        h('span', { class: 'forte a-capo' }, m.descrizione),
+        h('span', { class: 'c-cliente' }, h('span', { class: 'a-capo t2' }, c ? c.nome : m.idCliente), h('span', { class: 'solo-stretto t2 a-capo' }, chi())),
+        h('span', { class: 'c-resp a-capo' }, chi()),
         h('span', { class: 'ore-budget' }, h('span', { class: 'piccolo' }, k.budgetOre ? C.numero(k.ore) + ' di ' + C.numero(k.budgetOre) + ' h' : C.numero(k.ore) + ' h, senza budget'),
           k.budgetOre ? h('span', { class: 'barra sottile' }, h('i', { class: k.livelloOre, style: { width: perc + '%' } })) : null),
         soldi() ? h('span', { class: 'n forte' + (k.costo.lavoroNoto && k.margine < 0 ? ' negativo' : '') }, k.costo.lavoroNoto ? C.euro(k.margine) : '—') : null)]);
@@ -491,15 +495,17 @@
               : daBudget ? ', dopo ' + C.euro(costoAtteso) + ' di costi previsti' : ', dopo i costi') : '', null, noto && margine < 0))]);
 
         if (puo('fatturazione') && W.Fatture) { aggiungi(area, [fatturazioneCommessa(m)]); } else {
-        const tot = k.fatturato + k.prontoDaFatturare + k.inBozza;
+        const inviato = W.somma(k.rapportini.filter(r => r.stato === 'INVIATO'));
+        const daInviare = W.somma(k.rapportini.filter(RL.daInviare));
+        const tot = k.fatturato + inviato + daInviare;
         const pezzo = (x, classe) => tot > 0 && x > 0 ? h('i', { class: classe, style: { width: (x / tot * 100) + '%' } }) : null;
         aggiungi(area, [h('div', { class: 'scheda' },
           h('h2', null, 'Fatturazione'),
-          h('div', { class: 'barra' }, pezzo(k.fatturato, 'fatturato'), pezzo(k.prontoDaFatturare, 'pronto'), pezzo(k.inBozza, 'bozza')),
+          h('div', { class: 'barra' }, pezzo(k.fatturato, 'fatturato'), pezzo(inviato, 'pronto'), pezzo(daInviare, 'bozza')),
           h('div', { class: 'legenda' },
             h('span', null, h('i', { style: { background: 'var(--testo)' } }), 'Fatturato ' + C.euro(k.fatturato)),
-            h('span', null, h('i', { style: { background: 'var(--firmato)' } }), 'Pronto da fatturare ' + C.euro(k.prontoDaFatturare)),
-            h('span', null, h('i', { style: { background: 'var(--bordo-campo)' } }), 'Da far firmare ' + C.euro(k.inBozza))))]);
+            h('span', null, h('i', { style: { background: 'var(--firmato)' } }), 'Inviato, da fatturare ' + C.euro(inviato)),
+            h('span', null, h('i', { style: { background: 'var(--bordo-campo)' } }), 'Da inviare ' + C.euro(daInviare))))]);
         }
       }
 
@@ -557,7 +563,7 @@
             return riga({ titolo: sc.descrizione, sotto: quando + ' · ' + C.euro(sc.importo),
               destra: pillola(parola, sc.stato === 'prevista' ? 'grigio' : RF.coloreStato(parola)),
               onclick: sc.idFattura ? () => (sc.stato === 'in_bozza' && /^W-/.test(sc.fattura || '') ? W.vai('#fatturazione/bozza/' + sc.idFattura) : W.Fatture.apriPannello(sc.idFattura)) : null });
-          })) : h('div', { class: 'calmo' }, icona('fatturazione', 20, 2.2), x.modoFatturazione === 'corpo' ? 'Nessuna scadenza nel contratto.' : 'Si fattura a ore: rapportini, ore e spese.'))]);
+          })) : h('div', { class: 'calmo' }, icona('fatturazione', 20, 2.2), x.modoFatturazione === 'corpo' ? 'Nessuna scadenza nel contratto.' : 'Si fattura a ore: rapportini e spese.'))]);
       }).catch(e => { if (e && e.accesso === false) return; aggiungi(svuota(zona), [h('div', { class: 'banda calma' }, icona('avviso', 20), h('span', { class: 'spazio' }, (e && e.message) || String(e)))]); });
       return zona;
     }
@@ -594,17 +600,21 @@
     }
 
     function daFatturare(area, k) {
-      const da = k.rapportini.filter(r => r.stato === 'FIRMATO' || r.stato === 'INVIATO');
-      const inBozza = k.rapportini.filter(r => r.stato === 'BOZZA');
+      // 06/11/2026: niente firma. Da fatturare = da inviare e inviati; i da inviare a parte (vanno mandati al cliente).
+      const da = k.rapportini.filter(r => RL.daFatturare(r) && !r.fattura);
+      const daInviare = da.filter(RL.daInviare);
       aggiungi(area, [h('div', { class: 'tre-colonne' },
-        W.riquadro('Pronto da fatturare', C.euro(k.prontoDaFatturare), da.length ? W.nRapportini(da.length) + ' firmati o inviati' : 'niente'),
-        W.riquadro('Da far firmare', C.euro(k.inBozza), inBozza.length ? W.nRapportini(inBozza.length) : 'nessuno'),
+        W.riquadro('Da fatturare', C.euro(W.somma(da)), da.length ? RL.nLavori(da.length) + (daInviare.length ? ', ' + daInviare.length + ' da inviare' : '') : 'niente'),
+        W.riquadro('Da inviare', C.euro(W.somma(daInviare)), daInviare.length ? RL.nLavori(daInviare.length) : 'nessuno'),
         W.riquadro('Già fatturato', C.euro(k.fatturato), null))]);
       if (da.length) {
-        if (puo('fatturazione', 2)) {
+        // Riunione del 06/11/2026: mandare i rapportini è di chi li scrive; segnarli fatturati resta di chi fattura.
+        const fattura = puo('fatturazione', 2);
+        const manda = puo('rapportini', 2);
+        if (fattura || manda) {
           aggiungi(area, [h('div', { class: 'testata' }, h('span', { class: 'spazio' }),
-            h('button', { type: 'button', class: 'btn', onclick: () => W.cambiaStato(da, 'FATTURATO') }, 'Segna fatturati'),
-            h('button', { type: 'button', class: 'btn', onclick: () => W.preparaInvio(da) }, 'Prepara riepilogo'))]);
+            fattura ? h('button', { type: 'button', class: 'btn', onclick: () => W.cambiaStato(da, 'FATTURATO') }, 'Segna fatturati') : null,
+            manda ? h('button', { type: 'button', class: 'btn', onclick: () => W.preparaInvio(da) }, 'Prepara riepilogo') : null)]);
         }
         aggiungi(area, [W.tabellaRapportini(C.ordina(da, 'data', 1))]);
       } else {
@@ -669,7 +679,8 @@
       const v = {
         cliente: h('select', null, [h('option', { value: '' }, 'Scegli il cliente')].concat(clienti.map(c => h('option', { value: c.id, selected: c.id === (m.idCliente || S.filtriCommesse.cliente) }, c.nome)))),
         descrizione: h('input', { type: 'text', value: m.descrizione || '' }),
-        codice: h('input', { type: 'text', value: esistente ? m.id : '', disabled: !!esistente }),
+        // Dal 06/11/2026 il codice si cambia anche dopo (cambiaCodiceCommessa, con conferma).
+        codice: h('input', { type: 'text', value: esistente ? m.id : '', spellcheck: 'false', autocomplete: 'off' }),
         sede: h('select'),
         indirizzo: h('input', { type: 'text', value: m.indirizzo || '' }),
         responsabile: h('select', null, [h('option', { value: '' }, 'Da scegliere')].concat(utenti.map(u => h('option', { value: String(u.id), selected: String(u.id) === String(m.responsabileId) }, u.nome)))),
@@ -786,8 +797,21 @@
           if (!v.costoOrario.disabled) campi.costoOrario = C.numONull(v.costoOrario.value);
         }
         const codice = v.codice.value.trim().toUpperCase() === prossimo ? '' : v.codice.value.trim().toUpperCase();
+        // Il codice di una commessa che c'è già: se cambia, prima la conferma, poi cambiaCodiceCommessa (il server lo
+        // riscrive ovunque e può rifiutarlo con la sua frase), poi il resto dei dati sotto il codice nuovo.
+        // Il campo si chiama nuovoCodice: /exec toglie "codice".
+        const nuovoCodice = esistente ? v.codice.value.trim().toUpperCase() : '';
+        if (esistente && !nuovoCodice) { v.codice.focus(); avviso('Scrivi il codice della commessa', true); return; }
+        const cambiaCodice = esistente && nuovoCodice !== String(m.id).toUpperCase();
+        if (cambiaCodice && !(await conferma('Cambiare il codice in ' + nuovoCodice + '?',
+          'Il codice cambia anche in rapportini, progetti, ore, spese e fatture. I documenti già mandati restano col codice vecchio.', 'Cambia il codice'))) return;
+        let idAdesso = m.id;
         const ris = await lavora('Salvo la commessa', async () => {
-          if (esistente) return Rete.post('/server/aggiornaCommessa', { id: m.id, campi });
+          if (cambiaCodice) {
+            const x = await Rete.post('/server/cambiaCodiceCommessa', { id: m.id, nuovoCodice });
+            idAdesso = (x && x.commessa && x.commessa.id) || nuovoCodice;
+          }
+          if (esistente) return Rete.post('/server/aggiornaCommessa', { id: idAdesso, campi });
           if (daModello) {
             // La copia del modello porta con sé le prestazioni; poi si scrivono i dati del modulo.
             const copia = await Rete.post('/server/duplicaCommessa', { id: daModello, comeModello: false, idCliente: campi.idCliente });
@@ -795,11 +819,18 @@
           }
           return Rete.post('/server/creaCommessa', Object.assign({ id: codice }, campi));
         });
-        if (!ris) return;
+        if (!ris) {
+          // Il codice è cambiato ma il resto no: si rilegge e si resta sul codice nuovo.
+          if (cambiaCodice && idAdesso !== m.id) { await W.ricaricaAnagrafiche().catch(() => null); chiudi(); W.vai('#commesse/' + encodeURIComponent(idAdesso)); }
+          return;
+        }
         await W.ricaricaAnagrafiche().catch(() => null);
+        // Col codice nuovo cambiano anche rapportini e progetti: si rileggono.
+        if (cambiaCodice) { await W.rileggiRapportini().catch(() => null); if (W.Progetti) W.Progetti.daRileggere(); }
         W.caricaDashboard();
         chiudi();
         if (!esistente && ris.commessa.giaEsisteva) avviso('C\'era già: ' + ris.commessa.id, true);
+        else if (cambiaCodice) avviso('Codice cambiato: ' + m.id + ' adesso è ' + ris.commessa.id);
         else avviso((esistente ? 'Salvata ' : 'Creata ') + ris.commessa.id);
         W.vai('#commesse/' + encodeURIComponent(ris.commessa.id));
       };

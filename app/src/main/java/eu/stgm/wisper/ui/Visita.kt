@@ -80,7 +80,7 @@ class Visita {
     )
 
     val passi = listOf(
-        Passo("menu", "Il menu", "Clienti, commesse, preventivi, attività, ore, spese, fatture, banche, documenti e ticket: tocca Menu, o scorri dal bordo sinistro.", false, "dashboard"),
+        Passo("menu", "Il menu", "Clienti, commesse, preventivi, attività, rapportini, spese, fatture, banche, documenti e ticket: tocca Menu, o scorri dal bordo sinistro.", false, "dashboard"),
         Passo("cosa-fare", "La Dashboard", "Qui vedi cosa fare adesso: ogni riga porta dove si sistema.", false, "dashboard"),
         Passo("settimana", "Questa settimana", "Appuntamenti di oggi, attività e preventivi in scadenza: tocca una riga per aprirla.", false, "dashboard"),
         // Fase 8 (fase8.md §15.3): la riga Altre N della Dashboard.
@@ -93,14 +93,18 @@ class Visita {
         Passo("totale", "Il conto", "Il totale si aggiorna mentre scrivi.", false, "rapportino"),
         Passo("avanti", "Il lavoro", "Tocca Avanti per scrivere cosa hai fatto.", true, "rapportino"),
         Passo("scontrino", "Gli scontrini", "Fotografa lo scontrino subito, o aggiungilo dopo.", false, "rapportino"),
-        Passo("avanti", "Il riepilogo", "Tocca Avanti per vedere tutto prima di salvare.", true, "rapportino"),
-        Passo("firma", "La firma", "Il cliente firma col dito sul tuo telefono.", false, "rapportino"),
+        // 06/11/2026 (rapportino-lavori.md): il lavoro va nel rapportino del giorno, che può averne più di uno. Niente firma.
+        Passo("avanti", "Nel rapportino", "Tocca Aggiungi al rapportino: il lavoro va nel rapportino di oggi.", true, "rapportino"),
+        Passo("aggiungi", "Più lavori in un giorno", "Hai lavorato anche per un altro cliente? Aggiungi un lavoro: ognuno ha le sue ore e i suoi km.", false, "rapportino"),
+        Passo("salva-rapportino", "Salva il rapportino", "In basso ore, km e totale del giorno. Il pulsante giallo salva tutto.", false, "rapportino"),
         Passo("manca", "I giorni che mancano", "Un giorno senza rapportino si vede subito: toccalo per scriverlo.", false, "dashboard"),
-        // Fase 3, come i passi nuovi del computer (pc/ui/visita.js): spese, il timer, i rapportini.
+        // Fase 3, come i passi nuovi del computer (pc/ui/visita.js): spese e i rapportini.
+        // 07/11/2026: le Ore non ci sono più: via il passo del timer e quello del segmento Rapportini.
         Passo("nuova-spesa", "Spese e trasferte", "Scontrini, trasferte e rimborsi da fare stanno qui: una spesa comincia dalla foto dello scontrino.", false, "spese"),
-        Passo("timer", "Il timer", "Un tocco per partire, uno per fermare: poi correggi le ore e le salvi.", false, "ore"),
-        Passo("segmento-rapportini", "I rapportini", "Tutti i rapportini, divisi per chi paga. Tocca Rapportini.", true, "ore"),
-        Passo("azione-gialla", "La cosa da fare", "Il pulsante giallo è sempre la cosa da fare adesso.", false, "ore"),
+        Passo("azione-gialla", "I rapportini", "Tutti i rapportini, ognuno coi suoi lavori. Il pulsante giallo è sempre la cosa da fare adesso.", false, "rapportini"),
+        // 06/11/2026: ogni riga ha la sua casella; la riga apre, la casella sceglie.
+        Passo("casella-0", "Più lavori insieme", "Tocca la casella del rapportino per sceglierne tutti i lavori: la riga invece lo apre.", true, "rapportini"),
+        Passo("cosa-faccio", "Cosa faccio", "Con almeno un lavoro scelto, da qui li mandi ai clienti o li segni.", false, "rapportini"),
         // Fase 4: Fatturazione e Banche e scadenze (fase4.md §13).
         Passo("prepara-bozza", "Fatturazione", "Quello che è pronto da fatturare, per cliente: scegli le voci e prepara la bozza per il tuo programma.", false, "fatturazione"),
         Passo("scadenziario", "Banche e scadenze", "Quando entrano ed escono i soldi: tocca una scadenza per segnare l'incasso, anche in parte.", false, "banche"),

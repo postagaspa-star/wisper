@@ -98,14 +98,18 @@ test('Da mandare: il promemoria dell\'appuntamento il giorno lavorativo prima, c
   w.db.esegui("UPDATE attivita SET stato = 'da_fare', inizio = ?, fine = ? WHERE id = 27", a.inizio, a.fine);
 });
 
-test('Non mandare: la proposta non torna; con annulla torna. I rapportini da firmare vanno al referente dell\'ultima firma', async () => {
+test('Non mandare: la proposta non torna; con annulla torna. Nessuna proposta di far firmare un rapportino', async () => {
+  // 06/11/2026 (il rapportino senza firma, rapportino-lavori.md): Wisper non propone piu' "rapportino da firmare". La regola
+  // di Non mandare si prova sul promemoria di pagamento (la 39/2026).
   const dm = await manuel('daMandare');
-  const r = dm.proposti.find(x => x.proposta === 'rapportino:RAP/2026/0004');
-  assert.equal(r.a.nome, 'Paolo Rossi', 'l\'ultimo rapportino firmato di Rossi l\'ha firmato Paolo Rossi');
-  assert.deepEqual(await manuel('nonMandare', { proposta: r.proposta, motivo: 'lo firma lunedì' }), { ok: true });
+  assert.ok(!dm.proposti.some(x => /^rapportino:/.test(x.proposta)), 'niente piu\' rapportini da far firmare');
+  assert.ok(w.db.riga("SELECT id FROM rapportini WHERE id = 'RAP/2026/0004' AND UPPER(stato) = 'BOZZA' AND data < ?", piuGiorni(oggi(), -7)), 'la bozza vecchia che prima si proponeva c\'e\' ancora');
+  const r = dm.proposti.find(x => x.proposta === 'fattura:12:1');
+  assert.ok(r, 'la 39/2026 da sollecitare');
+  assert.deepEqual(await manuel('nonMandare', { proposta: r.proposta, motivo: 'paga lunedì' }), { ok: true });
   assert.ok(!(await manuel('daMandare')).proposti.some(x => x.proposta === r.proposta));
-  const c = (await manuel('comunicazioni', { idRapportino: 'RAP/2026/0004' })).comunicazioni[0];
-  assert.deepEqual([c.stato, c.statoVisto, c.motivo], ['non_mandato', 'Non mandato', 'lo firma lunedì']);
+  const c = (await manuel('comunicazioni', { idFattura: 12 })).comunicazioni.find(x => x.stato === 'non_mandato');
+  assert.deepEqual([c.stato, c.statoVisto, c.motivo], ['non_mandato', 'Non mandato', 'paga lunedì']);
   await manuel('nonMandare', { proposta: r.proposta, annulla: true });
   assert.ok((await manuel('daMandare')).proposti.some(x => x.proposta === r.proposta));
 });

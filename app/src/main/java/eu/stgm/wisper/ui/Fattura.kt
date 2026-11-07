@@ -637,14 +637,17 @@ private fun FoglioAvvisoParcella(dati: Dati, x: Fattura, pdf: File, email: Strin
     val ctx = LocalContext.current
     val avvisi = LocalAvvisi.current
     val scope = rememberCoroutineScope()
-    var a by remember { mutableStateOf(email) }
+    // 06/11/2026: l'email del cliente com'è adesso (arriva anche dopo, se le anagrafiche si rileggono); scritta a mano resta.
+    var aScritto by remember { mutableStateOf<String?>(null) }
+    val a = aScritto ?: email
+    LaunchedEffect(Unit) { if (!dati.esempio) dati.aggiorna() }
     var inCorso by remember { mutableStateOf(false) }
     FoglioDalBasso(onChiudi) {
         Text("Avviso di parcella", style = Testi.titoloScheda, color = c.testo)
         Text("Documento senza valore fiscale: la fattura si emette al pagamento", style = Testi.secondarioGrande, color = c.tenue)
         PulsanteBordo("Apri il PDF", { Stampa.apri(ctx, pdf) }, Modifier.fillMaxWidth(), icona = Icone.pdf)
         PulsanteBordo("Condividi il PDF", { Stampa.condividi(ctx, pdf, "Avviso di parcella ${x.riferimento}") }, Modifier.fillMaxWidth(), icona = Icone.condividi)
-        CampoTesto(a, { a = it.trim() }, "A", Modifier.fillMaxWidth(), tastiera = KeyboardType.Email)
+        CampoTesto(a, { aScritto = it.trim() }, "A", Modifier.fillMaxWidth(), tastiera = KeyboardType.Email)
         PulsantePrincipale(if (inCorso) "Mando…" else "Mandalo per email", {
             if (inCorso || !a.contains('@')) { if (!a.contains('@')) avvisi.mostra("Scrivi l'email del cliente"); return@PulsantePrincipale }
             inCorso = true

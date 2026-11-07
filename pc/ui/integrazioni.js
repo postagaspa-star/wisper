@@ -196,67 +196,64 @@
         tipo: typeof v[k] === 'boolean' ? 'si' : typeof v[k] === 'number' ? 'numero' : 'testo', valore: v[k] }));
     }
 
+    /**
+     * Le impostazioni del collegamento. Dal 06/11/2026 si salvano da sole: gli interruttori subito (il calendario fuori casa
+     * col suo foglio di conferma), i numeri quando smetti di scrivere e uscendo dal campo; una chiave per volta.
+     */
     function impostazioni(i) {
       const voci = vociImpostazioni(i.impostazioni);
       if (!voci.length) return null;
       const scrive = proviamo();
       const amm2 = W.puo('amministrazione', 2);
       const vero = x => x === true || x === 'true' || x === 1 || x === '1';
-      const valori = {};
-      const campi = {};
       const righe = [];
       const portale = (M.lista || []).find(x => x.chiave === 'portale');
+      const manda = valori => Rete.post('/server/salvaIntegrazione', { chiave: i.chiave, impostazioni: valori }).then(r => {
+        Object.assign(S.ana.impostazioni, valori);
+        // L'elenco si rilegge alla prossima apertura (lo stato può cambiare col valore nuovo).
+        M.lista = null;
+        M.dettaglio = null;
+        return r;
+      });
       voci.forEach(x => {
         const etichetta = (ETICHETTE_IMP[x.chiave] || [x.etichetta || x.chiave])[0];
         // Quelle che toccano internet (il calendario fuori casa, il portale) le cambia solo chi ha amministrazione 2 (§13.1).
         const internet = x.chiave === 'CALENDARIO_PUBBLICO' || /^PORTALE_/.test(x.chiave);
         const spento = !scrive || (internet && !amm2) || (x.chiave === 'CALENDARIO_PUBBLICO' && !vero(x.valore) && portale && portale.stato !== 'collegato');
         if (x.tipo === 'si' || typeof x.valore === 'boolean') {
-          valori[x.chiave] = vero(x.valore);
-          const b = h('button', { type: 'button', class: 'interruttore' + (valori[x.chiave] ? ' acceso' : ''), role: 'switch', 'aria-checked': valori[x.chiave] ? 'true' : 'false', 'aria-label': etichetta, disabled: !!spento,
-            onclick: () => { valori[x.chiave] = !valori[x.chiave]; b.classList.toggle('acceso', valori[x.chiave]); b.setAttribute('aria-checked', valori[x.chiave] ? 'true' : 'false'); } }, h('i'));
+          let si = vero(x.valore);
+          const b = h('button', { type: 'button', class: 'interruttore' + (si ? ' acceso' : ''), role: 'switch', 'aria-checked': si ? 'true' : 'false', 'aria-label': etichetta, disabled: !!spento  }, h('i'));
+          const metti = v => { si = v; b.classList.toggle('acceso', v); b.setAttribute('aria-checked', v ? 'true' : 'false'); };
+          b.addEventListener('click', async () => {
+            if (spento) return;
+            const nuovo = !si;
+            if (x.chiave === 'CALENDARIO_PUBBLICO' && nuovo && !(await conferma('Accendere il calendario fuori casa?', 'Gli indirizzi segnati "Anche fuori casa" passeranno dallo script del portale: titoli, luoghi e clienti dai server di Google o Microsoft, di base senza dettagli.', 'Accendi'))) return;
+            metti(nuovo);
+            const ok = await B.salvaOra(b, () => manda({ [x.chiave]: nuovo }).then(r => { x.valore = nuovo; return r; }));
+            if (!ok) metti(!nuovo);
+          });
           righe.push(h('div', { class: 'riga riga-int', 'data-chiave': x.chiave }, h('span', { class: 'corpo' }, h('span', { class: 't1' }, etichetta)), b));
           return;
         }
         if (x.tipo === 'numero') {
-          campi[x.chiave] = { voce: x, input: h('input', { type: 'text', inputmode: 'numeric', value: Q.numeroCampo(x.valore), disabled: !!spento, 'aria-label': etichetta }) };
+          const input = h('input', { type: 'text', inputmode: 'numeric', value: Q.numeroCampo(x.valore), disabled: !!spento, 'aria-label': etichetta });
+          if (!spento) B.salvaDaSolo(input, {
+            leggi: t => { const e = B.numeroAMeta(t) ? etichetta + ': scrivi un numero' : Q.erroreVoce(Object.assign({ tipo: 'numero' }, x, { etichetta }), t); return e ? { errore: e } : { valore: Q.numeroScritto(t) }; },
+            salva: n => manda({ [x.chiave]: n }).then(r => { x.valore = n; return r; }),
+          });
           const unita = x.unita || (ETICHETTE_IMP[x.chiave] || [])[1] || '';
-          righe.push(campo(etichetta, unita ? B.conSuffisso(campi[x.chiave].input, unita) : campi[x.chiave].input));
+          const c = campo(etichetta, unita ? B.conSuffisso(input, unita) : input);
+          c.setAttribute('data-chiave', x.chiave);
+          righe.push(c);
           return;
         }
         // L'indirizzo del portale non si scrive da qui: sta in Amministrazione › Portale clienti (fase 7). Qui si legge e basta.
         righe.push(h('div', { class: 'coppia' }, h('span', { class: 'k' }, etichetta), h('span', { class: 'v' }, x.valore ? Q.senzaSegreti(x.valore) === String(x.valore) ? String(x.valore) : 'c’è' : 'manca')));
       });
       if (!righe.length) return null;
-      const modificabili = Object.keys(campi).some(k => !campi[k].input.disabled) || voci.some(x => valori[x.chiave] !== undefined && !(x.chiave === 'CALENDARIO_PUBBLICO' && !amm2) && !(/^PORTALE_/.test(x.chiave) && !amm2));
-      const salva = async () => {
-        const nuovi = {};
-        for (const k of Object.keys(campi)) {
-          if (campi[k].input.disabled) continue;
-          const e = Q.erroreVoce(Object.assign({ tipo: 'numero' }, campi[k].voce, { etichetta: campi[k].input.getAttribute('aria-label') }), campi[k].input.value);
-          if (e) { avviso(e, true); return; }
-          nuovi[k] = Q.numeroScritto(campi[k].input.value);
-        }
-        voci.forEach(x => {
-          if (valori[x.chiave] === undefined) return;
-          if ((x.chiave === 'CALENDARIO_PUBBLICO' || /^PORTALE_/.test(x.chiave)) && !amm2) return;
-          if (valori[x.chiave] !== vero(x.valore)) nuovi[x.chiave] = valori[x.chiave];
-        });
-        if (!Object.keys(nuovi).length) { avviso('Niente da salvare: è tutto come prima'); return; }
-        if (nuovi.CALENDARIO_PUBBLICO === true && !(await conferma('Accendere il calendario fuori casa?', 'Gli indirizzi segnati "Anche fuori casa" passeranno dallo script del portale: titoli, luoghi e clienti dai server di Google o Microsoft, di base senza dettagli.', 'Accendi'))) return;
-        const r = await lavora('Salvo', () => Rete.post('/server/salvaIntegrazione', { chiave: i.chiave, impostazioni: nuovi }));
-        if (!r) return;
-        Object.assign(S.ana.impostazioni, nuovi);
-        avviso('Salvato');
-        M.lista = null;
-        M.dettaglio = null;
-        await leggi().catch(() => null);
-        apri(i.chiave);
-      };
       return h('div', { class: 'sezione-pannello' }, h('span', { class: 'etichetta' }, 'Impostazioni'),
         h('div', { class: 'scheda fila' }, righe,
-          scrive && modificabili ? h('div', { class: 'pillole' }, h('button', { type: 'button', class: 'btn', onclick: salva }, 'Salva'),
-            i.chiave === 'ricerca' && amm2 ? h('button', { type: 'button', class: 'btn', onclick: rileggiTutto }, 'Rileggi tutto') : null) : null,
+          scrive && i.chiave === 'ricerca' && amm2 ? h('div', { class: 'pillole' }, h('button', { type: 'button', class: 'btn', onclick: rileggiTutto }, 'Rileggi tutto')) : null,
           i.chiave === 'portale' && W.puo('amministrazione') ? h('div', null, h('button', { type: 'button', class: 'btn collegamento', onclick: () => { chiudiPannello(true); W.vai('#amministrazione/portale'); } }, 'Apri le impostazioni del portale')) : null,
           (i.chiave === 'calendario' || i.chiave === 'calendariofile') && W.puo('attivita') ? h('div', null, h('button', { type: 'button', class: 'btn collegamento', onclick: () => { chiudiPannello(true); W.vai('#attivita/altreapp'); } }, 'Apri Il calendario in altre app')) : null));
     }
@@ -268,19 +265,13 @@
     }
 
     function cambiaAccount(i) {
+      // Si salva da solo (06/11/2026); chiudendo si rilegge il collegamento.
       const v = h('input', { type: 'text', value: i.account || '', autocomplete: 'off' });
+      B.salvaDaSolo(v, { salva: x => Rete.post('/server/salvaIntegrazione', { chiave: i.chiave, account: x }) });
       let chiudi;
-      const salva = async () => {
-        const r = await lavora('Salvo', () => Rete.post('/server/salvaIntegrazione', { chiave: i.chiave, account: v.value.trim() }));
-        if (!r) return;
-        chiudi();
-        avviso('Salvato');
-        M.lista = null;
-        await leggi().catch(() => null);
-        apri(i.chiave);
-      };
       chiudi = finestra({ titolo: 'Account', corpo: campo('Nome dell\'account', v),
-        pulsanti: ['spazio', h('button', { type: 'button', class: 'btn testo grande', onclick: () => chiudi() }, 'Annulla'), h('button', { type: 'button', class: 'btn giallo grande', onclick: salva }, 'Salva')] });
+        allaChiusura: async () => { await B.inCoda(() => null); M.lista = null; M.dettaglio = null; await leggi().catch(() => null); apri(i.chiave); },
+        pulsanti: ['spazio', h('button', { type: 'button', class: 'btn grande', onclick: () => chiudi() }, 'Chiudi')] });
     }
 
     async function provaAdesso(chiave) {

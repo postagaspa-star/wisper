@@ -540,6 +540,12 @@ data class DaApprovare(val oggi: LocalDate? = null, val quante: Int = 0, val con
     /** "Seleziona tutto" se manca qualcosa, altrimenti "Togli la selezione": torna la selezione nuova. */
     fun selezionaTutto(chiavi: Set<String>): Set<String> = if (voci.all { it.chiave in chiavi }) emptySet() else tutteLeChiavi()
 
+    /**
+     * Senza le righe di ore (07/11/2026: le Ore non ci sono più, restano i rapportini e le spese).
+     * Un server di prima le manda ancora: si tolgono qui, coi conti rifatti.
+     */
+    fun senzaOre(): DaApprovare = if (voci.none { it.tipo == "ore" }) this else senza(voci.filter { it.tipo == "ore" }.map { it.chiave }.toSet())
+
     /** Toglie le voci già decise (dopo Approva o Respingi), senza rileggere. */
     fun senza(chiavi: Set<String>): DaApprovare {
         val persone2 = persone.map { p ->

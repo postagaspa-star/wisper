@@ -105,26 +105,30 @@ fun TitoloPagina(titolo: String, sopra: String? = null, etichettaSopra: Boolean 
     }
 }
 
-/** Tutti | Da fatturare | Da firmare: una scelta fra poche, sempre visibile. */
+/** Tutti | Da inviare | Da fatturare: una scelta fra poche, sempre visibile. */
 @Composable
 fun <T> Segmenti(opzioni: List<Pair<T, String>>, scelto: T, onScelta: (T) -> Unit, modifier: Modifier = Modifier) {
     val c = W.colori
+    // 07/11/2026: a 360 dp col carattere grande "Da fatturare" diventava "Da fattur...": il nome va a capo
+    // e tutti i segmenti prendono l'altezza del più alto.
     Row(
-        modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(c.superficie2).padding(4.dp),
+        modifier.fillMaxWidth().height(androidx.compose.foundation.layout.IntrinsicSize.Min)
+            .clip(RoundedCornerShape(14.dp)).background(c.superficie2).padding(4.dp),
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         opzioni.forEach { (valore, nome) ->
             val su = valore == scelto
             Box(
-                Modifier.weight(1f).height(44.dp).clip(RoundedCornerShape(11.dp))
+                Modifier.weight(1f).fillMaxHeight().heightIn(min = 44.dp).clip(RoundedCornerShape(11.dp))
                     .background(if (su) c.scheda else Color.Transparent)
                     .clickable { onScelta(valore) }
-                    .semantics { role = Role.Tab; selected = su },
+                    .semantics { role = Role.Tab; selected = su }
+                    .padding(horizontal = 4.dp, vertical = 4.dp),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
                     nome, style = Testi.secondarioGrande.copy(fontWeight = if (su) FontWeight.ExtraBold else FontWeight.Bold),
-                    color = if (su) c.testo else c.testo2, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    color = if (su) c.testo else c.testo2, textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                 )
             }
         }
@@ -218,15 +222,16 @@ fun CampoCerca(valore: String, onCambia: (String) -> Unit, segnaposto: String, m
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
         modifier = modifier.fillMaxWidth(),
         decorationBox = { campo ->
+            // 07/11/2026: col carattere grande il segnaposto va a capo (niente puntini) e il campo si allunga.
             Row(
-                Modifier.fillMaxWidth().height(52.dp).clip(RoundedCornerShape(16.dp)).background(c.scheda)
-                    .border(1.5.dp, c.bordoCampo, RoundedCornerShape(16.dp)).padding(horizontal = 14.dp),
+                Modifier.fillMaxWidth().heightIn(min = 52.dp).clip(RoundedCornerShape(16.dp)).background(c.scheda)
+                    .border(1.5.dp, c.bordoCampo, RoundedCornerShape(16.dp)).padding(horizontal = 14.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Icon(Icone.cerca, null, tint = c.tenue, modifier = Modifier.size(20.dp))
                 Spacer(Modifier.width(10.dp))
                 Box(Modifier.weight(1f)) {
-                    if (valore.isEmpty()) Text(segnaposto, style = Testi.testo, color = c.moltoTenue, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    if (valore.isEmpty()) Text(segnaposto, style = Testi.testo, color = c.moltoTenue)
                     campo()
                 }
                 if (valore.isNotEmpty()) {
@@ -495,7 +500,7 @@ fun FondoConPulsante(modifier: Modifier = Modifier, sopraBarra: Boolean = true, 
 
 // ---------------------------------------------------------------------------------- avvisi
 
-/** Un avviso in basso: scuro, 3,5 secondi; con Annulla resta 5 secondi. */
+/** Un avviso in basso: scuro, 3 secondi (anche gli errori, riunione del 06/11/2026); con Annulla o un'azione resta 5 secondi. */
 class Avviso(val testo: String, val annulla: (() -> Unit)?, val id: Long = System.nanoTime(), val azione: String = "Annulla")
 
 class Avvisi {
@@ -523,7 +528,7 @@ fun StratoAvvisi(avvisi: Avvisi, modifier: Modifier = Modifier) {
     val a = avvisi.corrente
     LaunchedEffect(a?.id) {
         if (a != null) {
-            delay(if (a.annulla != null) 5000 else 3500)
+            delay(if (a.annulla != null) 5000 else 3000)
             if (avvisi.corrente?.id == a.id) avvisi.chiudi()
         }
     }

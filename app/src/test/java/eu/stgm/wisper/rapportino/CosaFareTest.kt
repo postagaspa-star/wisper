@@ -44,7 +44,7 @@ class CosaFareTest {
 
     private val rapportini = listOf(
         r(1, LocalDate.of(2026, 10, 19), "26ST044", 8.0, Stato.FIRMATO),       // lunedì: fatto, martedì manca
-        r(2, LocalDate.of(2026, 10, 6), "26ST045", 6.0, Stato.BOZZA),          // da firmare da più di una settimana
+        r(2, LocalDate.of(2026, 10, 6), "26ST045", 6.0, Stato.BOZZA),          // da inviare da più di una settimana
         r(3, LocalDate.of(2026, 10, 7), "26ST045", 6.0, Stato.INVIATO),        // oltre il budget (12 su 10)
         r(4, LocalDate.of(2026, 9, 15), "26ST045", 4.0, Stato.INVIATO),        // di settembre, da fatturare
     )
@@ -58,7 +58,10 @@ class CosaFareTest {
         val tipi = d.urgenti.map { it.tipo }
         assertTrue("budget" in tipi)
         assertTrue("scadenza" in tipi)
-        assertTrue("firma" in tipi)
+        // 06/11/2026: niente firma; i lavori da inviare da piu' di una settimana, col filtro dell'elenco (come il server).
+        val daInviare = d.urgenti.first { it.tipo == "rapportini" }
+        assertEquals("1 lavoro da inviare da più di una settimana", daInviare.titolo)
+        assertEquals(mapOf("quali" to "inviare", "a" to oggi.minusDays(7).toString()), daInviare.collegamento!!.parametri)
         assertEquals("26ST045", d.urgenti.first { it.tipo == "budget" }.collegamento!!.id)
         assertTrue(d.urgenti.first { it.tipo == "scadenza" }.titolo.contains("scaduta da 4 giorni"))
     }

@@ -55,7 +55,8 @@ const AZIONI = {
   // Il nome di Code.gs: con solo idCommessa risponde come prima (cartella e file della commessa, per le versioni vecchie);
   // con archivio: true (o un filtro della fase 5) e' l'elenco dell'archivio (fase5.md §10.1).
   documenti: legge('documenti', 'vedere i documenti', (w, d) => (w.elencoNuovo(d) ? w.leggiDocumenti(d) : w.documentiCommessa(d.idCommessa))),
-  salvaRapportino: scrive('rapportini', 'scrivere i rapportini', (w, d) => ({ ok: true, rapportino: w.salvaRapportino(d.rapportino || {}) })),
+  // 06/11/2026: la forma nuova (il rapportino coi suoi lavori) in rapportino: {idLocale, id?, data, tecnico?, lavori}, o anche al primo livello.
+  salvaRapportino: scrive('rapportini', 'scrivere i rapportini', (w, d) => ({ ok: true, rapportino: w.salvaRapportino(Array.isArray(d.lavori) ? d : (d.rapportino || {})) })),
   caricaFile: {
     scrive: true,
     // Il permesso dipende da cosa si carica.
@@ -70,11 +71,14 @@ const AZIONI = {
     fn: (w, d) => ({ ok: true, file: w.caricaFile(d) }),
   },
   togliFile: scrive('rapportini', 'togliere le foto dei rapportini', (w, d) => ({ ok: true, rapportino: w.togliFile(d.id, d.fileId) })),
-  stato: scrive('rapportini', 'cambiare lo stato dei rapportini', (w, d) => ({ ok: true, rapportini: w.cambiaStato(d.ids || [d.id], d.stato) })),
+  // 06/11/2026: anche {idGiornata, stato}: tutti i lavori di quel rapportino.
+  stato: scrive('rapportini', 'cambiare lo stato dei rapportini', (w, d) => ({ ok: true, rapportini: w.cambiaStato(d.ids || (testo(d.idGiornata) && d.id === undefined ? [] : [d.id]), d.stato, d.idGiornata) })),
   creaCliente: scrive('clienti', 'creare clienti', (w, d) => ({ ok: true, cliente: w.creaCliente(d) })),
   aggiornaCliente: scrive('clienti', 'cambiare i clienti', (w, d) => ({ ok: true, cliente: w.aggiornaCliente(d.id, d.campi || {}) })),
   creaCommessa: scrive('commesse', 'creare commesse', (w, d) => ({ ok: true, commessa: w.creaCommessa(d) })),
   aggiornaCommessa: scrive('commesse', 'cambiare le commesse', (w, d) => ({ ok: true, commessa: w.aggiornaCommessa(d.id, d.campi || {}) })),
+  // 06/11/2026: il codice di una commessa dopo che e' nata ({id, nuovoCodice} -> {ok, commessa, vecchio}).
+  cambiaCodiceCommessa: scrive('commesse', 'cambiare il codice delle commesse', (w, d) => w.cambiaCodiceCommessa(d)),
   // 03/11/2026: i progetti, sotto le commesse (azioni/progetti.js).
   progetti: legge('progetti', 'vedere i progetti', (w, d) => ({ ok: true, progetti: w.leggiProgetti(d) })),
   progetto: legge('progetti', 'vedere i progetti', (w, d) => w.schedaProgetto(d)),
@@ -163,7 +167,8 @@ const AZIONI = {
   spuntaChecklist: scrive('attivita', 'scrivere le attività', (w, d) => w.spuntaChecklist(d)),
   togliAllegato: scrive('attivita', 'togliere gli allegati delle attività', (w, d) => w.togliAllegato(d)),
 
-  // --- ore, timer, approvazioni (fase 3): le ore sono del modulo rapportini (voce 6, Ore e rapportini)
+  // --- ore, timer, approvazioni (fase 3): le ore sono del modulo rapportini (voce 6, Rapportini). 07/11/2026: le Ore
+  // spariscono dalle app e dalla Dashboard; queste azioni restano per le app vecchie.
   ore: legge('rapportini', 'vedere le ore', (w, d) => w.leggiOre(d)),
   salvaOre: scrive('rapportini', 'registrare le ore', (w, d) => w.salvaOre(d)),
   togliOre: scrive('rapportini', 'togliere le ore', (w, d) => w.togliOre(d)),

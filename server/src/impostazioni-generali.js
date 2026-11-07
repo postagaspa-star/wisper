@@ -10,7 +10,8 @@
  *  - "elenco": scelte possibili, si possono solo togliere (i tipi di file del portale);
  *  - "tempi_ticket": la tabella Urgente · Alta · Normale · Bassa di "presa in carico entro" e "intervento entro", in ore;
  *  - "documenti_collaboratori": per ogni tipo di collaboratore i documenti che servono;
- *  - "sola_lettura": si mostra e basta (l'ora della copia viene dal .env).
+ *  - "sola_lettura": si mostra e basta (l'ora della copia viene dal .env);
+ *  - "codice_sdi": vuoto o 7 lettere e cifre, salvato in maiuscolo (il codice SDI dello studio).
  * ALTROVE: le chiavi che hanno la loro pagina (Dati dello studio, Impostazioni fiscali, Notifiche, Sicurezza, Funzioni
  * accese, Integrazioni, Veicoli, Modelli). NASCOSTE: quelle che non si mostrano, col motivo (§9.4).
  */
@@ -114,8 +115,8 @@ const GRUPPI = [
 /** Le chiavi che hanno una pagina loro, con la riga che porta li' (§9.4, "Altrove"). */
 const ALTROVE = {
   studio: ['RAGIONE_SOCIALE', 'INDIRIZZO', 'PARTITA_IVA', 'EMAIL', 'TELEFONO', 'PEC', 'FIRMA_TECNICO', 'POLIZZA_COMPAGNIA', 'POLIZZA_NUMERO', 'POLIZZA_MASSIMALE',
-    'TITOLI', 'CODICE_FISCALE', 'STUDIO_CAP', 'STUDIO_COMUNE', 'STUDIO_PROVINCIA', 'ALBO', 'ALBO_PROVINCIA', 'ALBO_NUMERO', 'ALBO_DATA',
-    'STUDIO_LOGO', 'STUDIO_NOME_BREVE', 'STUDIO_SITO', 'PDF_LOGO', 'PDF_PIEDE'],
+    'TITOLI', 'CODICE_FISCALE', 'STUDIO_CAP', 'STUDIO_COMUNE', 'STUDIO_PROVINCIA', 'STUDIO_SDI', 'ALBO', 'ALBO_PROVINCIA', 'ALBO_NUMERO', 'ALBO_DATA',
+    'STUDIO_LOGO', 'STUDIO_NOME_BREVE', 'STUDIO_SITO', 'PDF_LOGO', 'PDF_NOME', 'PDF_PIEDE'],
   fiscale: ['REGIME_FISCALE', 'TIPO_DOCUMENTO', 'RITENUTA_TIPO', 'RITENUTA_CAUSALE', 'EPPI_TIPO_CASSA', 'BOLLO_SOGLIA', 'BOLLO_IMPORTO', 'BOLLO_RIVALSA',
     'GIORNI_PAGAMENTO', 'PAGAMENTO_FINE_MESE', 'MODALITA_PAGAMENTO', 'IVA', 'EPPI_INTEGRATIVO', 'RITENUTA'],
   notifiche: ['EMAIL_AVVISI', 'NOTIFICHE_ORA'],
@@ -145,6 +146,9 @@ const ALTRE_VOCI = [
   { chiave: 'STUDIO_SITO', etichetta: 'Sito', tipo: 'testo', max: 120 },
   { chiave: 'PDF_PIEDE', etichetta: 'Riga in fondo ai PDF', tipo: 'testo', max: 160 },
   siNo('PDF_LOGO', 'Logo sui PDF'),
+  // 06/11/2026: il nome dello studio accanto al logo nei PDF; il codice SDI dello studio (7 lettere o cifre, o vuoto).
+  siNo('PDF_NOME', 'Nome dello studio accanto al logo nei PDF'),
+  { chiave: 'STUDIO_SDI', etichetta: 'Codice SDI', tipo: 'codice_sdi' },
   siNo('CALENDARIO_PUBBLICO', 'Calendario anche fuori casa (passa da Google)'),
 ];
 
@@ -239,6 +243,12 @@ function controllaValore(chiave, valore) {
       out[t] = Array.from(new Set(lista));
     }
     return out;
+  }
+  if (v.tipo === 'codice_sdi') {
+    // Vuoto, o 7 lettere e cifre (in maiuscolo, senza spazi): la frase intera, senza il nome davanti.
+    const s = valore === null || valore === undefined ? '' : String(valore).replace(/\s/g, '').toUpperCase();
+    if (s && !/^[A-Z0-9]{7}$/.test(s)) { const e = new Error('Il codice SDI ha 7 caratteri, lettere e numeri'); e.rifiuto = true; throw e; }
+    return s;
   }
   if (v.tipo === 'sola_lettura') throw errore('si cambia nel .env del NAS');
   return valore;

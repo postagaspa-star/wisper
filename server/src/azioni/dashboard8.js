@@ -6,7 +6,7 @@
  *  2. ordine fisso: per gravita' (urgente, attenzione, soldi, info), poi per tipo nell'ordine di §8.3, poi per data;
  *  3. tetti: 7 Urgenti, 7 Questa settimana, 5 Da pianificare, con "quante" per sezione (Altre N);
  *  4. da 3 voci della stessa famiglia in una sezione se ne fa una (le voci di sistema mai);
- *  5. Da approvare in una voce sola (ore e spese, ferie, documenti), con le sue righe;
+ *  5. Da approvare in una voce sola (rapportini e spese, ferie, documenti), con le sue righe;
  *  6. la piu' urgente = la prima di Urgenti (le app non la ripetono sotto);
  *  7. le voci "info" di Da pianificare si nascondono per 30 giorni (dashboard_nascoste);
  *  8. quattro riquadri per persona (utenti.riquadri, o quelli del ruolo).
@@ -25,7 +25,7 @@ const SEZIONI = ['urgenti', 'settimana', 'pianificare'];
 const ORDINE_TIPI = [
   ['sistema', 'integrazione', 'ripristino', 'versione', 'controlli'],
   ['ticket', 'intervento'],
-  ['timer'],
+  ['timer'],   // 07/11/2026: nessuna voce "timer" esce piu' (Ore tolte); il posto resta per non spostare l'ordine
   ['mezzo', 'strumento'],
   ['attivita', 'appuntamento', 'sopralluogo'],
   ['respinta'],
@@ -80,7 +80,7 @@ const OGGETTO_DI_PAGINA = {
 const FAMIGLIE = {
   scadenze: ['scadenze', { pagina: 'documenti', filtro: { segmento: 'scadenze' } }],
   attivita: ['attività', { pagina: 'attivita' }],
-  rapportini: ['rapportini da far firmare', { pagina: 'rapportini', filtro: { stato: 'BOZZA' } }],
+  rapportini: ['lavori da inviare', { pagina: 'rapportini', filtro: { quali: 'inviare' } }],
   preventivi: ['preventivi da seguire', { pagina: 'preventivi' }],
   ticket: ['ticket da seguire', { pagina: 'tickets', filtro: { segmento: 'aperti' } }],
   fatture: ['fatture scadute', { pagina: 'fatture', filtro: { scadute: true } }],
@@ -115,7 +115,7 @@ function famigliaDi(v, sezione) {
   if (['scadenza', 'qualifica', 'visita'].indexOf(v.tipo) >= 0) return 'scadenze';
   // Solo le attivita' da fare: un appuntamento o un sopralluogo di oggi resta una voce sua (ha l'ora).
   if (v.tipo === 'attivita') return 'attivita';
-  if (v.tipo === 'rapportini' && /firmare/.test(v.titolo)) return 'rapportini';
+  if (v.tipo === 'rapportini' && /da inviare/.test(v.titolo)) return 'rapportini';
   if (v.tipo === 'preventivo') return 'preventivi';
   if (v.tipo === 'ticket' && v.gravita !== 'urgente') return 'ticket';
   if (v.tipo === 'fattura' && /scadut/.test(v.titolo)) return 'fatture';
@@ -292,7 +292,7 @@ module.exports = {
         return false;
       });
     }
-    // 5. Da approvare in una voce sola, per chi approva (ore e spese, ferie, documenti). In Tutto quello che c'e' da fare no:
+    // 5. Da approvare in una voce sola, per chi approva (rapportini e spese, ferie, documenti). In Tutto quello che c'e' da fare no:
     // li' niente raggruppamenti, ogni cosa da approvare con la sua riga.
     if (!tutto && (!o || !o.mie)) tutte = this.unaVoceDaApprovare(tutte);
     const nNascoste = tutte.filter(v => v.nascondibile && nascoste.has(v.oggetto)).length;
@@ -355,31 +355,35 @@ module.exports = {
     return out;
   },
 
-  /** Ore e spese, ferie e documenti da approvare: una voce sola con le sue tre righe (§8.2, 5). */
+  /**
+   * Rapportini e spese, ferie e documenti da approvare: una voce sola con le sue tre righe (§8.2, 5).
+   * 07/11/2026 (Ore tolte): la prima parte erano "ore e spese" in "Ore e rapportini › Da approvare"; ora le ore registrate
+   * non si approvano piu' da qui, e la riga si chiama "Rapportini › Da approvare".
+   */
   unaVoceDaApprovare(tutte) {
-    const ore = tutte.filter(v => v.tipo === 'approvare');
+    const lavori = tutte.filter(v => v.tipo === 'approvare');
     const ferie = tutte.filter(v => v.tipo === 'assenza' && / da approvare/.test(v.titolo));
     const doc = tutte.filter(v => v.tipo === 'documento' && /da approvare$/.test(v.titolo) && !/aspetta/.test(v.titolo));
-    if (!ore.length && !ferie.length && !doc.length) return tutte;
+    if (!lavori.length && !ferie.length && !doc.length) return tutte;
     const n = l => l.reduce((t, v) => t + (v.unita === 'voci' || v.unita === 'documenti' ? Number(v.quanto) || 1 : 1), 0);
-    const quanteOre = n(ore);
+    const quantiLavori = n(lavori);
     const quanteFerie = n(ferie);
     const quantiDoc = n(doc);
-    const totale = quanteOre + quanteFerie + quantiDoc;
+    const totale = quantiLavori + quanteFerie + quantiDoc;
     const pezzi = [];
-    if (quanteOre) pezzi.push(quanteOre + ' ore e spese' + (ore.length === 1 && / di /.test(ore[0].titolo) ? ' di ' + ore[0].titolo.split(' di ').pop() : ''));
+    if (quantiLavori) pezzi.push(quantiLavori + ' rapportini e spese' + (lavori.length === 1 && / di /.test(lavori[0].titolo) ? ' di ' + lavori[0].titolo.split(' di ').pop() : ''));
     if (quanteFerie) pezzi.push(plurale(quanteFerie, 'ferie', 'ferie'));
     if (quantiDoc) pezzi.push(plurale(quantiDoc, 'documento', 'documenti'));
     const voce = {
       tipo: 'approvare', gravita: 'attenzione', titolo: plurale(totale, 'cosa da approvare', 'cose da approvare'), dettaglio: pezzi.join(', '),
       quanto: totale, unita: 'voci', collegamento: { pagina: 'approvare' }, oggetto: 'approvare', area: 'lavoro', nascondibile: false, sezione: 'urgenti', n: -1,
       righe: [
-        { nome: 'Ore e rapportini › Da approvare', numero: quanteOre, collegamento: { pagina: 'rapportini', filtro: { segmento: 'daApprovare' } } },
+        { nome: 'Rapportini › Da approvare', numero: quantiLavori, collegamento: { pagina: 'rapportini', filtro: { segmento: 'daApprovare' } } },
         { nome: 'Persone › Ferie da approvare', numero: quanteFerie, collegamento: { pagina: 'persone', filtro: { segmento: 'ferie', daApprovare: true } } },
         { nome: 'Documenti › Da approvare', numero: quantiDoc, collegamento: { pagina: 'documenti', filtro: { segmento: 'approvare' } } },
       ].filter(r => r.numero),
     };
-    const via = new Set(ore.concat(ferie, doc));
+    const via = new Set(lavori.concat(ferie, doc));
     return tutte.filter(v => !via.has(v)).concat([voce]);
   },
 
@@ -419,7 +423,8 @@ module.exports = {
     if (this.livello('mezzi') >= 1 && !spenti.has('mezzi') && nr.mezzi) v.tarateScadute = { numero: nr.mezzi.tarateScadute, unita: 'strumenti', rosso: nr.mezzi.tarateScadute > 0, collegamento: { pagina: 'mezzi', filtro: { segmento: 'strumenti', taratura: 'scaduta' } } };
     if (this.livello('portale') >= 1 && !spenti.has('portale') && nr.portale) v.dalPortale = { numero: nr.portale.daGuardare, unita: 'cose', collegamento: { pagina: 'portale', filtro: { segmento: 'daguardare' } } };
     if (this.livello('comunicazioni') >= 1 && !spenti.has('comunicazioni') && nr.comunicazioni) v.daMandareOggi = { numero: nr.comunicazioni.daMandareOggi, unita: 'messaggi', collegamento: { pagina: 'comunicazioni', filtro: { segmento: 'damandare' } } };
-    if (this.livello('rapportini') >= 1) v.oreSettimana = { numero: nr.ore ? nr.ore.settimana : (nr.rapportini ? nr.rapportini.oreSettimana : 0), unita: 'ore', collegamento: { pagina: 'rapportini', filtro: { segmento: 'ore' } } };
+    // 07/11/2026 (Ore tolte): le ore della settimana sono quelle dei rapportini (prima le ore registrate), e portano ai Rapportini.
+    if (this.livello('rapportini') >= 1) v.oreSettimana = { numero: (nr.rapportini && nr.rapportini.oreSettimana) || 0, unita: 'ore', collegamento: { pagina: 'rapportini' } };
     if (this.livello('attivita') >= 1 && nr.attivita) v.attivitaOggi = { numero: nr.attivita.oggi, unita: 'attività', collegamento: { pagina: 'attivita', filtro: { gruppo: 'oggi' } } };
     if (this.livello('preventivi') >= 1 && nr.preventivi) v.preventiviInAttesa = { numero: nr.preventivi.inviati, unita: 'preventivi', collegamento: { pagina: 'preventivi', filtro: { stato: 'INVIATO' } } };
     return v;

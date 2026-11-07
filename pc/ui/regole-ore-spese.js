@@ -369,6 +369,21 @@
     return n + (una ? ' rimessa da approvare' : ' rimesse da approvare');
   }
 
+  /**
+   * Da approvare senza le ore (07/11/2026, Manuel: "le Ore vanno tolte, non servono"): restano rapportini, spese e
+   * trasferte. Un server di prima manda anche le voci "ore": qui si tolgono e si rifanno i conti (quante, con
+   * un'anomalia, per persona); chi resta senza voci sparisce. Col server nuovo non cambia niente.
+   */
+  function approvareSenzaOre(r) {
+    const d = r || {};
+    const persone = (d.persone || []).map(p => {
+      const voci = (p.voci || []).filter(v => v.tipo !== 'ore');
+      return Object.assign({}, p, { voci, quante: voci.length, conAnomalie: voci.filter(v => (v.anomalie || []).length).length });
+    }).filter(p => p.voci.length);
+    const tutte = persone.reduce((a, p) => a.concat(p.voci), []);
+    return Object.assign({}, d, { persone, quante: tutte.length, conAnomalie: tutte.filter(v => (v.anomalie || []).length).length });
+  }
+
   // ------------------------------------------------------------------ costo della commessa (§14.11)
 
   /**
@@ -414,7 +429,7 @@
     STATI, pillolaStato, pillolaApprovazione, bloccoInvio, DESTINAZIONI, destinazione, destinazioneDiBase, CATEGORIE, categoria,
     piuGiorni, settimanaDi, periodoMese, spostaMese, giornoBreve, giornoLungo, titoloSettimana, MESI,
     chiaveCommessa, giorniDaMostrare, timesheet, cellaScrivibile, motivoNonScrivibile, leggiCella, azioneCella, valoreCella,
-    durata, secondiTimer, quantoVoce, chiaveVoce, fraseDecisione, costiConFase3, larghezza, testoPercentuale,
+    durata, secondiTimer, quantoVoce, chiaveVoce, fraseDecisione, approvareSenzaOre, costiConFase3, larghezza, testoPercentuale,
   };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = RegoleOreSpese;

@@ -407,7 +407,7 @@ module.exports = {
     if (affidato && idSoggetto !== prima.soggetto_id) throw new Rifiuto('L\'incarico affidato non cambia collaboratore');
     const idCommessa = x.idCommessa !== undefined ? testo(x.idCommessa) : prima ? prima.commessa_id : '';
     if (!idCommessa) throw new Rifiuto('Commessa: scegli la commessa');
-    const m = this.db.riga('SELECT id FROM commesse WHERE id = ? COLLATE NOCASE', idCommessa);
+    const m = this.db.riga('SELECT id FROM commesse WHERE id = ? COLLATE NOCASE', this.codiceCommessaVero(idCommessa));
     if (!m) throw new Rifiuto('Commessa ' + idCommessa + ' non trovata');
     if (affidato && m.id.toUpperCase() !== String(prima.commessa_id).toUpperCase()) throw new Rifiuto('L\'incarico affidato non cambia commessa');
     const titolo = x.titolo !== undefined ? testo(x.titolo) : prima ? prima.titolo : '';

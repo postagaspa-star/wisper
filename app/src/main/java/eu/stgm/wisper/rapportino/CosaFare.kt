@@ -14,7 +14,7 @@ import java.util.Locale
  * sui dati di esempio, e quando il server non l'ha ancora mandata. Quando c'e'
  * la dashboard del server, vince quella.
  *
- * Prima i problemi: oltre il budget, scadute, da firmare da piu' di una
+ * Prima i problemi: oltre il budget, scadute, lavori da inviare da piu' di una
  * settimana, da fatturare dei mesi prima (la cosa piu' urgente, con i soldi).
  * Poi la settimana: giorni senza rapportino, commesse che finiscono, da fatturare
  * del mese. Poi da pianificare: commesse senza budget o senza responsabile,
@@ -81,14 +81,19 @@ object CosaFare {
                 collegamento = Collegamento("commessa", m.id),
             )
         }
-        val bozzeVecchie = vivi.filter { it.stato == Stato.BOZZA && ChronoUnit.DAYS.between(it.data, oggi) > 7 }
-        if (bozzeVecchie.isNotEmpty()) {
+        // 06/11/2026 (rapportino-lavori.md): niente firma. Come il server (dashboard.js): i lavori da inviare di prima di
+        // sette giorni fa, non quelli che aspettano l'approvazione.
+        val settimanaFa = oggi.minusDays(7)
+        val vecchi = vivi.filter {
+            it.daInviare && it.data.isBefore(settimanaFa) && it.statoApprovazione != "da_approvare" && it.statoApprovazione != "respinto"
+        }
+        if (vecchi.isNotEmpty()) {
             urgenti += VoceDashboard(
-                tipo = "firma",
-                titolo = (if (bozzeVecchie.size == 1) "1 rapportino da far firmare" else "${bozzeVecchie.size} rapportini da far firmare") + " da più di una settimana",
-                dettaglio = bozzeVecchie.map { it.cliente.substringBefore(" Srl").substringBefore(" S.r.l.").ifBlank { "Senza cliente" } }.distinct().joinToString(", "),
-                gravita = "attenzione",
-                collegamento = Collegamento("rapportini", filtro = "firmare"),
+                tipo = "rapportini",
+                titolo = (if (vecchi.size == 1) "1 lavoro da inviare" else "${vecchi.size} lavori da inviare") + " da più di una settimana",
+                dettaglio = vecchi.map { it.cliente.substringBefore(" Srl").substringBefore(" S.r.l.").ifBlank { "Senza cliente" } }.distinct().joinToString(", "),
+                gravita = "urgente",
+                collegamento = Collegamento("rapportini", parametri = mapOf("quali" to "inviare", "a" to settimanaFa.toString())),
             )
         }
 

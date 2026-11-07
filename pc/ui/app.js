@@ -4,7 +4,7 @@
  * Si entra con email e password (la pagina di accesso), poi la barra laterale
  * con le voci che il proprio ruolo può vedere, nell'ordine delle specifiche:
  * Dashboard (la casa: cosa fare adesso), Clienti e fornitori, Progetti e
- * commesse, Ore e rapportini, Fatturazione (la vecchia Fine mese), Amministrazione.
+ * commesse, Rapportini, Fatturazione (la vecchia Fine mese), Amministrazione.
  *
  * Tutto quello che si vede viene dal server, e ogni modifica va al server
  * subito: i conti e i permessi li decide lui, qui si mostrano. Le pagine dei
@@ -27,13 +27,16 @@
   const K7 = window.WisperRegoleComunicazioni;
   const Q8 = window.WisperRegoleFase8;
   const RP = window.WisperRegoleProgetti;
+  const RI = window.WisperRegoleInvio;
+  // 06/11/2026: il rapportino con più lavori (raggruppare, stati senza firma, invio diviso per destinatario).
+  const RL = window.WisperRegoleLavori;
   const { $, h, aggiungi, svuota, icona, tondo, iniziali, stato, avviso, lavora, finestra, conferma, apriMenu, chiudiMenu,
     campo, conSuffisso, selezione, segmenti, cerca, riga, quadrato, segnaposto } = B;
 
   // ======================================================================= stato
 
   const meseDiOggi = () => C.oggiIso().slice(0, 7);
-  const filtriRapportini = f => Object.assign({ testo: '', mese: meseDiOggi(), quali: 'tutti', stato: '', chi: '', cliente: '', commessa: '' }, f || {});
+  const filtriRapportini = f => Object.assign({ testo: '', mese: meseDiOggi(), quali: 'tutti', stato: '', chi: '', cliente: '', commessa: '', a: '' }, f || {});
   const filtriCommesse = f => Object.assign({ testo: '', stato: 'APERTA', cliente: '', ritardo: false, responsabile: '' }, f || {});
 
   function leggiLato() {
@@ -59,6 +62,8 @@
     filtri: filtriRapportini(),
     scelti: new Set(),
     aperto: null,
+    // Il lavoro aperto nel pannello del rapportino (null = nessuno, o il rapportino dalla sua riga).
+    lavoroAperto: null,
     apriDopo: null,
     filtriCommesse: filtriCommesse(),
     filtriSoggetti: { tipo: 'clienti', testo: '', archiviati: false },
@@ -182,7 +187,9 @@
   function conLogoDaIo(imp) {
     const i = (S.io && S.io.interfaccia) || {};
     if (imp.STUDIO_LOGO !== undefined || !i.logo) return imp;
-    return Object.assign({}, imp, { STUDIO_LOGO: i.logo, PDF_LOGO: i.pdfLogo !== false, PDF_PIEDE: imp.PDF_PIEDE !== undefined ? imp.PDF_PIEDE : (i.pdfPiede || '') });
+    // 06/11/2026: anche il nome accanto al logo (PDF_NOME, di base sì; il server lo manda come pdfNome).
+    return Object.assign({}, imp, { STUDIO_LOGO: i.logo, PDF_LOGO: i.pdfLogo !== false, PDF_NOME: imp.PDF_NOME !== undefined ? imp.PDF_NOME : i.pdfNome !== false,
+      PDF_PIEDE: imp.PDF_PIEDE !== undefined ? imp.PDF_PIEDE : (i.pdfPiede || '') });
   }
 
   async function caricaAnagrafiche() {
@@ -199,11 +206,11 @@
   async function caricaDashboard() {
     if (!puo('dashboard')) return;
     try {
-      // Fase 3: il proprio timer acceso si vede sulla Dashboard.
-      const [dash] = await Promise.all([Rete.get('/server/dashboard'), Ore.leggiTimer(),
+      const [dash] = await Promise.all([Rete.get('/server/dashboard'),
         // Fase 5: per il collaboratore il numerino di Ticket conta anche i suoi (conteggi.miei).
         S.io && S.io.utente && S.io.utente.ruolo === 'collaboratore' && puo('ticket') ? Rete.get('/server/tickets?segmento=aperti').then(r => { Ticket.M.miei = (r.conteggi && r.conteggi.miei) || 0; }).catch(() => null) : null]);
-      S.dash = dash;
+      // 07/11/2026: niente più Ore; un server di prima manda ancora le voci del timer e delle ore respinte.
+      S.dash = R.dashSenzaOre(dash);
       S.dashErrore = '';
       if (S.caricato) disegnaLato();
     } catch (e) {
@@ -262,9 +269,24 @@
     if (fatto && !S.esempio && !visitaVista()) setTimeout(iniziaVisita, 400);
   }
 
-  /** Mette (o rimette) nell'elenco i rapportini che il server ha appena restituito. */
+  /**
+   * Mette (o rimette) nell'elenco i lavori che il server ha appena restituito. Un rapportino intero ({ id, lavori }, da
+   * salvaRapportino e ripristinaRapportino) porta i suoi lavori: quelli che non ci sono più (tolti) escono dall'elenco.
+   */
   function accogli(lista) {
-    (lista || []).forEach(r => {
+    const piatta = [];
+    (lista || []).forEach(x => {
+      if (!x) return;
+      if (!Array.isArray(x.lavori)) { piatta.push(x); return; }
+      const vivi = new Set(x.lavori.map(l => l.id || l.idLocale));
+      for (let i = S.rapportini.length - 1; i >= 0; i -= 1) {
+        const l = S.rapportini[i];
+        if (RL.giornataDi(l) === String(x.id) && !vivi.has(l.id || l.idLocale)) S.rapportini.splice(i, 1);
+      }
+      // L'ordine del rapportino: prima il lavoro 1 (unshift li mette in cima uno alla volta).
+      x.lavori.slice().reverse().forEach(l => piatta.push(Object.assign({ idGiornata: x.id, data: x.data, tecnico: x.tecnico }, l)));
+    });
+    piatta.forEach(r => {
       if (!r) return;
       const i = S.rapportini.findIndex(x => (r.idLocale && x.idLocale === r.idLocale) || (r.id && x.id === r.id));
       if (r.stato === 'ANNULLATO') { if (i >= 0) S.rapportini.splice(i, 1); return; }
@@ -316,11 +338,26 @@
     return Array.from(gruppi.values()).sort((a, b) => somma(b.lista) - somma(a.lista));
   }
 
-  function intestatarioRiepilogo(lista) {
-    const gruppi = perChiPaga(lista);
-    if (gruppi.length === 1) return { nome: gruppi[0].nome, righe: gruppi[0].righe, email: gruppi[0].email, mostraCliente: false };
-    return { nome: 'Vari clienti', righe: [], email: '', mostraCliente: true };
+  /**
+   * Il campo A di una finestra d'invio è vuoto: si rileggono i clienti (l'email può essere stata scritta poco fa da un
+   * altro computer o dal telefono) e, se adesso c'è e il campo è ancora vuoto, si mette. calcola() -> l'email coi dati nuovi.
+   */
+  function emailFresca(input, calcola) {
+    if (!input || input.value.trim() || S.esempio) return;
+    caricaAnagrafiche().then(() => {
+      const fresca = calcola();
+      if (fresca && !input.value.trim()) input.value = fresca;
+    }).catch(() => null);
   }
+
+  /** Dove cercare il cliente di un rapportino per l'email (regole-invio.js): dal suo id, dal nome, dalla commessa. */
+  const trovaPerInvio = () => ({
+    cliente: id => cliente(id),
+    perNome: nome => S.ana.soggetti.find(c => C.normalizza(c.nome) === C.normalizza(nome)),
+    commessa: id => commessa(id),
+  });
+
+  // (intestatarioRiepilogo con "Vari clienti" tolto il 07/11/2026: l'invio divide i lavori per destinatario, preparaInvio.)
 
   function periodoDi(lista) {
     const mesi = Array.from(new Set(lista.map(r => String(r.data).slice(0, 7)))).sort();
@@ -398,7 +435,7 @@
     const c = collegamento || {};
     if (c.pagina === 'nuovoRapportino') { moduloRapportino(null, { data: c.data }); return; }
     const d = R.destinazione(c);
-    const f = d.filtro;
+    let f = d.filtro;
     // I giorni senza rapportino: si scrive quello del giorno più recente che manca.
     if (d.hash === '#rapportini' && f && f.senzaRapportino && puo('rapportini', 2)) {
       const giorni = ((S.dash && S.dash.numeri && S.dash.numeri.giorniSenzaRapportino) || []).slice().sort();
@@ -406,21 +443,26 @@
     }
     if (d.hash === '#commesse') S.filtriCommesse = filtriCommesse(f || {});
     if (c.pagina === 'commessa' && f && f.sezione) S.schedaCommessa[c.id] = f.sezione;
-    // Fase 3: Ore e rapportini ha i segmenti Ore · Rapportini · Da approvare.
-    if (d.hash === '#rapportini' && f && (f.segmento === 'ore' || f.segmento === 'daApprovare')) {
-      S.filtroOre = { segmento: f.segmento, giorno: f.giorno || '' };
+    // Rapportini ha i segmenti Rapportini · Da approvare. Dal 07/11/2026 niente Ore: i collegamenti di prima col segmento
+    // "ore" (ore della settimana, timer) aprono i Rapportini senza filtri; "N cose respinte" apre i rapportini respinti
+    // (il server nuovo lo manda già così: segmento "rapportini", stato "respinta").
+    if (d.hash === '#rapportini' && f && f.segmento === 'daApprovare') {
+      S.filtroOre = { segmento: 'daApprovare' };
       vai(d.hash);
       return;
     }
+    if (d.hash === '#rapportini' && f && f.segmento === 'ore') f = f.stato === 'respinta' ? { stato: 'respinta' } : null;
     if (d.hash === '#rapportini') Ore.M.segmento = 'rapportini';
     if (d.hash === '#spese') S.filtroSpese = f ? Object.assign({}, f, c.id ? { id: c.id } : {}) : null;
     if (d.hash === '#rapportini') {
       const x = f || {};
-      // "stato": BOZZA è il segmento Da firmare; gli altri stati una pillola col filtro. Di tutti i mesi.
-      const quali = x.quali || (x.stato === 'BOZZA' ? 'firmare' : 'tutti');
-      S.filtri = filtriRapportini({ quali, stato: x.stato && x.stato !== 'BOZZA' ? x.stato : '',
-        mese: x.stato || x.quali === 'firmare' ? '' : (x.mese !== undefined ? x.mese : meseDiOggi()),
-        cliente: x.idCliente || x.cliente || '', commessa: x.idCommessa || x.commessa || '' });
+      // "stato": BOZZA (e il FIRMATO di prima) è il segmento Da inviare; gli altri stati una pillola col filtro. Di tutti
+      // i mesi. Dal 06/11/2026 niente firma: i collegamenti vecchi a "firmare" portano a Da inviare; "a" = fino a quel giorno.
+      const daInviare = x.quali === 'inviare' || x.quali === 'firmare' || x.stato === 'BOZZA' || x.stato === 'FIRMATO';
+      const quali = daInviare ? 'inviare' : (x.quali === 'fatturare' ? 'fatturare' : 'tutti');
+      S.filtri = filtriRapportini({ quali, stato: x.stato && !daInviare ? x.stato : '',
+        mese: x.stato || daInviare || x.a ? '' : (x.mese !== undefined ? x.mese : meseDiOggi()),
+        cliente: x.idCliente || x.cliente || '', commessa: x.idCommessa || x.commessa || '', a: x.a || '' });
       S.scelti.clear();
       S.apriDopo = x.apri || x.id || null;
     }
@@ -584,7 +626,7 @@
     const n = S.dash && S.dash.numeri && S.dash.numeri.soldi && S.dash.numeri.soldi.clientiDaFatturare;
     if (typeof n === 'number') return n;
     const mese = meseDiOggi();
-    return perChiPaga(attivi().filter(r => (r.stato === 'FIRMATO' || r.stato === 'INVIATO') && String(r.data).slice(0, 7) === mese && !RO.bloccoInvio(r))).length;
+    return perChiPaga(attivi().filter(r => RL.daFatturare(r) && !r.fattura && String(r.data).slice(0, 7) === mese && !RO.bloccoInvio(r))).length;
   }
 
   function disegnaLato() {
@@ -1140,11 +1182,11 @@
   function iconaVoce(v) {
     if (v.tipo === 'commessa') return v.gravita === 'urgente' ? 'allarme' : 'commesse';
     return { budget: 'allarme', scadenza: 'calendario', firma: 'firma', giorno: 'calendario', giorni: 'calendario', fatturare: 'fatturazione',
-      fatturazione: 'fatturazione', responsabile: 'clienti', sdi: 'fatturazione', cliente: 'clienti', rapportini: 'firma', rapportino: 'rapportini',
+      fatturazione: 'fatturazione', responsabile: 'clienti', sdi: 'fatturazione', cliente: 'clienti', rapportini: 'email', rapportino: 'rapportini',
       prestazioni: 'lista', preventivo: 'preventivo', preventivi: 'preventivo', attivita: 'lista', appuntamento: 'calendario', sopralluogo: 'luogo',
       calendario: 'calendario', listino: 'libro',
       // fase 3
-      approvare: 'spunta', respinta: 'allarme', timer: 'orologio', rimborsi: 'scontrino', veicoli: 'auto',
+      approvare: 'spunta', respinta: 'allarme', rimborsi: 'scontrino', veicoli: 'auto',
       // fase 4
       fattura: v.gravita === 'urgente' ? 'allarme' : 'fatturazione', ricevuta: 'scontrino', impegno: 'calendario', cassa: 'banca', conto: 'banca', fiscale: 'scudo',
       // fase 5
@@ -1186,8 +1228,6 @@
       // Come nel prototipo: la cosa più urgente in cima, poi i riquadri, poi le sezioni.
       if (!S.dashErrore) aggiungi(pagina, [Dash8.piuUrgente()]);
       aggiungi(pagina, [Dash8.riquadri()]);
-      const timer8 = Ore.schedaTimer();
-      if (timer8) aggiungi(pagina, [timer8]);
       const corpo8 = h('div', { class: 'dash-corpo', 'data-visita': 'dashboard' });
       aggiungi(pagina, [corpo8]);
       if (S.dashErrore) {
@@ -1271,10 +1311,6 @@
         box(n.chiuse, n.chiuse === 1 ? 'chiusa' : 'chiuse', { stato: 'CHIUSA' }))]);
     }
 
-    // Fase 3: il timer acceso, in vista appena si apre il programma.
-    const timer = Ore.schedaTimer();
-    if (timer) aggiungi(pagina, [timer]);
-
     const corpo = h('div', { class: 'dash-corpo', 'data-visita': 'dashboard' });
     aggiungi(pagina, [corpo]);
     if (S.dashErrore) {
@@ -1338,7 +1374,24 @@
 
   // ======================================================================= RAPPORTINI
 
-  /** Il segmento Rapportini di Ore e rapportini (ore.js mette i segmenti sotto la testata). */
+  // 06/11/2026 (docs/gestionale/rapportino-lavori.md): il rapportino è la giornata (numero, data, chi l'ha scritto) con
+  // più LAVORI, anche di clienti diversi; ogni lavoro è quello che fino alla 1.1 era un rapportino intero. S.rapportini
+  // tiene i lavori come li manda il server (idGiornata = il numero del rapportino, posizione); qui si raggruppano
+  // (regole-lavori.js). Niente firma: Da inviare (BOZZA, e il FIRMATO di prima) → Inviato → Fatturato.
+
+  const chiaveLavoro = l => l.id || l.idLocale;
+
+  /** Il rapportino di un lavoro o di un numero: { id, data, tecnico, lavori } coi lavori non annullati, in ordine. */
+  function giornata(chiave) {
+    const l = trova(chiave);
+    const id = l ? RL.giornataDi(l) : chiave;
+    return RL.raggruppa(attivi().filter(x => RL.giornataDi(x) === id))[0] || null;
+  }
+
+  /** "giovedì 5 novembre 2026". */
+  const dataConAnno = iso => dataLunga(iso) + ' ' + String(iso).slice(0, 4);
+
+  /** Il segmento Rapportini (ore.js mette sotto la testata i segmenti Rapportini · Da approvare, per chi approva). */
   function vistaRapportini(pagina, extra) {
     const ex = extra || {};
     const f = S.filtri;
@@ -1355,107 +1408,139 @@
     }
     if (f.cliente) attiviFiltri.push(chip((cliente(f.cliente) || { nome: f.cliente }).nome, () => { f.cliente = ''; disegnaPagina(); }));
     if (f.commessa) attiviFiltri.push(chip(f.commessa, () => { f.commessa = ''; disegnaPagina(); }));
-    if (f.stato) attiviFiltri.push(chip({ FIRMATO: 'Firmati', INVIATO: 'Inviati', FATTURATO: 'Fatturati' }[f.stato] || f.stato, () => { f.stato = ''; disegnaPagina(); }));
+    if (f.stato) attiviFiltri.push(chip({ BOZZA: 'Da inviare', INVIATO: 'Inviati', FATTURATO: 'Fatturati', RESPINTA: 'Respinti', RESPINTO: 'Respinti' }[RL.statoVisto(f.stato)] || f.stato, () => { f.stato = ''; disegnaPagina(); }));
+    // Dalla Dashboard: "lavori da inviare da più di una settimana" (fino a 7 giorni fa).
+    if (f.a) attiviFiltri.push(chip('Fino al ' + C.data(f.a), () => { f.a = ''; disegnaPagina(); }));
 
     aggiungi(pagina, [
-      h('div', { class: 'testata' }, h('div', { class: 'titoli' }, h('span', { class: 'dove' }, 'Ore e rapportini'), h('h1', null, 'Rapportini')),
+      h('div', { class: 'testata' }, h('div', { class: 'titoli' }, h('h1', null, 'Rapportini')),
         puo('rapportini', 2) ? h('button', { type: 'button', class: 'btn giallo', onclick: () => moduloRapportino(null) }, icona('piu', 18, 2.6), 'Nuovo rapportino') : null),
       ex.segmenti ? h('div', null, ex.segmenti) : null,
       h('div', { class: 'filtri' },
-        cerca(f.testo, 'Cliente, commessa, lavoro, numero', v => { f.testo = v; S.scelti.clear(); elencoRapportini(area); }),
+        // La scritta dentro il campo deve leggersi tutta anche a 1024 px: il campo non scende sotto la sua misura (cerca-rapportini).
+        (el => { el.classList.add('cerca-rapportini'); return el; })(cerca(f.testo, 'Cliente, commessa, lavoro, numero', v => { f.testo = v; S.scelti.clear(); elencoRapportini(area); })),
         selezione([['', 'Tutti i mesi']].concat(mesi.map(m => [m, C.nomeMese(m)])), f.mese, v => { f.mese = v; S.scelti.clear(); elencoRapportini(area); }),
-        segmenti([['tutti', 'Tutti'], ['fatturare', 'Da fatturare'], ['firmare', 'Da firmare', { 'data-visita': 'segmento-firmare' }]], f.quali, v => {
+        segmenti([['tutti', 'Tutti'], ['inviare', 'Da inviare', { 'data-visita': 'segmento-inviare' }], ['fatturare', 'Da fatturare']], f.quali, v => {
           f.quali = v;
           f.stato = '';
           S.scelti.clear();
           disegnaPagina();
-          if (v === 'firmare') Visita.azione('segmento-firmare');
+          if (v === 'inviare') Visita.azione('segmento-inviare');
         }),
         attiviFiltri),
       area]);
     elencoRapportini(area);
     // Arrivando dalla Dashboard su un rapportino preciso: si apre il suo pannello.
-    if (S.apriDopo) { const k = S.apriDopo; S.apriDopo = null; if (trova(k)) apriPannello(k); }
+    if (S.apriDopo) { const k = S.apriDopo; S.apriDopo = null; if (trova(k) || giornata(k)) apriPannello(k); }
   }
 
+  /** I lavori che passano i filtri (testo, mese, cliente, commessa, segmento, stato, fino al giorno, chi paga). */
   function filtrati() {
     const f = S.filtri;
-    const stato0 = f.stato || (f.quali === 'fatturare' ? 'dafatturare' : f.quali === 'firmare' ? 'BOZZA' : '');
-    let lista = C.filtra(S.rapportini, { testo: f.testo, mese: f.mese, cliente: f.cliente, commessa: f.commessa, stato: stato0 });
+    let lista = C.filtra(S.rapportini, { testo: f.testo, mese: f.mese, cliente: f.cliente, commessa: f.commessa });
+    if (f.quali === 'inviare') lista = lista.filter(RL.daInviare);
+    // Fase 5 (§16.14): i lavori di un ticket non chiuso aspettano la chiusura; quelli "nel contratto" o "non si fattura" non sono da fatturare.
+    if (f.quali === 'fatturare') lista = lista.filter(r => RL.daFatturare(r) && !r.nonSiFattura && !(r.idTicket && r.ticketAperto));
+    // "respinta" (dalla Dashboard, "N cose respinte") è l'approvazione, non lo stato del lavoro: i lavori respinti da chi approva.
+    if (f.stato && /^respint/i.test(f.stato)) lista = lista.filter(r => /^respint/i.test(String(r.statoApprovazione || '')));
+    else if (f.stato) lista = lista.filter(r => RL.statoVisto(r.stato) === RL.statoVisto(f.stato));
+    if (f.a) lista = lista.filter(r => String(r.data).slice(0, 10) <= f.a);
     if (f.chi) lista = lista.filter(r => chiPaga(r).chiave === f.chi);
-    // Fase 5 (§16.14): i rapportini di un ticket non chiuso aspettano la chiusura; quelli "nel contratto" o "non si fattura" non sono da fatturare.
-    if (stato0 === 'dafatturare') lista = lista.filter(r => !r.nonSiFattura && !(r.idTicket && r.ticketAperto));
-    return C.ordina(lista, 'data', -1);
+    return lista;
   }
 
-  /** Le colonne della tabella dei rapportini: senza il permesso dei soldi niente spese e totale. */
-  function colonneRapportini(conCasella) {
-    return (conCasella ? '22px ' : '') + '112px minmax(0, 1.3fr) minmax(0, 2fr) 54px 54px ' + (soldi() ? '84px 100px ' : '') + '104px';
+  /** La casella del rapportino: sceglie (o toglie) tutti i suoi lavori; a metà quando ne sono scelti solo alcuni. */
+  function casellaRapportino(lavori, ridisegnaElenco) {
+    const st = RL.casellaRapportino(lavori, S.scelti, chiaveLavoro);
+    const c = h('input', { type: 'checkbox', class: 'casella casella-rap', 'aria-label': 'Scegli tutti i lavori del rapportino', checked: st === 'tutti',
+      onclick: e => {
+        e.stopPropagation();
+        const tutti = st !== 'tutti';
+        lavori.forEach(l => (tutti ? S.scelti.add(chiaveLavoro(l)) : S.scelti.delete(chiaveLavoro(l))));
+        ridisegnaElenco();
+      } });
+    c.indeterminate = st === 'alcuni';
+    return c;
+  }
+
+  /** Commessa del lavoro a parole: "26ST044 · Nuovo magazzino" ('Senza commessa'). */
+  const commessaDi = r => (r.idCommessa ? r.idCommessa + (r.commessa ? ' · ' + r.commessa : '') : (r.commessa || 'Senza commessa'));
+
+  /** Una riga di lavoro della tabella: casella sempre in vista, Cliente, Commessa, Progetto, Lavoro svolto, Ore, Km, Totale, Stato. */
+  function rigaLavoro(r, sceglie, ridisegnaElenco) {
+    const chiave = chiaveLavoro(r);
+    const prog = progettoDi(r);
+    const casella = sceglie ? h('input', { type: 'checkbox', class: 'casella casella-rap', 'aria-label': 'Scegli il lavoro per ' + (r.cliente || 'il cliente'), checked: S.scelti.has(chiave),
+      onclick: e => { e.stopPropagation(); if (e.target.checked) S.scelti.add(chiave); else S.scelti.delete(chiave); ridisegnaElenco(); } }) : null;
+    const apri = () => { apriPannello(chiave); Visita.azione('riga-rapportino'); };
+    return h('div', { class: 'r lavoro cliccabile' + (S.aperto && S.lavoroAperto === chiave ? ' scelta' : ''), role: 'button', tabindex: '0', 'data-chiave': chiave,
+      onclick: apri, onkeydown: e => { if (e.key === 'Enter') apri(); } },
+    sceglie ? h('span', null, casella) : null,
+    // Nella tabella stretta (1024) commessa e progetto vanno sotto il cliente.
+    h('span', { class: 'c-cliente' }, h('span', { class: 'forte' }, r.cliente || '—'), h('span', { class: 'solo-stretto' }, [commessaDi(r), prog].filter(Boolean).join(' · '))),
+    h('span', { class: 'c-commessa' }, commessaDi(r)),
+    h('span', { class: 'c-progetto t2' }, prog || '—'),
+    h('span', { class: 'due-righe t2', title: r.descrizione || '' }, r.descrizione || ''),
+    h('span', { class: 'n' }, C.numero(r.oreTotali)),
+    h('span', { class: 'n' }, C.numero(r.km)),
+    soldi() ? h('span', { class: 'n forte' }, C.euro(r.totale)) : null,
+    statoRapportino(r));
   }
 
   function elencoRapportini(area) {
     svuota(area);
     const lista = filtrati();
-    // Scegliere più righe serve ai riepiloghi e agli stati della fatturazione.
-    const sceglie = puo('fatturazione', 2) && soldi();
-    const colonne = colonneRapportini(sceglie);
+    const ridisegnaElenco = () => elencoRapportini(area);
+    // Scegliere più lavori serve a mandarli e a segnarli inviati: è di chi scrive i rapportini (riunione del 06/11/2026),
+    // anche con Fatturazione spenta. Segnarli fatturati resta di chi fattura.
+    const sceglie = puo('rapportini', 2);
+    const fattura = puo('fatturazione', 2) && soldi() && funzioneAccesa('fatturazione');
     if (!lista.length) {
-      aggiungi(area, [h('p', { class: 'vuoto' }, S.rapportini.length ? 'Nessun rapportino con questi filtri.' : 'Ancora nessun rapportino.')]);
+      aggiungi(area, [h('p', { class: 'vuoto' }, S.rapportini.length ? 'Nessun lavoro con questi filtri.' : 'Ancora nessun rapportino.')]);
       return;
     }
-    let primaRiga = true;
-    perChiPaga(lista).sort((a, b) => a.nome.localeCompare(b.nome, 'it')).forEach(g => {
-      const t = C.totali(g.lista);
-      const daFatturare = g.lista.filter(r => r.stato === 'FIRMATO' || r.stato === 'INVIATO');
-      const intesta = h('div', { class: 'intesta' }, h('b', null, g.nome),
-        h('span', { class: 'riassunto' }, nRapportini(t.n) + ' · ' + C.ore(t.ore) + ' · ' + C.numero(t.km) + ' km'),
-        soldi() ? h('span', { class: 'totale' }, C.euro(t.totale)) : null,
-        daFatturare.length && sceglie ? h('button', { type: 'button', class: 'btn piccolo', onclick: () => preparaInvio(daFatturare) }, 'Prepara riepilogo') : null);
-      const tab = h('div', { class: 'tab' + (S.scelti.size ? ' con-scelti' : '') },
-        h('div', { class: 'r testa', style: { gridTemplateColumns: colonne } }, sceglie ? h('span') : null, h('span', null, 'Data · N°'), h('span', null, 'Commessa'),
-          h('span', null, 'Lavoro svolto'), h('span', { class: 'n' }, 'Ore'), h('span', { class: 'n' }, 'Km'),
-          soldi() ? h('span', { class: 'n' }, 'Spese') : null, soldi() ? h('span', { class: 'n' }, 'Totale') : null, h('span', null, 'Stato')));
-      g.lista.forEach(r => {
-        const chiave = r.id || r.idLocale;
-        const casella = sceglie ? h('input', { type: 'checkbox', class: 'casella', 'aria-label': 'Scegli ' + (r.id || 'il rapportino'), checked: S.scelti.has(chiave),
-          onclick: e => { e.stopPropagation(); if (e.target.checked) S.scelti.add(chiave); else S.scelti.delete(chiave); elencoRapportini(area); } }) : null;
-        aggiungi(tab, [h('div', {
-          class: 'r cliccabile' + (S.aperto === chiave ? ' scelta' : ''), style: { gridTemplateColumns: colonne }, role: 'button', tabindex: '0', 'data-chiave': chiave,
-          'data-visita': primaRiga ? 'riga-rapportino' : null,
-          onclick: () => { apriPannello(chiave); Visita.azione('riga-rapportino'); },
-          onkeydown: e => { if (e.key === 'Enter') apriPannello(chiave); },
-        },
-        sceglie ? h('span', null, casella) : null,
-        // La data e sotto il numero: una colonna in meno, più spazio a commessa e lavoro.
-        h('span', { class: 'doppia' }, h('span', { class: 'forte' }, dataBreve(r.data)), h('span', { class: 'num' }, r.id || 'in arrivo')),
-        progettoDi(r) ? h('span', { class: 'doppia', title: [r.idCommessa, r.commessa].filter(Boolean).join(' · ') }, h('span', null, r.idCommessa || r.commessa), h('span', { class: 'progetto-riga' }, progettoDi(r)))
-          : h('span', { class: 'doppia' }, h('span', null, r.idCommessa || r.commessa || 'Senza commessa'), r.idCommessa && r.commessa ? h('span', null, r.commessa) : null),
-        h('span', { class: 'taglia t2', title: r.descrizione }, r.descrizione),
-        h('span', { class: 'n' }, C.numero(r.oreTotali)),
-        h('span', { class: 'n' }, C.numero(r.km)),
-        soldi() ? h('span', { class: 'n t2' }, C.num(r.spese) ? C.euro(r.spese) : '') : null,
-        soldi() ? h('span', { class: 'n forte' }, C.euro(r.totale)) : null,
-        statoRapportino(r))]);
-        primaRiga = false;
-      });
-      aggiungi(area, [h('div', { class: 'gruppo-tab' }, intesta, tab)]);
+    const tab = h('div', { class: 'tab lavori' + (sceglie ? ' con-casella' : '') + (soldi() ? ' con-soldi' : '') + (S.scelti.size ? ' con-scelti' : '') },
+      h('div', { class: 'r testa' }, sceglie ? h('span') : null, h('span', { class: 'c-cliente' }, 'Cliente'), h('span', { class: 'c-commessa' }, 'Commessa'),
+        h('span', { class: 'c-progetto' }, 'Progetto'), h('span', null, 'Lavoro svolto'), h('span', { class: 'n' }, 'Ore'), h('span', { class: 'n' }, 'Km'),
+        soldi() ? h('span', { class: 'n' }, 'Totale') : null, h('span', null, 'Stato')));
+    const aperta = S.aperto ? (giornata(S.aperto) || {}).id : null;
+    let primo = true;
+    RL.raggruppa(lista).forEach(g => {
+      const t = C.totali(g.lavori);
+      const apri = () => { apriPannello(g.id, true); Visita.azione('riga-rapportino'); };
+      aggiungi(tab, [h('div', {
+        class: 'r rap cliccabile' + (aperta === g.id && !S.lavoroAperto ? ' scelta' : ''), role: 'button', tabindex: '0', 'data-giornata': g.id,
+        'data-visita': primo ? 'riga-rapportino' : null, onclick: apri, onkeydown: e => { if (e.key === 'Enter') apri(); },
+      },
+      sceglie ? h('span', null, casellaRapportino(g.lavori, ridisegnaElenco)) : null,
+      // Il rapportino: numero, giorno, quanti lavori e clienti, gli stati; poi ore, km e totale dei suoi lavori.
+      h('span', { class: 'c-rap', style: { gridColumn: (sceglie ? '2' : '1') + ' / ' + (soldi() ? '-5' : '-4') } },
+        h('b', null, g.id), h('span', null, dataLunga(g.data)), h('span', { class: 'tenue' }, RL.lavoriEClienti(g.lavori)), h('span', { class: 'tenue' }, RL.riassuntoStati(g.lavori))),
+      h('span', { class: 'n forte' }, C.numero(t.ore)),
+      h('span', { class: 'n forte' }, C.numero(t.km)),
+      soldi() ? h('span', { class: 'n forte' }, C.euro(t.totale)) : null,
+      h('span'))]);
+      primo = false;
+      g.lavori.forEach(r => aggiungi(tab, [rigaLavoro(r, sceglie, ridisegnaElenco)]));
     });
+    aggiungi(area, [tab]);
     const t = C.totali(lista);
-    aggiungi(area, [h('div', { class: 'totali-fondo' }, h('span', null, C.ore(t.ore)), h('span', null, C.numero(t.km) + ' km'), soldi() ? h('b', null, 'Totale ' + C.euro(t.totale)) : null)]);
+    aggiungi(area, [h('div', { class: 'totali-fondo' }, h('span', null, RL.nLavori(t.n)), h('span', null, C.ore(t.ore)), h('span', null, C.numero(t.km) + ' km'), soldi() ? h('b', null, 'Totale ' + C.euro(t.totale)) : null)]);
 
-    if (S.scelti.size && sceglie) {
-      const sel = lista.filter(r => S.scelti.has(r.id || r.idLocale));
+    const sel = lista.filter(r => S.scelti.has(chiaveLavoro(r)));
+    if (sel.length && sceglie) {
       aggiungi(area, [h('div', { class: 'barra-scelti' },
-        h('b', null, (sel.length === 1 ? '1 scelto' : sel.length + ' scelti') + ' · ' + C.euro(somma(sel))),
-        h('button', { type: 'button', class: 'btn piccolo', onclick: () => preparaInvio(sel) }, 'Riepilogo'),
+        h('div', { class: 'scelti-testo' }, h('b', null, sel.length === 1 ? '1 lavoro scelto' : sel.length + ' lavori scelti'),
+          h('span', null, RL.nClienti(RL.contaClienti(sel)) + (soldi() ? ' · ' + C.euro(somma(sel)) : ''))),
+        h('button', { type: 'button', class: 'btn piccolo', 'data-azione': 'da-inviare', onclick: () => preparaInvio(sel) }, 'Da inviare'),
         // I fatturati restano fatturati: "inviato" viene prima.
         h('button', { type: 'button', class: 'btn piccolo', onclick: () => cambiaStato(sel.filter(r => r.stato !== 'FATTURATO'), 'INVIATO') }, 'Segna inviati'),
-        h('button', { type: 'button', class: 'btn piccolo', onclick: () => segnaFatturatiAMano(sel) }, 'Segna fatturati a mano'),
-        h('button', { type: 'button', class: 'btn piccolo', onclick: () => { S.scelti.clear(); elencoRapportini(area); } }, 'Deseleziona'))]);
+        fattura ? h('button', { type: 'button', class: 'btn piccolo', onclick: () => segnaFatturatiAMano(sel) }, 'Segna fatturati a mano') : null,
+        h('button', { type: 'button', class: 'btn piccolo solo-icona', 'aria-label': 'Deseleziona', title: 'Deseleziona', onclick: () => { S.scelti.clear(); ridisegnaElenco(); } }, icona('chiudi', 16, 2.6)))]);
     }
   }
 
-  /** Il progetto di un rapportino a parole: "ED-003 · Quadro QE1" ('' senza progetto). */
+  /** Il progetto di un lavoro a parole: "ED-003 · Quadro QE1" ('' senza progetto). */
   function progettoDi(r) {
     return RP.delRapportino(r, S.ana.progetti || []);
   }
@@ -1463,12 +1548,12 @@
   /** La parola dello stato e, sotto, la pillola dell'approvazione (fase 3: "Da approvare", "Respinto: motivo"). */
   function statoRapportino(r) {
     const p = RO.pillolaApprovazione(r);
-    if (!p) return h('span', null, stato(r.stato));
-    return h('span', { class: 'stato-doppio' }, stato(r.stato), h('span', { class: 'pill piccola p-' + p.colore, title: p.testo }, p.testo));
+    if (!p) return h('span', null, stato(RL.statoVisto(r.stato)));
+    return h('span', { class: 'stato-doppio' }, stato(RL.statoVisto(r.stato)), h('span', { class: 'pill piccola p-' + p.colore, title: p.testo }, p.testo));
   }
 
   /**
-   * Un rapportino che aspetta l'approvazione non si manda al cliente e non si fattura:
+   * Un lavoro che aspetta l'approvazione non si manda al cliente e non si fattura:
    * il server lo rifiuterebbe, qui lo si dice prima (con la sua frase). true = si può.
    */
   function puoMandare(lista) {
@@ -1481,28 +1566,34 @@
 
   // ----------------------------------------------------------------------- pannello
 
-  function apriPannello(chiave) {
+  /**
+   * Il pannello del rapportino. chiave: un lavoro (si apre il suo rapportino con quel lavoro aperto) o il numero del
+   * rapportino; soloRapportino: dalla riga del rapportino (nessun lavoro aperto; uno solo si apre da sé).
+   */
+  function apriPannello(chiave, soloRapportino) {
     S.aperto = chiave;
+    const l = soloRapportino ? null : trova(chiave);
+    S.lavoroAperto = l ? chiaveLavoro(l) : null;
     disegnaPannello();
-    document.querySelectorAll('.tab .r[data-chiave]').forEach(x => x.classList.toggle('scelta', x.dataset.chiave === chiave));
+    evidenziaAperto();
+  }
+
+  /** Nelle tabelle: la riga del lavoro aperto, o quella del rapportino se nessun lavoro è aperto. */
+  function evidenziaAperto() {
+    const g = S.aperto ? giornata(S.aperto) : null;
+    document.querySelectorAll('.tab .r[data-chiave]').forEach(x => x.classList.toggle('scelta', !!S.aperto && x.dataset.chiave === S.lavoroAperto));
+    document.querySelectorAll('.tab .r[data-giornata]').forEach(x => x.classList.toggle('scelta', !!g && !S.lavoroAperto && x.dataset.giornata === g.id));
   }
 
   function chiudiPannello(subito) {
     const p = $('.pannello');
     S.aperto = null;
+    S.lavoroAperto = null;
     document.querySelectorAll('.tab .r.scelta').forEach(x => x.classList.remove('scelta'));
     if (!p) return;
     if (subito) { p.remove(); return; }
     p.classList.add('via');
     setTimeout(() => p.remove(), 200);
-  }
-
-  function passi(st) {
-    const tutti = ['BOZZA', 'FIRMATO', 'INVIATO', 'FATTURATO'];
-    const nomi = ['Da firmare', 'Firmato', 'Inviato', 'Fatturato'];
-    const i = Math.max(0, tutti.indexOf(st));
-    return h('div', { class: 'passi', 'aria-label': 'A che punto è' },
-      nomi.map((n, k) => h('span', { class: (k <= i ? 'fatto' : '') + (k === i ? ' ora' : '') }, h('i'), h('em', null, n))));
   }
 
   function rigaConto(sinistra, destra) {
@@ -1524,96 +1615,137 @@
     ];
   }
 
-  function disegnaPannello() {
-    const r = trova(S.aperto);
-    const vecchio = $('.pannello');
-    if (!r) { if (vecchio) vecchio.remove(); S.aperto = null; return; }
-    const bloccato = ['FIRMATO', 'INVIATO', 'FATTURATO'].indexOf(r.stato) >= 0;
-    const commessaLunga = r.idCommessa ? r.idCommessa + ' ' + (r.commessa || '') : (r.commessa || 'Senza commessa');
-    // Fase 3: da approvare o respinto = non si manda al cliente e non si fattura.
-    const approvazione = RO.pillolaApprovazione(r);
-    const fermo = !!RO.bloccoInvio(r);
+  /** I destinatari dei lavori (chi paga): [{ chiave, nome, lavori }], come all'invio. */
+  function destinatariDi(lavori) {
+    return RL.perDestinatario(lavori, l => chiPaga(l).chiave).map(g => Object.assign({ nome: chiPaga(g.lavori[0]).nome }, g));
+  }
 
-    const corpo = h('div', { class: 'corpo' },
-      h('div', { class: 'alto' }, h('span', { class: 'numero' }, r.id || 'Rapportino'), stato(r.stato, true), tondo('chiudi', 'Chiudi', () => chiudiPannello(), 'piccolo')),
-      passi(r.stato),
-      // Fase 7 (§12.6): Da firmare nel portale o Nel portale, col visto.
-      r.portale && r.portale.pubblicato && Portale ? h('div', { class: 'pillole-testa' }, Portale.pillola(r.portale)) : null,
-      // Fase 4 (§15.2): la pillola della fattura in cui sta, col collegamento (solo per chi vede le fatture).
+  /** Il dettaglio di un lavoro nel pannello (com'era il pannello del rapportino fino alla 1.1, senza la firma). */
+  function dettagliLavoro(r) {
+    const approvazione = RO.pillolaApprovazione(r);
+    return h('div', { class: 'lavoro-dettagli' },
+      // Fase 7: Nel portale, col visto. Fase 4 (§15.2): la fattura in cui sta. Fase 5: il ticket, "Nel contratto" / "Non si fattura".
+      r.portale && r.portale.pubblicato && Portale ? h('div', { class: 'pillole-testa' }, Portale.pillola(Object.assign({}, r.portale, { daFirmare: false }))) : null,
       r.fattura ? h('button', { type: 'button', class: 'pill ' + (r.fattura.stato === 'emessa' ? 'p-blu' : 'p-grigio') + ' pill-fattura', title: 'Apri', onclick: () => apriSuaFattura(r) }, icona('fatturazione', 14, 2.2), r.fattura.etichetta) : null,
-      // Fase 5: il ticket di cui è il rapportino (apre il ticket) e "Nel contratto" / "Non si fattura".
       r.idTicket || r.nonSiFattura ? h('div', { class: 'pillole-testa' },
         r.idTicket && puo('ticket') ? h('button', { type: 'button', class: 'pill p-grigio pill-fattura', title: 'Apri il ticket', onclick: () => { chiudiPannello(true); vai('#ticket/tk/' + r.idTicket); } }, icona('chiaveInglese', 14, 2.2), 'Ticket ' + (r.numeroTicket || '')) : null,
         r.nonSiFattura ? h('span', { class: 'pill p-grigio' }, r.nonSiFattura) : null) : null,
       approvazione ? h('div', { class: approvazione.colore === 'rosso' ? 'banda' : 'banda calma' }, icona(approvazione.colore === 'rosso' ? 'avviso' : 'orologio', 20),
         h('span', { class: 'spazio' }, approvazione.colore === 'rosso' ? approvazione.testo : 'Da approvare: si manda al cliente e si fattura dopo l\'approvazione')) : null,
-      h('div', null, h('div', { style: { fontSize: '18px', fontWeight: '800' } }, r.cliente),
-        h('div', { class: 't2', style: { fontSize: '15px', color: 'var(--testo2)' } }, commessaLunga + ' · ' + dataLunga(r.data)),
-        // 03/11/2026: il progetto del rapportino (si apre la sua scheda) e a chi è intestato.
-        progettoDi(r) ? h('div', { class: 'riga-progetto' }, h('span', { class: 'etichetta' }, 'Progetto'),
-          r.idProgetto && puo('progetti') && funzioneAccesa('progetti') ? h('button', { type: 'button', class: 'btn collegamento', onclick: () => { chiudiPannello(true); vai('#progetti/' + encodeURIComponent(r.idProgetto)); } }, progettoDi(r)) : h('span', null, progettoDi(r)),
-          RP.intestatoDelRapportino(r, S.ana.progetti || []) ? h('span', { class: 't2' }, 'Intestato a ' + RP.intestatoDelRapportino(r, S.ana.progetti || [])) : null) : null),
+      // 03/11/2026: il progetto del lavoro (si apre la sua scheda) e a chi è intestato.
+      progettoDi(r) ? h('div', { class: 'riga-progetto' }, h('span', { class: 'etichetta' }, 'Progetto'),
+        r.idProgetto && puo('progetti') && funzioneAccesa('progetti') ? h('button', { type: 'button', class: 'btn collegamento', onclick: () => { chiudiPannello(true); vai('#progetti/' + encodeURIComponent(r.idProgetto)); } }, progettoDi(r)) : h('span', null, progettoDi(r)),
+        RP.intestatoDelRapportino(r, S.ana.progetti || []) ? h('span', { class: 't2' }, 'Intestato a ' + RP.intestatoDelRapportino(r, S.ana.progetti || [])) : null) : null,
       h('div', { class: 'lavoro' }, r.descrizione || '—'),
       h('div', { class: 'tre-dati' },
         h('span', null, h('em', null, 'Ore'), h('b', null, C.ore(r.oreTotali))),
         h('span', null, h('em', null, 'Km'), h('b', null, C.numero(r.km) + ' km')),
         h('span', null, h('em', null, 'Spese'), h('b', null, C.num(r.spese) ? C.euro(r.spese) : '—'))),
-      // Fase 6 (§3.9): gli strumenti usati, con lo stato della taratura di quel giorno; l'avviso se uno era scaduto o non si doveva usare.
+      // Fase 6 (§3.9): gli strumenti usati, con lo stato della taratura di quel giorno.
       bloccoStrumenti(r),
-      soldi() ? h('div', { class: 'conto' }, righeDelConto(r),
-        h('div', { class: 'tot' }, h('span', null, 'Totale'), h('span', null, C.euro(r.totale)))) : null,
-      r.firma ? h('div', { class: 'firma-box' }, h('img', { src: '/file/' + r.firma.id, alt: 'Firma del cliente' }),
-        h('div', null, h('b', null, r.firmatario || 'Firmato'), h('span', { class: 'tenue' }, r.firmatoIl ? 'firmato il ' + C.dataOra(r.firmatoIl).replace(' ', ' alle ') : 'firmato'),
-          // Fase 7 (§3.9): sotto la firma "Firmato nel portale da Roberto Ferretti · 22/10/2026 10:15".
-          r.firmaModo === 'portale' ? h('span', { class: 'tenue' }, 'Firmato nel portale da ' + (r.firmatario || r.firmaReferente || '') + (r.firmatoIl ? ' · ' + C.dataOra(r.firmatoIl) : '')) : null)) : null,
+      soldi() ? h('div', { class: 'conto' }, righeDelConto(r), h('div', { class: 'tot' }, h('span', null, 'Totale del lavoro'), h('span', null, C.euro(r.totale)))) : null,
       (r.foto || []).length ? h('div', null, h('div', { class: 'etichetta', style: { marginBottom: '8px' } }, 'Scontrini'),
         h('div', { class: 'miniature' }, r.foto.map(f => h('a', { href: '#', title: 'Apri lo scontrino', onclick: e => { e.preventDefault(); apriFile(f); } }, h('img', { src: '/file/' + f.id, alt: 'Scontrino' }))))) : null,
       r.luogo ? h('div', null, h('div', { class: 'etichetta' }, 'Luogo'), h('div', null, r.luogo)) : null,
-      r.noteInterne ? h('div', null, h('div', { class: 'etichetta' }, 'Nota per te'), h('div', { class: 't2' }, r.noteInterne)) : null);
+      r.noteInterne ? h('div', null, h('div', { class: 'etichetta' }, 'Nota per te'), h('div', { class: 't2' }, r.noteInterne)) : null,
+      vociLavoro(r).length ? h('div', { class: 'azioni-lavoro' }, (() => {
+        const b = h('button', { type: 'button', class: 'btn piccolo' }, icona('altro', 18), 'Altro su questo lavoro');
+        b.addEventListener('click', () => apriMenu(b, vociLavoro(r)));
+        return b;
+      })()) : null);
+  }
 
-    const pdf = giallo => h('button', { type: 'button', class: 'btn grande' + (giallo ? ' giallo' : ''), 'data-visita': giallo ? 'azione-gialla' : null, onclick: () => pdfRapportino(r, { apri: true }) }, 'PDF');
-    // Chi scrive rapportini li corregge; invii e stati della fatturazione sono di chi fattura.
+  /** Le azioni su un lavoro solo (il menu nel suo dettaglio). */
+  function vociLavoro(r) {
     const scrive = puo('rapportini', 2);
-    const fattura = puo('fatturazione', 2) && soldi() && !fermo;
-    const voci = [
-      bloccato || !scrive ? null : (r.stato !== 'BOZZA' ? { testo: 'Modifica', fn: () => moduloRapportino(r) } : null),
-      fattura && (r.stato === 'BOZZA' || r.stato === 'INVIATO') ? { testo: r.stato === 'INVIATO' ? 'Invia di nuovo al cliente' : 'Invia al cliente', fn: () => preparaInvio([r], true) } : null,
-      scrive && r.stato === 'BOZZA' ? { testo: 'Carica il foglio firmato', fn: () => caricaFirmato(r) } : null,
+    const fermoAppr = !!RO.bloccoInvio(r);
+    const invia = scrive && !fermoAppr;
+    const fattura = puo('fatturazione', 2) && soldi() && !fermoAppr;
+    const st = RL.statoVisto(r.stato);
+    return [
+      invia && st !== 'FATTURATO' ? { testo: st === 'INVIATO' ? 'Invia di nuovo al cliente' : 'Invia solo questo lavoro', fn: () => preparaInvio([r]) } : null,
+      invia && st === 'BOZZA' ? { testo: 'Segna inviato senza email', fn: () => cambiaStato([r], 'INVIATO') } : null,
+      scrive && st === 'INVIATO' && !r.fattura ? { testo: 'Riporta da inviare', fn: () => riportaDaInviare([r]) } : null,
       scrive ? { testo: 'Aggiungi uno scontrino', fn: () => aggiungiFoto(r) } : null,
-      fattura && (r.stato === 'BOZZA' || r.stato === 'FIRMATO') ? { testo: 'Segna inviato senza email', fn: () => cambiaStato([r], 'INVIATO') } : null,
       // Fase 4: diventa fatturato da solo quando torna l'XML; a mano solo quello fatturato fuori da Wisper, con conferma.
-      fattura && !r.fattura && (r.stato === 'FIRMATO' || r.stato === 'INVIATO') ? { testo: 'Segna fatturato a mano', fn: () => segnaFatturatiAMano([r]) } : null,
-      fattura && r.stato === 'FATTURATO' && !r.fattura ? { testo: 'Non ancora fatturato', fn: () => cambiaStato([r], 'INVIATO') } : null,
-      bloccato && (r.stato === 'FIRMATO' ? scrive : fattura) ? { testo: 'Riporta in bozza', fn: () => riportaInBozza(r) } : null,
-      // Fase 5 (§3.3): legare un rapportino scritto dalla strada solita a un ticket, o toglierlo.
-      scrive && puo('ticket') && r.id && r.stato !== 'FATTURATO' && !r.idTicket && !r.fattura ? { testo: 'Lega a un ticket', fn: () => legaATicket(r) } : null,
-      scrive && r.idTicket && r.stato !== 'FATTURATO' && !r.fattura ? { testo: 'Togli dal ticket', fn: () => togliDalTicket(r) } : null,
-      // Fase 7 (§3.9, §8.2): far firmare a distanza un rapportino in bozza; pubblicare un firmato; togliere.
-      Portale && Portale.puoPubblicare('rapportino') && r.id && !(r.portale && r.portale.pubblicato) && (r.stato === 'BOZZA' || bloccato) ? { testo: r.stato === 'BOZZA' ? 'Fallo firmare nel portale' : 'Pubblica nel portale',
-        fn: async () => { const x = await Portale.pubblica('rapportino', r.id, { idCliente: r.idCliente, nomeCliente: r.cliente, titolo: 'Rapportino ' + r.id + ' del ' + C.data(r.data), bozza: r.stato === 'BOZZA', daFirmare: r.stato === 'BOZZA' }); if (x) { await rileggiRapportini(); disegnaPannello(); } } } : null,
+      fattura && !r.fattura && RL.daFatturare(r) ? { testo: 'Prepara la bozza', fn: () => { chiudiPannello(true); S.filtroFatture = { preseleziona: 'rapportino:' + r.id }; vai('#fatturazione'); } } : null,
+      fattura && !r.fattura && RL.daFatturare(r) ? { testo: 'Segna fatturato a mano', fn: () => segnaFatturatiAMano([r]) } : null,
+      fattura && st === 'FATTURATO' && !r.fattura ? { testo: 'Non ancora fatturato', fn: () => cambiaStato([r], 'INVIATO') } : null,
+      r.fattura && puo('fatturazione') ? { testo: 'Apri ' + (r.fattura.riferimento || 'la fattura'), fn: () => apriSuaFattura(r) } : null,
+      // Fase 5 (§3.3): legare un lavoro scritto dalla strada solita a un ticket, o toglierlo.
+      scrive && puo('ticket') && r.id && st !== 'FATTURATO' && !r.idTicket && !r.fattura ? { testo: 'Lega a un ticket', fn: () => legaATicket(r) } : null,
+      scrive && r.idTicket && st !== 'FATTURATO' && !r.fattura ? { testo: 'Togli dal ticket', fn: () => togliDalTicket(r) } : null,
+      // Fase 7 (§8.2): pubblicare nel portale (il cliente lo guarda); togliere.
+      Portale && Portale.puoPubblicare('rapportino') && r.id && !(r.portale && r.portale.pubblicato) ? { testo: 'Pubblica nel portale',
+        fn: async () => { const x = await Portale.pubblica('rapportino', r.id, { idCliente: r.idCliente, nomeCliente: r.cliente, titolo: 'Rapportino ' + RL.giornataDi(r) + ' del ' + C.data(r.data), bozza: false, daFirmare: false }); if (x) { await rileggiRapportini(); disegnaPannello(); } } } : null,
       Portale && Portale.puoPubblicare('rapportino') && r.portale && r.portale.pubblicato ? { testo: 'Togli dal portale', fn: () => Portale.togli(r.portale.pubblicazione || { tipo: 'rapportino', rif: r.id, idCliente: r.idCliente }, async () => { await rileggiRapportini(); disegnaPannello(); }) } : null,
-      scrive && r.stato === 'BOZZA' ? '-' : null,
-      scrive && r.stato === 'BOZZA' ? { testo: 'Elimina', fn: () => annulla(r), pericolo: true } : null,
+    ].filter(Boolean);
+  }
+
+  function disegnaPannello() {
+    const g = S.aperto ? giornata(S.aperto) : null;
+    const vecchio = $('.pannello');
+    if (!g) { if (vecchio) vecchio.remove(); S.aperto = null; return; }
+    const scrive = puo('rapportini', 2);
+    const fattura = puo('fatturazione', 2) && soldi();
+    const daInviare = g.lavori.filter(RL.daInviare);
+    // Un lavoro che aspetta l'approvazione non si manda e non si segna inviato (fase 3).
+    const mandabili = daInviare.filter(l => !RO.bloccoInvio(l));
+    const inviati = g.lavori.filter(l => RL.statoVisto(l.stato) === 'INVIATO' && !l.fattura);
+    const fatturabili = g.lavori.filter(l => RL.daFatturare(l) && !l.fattura && !RO.bloccoInvio(l));
+    // Uno solo si apre da sé; altrimenti quello scelto nella tabella (o nessuno).
+    const aperto = g.lavori.some(l => chiaveLavoro(l) === S.lavoroAperto) ? S.lavoroAperto : g.lavori.length === 1 ? chiaveLavoro(g.lavori[0]) : null;
+    const t = C.totali(g.lavori);
+
+    const scheda = l => {
+      const espanso = chiaveLavoro(l) === aperto;
+      const sotto = [commessaDi(l), progettoDi(l)].filter(Boolean).join(' · ');
+      return h('div', { class: 'lavoro-p' + (espanso ? ' aperto' : ''), 'data-chiave': chiaveLavoro(l) },
+        h('button', { type: 'button', class: 'lavoro-testa', 'aria-expanded': espanso ? 'true' : 'false', onclick: () => { S.lavoroAperto = espanso ? null : chiaveLavoro(l); disegnaPannello(); evidenziaAperto(); } },
+          iniziali(l.cliente, true),
+          h('span', { class: 'testi' }, h('b', null, l.cliente || '—'), h('span', null, sotto), espanso ? null : h('span', { class: 'una-riga', title: l.descrizione || '' }, l.descrizione || '')),
+          h('span', { class: 'destra' }, stato(RL.statoVisto(l.stato)), soldi() ? h('b', null, C.euro(l.totale)) : null)),
+        espanso ? dettagliLavoro(l) : null);
+    };
+
+    const corpo = h('div', { class: 'corpo' },
+      h('div', { class: 'alto' }, h('span', { class: 'numero' }, g.id), tondo('chiudi', 'Chiudi', () => chiudiPannello(), 'piccolo')),
+      h('div', { class: 'testa-rap' }, h('b', null, dataConAnno(g.data)), h('span', null, [g.tecnico, RL.lavoriEClienti(g.lavori)].filter(Boolean).join(' · ')),
+        h('span', null, RL.riassuntoStati(g.lavori))),
+      h('div', { class: 'lavori-p' }, g.lavori.map(scheda)),
+      soldi() ? h('div', { class: 'conto' }, h('div', { class: 'tot' }, h('span', null, 'Totale del giorno'), h('span', null, C.euro(t.totale)))) : null);
+
+    // PDF: uno per destinatario (nessun cliente vede i lavori di un altro).
+    const destinatari = destinatariDi(g.lavori);
+    const pdf = h('button', { type: 'button', class: 'btn grande' }, 'PDF');
+    pdf.addEventListener('click', () => {
+      if (destinatari.length === 1) { pdfRapportino({ id: g.id, data: g.data, tecnico: g.tecnico, lavori: destinatari[0].lavori }, { apri: true }); return; }
+      apriMenu(pdf, destinatari.map(d => ({ testo: 'PDF per ' + d.nome, fn: () => pdfRapportino({ id: g.id, data: g.data, tecnico: g.tecnico, lavori: d.lavori }, { apri: true }) })));
+    });
+    const voci = [
+      scrive && inviati.length ? { testo: 'Riporta da inviare', fn: () => riportaDaInviare(inviati) } : null,
+      scrive && mandabili.length ? { testo: 'Segna inviato senza email', fn: () => cambiaStato(mandabili, 'INVIATO') } : null,
+      fattura && fatturabili.length ? { testo: 'Segna fatturato', fn: () => segnaFatturatiAMano(fatturabili) } : null,
+      // Elimina: il rapportino coi suoi lavori, solo se sono tutti da inviare e fuori dalle fatture.
+      scrive && daInviare.length === g.lavori.length && !g.lavori.some(l => l.fattura) ? '-' : null,
+      scrive && daInviare.length === g.lavori.length && !g.lavori.some(l => l.fattura) ? { testo: 'Elimina', fn: () => eliminaRapportino(g), pericolo: true } : null,
     ].filter(Boolean);
     if (voci[0] === '-') voci.shift();
     const altro = voci.length ? h('button', { type: 'button', class: 'btn grande', 'aria-label': 'Altre azioni', title: 'Altre azioni', style: { width: '52px', padding: '0' } }, icona('altro', 20)) : null;
     if (altro) altro.addEventListener('click', () => apriMenu(altro, voci));
-    // UN pulsante giallo: la cosa da fare adesso (quella che il proprio ruolo può fare).
-    const principale = {
-      BOZZA: scrive ? h('button', { type: 'button', class: 'btn grande giallo', 'data-visita': 'azione-gialla', onclick: () => moduloRapportino(r) }, 'Modifica') : null,
-      FIRMATO: fattura ? h('button', { type: 'button', class: 'btn grande giallo', 'data-visita': 'azione-gialla', onclick: () => preparaInvio([r], true) }, 'Invia al cliente') : null,
-      // Fase 4: un rapportino inviato si fattura preparando la bozza (o si apre la bozza in cui è già).
-      INVIATO: r.fattura && puo('fatturazione') ? h('button', { type: 'button', class: 'btn grande giallo', 'data-visita': 'azione-gialla', onclick: () => apriSuaFattura(r) }, 'Apri ' + (r.fattura.riferimento || 'la fattura'))
-        : fattura ? h('button', { type: 'button', class: 'btn grande giallo', 'data-visita': 'azione-gialla', onclick: () => { S.filtroFatture = { preseleziona: 'rapportino:' + r.id }; vai('#fatturazione'); } }, 'Prepara la bozza') : null,
-    }[r.stato];
-    const piede = h('div', { class: 'piede' }, principale ? [pdf(false), altro, principale] : [altro, pdf(true)]);
+    // UN pulsante giallo: Invia ai clienti, quando c'è qualcosa da inviare (ogni cliente riceve solo i suoi lavori).
+    const invia = scrive ? h('button', { type: 'button', class: 'btn grande' + (mandabili.length ? ' giallo' : ''), 'data-visita': 'azione-gialla', 'data-azione': 'invia-ai-clienti',
+      onclick: () => preparaInvio(daInviare.length ? (mandabili.length ? mandabili : daInviare) : g.lavori) },
+    'Invia ai clienti') : null;
+    const modifica = scrive ? h('button', { type: 'button', class: 'btn grande', onclick: () => moduloRapportino(g.lavori.find(l => chiaveLavoro(l) === aperto) || g.lavori[0]) }, 'Modifica') : null;
+    const piede = h('div', { class: 'piede piede-rap' }, invia, h('div', { class: 'fila-piede' }, modifica, pdf, altro));
 
-    const p = h('aside', { class: 'pannello', 'aria-label': 'Il rapportino ' + (r.id || '') }, corpo, piede);
+    const p = h('aside', { class: 'pannello', 'aria-label': 'Il rapportino ' + g.id }, corpo, piede);
     if (vecchio) { p.style.animation = 'none'; vecchio.replaceWith(p); } else aggiungi($('#sovrapposti'), [p]);
   }
 
   /**
-   * Fase 6: gli strumenti di un rapportino (o di un ticket), con la pillola dello stato di quel giorno, e la banda
+   * Fase 6: gli strumenti di un lavoro (o di un ticket), con la pillola dello stato di quel giorno, e la banda
    * quando uno era scaduto (confermato o no), non conforme o al laboratorio. Niente se non ce ne sono.
    */
   function bloccoStrumenti(r) {
@@ -1647,34 +1779,31 @@
       return true;
     });
     if (fatto) {
-      const nomi = { BOZZA: 'in bozza', INVIATO: 'inviato', FATTURATO: 'fatturato', ANNULLATO: 'eliminato' };
-      const parola = nomi[st] || st.toLowerCase();
-      // Un rapportino eliminato resta sul server come annullato: Annulla lo rimette com'era.
-      const rimetti = st === 'ANNULLATO' && ids.length === 1 && lista[0].id ? { testo: 'Annulla', fn: () => ripristinaRapportino(lista[0].id) } : null;
-      avviso(ids.length === 1 ? (st === 'ANNULLATO' ? 'Rapportino eliminato' : 'Segnato ' + parola) : ids.length + ' rapportini segnati ' + parola.replace(/o$/, 'i'), false, null, rimetti);
+      const uno = { BOZZA: 'Riportato da inviare', INVIATO: 'Segnato inviato', FATTURATO: 'Segnato fatturato', ANNULLATO: 'Lavoro tolto' };
+      const tanti = { BOZZA: 'riportati da inviare', INVIATO: 'segnati inviati', FATTURATO: 'segnati fatturati', ANNULLATO: 'tolti' };
+      avviso(ids.length === 1 ? (uno[st] || 'Fatto') : ids.length + ' lavori ' + (tanti[st] || ''));
       S.scelti.clear();
-      if (st === 'ANNULLATO') chiudiPannello();
       ridisegna();
     }
     return !!fatto;
   }
 
   /**
-   * "Segna fatturati a mano" (fase4.md §13.1): solo per i rapportini fatturati fuori da Wisper.
+   * "Segna fatturati a mano" (fase4.md §13.1): solo per i lavori fatturati fuori da Wisper.
    * Quelli in una bozza o fattura di Wisper il server li rifiuta con la sua frase; qui si chiede conferma.
    */
   async function segnaFatturatiAMano(lista0) {
     const lista = lista0.filter(r => r.stato !== 'FATTURATO');
     if (!lista.length) { avviso('Sono già fatturati', true); return false; }
     const inFattura = lista.filter(r => r.fattura);
-    if (inFattura.length) { avviso('Il rapportino ' + inFattura[0].id + ' è già in ' + inFattura[0].fattura.etichetta + ': diventa fatturato da solo quando torna l\'XML', true); return false; }
-    const ok = await conferma('Fatturati fuori da Wisper?', (lista.length === 1 ? 'Il rapportino diventa fatturato' : 'I ' + lista.length + ' rapportini diventano fatturati') +
+    if (inFattura.length) { avviso('Il lavoro per ' + inFattura[0].cliente + ' è già in ' + inFattura[0].fattura.etichetta + ': diventa fatturato da solo quando torna l\'XML', true); return false; }
+    const ok = await conferma('Fatturati fuori da Wisper?', (lista.length === 1 ? 'Il lavoro diventa fatturato' : 'I ' + lista.length + ' lavori diventano fatturati') +
       ' senza una fattura in Wisper. Fallo solo per quelli fatturati fuori da Wisper; gli altri si fatturano da Fatturazione › Da fatturare.', 'Sì, segna fatturati');
     if (!ok) return false;
     return cambiaStato(lista, 'FATTURATO');
   }
 
-  /** La bozza o la fattura in cui sta un rapportino. */
+  /** La bozza o la fattura in cui sta un lavoro. */
   function apriSuaFattura(r) {
     if (!r.fattura) return;
     chiudiPannello(true);
@@ -1694,7 +1823,7 @@
       if (!x) return;
       accogli([x.rapportino]);
       Ticket.daRileggere();
-      avviso(r.id + ' legato a ' + t.numero);
+      avviso('Lavoro legato a ' + t.numero);
       ridisegna();
     };
     chiudi = finestra({ titolo: 'Lega a un ticket', fuoco: false,
@@ -1704,7 +1833,7 @@
   }
 
   async function togliDalTicket(r) {
-    const ok = await conferma('Togliere dal ticket?', 'Il rapportino ' + r.id + ' non sarà più del ticket ' + (r.numeroTicket || '') + '.', 'Togli dal ticket');
+    const ok = await conferma('Togliere dal ticket?', 'Il lavoro per ' + r.cliente + ' non sarà più del ticket ' + (r.numeroTicket || '') + '.', 'Togli dal ticket');
     if (!ok) return;
     const x = await lavora('Tolgo dal ticket', () => Rete.post('/server/legaRapportino', { idRapportino: r.id, idTicket: null }));
     if (!x) return;
@@ -1714,16 +1843,28 @@
     ridisegna();
   }
 
-  async function riportaInBozza(r) {
-    const ok = await conferma('Riportare in bozza?',
-      r.firma ? 'La firma del cliente viene tolta: ha firmato il rapportino com\'era. Dopo la correzione va rifirmato.' : 'Il rapportino torna modificabile.',
-      'Riporta in bozza');
-    if (ok) cambiaStato([r], 'BOZZA');
+  /** "Riporta da inviare": un lavoro inviato torna modificabile (va mandato di nuovo). */
+  async function riportaDaInviare(lista) {
+    const ok = await conferma('Riportare da inviare?', (lista.length === 1 ? 'Il lavoro torna modificabile' : 'I ' + lista.length + ' lavori tornano modificabili') +
+      ': dopo la correzione va mandato di nuovo al cliente.', 'Riporta da inviare');
+    if (ok) cambiaStato(lista, 'BOZZA');
   }
 
-  async function annulla(r) {
-    const ok = await conferma('Eliminare il rapportino?', 'Sparisce dagli elenchi. Resta nell\'archivio, segnato come annullato.', 'Elimina', true);
-    if (ok) cambiaStato([r], 'ANNULLATO');
+  /** Elimina il rapportino coi suoi lavori (tutti da inviare): restano nell'archivio come annullati, Annulla li rimette. */
+  async function eliminaRapportino(g) {
+    const ok = await conferma('Eliminare il rapportino?', (g.lavori.length === 1 ? 'Il rapportino sparisce' : 'Il rapportino e i suoi ' + g.lavori.length + ' lavori spariscono') +
+      ' dagli elenchi. Restano nell\'archivio, segnati come annullati.', 'Elimina', true);
+    if (!ok) return;
+    const fatto = await lavora('Elimino il rapportino', async () => {
+      const ris = await Rete.post('/server/stato', { ids: [], idGiornata: g.id, stato: 'ANNULLATO' });
+      accogli(ris.rapportini);
+      return true;
+    });
+    if (!fatto) return;
+    avviso('Rapportino eliminato', false, null, { testo: 'Annulla', fn: () => ripristinaRapportino(g.id) });
+    chiudiPannello();
+    S.scelti.clear();
+    ridisegna();
   }
 
   async function ripristinaRapportino(id) {
@@ -1747,164 +1888,193 @@
     if (fatto) { avviso('Scontrino aggiunto'); ridisegna(); }
   }
 
-  /** La scansione di un rapportino firmato a mano: vale come firma. */
-  function caricaFirmato(r) {
-    const nome = h('input', { type: 'text' });
-    let chiudi;
-    const vai = async () => {
-      if (!nome.value.trim()) { nome.focus(); avviso('Scrivi il nome di chi ha firmato', true); return; }
-      const scelto = await Rete.post('/locale/scegli-file', { filtro: 'immagini' }).catch(() => null);
-      if (!scelto || !scelto.ok) return;
-      const fatto = await lavora('Carico la firma', async () => {
-        await Rete.post('/server/caricaFile', {
-          tipo: 'firma', id: r.id, idLocale: r.idLocale, idFile: 'pc' + Date.now().toString(36),
-          mime: scelto.mime, base64: scelto.base64, firmatario: nome.value.trim(),
-        });
-        const ris = await Rete.get('/server/rapportini?da=' + r.data + '&a=' + r.data);
-        accogli(ris.rapportini);
-        return true;
-      });
-      if (fatto) { chiudi(); avviso('Firma caricata: il rapportino è firmato'); ridisegna(); }
-    };
-    chiudi = finestra({
-      titolo: 'Carica il foglio firmato',
-      corpo: [h('p', { style: { margin: 0, fontSize: '16px' } }, 'La foto o la scansione del rapportino firmato a mano.'), campo('Nome di chi ha firmato', nome)],
-      pulsanti: ['spazio', h('button', { type: 'button', class: 'btn testo grande', onclick: () => chiudi() }, 'Annulla'),
-        h('button', { type: 'button', class: 'btn giallo grande', onclick: vai }, 'Scegli il file')],
-    });
-  }
-
   // ----------------------------------------------------------------------- PDF e invio
 
   function nomeFile(prefisso, testo) {
     return (prefisso + ' ' + testo).replace(/[\\/:*?"<>|]+/g, '-').trim();
   }
 
-  async function pdfRapportino(r, opzioni) {
+  /** Il PDF del rapportino per UN destinatario: g = { id, data, tecnico, lavori } (o un lavoro solo, come prima). */
+  async function pdfRapportino(x, opzioni) {
     const o = opzioni || {};
     if (S.esempio) { avviso('Nella visita il PDF non si crea'); return null; }
-    const html = D.rapportino(r, S.ana, { conImporti: !!o.conImporti, conFoto: !!o.conFoto });
+    const g = Array.isArray(x.lavori) ? x : { id: RL.giornataDi(x), data: x.data, tecnico: x.tecnico, lavori: [x] };
+    const html = D.rapportino({ id: g.id, data: g.data, tecnico: g.tecnico, lavori: g.lavori }, S.ana, { conImporti: !!o.conImporti, conFoto: !!o.conFoto });
+    const nomeCli = (g.lavori[0] && g.lavori[0].cliente) || '';
     const ris = await lavora('Preparo il PDF', () => Rete.post('/locale/pdf', {
-      html, nome: nomeFile(r.id || 'Rapportino', r.cliente + ' ' + C.data(r.data).replace(/\//g, '-')), apri: !!o.apri, base64: !!o.base64,
+      html, nome: nomeFile(g.id || 'Rapportino', nomeCli + ' ' + C.data(g.data).replace(/\//g, '-')), apri: !!o.apri, base64: !!o.base64,
     }));
     if (ris && o.apri) avviso('PDF salvato in ' + ris.percorso);
     return ris;
   }
 
   /**
-   * Prepara riepilogo (e Invia al cliente per un rapportino solo): a sinistra la
-   * pagina com'è, a destra a chi va e cosa contiene, poi Invia per email, Solo il
-   * PDF o "Segna come inviato senza email" per quando il PDF lo si consegna in
-   * altro modo. Gli importi ci sono nel riepilogo (serve per la fattura), non nel
-   * rapportino singolo (al cliente di solito serve il lavoro, non il conto).
+   * Invio rapportino / Invio rapportini (rapportino-lavori.md §4): i lavori scelti si dividono per destinatario (chi paga:
+   * il cliente del lavoro) e partono in un'email per destinatario, con solo i suoi lavori (inviaEmail con i suoi ids).
+   * Per ognuno: l'email già scritta, oggetto e frase da periodoInvio sui suoi lavori (un rapportino solo: "Rapportino
+   * N del gg/mm/aaaa"), il PDF (un rapportino: il rapportino coi suoi lavori; più rapportini: il riepilogo, una riga per
+   * lavoro). A sinistra l'anteprima della pagina del destinatario scelto; a destra una scheda per destinatario.
    */
-  function preparaInvio(lista0, singolo) {
-    const lista = C.ordina(lista0, 'data', 1);
-    if (!lista.length) { avviso('Non c\'è niente da mettere nel riepilogo', true); return; }
+  function preparaInvio(lista0) {
+    // In ordine di giorno, poi di rapportino e di posizione: i destinatari nell'ordine in cui compaiono i loro lavori.
+    const lista = (lista0 || []).filter(Boolean).map((l, i) => ({ l, i })).sort((a, b) => String(a.l.data).localeCompare(String(b.l.data)) ||
+      RL.giornataDi(a.l).localeCompare(RL.giornataDi(b.l)) || ((Number(a.l.posizione) || 1) - (Number(b.l.posizione) || 1)) || a.i - b.i).map(x => x.l);
+    if (!lista.length) { avviso('Non c\'è niente da mandare', true); return; }
     if (!puoMandare(lista)) return;
-    const r0 = singolo ? lista[0] : null;
-    // Il rapportino singolo va al cliente (o, senza la sua email, a chi paga); il riepilogo a chi paga.
-    const intest = r0
-      ? { nome: r0.cliente, email: (cliente(r0.idCliente) || {}).email || chiPaga(r0).email, righe: [], mostraCliente: false }
-      : intestatarioRiepilogo(lista);
-    const periodo = periodoDi(lista);
     const imp = S.ana.impostazioni;
-    const t = C.totali(lista);
+    const firmaEmail = imp.TECNICO || imp.RAGIONE_SOCIALE || '';
     let chiudi;
+    let scelto = 0;
 
-    const conImporti = h('input', { type: 'checkbox', checked: !singolo });
+    const gruppi = destinatariDi(lista).map((g, i) => {
+      const chi = chiPaga(g.lavori[0]);
+      const numero = RL.unRapportino(g.lavori);
+      const p = RL.oggettoInvio(g.lavori, RI.periodoInvio);
+      const x = {
+        i, chiave: g.chiave, nome: chi.nome, righe: chi.righe, lavori: g.lavori, numero, periodo: periodoDi(g.lavori), inviata: false, errore: '', aperto: false,
+        a: h('input', { type: 'email', value: RI.emailDestinatario(g.lavori, trovaPerInvio()) || '', placeholder: 'Scrivi l\'indirizzo', 'aria-label': 'Email di ' + chi.nome }),
+        oggetto: h('input', { type: 'text', value: p.oggetto + (numero ? '' : ' · ' + chi.nome) }),
+        cc: h('input', { type: 'text' }),
+        messaggio: h('textarea', { rows: 5 }),
+      };
+      x.messaggio.value = RI.messaggioInvio(p.frase, firmaEmail);
+      // Senza email in memoria si rileggono i clienti (scritta poco fa da un altro computer o dal telefono).
+      emailFresca(x.a, () => RI.emailDestinatario(g.lavori, trovaPerInvio()));
+      x.a.addEventListener('input', () => { if (x.errore) { x.errore = ''; disegnaSchede(); x.a.focus(); } });
+      return x;
+    });
+    const unoSolo = !!RL.unRapportino(lista);
+    // Gli importi: di base sì nei riepiloghi (servono per la fattura), no nel rapportino (al cliente serve il lavoro).
+    const conImporti = h('input', { type: 'checkbox', checked: soldi() && gruppi.some(x => !x.numero) });
     const conFoto = h('input', { type: 'checkbox' });
-    const a = h('input', { type: 'email', value: intest.email || '', placeholder: 'email di ' + intest.nome });
-    const cc = h('input', { type: 'text' });
-    const oggetto = h('input', { type: 'text', value: r0 ? 'Rapportino ' + r0.id + ' del ' + C.data(r0.data) : 'Rapportini ' + periodo + (intest.nome !== 'Vari clienti' ? ' · ' + intest.nome : '') });
-    const messaggio = h('textarea', { rows: 5 });
-    messaggio.value = (r0
-      ? 'Buongiorno,\nin allegato il rapportino del ' + C.data(r0.data) + '.'
-      : 'Buongiorno,\nin allegato il riepilogo dei rapportini di ' + periodo.toLowerCase() + '.') +
-      '\n\nCordiali saluti\n' + (imp.TECNICO || imp.RAGIONE_SOCIALE || '');
-    const campoA = h('div', null, campo('A', a));
-    const messaggioZona = h('div', { class: 'fila nascosto', style: { display: 'flex', flexDirection: 'column', gap: '14px' } },
-      campo('Oggetto', oggetto), campo('Copia anche a', cc), campo('Messaggio', messaggio));
-    const cambiaMessaggio = h('button', { type: 'button', class: 'btn collegamento', style: { alignSelf: 'flex-start' }, onclick: () => { messaggioZona.classList.remove('nascosto'); cambiaMessaggio.remove(); oggetto.focus(); } }, 'Cambia il messaggio');
+    const opzioni = () => ({ conImporti: conImporti.checked, conFoto: conFoto.checked });
+    const htmlDi = x => (x.numero
+      ? D.rapportino({ id: x.numero, data: x.lavori[0].data, tecnico: x.lavori[0].tecnico, lavori: x.lavori }, S.ana, opzioni())
+      : D.riepilogo(x.lavori, S.ana, { nome: x.nome, righe: x.righe, email: x.a.value.trim(), mostraCliente: false }, x.periodo, opzioni()));
+    const nomeDi = x => (x.numero ? nomeFile(x.numero, x.nome) : nomeFile('Riepilogo', x.nome + ' ' + x.periodo));
+    const creaPdf = (x, base64) => Rete.post('/locale/pdf', { html: htmlDi(x), nome: nomeDi(x), apri: !base64, base64: !!base64 });
+    // "Riepilogo ottobre 2026": il mese a metà frase va minuscolo (nel titolo del PDF resta "Ottobre 2026").
+    const allegato = x => (x.numero ? 'Rapportino ' + x.numero : 'Riepilogo ' + x.periodo.charAt(0).toLowerCase() + x.periodo.slice(1)) + ' · ' + RL.nLavori(x.lavori.length);
 
-    // L'anteprima della pagina: com'è fatta, coi numeri veri.
+    // L'anteprima della pagina del destinatario scelto: com'è fatta, coi numeri veri.
     const foglioA4 = h('div', { class: 'foglio-a4', 'aria-hidden': 'true' });
-    const disegnaAnteprima = () => {
+    function disegnaAnteprima() {
+      const x = gruppi[scelto];
+      const t = C.totali(x.lavori);
       aggiungi(svuota(foglioA4), [
-        h('div', { class: 'testa-a4' }, h('span', null, imp.RAGIONE_SOCIALE || 'Lo studio'), h('span', null, r0 ? r0.id : periodo)),
+        h('div', { class: 'testa-a4' }, h('span', null, imp.RAGIONE_SOCIALE || 'Lo studio'), h('span', null, x.numero || x.periodo)),
         h('div', { class: 'linea-a4' }),
-        h('div', { class: 'parti-a4' }, h('span', null, imp.RAGIONE_SOCIALE || ''), h('span', null, intest.nome)),
-        lista.slice(0, 10).map(r => h('div', { class: 'riga-a4' }, h('span', null, dataBreve(r.data) + '  ' + (r0 ? r.descrizione : (r.commessa || r.descrizione))),
+        h('div', { class: 'parti-a4' }, h('span', null, imp.RAGIONE_SOCIALE || ''), h('span', null, x.nome)),
+        x.lavori.slice(0, 10).map(r => h('div', { class: 'riga-a4' }, h('span', null, (x.numero ? (r.progetto || r.idCommessa || '') + '  ' : dataBreve(r.data) + '  ') + (r.descrizione || '')),
           h('span', null, conImporti.checked ? C.euro(r.totale) : C.ore(r.oreTotali)))),
-        lista.length > 10 ? h('div', { class: 'riga-a4' }, h('span', null, '… e altri ' + (lista.length - 10))) : null,
-        conImporti.checked ? h('div', { class: 'tot-a4' }, C.euro(t.totale)) : h('div', { class: 'tot-a4' }, C.ore(t.ore))]);
-    };
+        x.lavori.length > 10 ? h('div', { class: 'riga-a4' }, h('span', null, '… e altri ' + (x.lavori.length - 10))) : null,
+        h('div', { class: 'tot-a4' }, conImporti.checked ? C.euro(t.totale) : C.ore(t.ore))]);
+    }
     conImporti.addEventListener('change', disegnaAnteprima);
-    disegnaAnteprima();
 
-    const creaPdf = async base64 => {
-      const html = r0
-        ? D.rapportino(r0, S.ana, { conImporti: conImporti.checked, conFoto: conFoto.checked })
-        : D.riepilogo(lista, S.ana, intest, periodo, { conImporti: conImporti.checked, conFoto: conFoto.checked });
-      const nome = r0 ? nomeFile(r0.id, r0.cliente) : nomeFile('Riepilogo', intest.nome + ' ' + periodo);
-      return Rete.post('/locale/pdf', { html, nome, apri: !base64, base64: !!base64 });
-    };
+    const schede = h('div', { class: 'destinatari' });
+    function disegnaSchede() {
+      aggiungi(svuota(schede), gruppi.map(x => {
+        const sceglila = () => { if (scelto !== x.i) { scelto = x.i; disegnaSchede(); disegnaAnteprima(); } };
+        const t = C.totali(x.lavori);
+        return h('div', { class: 'dest' + (x.i === scelto ? ' scelta' : '') + (x.inviata ? ' inviata' : ''), 'data-destinatario': x.nome, onclick: sceglila },
+          h('div', { class: 'dest-testa' }, iniziali(x.nome, true),
+            h('span', { class: 'testi' }, h('b', null, x.nome), h('span', null, RL.nLavori(x.lavori.length) + (soldi() ? ' · ' + C.euro(t.totale) : ''))),
+            x.inviata ? h('span', { class: 'pill p-verde' }, 'Inviata') : null),
+          x.inviata ? null : campo('A', x.a, x.errore || null),
+          h('div', { class: 'allegato' }, icona('graffetta', 16, 2.2), h('span', null, allegato(x))),
+          x.inviata ? null : x.aperto ? h('div', { class: 'fila', style: { display: 'flex', flexDirection: 'column', gap: '12px' } },
+            campo('Oggetto', x.oggetto), campo('Copia anche a', x.cc), campo('Messaggio', x.messaggio))
+            : h('div', { class: 'oggetto-dest' }, h('span', { class: 'tenue' }, x.oggetto.value),
+              h('button', { type: 'button', class: 'btn collegamento', onclick: e => { e.stopPropagation(); x.aperto = true; sceglila(); disegnaSchede(); x.oggetto.focus(); } }, 'Cambia il messaggio')));
+      }));
+    }
+
+    const rimaste = () => gruppi.filter(x => !x.inviata);
+    const bottoneInvia = h('button', { type: 'button', class: 'btn grande giallo', 'data-visita': 'invia-email', 'data-azione': 'invia-email', onclick: () => manda(false) });
+    const etichettaInvia = () => { const n = rimaste().length; bottoneInvia.textContent = n === 1 ? 'Invia l\'email' : 'Invia ' + n + ' email'; };
 
     async function manda(aMe) {
-      if (!aMe && !a.value.trim()) {
-        aggiungi(svuota(campoA), [campo('A', a, 'Manca l\'indirizzo: scrivilo qui (lo puoi salvare in Clienti)')]);
-        a.focus();
-        return;
+      const daMandare = aMe ? [gruppi[scelto]] : rimaste();
+      // Prima i controlli: ogni email ha il suo indirizzo (niente parte a metà per un campo vuoto).
+      if (!aMe) {
+        const senza = daMandare.find(x => !x.a.value.trim());
+        if (senza) {
+          senza.errore = 'Manca l\'indirizzo: scrivilo qui (lo puoi salvare in Clienti)';
+          scelto = senza.i;
+          disegnaSchede(); disegnaAnteprima();
+          senza.a.focus();
+          return;
+        }
       }
-      const fatto = await lavora(aMe ? 'Mando la copia' : 'Mando l\'email', async () => {
-        const pdf = await creaPdf(true);
-        const ris = await Rete.post('/server/inviaEmail', {
-          a: a.value.trim(), cc: cc.value.trim(), oggetto: oggetto.value, messaggio: messaggio.value,
-          allegati: pdf && pdf.base64 ? [{ nome: pdf.nome, base64: pdf.base64, mime: 'application/pdf' }] : [],
-          ids: lista.map(r => r.id), aMe: !!aMe,
+      let fatte = 0;
+      for (const x of daMandare) {
+        const ok = await lavora(aMe ? 'Mando la copia' : 'Mando l\'email a ' + x.nome, async () => {
+          const pdf = await creaPdf(x, true);
+          const ris = await Rete.post('/server/inviaEmail', {
+            a: x.a.value.trim(), cc: x.cc.value.trim(), oggetto: x.oggetto.value, messaggio: x.messaggio.value,
+            allegati: pdf && pdf.base64 ? [{ nome: pdf.nome, base64: pdf.base64, mime: 'application/pdf' }] : [],
+            ids: x.lavori.map(r => r.id), aMe: !!aMe,
+          });
+          accogli(ris.rapportini);
+          return true;
         });
-        accogli(ris.rapportini);
-        return true;
-      });
-      if (!fatto) return;
-      if (aMe) { avviso('Copia mandata alla tua casella'); return; }
+        if (!ok) { disegnaSchede(); etichettaInvia(); if (fatte) ridisegna(); return; }
+        if (aMe) { avviso('Copia mandata alla tua casella'); return; }
+        x.inviata = true;
+        fatte += 1;
+      }
       chiudi();
-      avviso((r0 ? 'Rapportino' : 'Riepilogo') + ' inviato a ' + a.value.trim() + (S.esempio ? ' (esempio: non è partito niente)' : ''));
+      const dove = daMandare.length === 1 ? 'Email mandata a ' + daMandare[0].a.value.trim() : daMandare.length + ' email mandate';
+      avviso(dove + (S.esempio ? ' (esempio: non è partito niente)' : ''));
       ridisegna();
       Visita.azione('invia-email');
+    }
+
+    async function soloPdf() {
+      if (S.esempio) { avviso('Nella visita il PDF non si crea'); return; }
+      let ultimo = null;
+      for (const x of gruppi) {
+        const ok = await lavora('Preparo il PDF', () => creaPdf(x, false));
+        if (!ok) return;
+        ultimo = ok;
+      }
+      chiudi();
+      avviso(gruppi.length === 1 ? 'PDF salvato in ' + ultimo.percorso : gruppi.length + ' PDF salvati, l\'ultimo in ' + ultimo.percorso);
     }
 
     const altro = h('button', { type: 'button', class: 'tondo piccolo', 'aria-label': 'Altre azioni', title: 'Altre azioni' }, icona('altro', 18));
     altro.addEventListener('click', () => apriMenu(altro, [{ testo: 'Mandane una copia a me', fn: () => manda(true) }]));
     const daSegnare = lista.filter(r => r.stato !== 'FATTURATO');
+    const t = C.totali(lista);
+    const titolo = unoSolo ? 'Invio rapportino' : 'Invio rapportini';
 
-    const contenuto = h('div', { class: 'riepilogo-f' },
+    disegnaSchede();
+    disegnaAnteprima();
+    etichettaInvia();
+    const contenuto = h('div', { class: 'riepilogo-f invio-f' },
       h('div', { class: 'anteprima' }, foglioA4),
       h('div', { class: 'scelte' },
         h('div', { class: 'titolo-r' },
-          h('div', null, h('span', { class: 'secondario' }, r0 ? 'Rapportino ' + r0.id : 'Riepilogo di ' + periodo.toLowerCase()),
-            h('b', null, intest.nome + ' · ' + C.euro(t.totale))),
+          h('div', null, h('span', { class: 'secondario', 'data-titolo-invio': '' }, titolo + ' · ' + (unoSolo ? RL.unRapportino(lista) : periodoDi(lista).toLowerCase())),
+            h('b', null, (gruppi.length === 1 ? gruppi[0].nome : gruppi.length + ' clienti') + (soldi() ? ' · ' + C.euro(t.totale) : ''))),
           altro, tondo('chiudi', 'Chiudi', () => chiudi(), 'piccolo')),
-        campoA,
-        h('label', { class: 'spunta-campo' }, conImporti, 'Con gli importi'),
-        h('label', { class: 'spunta-campo' }, conFoto, 'Con le foto degli scontrini'),
-        cambiaMessaggio, messaggioZona,
+        schede,
+        h('div', { class: 'spunte-invio' },
+          soldi() ? h('label', { class: 'spunta-campo' }, conImporti, 'Con gli importi') : null,
+          h('label', { class: 'spunta-campo' }, conFoto, 'Con le foto degli scontrini')),
         h('div', { class: 'bottoni' },
           h('button', { type: 'button', class: 'btn testo grande', onclick: () => chiudi() }, 'Annulla'),
-          h('button', { type: 'button', class: 'btn grande', onclick: async () => {
-            if (S.esempio) { avviso('Nella visita il PDF non si crea'); return; }
-            const ok = await lavora('Preparo il PDF', () => creaPdf(false));
-            if (ok) { chiudi(); avviso('PDF salvato in ' + ok.percorso); }
-          } }, 'Solo il PDF'),
-          h('button', { type: 'button', class: 'btn grande giallo', 'data-visita': 'invia-email', onclick: () => manda(false) }, 'Invia per email')),
+          h('button', { type: 'button', class: 'btn grande', onclick: soloPdf }, 'Solo i PDF'),
+          bottoneInvia),
         daSegnare.length ? h('button', { type: 'button', class: 'btn collegamento', style: { alignSelf: 'center' }, onclick: async () => {
           chiudi();
           await cambiaStato(daSegnare, 'INVIATO');
-        } }, 'Segna come inviato senza email') : null));
-    chiudi = finestra({ contenuto, larghezza: 'media', titolo: r0 ? 'Invia il rapportino' : 'Prepara il riepilogo', fuoco: false });
+        } }, 'Segna inviati senza email') : null));
+    chiudi = finestra({ contenuto, larghezza: 'media', titolo, fuoco: false });
   }
 
-  // ----------------------------------------------------------------------- modulo
+  // ----------------------------------------------------------------------- il rapportino da scrivere
 
   /** Le ultime coppie cliente-commessa usate: le schede da toccare per prime. */
   function recenti(quante) {
@@ -1925,22 +2095,61 @@
     return x ? C.num(x.km) : null;
   }
 
+  /** I campi di un lavoro come li vuole salvaRapportino (gli stessi di un rapportino della 1.1). */
+  function campiLavoro(l) {
+    const out = { idLocale: l.idLocale, id: l.id || '' };
+    ['idCliente', 'cliente', 'idCommessa', 'commessa', 'descrizione', 'luogo', 'noteSpese', 'noteInterne', 'ticket'].forEach(k => { out[k] = l[k] || ''; });
+    ['oreLavoro', 'oreExtra', 'oreViaggio', 'km', 'spese'].forEach(k => { out[k] = C.num(l[k]); });
+    out.idProgetto = l.idProgetto === undefined || l.idProgetto === '' ? null : l.idProgetto;
+    if (l.tariffa !== undefined && l.tariffa !== null) out.tariffa = l.tariffa;
+    return out;
+  }
+
   /**
-   * Il rapportino da compilare o correggere dal computer: la stessa sequenza
-   * del telefono in una finestra larga. A sinistra per chi, ore e strada; a
-   * destra il lavoro, le spese e il conto che si aggiorna mentre si scrive.
+   * Un lavoro inviato, fatturato o dentro una fattura: si vede, non si cambia. Al salvataggio parte uguale (il server lo
+   * lascia com'è).
    */
-  function moduloRapportino(esistente, predefiniti) {
+  function formaFerma(l) {
+    const st = RL.statoVisto(l.stato);
+    const perche = l.fattura ? 'È in ' + (l.fattura.etichetta || 'una fattura') + ': non si cambia.'
+      : st === 'FATTURATO' ? 'Fatturato: non si cambia.' : 'Già inviato al cliente: non si cambia. Per correggerlo, riportalo da inviare dal rapportino.';
+    const el = h('div', { class: 'lavoro-fermo' },
+      h('div', { class: 'banda calma' }, icona('avviso', 20), h('span', { class: 'spazio' }, perche)),
+      h('div', null, h('div', { style: { fontSize: '18px', fontWeight: '800' } }, l.cliente), h('div', { class: 't2' }, [commessaDi(l), progettoDi(l)].filter(Boolean).join(' · '))),
+      dettagliFissi(l));
+    return { lavoro: l, fermo: true, el, leggi: () => campiLavoro(l), valida: () => ({}), haErrori: () => false, riassunto: () => l, dataCambiata() {}, fuoco() {} };
+  }
+
+  /** Il dettaglio di un lavoro senza le azioni (per il lavoro fermo dentro il modulo). */
+  function dettagliFissi(r) {
+    return h('div', { class: 'lavoro-dettagli' },
+      h('div', { class: 'lavoro' }, r.descrizione || '—'),
+      h('div', { class: 'tre-dati' },
+        h('span', null, h('em', null, 'Ore'), h('b', null, C.ore(r.oreTotali))),
+        h('span', null, h('em', null, 'Km'), h('b', null, C.numero(r.km) + ' km')),
+        h('span', null, h('em', null, 'Spese'), h('b', null, C.num(r.spese) ? C.euro(r.spese) : '—'))),
+      soldi() ? h('div', { class: 'conto' }, righeDelConto(r), h('div', { class: 'tot' }, h('span', null, 'Totale del lavoro'), h('span', null, C.euro(r.totale)))) : null);
+  }
+
+  /**
+   * Un lavoro da compilare o correggere: la sequenza di sempre (per chi, progetto, ore e strada, tariffa, il lavoro, spese,
+   * luogo, nota, ticket, strumenti) col suo conto. esistente: il lavoro che c'è già; p: i dati di partenza (data, cliente,
+   * commessa, progetto, ticket; copiaDa = "Copia il lavoro scelto"). ctx: data() = la data del rapportino, cambiato() =
+   * qualcosa è cambiato (l'elenco dei lavori e i totali del giorno si aggiornano).
+   */
+  function formaLavoro(esistente, predefiniti, ctx) {
     const p = predefiniti || {};
+    const c0 = p.copiaDa || null;
     const r = esistente ? Object.assign({}, esistente) : {
       idLocale: 'U-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
-      data: p.data || C.oggiIso(), tecnico: (S.io && S.io.utente && S.io.utente.nome) || S.ana.impostazioni.TECNICO || '', idCliente: p.idCliente || '', cliente: '',
-      idCommessa: p.idCommessa || '', commessa: '', oreLavoro: 0, oreExtra: 0, oreViaggio: 0, km: '', spese: '',
-      tariffa: null, descrizione: '', luogo: p.luogo || '', ticket: '', noteSpese: '', noteInterne: '',
-      // Fase 5 (§3.3): dal ticket il rapportino nasce già con cliente, commessa e luogo; il numero lo scrive il server.
+      idCliente: c0 ? c0.idCliente || '' : p.idCliente || '', cliente: c0 ? c0.cliente || '' : '',
+      idCommessa: c0 ? c0.idCommessa || '' : p.idCommessa || '', commessa: c0 && c0.idCommessa ? c0.commessa || '' : '',
+      oreLavoro: 0, oreExtra: 0, oreViaggio: 0, km: '', spese: '',
+      tariffa: c0 && c0.tariffa ? c0.tariffa : null, descrizione: '', luogo: c0 ? c0.luogo || '' : p.luogo || '', ticket: '', noteSpese: '', noteInterne: '',
+      // Fase 5 (§3.3): dal ticket il lavoro nasce già con cliente, commessa e luogo; il numero lo scrive il server.
       idTicket: p.idTicket || null, numeroTicket: p.numeroTicket || '',
-      // 03/11/2026: dal progetto il rapportino nasce già con cliente, commessa e progetto.
-      idProgetto: p.idProgetto || null,
+      // 03/11/2026: dal progetto il lavoro nasce già con cliente, commessa e progetto (copiato: lo stesso del lavoro scelto).
+      idProgetto: c0 ? (c0.idCommessa ? c0.idProgetto || null : null) : p.idProgetto || null,
     };
     if (r.idCliente && !r.cliente) r.cliente = (cliente(r.idCliente) || {}).nome || '';
     if (r.idCommessa && !r.commessa) r.commessa = (commessa(r.idCommessa) || {}).descrizione || '';
@@ -1949,14 +2158,17 @@
       idCliente: r.idCliente, cliente: r.cliente, idCommessa: r.idCommessa, commessa: r.commessa, codiceProposto: '',
       sceltaFatta: !!r.cliente, commessaFatta: !!esistente || !!r.idCommessa || !!r.idTicket,
       oreLavoro: C.num(r.oreLavoro), oreExtra: C.num(r.oreExtra), oreViaggio: C.num(r.oreViaggio),
-      extraAperto: C.num(r.oreExtra) > 0, tariffaToccata: !!esistente, nuovoCliente: false,
+      extraAperto: C.num(r.oreExtra) > 0, tariffaToccata: !!esistente || !!(c0 && c0.tariffa), nuovoCliente: false,
       // 03/11/2026 (progetti.md §4.6): il progetto della commessa, scelto (idProgetto) o nuovo (progettoNuovo, per una commessa nuova).
       idProgetto: r.idProgetto !== undefined && r.idProgetto !== null && r.idProgetto !== '' ? r.idProgetto : null, progettoNuovo: null,
     };
     let errori = {};
-    // Con la funzione Progetti accesa il rapportino non si salva senza progetto; con Commesse spenta non chiede la commessa.
+    // Con la funzione Progetti accesa il lavoro chiede il progetto; con Commesse spenta non chiede la commessa.
+    // Dal 06/11/2026 progetto e commessa sono obbligatori solo per Elettrodinamica (RP.progettoObbligatorio, dal nome del
+    // cliente): per gli altri il progetto si sceglie ma c'è "Nessun progetto", e torna "Senza commessa".
     const conProgetti = progettiAccesi();
     const conCommesse = funzioneAccesa('commesse');
+    const obbligatorio = () => conProgetti && RP.progettoObbligatorio(m.cliente);
     /** I progetti che si possono scegliere: gli aperti della commessa (e quello già scelto). */
     const progettiDellaCommessa = () => RP.perRapportino(S.ana.progetti || [], m.idCommessa, m.idProgetto);
     /** Cambiata la commessa: il progetto di prima non vale più; se la commessa ne ha uno solo aperto, è quello. */
@@ -1969,11 +2181,10 @@
     if (conProgetti && !esistente && !m.idProgetto && m.idCommessa) progettoDaCommessa();
 
     const v = {
-      data: h('input', { type: 'date', value: r.data }),
       ricerca: h('input', { type: 'search', placeholder: 'Scrivi il nome', 'aria-label': 'Cerca il cliente' }),
-      nuovaCommessa: h('input', { type: 'text', placeholder: 'Come la chiami tu' }),
+      nuovaCommessa: h('input', { type: 'text', placeholder: 'Come la chiami tu', 'aria-label': 'Il nome della commessa nuova' }),
       km: h('input', { type: 'text', inputmode: 'decimal', value: r.km !== '' && r.km !== null && r.km !== undefined && (esistente || C.num(r.km)) ? R.numeroCampo(r.km) : '' }),
-      tariffa: h('input', { type: 'text', inputmode: 'decimal', value: r.tariffa ? R.numeroCampo(r.tariffa) : '' }),
+      tariffa: h('input', { type: 'text', inputmode: 'decimal', value: r.tariffa ? R.numeroCampo(r.tariffa) : '', 'aria-label': 'Tariffa oraria' }),
       descrizione: h('textarea', { rows: 5 }),
       spese: h('input', { type: 'text', inputmode: 'decimal', value: C.num(r.spese) ? R.numeroCampo(r.spese) : '' }),
       noteSpese: h('input', { type: 'text', value: r.noteSpese || '' }),
@@ -1987,7 +2198,7 @@
     const clienteScelto = () => (m.idCliente && cliente(m.idCliente)) || null;
     const regoleAttuali = () => C.regoleDi(clienteScelto(), S.ana.gruppi, S.ana.impostazioni, commessa(m.idCommessa));
     // Il codice che avrà una commessa nuova: si vede subito, come vuole lo studio.
-    const codiceNuovo = () => prossimoCodiceCommessa(new Date(v.data.value || Date.now()).getFullYear());
+    const codiceNuovo = () => prossimoCodiceCommessa(new Date(ctx.data() || Date.now()).getFullYear());
     const sottoCliente = c => (c && c.tariffaFissa !== null && c.tariffaFissa !== undefined) ? 'Tariffa fissa ' + C.numero(c.tariffaFissa) + ' €/h' : 'Tariffa libera';
 
     const zonaPerChi = h('div', { class: 'fila', style: { display: 'flex', flexDirection: 'column', gap: '10px' } });
@@ -2036,11 +2247,16 @@
 
     function disegnaPerChi() {
       svuota(zonaPerChi);
+      disegnaPerChi0();
+      ctx.cambiato();
+    }
+
+    function disegnaPerChi0() {
       if (!m.sceltaFatta) {
         const rec = recenti(4);
         if (rec.length) {
           aggiungi(zonaPerChi, [h('div', { class: 'griglia-scelte' }, rec.map(x => h('button', {
-            type: 'button', class: 'scelta-card', onclick: () => {
+            type: 'button', class: 'scelta-card', title: [x.cliente, conCommesse ? x.commessa : ''].filter(Boolean).join(' · '), onclick: () => {
               const c = cliente(x.idCliente);
               scegliCliente(c, x.cliente);
               m.idCommessa = conCommesse ? x.idCommessa : ''; m.commessa = conCommesse ? x.commessa : ''; m.commessaFatta = true;
@@ -2054,7 +2270,7 @@
         if (testo) {
           const trovati = clientiAttivi().filter(c => C.normalizza([c.nome].concat(c.alias || []).join(' ')).indexOf(C.normalizza(testo)) >= 0)
             .sort((a, b) => a.nome.localeCompare(b.nome, 'it')).slice(0, 6);
-          trovati.forEach(c => aggiungi(zonaPerChi, [h('button', { type: 'button', class: 'scelta-card', onclick: () => scegliCliente(c) },
+          trovati.forEach(c => aggiungi(zonaPerChi, [h('button', { type: 'button', class: 'scelta-card', title: c.nome, onclick: () => scegliCliente(c) },
             iniziali(c.nome, true), h('span', { class: 'testi' }, h('b', null, c.nome), h('span', null, sottoCliente(c))))]));
           if (!trovati.some(c => C.normalizza(c.nome) === C.normalizza(testo))) {
             // Un cliente nuovo ha la tariffa libera: Elettrodinamica, l'unica fissa, c'è già.
@@ -2066,8 +2282,8 @@
       }
       aggiungi(zonaPerChi, [h('div', { class: 'scelta-card scelta' }, iniziali(m.cliente, true),
         h('span', { class: 'testi' }, h('b', null, m.cliente), h('span', null, m.idCliente ? sottoCliente(clienteScelto()) : 'Cliente nuovo · tariffa libera')),
-        h('button', { type: 'button', class: 'btn collegamento', onclick: () => { m.sceltaFatta = false; disegnaPerChi(); } }, 'Cambia'))]);
-      // Commesse spenta (progetti.md §5): il rapportino non chiede la commessa (né il progetto).
+        h('button', { type: 'button', class: 'btn collegamento', onclick: () => { m.sceltaFatta = false; disegnaPerChi(); setTimeout(() => v.ricerca.focus(), 20); } }, 'Cambia'))]);
+      // Commesse spenta (progetti.md §5): il lavoro non chiede la commessa (né il progetto).
       if (!conCommesse) return;
       const aperte = m.idCliente ? S.ana.commesse.filter(x => x.idCliente === m.idCliente && !x.modello && ((x.stato === 'APERTA' && !x.archiviata) || x.id === m.idCommessa)) : [];
       const pill = (testo, scelta, fn, attr) => h('button', Object.assign({ type: 'button', class: 'pillola' + (scelta ? ' scelta' : ''), onclick: fn }, attr || {}), testo);
@@ -2076,9 +2292,9 @@
         h('div', { class: 'pillole' },
           aperte.map(x => pill(x.id + ' · ' + x.descrizione, m.idCommessa === x.id, () => { m.idCommessa = x.id; m.commessa = x.descrizione; m.codiceProposto = ''; m.commessaFatta = true; commessaScelta(); })),
           m.commessa && !m.idCommessa ? pill(m.codiceProposto + ' · ' + m.commessa + ' (nuova)', true, () => {}) : null,
-          // Con i progetti accesi un rapportino ha sempre commessa e progetto (§4.6): niente "Senza commessa".
-          conProgetti ? null : pill('Senza commessa', m.commessaFatta && !m.commessa, () => { m.idCommessa = ''; m.commessa = ''; m.codiceProposto = ''; m.commessaFatta = true; disegnaPerChi(); disegnaKm(); aggiornaConto(); })),
-        h('div', { style: { display: 'flex', gap: '8px' } }, h('div', { style: { flex: '1' } }, campo(null, v.nuovaCommessa)),
+          // Con i progetti accesi un lavoro di Elettrodinamica ha sempre commessa e progetto (§4.6): niente "Senza commessa".
+          obbligatorio() ? null : pill('Senza commessa', m.commessaFatta && !m.commessa, () => { m.idCommessa = ''; m.commessa = ''; m.codiceProposto = ''; m.commessaFatta = true; disegnaPerChi(); disegnaKm(); aggiornaConto(); })),
+        h('div', { class: 'riga-nuova-commessa' }, h('div', { style: { flex: '1', minWidth: '0' } }, campo(null, v.nuovaCommessa)),
           h('button', { type: 'button', class: 'btn', onclick: () => {
             const n = v.nuovaCommessa.value.trim();
             if (!n) { v.nuovaCommessa.focus(); return; }
@@ -2091,22 +2307,25 @@
         return;
       }
       // Il progetto (progetti.md §4.6): gli aperti della commessa e "Nuovo progetto"; uno solo aperto è già scelto.
+      // Per chi non è Elettrodinamica c'è anche "Nessun progetto" (06/11/2026).
       const scelti = commessaNuova ? [] : progettiDellaCommessa();
       const puoCreare = puo('progetti', 2);
       const nuovo = m.progettoNuovo;
+      const facoltativo = !obbligatorio();
       aggiungi(zonaPerChi, [h('div', { class: 'etichetta' }, 'Progetto'),
         h('div', { class: 'pillole', 'data-campo': 'progetto' },
+          facoltativo ? pill('Nessun progetto', !m.idProgetto && !nuovo, () => { m.idProgetto = null; m.progettoNuovo = null; delete errori.progetto; disegnaPerChi(); }) : null,
           scelti.map(x => pill(RP.etichetta(x), String(m.idProgetto) === String(x.id), () => { m.idProgetto = x.id; m.progettoNuovo = null; delete errori.progetto; disegnaPerChi(); },
             { title: x.intestatoA ? 'Intestato a ' + x.intestatoA : '' })),
           nuovo ? pill((nuovo.codice || nuovo.codiceVisto ? (nuovo.codice || nuovo.codiceVisto) + ' · ' : '') + (nuovo.descrizione || 'Progetto') + ' (nuovo)', true, () => nuovoProgetto()) : null,
           puoCreare && !nuovo ? h('button', { type: 'button', class: 'pillola tratteggiata', onclick: () => nuovoProgetto() }, '+ Nuovo progetto') : null),
-        !scelti.length && !nuovo && !puoCreare ? h('p', { class: 'vuoto sinistra' }, 'Nessun progetto aperto in questa commessa.') : null,
+        !scelti.length && !nuovo && !puoCreare && !facoltativo ? h('p', { class: 'vuoto sinistra' }, 'Nessun progetto aperto in questa commessa.') : null,
         errori.progetto ? h('div', { class: 'campo' }, h('div', { class: 'errore' }, errori.progetto)) : null]);
     }
 
     /**
-     * "Nuovo progetto" dal rapportino. Su una commessa che c'è già: il modulo dei progetti col codice proposto, il progetto
-     * si crea subito (creaProgetto) e resta scelto. Su una commessa nuova: i dati restano nel rapportino (progettoNuovo) e
+     * "Nuovo progetto" dal lavoro. Su una commessa che c'è già: il modulo dei progetti col codice proposto, il progetto
+     * si crea subito (creaProgetto) e resta scelto. Su una commessa nuova: i dati restano nel lavoro (progettoNuovo) e
      * il server crea commessa e progetto insieme al rapportino (il codice, se vuoto, lo propone lui).
      */
     function nuovoProgetto() {
@@ -2160,7 +2379,7 @@
       if (!soldi()) return;
       if (regole.tariffaFissa !== null) {
         aggiungi(zonaTariffa, [h('div', { class: 'riga-stepper' }, h('span', { class: 'nome' }, h('b', null, 'Tariffa fissa ' + (m.cliente || ''))),
-          h('span', { style: { fontSize: '18px', fontWeight: '800' } }, C.numero(regole.tariffaFissa) + ' €/h'))]);
+          h('span', { class: 'valore-tariffa' }, C.numero(regole.tariffaFissa) + ' €/h'))]);
         return;
       }
       const c = clienteScelto();
@@ -2171,7 +2390,7 @@
         : proposta && C.num(v.tariffa.value) === proposta ? 'l\'ultima usata per ' + (c ? c.nome : 'questo cliente')
         : proposta ? 'l\'ultima volta era ' + C.numero(proposta) + ' €/h' : 'prima volta per questo cliente';
       aggiungi(zonaTariffa, [h('div', { class: 'riga-stepper' }, h('span', { class: 'nome' }, h('b', null, 'Tariffa oraria'), h('span', { class: 'piccolo' }, nota)),
-        h('div', { style: { width: '150px' } }, campo(null, conSuffisso(v.tariffa, '€/h'), errori.tariffa)))]);
+        h('div', { class: 'campo-tariffa' }, campo(null, conSuffisso(v.tariffa, '€/h'), errori.tariffa)))]);
     }
 
     function disegnaAltro() {
@@ -2191,11 +2410,11 @@
      * Gli strumenti usati (fase6.md §3.8, §3.9): i miei strumenti come schede con lo stato della taratura alla data del
      * rapportino (ricalcolato dalla data, come il telefono senza rete), "Come l'ultima volta qui", "Altro strumento".
      * Non conforme, al laboratorio, guasto: spento, il tocco dice perché. Scaduto: si usa solo confermando (con
-     * TARATURA_BLOCCO = "blocco" non si sceglie), e la conferma resta scritta nel rapportino.
+     * TARATURA_BLOCCO = "blocco" non si sceglie), e la conferma resta scritta nel lavoro.
      */
     const statoAllaData = s => {
       const prea = Number(S.ana.impostazioni.TARATURA_PREAVVISO_GIORNI) || 30;
-      if (s.ultimaTaratura !== undefined || s.controllo !== undefined) return window.WisperRegolePersone.statoTaratura({ controllo: s.controllo, ultima: s.ultimaTaratura || null, fuoriUso: s.fuoriUso, inLaboratorio: s.stato === 'laboratorio' }, v.data.value || C.oggiIso(), prea) || s.taratura || null;
+      if (s.ultimaTaratura !== undefined || s.controllo !== undefined) return window.WisperRegolePersone.statoTaratura({ controllo: s.controllo, ultima: s.ultimaTaratura || null, fuoriUso: s.fuoriUso, inLaboratorio: s.stato === 'laboratorio' }, ctx.data() || C.oggiIso(), prea) || s.taratura || null;
       return s.taratura || null;
     };
     function disegnaStrumenti() {
@@ -2280,8 +2499,6 @@
       return {
         idLocale: r.idLocale,
         id: r.id || '',
-        data: v.data.value,
-        tecnico: r.tecnico || S.ana.impostazioni.TECNICO || '',
         idCliente: m.idCliente,
         cliente: m.cliente,
         idCommessa: m.idCommessa,
@@ -2301,11 +2518,19 @@
         ...(r.idTicket && !esistente ? { idTicket: r.idTicket } : {}),
         // Fase 6: l'elenco intero degli strumenti (il server congela lo stato della taratura di quel giorno).
         ...(conStrumenti ? { strumenti: strumentiScelti.map(s => ({ idAttrezzatura: s.idAttrezzatura, confermato: !!s.confermato })) } : {}),
-        // 03/11/2026: il progetto. Con la funzione spenta un rapportino già scritto tiene il suo (se resta sulla stessa commessa):
+        // 03/11/2026: il progetto. Con la funzione spenta un lavoro già scritto tiene il suo (se resta sulla stessa commessa):
         // senza idProgetto il server lo staccherebbe.
         ...(conProgetti ? (m.progettoNuovo && !m.idProgetto ? { idProgetto: null, progettoNuovo: m.progettoNuovo } : { idProgetto: m.idProgetto || null })
           : esistente && esistente.idProgetto && String(esistente.idCommessa || '').toUpperCase() === String(m.idCommessa || '').toUpperCase() ? { idProgetto: esistente.idProgetto } : {}),
       };
+    }
+
+    /** Il lavoro coi suoi conti, per la scheda a sinistra e i totali del giorno. */
+    function riassunto() {
+      const dati = leggiModulo();
+      const conto = C.calcola(dati, regoleAttuali());
+      const nomeProgetto = m.progettoNuovo && !m.idProgetto ? (m.progettoNuovo.codice || m.progettoNuovo.codiceVisto || m.progettoNuovo.descrizione || 'Progetto nuovo') : progettoDi({ idProgetto: m.idProgetto });
+      return Object.assign({}, dati, conto, { stato: r.stato || 'BOZZA', commessaFatta: m.commessaFatta, nomeProgetto });
     }
 
     function aggiornaConto() {
@@ -2314,7 +2539,8 @@
       const conto = C.calcola(dati, regole);
       const x = Object.assign({}, dati, conto);
       aggiungi(svuota(zonaConto), [h('div', { class: 'conto' }, righeDelConto(x, regole),
-        h('div', { class: 'tot' }, h('span', null, 'Totale'), h('span', null, C.euro(conto.totale))))]);
+        h('div', { class: 'tot' }, h('span', null, 'Totale del lavoro'), h('span', null, C.euro(conto.totale))))]);
+      ctx.cambiato();
     }
 
     function disegnaDescrizione() {
@@ -2324,19 +2550,19 @@
     function valida(dati) {
       const e = {};
       if (!dati.cliente) e.cliente = 'Scegli il cliente';
-      if (!dati.descrizione) e.descrizione = 'Scrivi che lavoro hai fatto';
-      if (!dati.data) e.data = 'Manca la data';
-      ['km', 'spese', 'tariffa'].forEach(k => {
-        const t = v[k].value.trim();
-        if (t && C.numONull(t) === null) e[k] = 'Non è un numero';
-      });
-      if (dati.oreLavoro + dati.oreExtra + dati.oreViaggio <= 0) e.oreLavoro = 'Mancano le ore';
-      if (soldi() && regoleAttuali().tariffaFissa === null && !(dati.tariffa > 0) && !e.tariffa) e.tariffa = 'Scrivi la tariffa';
-      if (conProgetti && dati.cliente) {
+      // Commessa e progetto obbligatori solo per Elettrodinamica (06/11/2026); le frasi del rifiuto restano quelle di prima.
+      if (conProgetti && dati.cliente && RP.progettoObbligatorio(dati.cliente)) {
         const manca = RP.mancaProgetto({ accesi: true, idCommessa: m.idCommessa, commessaNuova: !!(m.commessa && !m.idCommessa), idProgetto: m.idProgetto, progettoNuovo: m.progettoNuovo,
           aperti: m.idCommessa ? progettiDellaCommessa().length : 0, puoCreare: puo('progetti', 2), titolare: titolare() });
         if (manca) e.progetto = manca;
       }
+      if (dati.oreLavoro + dati.oreExtra + dati.oreViaggio <= 0) e.oreLavoro = 'Mancano le ore';
+      ['km', 'tariffa', 'spese'].forEach(k => {
+        const t = v[k].value.trim();
+        if (t && C.numONull(t) === null) e[k] = 'Non è un numero';
+      });
+      if (soldi() && regoleAttuali().tariffaFissa === null && !(dati.tariffa > 0) && !e.tariffa) e.tariffa = 'Scrivi la tariffa';
+      if (!dati.descrizione) e.descrizione = 'Scrivi che lavoro hai fatto';
       return e;
     }
 
@@ -2344,71 +2570,227 @@
     v.tariffa.addEventListener('input', () => { m.tariffaToccata = true; delete errori.tariffa; aggiornaConto(); });
     v.tariffa.addEventListener('change', disegnaTariffa);
     ['km', 'spese'].forEach(k => v[k].addEventListener('input', aggiornaConto));
-    v.descrizione.addEventListener('input', () => { if (errori.descrizione) { delete errori.descrizione; disegnaDescrizione(); v.descrizione.focus(); } });
+    v.descrizione.addEventListener('input', () => { if (errori.descrizione) { delete errori.descrizione; disegnaDescrizione(); v.descrizione.focus(); } ctx.cambiato(); });
 
+    disegnaPerChi0(); disegnaOre(); disegnaKm(); disegnaTariffa(); disegnaAltro(); disegnaDescrizione();
+    if (conStrumenti && strumentiAperti) disegnaStrumenti();
+    const zonaConto0 = soldi() ? [h('h3', null, 'Il conto'), zonaConto] : [];
+    const el = h('div', { class: 'modulo' },
+      h('div', { class: 'col' }, r.numeroTicket || r.idTicket ? h('div', { class: 'pillole-testa' }, h('span', { class: 'pill p-grigio' }, icona('chiaveInglese', 14, 2.2), 'Ticket ' + (r.numeroTicket || ''))) : null,
+        h('h3', null, 'Per chi'), zonaPerChi, h('h3', null, 'Ore e strada'), zonaOre, zonaKm, zonaTariffa),
+      h('div', { class: 'col' }, h('h3', null, 'Il lavoro'), campoDescrizione, zonaAltro, zonaConto0));
+    // Il conto all'inizio, senza avvisare l'editor (che non è ancora pronto).
+    (() => { const regole = regoleAttuali(); const d = leggiModulo(); const conto = C.calcola(d, regole);
+      aggiungi(svuota(zonaConto), [h('div', { class: 'conto' }, righeDelConto(Object.assign({}, d, conto), regole), h('div', { class: 'tot' }, h('span', null, 'Totale del lavoro'), h('span', null, C.euro(conto.totale))))]); })();
+
+    return {
+      lavoro: r, fermo: false, el, leggi: leggiModulo, riassunto,
+      valida() {
+        errori = valida(leggiModulo());
+        disegnaPerChi0Pulito(); disegnaOre(); disegnaKm(); disegnaTariffa(); disegnaAltro(); disegnaDescrizione();
+        return errori;
+      },
+      haErrori: () => Object.keys(errori).length > 0,
+      dataCambiata() { if (conStrumenti && strumentiAperti) disegnaStrumenti(); },
+      fuoco() { if (!m.sceltaFatta) setTimeout(() => v.ricerca.focus(), 40); },
+    };
+    function disegnaPerChi0Pulito() { svuota(zonaPerChi); disegnaPerChi0(); }
+  }
+
+  /**
+   * Il rapportino da scrivere o correggere (rapportino-lavori.md §5, computer 1): una finestra larga. In alto la data
+   * con Cambia; a sinistra i lavori (la scheda scelta evidenziata), "Aggiungi un lavoro", "Copia il lavoro scelto"; a
+   * destra il lavoro scelto, con tutto quello che aveva il rapportino della 1.1, e "Togli questo lavoro" (solo da
+   * inviare). In basso lavori, ore e km del giorno, Totale del giorno, Annulla, Salva rapportino. Gli errori dicono
+   * quale lavoro ("Lavoro 2: scegli il progetto") e lo aprono. I lavori inviati o fatturati si vedono, non si cambiano.
+   *
+   * esistente: un lavoro (si apre il suo rapportino con quel lavoro scelto), o null per un rapportino nuovo;
+   * predefiniti: data, idCliente, idCommessa, idProgetto, luogo, idTicket, numeroTicket, verifica (il primo lavoro).
+   */
+  function moduloRapportino(esistente, predefiniti) {
+    const p = predefiniti || {};
+    const g0 = esistente ? giornata(chiaveLavoro(esistente)) : null;
+    const G = g0 ? { id: g0.id, data: g0.data, tecnico: g0.tecnico }
+      : { idLocale: 'G-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8), id: '', data: p.data || C.oggiIso(),
+        tecnico: (S.io && S.io.utente && S.io.utente.nome) || S.ana.impostazioni.TECNICO || '' };
+    const dataInput = h('input', { type: 'date', value: G.data, 'aria-label': 'La data del rapportino' });
+    let dataAperta = false;
+    const zonaData = h('div', { class: 'data-rap' });
+    const elenco = h('div', { class: 'elenco-lavori' });
+    const zonaLavoro = h('div', { class: 'zona-lavoro' });
+    const riassunto = h('div', { class: 'riassunto-giorno' });
+    const forme = [];
+    let scelto = 0;
+    let pronto = false;
+    const ctx = { data: () => dataInput.value || G.data, cambiato: () => { if (pronto) { disegnaElenco(); disegnaRiassunto(); } } };
+    if (g0) g0.lavori.forEach(l => forme.push(RL.fermo(l) ? formaFerma(l) : formaLavoro(l, null, ctx)));
+    else forme.push(formaLavoro(null, p, ctx));
+    if (g0) {
+      const i = forme.findIndex(f => chiaveLavoro(f.lavoro) === chiaveLavoro(esistente));
+      scelto = i >= 0 ? i : Math.max(0, forme.findIndex(f => !f.fermo));
+    }
+    // La data vale per tutti i lavori: con un lavoro già inviato o fatturato non si cambia più.
+    const dataFissa = forme.some(f => f.fermo);
+
+    function disegnaData() {
+      const d = dataInput.value || G.data;
+      aggiungi(svuota(zonaData), [h('span', { class: 'quando' }, d ? dataConAnno(d) : 'Scegli la data'),
+        dataAperta ? dataInput : dataFissa ? null : h('button', { type: 'button', class: 'btn collegamento', 'data-azione': 'cambia-data', onclick: () => {
+          dataAperta = true; disegnaData(); dataInput.focus(); try { dataInput.showPicker(); } catch (e) { /* non tutti i browser */ }
+        } }, 'Cambia')]);
+    }
+    dataInput.addEventListener('change', () => { if (!dataInput.value) return; dataAperta = false; disegnaData(); forme.forEach(f => f.dataCambiata()); });
+
+    function schedaElenco(f, i) {
+      const x = f.riassunto();
+      const err = f.haErrori();
+      const prog = f.fermo ? progettoDi(x) : x.nomeProgetto;
+      const comm = x.idCommessa ? x.idCommessa + (x.commessa ? ' · ' + x.commessa : '') : x.commessa ? (x.codiceProposto ? x.codiceProposto + ' · ' : '') + x.commessa + ' (nuova)' : f.fermo || x.commessaFatta ? 'Senza commessa' : '';
+      const sotto = [comm, prog].filter(Boolean).join(' · ');
+      return h('button', { type: 'button', class: 'card-lavoro' + (i === scelto ? ' scelta' : '') + (err ? ' sbagliata' : ''), 'aria-pressed': i === scelto ? 'true' : 'false',
+        'data-lavoro': String(i + 1), onclick: () => scegli(i) },
+      h('span', { class: 'num-lav' }, String(i + 1)),
+      h('span', { class: 'testi' },
+        h('b', null, x.cliente || 'Scegli il cliente'),
+        sotto ? h('span', null, sotto) : null,
+        h('span', { class: 'una-riga', title: x.descrizione || '' }, x.descrizione || 'Cosa hai fatto?'),
+        h('span', { class: 'numeri' }, h('span', null, C.ore(C.num(x.oreLavoro) + C.num(x.oreExtra) + C.num(x.oreViaggio)) + ' · ' + C.numero(x.km) + ' km'),
+          soldi() ? h('b', null, C.euro(x.totale)) : null),
+        RL.statoVisto(x.stato) !== 'BOZZA' || x.fattura ? h('span', null, stato(RL.statoVisto(x.stato))) : null));
+    }
+
+    function disegnaElenco() {
+      aggiungi(svuota(elenco), [forme.map(schedaElenco),
+        h('button', { type: 'button', class: 'aggiungi-lavoro', 'data-azione': 'aggiungi-lavoro', onclick: aggiungiLavoro }, icona('piu', 18, 2.6), 'Aggiungi un lavoro'),
+        h('button', { type: 'button', class: 'btn collegamento', 'data-azione': 'copia-lavoro', onclick: copiaLavoro }, 'Copia il lavoro scelto')]);
+    }
+
+    function disegnaRiassunto() {
+      const xs = forme.map(f => f.riassunto());
+      const t = C.totali(xs);
+      aggiungi(svuota(riassunto), [h('span', { class: 'conti-giorno' }, RL.nLavori(forme.length) + ' · ' + C.ore(t.oreLavoro + t.oreExtra + t.oreViaggio) + ' · ' + C.numero(t.km) + ' km'),
+        soldi() ? h('span', { class: 'tot-giorno' }, 'Totale del giorno', h('b', null, C.euro(t.totale))) : null]);
+    }
+
+    function mostraLavoro() {
+      const f = forme[scelto];
+      aggiungi(svuota(zonaLavoro), [h('div', { class: 'testa-lavoro' },
+        h('h3', null, 'Lavoro ' + (scelto + 1) + (forme.length > 1 ? ' di ' + forme.length : '')),
+        !f.fermo && forme.length > 1 ? h('button', { type: 'button', class: 'btn collegamento rosso', 'data-azione': 'togli-lavoro', onclick: () => togli(scelto) }, 'Togli questo lavoro') : null),
+      f.el]);
+    }
+
+    function scegli(i) {
+      scelto = i;
+      disegnaElenco();
+      mostraLavoro();
+      zonaLavoro.scrollTop = 0;
+    }
+
+    function aggiungiLavoro() {
+      const f = formaLavoro(null, {}, ctx);
+      forme.push(f);
+      scegli(forme.length - 1);
+      disegnaRiassunto();
+      f.fuoco();
+    }
+
+    /** "Copia il lavoro scelto": stesso cliente, commessa (se c'è già) e progetto, tariffa e luogo; ore, km e lavoro nuovi. */
+    function copiaLavoro() {
+      const base = forme[scelto].leggi();
+      if (!base.cliente) { avviso('Il lavoro scelto non ha ancora il cliente', true); return; }
+      const f = formaLavoro(null, { copiaDa: base }, ctx);
+      forme.push(f);
+      scegli(forme.length - 1);
+      disegnaRiassunto();
+    }
+
+    function togli(i) {
+      const f = forme.splice(i, 1)[0];
+      scegli(Math.min(i, forme.length - 1));
+      disegnaRiassunto();
+      avviso('Lavoro ' + (i + 1) + ' tolto' + (f.lavoro.id ? ': sparisce quando salvi' : ''), false, null,
+        { testo: 'Annulla', fn: () => { forme.splice(i, 0, f); scegli(i); disegnaRiassunto(); } });
+    }
+
+    let salvando = false;
     async function salva() {
-      const dati = leggiModulo();
-      errori = valida(dati);
-      if (Object.keys(errori).length) {
-        disegnaPerChi(); disegnaOre(); disegnaKm(); disegnaTariffa(); disegnaAltro(); disegnaDescrizione();
-        avviso('Mancano dei dati: sono segnati in rosso', true);
+      if (salvando) return;
+      if (!dataInput.value) { dataAperta = true; disegnaData(); avviso('Manca la data del rapportino', true); return; }
+      // I controlli lavoro per lavoro: il primo con un errore si apre e l'avviso dice quale.
+      const sbagliati = [];
+      forme.forEach((f, i) => { const e = f.valida(); if (Object.keys(e).length) sbagliati.push({ i, e }); });
+      if (sbagliati.length) {
+        const primo = sbagliati[0];
+        scegli(primo.i);
+        const frase = primo.e[Object.keys(primo.e)[0]];
+        const altri = sbagliati.slice(1).map(x => x.i + 1);
+        avviso((forme.length > 1 ? 'Lavoro ' + (primo.i + 1) + ': ' + frase.charAt(0).toLowerCase() + frase.slice(1) : frase) +
+          (altri.length ? ' (anche ' + (altri.length === 1 ? 'il lavoro ' : 'i lavori ') + altri.join(', ') + ')' : ''), true);
         return;
       }
-      const nuovaAnagrafica = !dati.idCliente || (dati.commessa && !dati.idCommessa) || !!dati.progettoNuovo;
-      const ris = await lavora('Salvo il rapportino', () => Rete.post('/server/salvaRapportino', { rapportino: dati }));
-      if (!ris) return;
-      accogli([ris.rapportino]);
+      const corpo = { idLocale: G.idLocale || undefined, id: G.id || undefined, data: dataInput.value, tecnico: G.tecnico, lavori: forme.map(f => f.leggi()) };
+      const nuovaAnagrafica = corpo.lavori.some(l => !l.idCliente || (l.commessa && !l.idCommessa) || !!l.progettoNuovo);
+      salvando = true;
+      let lavoroSbagliato = 0;
+      const ris = await lavora('Salvo il rapportino', async () => {
+        try { return await Rete.post('/server/salvaRapportino', { rapportino: corpo }); } catch (e) { lavoroSbagliato = Number(e && e.dati && e.dati.lavoro) || 0; throw e; }
+      });
+      salvando = false;
+      if (!ris) { if (lavoroSbagliato && forme[lavoroSbagliato - 1]) scegli(lavoroSbagliato - 1); return; }
+      const g = ris.rapportino;
+      accogli([g]);
       if (nuovaAnagrafica) await ricaricaAnagrafiche().catch(() => null);
-      // I progetti contano rapportini e ore: si rileggono (la pagina e la scheda commessa li mostrano).
-      if (conProgetti && puo('progetti')) {
+      // I progetti contano lavori e ore: si rileggono (la pagina e la scheda commessa li mostrano).
+      if (progettiAccesi() && puo('progetti')) {
         Progetti.daRileggere();
         Progetti.leggi().then(() => { const dove = percorso().split('/')[0]; if (dove === 'progetti' || dove === 'commesse') ridisegna(); }).catch(() => null);
       }
       chiudi();
-      avviso('Salvato: ' + ris.rapportino.id + (soldi() ? ' · ' + C.euro(ris.rapportino.totale) : ''));
-      // Fase 5: un rapportino del ticket chiede "Il lavoro è finito?" (il ticket si rilegge col rapportino nuovo).
-      if (ris.rapportino.idTicket && !esistente) { Ticket.daRileggere(); Ticket.lavoroFinito(ris.rapportino); if (W.percorso().indexOf('ticket') === 0) { ridisegna(); if (Ticket.M.tk) Ticket.apriPannello(ris.rapportino.idTicket); return; } }
-      S.aperto = ris.rapportino.id || ris.rapportino.idLocale;
+      const lavori = (g && g.lavori) || [];
+      avviso('Salvato: ' + g.id + ' · ' + RL.nLavori(lavori.length) + (soldi() ? ' · ' + C.euro(g.totale) : ''));
+      // Fase 5: il lavoro del ticket chiede "Il lavoro è finito?" (il ticket si rilegge col lavoro nuovo).
+      const delTicket = !g0 && p.idTicket ? lavori.find(l => String(l.idTicket) === String(p.idTicket)) : null;
+      if (delTicket) { Ticket.daRileggere(); Ticket.lavoroFinito(delTicket); if (W.percorso().indexOf('ticket') === 0) { ridisegna(); if (Ticket.M.tk) Ticket.apriPannello(delTicket.idTicket); return; } }
+      S.aperto = g.id;
+      S.lavoroAperto = null;
       ridisegna();
+      evidenziaAperto();
     }
 
-    disegnaPerChi(); disegnaOre(); disegnaKm(); disegnaTariffa(); disegnaAltro(); disegnaDescrizione(); aggiornaConto();
-    if (conStrumenti && strumentiAperti) disegnaStrumenti();
-    // La data cambia lo stato della taratura (uno strumento che scade oggi domani è scaduto).
-    v.data.addEventListener('change', () => { if (conStrumenti && strumentiAperti) disegnaStrumenti(); });
-    const corpo = h('div', { class: 'modulo' },
-      h('div', { class: 'col' }, r.numeroTicket || r.idTicket ? h('div', { class: 'pillole-testa' }, h('span', { class: 'pill p-grigio' }, icona('chiaveInglese', 14, 2.2), 'Ticket ' + (r.numeroTicket || esistente && esistente.numeroTicket || ''))) : null,
-        campo('Data', v.data), h('h3', null, 'Per chi'), zonaPerChi, h('h3', null, 'Ore e strada'),
-        zonaOre, zonaKm, zonaTariffa),
-      h('div', { class: 'col' }, h('h3', null, 'Il lavoro'), campoDescrizione, zonaAltro, soldi() ? h('h3', null, 'Il conto') : null, soldi() ? zonaConto : null));
+    disegnaData();
+    disegnaElenco();
+    disegnaRiassunto();
+    mostraLavoro();
+    pronto = true;
+    const corpoF = h('div', { class: 'editor-rap' }, h('div', { class: 'col-elenco' }, elenco), zonaLavoro);
     const chiudi = finestra({
-      titolo: esistente ? 'Modifica ' + (r.id || 'il rapportino') : 'Nuovo rapportino', larghezza: 'larga', corpo, fuoco: false,
-      pulsanti: ['spazio', h('button', { type: 'button', class: 'btn testo grande', onclick: () => chiudi() }, 'Annulla'),
-        h('button', { type: 'button', class: 'btn giallo grande', style: { minWidth: '180px' }, onclick: salva }, 'Salva')],
+      titolo: G.id ? 'Rapportino ' + G.id : 'Nuovo rapportino', larghezza: 'piena editor', corpo: corpoF, fuoco: false, testaExtra: zonaData,
+      pulsanti: [riassunto, 'spazio', h('button', { type: 'button', class: 'btn testo grande', onclick: () => chiudi() }, 'Annulla'),
+        h('button', { type: 'button', class: 'btn giallo grande', 'data-azione': 'salva-rapportino', onclick: salva }, 'Salva rapportino')],
     });
-    if (!m.sceltaFatta) setTimeout(() => v.ricerca.focus(), 40);
+    forme[scelto].fuoco();
   }
 
-  /** I rapportini di una commessa: la stessa tabella, senza gruppi. */
+  /** I lavori di una commessa o di un progetto: la stessa tabella, senza gruppi (la data e il numero del rapportino). */
   function tabellaRapportini(lista) {
     if (!lista.length) return h('p', { class: 'vuoto' }, 'Ancora nessun rapportino.');
-    const colonne = colonneRapportini(false);
-    const tab = h('div', { class: 'tab' }, h('div', { class: 'r testa', style: { gridTemplateColumns: colonne } }, h('span', null, 'Data · N°'), h('span', null, 'Cliente'),
-      h('span', null, 'Lavoro svolto'), h('span', { class: 'n' }, 'Ore'), h('span', { class: 'n' }, 'Km'),
-      soldi() ? h('span', { class: 'n' }, 'Spese') : null, soldi() ? h('span', { class: 'n' }, 'Totale') : null, h('span', null, 'Stato')));
+    const tab = h('div', { class: 'tab lavori semplice' + (soldi() ? ' con-soldi' : '') }, h('div', { class: 'r testa' }, h('span', null, 'Data · N°'), h('span', { class: 'c-cliente' }, 'Cliente'),
+      h('span', null, 'Lavoro svolto'), h('span', { class: 'n' }, 'Ore'), h('span', { class: 'n c-km' }, 'Km'),
+      soldi() ? h('span', { class: 'n' }, 'Totale') : null, h('span', null, 'Stato')));
     lista.forEach(r => {
-      const chiave = r.id || r.idLocale;
-      aggiungi(tab, [h('div', { class: 'r cliccabile' + (S.aperto === chiave ? ' scelta' : ''), style: { gridTemplateColumns: colonne }, role: 'button', tabindex: '0', 'data-chiave': chiave, onclick: () => apriPannello(chiave) },
-        h('span', { class: 'doppia' }, h('span', { class: 'forte' }, dataBreve(r.data)), h('span', { class: 'num' }, r.id)),
-        h('span', { class: 'doppia' }, h('span', null, r.cliente), h('span', null, [r.idCommessa, progettoDi(r)].filter(Boolean).join(' · '))),
-        h('span', { class: 'taglia t2', title: r.descrizione }, r.descrizione),
-        h('span', { class: 'n' }, C.numero(r.oreTotali)), h('span', { class: 'n' }, C.numero(r.km)),
-        soldi() ? h('span', { class: 'n t2' }, C.num(r.spese) ? C.euro(r.spese) : '') : null, soldi() ? h('span', { class: 'n forte' }, C.euro(r.totale)) : null, statoRapportino(r))]);
+      const chiave = chiaveLavoro(r);
+      aggiungi(tab, [h('div', { class: 'r cliccabile' + (S.aperto && S.lavoroAperto === chiave ? ' scelta' : ''), role: 'button', tabindex: '0', 'data-chiave': chiave, onclick: () => apriPannello(chiave) },
+        h('span', { class: 'doppia' }, h('span', { class: 'forte' }, dataBreve(r.data)), h('span', { class: 'num' }, RL.giornataDi(r))),
+        h('span', { class: 'c-cliente' }, h('span', { class: 'forte' }, r.cliente), h('span', { class: 'tenue' }, [r.idCommessa, progettoDi(r)].filter(Boolean).join(' · '))),
+        h('span', { class: 'due-righe t2', title: r.descrizione || '' }, r.descrizione),
+        h('span', { class: 'n' }, C.numero(r.oreTotali)), h('span', { class: 'n c-km' }, C.numero(r.km)),
+        soldi() ? h('span', { class: 'n forte' }, C.euro(r.totale)) : null, statoRapportino(r))]);
     });
     const t = C.totali(lista);
-    aggiungi(tab, [h('div', { class: 'r piede', style: { gridTemplateColumns: colonne } }, h('span', { style: { gridColumn: 'span 3' } }, 'Totale · ' + nRapportini(t.n)),
-      h('span', { class: 'n' }, C.numero(t.ore)), h('span', { class: 'n' }, C.numero(t.km)),
-      soldi() ? h('span', { class: 'n' }, C.euro(t.spese)) : null, soldi() ? h('span', { class: 'n' }, C.euro(t.totale)) : null, h('span'))]);
+    aggiungi(tab, [h('div', { class: 'r piede' }, h('span', { style: { gridColumn: 'span 3' } }, 'Totale · ' + RL.nLavori(t.n)),
+      h('span', { class: 'n' }, C.numero(t.ore)), h('span', { class: 'n c-km' }, C.numero(t.km)),
+      soldi() ? h('span', { class: 'n' }, C.euro(t.totale)) : null, h('span'))]);
     return tab;
   }
 
@@ -2422,7 +2804,7 @@
     S, C, D, R, B, Rete, Api, Visita,
     puo, soldi, perm, cliente, commessa, utente, clientiAttivi, attivi, somma, nRapportini, dataBreve, meseMinuscolo,
     mostra, ridisegna, disegnaPagina, vai, vaiA, vaiARapportini, ricaricaAnagrafiche, caricaDashboard, accogli,
-    riquadro, apriPannello, moduloRapportino, preparaInvio, cambiaStato, tabellaRapportini, apriFile,
+    riquadro, apriPannello, moduloRapportino, preparaInvio, cambiaStato, tabellaRapportini, apriFile, emailFresca,
     iniziaVisita, cercaAggiornamenti, riavvia, statoAggiornamenti, mostraLicenza, esci, filtriCommesse, titolare,
     // fase 2
     senzaPermesso, nomeFile, prossimoCodiceCommessa, attivitaLette, scriviConConferma,
@@ -2592,8 +2974,8 @@
   function svuotaFase2() {
     Object.assign(Preventivi.M, { lista: null, listino: null, aperti: {}, bozza: null, chiave: '' });
     Object.assign(Attivita.M, { aperte: null, periodo: null, da: '', a: '' });
-    // fase 3: ore, timer, approvazioni, spese
-    Object.assign(Ore.M, { ore: null, chiave: '', approvare: null, stat: null, timer: null, attivita: null, aggiunte: {}, persona: null, segmento: 'ore' });
+    // fase 3: approvazioni, spese (le Ore sono state tolte il 07/11/2026)
+    Object.assign(Ore.M, { approvare: null, segmento: 'rapportini' });
     Object.assign(Spese.M, { spese: null, trasferte: null, rimborsi: null, veicoli: null, riep: null, persona: '', segmento: 'spese' });
     // fase 4: fatture, banche e scadenze
     Fatture.daRileggere();

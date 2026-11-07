@@ -289,7 +289,7 @@ con spunta verde, oppure "Foglio non raggiunto · Riprova").
   bordo: il giallo c'è solo su **Collega** quando il foglio non è ancora collegato. Le frasi che prima stavano
   fisse sotto i campi diventano la conferma dopo il salvataggio ("Vale per i rapportini nuovi: quelli già
   scritti tengono il rimborso con cui sono nati").
-- **Avvisi**: in basso al centro, scuri, 3,5 s; gli errori restano finché non si chiudono, con cosa fare.
+- **Avvisi**: in basso al centro, scuri, 3 s; con un'azione 6 s; il tempo si ferma col mouse sopra.
 - **Versione nuova**: si scarica da sola; quando è pronta, sopra lo stato del foglio nella barra laterale
   compare un riquadro giallo tenue "Versione X pronta · Parte alla prossima apertura, o subito:" con
   **Riavvia Wisper Ufficio**. In Impostazioni › L'app la riga "Versione X" dice "Si aggiorna da solo ·

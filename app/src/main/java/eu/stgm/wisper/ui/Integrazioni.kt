@@ -23,6 +23,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -265,6 +266,8 @@ private fun ImpostazioniCollegamento(dati: Dati, i: Integrazione, puo: Boolean, 
  * sola_lettura). Si mandano solo quelle cambiate: il server le controlla di nuovo.
  */
 internal class ModificaImpostazioni(val voci: List<VoceImpostazione>) {
+    /** Dal 06/11/2026, col salvataggio da solo: l'ultimo valore che il server ha preso, per voce. */
+    private val salvate = HashMap<String, Any?>()
     private val testi = mutableStateMapOf<String, String>()
     private val accesi = mutableStateMapOf<String, Boolean>()
     private val liste = mutableStateMapOf<String, Set<String>>()
@@ -337,7 +340,23 @@ internal class ModificaImpostazioni(val voci: List<VoceImpostazione>) {
     fun cambiata(): Boolean = valori().isNotEmpty()
 
     /** I problemi, con la parola davanti ("Ore di lavoro al giorno: da 1 a 12"). */
-    fun errori(): List<String> = voci.mapNotNull { v ->
+    fun errori(): List<String> = voci.mapNotNull { erroreDi(it) }
+
+    /**
+     * Col salvataggio da solo (06/11/2026): la voce [v] parte da sola se va bene ed è diversa dall'ultima salvata.
+     * Interruttori e scelte subito, testi e numeri dopo la pausa o lasciando il campo.
+     */
+    private fun salvaVoce(v: VoceImpostazione, salva: SalvaDaSolo, onSalva: suspend (String, Any?) -> Result<*>, subito: Boolean) {
+        if (erroreDi(v) != null) { salva.annulla(v.chiave); return }
+        val x = valore(v)
+        val ultimo = if (v.chiave in salvate) salvate[v.chiave] else originale(v)
+        if (uguali(x, ultimo)) { salva.annulla(v.chiave); return }
+        val lavoro: suspend () -> Result<*> = { onSalva(v.chiave, x).onSuccess { salvate[v.chiave] = x } }
+        if (subito) salva.subito(v.chiave, lavoro = lavoro) else salva.piuTardi(v.chiave, lavoro = lavoro)
+    }
+
+    /** Cosa non va in una voce (null = va bene). */
+    private fun erroreDi(v: VoceImpostazione): String? =
         when (tipo(v)) {
             "numero" -> v.errore(testi[v.chiave].orEmpty())
             "tempi" -> righe(v).firstNotNullOfOrNull { (r, nome) ->
@@ -354,44 +373,74 @@ internal class ModificaImpostazioni(val voci: List<VoceImpostazione>) {
             "giorno_mese" -> testi[v.chiave].orEmpty().trim().let { t -> if (t.isNotEmpty() && !Regex("""^(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$""").matches(t)) "${v.etichetta}: mese e giorno, per esempio 07-07" else null }
             else -> null
         }
-    }
 
+    /**
+     * I campi delle voci. Con [salva] e [onSalva] (Impostazioni generali, 06/11/2026) ogni voce si salva da sola, ha
+     * "Salvato" accanto al nome e il no del server sotto; senza, si salva col pulsante di chi chiama (Integrazioni).
+     */
     @OptIn(ExperimentalLayoutApi::class)
     @Composable
-    fun Campi(abilitato: (VoceImpostazione) -> Boolean = { true }) {
+    fun Campi(
+        abilitato: (VoceImpostazione) -> Boolean = { true },
+        salva: SalvaDaSolo? = null,
+        onSalva: (suspend (String, Any?) -> Result<*>)? = null,
+    ) {
         val c = W.colori
+        val daSolo = salva != null && onSalva != null
+        fun subito(v: VoceImpostazione) { if (salva != null && onSalva != null) salvaVoce(v, salva, onSalva, subito = true) }
+        fun dopo(v: VoceImpostazione) { if (salva != null && onSalva != null) salvaVoce(v, salva, onSalva, subito = false) }
         voci.forEach { v ->
             val si = abilitato(v)
+            // Ogni voce si trova dalla ricerca delle impostazioni; lasciando un suo campo, quello in attesa parte.
+            Column(
+                Modifier.fillMaxWidth().evidenziabile(v.chiave).let { m ->
+                    if (salva == null) m else m.onFocusChanged { st -> if (!st.hasFocus && salva.inAttesa(v.chiave)) salva.adesso(v.chiave) }
+                },
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+            val etichettaCampo: String? = if (daSolo) null else v.etichetta
+            if (daSolo && tipo(v) !in setOf("si", "scelta", "sola", "elenco", "documenti_collaboratori", "tempi")) EtichettaSalvata(v.etichetta, salva!!, v.chiave)
             when (tipo(v)) {
                 "si" -> Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(v.etichetta, style = Testi.forte, color = c.testo, modifier = Modifier.weight(1f))
-                    Interruttore(accesi[v.chiave] == true, { if (si) accesi[v.chiave] = it }, v.etichetta)
+                    if (salva != null) SegnoSalvato(salva, v.chiave, Modifier.padding(horizontal = 8.dp))
+                    Interruttore(accesi[v.chiave] == true, { if (si) { accesi[v.chiave] = it; subito(v) } }, v.etichetta)
                 }
-                "scelta" -> Domanda(v.etichetta) { SceltePillole(v.scelte, testi[v.chiave], { if (si) testi[v.chiave] = it }) }
+                "scelta" -> Domanda(v.etichetta) {
+                    SceltePillole(v.scelte, testi[v.chiave], { if (si) { testi[v.chiave] = it; subito(v) } })
+                    if (salva != null) SegnoSalvato(salva, v.chiave)
+                }
                 "sola" -> Coppia(v.etichetta, v.testo)
                 "elenco" -> Domanda(v.etichetta) {
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         v.scelte.forEach { (k, nome) ->
                             val dentro = k in liste[v.chiave].orEmpty()
-                            Pillola(nome, dentro, { if (si) liste[v.chiave] = if (dentro) liste[v.chiave].orEmpty() - k else liste[v.chiave].orEmpty() + k }, altezza = 46.dp)
+                            Pillola(nome, dentro, { if (si) { liste[v.chiave] = if (dentro) liste[v.chiave].orEmpty() - k else liste[v.chiave].orEmpty() + k; subito(v) } }, altezza = 46.dp)
                         }
                     }
+                    if (salva != null) SegnoSalvato(salva, v.chiave)
                 }
                 "documenti_collaboratori" -> Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text(v.etichetta, style = Testi.forte, color = c.testo)
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Text(v.etichetta, style = Testi.forte, color = c.testo, modifier = Modifier.weight(1f))
+                        if (salva != null) SegnoSalvato(salva, v.chiave)
+                    }
                     righe(v).forEach { (r, nomeRiga) ->
                         Text(nomeRiga, style = Testi.secondarioGrande.copy(fontWeight = FontWeight.Bold), color = c.testo2)
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             v.scelte.forEach { (k, nome) ->
                                 val chiave = "${v.chiave}|$r"
                                 val dentro = k in liste[chiave].orEmpty()
-                                Pillola(nome, dentro, { if (si) liste[chiave] = if (dentro) liste[chiave].orEmpty() - k else liste[chiave].orEmpty() + k }, altezza = 46.dp)
+                                Pillola(nome, dentro, { if (si) { liste[chiave] = if (dentro) liste[chiave].orEmpty() - k else liste[chiave].orEmpty() + k; subito(v) } }, altezza = 46.dp)
                             }
                         }
                     }
                 }
                 "tempi" -> Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(v.etichetta + if (v.unita.isNotBlank()) ", in ${v.unita}" else "", style = Testi.forte, color = c.testo)
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Text(v.etichetta + if (v.unita.isNotBlank()) ", in ${v.unita}" else "", style = Testi.forte, color = c.testo, modifier = Modifier.weight(1f))
+                        if (salva != null) SegnoSalvato(salva, v.chiave)
+                    }
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text("Priorità", style = Testi.piccolo.copy(fontWeight = FontWeight.Bold), color = c.tenue, modifier = Modifier.width(78.dp))
                         colonne(v).forEach { (_, nome) -> Text(nome, style = Testi.piccolo.copy(fontWeight = FontWeight.Bold), color = c.tenue, modifier = Modifier.weight(1f)) }
@@ -401,20 +450,29 @@ internal class ModificaImpostazioni(val voci: List<VoceImpostazione>) {
                             Text(nome, style = Testi.secondarioGrande.copy(fontWeight = FontWeight.Bold), color = c.testo, modifier = Modifier.width(78.dp))
                             colonne(v).forEach { (k, _) ->
                                 val chiave = "${v.chiave}|$r|$k"
-                                CampoTesto(celle[chiave].orEmpty(), { celle[chiave] = it }, null, Modifier.weight(1f), tastiera = KeyboardType.Number, suffisso = "h", abilitato = si)
+                                CampoTesto(celle[chiave].orEmpty(), { celle[chiave] = it; dopo(v) }, null, Modifier.weight(1f), tastiera = KeyboardType.Number, suffisso = "h", abilitato = si)
                             }
                         }
                     }
                 }
                 "numero" -> CampoTesto(
-                    testi[v.chiave].orEmpty(), { testi[v.chiave] = it }, v.etichetta, Modifier.fillMaxWidth(),
-                    tastiera = KeyboardType.Decimal, suffisso = v.unita.ifBlank { null }, abilitato = si, errore = v.errore(testi[v.chiave].orEmpty()),
+                    testi[v.chiave].orEmpty(), { testi[v.chiave] = it; dopo(v) }, etichettaCampo, Modifier.fillMaxWidth(),
+                    tastiera = KeyboardType.Decimal, suffisso = v.unita.ifBlank { null }, abilitato = si,
+                    errore = v.errore(testi[v.chiave].orEmpty()) ?: salva?.errori?.get(v.chiave),
                 )
-                "email" -> CampoTesto(testi[v.chiave].orEmpty(), { testi[v.chiave] = it.trim() }, v.etichetta, Modifier.fillMaxWidth(), tastiera = KeyboardType.Email, abilitato = si)
-                "ora", "giorno_mese" -> CampoTesto(testi[v.chiave].orEmpty(), { testi[v.chiave] = it }, v.etichetta, Modifier.fillMaxWidth(), tastiera = KeyboardType.Number, abilitato = si,
-                    segnaposto = if (tipo(v) == "ora") "08:00" else "07-07")
-                "testo_lungo" -> CampoTesto(testi[v.chiave].orEmpty(), { testi[v.chiave] = it }, v.etichetta, Modifier.fillMaxWidth(), righe = 4, abilitato = si)
-                else -> CampoTesto(testi[v.chiave].orEmpty(), { testi[v.chiave] = it }, v.etichetta, Modifier.fillMaxWidth(), abilitato = si)
+                "email" -> CampoTesto(testi[v.chiave].orEmpty(), { testi[v.chiave] = it.trim(); dopo(v) }, etichettaCampo, Modifier.fillMaxWidth(), tastiera = KeyboardType.Email, abilitato = si,
+                    errore = salva?.errori?.get(v.chiave))
+                "ora", "giorno_mese" -> CampoTesto(testi[v.chiave].orEmpty(), { testi[v.chiave] = it; dopo(v) }, etichettaCampo, Modifier.fillMaxWidth(), tastiera = KeyboardType.Number, abilitato = si,
+                    segnaposto = if (tipo(v) == "ora") "08:00" else "07-07", errore = if (daSolo) erroreDi(v) ?: salva?.errori?.get(v.chiave) else null)
+                "testo_lungo" -> CampoTesto(testi[v.chiave].orEmpty(), { testi[v.chiave] = it; dopo(v) }, etichettaCampo, Modifier.fillMaxWidth(), righe = 4, abilitato = si,
+                    errore = salva?.errori?.get(v.chiave))
+                else -> CampoTesto(testi[v.chiave].orEmpty(), { testi[v.chiave] = it; dopo(v) }, etichettaCampo, Modifier.fillMaxWidth(), abilitato = si,
+                    errore = salva?.errori?.get(v.chiave))
+            }
+            // Il no del server per le voci senza campo di testo (interruttori, scelte, tabelle).
+            if (salva != null && tipo(v) in setOf("si", "scelta", "elenco", "documenti_collaboratori", "tempi")) {
+                (salva.errori[v.chiave] ?: if (tipo(v) in setOf("elenco", "tempi")) erroreDi(v) else null)?.let { Text(it, style = Testi.secondario, color = c.rossoTesto) }
+            }
             }
         }
     }

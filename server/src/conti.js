@@ -519,12 +519,33 @@ function importoRapportino(r) {
 }
 
 /**
+ * 06/11/2026 (Manuel: nelle fatture il codice del progetto, quello della commessa va accanto al mittente): i codici dei
+ * progetti di questi rapportini, in ordine (ED-002 prima di ED-010), senza doppioni; null se anche uno solo non ha il
+ * progetto (allora i testi restano come prima, con la commessa).
+ */
+function progettiDi(rapportini) {
+  const lista = rapportini || [];
+  if (!lista.length || lista.some(r => !testo(r.progetto))) return null;
+  const visti = new Map();
+  for (const r of lista) if (!visti.has(testo(r.progetto).toUpperCase())) visti.set(testo(r.progetto).toUpperCase(), testo(r.progetto));
+  return Array.from(visti.values()).sort((a, b) => a.localeCompare(b, 'it', { numeric: true, sensitivity: 'base' }));
+}
+
+/** "progetto ED-003" / "progetti ED-001, ED-002" ('' senza progetti). */
+function testoProgetti(codici) {
+  if (!codici || !codici.length) return '';
+  return (codici.length === 1 ? 'progetto ' : 'progetti ') + codici.join(', ');
+}
+
+/**
  * Le righe dei rapportini di un cliente (§5.2), coi gruppi (§5.3).
  *
  * @param x.raggruppa 'mese' (di base per i clienti a tariffa fissa) | 'rapportino'
  * @param x.cliente   {id, tariffaFissa, pagaViaggio}
  * @param x.rapportini [{id, data, descrizione, oreLavoro, oreExtra, oreViaggio, pagaViaggio?, tariffa, maggExtra,
- *                      compensoOre, km, euroKm, rimborsoKm, speseSenzaRighe?, idCommessa?}]
+ *                      compensoOre, km, euroKm, rimborsoKm, speseSenzaRighe?, idCommessa?, progetto?, numero?}]
+ *                      (progetto: il codice; senza, i testi sono quelli di prima. numero: quello del rapportino di cui
+ *                      e' un lavoro, RAP/2026/0153; senza, l'id)
  * @param x.spese     [{id, idRapportino, data, descrizione, importo, anticipazione, tributoCliente?}] (le loro)
  * @return [{gruppo, righe: [{tipo, descrizione, quantita, unita, prezzo, importo, idCommessa, periodoDa, periodoA}],
  *           sorgenti: [{tipo, id, importo}]}]
@@ -562,7 +583,9 @@ function righeRapportini(x) {
       if (ore > 0) parti.push(numeroIt(ore) + (ore === 1 ? ' ora' : ' ore'));
       if (numero(r.km) > 0 && numero(r.rimborsoKm) > 0) parti.push(numeroIt(r.km) + ' km');
       if (nonAnticipate > 0) parti.push('spese ' + euroIt(nonAnticipate) + ' €');
-      const descrizione = 'Rapportino ' + r.id + ' del ' + dataIt(r.data) + (testo(r.descrizione) ? ': ' + testo(r.descrizione) : '') +
+      // 06/11/2026: col progetto, il suo codice ("Rapportino RAP/2026/0142 del 21/10/2026, progetto ED-003: ...").
+      const progetto = testoProgetti(progettiDi([r]));
+      const descrizione = 'Rapportino ' + (testo(r.numero) || r.id) + ' del ' + dataIt(r.data) + (progetto ? ', ' + progetto : '') + (testo(r.descrizione) ? ': ' + testo(r.descrizione) : '') +
         (parti.length ? ' (' + parti.join(', ') + ')' : '');
       const righe = [{ tipo: 'compenso', descrizione, quantita: 1, unita: '', prezzo: importo, importo, idCommessa: testo(r.idCommessa), periodoDa: r.data, periodoA: r.data }];
       sue.filter(s => s.anticipazione).forEach(s => righe.push(anticipazione(s)));
@@ -591,16 +614,19 @@ function righeRapportini(x) {
     const perTariffa = new Map();
     for (const r of lista) {
       const t = numero(r.tariffa);
-      if (!perTariffa.has(t)) perTariffa.set(t, { n: 0, ore: 0, extra: 0, importo: 0 });
+      if (!perTariffa.has(t)) perTariffa.set(t, { n: 0, ore: 0, extra: 0, importo: 0, rapportini: [] });
       const g = perTariffa.get(t);
       g.n++;
+      g.rapportini.push(r);
       g.ore = due2(g.ore + orePagate(r, cliente.pagaViaggio));
       g.extra = due2(g.extra + numero(r.oreExtra));
       g.importo = centesimi(g.importo + numero(r.compensoOre));
     }
     for (const [tariffa, g] of perTariffa) {
       if (!(g.importo > 0) && !(g.ore > 0)) continue;
-      const base = 'Prestazioni professionali di ' + quando + ' (' + g.n + (g.n === 1 ? ' rapportino' : ' rapportini');
+      // 06/11/2026: se tutti i rapportini della riga hanno il progetto, i codici ("di ottobre 2026, progetti ED-001, ED-002 (...)").
+      const progetti = testoProgetti(progettiDi(g.rapportini));
+      const base = 'Prestazioni professionali di ' + quando + (progetti ? ', ' + progetti : '') + ' (' + g.n + (g.n === 1 ? ' rapportino' : ' rapportini');
       if (centesimi(g.ore * tariffa) === g.importo) {
         righe.push({ tipo: 'compenso', descrizione: base + ')', quantita: g.ore, unita: 'ore', prezzo: tariffa, importo: g.importo, idCommessa: commessa, periodoDa, periodoA });
       } else {
@@ -1197,6 +1223,6 @@ module.exports = {
   importoVoce, vociCheContano, gruppoAlternativa, contiPreventivo,
   minutiDa, oraDaMinuti, oreDaOrari, rimborsoTrasferta, oreDelRapportino, contaNeiConti, rimborsiDovuti, costoCommessa,
   // fase 4
-  importoRigaFattura, contiFattura, MESI, nomeMese, numeroIt, euroIt, dataIt, orePagate, importoRapportino, righeRapportini,
+  importoRigaFattura, contiFattura, MESI, nomeMese, numeroIt, euroIt, dataIt, orePagate, importoRapportino, righeRapportini, progettiDi, testoProgetti,
   rigaScadenza, rigaSpesa, rigaOre, giorniDopo, fineMese, scadenzaFattura, pasqua, nonLavorativo, primoLavorativo, ibanValido,
 };

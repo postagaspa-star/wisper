@@ -166,9 +166,11 @@ module.exports = {
     const k = campi || {};
     const valori = {};
     let idCliente = testo(r.cliente_id);
-    if (k.idCommessa !== undefined && testo(k.idCommessa).toUpperCase() !== testo(r.commessa_id).toUpperCase()) {
-      const nuova = this.commessa(testo(k.idCommessa));
-      if (!nuova) throw new Rifiuto('Commessa ' + testo(k.idCommessa) + ' non trovata');
+    // 06/11/2026: col codice di prima della commessa (cambiaCodiceCommessa) e' la stessa commessa, non un cambio.
+    const altra = k.idCommessa !== undefined && testo(k.idCommessa).toUpperCase() !== testo(r.commessa_id).toUpperCase();
+    const nuova = altra ? this.commessa(testo(k.idCommessa)) : null;
+    if (altra && !nuova) throw new Rifiuto('Commessa ' + testo(k.idCommessa) + ' non trovata');
+    if (nuova && nuova.id.toUpperCase() !== testo(r.commessa_id).toUpperCase()) {
       if (this.db.riga('SELECT id FROM rapportini WHERE id_progetto = ? LIMIT 1', r.id)) {
         throw new Rifiuto('Il progetto ha già dei rapportini: la commessa non si cambia');
       }

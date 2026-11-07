@@ -268,14 +268,18 @@ private fun FoglioManda(dati: Dati, d: DocArchivio, onChiudi: () -> Unit, onFatt
     val avvisi = LocalAvvisi.current
     val scope = rememberCoroutineScope()
     val ana by dati.anagrafiche.collectAsStateWithLifecycle()
-    var a by remember { mutableStateOf(ana.cliente(d.idCliente)?.email.orEmpty()) }
+    // 06/11/2026: l'email già scritta è quella del cliente del documento (o della sua commessa), com'è adesso.
+    var aScritto by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) { if (!dati.esempio) dati.aggiorna() }
+    val cliente = ana.cliente(d.idCliente) ?: ana.commessa(d.idCommessa)?.let { ana.cliente(it.idCliente) }
+    val a = aScritto ?: cliente?.email.orEmpty()
     var messaggio by remember { mutableStateOf("") }
     var errore by remember { mutableStateOf<String?>(null) }
     var invio by remember { mutableStateOf(false) }
     FoglioDalBasso(onChiudi) {
         Text("Manda per email", style = Testi.titoloScheda, color = c.testo)
         Text(d.titolo + (d.revisione?.let { " · rev. $it" } ?: "") + (peso(d.byte).takeIf { it.isNotBlank() }?.let { " · $it" } ?: ""), style = Testi.secondarioGrande, color = c.tenue)
-        CampoTesto(a, { a = it; errore = null }, "A", tastiera = androidx.compose.ui.text.input.KeyboardType.Email, errore = errore)
+        CampoTesto(a, { aScritto = it; errore = null }, "A", tastiera = androidx.compose.ui.text.input.KeyboardType.Email, errore = errore)
         CampoTesto(messaggio, { messaggio = it }, "Messaggio", righe = 4)
         if (d.collegamento) Text("Il cliente lo apre solo se in ${d.collegamentoNome} è condiviso anche fuori dallo studio", style = Testi.secondario.copy(fontWeight = FontWeight.Bold), color = c.ambraTesto)
         PulsantePrincipale(if (invio) "Mando…" else "Manda", {

@@ -133,8 +133,11 @@ class ServerDiProvaFase3Test {
         }
         val (_, manuel) = entra("manuel@esempio.it")
         val d = manuel.daApprovare()
-        val voce = d.voci.first { it.tipo == "ore" && it.id == riga.id }
-        assertTrue(d.tutteLeChiavi().contains(voce.chiave))
+        // 07/11/2026 (le Ore tolte): le righe di ore non sono più fra le cose da approvare...
+        assertTrue(d.voci.none { it.tipo == "ore" })
+        assertEquals(d, d.senzaOre())
+        // ...ma approva e respingi {tipo: 'ore'} vanno ancora: una coda di un'app di prima non si rompe.
+        val voce = VoceDaApprovare("ore", riga.id, idUtente = riga.idUtente)
         assertEquals(1, manuel.approva(listOf(voce)).fatte)
         assertEquals(0, manuel.approva(listOf(voce)).fatte) // ripetuta dalla coda: non conta
         assertEquals(StatoVoce.APPROVATA, marco.ore(oggi, oggi).ore.first { it.id == riga.id }.stato)
@@ -151,11 +154,12 @@ class ServerDiProvaFase3Test {
         assertEquals(StatoVoce.RESPINTA, respinta.stato)
         assertEquals("Controlla le ore", respinta.motivoRifiuto)
         assertEquals("Manuel Gasparotto", respinta.approvataDaNome)
-        // Nella sua Dashboard c'è la voce respinta; in quella di Manuel le cose da approvare.
+        // 07/11/2026: nella sua Dashboard niente ore respinte né timer, né collegamenti al segmento Ore;
+        // in quella di Manuel restano le cose da approvare (spese e rapportini dei dati di esempio).
         val dm = Dashboard.daJson(marco.dashboard())
-        assertTrue(dm.urgenti.any { it.tipo == "respinta" })
+        val tutteM = dm.urgenti + dm.settimana + dm.pianificare
+        assertTrue(tutteM.none { it.tipo == "timer" || it.collegamento?.parametri?.get("segmento") == "ore" })
         assertNull(dm.fase3.approvare)
-        assertNotNull(dm.fase3.ore)
         assertNotNull(Dashboard.daJson(manuel.dashboard()).fase3.approvare)
         marco.esci(); manuel.esci()
     }

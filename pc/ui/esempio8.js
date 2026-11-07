@@ -77,7 +77,7 @@
       { chiave: 'banca', nome: 'Movimenti della banca', cosa: 'Leggere i movimenti del conto', gruppo: 'noncollegati', stato: 'non_collegato', perche: 'Banche e scadenze è solo scadenziario: incassi e pagamenti si segnano a mano', servirebbe: 'Un fornitore autorizzato a leggere i conti; il consenso si rifà ogni 180 giorni', costo: 'Da 0 € (solo i propri conti) a un contratto' },
       { chiave: 'estratto', nome: 'Importa l\'estratto conto', cosa: 'Leggere il file dei movimenti della banca', gruppo: 'noncollegati', stato: 'non_collegato', perche: 'Banche e scadenze è solo scadenziario', servirebbe: 'Il file della banca (CSV o CBI)', costo: '0 €' },
       { chiave: 'whatsapp', nome: 'WhatsApp Business dal server', cosa: 'Messaggi mandati e ricevuti da Wisper', gruppo: 'noncollegati', stato: 'non_collegato', perche: 'I messaggi li manda Manuel dal suo WhatsApp: Wisper li prepara', servirebbe: 'Un numero sulla piattaforma di Meta, modelli approvati, un indirizzo su internet', costo: 'circa 0,036 $ a promemoria' },
-      { chiave: 'messaggi', nome: 'Ore e spese via messaggio', cosa: 'Scrivere ore e spese in chat', gruppo: 'noncollegati', stato: 'non_collegato', perche: 'L\'app lo fa già in meno di un minuto, anche senza rete', servirebbe: 'WhatsApp dal server o un bot Telegram', costo: 'WhatsApp come sopra; Telegram 0 €' },
+      { chiave: 'messaggi', nome: 'Spese via messaggio', cosa: 'Scrivere le spese in chat', gruppo: 'noncollegati', stato: 'non_collegato', perche: 'L\'app lo fa già in meno di un minuto, anche senza rete', servirebbe: 'WhatsApp dal server o un bot Telegram', costo: 'WhatsApp come sopra; Telegram 0 €' },
       { chiave: 'assistente', nome: 'Assistente operativo', cosa: 'Domande sul gestionale scritte a parole', gruppo: 'noncollegati', stato: 'non_collegato', perche: 'I dati dei clienti andrebbero fuori dall\'Europa; un modello sul NAS è troppo lento', servirebbe: 'Un modello in rete e un accordo sui dati', costo: 'circa 1-1,5 $ al mese per 500 domande' },
       { chiave: 'firebase', nome: 'Notifiche immediate', cosa: 'Avvisi sul telefono nello stesso istante', gruppo: 'noncollegati', stato: 'non_collegato', perche: 'Il telefono controlla ogni 15 minuti: basta, senza progetti Google né chiavi', servirebbe: 'Un progetto Firebase e una chiave sul NAS', costo: '0 €' },
       { chiave: 'paghe', nome: 'Programma paghe del consulente', cosa: 'Mandare presenze e assenze al consulente', gruppo: 'noncollegati', stato: 'non_collegato', perche: 'Non esiste un formato comune: si esporta il file per il consulente', servirebbe: 'Un formato comune', costo: '0 €' },
@@ -138,7 +138,7 @@
       f('M03.1', '03 Commesse', 'Codice che continua; formato cambiato senza ricodificare; prestazioni; duplica come modello; archivia', 'automatica', 'Andrea', 'fatto', -1),
       f('M03.2', '03 Commesse', 'Costi e margine uguali alla 0.4.0 coi dati della prova generale', 'prova_generale', 'Andrea e Manuel', 'da_fare'),
       f('M05.2', '05 Attività e calendario', 'Il file importato in Google Calendar e nel classico Outlook; ICSx⁵ sull\'emulatore che si aggiorna', 'a_mano', 'Andrea', 'da_fare'),
-      f('M06.2', '06 Ore e rapportini', 'Riepiloghi del mese scorso uguali ai PDF mandati', 'prova_generale', 'Andrea e Manuel', 'da_fare'),
+      f('M06.2', '06 Rapportini', 'Riepiloghi del mese scorso uguali ai PDF mandati', 'prova_generale', 'Andrea e Manuel', 'da_fare'),
       f('M08.2', '08 Fatturazione', 'Regole fiscali confermate dal commercialista', 'server', '', 'non_va', '', 'Non ancora confermate'),
       f('M08.3', '08 Fatturazione', 'Il prospetto passato al programma di Manuel e l\'XML emesso tornato in Wisper', 'a_mano', 'Manuel', 'da_fare'),
       f('M11.1', '11 Documenti', 'Revisioni; collegamenti OneDrive; cerca dentro i file; un file non visto non dà estratti', 'automatica', 'Andrea', 'fatto', -1),
@@ -337,7 +337,8 @@
       case 'interventiOggi': return conta(t.interventiOggi, 1);
       case 'scadenzeVicine': return conta((n.scadenze && n.scadenze.vicine) || pe.scadenzeVicine, 6);
       case 'assentiOggi': return conta(pe.assentiOggi, 1);
-      case 'daApprovare': return conta(undefined, 10);
+      // Rapportini, spese e trasferte di Marco (niente più ore dal 07/11/2026) più la richiesta di ferie e il documento.
+      case 'daApprovare': return conta(((n.approvare && n.approvare.voci) || 0) + 2, 10);
       case 'tarateScadute': return conta(me.tarateScadute, 1);
       case 'dalPortale': return conta(n.portale && n.portale.daGuardare, 4);
       case 'daMandareOggi': return conta(n.comunicazioni && n.comunicazioni.daMandareOggi, 2);
@@ -357,7 +358,7 @@
     assentiOggi: { pagina: 'persone', filtro: { segmento: 'ferie' } }, daApprovare: { pagina: 'approvare' }, tarateScadute: { pagina: 'mezzi', filtro: { segmento: 'strumenti', taratura: 'scadute' } },
     dalPortale: { pagina: 'portale', filtro: { segmento: 'daguardare' } }, daMandareOggi: { pagina: 'comunicazioni', filtro: { segmento: 'damandare' } },
     commesseAperte: { pagina: 'commesse', filtro: { stato: 'APERTA' } }, commesseInRitardo: { pagina: 'commesse', filtro: { stato: 'APERTA', ritardo: true } },
-    oreSettimana: { pagina: 'rapportini', filtro: { segmento: 'ore' } }, attivitaOggi: { pagina: 'attivita' }, mieiTicket: { pagina: 'tickets', filtro: { segmento: 'aperti' } }, preventiviInAttesa: { pagina: 'preventivi', filtro: { segmento: 'inviati' } },
+    oreSettimana: { pagina: 'rapportini' }, attivitaOggi: { pagina: 'attivita' }, mieiTicket: { pagina: 'tickets', filtro: { segmento: 'aperti' } }, preventiviInAttesa: { pagina: 'preventivi', filtro: { segmento: 'inviati' } },
   };
 
   // ------------------------------------------------------------------------- le risposte
@@ -689,9 +690,11 @@
       risposta.riquadri = scelti.map(k => Object.assign({ chiave: k, rosso: ['scaduto', 'commesseInRitardo', 'tarateScadute'].indexOf(k) >= 0, collegamento: COLLEGAMENTI_RIQUADRI[k] || null }, numeroRiquadro(k, risposta.numeri, dati)));
       risposta.numeri = Object.assign({}, risposta.numeri, { integrazioni: { errori: f8.integrazioni.filter(i => i.stato === 'errore').length } });
       // Da approvare in una voce sola (§8.2 punto 5): il foglio con le tre righe.
-      risposta.approvare = { quante: 10, righe: [{ testo: '8 ore e spese di Marco Rossato', dove: 'Ore e rapportini › Da approvare', n: 8, collegamento: { pagina: 'rapportini', filtro: { segmento: 'daApprovare' } } },
+      // 07/11/2026: niente Ore; la prima riga sono rapportini e spese da approvare (quante ne conta la fase 3 di esempio).
+      const nRap = (risposta.numeri && risposta.numeri.approvare && risposta.numeri.approvare.voci) || 0;
+      risposta.approvare = { quante: nRap + 2, righe: [nRap ? { testo: (nRap === 1 ? '1 cosa' : nRap + ' cose') + ' di Marco Rossato', dove: 'Rapportini › Da approvare', n: nRap, collegamento: { pagina: 'rapportini', filtro: { segmento: 'daApprovare' } } } : null,
         { testo: '1 richiesta di ferie', dove: 'Persone › Ferie da approvare', n: 1, collegamento: { pagina: 'persone', filtro: { segmento: 'ferie', daApprovare: true } } },
-        { testo: '1 documento', dove: 'Documenti › Da approvare', n: 1, collegamento: { pagina: 'documenti', filtro: { segmento: 'approvare' } } }] };
+        { testo: '1 documento', dove: 'Documenti › Da approvare', n: 1, collegamento: { pagina: 'documenti', filtro: { segmento: 'approvare' } } }].filter(Boolean) };
     }
     return risposta;
   }

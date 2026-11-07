@@ -199,16 +199,19 @@
     const ana = { clienti: [], fornitori: [], soggetti, commesse, progetti, referenti, sedi, prestazioni, utenti, numerazioni, gruppi: [], impostazioni };
 
     // ------------------------------------------------------------- rapportini
+    // 06/11/2026 (rapportino-lavori.md): un rapportino (idGiornata) con uno o più lavori; i lavori di un rapportino nuovo
+    // hanno il numero del rapportino con -1, -2...; quelli di prima (un lavoro solo) hanno il numero del rapportino.
     let n = 0;
+    let nl = 0;
     const rapportini = [];
-    const r = (data, idCliente, idCommessa, descrizione, oreLavoro, oreViaggio, km, spese, stato, idUtente, extra) => {
-      n += 1;
+    const lavoro = (idGiornata, posizione, id, data, idCliente, idCommessa, descrizione, oreLavoro, oreViaggio, km, spese, stato, idUtente, extra) => {
+      nl += 1;
       const c = soggetti.find(x => x.id === idCliente);
       const m = commesse.find(x => x.id === idCommessa);
       const regole = C.regoleDi(c, [], impostazioni, m);
       const u = utenti.find(x => x.id === idUtente) || utenti[0];
       const base = Object.assign({
-        id: 'RAP/' + data.slice(0, 4) + '/' + due(n).padStart(4, '0'), idLocale: 'esempio-' + n, idUtente: u.id,
+        id, idGiornata, numero: idGiornata, posizione, idLocale: 'esempio-' + nl, idUtente: u.id,
         data, tecnico: u.nome, idCliente, cliente: c.nome, gruppo: '', idCommessa, commessa: m ? m.descrizione : '', ticket: '', luogo: '', descrizione,
         oreLavoro, oreExtra: 0, oreViaggio, km, spese, noteSpese: spese ? 'Pranzo' : '', foto: [],
         tariffa: regole.tariffaFissa !== null ? regole.tariffaFissa : (m && m.prezzoOrario) || c.ultimaTariffa,
@@ -217,6 +220,17 @@
         firmatario: '', firmatoIl: '', stato, inviatoIl: '', fatturatoIl: '', creato: data + 'T18:00:00', modificato: '',
       }, extra || {});
       rapportini.push(Object.assign(base, C.calcola(base, regole)));
+    };
+    const numeroNuovo = data => { n += 1; return 'RAP/' + data.slice(0, 4) + '/' + String(n).padStart(4, '0'); };
+    /** Un rapportino con un lavoro solo. */
+    const r = (data, idCliente, idCommessa, descrizione, oreLavoro, oreViaggio, km, spese, stato, idUtente, extra) => {
+      const idG = numeroNuovo(data);
+      lavoro(idG, 1, idG, data, idCliente, idCommessa, descrizione, oreLavoro, oreViaggio, km, spese, stato, idUtente, extra);
+    };
+    /** Un rapportino con più lavori: righe = [[idCliente, idCommessa, descrizione, oreLavoro, oreViaggio, km, spese], ...]. */
+    const rg = (data, idUtente, stato, righe, extra) => {
+      const idG = numeroNuovo(data);
+      righe.forEach((x, i) => lavoro(idG, i + 1, idG + '-' + (i + 1), data, x[0], x[1], x[2], x[3], x[4], x[5], x[6], stato, idUtente, extra));
     };
     const c44 = aa + 'ST044';
     const c45 = aa + 'ST045';
@@ -228,24 +242,30 @@
     r(mesePrima(oggi, 16), 'C002', c45, 'Disegni del quadro e distinta materiali.', 8, 0.5, 22, 0, 'FATTURATO', 1, { fatturatoIl: mesePrima(oggi, 28) + 'T09:00:00' });
     r(mesePrima(oggi, 22), 'C002', c45, 'Montaggio del quadro in officina.', 8, 0.5, 22, 12.5, 'INVIATO', 1, { inviatoIl: mesePrima(oggi, 30) + 'T09:00:00' });
     r(mesePrima(oggi, 23), 'C002', c45, 'Cablaggio delle partenze.', 8, 0.5, 22, 0, 'INVIATO', 1, { inviatoIl: mesePrima(oggi, 30) + 'T09:00:00' });
-    r(mesePrima(oggi, 24), 'C002', c45, 'Prove del quadro con il cliente.', 7.5, 0.5, 22, 0, 'FIRMATO', 1, { firmatario: 'Andrea Rossi', firmatoIl: mesePrima(oggi, 24) + 'T17:00:00' });
+    r(mesePrima(oggi, 24), 'C002', c45, 'Prove del quadro con il cliente.', 7.5, 0.5, 22, 0, 'BOZZA', 1);
     // Questo mese.
     r(nelMese(oggi, 13), 'C001', c44, 'Cablaggio del quadro di linea 1.', 8, 1, 96, 14.5, 'INVIATO', 1, { inviatoIl: oggi + 'T09:00:00' });
     r(nelMese(oggi, 9), 'C001', c44, 'Collaudo sensori e messa in servizio del nastro.', 7.5, 1.5, 96, 0, 'INVIATO', 3, { inviatoIl: oggi + 'T09:00:00' });
-    r(nelMese(oggi, 8), 'C003', c47, 'Sopralluogo sul tetto e misure per i pannelli.', 6, 0.5, 18, 0, 'BOZZA', 1);
-    r(nelMese(oggi, 6), 'C001', c46, 'Verifica dei finecorsa e prova a vuoto.', 6, 1, 64, 0, 'FIRMATO', 3, { firmatario: 'Giulia Dal Santo', firmatoIl: nelMese(oggi, 6) + 'T17:10:00' });
+    // Un rapportino con due clienti: il sopralluogo da Bianchi e, sulla strada, il quadro di Rossi.
+    rg(nelMese(oggi, 8), 1, 'BOZZA', [
+      ['C003', c47, 'Sopralluogo sul tetto e misure per i pannelli.', 4, 0.5, 18, 0],
+      ['C002', c45, 'Controllo del quadro generale dopo il temporale.', 2, 0, 12, 0]]);
+    r(nelMese(oggi, 6), 'C001', c46, 'Verifica dei finecorsa e prova a vuoto.', 6, 1, 64, 0, 'BOZZA', 3);
     r(nelMese(oggi, 5), 'C002', c45, 'Sostituzione interruttore generale.', 3.5, 0.5, 22, 0, 'BOZZA', 1);
     r(nelMese(oggi, 3), 'C001', c46, 'Programmazione PLC della linea.', 8, 1, 64, 0, 'BOZZA', 3);
-    r(nelMese(oggi, 2), 'C001', c46, 'Taratura dei sensori di linea.', 6, 1, 64, 0, 'FIRMATO', 3, { firmatario: 'Giulia Dal Santo', firmatoIl: nelMese(oggi, 2) + 'T16:40:00' });
-    r(nelMese(oggi, 1), 'C001', c44, 'Taratura inverter del nastro 2 e prova a vuoto con il capo reparto.', 2.5, 1, 96, 12.5, 'FIRMATO', 1,
-      { firmatario: 'Giulia Dal Santo', firmatoIl: nelMese(oggi, 1) + 'T17:02:00' });
+    r(nelMese(oggi, 2), 'C001', c46, 'Taratura dei sensori di linea.', 6, 1, 64, 0, 'BOZZA', 3);
+    // Tre lavori di due clienti nello stesso giorno: due per Elettrodinamica (magazzino e linea 3), uno per Rossi.
+    rg(nelMese(oggi, 1), 1, 'BOZZA', [
+      ['C001', c44, 'Taratura inverter del nastro 2 e prova a vuoto con il capo reparto.', 2.5, 1, 96, 12.5],
+      ['C001', c46, 'Verifica dei finecorsa della linea 3.', 2, 0, 0, 0],
+      ['C002', c45, 'Misura delle correnti del quadro generale.', 3, 0.5, 22, 0]]);
     r(nelMese(oggi, 0), 'C002', c45, 'Verifica impianto di terra.', 3, 1, 30, 0, 'BOZZA', 1);
     // Fase 3: i rapportini di Marco vanno approvati; il più recente aspetta ancora.
     rapportini.forEach(x => Object.assign(x, { statoApprovazione: x.idUtente === 3 && x.data.slice(0, 7) === oggi.slice(0, 7) ? 'approvato' : '', approvatoDa: null, approvatoIl: '', motivoRifiuto: '', righeSpese: [] }));
     const ultimoDiMarco = rapportini.filter(x => x.idUtente === 3 && x.stato === 'BOZZA').sort((x, y) => (x.data < y.data ? 1 : -1))[0];
     if (ultimoDiMarco) ultimoDiMarco.statoApprovazione = 'da_approvare';
 
-    numerazioni[1].ultimo = rapportini.filter(x => x.data.slice(0, 4) === String(anno)).length;
+    numerazioni[1].ultimo = new Set(rapportini.filter(x => x.data.slice(0, 4) === String(anno)).map(x => x.idGiornata)).size;
     // Il magazzino: il mese prima il rilievo (ED-001), questo mese i quadri (ED-002); la Linea 3 è tutta ED-003.
     rapportini.forEach(x => {
       const p = x.idCommessa === c46 ? progetti[2] : x.idCommessa === c44 ? (x.data.slice(0, 7) < oggi.slice(0, 7) ? progetti[0] : progetti[1]) : null;
@@ -440,7 +460,7 @@
     // Soldi fermi: rapportini firmati o inviati dei mesi prima, non ancora fatturati.
     if (soldi && !mio) {
       const mese = oggi.slice(0, 7);
-      const vecchi = vivi.filter(r => (r.stato === 'FIRMATO' || r.stato === 'INVIATO') && r.data.slice(0, 7) < mese);
+      const vecchi = vivi.filter(r => ['BOZZA', 'FIRMATO', 'INVIATO'].indexOf(r.stato) >= 0 && r.statoApprovazione !== 'da_approvare' && r.data.slice(0, 7) < mese);
       const perCliente = new Map();
       vecchi.forEach(r => { if (!perCliente.has(r.idCliente)) perCliente.set(r.idCliente, []); perCliente.get(r.idCliente).push(r); });
       Array.from(perCliente.entries()).forEach(([id, lista]) => {
@@ -469,11 +489,12 @@
       }
       if (!k.budgetOre && !m.importoContratto) pianificare.push({ tipo: 'budget', gravita: 'info', titolo: m.descrizione + ' non ha un budget', dettaglio: m.id + ' · ' + nome(m.idCliente), collegamento: { pagina: 'commessa', id: m.id } });
     });
-    // Da far firmare da più di una settimana.
-    const ferme = vivi.filter(r => r.stato === 'BOZZA' && r.data <= giorno(oggi, -7));
+    // 06/11/2026: niente firma. I lavori da inviare da più di una settimana (come server/src/azioni/dashboard.js).
+    const settimanaFa = giorno(oggi, -7);
+    const ferme = vivi.filter(r => (r.stato === 'BOZZA' || r.stato === 'FIRMATO') && r.data <= settimanaFa && r.statoApprovazione !== 'da_approvare');
     if (ferme.length) {
-      urgenti.push({ tipo: 'firma', gravita: 'attenzione', titolo: ferme.length + (ferme.length === 1 ? ' rapportino da far firmare' : ' rapportini da far firmare') + ' da più di una settimana',
-        dettaglio: Array.from(new Set(ferme.map(r => r.cliente))).join(', '), collegamento: { pagina: 'rapportini', filtro: { quali: 'firmare', mese: '' } } });
+      urgenti.push({ tipo: 'rapportini', gravita: 'urgente', titolo: ferme.length + (ferme.length === 1 ? ' lavoro da inviare' : ' lavori da inviare') + ' da più di una settimana',
+        dettaglio: Array.from(new Set(ferme.map(r => r.cliente))).join(', '), collegamento: { pagina: 'rapportini', filtro: { quali: 'inviare', a: settimanaFa } } });
     }
     // I giorni di questa settimana senza rapportino (di chi è entrato).
     const senzaRapportino = [];
@@ -495,11 +516,11 @@
     }
     if (soldi && !mio && R.puo(dati.permessiIo, 'fatturazione')) {
       const mese = oggi.slice(0, 7);
-      const da = vivi.filter(r => (r.stato === 'FIRMATO' || r.stato === 'INVIATO') && r.data.slice(0, 7) === mese);
+      const da = vivi.filter(r => ['BOZZA', 'FIRMATO', 'INVIATO'].indexOf(r.stato) >= 0 && r.statoApprovazione !== 'da_approvare' && r.data.slice(0, 7) === mese);
       if (da.length) {
         const clienti = new Set(da.map(r => r.idCliente)).size;
         settimana.push({ tipo: 'fatturare', gravita: 'soldi', titolo: 'Da fatturare a ' + C.nomeMese(mese).split(' ')[0].toLowerCase(),
-          dettaglio: clienti + (clienti === 1 ? ' cliente · ' : ' clienti · ') + da.length + (da.length === 1 ? ' rapportino' : ' rapportini'),
+          dettaglio: clienti + (clienti === 1 ? ' cliente · ' : ' clienti · ') + da.length + (da.length === 1 ? ' lavoro' : ' lavori'),
           quanto: C.centesimi(da.reduce((s, r) => s + C.num(r.totale), 0)), unita: 'euro', collegamento: { pagina: 'fatturazione', filtro: { mese } } });
       }
     }
@@ -652,6 +673,55 @@
    * Risponde a una chiamata /server/<azione> come farebbe il server, sui dati di
    * esempio. Quello che non serve risponde "fatto" senza cambiare niente.
    */
+  /**
+   * Un lavoro scritto o corretto (salvaRapportino): cliente, commessa e progetto nuovi si creano, i conti si rifanno con
+   * le regole del cliente. esistente: il lavoro che c'è già. { ok, lavoro } o { ok: false, errore }.
+   */
+  function salvaLavoro(dati, nuovo, esistente) {
+    const a = dati.ana;
+    const vecchio = esistente || (nuovo.idLocale ? dati.rapportini.find(r => r.idLocale === nuovo.idLocale) : null) || null;
+    if (!nuovo.idCliente && nuovo.cliente) {
+      const gia = a.soggetti.find(s => C.normalizza(s.nome) === C.normalizza(nuovo.cliente));
+      if (gia) nuovo.idCliente = gia.id;
+      else {
+        const id = 'C' + String(a.soggetti.filter(s => /^C/.test(s.id)).length + 1).padStart(3, '0');
+        a.soggetti.push({ id, nome: nuovo.cliente, cliente: true, fornitore: false, alias: [], archiviato: false, citta: '', ultimaTariffa: nuovo.tariffa });
+        nuovo.idCliente = id;
+      }
+    }
+    if (!nuovo.idCommessa && nuovo.commessa) {
+      const id = prossimoCodice(dati);
+      a.commesse.push({ id, idCliente: nuovo.idCliente, descrizione: nuovo.commessa, stato: 'APERTA', persone: [dati.io.id], archiviata: false, modello: false });
+      nuovo.idCommessa = id;
+    }
+    if (!nuovo.idProgetto && nuovo.progettoNuovo && nuovo.idCommessa) {
+      const pn = nuovo.progettoNuovo;
+      const fatto = esegui(dati, 'creaProgetto', { idCommessa: nuovo.idCommessa, codiceProgetto: pn.codice || '', intestatoA: pn.intestatoA, descrizione: pn.descrizione || pn.codice, idLocale: pn.idLocale });
+      if (!fatto.ok) return fatto;
+      nuovo.idProgetto = fatto.progetto.id;
+    }
+    delete nuovo.progettoNuovo;
+    delete nuovo.codiceProposto;
+    const c = a.soggetti.find(x => x.id === nuovo.idCliente) || null;
+    const m = a.commesse.find(x => x.id === nuovo.idCommessa) || null;
+    if (m && !nuovo.commessa) nuovo.commessa = m.descrizione;
+    const regole = C.regoleDi(c, [], a.impostazioni, m);
+    if (nuovo.tariffa === null || nuovo.tariffa === undefined) nuovo.tariffa = regole.tariffaFissa !== null ? regole.tariffaFissa : (c && c.ultimaTariffa) || 0;
+    Object.assign(nuovo, regole.tariffaFissa !== null ? { tariffa: regole.tariffaFissa } : {},
+      { pagaViaggio: regole.pagaViaggio, kmRimborsati: regole.kmRimborsati, euroKm: regole.euroKm, maggExtra: regole.maggExtra }, C.calcola(nuovo, regole));
+    conProgetto(dati, nuovo);
+    if (vecchio) {
+      Object.assign(vecchio, nuovo, { id: vecchio.id });
+      scrivi(dati, 'salvaRapportino', 'rapportini', vecchio.id, vecchio.id, {}, { descrizione: vecchio.descrizione });
+      return { ok: true, lavoro: vecchio };
+    }
+    if (!nuovo.id) { dati.contatori.r += 1; nuovo.id = 'RAP/' + String(nuovo.data).slice(0, 4) + '/' + String(dati.rapportini.length + 1).padStart(4, '0'); }
+    Object.assign(nuovo, { stato: 'BOZZA', foto: [], firma: null, idUtente: dati.io.id, tecnico: nuovo.tecnico || dati.io.nome || '', statoApprovazione: '', righeSpese: [] });
+    dati.rapportini.unshift(nuovo);
+    scrivi(dati, 'salvaRapportino', 'rapportini', nuovo.id, nuovo.id, null, { oreLavoro: nuovo.oreLavoro });
+    return { ok: true, lavoro: nuovo };
+  }
+
   function gestisci(dati, metodo, percorso, corpo) {
     const [nomeAzione, query] = percorso.replace(/^\/(server|foglio)\//, '').split('?');
     const azione = nomeAzione.replace(/\/+$/, '');
@@ -793,7 +863,12 @@
         if (azione === 'inviaEmail' && b.aMe) return { ok: true, rapportini: [] };
         const st = azione === 'stato' ? b.stato : 'INVIATO';
         const ids = b.ids || [];
-        const cambiati = dati.rapportini.filter(r => (ids.indexOf(r.id) >= 0 || ids.indexOf(r.idLocale) >= 0) && !(azione === 'inviaEmail' && r.stato === 'FATTURATO')).map(r => {
+        // 06/11/2026: con idGiornata (e ids vuoto) tutti i lavori del rapportino; i lavori inviati o fatturati non si annullano.
+        const delGiorno = r => !!b.idGiornata && !ids.length && (r.idGiornata || r.id) === b.idGiornata && r.stato !== 'ANNULLATO';
+        if (st === 'ANNULLATO' && b.idGiornata && dati.rapportini.some(r => delGiorno(r) && (r.stato === 'INVIATO' || r.stato === 'FATTURATO'))) {
+          return { ok: false, errore: 'Il rapportino ha lavori già inviati: non si elimina' };
+        }
+        const cambiati = dati.rapportini.filter(r => (ids.indexOf(r.id) >= 0 || ids.indexOf(r.idLocale) >= 0 || delGiorno(r)) && !(azione === 'inviaEmail' && r.stato === 'FATTURATO')).map(r => {
           const prima = r.stato;
           if (st === 'ANNULLATO') r.statoPrima = r.stato;
           r.stato = st;
@@ -806,38 +881,39 @@
         return { ok: true, rapportini: cambiati };
       }
       case 'salvaRapportino': {
-        const nuovo = Object.assign({}, b.rapportino);
-        const i = dati.rapportini.findIndex(r => r.idLocale === nuovo.idLocale);
-        const c = a.soggetti.find(x => x.id === nuovo.idCliente) || null;
-        const m = a.commesse.find(x => x.id === nuovo.idCommessa) || null;
-        const regole = C.regoleDi(c, [], a.impostazioni, m);
-        if (nuovo.tariffa === null || nuovo.tariffa === undefined) nuovo.tariffa = regole.tariffaFissa !== null ? regole.tariffaFissa : (c && c.ultimaTariffa) || 0;
-        Object.assign(nuovo, regole.tariffaFissa !== null ? { tariffa: regole.tariffaFissa } : {}, C.calcola(nuovo, regole));
-        if (i >= 0) { delete nuovo.progettoNuovo; conProgetto(dati, nuovo); Object.assign(dati.rapportini[i], nuovo); scrivi(dati, 'salvaRapportino', 'rapportini', nuovo.id, nuovo.id, {}, { descrizione: nuovo.descrizione }); return { ok: true, rapportino: dati.rapportini[i] }; }
-        dati.contatori.r += 1;
-        nuovo.id = 'RAP/' + nuovo.data.slice(0, 4) + '/' + String(dati.rapportini.length + 1).padStart(4, '0');
-        nuovo.stato = 'BOZZA'; nuovo.foto = []; nuovo.firma = null; nuovo.idUtente = dati.io.id;
-        if (!nuovo.idCliente && nuovo.cliente) {
-          const id = 'C' + String(a.soggetti.filter(s => /^C/.test(s.id)).length + 1).padStart(3, '0');
-          a.soggetti.push({ id, nome: nuovo.cliente, cliente: true, fornitore: false, alias: [], archiviato: false, citta: '', ultimaTariffa: nuovo.tariffa });
-          nuovo.idCliente = id;
+        // 06/11/2026 (rapportino-lavori.md): { rapportino: { idLocale, id?, data, tecnico?, lavori: [...] } } come il server;
+        // la forma di prima (un rapportino = un lavoro) passa ancora.
+        const g = b.rapportino && Array.isArray(b.rapportino.lavori) ? b.rapportino : Array.isArray(b.lavori) ? b : null;
+        if (!g) {
+          const x = salvaLavoro(dati, Object.assign({}, b.rapportino), null);
+          return x.ok ? { ok: true, rapportino: x.lavoro } : x;
         }
-        if (!nuovo.idCommessa && nuovo.commessa) {
-          const id = prossimoCodice(dati);
-          a.commesse.push({ id, idCliente: nuovo.idCliente, descrizione: nuovo.commessa, stato: 'APERTA', persone: [dati.io.id], archiviata: false, modello: false });
-          nuovo.idCommessa = id;
+        if (!g.lavori.length) return { ok: false, errore: 'Aggiungi almeno un lavoro' };
+        const prima = g.id ? dati.rapportini.filter(r => (r.idGiornata || r.id) === g.id && r.stato !== 'ANNULLATO') : [];
+        const idG = g.id || (() => { dati.contatori.r += 1; return 'RAP/' + String(g.data).slice(0, 4) + '/' + String(new Set(dati.rapportini.map(r => r.idGiornata || r.id)).size + 1).padStart(4, '0'); })();
+        // I lavori tolti: quelli inviati o in una fattura non si tolgono.
+        const restano = new Set(g.lavori.map(l => l.id || l.idLocale));
+        for (const r of prima) {
+          if (restano.has(r.id) || restano.has(r.idLocale)) continue;
+          if (r.stato === 'INVIATO' || r.stato === 'FATTURATO') return { ok: false, errore: 'Il lavoro per ' + r.cliente + ' è già inviato: non si toglie' };
         }
-        if (!nuovo.idProgetto && nuovo.progettoNuovo && nuovo.idCommessa) {
-          const pn = nuovo.progettoNuovo;
-          const fatto = esegui(dati, 'creaProgetto', { idCommessa: nuovo.idCommessa, codiceProgetto: pn.codice || '', intestatoA: pn.intestatoA, descrizione: pn.descrizione || pn.codice, idLocale: pn.idLocale });
-          if (!fatto.ok) return fatto;
-          nuovo.idProgetto = fatto.progetto.id;
+        const fatti = [];
+        let prossimo = prima.reduce((m, r) => Math.max(m, Number(String(r.id).split('-').pop()) || 0), 0);
+        for (let k = 0; k < g.lavori.length; k += 1) {
+          const l = Object.assign({}, g.lavori[k], { data: g.data });
+          if (!l.cliente) return { ok: false, errore: 'Lavoro ' + (k + 1) + ': scegli il cliente', lavoro: k + 1 };
+          if (!l.descrizione) return { ok: false, errore: 'Lavoro ' + (k + 1) + ': scrivi che lavoro hai fatto', lavoro: k + 1 };
+          const esiste = prima.find(r => (l.id && r.id === l.id) || (l.idLocale && r.idLocale === l.idLocale));
+          if (esiste && (esiste.stato === 'INVIATO' || esiste.stato === 'FATTURATO')) { esiste.posizione = k + 1; fatti.push(esiste); continue; }
+          if (!esiste) { prossimo += 1; l.id = idG + '-' + prossimo; }
+          const x = salvaLavoro(dati, l, esiste || null);
+          if (!x.ok) return Object.assign({}, x, { errore: 'Lavoro ' + (k + 1) + ': ' + x.errore, lavoro: k + 1 });
+          Object.assign(x.lavoro, { idGiornata: idG, numero: idG, posizione: k + 1, data: g.data });
+          fatti.push(x.lavoro);
         }
-        delete nuovo.progettoNuovo;
-        conProgetto(dati, nuovo);
-        dati.rapportini.unshift(nuovo);
-        scrivi(dati, 'salvaRapportino', 'rapportini', nuovo.id, nuovo.id, null, { oreLavoro: nuovo.oreLavoro });
-        return { ok: true, rapportino: nuovo };
+        prima.forEach(r => { if (fatti.indexOf(r) < 0) { r.statoPrima = r.stato; r.stato = 'ANNULLATO'; } });
+        scrivi(dati, 'salvaRapportino', 'rapportini', idG, idG, null, { lavori: fatti.length });
+        return { ok: true, rapportino: { id: idG, idLocale: g.idLocale || '', data: g.data, tecnico: g.tecnico || dati.io.nome, lavori: fatti, totale: C.totali(fatti).totale } };
       }
       case 'caricaFile': {
         const file = { id: 'esempio' + Date.now(), nome: b.nome || 'file', mime: b.mime || '', url: '' };
@@ -850,11 +926,18 @@
         return { ok: true };
       }
       case 'ripristinaRapportino': {
-        const r = dati.rapportini.find(x => x.id === b.id || x.idLocale === b.id);
-        if (!r) return { ok: false, errore: 'Rapportino non trovato' };
-        r.stato = r.statoPrima || 'BOZZA';
-        scrivi(dati, azione, 'rapportini', r.id, r.id, { stato: 'ANNULLATO' }, { stato: r.stato });
-        return { ok: true, rapportino: r };
+        // Col numero di un rapportino: tutti i suoi lavori tolti tornano, e la risposta è il rapportino coi lavori.
+        const delGiorno = dati.rapportini.filter(x => (x.idGiornata || x.id) === b.id && x.stato === 'ANNULLATO');
+        const r = delGiorno.length ? null : dati.rapportini.find(x => x.id === b.id || x.idLocale === b.id);
+        if (!r && !delGiorno.length) return { ok: false, errore: 'Rapportino non trovato' };
+        (r ? [r] : delGiorno).forEach(x => {
+          x.stato = x.statoPrima || 'BOZZA';
+          scrivi(dati, azione, 'rapportini', x.id, x.id, { stato: 'ANNULLATO' }, { stato: x.stato });
+        });
+        if (r && !r.idGiornata) return { ok: true, rapportino: r };
+        const idG = r ? r.idGiornata : b.id;
+        const lavori = dati.rapportini.filter(x => (x.idGiornata || x.id) === idG && x.stato !== 'ANNULLATO').sort((x, y) => (x.posizione || 1) - (y.posizione || 1));
+        return { ok: true, rapportino: { id: idG, data: lavori[0].data, tecnico: lavori[0].tecnico, lavori, totale: C.totali(lavori).totale } };
       }
 
       // ------------------------------------------------- clienti e fornitori
@@ -1615,8 +1698,7 @@
         const troppe = (idUtente, gi) => { const t = oreDi(idUtente, gi); return t > limite ? [{ tipo: 'troppeOre', testo: C.numero(t) + ' ore in un giorno' }] : []; };
         const giornoTesto = gi => RO.giornoLungo(gi).split(' ').slice(0, 2).join(' ');
         const voci = [];
-        dati.ore.filter(o => !o.tolta && o.stato === 'da_approvare').forEach(o => voci.push({ tipo: 'ore', id: o.id, idUtente: o.idUtente, data: o.data, cosa: 'Ore',
-          dettaglio: [o.idCommessa || 'Studio', o.descrizione, giornoTesto(o.data)].filter(Boolean).join(' · '), quanto: o.ore, unita: 'ore', anomalie: troppe(o.idUtente, o.data) }));
+        // 07/11/2026: niente Ore (come il server nuovo): da approvare restano rapportini, spese e trasferte.
         dati.rapportini.filter(r => r.stato !== 'ANNULLATO' && r.statoApprovazione === 'da_approvare').forEach(r => voci.push({ tipo: 'rapportino', id: r.id, idUtente: r.idUtente, data: r.data, cosa: 'Rapportino',
           dettaglio: [r.id, r.descrizione, giornoTesto(r.data)].join(' · '), quanto: C.num(r.oreTotali), unita: 'ore', km: C.num(r.km), anomalie: troppe(r.idUtente, r.data) }));
         dati.spese.filter(s => !s.tolta && s.stato === 'da_approvare' && !s.idRapportino).forEach(s => voci.push({ tipo: 'spesa', id: s.id, idUtente: s.idUtente, data: s.data, cosa: 'Spesa',
@@ -1639,7 +1721,7 @@
       case 'approva':
       case 'respingi':
       case 'annullaApprovazione': {
-        if (!puoApprovare) return { ok: false, errore: 'Non hai il permesso per approvare ore e rapportini: chiedi al titolare', permesso: false };
+        if (!puoApprovare) return { ok: false, errore: 'Non hai il permesso per approvare rapportini e spese: chiedi al titolare', permesso: false };
         const voci = b.voci || [];
         if (!voci.length) return { ok: false, errore: 'Scegli cosa ' + (azione === 'approva' ? 'approvare' : azione === 'respingi' ? 'respingere' : 'rimettere da approvare') };
         if (azione === 'respingi' && !String(b.motivo || '').trim()) return { ok: false, errore: 'Scrivi il motivo: arriva a chi l\'ha scritta' };
@@ -1899,13 +1981,11 @@
         numeri.approvare = { voci: r.quante, conAnomalie: r.conAnomalie };
         const una = r.persone.length === 1 ? r.persone[0] : null;
         d.urgenti.push({ tipo: 'approvare', gravita: 'attenzione', titolo: r.quante + (r.quante === 1 ? ' cosa da approvare' : ' cose da approvare') + (una ? ' di ' + una.nome : ''),
-          dettaglio: 'Ore, spese e rapportini' + (r.conAnomalie ? ' · ' + r.conAnomalie + (r.conAnomalie === 1 ? ' con un\'anomalia' : ' con un\'anomalia') : ''), quanto: r.quante, unita: 'voci',
+          dettaglio: 'Rapportini e spese' + (r.conAnomalie ? ' · ' + r.conAnomalie + (r.conAnomalie === 1 ? ' con un\'anomalia' : ' con un\'anomalia') : ''), quanto: r.quante, unita: 'voci',
           collegamento: { pagina: 'rapportini', filtro: { segmento: 'daApprovare' } } });
       }
     }
-    // Le proprie cose respinte, col motivo.
-    dati.ore.filter(o => !o.tolta && o.stato === 'respinta' && o.idUtente === io).slice(0, 3).forEach(o => d.urgenti.push({ tipo: 'respinta', gravita: 'attenzione', titolo: 'Ore del ' + C.data(o.data).slice(0, 5) + ' respinte',
-      dettaglio: 'Motivo: ' + o.motivoRifiuto + (o.approvataDa ? ' · ' + nome(o.approvataDa) : ''), quanto: null, unita: null, collegamento: { pagina: 'rapportini', filtro: { segmento: 'ore', giorno: o.data } } }));
+    // Le proprie cose respinte, col motivo (dal 07/11/2026 niente più ore).
     dati.spese.filter(s => !s.tolta && s.stato === 'respinta' && s.idUtente === io).slice(0, 3).forEach(s => d.urgenti.push({ tipo: 'respinta', gravita: 'attenzione', titolo: 'Spesa del ' + C.data(s.data).slice(0, 5) + ' respinta',
       dettaglio: 'Motivo: ' + s.motivoRifiuto, quanto: null, unita: null, collegamento: { pagina: 'spese', filtro: { segmento: 'spese', id: s.id } } }));
     if (d.soldi && !d.mio && (dati.io.ruolo === 'titolare' || dati.io.ruolo === 'amministrazione')) {
@@ -2124,12 +2204,12 @@
     return f;
   }
 
-  /** Le voci da fatturare dei dati di esempio: i rapportini firmati e inviati non ancora in una bozza (§15.3, in piccolo). */
+  /** Le voci da fatturare dei dati di esempio: i lavori da inviare e inviati non ancora in una bozza (§15.3, in piccolo; niente firma dal 06/11/2026). */
   function daFatturareEsempio(dati, F) {
     const riservati = new Set();
     F.fatture.filter(f => f.stato !== 'scartata').forEach(f => (f.sorgenti || []).filter(s => s.attiva).forEach(s => riservati.add(s.id)));
     const gruppi = new Map();
-    dati.rapportini.filter(r => (r.stato === 'FIRMATO' || r.stato === 'INVIATO') && !riservati.has(r.id) && (!r.statoApprovazione || r.statoApprovazione === 'approvato')).forEach(r => {
+    dati.rapportini.filter(r => ['BOZZA', 'FIRMATO', 'INVIATO'].indexOf(r.stato) >= 0 && !riservati.has(r.id) && (!r.statoApprovazione || r.statoApprovazione === 'approvato')).forEach(r => {
       const c = dati.ana.soggetti.find(s => s.id === r.idCliente) || { nome: r.cliente };
       if (!gruppi.has(r.idCliente)) gruppi.set(r.idCliente, { idCliente: r.idCliente, cliente: c.nome, sostituto: !!c.partitaIva, mancano: [], totale: 0, voci: [] });
       const g0 = gruppi.get(r.idCliente);
@@ -2145,7 +2225,7 @@
       ok: true, oggi: dati.oggi, totale: Math.round(lista.reduce((a, x) => a + x.totale, 0) * 100) / 100, clienti: lista.length, gruppi: lista, piuAvanti: [],
       inBozza: F.fatture.filter(f => f.stato === 'bozza' || f.stato === 'pronta').map(f => ({ idFattura: f.id, riferimento: f.riferimento, idCliente: f.idCliente, cliente: f.cliente, stato: f.stato, voci: (f.sorgenti || []).length, totale: f.conti.totale })),
       riepiloghi: [], raggruppa,
-      daFirmare: dati.rapportini.filter(r => r.stato === 'BOZZA').map(r => ({ id: r.id, idCliente: r.idCliente, cliente: r.cliente, idCommessa: r.idCommessa, data: r.data, descrizione: r.descrizione, ore: r.oreTotali })),
+      daFirmare: [],
     };
   }
 

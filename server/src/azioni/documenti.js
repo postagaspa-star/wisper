@@ -455,10 +455,11 @@ module.exports = {
     }
     if (this.livello('rapportini') >= 1) {
       const io = this.chi().utente ? this.chi().utente.id : null;
-      for (const r of this.db.righe("SELECT * FROM rapportini WHERE UPPER(stato) IN ('FIRMATO', 'INVIATO', 'FATTURATO') ORDER BY data DESC, id DESC")) {
+      // 06/11/2026: anche i lavori Da inviare (niente firma: sono finiti).
+      for (const r of this.db.righe("SELECT * FROM rapportini WHERE UPPER(stato) IN ('BOZZA', 'FIRMATO', 'INVIATO', 'FATTURATO') ORDER BY data DESC, id DESC")) {
         if (this.soloSuoi() && r.utente_id !== io) continue;
         if (!tocca(r.id_cliente, r.id_commessa, null)) continue;
-        out.push({ tipo: 'rapportino', id: r.id, titolo: 'Rapportino ' + r.id, dettaglio: dataIt(dataIso(r.data)) + (r.descrizione ? ' · ' + r.descrizione : '') + ' · ' + String(r.stato).toLowerCase(),
+        out.push({ tipo: 'rapportino', id: r.id, titolo: 'Rapportino ' + r.id, dettaglio: dataIt(dataIso(r.data)) + (r.descrizione ? ' · ' + r.descrizione : '') + ' · ' + (['BOZZA', 'FIRMATO'].indexOf(String(r.stato).toUpperCase()) >= 0 ? 'da inviare' : String(r.stato).toLowerCase()),
           data: dataIso(r.data), pagina: 'rapportino' });
       }
     }
@@ -593,7 +594,7 @@ module.exports = {
     let idCommessa = x.idCommessa !== undefined ? testo(x.idCommessa) : testo(p.commessa_id);
     let commessa = null;
     if (idCommessa) {
-      commessa = this.db.riga('SELECT id, cliente_id FROM commesse WHERE id = ?', idCommessa);
+      commessa = this.db.riga('SELECT id, cliente_id FROM commesse WHERE id = ?', this.codiceCommessaVero(idCommessa));
       if (!commessa) throw new Rifiuto('Commessa ' + idCommessa + ' non trovata');
       idCommessa = commessa.id;
     }

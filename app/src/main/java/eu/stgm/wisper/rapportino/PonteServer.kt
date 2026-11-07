@@ -177,6 +177,18 @@ class PonteServer(
     }
 
     /**
+     * Il rapportino coi suoi lavori (salvaRapportino, forma nuova: docs/gestionale/rapportino-lavori.md §3). Torna il
+     * rapportino come l'ha scritto il server: numero, lavori coi conti (i tolti non ci sono piu'), totale. Lo stesso
+     * idLocale rimandato non crea doppioni. Un no del server dice quale lavoro ("Lavoro 2: ...").
+     */
+    suspend fun salvaGiornata(g: Giornata): Giornata = withContext(Dispatchers.IO) {
+        val risposta = scrivi(JSONObject().put("azione", "salvaRapportino").put("rapportino", g.perIlServer()))
+        val r = risposta.optJSONObject("rapportino") ?: throw Rifiutato("Il server non ha restituito il rapportino")
+        // Il server non rimanda l'idLocale dei rapportini nati prima della 1.2: si tiene quello mandato.
+        Giornata.daJson(if (r.testo("idLocale").isBlank()) JSONObject(r.toString()).put("idLocale", g.idLocale) else r, dalServer = true)
+    }
+
+    /**
      * Carica una foto di spesa o una firma. [idFile] e' lo stesso a ogni
      * tentativo: se il file e' gia' arrivato, il server non ne crea un secondo.
      */
@@ -308,6 +320,17 @@ class PonteServer(
                 .put("campi", campiCommessa(m, cliente, nuova = false, costi = costi, fatturazione = fatturazione))
         )
         Commessa.daJson(r.optJSONObject("commessa") ?: throw Rifiutato("Il server non ha restituito la commessa"))
+    }
+
+    /**
+     * Il codice di una commessa che c'è già (06/11/2026): cambia anche in rapportini, progetti, ore, spese e fatture; il
+     * codice di prima resta in codicePrecedente. Il campo si chiama `nuovoCodice`: /exec toglie `codice` da ogni richiesta.
+     * Torna la commessa col codice nuovo e il codice di prima.
+     */
+    suspend fun cambiaCodiceCommessa(id: String, nuovoCodice: String): Pair<Commessa, String> = withContext(Dispatchers.IO) {
+        val r = scrivi(JSONObject().put("azione", "cambiaCodiceCommessa").put("id", id.trim()).put("nuovoCodice", nuovoCodice.trim()))
+        val m = Commessa.daJson(r.optJSONObject("commessa") ?: throw Rifiutato("Il server non ha restituito la commessa"))
+        m to r.optString("vecchio").ifBlank { id.trim() }
     }
 
     private fun campiCommessa(m: Commessa, cliente: Cliente?, nuova: Boolean, costi: Boolean, fatturazione: Boolean = false): JSONObject {
