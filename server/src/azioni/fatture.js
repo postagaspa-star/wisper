@@ -79,6 +79,17 @@ module.exports = {
       this.db.riga('SELECT * FROM conti WHERE attivo = 1 ORDER BY id LIMIT 1');
   },
 
+  /**
+   * Il conto su cui farsi pagare la fattura. Una bozza nata quando i conti non c'erano ancora (conto_id vuoto) prende il
+   * predefinito di oggi: il conto scritto dopo in Banche vale anche per lei. Passando al programma il conto si fissa nella
+   * fattura (passaAlProgramma). conti: la mappa id -> conto degli elenchi, se c'e'.
+   */
+  contoDellaFattura(f, conti) {
+    if (f.conto_id) return conti ? conti[f.conto_id] || null : this.db.riga('SELECT * FROM conti WHERE id = ?', f.conto_id);
+    if (f.stato !== 'bozza') return null;
+    return this.ricordata('contoPredefinito', () => this.contoPredefinito()) || null;
+  },
+
   /** "Conto studio …4521". */
   nomeConto(c) {
     if (!c) return '';
@@ -719,7 +730,7 @@ module.exports = {
     });
     const scadenze = this.db.righe('SELECT * FROM fattura_scadenze WHERE fattura_id = ? ORDER BY ordine, id', id);
     const data = f.scadenza_a_mano === 1 && scadenze[0] ? scadenze[0].data : C.scadenzaFattura(f.data, f.giorni_pagamento, f.fine_mese === 1);
-    const conto = f.conto_id ? this.db.riga('SELECT iban FROM conti WHERE id = ?', f.conto_id) : null;
+    const conto = this.contoDellaFattura(f);
     const v = { ordine: 1, data, importo: conti.netto, modalita: f.modalita_pagamento, iban: conto ? testo(conto.iban) : '' };
     if (scadenze[0]) this.aggiorna('fattura_scadenze', scadenze[0].id, v);
     else this.inserisci('fattura_scadenze', Object.assign({ fattura_id: id }, v));
@@ -890,7 +901,7 @@ module.exports = {
     a = a || this.aiutiFatture([f]);
     const p = this.pagamentoDi(f, a);
     const scadenze = a.scadenze[f.id] || [];
-    const conto = f.conto_id ? a.conti[f.conto_id] : null;
+    const conto = this.contoDellaFattura(f, a.conti);
     return {
       id: f.id, riferimento: f.riferimento, etichetta: this.etichettaFattura(f), tipo: f.tipo, tipoDocumento: f.tipo_documento,
       idCliente: f.cliente_id, cliente: a.clienti[f.cliente_id] || '', idCommessa: f.commessa_id || '',
@@ -906,7 +917,7 @@ module.exports = {
       },
       totaleBozza: f.totale_bozza === null ? null : f.totale_bozza, nettoBozza: f.netto_bozza === null ? null : f.netto_bozza,
       scadenze: scadenze.map((s, i) => ({ id: s.id, data: s.data, importo: s.importo, modalita: s.modalita, coperta: p.coperture[i] || 0 })),
-      scadenzaAMano: f.scadenza_a_mano === 1, idConto: f.conto_id === null ? null : f.conto_id, conto: this.nomeConto(conto),
+      scadenzaAMano: f.scadenza_a_mano === 1, idConto: conto ? conto.id : null, conto: this.nomeConto(conto),
       incassato: p.incassato, residuo: p.residuo, daRestituire: p.daRestituire, daEmettereEntro: p.daEmettereEntro,
       esitoSdi: f.esito_sdi, prontaIl: dataOraIso(f.pronta_il), emessaIl: dataOraIso(f.emessa_il), avvisoInviatoIl: dataOraIso(f.avviso_inviato_il),
       regoleConfermate: f.stato === 'bozza' ? !!this.regoleConfermate() : !!f.regole_confermate,
@@ -1168,7 +1179,7 @@ module.exports = {
       !testo(imp.STUDIO_CAP) || !testo(imp.STUDIO_COMUNE) || !testo(imp.STUDIO_PROVINCIA)) {
       m.push({ campo: 'studio', testo: 'I dati dello studio per la fattura: scrivili in Amministrazione › Dati dello studio' });
     }
-    const conto = f.conto_id ? this.db.riga('SELECT * FROM conti WHERE id = ?', f.conto_id) : null;
+    const conto = this.contoDellaFattura(f);
     if (f.modalita_pagamento === 'MP05' && !(conto && testo(conto.iban))) {
       m.push({ campo: 'iban', testo: 'L\'IBAN del conto su cui farti pagare: scrivilo in Banche e scadenze › Conti' });
     }
@@ -1193,7 +1204,7 @@ module.exports = {
     const righe = this.righeVisibili(f.id);
     const privato = !chiavePiva(s.partita_iva);
     const nc = nomeECognome(s.nome);
-    const conto = f.conto_id ? this.db.riga('SELECT * FROM conti WHERE id = ?', f.conto_id) : null;
+    const conto = this.contoDellaFattura(f);
     const iban = c => (o.ibanIntero ? testo(c).replace(/\s/g, '') : ibanCoperto(c));
     const forfettario = f.regime === 'forfettario';
     const ritenutaSi = f.ritenuta_applicata === 1 && !forfettario && numero(f.ritenuta) > 0;
@@ -1298,9 +1309,12 @@ module.exports = {
     }
     const ora = adesso();
     const c = this.chi();
-    this.aggiorna('fatture', f.id, {
-      stato: 'pronta', pronta_il: ora, pronta_da: c.utente ? c.utente.id : null, regole_confermate: regole ? regole.data : '', modificato: ora,
-    }, 'id', 'passata al programma');
+    const conto = this.contoDellaFattura(f);
+    const v = { stato: 'pronta', pronta_il: ora, pronta_da: c.utente ? c.utente.id : null, regole_confermate: regole ? regole.data : '', modificato: ora };
+    // La bozza nata senza conto si tiene quello che ha usato il prospetto: cambiare il predefinito dopo non la tocca.
+    if (!f.conto_id && conto) v.conto_id = conto.id;
+    this.aggiorna('fatture', f.id, v, 'id', 'passata al programma');
+    if (v.conto_id) this.ricalcolaFattura(f.id);
     const dopo = this.db.riga('SELECT * FROM fatture WHERE id = ?', f.id);
     return { ok: true, fattura: this.fatturaCompleta(dopo), pacchetto: this.pacchettoDi(dopo) };
   },

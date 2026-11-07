@@ -11,6 +11,7 @@ mai dati veri di clienti.
 
 | Data | Versione | In breve |
 |------|----------|----------|
+| 07/11/2026 | server 0.13.2 | [La fattura vede il conto scritto dopo in Banche](#server-0-13-2) |
 | 07/11/2026 | 1.2.1, server 0.13.1 | [I rapportini di prima uniti per giorno, un rapportino per scheda](#v1-2-1) |
 | 07/11/2026 | 1.2.0, server 0.13.0 | [Il rapportino diventa la giornata: più lavori, niente firma, niente Ore](#v1-2-0) |
 | 04/11/2026 | 1.1.1 (computer) | [Il menu laterale resta dov'era e non ha più la barra grigia](#v1-1-1) |
@@ -42,6 +43,31 @@ mai dati veri di clienti.
 | 26/09–14/10/2026 | 0.1 | [Un rapportino confermato non si perde più](#coda) |
 | 7–9/08/2026 | 0.1.0 | [Hackathon NGN Hacks: la versione a voce, senza mani](#v0-1-0) |
 | marzo–giugno 2026 | prima del repository | [Le prime versioni](#prima) |
+
+---
+
+<a id="server-0-13-2"></a>
+## 7 novembre 2026 · server 0.13.2 · La fattura vede il conto scritto dopo in Banche
+
+**Perché.** Andrea: "anche se nelle Banche è stato inserito l'IBAN non si riesce a Passare al programma dalla
+fatturazione". La finestra Passa al programma della W-1 diceva "Prima di passarla al programma manca: L'IBAN del conto
+su cui farti pagare".
+
+**Cosa succedeva.** Quando nasce, una bozza di fattura si segna il conto predefinito di quel momento. La W-1 è nata il 6
+novembre alle 19:54, il conto con l'IBAN è stato scritto in Banche alle 20:10. La bozza era rimasta senza conto, e il
+controllo guardava solo lì.
+
+**Cosa cambia.** Una bozza senza conto usa il conto predefinito di oggi: nel controllo di cosa manca, nel prospetto,
+nell'XML da completare e nella scadenza. Quando passa al programma il conto si fissa nella fattura, così se dopo si
+cambia il conto predefinito le fatture già passate restano come sono. Una bozza che ha già il suo conto lo tiene. Cambia
+solo il server: telefono e computer restano alla 1.2.1.
+
+**Prove.** Una prova nuova rifà il caso del 6 novembre. Senza conti manca l'IBAN; col conto scritto dopo non manca più,
+il prospetto ha l'IBAN e, passando al programma, il conto resta nella fattura. Col codice di prima la stessa prova non
+passa. Passano tutte le prove del server. Sul NAS ho controllato su una copia usa e getta dei dati veri: la W-1 ora
+trova il conto e non le manca niente.
+
+**Pubblicata.** Server 0.13.2 sul NAS dalle 17:03 del 7 novembre, dopo la copia intera dei dati.
 
 ---
 

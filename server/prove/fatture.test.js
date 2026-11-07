@@ -257,6 +257,38 @@ test('nuovaFattura e fattura a zero: righe senza prezzo e totale zero non passan
   await manuel('scartaFattura', { id: f.id });
 });
 
+test('una bozza nata prima dei conti prende il conto predefinito scritto dopo; passando al programma lo tiene', async () => {
+  // Il caso del 06/11 sul NAS: la bozza nasce quando in Banche non c'e' ancora nessun conto (conto_id vuoto), il conto
+  // con l'IBAN arriva dopo. Prima la bozza diceva per sempre "manca l'IBAN".
+  const cliente = db().riga("SELECT cliente_id FROM fatture WHERE riferimento = 'W-15'").cliente_id;
+  const conti = db().righe('SELECT id, attivo FROM conti');
+  const f = (await manuel('nuovaFattura', { idCliente: cliente })).fattura;
+  await manuel('salvaFattura', { fattura: { id: f.id, righe: [{ tipo: 'compenso', descrizione: 'Consulenza', quantita: 1, prezzo: 100 }] } });
+  db().esegui('UPDATE conti SET attivo = 0');
+  db().esegui('UPDATE fatture SET conto_id = NULL WHERE id = ?', f.id);
+  const senza = (await manuel('fattura', { id: f.id })).fattura;
+  assert.deepEqual([senza.idConto, senza.conto], [null, '']);
+  assert.deepEqual(senza.mancano.map(m => m.campo), ['iban'], 'nessun conto in Banche: manca davvero');
+  // Ora il conto c'e' (in Banche): la stessa bozza lo vede, senza toccarla.
+  for (const c of conti) db().esegui('UPDATE conti SET attivo = ? WHERE id = ?', c.attivo, c.id);
+  const predefinito = db().riga('SELECT * FROM conti WHERE predefinito = 1 AND attivo = 1');
+  const con = (await manuel('fattura', { id: f.id })).fattura;
+  assert.equal(con.idConto, predefinito.id);
+  assert.match(con.conto, /…3456$/);
+  assert.deepEqual(con.mancano, []);
+  const pacchetto = await manuel('pacchetto', { id: f.id });
+  assert.equal(pacchetto.ok, true, pacchetto.errore);
+  assert.ok(pacchetto.modello.pagamento.dettagli[0].iban.endsWith('3456'), 'il prospetto ha l\'IBAN del conto');
+  const r = await manuel('passaAlProgramma', { id: f.id, conferma: true });
+  assert.equal(r.ok, true, r.errore);
+  assert.equal(r.fattura.stato, 'pronta');
+  // Passando al programma il conto si fissa nella fattura, e la scadenza ha l'IBAN.
+  assert.equal(db().riga('SELECT conto_id FROM fatture WHERE id = ?', f.id).conto_id, predefinito.id);
+  assert.equal(db().riga('SELECT iban FROM fattura_scadenze WHERE fattura_id = ?', f.id).iban, predefinito.iban);
+  await manuel('tornaInBozza', { id: f.id });
+  await manuel('scartaFattura', { id: f.id });
+});
+
 // ------------------------------------------------------------------ il passaggio al programma
 
 test('pacchetto: il modello, il prospetto per sezioni e l\'XML da completare (numero BOZZA, nome che dice di non inviarlo)', async () => {
