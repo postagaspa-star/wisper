@@ -16,7 +16,7 @@ const { serverDiProva, cartellaNuova, SEGRETO, giornoDeiPrototipi } = require('.
 const { scriviXlsx } = require('../strumenti/xlsx');
 const { importa, confronta } = require('../strumenti/importa');
 
-process.env.WISPER_POSTA_FINTA = fs.mkdtempSync(path.join(os.tmpdir(), 'wisper-posta-'));
+process.env.WISPER_POSTA_FINTA = cartellaNuova('posta');
 const finto = require('../../apps-script/prove/finto-google.js');
 finto.proprieta.set('SEGRETO_SERVER', SEGRETO);
 

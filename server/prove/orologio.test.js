@@ -10,6 +10,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const net = require('node:net');
 const path = require('node:path');
+const { cartellaNuova } = require('./aiuto');
 const { spawn } = require('node:child_process');
 const { DatabaseSync } = require('node:sqlite');
 const U = require('../src/utili');
@@ -30,7 +31,7 @@ function portaLibera() {
 /** Il server da riga di comando, come sul NAS (node src/avvio.js --dati ...), con WISPER_OGGI_PROVA nell'ambiente. */
 async function avviaDaRiga(argomenti, giorno) {
   const porta = await portaLibera();
-  const dati = fs.mkdtempSync(path.join(os.tmpdir(), 'wisper-orologio-'));
+  const dati = cartellaNuova('orologio');
   const env = Object.assign({}, process.env, { WISPER_OGGI_PROVA: giorno, WISPER_PORTA_GOOGLE: 'no' });
   delete env.NODE_TEST_CONTEXT;
   delete env.WISPER_POSTINO_URL;

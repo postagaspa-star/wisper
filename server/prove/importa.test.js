@@ -18,7 +18,7 @@ const { importa } = require('../strumenti/importa');
 const { copiaDrive } = require('../strumenti/copia-drive');
 const { Wisper } = require('../src/wisper');
 
-process.env.WISPER_POSTA_FINTA = fs.mkdtempSync(path.join(os.tmpdir(), 'wisper-posta-'));
+process.env.WISPER_POSTA_FINTA = cartellaNuova('posta');
 const finto = require('../../apps-script/prove/finto-google.js');
 
 const scrivi = (azione, dati) => {

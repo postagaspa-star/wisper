@@ -10,7 +10,9 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
-process.env.WISPER_POSTA_FINTA = fs.mkdtempSync(path.join(os.tmpdir(), 'wisper-posta-'));
+const postaFinta = fs.mkdtempSync(path.join(os.tmpdir(), 'wisper-posta-'));
+process.env.WISPER_POSTA_FINTA = postaFinta;
+process.on('exit', () => { try { fs.rmSync(postaFinta, { recursive: true, force: true }); } catch (e) { /* ancora aperta: resta */ } });
 const { contesto, fogli, proprieta } = require('./finto-google.js');
 
 const CODICE = 'prova';

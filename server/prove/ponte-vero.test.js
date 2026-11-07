@@ -16,7 +16,7 @@ const { SEGRETO, cartellaNuova } = require('./aiuto');
 const PONTE = path.join(__dirname, '..', '..', 'apps-script', 'Ponte.gs');
 const salta = !fs.existsSync(PONTE) && 'manca apps-script/Ponte.gs';
 
-process.env.WISPER_POSTA_FINTA = fs.mkdtempSync(path.join(os.tmpdir(), 'wisper-posta-'));
+process.env.WISPER_POSTA_FINTA = cartellaNuova('posta');
 
 function portaLibera() {
   return new Promise(r => {

@@ -9,7 +9,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { serverDiProva, PNG, giornoDeiPrototipi } = require('./aiuto');
+const { serverDiProva, PNG, giornoDeiPrototipi, cartellaNuova } = require('./aiuto');
 // La Dashboard intera del titolare contiene anche la storia a date fisse delle fasi 4 e 5: dal 2027 quella storia
 // invecchia (fatture scadute da mesi, decine di pagamenti scaduti) e riempie le sezioni prima delle voci cercate qui
 // (20 voci al massimo per sezione, come vuole l'accordo): queste prove la guardano dal giorno del prototipo, giovedi' 22/10/2026,
@@ -96,7 +96,7 @@ test('conti del preventivo: il server usa gli stessi conti (il PR/012 del protot
 
 test('migrazione 002 su un database della fase 1: copia prima-2, file e dati conservati, tipi di file nuovi', () => {
   const { Database } = require('../src/db');
-  const dati = fs.mkdtempSync(path.join(os.tmpdir(), 'wisper-002-'));
+  const dati = cartellaNuova('002');
   const cartella = path.join(dati, 'migrazioni');
   fs.mkdirSync(cartella);
   fs.copyFileSync(path.join(__dirname, '..', 'src', 'migrazioni', '001-base.sql'), path.join(cartella, '001-base.sql'));
@@ -127,7 +127,7 @@ test('migrazione 002 su un database della fase 1: copia prima-2, file e dati con
 // ------------------------------------------------------------------ listino
 
 test('listino: si parte con le prestazioni tipiche senza prezzi; il prezzo lo scrive chi vede i costi', async () => {
-  const dati = fs.mkdtempSync(path.join(os.tmpdir(), 'wisper-listino-'));
+  const dati = cartellaNuova('listino');
   const vuoto = new Wisper({ dati, memoria: true });
   const l = vuoto.leggiListino();
   assert.deepEqual(l.map(v => v.nome), ['Sopralluogo e rilievo', 'Progetto preliminare', 'Progetto esecutivo', 'Direzione lavori',

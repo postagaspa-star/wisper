@@ -11,10 +11,10 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { serverDiProva, SEGRETO } = require('./aiuto');
+const { serverDiProva, SEGRETO, cartellaNuova } = require('./aiuto');
 const { PortaGoogle } = require('../src/porta');
 
-process.env.WISPER_POSTA_FINTA = fs.mkdtempSync(path.join(os.tmpdir(), 'wisper-posta-'));
+process.env.WISPER_POSTA_FINTA = cartellaNuova('posta');
 const finto = require('../../apps-script/prove/finto-google.js');
 finto.proprieta.set('SEGRETO_SERVER', SEGRETO);
 

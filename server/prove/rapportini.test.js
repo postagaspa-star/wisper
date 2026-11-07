@@ -8,11 +8,11 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { serverDiProva, PNG } = require('./aiuto');
+const { serverDiProva, PNG, cartellaNuova } = require('./aiuto');
 const { oggi, dataIso } = require('../src/utili');
 
 // Il finto Google con lo script vero: le sue risposte sono il riferimento.
-process.env.WISPER_POSTA_FINTA = fs.mkdtempSync(path.join(os.tmpdir(), 'wisper-posta-'));
+process.env.WISPER_POSTA_FINTA = cartellaNuova('posta');
 const finto = require('../../apps-script/prove/finto-google.js');
 const delloScript = p => JSON.parse(finto.contesto.doGet({ parameter: Object.assign({ codice: 'prova' }, p) }).testo);
 

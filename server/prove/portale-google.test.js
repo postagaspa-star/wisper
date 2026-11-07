@@ -13,10 +13,10 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { serverDiProva, SEGRETO, giornoDeiPrototipi } = require('./aiuto');
+const { serverDiProva, SEGRETO, giornoDeiPrototipi, cartellaNuova } = require('./aiuto');
 
 giornoDeiPrototipi();
-process.env.WISPER_POSTA_FINTA = fs.mkdtempSync(path.join(os.tmpdir(), 'wisper-posta-'));
+process.env.WISPER_POSTA_FINTA = cartellaNuova('posta');
 const finto = require('../../apps-script/prove/finto-google.js');
 const SEGRETO_PORTALE = 'segreto-del-portale-diverso-da-quello-del-foglio';
 finto.proprieta.set('SEGRETO_SERVER', SEGRETO_PORTALE);

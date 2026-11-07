@@ -14,7 +14,7 @@ const { scriviXlsx } = require('../strumenti/xlsx');
 const { importa } = require('../strumenti/importa');
 const { Wisper, SISTEMA } = require('../src/wisper');
 
-process.env.WISPER_POSTA_FINTA = fs.mkdtempSync(path.join(os.tmpdir(), 'wisper-posta-'));
+process.env.WISPER_POSTA_FINTA = cartellaNuova('posta');
 const { contesto, fogli, proprieta } = require('../../apps-script/prove/finto-google.js');
 
 const ss = contesto.SpreadsheetApp.getActiveSpreadsheet();
