@@ -384,18 +384,19 @@ async function main() {
     await valuta(`document.querySelector('.tab .r.rap[data-giornata="${ID}"] input').click(); true`);
     await aspetta(500);
     const barra = await valuta("(document.querySelector('.barra-scelti') || {}).innerText || ''");
-    assert.match(barra, /3 lavori scelti/);
-    assert.match(barra, /2 clienti/);
+    assert.match(barra, /1 rapportino scelto/);
+    assert.match(barra, /3 lavori · 2 clienti/);
+    // Ogni rapportino è una scheda a sé (07/11/2026), scelta tutta insieme.
+    assert.equal(await valuta(`document.querySelector('.tab .r.rap[data-giornata="${ID}"]').parentElement.className`), 'blocco-rap scelto');
     await sta('l\'elenco con la barra');
     await foto('elenco');
-    passo('Da inviare: la riga del rapportino (3 lavori · 2 clienti, 3 da inviare), la casella sceglie i suoi 3 lavori');
-    // Un lavoro tolto dalla scelta: la casella del rapportino va a metà.
-    await valuta(`document.querySelector('.tab .r.lavoro[data-chiave="${suoi[1].id}"] input').click(); true`);
+    passo('Da inviare: la scheda del rapportino (3 lavori · 2 clienti, 3 da inviare), la casella sceglie il rapportino intero');
+    // I lavori da soli non si scelgono: nessuna casella nelle loro righe; la casella del rapportino lo toglie tutto.
+    assert.equal(await valuta("document.querySelectorAll('.tab .r.lavoro input').length"), 0, 'nessuna casella sui lavori');
+    await valuta(`document.querySelector('.tab .r.rap[data-giornata="${ID}"] input').click(); true`);
     await aspetta(300);
-    assert.equal(await valuta(`document.querySelector('.tab .r.rap[data-giornata="${ID}"] input').indeterminate`), true, 'a metà');
-    assert.match(await valuta("document.querySelector('.barra-scelti').innerText"), /2 lavori scelti[\s\S]*1 cliente/);
-    await clicca('Deseleziona', '.barra-scelti', 400);
-    passo('un lavoro tolto: la casella del rapportino a metà; Deseleziona');
+    assert.ok(!(await valuta("!!document.querySelector('.barra-scelti')")), 'tolto il rapportino, niente barra');
+    passo('nessuna casella sui lavori; la casella del rapportino lo toglie intero');
 
     // ------------------------------------------------------------- il pannello
     await valuta(`document.querySelector('.tab .r.rap[data-giornata="${ID}"]').click(); true`);
@@ -545,7 +546,7 @@ async function main() {
     await valuta(`document.querySelector('.pannello [aria-label="Chiudi"]').click(); true`);
     await aspetta(400);
     for (const id of VECCHI) { await valuta(`document.querySelector('.tab .r.rap[data-giornata="${id}"] input').click(); true`); await aspetta(300); }
-    assert.match(await valuta("document.querySelector('.barra-scelti').innerText"), /2 lavori scelti[\s\S]*1 cliente/);
+    assert.match(await valuta("document.querySelector('.barra-scelti').innerText"), /2 rapportini scelti[\s\S]*2 lavori · 1 cliente/);
     await clicca('Da inviare', '.barra-scelti', 1200);
     testo = await testoFinestra();
     assert.match(testo, /Invio rapportini/, 'due rapportini: Invio rapportini');

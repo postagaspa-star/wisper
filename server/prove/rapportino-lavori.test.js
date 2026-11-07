@@ -355,7 +355,7 @@ test('migrazione 011: ogni riga di prima e\' un rapportino con un lavoro, stesso
   db.chiudi();
   const w2 = new Wisper({ dati });
   try {
-    assert.equal(w2.db.versione(), 11);
+    assert.equal(w2.db.versione(), 12);
     const copia = new Database(path.join(dati, 'wisper.db.prima-11'));
     assert.equal(copia.versione(), 10, 'la copia e\' com\'era prima');
     copia.chiudi();
@@ -387,5 +387,79 @@ test('migrazione 011: ogni riga di prima e\' un rapportino con un lavoro, stesso
     assert.deepEqual([w3.db.riga("SELECT id_giornata FROM rapportini WHERE id = 'RAP/2026/0050'").id_giornata, !!w3.db.riga("SELECT id FROM giornate WHERE id = 'RAP/2026/0050'")], ['RAP/2026/0050', true]);
   } finally {
     w3.chiudi();
+  }
+});
+
+// ------------------------------------------------------------------ la migrazione 012
+
+test('migrazione 012: i rapportini di prima dello stesso giorno e della stessa persona diventano uno; quelli della 1.2 restano', () => {
+  const dati = cartellaNuova('migrazione-012');
+  const migr = path.join(dati, 'src', 'migrazioni');
+  fs.mkdirSync(migr, { recursive: true });
+  for (const f of ['utili.js', 'documenti.js']) fs.copyFileSync(path.join(MIGRAZIONI, '..', f), path.join(dati, 'src', f));
+  const copia = re => { for (const f of fs.readdirSync(MIGRAZIONI).filter(x => re.test(x))) fs.copyFileSync(path.join(MIGRAZIONI, f), path.join(migr, f)); };
+  copia(/^(00\d|010)-/);
+  const db = new Database(path.join(dati, 'wisper.db'));
+  db.migra(migr);
+  // Le righe di prima (prima della 1.2), con l'ora in cui erano state scritte.
+  const righe = [
+    ['RAP/2026/0001', '2026-11-06', 'Manuel Gasparotto', 'INVIATO', '2026-11-06T19:27:00+01:00'],
+    ['RAP/2026/0003', '2026-11-06', 'Manuel Gasparotto', 'BOZZA', '2026-11-06T19:31:00+01:00'],
+    ['RAP/2026/0002', '2026-11-06', 'Manuel Gasparotto', 'INVIATO', '2026-11-06T19:29:00+01:00'],
+    ['RAP/2026/0004', '2026-11-05', 'Manuel Gasparotto', 'INVIATO', '2026-11-06T19:44:00+01:00'],
+    ['RAP/2026/0005', '2026-11-05', 'Manuel Gasparotto', 'INVIATO', '2026-11-06T19:45:00+01:00'],
+    ['RAP/2026/0006', '2026-11-06', 'Marco Rossato', 'BOZZA', '2026-11-06T20:00:00+01:00'],
+    ['RAP/2026/0007', '2026-11-04', 'Andrea Gasparotto', 'ANNULLATO', '2026-11-04T06:38:00+01:00'],
+  ];
+  for (const [id, data, tecnico, stato, creato] of righe) {
+    db.esegui("INSERT INTO rapportini (id, data, tecnico, id_cliente, cliente, stato, creato, modificato) VALUES (?, ?, ?, 'C002', 'Rossi Impianti Srl', ?, ?, ?)",
+      id, data, tecnico, stato, creato, creato.replace('T19', 'T21'));
+  }
+  copia(/^011-/);
+  db.migra(migr);
+  assert.equal(db.versione(), 11);
+  // Un rapportino fatto con la 1.2 lo stesso giorno: resta com'e'.
+  db.esegui("INSERT INTO giornate (id, data, tecnico, creato, modificato) VALUES ('RAP/2026/0010', '2026-11-06', 'Manuel Gasparotto', 'x', 'x')");
+  db.esegui("INSERT INTO rapportini (id, id_giornata, posizione, data, tecnico, id_cliente, cliente, stato, creato, modificato) VALUES ('RAP/2026/0010-1', 'RAP/2026/0010', 1, '2026-11-06', 'Manuel Gasparotto', 'C002', 'Rossi Impianti Srl', 'BOZZA', 'x', 'x')");
+  const prima = db.righe('SELECT * FROM rapportini ORDER BY id').map(r => Object.assign({}, r));
+  db.chiudi();
+  const w2 = new Wisper({ dati });
+  try {
+    assert.equal(w2.db.versione(), 12);
+    const copiaPrima = new Database(path.join(dati, 'wisper.db.prima-12'));
+    assert.equal(copiaPrima.versione(), 11, 'la copia e\' com\'era prima');
+    copiaPrima.chiudi();
+    // I rapportini: quello del 06/11 di Manuel prende il numero del primo scritto e i lavori in ordine di scrittura.
+    const giornate = w2.db.righe('SELECT id, data, tecnico, creato, modificato FROM giornate ORDER BY id').map(g => Object.assign({}, g));
+    assert.deepEqual(giornate.map(g => g.id), ['RAP/2026/0001', 'RAP/2026/0004', 'RAP/2026/0006', 'RAP/2026/0007', 'RAP/2026/0010']);
+    assert.deepEqual([giornate[0].creato, giornate[0].modificato], ['2026-11-06T19:27:00+01:00', '2026-11-06T21:31:00+01:00']);
+    const dove = w2.db.righe('SELECT id, id_giornata, posizione FROM rapportini ORDER BY id_giornata, posizione').map(r => [r.id, r.id_giornata, r.posizione]);
+    assert.deepEqual(dove, [
+      ['RAP/2026/0001', 'RAP/2026/0001', 1], ['RAP/2026/0002', 'RAP/2026/0001', 2], ['RAP/2026/0003', 'RAP/2026/0001', 3],
+      ['RAP/2026/0004', 'RAP/2026/0004', 1], ['RAP/2026/0005', 'RAP/2026/0004', 2],
+      ['RAP/2026/0006', 'RAP/2026/0006', 1],
+      ['RAP/2026/0007', 'RAP/2026/0007', 1],
+      ['RAP/2026/0010-1', 'RAP/2026/0010', 1],
+    ]);
+    // I lavori non cambiano in niente altro.
+    const dopo = w2.db.righe('SELECT * FROM rapportini ORDER BY id').map(r => Object.assign({}, r));
+    dopo.forEach((r, i) => {
+      const a = Object.assign({}, r); const b = Object.assign({}, prima[i]);
+      for (const x of [a, b]) { delete x.id_giornata; delete x.posizione; }
+      assert.deepEqual(a, b, r.id);
+    });
+    // Nel registro, uno spostamento per lavoro spostato.
+    assert.deepEqual(w2.db.righe("SELECT id_riga FROM registro WHERE nota LIKE 'migrazione 012%' ORDER BY id_riga").map(r => r.id_riga), ['RAP/2026/0002', 'RAP/2026/0003', 'RAP/2026/0005']);
+    // Come lo leggono le app: il numero che si vede e' quello del rapportino.
+    const letti = w2.come({ utente: null, sistema: true }, () => w2.leggiRapportini('2026-11-01', '2026-11-30', true));
+    const lista = Array.isArray(letti) ? letti : letti.rapportini;
+    assert.deepEqual(lista.filter(r => r.idGiornata === 'RAP/2026/0001').map(r => [r.id, r.posizione, r.numero]),
+      [['RAP/2026/0001', 1, 'RAP/2026/0001'], ['RAP/2026/0002', 2, 'RAP/2026/0001'], ['RAP/2026/0003', 3, 'RAP/2026/0001']]);
+    // Il prossimo numero non riprende quelli tolti come rapportini (sono ancora numeri di lavori).
+    const nuovo = w2.come({ utente: null, sistema: true }, () =>
+      w2.salvaRapportino({ idLocale: 'dopo-012', data: '2026-11-07', lavori: [{ idLocale: 'dopo-012-1', idCliente: '', cliente: 'Rossi Impianti Srl', tariffa: 40, oreLavoro: 1 }] }));
+    assert.equal(nuovo.id, 'RAP/2026/0011');
+  } finally {
+    w2.chiudi();
   }
 });

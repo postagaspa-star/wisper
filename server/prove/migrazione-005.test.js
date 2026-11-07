@@ -93,7 +93,7 @@ const comeTitolare = fn => w.come({ utente: w.titolare(), permessi: w.permessiDi
 
 test('migrazione 005: versione 5, la copia wisper.db.prima-5 com\'era, le tabelle di prima riga per riga uguali', () => {
   // Fase 6: il server apre il database fino alla versione 6 (la 006 parte dopo la 005); la copia della 005 resta.
-  assert.equal(w.db.versione(), 11);
+  assert.equal(w.db.versione(), 12);
   const copia = new Database(path.join(cartella, 'wisper.db.prima-5'));
   assert.equal(copia.versione(), 4, 'la copia e\' com\'era prima');
   copia.chiudi();
@@ -229,7 +229,7 @@ test('riaperto il server: la migrazione non si rifa\'', () => {
   const documenti = w.db.riga('SELECT COUNT(*) n FROM documenti').n;
   w.chiudi();
   w = new Wisper({ dati: cartella });
-  assert.equal(w.db.versione(), 11);
+  assert.equal(w.db.versione(), 12);
   assert.equal(w.db.riga('SELECT COUNT(*) n FROM documenti').n, documenti);
   assert.equal(w.db.riga('SELECT COUNT(*) n FROM documento_categorie').n, 25);
 });

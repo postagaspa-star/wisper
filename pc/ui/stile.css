@@ -2013,6 +2013,19 @@ button.imp-riga.collegamento-imp:hover .lab { text-decoration: underline; text-u
 .tab.lavori .c-rap b { font-size: 15px; font-weight: 800; }
 .tab.lavori .c-rap span:nth-child(2) { font-weight: 700; color: var(--testo2); }
 .tab.lavori .c-rap .tenue { color: var(--tenue); font-weight: 600; }
+/* 07/11/2026: un rapportino = una scheda. La tabella non fa più da scheda: le intestazioni stanno sopra, ogni rapportino
+   ha bordo e angoli suoi, la testata su fondo più scuro e alta, i lavori sotto; fra un rapportino e l'altro, spazio. */
+.tab.lavori.a-blocchi { background: transparent; border: none; border-radius: 0; overflow: visible; }
+.tab.lavori.a-blocchi > .r.testa { background: transparent; border-bottom: none; padding-top: 0; padding-bottom: 8px; }
+.tab.lavori .blocco-rap { background: var(--scheda); border: 1px solid var(--bordo-scheda); border-radius: 16px; overflow: hidden; }
+.tab.lavori .blocco-rap + .blocco-rap { margin-top: 14px; }
+.tab.lavori .blocco-rap .r.rap { background: var(--superficie-tenue); min-height: 56px; border-bottom: 1px solid var(--bordo-scheda); }
+.tab.lavori .blocco-rap .r.rap:hover { background: var(--fondo); }
+.tab.lavori .blocco-rap .r.rap.scelta { background: var(--giallo-scelto); }
+.tab.lavori .blocco-rap.scelto { border-color: var(--testo); box-shadow: 0 0 0 1px var(--testo); }
+.tab.lavori .blocco-rap.scelto .r.rap { background: var(--giallo-tenue); }
+.tab.lavori .blocco-rap .r.lavoro.nel-scelto { background: var(--giallo-scelto); }
+.tab.lavori .blocco-rap .r.rap .c-rap b { font-size: 16px; }
 @container (max-width: 860px) {
   .tab.lavori .r { grid-template-columns: var(--col-cas, ) minmax(130px, 1.3fr) minmax(0, 1.7fr) 44px 44px var(--col-sol, ) 100px; }
   .tab.lavori .c-commessa, .tab.lavori .c-progetto { display: none; }

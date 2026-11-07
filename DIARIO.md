@@ -11,6 +11,7 @@ mai dati veri di clienti.
 
 | Data | Versione | In breve |
 |------|----------|----------|
+| 07/11/2026 | 1.2.1, server 0.13.1 | [I rapportini di prima uniti per giorno, un rapportino per scheda](#v1-2-1) |
 | 07/11/2026 | 1.2.0, server 0.13.0 | [Il rapportino diventa la giornata: più lavori, niente firma, niente Ore](#v1-2-0) |
 | 04/11/2026 | 1.1.1 (computer) | [Il menu laterale resta dov'era e non ha più la barra grigia](#v1-1-1) |
 | 04/11/2026 | 1.1.0, server 0.12.0 | [Si riparte da zero: progetti, funzioni tutte spegnibili, aggiornamenti annunciati dal NAS](#v1-1-0) |
@@ -41,6 +42,52 @@ mai dati veri di clienti.
 | 26/09–14/10/2026 | 0.1 | [Un rapportino confermato non si perde più](#coda) |
 | 7–9/08/2026 | 0.1.0 | [Hackathon NGN Hacks: la versione a voce, senza mani](#v0-1-0) |
 | marzo–giugno 2026 | prima del repository | [Le prime versioni](#prima) |
+
+---
+
+<a id="v1-2-1"></a>
+## 7 novembre 2026 · 1.2.1, server 0.13.1 · I rapportini di prima uniti per giorno, un rapportino per scheda
+
+**Perché.** Andrea ha guardato la 1.2.0 appena pubblicata e ha trovato tre cose. "Gli 8 rapportini dovevano essere
+raggruppati con il nuovo sistema a giornate dei rapportini, non lasciati esattamente come prima." Poi: "la suddivisione
+per rapportini nella sezione Rapportini fa schifo: non si capisce quando inizia un rapportino e quando finisce uno".
+E ancora: "non devono poter essere selezionati i lavori singoli di un rapportino".
+
+**I rapportini di prima, uniti per giorno.** Nella 1.2.0 ogni rapportino fatto prima era diventato un rapportino con un
+lavoro solo. Così il 6 novembre di Manuel risultava fatto di cinque rapportini, invece che di uno con cinque lavori. La
+migrazione 012 del server 0.13.1 li unisce. I rapportini di prima con lo stesso giorno e lo stesso autore diventano uno
+solo, col numero del primo scritto quel giorno. I lavori restano in fila nell'ordine in cui erano stati scritti. I lavori
+non cambiano in niente: stesso numero, stato, fattura, spese e file. Cambia solo il rapportino in cui stanno. Sul NAS il
+06/11 di Manuel diventa un rapportino con 5 lavori e il 05/11 uno con 2; il 04/11 di Andrea resta da solo. Prima di
+farlo il server salva una copia intera del database.
+
+Ad Andrea ho chiesto anche cosa fare quando si crea un rapportino in un giorno che ne ha già uno: unirli da soli, o
+lasciarli separati? Ha scelto "Due separati vanno bene". La 012 tocca quindi solo i rapportini fatti prima della 1.2.
+Quelli fatti con la 1.2 restano come sono.
+
+**Un rapportino, una scheda.** Sul computer l'elenco era una tabella sola, e la riga del rapportino sembrava una riga
+come le altre. Ora ogni rapportino è una scheda a sé, con bordo e spazio prima della scheda dopo. In cima c'è la
+testata, su fondo più scuro: casella, numero, giorno, chi l'ha scritto, lavori e clienti, stati, ore, km e totale.
+Sotto ci sono i suoi lavori. Sul telefono le schede c'erano già, ma testata e lavori si somigliavano troppo. Ora la
+testata ha il fondo più scuro, i lavori non hanno la casella e il loro importo è più leggero. Fra una scheda e l'altra
+c'è più spazio.
+
+**Si sceglie il rapportino intero.** La casella c'è solo sulla testata e sceglie tutto il rapportino. Un rapportino
+scelto ha il bordo scuro e i lavori in giallo chiaro. La barra in fondo li conta: "1 rapportino scelto", sotto "3 lavori ·
+2 clienti · 363,18 €". Da lì si va a Da inviare, Segna inviati e Segna fatturati, come prima. Nella scheda Da approvare si
+approva ancora lavoro per lavoro, perché lì si decide su ogni lavoro.
+
+**Prove.** Server: una prova nuova per la 012, con giorni di più persone, un rapportino annullato e uno fatto con la
+1.2 che non si deve toccare. Le prove delle migrazioni 006, 007 e 008 controllano la regola nuova sui dati delle fasi di
+prima, riga per riga. Computer: 345 prove, più il giro cliccato del rapportino a più lavori (15 passi), che ora controlla
+anche che sui lavori non ci siano caselle. Telefono: 434 prove contro il server di prova, e schermate sull'emulatore in
+tema chiaro e scuro.
+
+![Il computer: ogni rapportino è una scheda, quello scelto ha il bordo scuro](docs/diario/1-2-1/computer-rapportini-schede.png)
+![Lo stesso elenco in tema scuro](docs/diario/1-2-1/computer-rapportini-schede-scuro.png)
+![Il telefono: la testata più scura con la casella, il lavoro sotto senza casella](docs/diario/1-2-1/telefono-rapportini-schede.png)
+![Un rapportino scelto e la barra "1 rapportino scelto"](docs/diario/1-2-1/telefono-rapportino-scelto.png)
+![L'elenco del telefono in tema scuro](docs/diario/1-2-1/telefono-rapportini-scuro.png)
 
 ---
 
@@ -114,7 +161,8 @@ di prova, e le schermate fatte con il carattere grande (1,3) a 360 dp. Da questa
 cartelle temporanee che creano. Prima restavano: il 6 novembre erano 12.194 cartelle, 29 GB sul disco C.
 
 **Pubblicata.** Il server 0.13.0 è sul NAS dalle 12:37 del 7 novembre. Prima ho fatto la copia intera dei dati. Gli 8
-rapportini che c'erano sono diventati 8 giornate, e non si è perso niente. Release **v1.2.0** su GitHub alle 12:42
+rapportini che c'erano sono rimasti 8 rapportini con un lavoro ciascuno, senza perdere niente: andavano uniti per
+giorno, e lo fa la [1.2.1](#v1-2-1). Release **v1.2.0** su GitHub alle 12:42
 (APK con la stessa firma di sempre). Il NAS la annuncia dalle 12:47: telefoni e computer con la 1.1 la scaricano da soli.
 
 ![Il rapportino sul computer: i lavori a sinistra, il lavoro scelto a destra, il totale del giorno in basso](docs/diario/1-2-0/computer-rapportino-editor.png)

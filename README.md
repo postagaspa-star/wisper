@@ -51,6 +51,12 @@ can be searched, notices fade after 3 seconds, the studio has an SDI code, and t
 studio's name. The separate hours page and the timer were removed ("only work reports"): old hours stay in the
 database and older apps can still send them, but nothing shows them.
 
+Version 1.2.1 with server 0.13.1 (7 November) fixes what I found right after. Migration 012 merges the reports
+written before 1.2 into one report per day and per person: the number of the first one, the jobs in the order they
+were written. Only `id_giornata` and `posizione` change, and reports made with 1.2 are left alone (two reports on the
+same day stay two). In the Rapportini list every report is now its own card, with a darker header that holds the only
+checkbox: you select whole reports, never a single job, and the bar counts reports.
+
 Phase 1 (October 2026) replaces the Google Sheet with a small server on
 the home NAS (`server/`: Node.js 24 with its built-in SQLite, no npm dependencies, in
 Docker). It speaks the same protocol as the sheet script, so the phone and the office

@@ -34,6 +34,12 @@ Server 0.13.0, telefono 1.2.0, computer 1.2.0 (insieme alle correzioni piccole d
 - Id dei lavori nuovi: `<id della giornata>-<n>` (`RAP/2026/0153-2`). Le righe che ci sono già tengono il loro id.
 - Migrazione: ogni riga che c'è diventa un rapportino con un solo lavoro (`giornate.id` = id della riga,
   `posizione` 1), con copia del database prima, come le altre migrazioni. Il numero visibile non cambia.
+- **Migrazione 012 (07/11/2026, server 0.13.1)**: Andrea: "gli 8 rapportini dovevano essere raggruppati con il nuovo
+  sistema a giornate". I rapportini di prima (un lavoro solo, con lo stesso id del rapportino) dello stesso giorno e della
+  stessa persona (utente e nome del tecnico) diventano un rapportino solo, col numero del primo scritto; i lavori in fila
+  nell'ordine in cui erano stati scritti (`creato`, poi id). Cambiano solo `id_giornata` e `posizione`; i rapportini
+  rimasti vuoti si tolgono; nel registro una riga per lavoro spostato. Quelli fatti con la 1.2 non si toccano: due
+  rapportini nello stesso giorno, fatti apposta, restano due (scelta di Andrea: "Due separati vanno bene").
 - La numerazione dei rapportini conta le `giornate` (e gli id delle righe vecchie): il prossimo numero non ripete
   mai un numero già dato.
 
@@ -98,8 +104,10 @@ Stile di oggi (`docs/aspetto.md`): il design "Fai" è in pausa.
    menu ⋯ del lavoro (solo Da inviare).
 3. **Oggi / Dashboard**: la scheda del giorno parla del rapportino di oggi e dei suoi lavori.
 4. **Rapportini**: un blocco per rapportino (N°, data, "N lavori · N clienti", riassunto degli stati, totale) con i suoi
-   lavori sotto; la casella per scegliere è sempre visibile, sul rapportino (sceglie tutti i suoi lavori) e su ogni
-   lavoro; barra "N lavori scelti · N clienti · €" con **Da inviare** (apre l'invio), Segna inviati, Segna fatturati.
+   lavori sotto. Dal 07/11/2026 (1.2.1, Andrea: "non devono poter essere selezionati i lavori singoli"): la casella c'è
+   solo sulla testata del rapportino e lo sceglie intero; la testata sta su fondo più scuro, fra un rapportino e l'altro
+   c'è più spazio; scelto = bordo scuro e lavori in giallo chiaro. Barra "N rapportini scelti", sotto "N lavori · N
+   clienti · €", con **Cosa faccio** (Da inviare, Segna inviati, Segna fatturati).
 5. **Invio** (§4).
 
 **Computer**
@@ -108,9 +116,11 @@ Stile di oggi (`docs/aspetto.md`): il design "Fai" è in pausa.
    (Per chi con recenti e ricerca, Progetto, Ore e strada con gli stepper, tariffa, Cosa hai fatto, spese, luogo, nota,
    ticket, strumenti), "Togli questo lavoro". In basso: lavori, ore e km del giorno, **Totale del giorno**, Annulla,
    **Salva rapportino** (giallo). Gli errori dicono quale lavoro ("Lavoro 2: scegli il progetto") e lo aprono.
-2. **Rapportini**: tabella raggruppata per rapportino (riga del rapportino con casella, N°, data, lavori, clienti, stati,
-   totale; righe dei lavori con casella sempre visibile, Cliente, Commessa, Progetto, Lavoro svolto, Ore, Km, Totale,
-   Stato), barra di selezione con **Da inviare**.
+2. **Rapportini**: una scheda per rapportino (07/11/2026: "non si capisce quando inizia un rapportino e quando
+   finisce"), le intestazioni delle colonne sopra tutte le schede. Testata della scheda su fondo più scuro con la sola
+   casella, N°, data, chi l'ha scritto, lavori, clienti, stati, ore, km, totale; sotto le righe dei lavori senza casella
+   (Cliente, Commessa, Progetto, Lavoro svolto, Ore, Km, Totale, Stato). Si sceglie il rapportino intero; barra "N
+   rapportini scelti · N lavori · N clienti · €" con **Da inviare**, Segna inviati, Segna fatturati a mano.
 3. **Pannello del rapportino** (a destra): numero, data, i lavori con il loro stato e importo, totale; pulsanti: **Invia
    ai clienti** (giallo se c'è qualcosa da inviare), Modifica, PDF, ⋯ (Riporta da inviare, Segna inviato senza email,
    Segna fatturato, Elimina). Sparisce "Carica il foglio firmato".

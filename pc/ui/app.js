@@ -1449,10 +1449,13 @@
     return lista;
   }
 
-  /** La casella del rapportino: sceglie (o toglie) tutti i suoi lavori; a metà quando ne sono scelti solo alcuni. */
+  /**
+   * La casella del rapportino: sceglie (o toglie) il rapportino intero, cioè tutti i suoi lavori in vista. I lavori da
+   * soli non si scelgono (07/11/2026, Andrea).
+   */
   function casellaRapportino(lavori, ridisegnaElenco) {
     const st = RL.casellaRapportino(lavori, S.scelti, chiaveLavoro);
-    const c = h('input', { type: 'checkbox', class: 'casella casella-rap', 'aria-label': 'Scegli tutti i lavori del rapportino', checked: st === 'tutti',
+    const c = h('input', { type: 'checkbox', class: 'casella casella-rap', 'aria-label': 'Scegli il rapportino', checked: st === 'tutti',
       onclick: e => {
         e.stopPropagation();
         const tutti = st !== 'tutti';
@@ -1466,16 +1469,17 @@
   /** Commessa del lavoro a parole: "26ST044 · Nuovo magazzino" ('Senza commessa'). */
   const commessaDi = r => (r.idCommessa ? r.idCommessa + (r.commessa ? ' · ' + r.commessa : '') : (r.commessa || 'Senza commessa'));
 
-  /** Una riga di lavoro della tabella: casella sempre in vista, Cliente, Commessa, Progetto, Lavoro svolto, Ore, Km, Totale, Stato. */
-  function rigaLavoro(r, sceglie, ridisegnaElenco) {
+  /**
+   * Una riga di lavoro della tabella: Cliente, Commessa, Progetto, Lavoro svolto, Ore, Km, Totale, Stato. Niente casella:
+   * si sceglie il rapportino intero dalla sua testata (07/11/2026); la colonna resta vuota, così le colonne restano in fila.
+   */
+  function rigaLavoro(r, sceglie, scelto) {
     const chiave = chiaveLavoro(r);
     const prog = progettoDi(r);
-    const casella = sceglie ? h('input', { type: 'checkbox', class: 'casella casella-rap', 'aria-label': 'Scegli il lavoro per ' + (r.cliente || 'il cliente'), checked: S.scelti.has(chiave),
-      onclick: e => { e.stopPropagation(); if (e.target.checked) S.scelti.add(chiave); else S.scelti.delete(chiave); ridisegnaElenco(); } }) : null;
     const apri = () => { apriPannello(chiave); Visita.azione('riga-rapportino'); };
-    return h('div', { class: 'r lavoro cliccabile' + (S.aperto && S.lavoroAperto === chiave ? ' scelta' : ''), role: 'button', tabindex: '0', 'data-chiave': chiave,
+    return h('div', { class: 'r lavoro cliccabile' + (S.aperto && S.lavoroAperto === chiave ? ' scelta' : scelto ? ' nel-scelto' : ''), role: 'button', tabindex: '0', 'data-chiave': chiave,
       onclick: apri, onkeydown: e => { if (e.key === 'Enter') apri(); } },
-    sceglie ? h('span', null, casella) : null,
+    sceglie ? h('span') : null,
     // Nella tabella stretta (1024) commessa e progetto vanno sotto il cliente.
     h('span', { class: 'c-cliente' }, h('span', { class: 'forte' }, r.cliente || '—'), h('span', { class: 'solo-stretto' }, [commessaDi(r), prog].filter(Boolean).join(' · '))),
     h('span', { class: 'c-commessa' }, commessaDi(r)),
@@ -1499,7 +1503,9 @@
       aggiungi(area, [h('p', { class: 'vuoto' }, S.rapportini.length ? 'Nessun lavoro con questi filtri.' : 'Ancora nessun rapportino.')]);
       return;
     }
-    const tab = h('div', { class: 'tab lavori' + (sceglie ? ' con-casella' : '') + (soldi() ? ' con-soldi' : '') + (S.scelti.size ? ' con-scelti' : '') },
+    // 07/11/2026 ("non si capisce quando inizia un rapportino e quando finisce"): ogni rapportino è una scheda a sé, con la
+    // sua testata e i suoi lavori; fra una scheda e l'altra c'è spazio.
+    const tab = h('div', { class: 'tab lavori a-blocchi' + (sceglie ? ' con-casella' : '') + (soldi() ? ' con-soldi' : '') + (S.scelti.size ? ' con-scelti' : '') },
       h('div', { class: 'r testa' }, sceglie ? h('span') : null, h('span', { class: 'c-cliente' }, 'Cliente'), h('span', { class: 'c-commessa' }, 'Commessa'),
         h('span', { class: 'c-progetto' }, 'Progetto'), h('span', null, 'Lavoro svolto'), h('span', { class: 'n' }, 'Ore'), h('span', { class: 'n' }, 'Km'),
         soldi() ? h('span', { class: 'n' }, 'Totale') : null, h('span', null, 'Stato')));
@@ -1508,20 +1514,24 @@
     RL.raggruppa(lista).forEach(g => {
       const t = C.totali(g.lavori);
       const apri = () => { apriPannello(g.id, true); Visita.azione('riga-rapportino'); };
-      aggiungi(tab, [h('div', {
+      const scelto = sceglie && RL.casellaRapportino(g.lavori, S.scelti, chiaveLavoro) === 'tutti';
+      const blocco = h('div', { class: 'blocco-rap' + (scelto ? ' scelto' : ''), 'data-blocco': g.id });
+      aggiungi(blocco, [h('div', {
         class: 'r rap cliccabile' + (aperta === g.id && !S.lavoroAperto ? ' scelta' : ''), role: 'button', tabindex: '0', 'data-giornata': g.id,
         'data-visita': primo ? 'riga-rapportino' : null, onclick: apri, onkeydown: e => { if (e.key === 'Enter') apri(); },
       },
       sceglie ? h('span', null, casellaRapportino(g.lavori, ridisegnaElenco)) : null,
       // Il rapportino: numero, giorno, quanti lavori e clienti, gli stati; poi ore, km e totale dei suoi lavori.
       h('span', { class: 'c-rap', style: { gridColumn: (sceglie ? '2' : '1') + ' / ' + (soldi() ? '-5' : '-4') } },
-        h('b', null, g.id), h('span', null, dataLunga(g.data)), h('span', { class: 'tenue' }, RL.lavoriEClienti(g.lavori)), h('span', { class: 'tenue' }, RL.riassuntoStati(g.lavori))),
+        h('b', null, g.id), h('span', null, dataLunga(g.data)), g.tecnico ? h('span', { class: 'tenue' }, g.tecnico) : null,
+        h('span', { class: 'tenue' }, RL.lavoriEClienti(g.lavori)), h('span', { class: 'tenue' }, RL.riassuntoStati(g.lavori))),
       h('span', { class: 'n forte' }, C.numero(t.ore)),
       h('span', { class: 'n forte' }, C.numero(t.km)),
       soldi() ? h('span', { class: 'n forte' }, C.euro(t.totale)) : null,
       h('span'))]);
       primo = false;
-      g.lavori.forEach(r => aggiungi(tab, [rigaLavoro(r, sceglie, ridisegnaElenco)]));
+      g.lavori.forEach(r => aggiungi(blocco, [rigaLavoro(r, sceglie, scelto)]));
+      aggiungi(tab, [blocco]);
     });
     aggiungi(area, [tab]);
     const t = C.totali(lista);
@@ -1530,8 +1540,9 @@
     const sel = lista.filter(r => S.scelti.has(chiaveLavoro(r)));
     if (sel.length && sceglie) {
       aggiungi(area, [h('div', { class: 'barra-scelti' },
-        h('div', { class: 'scelti-testo' }, h('b', null, sel.length === 1 ? '1 lavoro scelto' : sel.length + ' lavori scelti'),
-          h('span', null, RL.nClienti(RL.contaClienti(sel)) + (soldi() ? ' · ' + C.euro(somma(sel)) : ''))),
+        // Si scelgono rapportini interi: la barra li conta, sotto quanti lavori e clienti (07/11/2026).
+        h('div', { class: 'scelti-testo' }, h('b', null, (n => (n === 1 ? '1 rapportino scelto' : n + ' rapportini scelti'))(RL.raggruppa(sel).length)),
+          h('span', null, [RL.nLavori(sel.length), RL.nClienti(RL.contaClienti(sel))].join(' · ') + (soldi() ? ' · ' + C.euro(somma(sel)) : ''))),
         h('button', { type: 'button', class: 'btn piccolo', 'data-azione': 'da-inviare', onclick: () => preparaInvio(sel) }, 'Da inviare'),
         // I fatturati restano fatturati: "inviato" viene prima.
         h('button', { type: 'button', class: 'btn piccolo', onclick: () => cambiaStato(sel.filter(r => r.stato !== 'FATTURATO'), 'INVIATO') }, 'Segna inviati'),

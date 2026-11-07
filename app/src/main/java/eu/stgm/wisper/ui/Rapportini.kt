@@ -129,6 +129,8 @@ fun SchermataRapportini(
     BackHandler(enabled = scelti.isNotEmpty()) { scelti = emptyList() }
 
     val selezionati = lista.filter { it.rapportino.idLocale in scelti }
+    // 07/11/2026: si scelgono i rapportini interi, mai un lavoro da solo; la barra li conta.
+    val rapportiniScelti = Giornate.raggruppa(selezionati) { it.rapportino }.size
     val conFiltri = filtro.quali != Quali.TUTTI || filtro.testo.isNotBlank() || filtro.idCliente != null || filtro.idCommessa != null || filtro.a != null
     // Con un cliente o una commessa scelti il cliente è già detto: la riga dice il lavoro.
     val perLavoro = filtro.idCliente != null || filtro.idCommessa != null
@@ -222,8 +224,9 @@ fun SchermataRapportini(
                 }
             }
 
-            // Un blocco per rapportino, il più recente prima; dentro, i lavori nel loro ordine.
-            gruppi.forEachIndexed { i, g ->
+            // Un blocco per rapportino, il più recente prima; dentro, i lavori nel loro ordine. Fra un rapportino e l'altro
+            // più aria che fra le altre cose (07/11/2026: "non si capisce quando inizia un rapportino e quando finisce").
+            Column(verticalArrangement = Arrangement.spacedBy(20.dp)) { gruppi.forEachIndexed { i, g ->
                 val ids = g.voci.map { it.rapportino.idLocale }
                 BloccoRapportino(
                     g, perLavoro = perLavoro, costi = costi, annoDiverso = g.data.year != oggi.year,
@@ -235,14 +238,13 @@ fun SchermataRapportini(
                         scelti = if (ids.all { it in scelti }) scelti - ids.toSet() else (scelti + ids).distinct()
                         if (i == 0) visita?.azione("casella-0")
                     },
-                    onScegli = { id -> scelti = if (id in scelti) scelti - id else scelti + id },
                     casella = if (i == 0) "casella-0" else null,
                 )
-            }
+            } }
         }
 
         if (selezionati.isNotEmpty()) {
-            BarraScelti(selezionati.map { it.rapportino }, selezionati.sumOf { it.conto?.totale ?: 0.0 }, costi, { foglioAzioni = true }, Modifier.align(Alignment.BottomCenter))
+            BarraScelti(rapportiniScelti, selezionati.map { it.rapportino }, selezionati.sumOf { it.conto?.totale ?: 0.0 }, costi, { foglioAzioni = true }, Modifier.align(Alignment.BottomCenter))
         } else if (scrive) {
             FondoConPulsante(Modifier.align(Alignment.BottomCenter)) {
                 PulsantePrincipale("Nuovo rapportino", { nav.nuovoRapportino() }, Modifier.bersaglio("azione-gialla"), icona = Icone.piu)
@@ -268,9 +270,9 @@ fun SchermataRapportini(
 
     if (foglioAzioni) {
         FoglioDalBasso({ foglioAzioni = false }) {
-            Text(Testo.quanti(selezionati.size, "lavoro scelto", "lavori scelti"), style = Testi.titoloScheda, color = c.testo)
+            Text(Testo.quanti(rapportiniScelti, "rapportino scelto", "rapportini scelti"), style = Testi.titoloScheda, color = c.testo)
             Text(
-                Giornate.perClienti(Giornate.quantiClienti(selezionati.map { it.rapportino })).replaceFirstChar { it.uppercase() } +
+                Giornate.lavoriEClienti(selezionati.map { it.rapportino }).replaceFirstChar { it.uppercase() } +
                     if (costi) " · " + Numeri.euro(selezionati.sumOf { it.conto?.totale ?: 0.0 }) else "",
                 style = Testi.testo, color = c.testo2,
             )
@@ -395,7 +397,6 @@ private fun BloccoRapportino(
     onApri: () -> Unit,
     onApriLavoro: (String) -> Unit,
     onScegliTutti: () -> Unit,
-    onScegli: (String) -> Unit,
     casella: String? = null,
 ) {
     val c = W.colori
@@ -408,10 +409,11 @@ private fun BloccoRapportino(
         .replaceFirstChar { it.uppercase() }
     val numero = g.id.takeIf { it.isNotBlank() }?.let { "N° $it" }
     val clienti = Giornate.quantiClienti(lavori)
-    Column(Modifier.fillMaxWidth().clip(forma).background(c.scheda).border(1.dp, c.bordoScheda, forma)) {
+    Column(Modifier.fillMaxWidth().clip(forma).background(c.scheda).border(if (tutti) 2.dp else 1.dp, if (tutti) c.testo else c.bordoScheda, forma)) {
+        // La testata e' la parte che si sceglie: su fondo piu' scuro, cosi' si vede dove comincia il rapportino.
         Row(
             Modifier.fillMaxWidth().heightIn(min = 64.dp)
-                .then(if (tutti) Modifier.background(c.gialloTenue) else Modifier)
+                .background(if (tutti) c.gialloTenue else c.fondo)
                 .clickable(onClick = onApri)
                 .padding(start = if (scelti != null) 6.dp else 16.dp, end = 16.dp, top = 10.dp, bottom = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -421,7 +423,7 @@ private fun BloccoRapportino(
                     Modifier.size(48.dp).clip(RoundedCornerShape(12.dp))
                         .toggleable(value = tutti, role = Role.Checkbox, onValueChange = { onScegliTutti() })
                         .let { if (casella != null) it.bersaglio(casella) else it }
-                        .semantics { contentDescription = "Scegli tutti i lavori del rapportino del ${g.data.dayOfMonth} " + g.data.month.getDisplayName(TextStyle.FULL, IT) },
+                        .semantics { contentDescription = "Scegli il rapportino del ${g.data.dayOfMonth} " + g.data.month.getDisplayName(TextStyle.FULL, IT) },
                     contentAlignment = Alignment.Center,
                 ) { Casella(tutti, parziale = quanti > 0 && !tutti) }
                 Spacer(Modifier.width(6.dp))
@@ -445,12 +447,7 @@ private fun BloccoRapportino(
         g.voci.forEach { v ->
             LineaElenco()
             val id = v.rapportino.idLocale
-            RigaLavoroElenco(
-                v, perLavoro = perLavoro, costi = costi,
-                scelto = scelti?.let { id in it },
-                onClick = { onApriLavoro(id) },
-                onScegli = { onScegli(id) },
-            )
+            RigaLavoroElenco(v, perLavoro = perLavoro, costi = costi, scelto = tutti, onClick = { onApriLavoro(id) })
         }
     }
 }
@@ -462,8 +459,8 @@ private fun BloccoRapportino(
  */
 @Composable
 private fun RigaLavoroElenco(
-    v: Vista, perLavoro: Boolean, scelto: Boolean?, costi: Boolean = true,
-    onClick: () -> Unit, onScegli: () -> Unit = {},
+    v: Vista, perLavoro: Boolean, scelto: Boolean, costi: Boolean = true,
+    onClick: () -> Unit,
 ) {
     val c = W.colori
     val r = v.rapportino
@@ -474,21 +471,11 @@ private fun RigaLavoroElenco(
     val descrizione = r.descrizione.takeIf { !perLavoro && it.isNotBlank() }
     Row(
         Modifier.fillMaxWidth().heightIn(min = 72.dp)
-            .then(if (scelto == true) Modifier.background(c.gialloTenue) else Modifier)
+            .then(if (scelto) Modifier.background(c.scelta) else Modifier)
             .clickable(onClick = onClick)
-            .padding(start = if (scelto != null) 6.dp else 16.dp, end = 16.dp, top = 10.dp, bottom = 10.dp),
+            .padding(start = 20.dp, end = 16.dp, top = 10.dp, bottom = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (scelto != null) {
-            // La casella ha il suo tocco, largo 48: non apre il lavoro.
-            Box(
-                Modifier.size(48.dp).clip(RoundedCornerShape(12.dp))
-                    .toggleable(value = scelto, role = Role.Checkbox, onValueChange = { onScegli() })
-                    .semantics { contentDescription = "Scegli il lavoro per " + r.cliente.ifBlank { "senza cliente" } },
-                contentAlignment = Alignment.Center,
-            ) { Casella(scelto) }
-            Spacer(Modifier.width(6.dp))
-        }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(titolo, style = Testi.forte, color = c.testo)
             Text(sotto, style = Testi.secondario.copy(fontWeight = FontWeight.Medium), color = c.tenue)
@@ -503,7 +490,7 @@ private fun RigaLavoroElenco(
         }
         Spacer(Modifier.width(8.dp))
         Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            if (costi) Text(v.conto?.let { Numeri.euro(it.totale) } ?: "", style = Testi.forte, color = c.testo)
+            if (costi) Text(v.conto?.let { Numeri.euro(it.totale) } ?: "", style = Testi.secondarioGrande, color = c.testo2)
             ParolaStato(r.stato)
             if (v.inCoda) Icon(Icone.nuvola, null, tint = c.tenue, modifier = Modifier.size(16.dp).semantics { contentDescription = "Ancora sul telefono" })
         }
@@ -530,7 +517,7 @@ private fun Casella(scelta: Boolean, parziale: Boolean = false) {
 
 /** La barra scura in fondo, con almeno un lavoro scelto: "N lavori scelti · N clienti", quanto (con i costi), e Cosa faccio. */
 @Composable
-private fun BarraScelti(scelti: List<eu.stgm.wisper.rapportino.Rapportino>, totale: Double, costi: Boolean, onAzioni: () -> Unit, modifier: Modifier = Modifier) {
+private fun BarraScelti(rapportini: Int, scelti: List<eu.stgm.wisper.rapportino.Rapportino>, totale: Double, costi: Boolean, onAzioni: () -> Unit, modifier: Modifier = Modifier) {
     val c = W.colori
     val n = scelti.size
     val clienti = Giornate.quantiClienti(scelti)
@@ -542,10 +529,13 @@ private fun BarraScelti(scelti: List<eu.stgm.wisper.rapportino.Rapportino>, tota
     ) {
         Column(Modifier.weight(1f)) {
             Text(
-                (if (n == 1) "1 lavoro scelto" else "$n lavori scelti") + " · " + (if (clienti == 1) "1 cliente" else "$clienti clienti"),
+                if (rapportini == 1) "1 rapportino scelto" else "$rapportini rapportini scelti",
                 style = Testi.secondarioGrande.copy(fontWeight = FontWeight.ExtraBold), color = c.scheda,
             )
-            if (costi) Text(Numeri.euro(totale), style = Testi.piccolo, color = c.scheda.copy(alpha = 0.75f))
+            Text(
+                listOfNotNull(Giornate.lavori(n), if (clienti == 1) "1 cliente" else "$clienti clienti", if (costi) Numeri.euro(totale) else null).joinToString(" · "),
+                style = Testi.piccolo, color = c.scheda.copy(alpha = 0.75f),
+            )
         }
         Box(
             Modifier.heightIn(min = 48.dp).clip(RoundedCornerShape(12.dp)).background(c.giallo)

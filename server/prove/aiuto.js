@@ -214,16 +214,25 @@ const COLONNE_009 = {
 };
 
 /**
- * Le colonne nuove della 011 (06/11/2026, il rapportino con piu' lavori): ogni riga e' il lavoro di un rapportino col suo
- * stesso numero, al primo posto. Un valore funzione si calcola dalla riga (valoreAtteso).
+ * Le colonne nuove della 011 (06/11/2026, il rapportino con piu' lavori) dopo la 012 (07/11/2026): le righe di prima dello
+ * stesso giorno e della stessa persona sono i lavori di un rapportino solo, col numero della prima scritta, in fila
+ * nell'ordine in cui sono state scritte; una riga senza data resta da sola. Un valore funzione si calcola dalla riga e
+ * da tutte le righe di prima della tabella (valoreAtteso).
  */
+function giornataAttesa(r, righe) {
+  const chiave = x => [x.data, x.utente_id === null || x.utente_id === undefined ? '' : x.utente_id, String(x.tecnico || '').trim().toLowerCase()].join('|');
+  if (!r.data || !righe) return { id: r.id, posizione: 1 };
+  const stesso = righe.filter(x => x.data && chiave(x) === chiave(r))
+    .sort((a, b) => String(a.creato || '').localeCompare(String(b.creato || '')) || String(a.id).localeCompare(String(b.id)));
+  return { id: stesso[0].id, posizione: stesso.findIndex(x => x.id === r.id) + 1 };
+}
 const COLONNE_011 = {
-  rapportini: { id_giornata: r => r.id, posizione: 1 },
+  rapportini: { id_giornata: (r, righe) => giornataAttesa(r, righe).id, posizione: (r, righe) => giornataAttesa(r, righe).posizione },
 };
 
-/** Il valore di base atteso di una colonna nuova in quella riga (un numero, un testo, o una funzione della riga). */
-function valoreAtteso(v, riga) {
-  return typeof v === 'function' ? v(riga) : v;
+/** Il valore di base atteso di una colonna nuova in quella riga (un numero, un testo, o una funzione della riga e delle righe di prima). */
+function valoreAtteso(v, riga, righe) {
+  return typeof v === 'function' ? v(riga, righe) : v;
 }
 
 /** Le colonne nuove dalla 007 in poi, insieme: le prove delle migrazioni di prima (003-007) le tolgono prima di confrontare. */

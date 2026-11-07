@@ -50,6 +50,8 @@ const PAGINE = [
   { nome: 'commessa-menu', hash: '#commesse/' + new Date().getFullYear() % 100 + 'ST044', fai: "document.querySelector('.testata .tondo[aria-label=\"Altre azioni\"]').click()", dopo: "document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))" },
   { nome: 'commessa-modulo', hash: '#commesse', fai: "[...document.querySelectorAll('.btn.giallo')].find(b => /Nuova commessa/.test(b.textContent)).click()", dopo: "document.querySelectorAll('.velo').forEach(v => v.remove())" },
   { nome: 'rapportini', hash: '#rapportini/elenco' },
+  // 07/11/2026: ogni rapportino una scheda; il secondo scelto (la casella c'è solo sulla testata).
+  { nome: 'rapportini-schede', hash: '#rapportini/elenco', fai: "await new Promise(r => setTimeout(r, 1500)); document.querySelectorAll('.avviso').forEach(x => x.remove()); document.querySelectorAll('.tab .r.rap input')[1].click(); await new Promise(r => setTimeout(r, 900)); document.querySelectorAll('.avviso').forEach(x => x.remove())" },
   { nome: 'rapportino-modulo', hash: '#rapportini/elenco', fai: "[...document.querySelectorAll('.btn.giallo')].find(b => /Nuovo rapportino/.test(b.textContent)).click()", dopo: "document.querySelectorAll('.velo').forEach(v => v.remove())" },
   { nome: 'rapportino-pannello', hash: '#rapportini/elenco', fai: "document.querySelector('.tab .r.cliccabile').click()", dopo: "document.querySelector('.pannello') && document.querySelector('.pannello').remove()" },
   // fase 3: ore, timer, approvazioni, statistiche, spese e trasferte, veicoli

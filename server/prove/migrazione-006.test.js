@@ -91,7 +91,7 @@ const comeTitolare = fn => w.come({ utente: w.titolare(), permessi: w.permessiDi
 
 test('migrazione 006: versione 6, la copia wisper.db.prima-6 com\'era; le tabelle di prima riga per riga uguali (le colonne nuove vuote)', () => {
   assert.equal(PRIMA.versione, '0.8.0');
-  assert.equal(w.db.versione(), 11);
+  assert.equal(w.db.versione(), 12);
   const copia = new Database(path.join(cartella, 'wisper.db.prima-6'));
   assert.equal(copia.versione(), 5, 'la copia e\' com\'era prima');
   copia.chiudi();
@@ -126,7 +126,7 @@ test('migrazione 006: versione 6, la copia wisper.db.prima-6 com\'era; le tabell
         else if (t === 'veicoli' && c === 'tipo') assert.equal(r[c], 'auto', t + ' riga ' + i);
         else if (t === 'scadenze' && c === 'fine_mese') assert.equal(r[c], 0, t + ' riga ' + i);
         // Fase 7: le colonne della 007, col loro valore di base (niente portale, avvisi e notifiche accesi).
-        else if (COLONNE_007[t] && c in COLONNE_007[t]) assert.deepEqual(r[c], valoreAtteso(COLONNE_007[t][c], r), t + ' riga ' + i + ': ' + c);
+        else if (COLONNE_007[t] && c in COLONNE_007[t]) assert.deepEqual(r[c], valoreAtteso(COLONNE_007[t][c], r, righePrima[t]), t + ' riga ' + i + ': ' + c);
         else assert.ok(r[c] === null || r[c] === '', t + ' riga ' + i + ': ' + c + ' = ' + JSON.stringify(r[c]));
         delete r[c];
       }
@@ -228,6 +228,6 @@ test('riaperto il server: la migrazione non si rifa\'', () => {
   const persone = w.db.riga('SELECT COUNT(*) n FROM persone').n;
   w.chiudi();
   w = new Wisper({ dati: cartella });
-  assert.equal(w.db.versione(), 11);
+  assert.equal(w.db.versione(), 12);
   assert.equal(w.db.riga('SELECT COUNT(*) n FROM persone').n, persone);
 });

@@ -89,7 +89,7 @@ const comeTitolare = fn => w.come({ utente: w.titolare(), permessi: w.permessiDi
 
 test('migrazione 007: versione 7, la copia wisper.db.prima-7 com\'era; le tabelle di prima riga per riga uguali (le colonne nuove col valore di base)', () => {
   assert.equal(PRIMA.versione, '0.9.0');
-  assert.equal(w.db.versione(), 11);
+  assert.equal(w.db.versione(), 12);
   const copia = new Database(path.join(cartella, 'wisper.db.prima-7'));
   assert.equal(copia.versione(), 6, 'la copia e\' com\'era prima');
   copia.chiudi();
@@ -113,7 +113,7 @@ test('migrazione 007: versione 7, la copia wisper.db.prima-7 com\'era; le tabell
     dopo.slice(0, prima.length).forEach((r, i) => {
       for (const c of nuove) {
         assert.ok(COLONNE_007[t] && c in COLONNE_007[t], t + ': colonna nuova non prevista ' + c);
-        assert.deepEqual(r[c], valoreAtteso(COLONNE_007[t][c], r), t + ' riga ' + i + ': ' + c);
+        assert.deepEqual(r[c], valoreAtteso(COLONNE_007[t][c], r, prima), t + ' riga ' + i + ': ' + c);
         delete r[c];
       }
       assert.deepEqual(r, prima[i], t + ' riga ' + i);
@@ -231,6 +231,6 @@ test('riaperto il server: la migrazione non si rifa\'', () => {
   const n = w.db.riga('SELECT COUNT(*) n FROM comunicazioni').n;
   w.chiudi();
   w = new Wisper({ dati: cartella });
-  assert.equal(w.db.versione(), 11);
+  assert.equal(w.db.versione(), 12);
   assert.equal(w.db.riga('SELECT COUNT(*) n FROM comunicazioni').n, n);
 });
