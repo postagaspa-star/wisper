@@ -83,6 +83,10 @@ prima, riga per riga. Computer: 345 prove, più il giro cliccato del rapportino 
 anche che sui lavori non ci siano caselle. Telefono: 434 prove contro il server di prova, e schermate sull'emulatore in
 tema chiaro e scuro.
 
+**Pubblicata.** Il server 0.13.1 è sul NAS dalle 14:26 del 7 novembre. Prima ho fatto la copia intera dei dati. Release
+**v1.2.1** su GitHub alle 15:01 (APK con la stessa firma di sempre). Il NAS la annuncia dalle 15:06: telefoni e
+computer la scaricano da soli.
+
 ![Il computer: ogni rapportino è una scheda, quello scelto ha il bordo scuro](docs/diario/1-2-1/computer-rapportini-schede.png)
 ![Lo stesso elenco in tema scuro](docs/diario/1-2-1/computer-rapportini-schede-scuro.png)
 ![Il telefono: la testata più scura con la casella, il lavoro sotto senza casella](docs/diario/1-2-1/telefono-rapportini-schede.png)
