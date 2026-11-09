@@ -94,7 +94,7 @@ resta la 0.13.2.
 **Non provato.** I telefoni veri di Manuel e Andrea.
 
 **Pubblicata.** [Versione 1.3.0](https://github.com/postagaspa-star/wisper/releases/tag/v1.3.0): telefono codice 13,
-computer 1.3.0.
+computer 1.3.0, pubblicata alle 16:17 del 9 novembre. Il NAS la annuncia dalle 16:23: telefoni e computer si aggiornano da soli.
 
 ---
 
