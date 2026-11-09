@@ -1,0 +1,322 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<title>Fai · telefono · Aggiungi una spesa</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&amp;display=swap">
+<style>
+body { margin: 0; }
+.fai { font-family: 'Plus Jakarta Sans', system-ui, sans-serif; color: #16171B; -webkit-font-smoothing: antialiased; }
+.fai button { font-family: inherit; }
+.fai button:focus-visible, .fai a:focus-visible { outline: 3px solid #3D5AFE; outline-offset: 2px; }
+.molla { transition: transform .24s cubic-bezier(.34, 1.56, .64, 1), background-color .2s ease; }
+.molla:active { transform: scale(.96); transition-duration: .12s; }
+@keyframes daDestra { from { opacity: 0; transform: translateX(28px); } to { opacity: 1; transform: translateX(0); } }
+@keyframes daSinistra { from { opacity: 0; transform: translateX(-28px); } to { opacity: 1; transform: translateX(0); } }
+@keyframes compare { from { opacity: 0; transform: scale(.9) rotate(-3deg); } to { opacity: 1; transform: scale(1) rotate(-3deg); } }
+@keyframes sale { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes disegna { from { stroke-dashoffset: 60; } to { stroke-dashoffset: 0; } }
+@keyframes cerchio { from { transform: scale(.6); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+.passo { animation-duration: .32s; animation-timing-function: cubic-bezier(.2, .8, .2, 1); animation-fill-mode: backwards; }
+.passo.da-destra { animation-name: daDestra; }
+.passo.da-sinistra { animation-name: daSinistra; }
+.seg { flex: 1; height: 6px; border-radius: 999px; background: #ECEDF0; transition: background-color .3s ease; }
+.seg.pieno { background: #FF6B57; }
+.chip { height: 48px; padding: 0 18px; border: none; border-radius: 999px; background: #F4F5F7; color: #16171B; font-size: 16px; font-weight: 700; cursor: pointer; }
+.chip.scelto { background: #FF6B57; color: #1A1A1A; font-weight: 800; }
+.tasto { height: 64px; border: none; border-radius: 18px; background: #F4F5F7; color: #16171B; font-size: 26px; font-weight: 700; display: flex; align-items: center; justify-content: center; cursor: pointer; font-variant-numeric: tabular-nums; }
+.tasto:hover { background: #ECEDF0; }
+.principale { flex: 1; height: 60px; border: none; border-radius: 20px; background: #FF6B57; color: #1A1A1A; font-size: 18px; font-weight: 800; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px; text-decoration: none; }
+.principale:disabled { background: #F1F2F4; color: #8B8F98; cursor: default; }
+.secondario { height: 60px; padding: 0 22px; border: none; border-radius: 20px; background: #F4F5F7; color: #16171B; font-size: 17px; font-weight: 700; cursor: pointer; }
+.scheda { width: 100%; box-sizing: border-box; min-height: 84px; border: none; border-radius: 22px; background: #F4F5F7; padding: 14px 16px; display: flex; align-items: center; gap: 12px; text-align: left; color: #16171B; cursor: pointer; }
+.scheda.scelta { background: #FFECE9; box-shadow: inset 0 0 0 2px #FF6B57; }
+.spunta { width: 30px; height: 30px; border-radius: 50%; background: #FF6B57; display: flex; align-items: center; justify-content: center; flex: 0 0 auto; }
+.importo { font-size: 48px; font-weight: 800; letter-spacing: -1.2px; font-variant-numeric: tabular-nums; }
+.importo.vuoto { color: #8B8F98; }
+.scontrino { animation: compare .32s cubic-bezier(.2, .8, .2, 1) backwards; transform: rotate(-3deg); }
+.sale { animation: sale .34s cubic-bezier(.2, .8, .2, 1) backwards; }
+.sale2 { animation: sale .34s cubic-bezier(.2, .8, .2, 1) .12s backwards; }
+.sale3 { animation: sale .34s cubic-bezier(.2, .8, .2, 1) .2s backwards; }
+.cerchio-ok { transform-origin: 48px 48px; animation: cerchio .32s cubic-bezier(.34, 1.56, .64, 1) backwards; }
+.segno-ok { stroke-dasharray: 60; stroke-dashoffset: 0; animation: disegna .45s ease .18s backwards; }
+@media (prefers-reduced-motion: reduce) {
+  .passo, .scontrino, .sale, .sale2, .sale3, .cerchio-ok, .segno-ok { animation: none; }
+  .molla, .seg { transition: none; }
+}
+</style>
+</helmet>
+<div class="fai" style="position: relative; width: 390px; height: 844px; overflow: hidden; background: #FFFFFF; display: flex; flex-direction: column;">
+
+  <div style="flex: 0 0 auto; padding: 12px 20px 0;">
+    <div style="display: flex; align-items: center; justify-content: space-between; height: 52px;">
+      <a href="Fai-telefono.dc.html" class="molla" aria-label="Chiudi e torna a casa" style="width: 48px; height: 48px; border-radius: 50%; background: #F4F5F7; display: flex; align-items: center; justify-content: center;">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#16171B" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg>
+      </a>
+      <div style="font-size: 15px; font-weight: 700; color: #44474F;">{{ etichettaPasso }}</div>
+      <div style="width: 48px; height: 48px;"></div>
+    </div>
+    <div style="display: flex; gap: 6px; margin-top: 8px;" aria-hidden="true">
+      <sc-for list="{{ segmenti }}" as="sg" hint-placeholder-count="3">
+        <div class="{{ sg.cls }}"></div>
+      </sc-for>
+    </div>
+  </div>
+
+  <div style="flex: 1; min-height: 0; overflow-y: auto; padding: 20px 20px 12px;">
+
+    <sc-if value="{{ p1 }}" hint-placeholder-val="{{ true }}">
+      <div class="passo {{ entrata }}" style="display: flex; flex-direction: column; gap: 16px;">
+        <h1 style="margin: 0; font-size: 26px; font-weight: 800; letter-spacing: -0.5px;">Quanto hai speso?</h1>
+        <div style="height: 68px; display: flex; align-items: baseline; justify-content: center; gap: 8px;" aria-live="polite">
+          <span class="{{ importoCls }}">{{ importoMostrato }}</span>
+          <span style="font-size: 30px; font-weight: 800; color: #44474F;">€</span>
+        </div>
+        <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+          <sc-for list="{{ tipi }}" as="t" hint-placeholder-count="5">
+            <button type="button" class="{{ t.cls }} molla" aria-pressed="{{ t.premuto }}" onClick="{{ t.scegli }}">{{ t.nome }}</button>
+          </sc-for>
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px;">
+          <sc-for list="{{ tasti }}" as="k" hint-placeholder-count="12">
+            <button type="button" class="tasto molla" aria-label="{{ k.nomeVoce }}" onClick="{{ k.premi }}">
+              <sc-if value="{{ k.numero }}" hint-placeholder-val="{{ true }}">{{ k.etichetta }}</sc-if>
+              <sc-if value="{{ k.canc }}" hint-placeholder-val="{{ false }}">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#16171B" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5h11a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H9l-6-7z"></path><path d="M12 9.5l5 5M17 9.5l-5 5"></path></svg>
+              </sc-if>
+            </button>
+          </sc-for>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ p2 }}" hint-placeholder-val="{{ false }}">
+      <div class="passo {{ entrata }}" style="display: flex; flex-direction: column; gap: 12px;">
+        <h1 style="margin: 0 0 4px; font-size: 26px; font-weight: 800; letter-spacing: -0.5px;">Per quale lavoro?</h1>
+        <sc-for list="{{ commesse }}" as="c" hint-placeholder-count="4">
+          <button type="button" class="{{ c.cls }} molla" aria-pressed="{{ c.premuto }}" onClick="{{ c.scegli }}">
+            <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px;">
+              <span style="align-self: flex-start; background: #16171B; color: #FFFFFF; font-size: 13px; font-weight: 800; padding: 3px 9px; border-radius: 8px; letter-spacing: .02em;">{{ c.codice }}</span>
+              <span style="font-size: 17px; font-weight: 800;">{{ c.cliente }}</span>
+              <span style="font-size: 15px; font-weight: 600; color: #5C606A;">{{ c.cosa }}</span>
+            </span>
+            <sc-if value="{{ c.scelta }}" hint-placeholder-val="{{ false }}">
+              <span class="spunta"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1A1A1A" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg></span>
+            </sc-if>
+          </button>
+        </sc-for>
+        <button type="button" class="{{ nessunaCls }} molla" aria-pressed="{{ nessunaPremuto }}" onClick="{{ scegliNessuna }}" style="min-height: 60px;">
+          <span style="flex: 1; font-size: 17px; font-weight: 700;">Nessuna commessa</span>
+          <sc-if value="{{ nessunaScelta }}" hint-placeholder-val="{{ false }}">
+            <span class="spunta"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1A1A1A" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg></span>
+          </sc-if>
+        </button>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ p3 }}" hint-placeholder-val="{{ false }}">
+      <div class="passo {{ entrata }}" style="display: flex; flex-direction: column; gap: 14px;">
+        <h1 style="margin: 0 0 4px; font-size: 26px; font-weight: 800; letter-spacing: -0.5px;">Hai lo scontrino?</h1>
+        <button type="button" class="molla" onClick="{{ foto }}" style="height: 290px; border: none; border-radius: 28px; background: #FFECE9; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; cursor: pointer; color: #16171B;">
+          <sc-if value="{{ senzaFoto }}" hint-placeholder-val="{{ true }}">
+            <span style="display: flex; flex-direction: column; align-items: center; gap: 14px;">
+              <span style="width: 76px; height: 76px; border-radius: 50%; background: #FF6B57; display: flex; align-items: center; justify-content: center;">
+                <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#1A1A1A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"></path><circle cx="12" cy="13" r="3.6"></circle></svg>
+              </span>
+              <span style="font-size: 19px; font-weight: 800;">Fotografa lo scontrino</span>
+            </span>
+          </sc-if>
+          <sc-if value="{{ conFoto }}" hint-placeholder-val="{{ false }}">
+            <span style="display: flex; flex-direction: column; align-items: center; gap: 14px;">
+              <span class="scontrino" style="width: 150px; box-sizing: border-box; background: #FFFFFF; border-radius: 6px; box-shadow: 0 8px 22px rgba(0, 0, 0, .14); padding: 14px 14px 16px; display: flex; flex-direction: column; gap: 7px;">
+                <span style="height: 7px; width: 70%; align-self: center; border-radius: 3px; background: #D5D7DC;"></span>
+                <span style="height: 5px; width: 50%; align-self: center; border-radius: 3px; background: #E6E8EC;"></span>
+                <span style="height: 5px; width: 100%; border-radius: 3px; background: #E6E8EC; margin-top: 6px;"></span>
+                <span style="height: 5px; width: 86%; border-radius: 3px; background: #E6E8EC;"></span>
+                <span style="height: 5px; width: 92%; border-radius: 3px; background: #E6E8EC;"></span>
+                <span style="height: 5px; width: 64%; border-radius: 3px; background: #E6E8EC;"></span>
+                <span style="display: flex; justify-content: space-between; align-items: baseline; margin-top: 6px; font-size: 11px; font-weight: 800; color: #16171B;">
+                  <span>TOTALE</span><span style="font-variant-numeric: tabular-nums;">{{ importoFormattato }}</span>
+                </span>
+              </span>
+              <span style="font-size: 16px; font-weight: 700; color: #44474F;">Rifai la foto</span>
+            </span>
+          </sc-if>
+        </button>
+        <button type="button" class="{{ nonCeCls }} molla" aria-pressed="{{ nonCePremuto }}" onClick="{{ nonCe }}" style="min-height: 60px;">
+          <span style="flex: 1; font-size: 17px; font-weight: 700;">Non ce l'ho</span>
+          <sc-if value="{{ nonCeScelto }}" hint-placeholder-val="{{ false }}">
+            <span class="spunta"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1A1A1A" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg></span>
+          </sc-if>
+        </button>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ p4 }}" hint-placeholder-val="{{ false }}">
+      <div class="passo {{ entrata }}" style="display: flex; flex-direction: column; align-items: center; gap: 18px; padding-top: 18px;" role="status">
+        <svg width="96" height="96" viewBox="0 0 96 96" aria-hidden="true">
+          <circle class="cerchio-ok" cx="48" cy="48" r="46" fill="#12B76A"></circle>
+          <path class="segno-ok" d="M29 49.5l13 13L68 35" fill="none" stroke="#0A0A0A" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"></path>
+        </svg>
+        <h1 class="sale" style="margin: 0; font-size: 28px; font-weight: 800; letter-spacing: -0.5px;">Spesa salvata</h1>
+        <div class="sale2" style="width: 100%; box-sizing: border-box; background: #F4F5F7; border-radius: 24px; padding: 20px; display: flex; flex-direction: column; gap: 14px;">
+          <div style="font-size: 36px; font-weight: 800; letter-spacing: -0.8px; font-variant-numeric: tabular-nums;">{{ importoFormattato }} €</div>
+          <div style="display: flex; justify-content: space-between; gap: 12px; font-size: 16px;">
+            <span style="font-weight: 600; color: #5C606A;">Tipo</span><span style="font-weight: 800; text-align: right;">{{ riepTipo }}</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; gap: 12px; font-size: 16px;">
+            <span style="font-weight: 600; color: #5C606A;">Lavoro</span><span style="font-weight: 800; text-align: right;">{{ riepCommessa }}</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; gap: 12px; font-size: 16px;">
+            <span style="font-weight: 600; color: #5C606A;">Scontrino</span><span style="font-weight: 800; text-align: right;">{{ riepScontrino }}</span>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+  </div>
+
+  <div style="flex: 0 0 auto; padding: 12px 20px 24px; background: #FFFFFF;">
+    <sc-if value="{{ p1 }}" hint-placeholder-val="{{ true }}">
+      <div style="display: flex;">
+        <button type="button" class="principale molla" disabled="{{ avanti1Spento }}" onClick="{{ avanti1 }}">Avanti</button>
+      </div>
+    </sc-if>
+    <sc-if value="{{ p2 }}" hint-placeholder-val="{{ false }}">
+      <div style="display: flex; gap: 10px;">
+        <button type="button" class="secondario molla" onClick="{{ indietro2 }}">Indietro</button>
+        <button type="button" class="principale molla" disabled="{{ avanti2Spento }}" onClick="{{ avanti2 }}">Avanti</button>
+      </div>
+    </sc-if>
+    <sc-if value="{{ p3 }}" hint-placeholder-val="{{ false }}">
+      <div style="display: flex; gap: 10px;">
+        <button type="button" class="secondario molla" onClick="{{ indietro3 }}">Indietro</button>
+        <button type="button" class="principale molla" disabled="{{ salvaSpento }}" onClick="{{ salva }}">Salva la spesa</button>
+      </div>
+    </sc-if>
+    <sc-if value="{{ p4 }}" hint-placeholder-val="{{ false }}">
+      <div class="sale3" style="display: flex; flex-direction: column; gap: 10px;">
+        <a href="Fai-telefono.dc.html" class="principale molla" style="flex: 0 0 auto; background: #16171B; color: #FFFFFF;">Torna a casa</a>
+        <button type="button" class="secondario molla" onClick="{{ ricomincia }}" style="height: 56px;">Aggiungi un'altra</button>
+      </div>
+    </sc-if>
+  </div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  constructor(...args) {
+    super(...args);
+    this.state = { passo: 1, dir: 'da-destra', cifre: '', tipo: '', commessa: '', scontrino: '' };
+  }
+  renderVals() {
+    const s = this.state;
+    const punti = (intero) => intero.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    const mostra = (c) => {
+      if (c === '') return '0';
+      const parti = c.split(',');
+      return punti(parti[0] === '' ? '0' : parti[0]) + (parti.length > 1 ? ',' + parti[1] : '');
+    };
+    const formatta = (c) => {
+      if (c === '') return '0,00';
+      const parti = c.split(',');
+      const intero = parti[0] === '' ? '0' : parti[0];
+      const dec = ((parti[1] || '') + '00').slice(0, 2);
+      return punti(intero) + ',' + dec;
+    };
+    const valore = parseFloat((s.cifre || '0').replace(',', '.')) || 0;
+    const vai = (p) => this.setState({ passo: p, dir: p > s.passo ? 'da-destra' : 'da-sinistra' });
+    const premi = (k) => {
+      let c = this.state.cifre;
+      if (k === 'canc') {
+        c = c.slice(0, -1);
+      } else if (k === ',') {
+        if (c.indexOf(',') === -1) c = (c === '' ? '0' : c) + ',';
+      } else if (c.indexOf(',') !== -1) {
+        if (c.split(',')[1].length < 2) c = c + k;
+      } else if (c === '0') {
+        c = k;
+      } else if (c.length < 5) {
+        c = c + k;
+      }
+      this.setState({ cifre: c });
+    };
+    const tasti = ['1', '2', '3', '4', '5', '6', '7', '8', '9', ',', '0', 'canc'].map((k) => ({
+      etichetta: k,
+      numero: k !== 'canc',
+      canc: k === 'canc',
+      nomeVoce: k === 'canc' ? 'Cancella' : (k === ',' ? 'Virgola' : k),
+      premi: () => premi(k)
+    }));
+    const tipi = ['Carburante', 'Pranzo', 'Materiale', 'Parcheggio', 'Altro'].map((nome) => ({
+      nome: nome,
+      cls: s.tipo === nome ? 'chip scelto' : 'chip',
+      premuto: s.tipo === nome ? 'true' : 'false',
+      scegli: () => this.setState({ tipo: this.state.tipo === nome ? '' : nome })
+    }));
+    const elenco = [
+      { codice: '26ST014', cliente: 'Rossi Impianti Srl', cosa: 'Quadro QE2 e linee forza motrice' },
+      { codice: '26ST043', cliente: 'Caseificio Monte Grappa', cosa: 'Impianto di terra, verifica periodica' },
+      { codice: '26ST045', cliente: 'Meccanica Pasubio Srl', cosa: 'Illuminazione LED capannone' },
+      { codice: '26ST030', cliente: 'Rossi Impianti Srl', cosa: 'Cabina MT di Zanè' }
+    ];
+    const commesse = elenco.map((c) => ({
+      codice: c.codice,
+      cliente: c.cliente,
+      cosa: c.cosa,
+      scelta: s.commessa === c.codice,
+      cls: s.commessa === c.codice ? 'scheda scelta' : 'scheda',
+      premuto: s.commessa === c.codice ? 'true' : 'false',
+      scegli: () => this.setState({ commessa: c.codice })
+    }));
+    const trovata = elenco.find((c) => c.codice === s.commessa);
+    const segmenti = [1, 2, 3].map((n) => ({ cls: s.passo >= n ? 'seg pieno' : 'seg' }));
+    return {
+      etichettaPasso: s.passo < 4 ? 'Passo ' + s.passo + ' di 3' : 'Fatto',
+      segmenti: segmenti,
+      entrata: s.dir,
+      p1: s.passo === 1,
+      p2: s.passo === 2,
+      p3: s.passo === 3,
+      p4: s.passo === 4,
+      importoMostrato: mostra(s.cifre),
+      importoCls: s.cifre === '' ? 'importo vuoto' : 'importo',
+      importoFormattato: formatta(s.cifre),
+      tasti: tasti,
+      tipi: tipi,
+      commesse: commesse,
+      nessunaScelta: s.commessa === 'nessuna',
+      nessunaCls: s.commessa === 'nessuna' ? 'scheda scelta' : 'scheda',
+      nessunaPremuto: s.commessa === 'nessuna' ? 'true' : 'false',
+      scegliNessuna: () => this.setState({ commessa: 'nessuna' }),
+      senzaFoto: s.scontrino !== 'si',
+      conFoto: s.scontrino === 'si',
+      foto: () => this.setState({ scontrino: 'si' }),
+      nonCeScelto: s.scontrino === 'no',
+      nonCeCls: s.scontrino === 'no' ? 'scheda scelta' : 'scheda',
+      nonCePremuto: s.scontrino === 'no' ? 'true' : 'false',
+      nonCe: () => this.setState({ scontrino: this.state.scontrino === 'no' ? '' : 'no' }),
+      avanti1Spento: !(valore > 0),
+      avanti1: () => vai(2),
+      indietro2: () => vai(1),
+      avanti2Spento: s.commessa === '',
+      avanti2: () => vai(3),
+      indietro3: () => vai(2),
+      salvaSpento: s.scontrino === '',
+      salva: () => vai(4),
+      riepTipo: s.tipo || 'Spesa',
+      riepCommessa: trovata ? trovata.codice + ' · ' + trovata.cliente : 'Nessuna commessa',
+      riepScontrino: s.scontrino === 'si' ? 'Con la foto' : 'Senza scontrino',
+      ricomincia: () => this.setState({ passo: 1, dir: 'da-sinistra', cifre: '', tipo: '', commessa: '', scontrino: '' })
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -126,7 +126,7 @@ async function main() {
     passo('Le voci non ci stanno: nessuna barra grigia, il bordo sfuma solo sotto');
 
     // ------------------------------------------------------------- 2. La rotellina scorre il menu; in fondo sfuma solo sopra
-    const pDash = await centro('Dashboard');
+    const pDash = await centro('Casa');
     for (let i = 0; i < 12; i++) await cdp('Input.dispatchMouseEvent', { type: 'mouseWheel', x: pDash.x, y: pDash.y + 120, deltaX: 0, deltaY: 200 });
     await aspetta(800);
     m = await menu();

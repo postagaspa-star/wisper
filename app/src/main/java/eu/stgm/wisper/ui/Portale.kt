@@ -412,7 +412,7 @@ fun SchermataPortaleCliente(dati: Dati, nav: Navigatore, idCliente: String) {
                     }
                     Sezione5("Accessi recenti") {
                         ElencoAccessi(cp.accessi.take(5))
-                        PulsanteTesto("Tutti", { RicordoPortale.segmento = SegmentoPortale.ACCESSI; nav.sezione(Sezione.PORTALE) }, colore = c.gialloTesto)
+                        PulsanteTesto("Tutti", { RicordoPortale.segmento = SegmentoPortale.ACCESSI; nav.sezione(Sezione.PORTALE) }, colore = c.collegamento)
                     }
                 }
             }

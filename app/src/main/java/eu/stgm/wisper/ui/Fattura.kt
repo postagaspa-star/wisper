@@ -221,7 +221,7 @@ fun SchermataFattura(dati: Dati, nav: Navigatore, id: String) {
                         Text("bonifico" + if (x.conto.isNotBlank()) " su ${x.conto}" else "", style = Testi.secondario, color = c.tenue)
                         if (x.causale.isNotBlank()) Text(x.causale, style = Testi.secondario, color = c.tenue, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     }
-                    if (modificabile) Text("Cambia", style = Testi.pulsanteSecondario, color = c.gialloTesto)
+                    if (modificabile) Text("Cambia", style = Testi.pulsanteSecondario, color = c.collegamento)
                 }
             }
 

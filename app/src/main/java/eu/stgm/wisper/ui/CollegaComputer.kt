@@ -608,7 +608,7 @@ private fun RigheSottoFinestra(mostra: Boolean, aiuto: Boolean, rifiutatoAlle: L
         Text(
             "Inquadra il codice sul computer",
             style = TextStyle(
-                fontFamily = Figtree, fontSize = 17.sp, fontWeight = FontWeight.Bold, lineHeight = 22.sp,
+                fontFamily = Carattere, fontSize = 17.sp, fontWeight = FontWeight.Bold, lineHeight = 22.sp,
                 shadow = Shadow(Color.Black.copy(alpha = 0.6f), Offset(0f, with(densita) { 1.dp.toPx() }), with(densita) { 6.dp.toPx() }),
             ),
             color = Color.White, textAlign = TextAlign.Center,

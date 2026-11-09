@@ -285,7 +285,7 @@ fun PaginaApp(
                 freccia = false,
             )
             LineaElenco()
-            RigaVoce("Licenze", sotto = "Carattere Figtree, SIL OFL 1.1", onClick = { licenza = true })
+            RigaVoce("Licenze", sotto = "Caratteri Plus Jakarta Sans e Figtree, SIL OFL 1.1", onClick = { licenza = true })
         }
 
         TitoloSezione("Il collegamento")
@@ -352,10 +352,14 @@ fun PaginaApp(
 
 
     if (licenza) {
-        val testo = remember { runCatching { ctx.assets.open("licenze/figtree-OFL.txt").bufferedReader().use { it.readText() } }.getOrDefault("") }
+        val testo = remember {
+            listOf("plus-jakarta-sans-OFL.txt" to "Plus Jakarta Sans (le schermate)", "figtree-OFL.txt" to "Figtree (i PDF)").joinToString("\n\n") { (file, nome) ->
+                nome + "\n\n" + runCatching { ctx.assets.open("licenze/" + file).bufferedReader().use { it.readText() } }.getOrDefault("")
+            }
+        }
         AlertDialog(
             onDismissRequest = { licenza = false },
-            title = { Text("Figtree", style = Testi.titoloSezione) },
+            title = { Text("Licenze dei caratteri", style = Testi.titoloSezione) },
             text = { Text(testo, style = Testi.piccolo, modifier = Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) },
             confirmButton = { TextButton(onClick = { licenza = false }) { Text("Chiudi", color = c.testo) } },
         )
@@ -829,7 +833,7 @@ fun SchermataAccesso(archivio: Archivio, onEntrato: () -> Unit) {
                     Text(
                         buildAnnotatedString {
                             append(Indirizzi.descrivi(server, google))
-                            withStyle(SpanStyle(fontWeight = FontWeight.Bold, color = c.gialloTesto)) { append(" · Cambia") }
+                            withStyle(SpanStyle(fontWeight = FontWeight.Bold, color = c.collegamento)) { append(" · Cambia") }
                         },
                         style = Testi.piccolo, color = c.tenue, textAlign = TextAlign.Center,
                     )

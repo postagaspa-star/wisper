@@ -757,6 +757,6 @@ private fun RigaRiepilogoPreventivo(titolo: String, sotto: String, onCambia: () 
             Text(titolo, style = Testi.forte, color = c.testo)
             Text(sotto, style = Testi.secondario, color = c.tenue, maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
-        Text("Cambia", style = Testi.secondarioGrande.copy(fontWeight = FontWeight.Bold), color = c.gialloTesto)
+        Text("Cambia", style = Testi.secondarioGrande.copy(fontWeight = FontWeight.Bold), color = c.collegamento)
     }
 }

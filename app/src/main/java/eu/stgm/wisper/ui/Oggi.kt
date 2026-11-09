@@ -100,6 +100,8 @@ fun IlTuoGiorno(
     onApriLavoro: (String) -> Unit,
     onMese: () -> Unit,
     onDaInviare: () -> Unit,
+    /** Nei Rapportini (09/11/2026): solo la settimana e il rapportino di oggi, l'elenco sotto dice il resto. */
+    soloGiorno: Boolean = false,
 ) {
     val c = W.colori
     val visita = LocalVisita.current
@@ -129,7 +131,7 @@ fun IlTuoGiorno(
         val fatti = settimana.count { (it.tipo == TipoGiorno.FATTO || it.tipo == TipoGiorno.OGGI_FATTO) && it.data.dayOfWeek.value <= 5 }
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Etichetta("Il tuo giorno", Modifier.weight(1f))
-            Text("$fatti di $passati giorni", style = Testi.secondario, color = c.tenue)
+            Text("$fatti di $passati " + if (passati == 1) "giorno" else "giorni", style = Testi.secondario, color = c.tenue)
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             settimana.forEach { g -> GiornoSettimana(g, Modifier.weight(1f), onNuovo, onMese) }
@@ -140,7 +142,8 @@ fun IlTuoGiorno(
                 if (weekend) "Oggi è ${oggi.dayOfWeek.getDisplayName(TextStyle.FULL, IT)}" else "Il rapportino di oggi non l'hai ancora scritto",
                 style = Testi.titoloScheda, color = c.testo,
             )
-            PulsantePrincipale(
+            // Nei Rapportini il pulsante giallo della pagina è Nuovo rapportino: uno solo per schermata.
+            if (!soloGiorno) PulsantePrincipale(
                 if (weekend) "Scrivi comunque" else "Scrivi il rapportino",
                 { visita?.azione("scrivi"); onNuovo(oggi) },
                 Modifier.bersaglio("scrivi"),
@@ -148,7 +151,7 @@ fun IlTuoGiorno(
             )
             if (ieri != null) {
                 Row(
-                    Modifier.fillMaxWidth().heightIn(min = 60.dp).clip(RoundedCornerShape(16.dp)).background(c.fondo)
+                    Modifier.fillMaxWidth().heightIn(min = 60.dp).clip(RoundedCornerShape(16.dp)).background(c.foglio)
                         .clickable { onComeIeri(ieri) }.padding(horizontal = 14.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -175,7 +178,7 @@ fun IlTuoGiorno(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Box(Modifier.size(40.dp).clip(CircleShape).background(c.testo), contentAlignment = Alignment.Center) {
-                        Icon(Icone.spunta, null, tint = c.scheda, modifier = Modifier.size(20.dp))
+                        Icon(Icone.spunta, null, tint = c.foglio, modifier = Modifier.size(20.dp))
                     }
                     Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {
@@ -216,6 +219,8 @@ fun IlTuoGiorno(
             PulsanteBordo("Aggiungi un lavoro", { onNuovo(oggi) }, Modifier.fillMaxWidth(), icona = Icone.piu)
         }
     }
+
+    if (soloGiorno) return
 
     // ---------------------------------------------------------- da inviare
     if (daInviare.isNotEmpty()) {
@@ -259,8 +264,8 @@ fun IlTuoGiorno(
                 style = Testi.titoloSezione.copy(fontSize = Testi.titoloSezione.fontSize * 1.1f), color = c.testo,
             )
         }
-        Text("Il mese", style = Testi.secondarioGrande.copy(fontWeight = FontWeight.Bold), color = c.gialloTesto)
-        Icon(Icone.freccia, null, tint = c.gialloTesto, modifier = Modifier.size(16.dp))
+        Text("Il mese", style = Testi.secondarioGrande.copy(fontWeight = FontWeight.Bold), color = c.collegamento)
+        Icon(Icone.freccia, null, tint = c.collegamento, modifier = Modifier.size(16.dp))
     }
 
     VersioneNuova(dati)
@@ -323,7 +328,7 @@ private fun GiornoSettimana(g: Riepiloghi.Giorno, modifier: Modifier, onNuovo: (
             color = when (g.tipo) { TipoGiorno.FUTURO -> c.moltoTenue; TipoGiorno.OGGI, TipoGiorno.OGGI_FATTO -> c.testo; else -> c.tenue })
         when (g.tipo) {
             TipoGiorno.FATTO, TipoGiorno.OGGI_FATTO -> Box(Modifier.size(44.dp).clip(CircleShape).background(c.testo), contentAlignment = Alignment.Center) {
-                Icon(Icone.spunta, null, tint = c.scheda, modifier = Modifier.size(20.dp))
+                Icon(Icone.spunta, null, tint = c.foglio, modifier = Modifier.size(20.dp))
             }
             TipoGiorno.MANCA -> Box(
                 Modifier.size(44.dp).bordoTratteggiato(c.gialloTesto, 22.dp),

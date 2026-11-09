@@ -236,6 +236,42 @@
           h('span', { class: 'spazio' }), o.pulsanti ? o.pulsanti() : null));
     }
 
+    /**
+     * "Manda un promemoria" dalla casa (fai.md §5): la proposta di Da mandare per quella fattura, con le regole di sempre
+     * (primo o secondo promemoria, chi riceve, il sì a WhatsApp). Senza proposta o senza numero si apre il Messaggio.
+     */
+    async function promemoriaFattura(idFattura, cliente, dopo) {
+      if (!scrive()) { avviso('Non hai il permesso per mandare messaggi: chiedi a ' + W.titolare(), true); return; }
+      const letto = await lavora('Preparo il promemoria', () => Promise.all([leggiDaMandare(), leggiModelli().catch(() => null)]));
+      if (!letto) return;
+      const p = tutteLeProposte().find(x => String(x.proposta || '').indexOf('fattura:' + idFattura + ':') === 0);
+      const msg = p ? daProposta(p) : null;
+      const nW = msg && msg.canale === 'whatsapp';
+      if (!msg || (nW && !(msg.a || {}).numero) || !String(msg.testo || '').trim()) {
+        scrivi({ modello: 'promemoria_pagamento', canale: 'whatsapp', idFattura, riferimento: cliente });
+        return;
+      }
+      if (!msg.idCliente && msg.a) msg.idCliente = msg.a.idCliente || '';
+      let modifica = false;
+      const testo = h('textarea', { rows: 7, 'aria-label': 'Il messaggio' });
+      testo.value = msg.testo;
+      testo.addEventListener('input', () => { msg.testo = testo.value; });
+      const zona = h('div', { class: 'fila' });
+      const cambia = h('button', { type: 'button', class: 'btn grande', onclick: () => { modifica = !modifica; disegna(); } }, 'Cambia il testo');
+      const disegna = () => {
+        aggiungi(svuota(zona), [
+          h('div', { class: 'sotto-titolo' }, (nW ? 'Su WhatsApp' : 'Per email') + ((msg.a || {}).nome ? (nW ? ', a ' : ' a ') + msg.a.nome : '')),
+          modifica ? campo('Il messaggio', testo) : h('div', { class: 'bolla-wa' }, msg.testo)]);
+        cambia.textContent = modifica ? 'Fatto' : 'Cambia il testo';
+      };
+      disegna();
+      let chiudi;
+      chiudi = finestra({ titolo: 'Promemoria a ' + (cliente || (msg.a || {}).cliente || 'il cliente'), corpo: zona, fuoco: false,
+        pulsanti: [h('button', { type: 'button', class: 'btn verde grande', style: { flex: '1 1 220px' }, onclick: async () => {
+          if (await manda(msg, chiudi)) { chiudi(); if (dopo) dopo(); }
+        } }, icona(nW ? 'whatsapp' : 'email', 20, 2.2), nW ? 'Manda su WhatsApp' : 'Manda per email'), cambia] });
+    }
+
     /** Chiede al server il testo dal modello (preparaMessaggio): non salva niente. */
     async function componi(msg) {
       const corpo = Object.assign({ modello: msg.modello || 'libero', canale: msg.canale || 'whatsapp', idReferente: (msg.a && msg.a.idReferente) || undefined, idCliente: msg.idCliente || undefined, proposta: msg.proposta || undefined }, msg.rif || {});
@@ -710,6 +746,6 @@
         destra: pillStato(c), onclick: () => { M.storico = null; M.idCliente = ''; M.idCommessa = ''; W.vai('#comunicazioni/storico'); setTimeout(() => apriPannello(c), 400); } });
     }
 
-    return { vista, M, daRileggere, scrivi, nuovoMessaggio, annotaTelefonata, schedaCliente, schedaCommessa, nuove, rileggiNuove, leggiNotifiche, chiudiPannello, apriWhatsapp, chiediMandato };
+    return { vista, M, daRileggere, scrivi, promemoriaFattura, nuovoMessaggio, annotaTelefonata, schedaCliente, schedaCommessa, nuove, rileggiNuove, leggiNotifiche, chiudiPannello, apriWhatsapp, chiediMandato };
   };
 })(window);

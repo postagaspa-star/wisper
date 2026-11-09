@@ -1,0 +1,35 @@
+{
+  "_nota": "La scheda gialla della casa (docs/gestionale/fai.md §5): gli stessi casi su computer (pc/prove/casa.test.js) e telefono (CasaTest.kt).",
+  "schedaImportante": [
+    {
+      "nome": "una fattura scaduta di un cliente",
+      "voce": { "tipo": "fattura", "gravita": "urgente", "titolo": "Fattura 2026/41 scaduta da 12 giorni", "dettaglio": "Rossi Impianti Srl · restano 1.830,00 € di 1.830,00 €", "quanto": 1830, "unita": "euro", "collegamento": { "pagina": "fattura", "id": 41 } },
+      "atteso": { "titolo": "La fattura di Rossi Impianti Srl è scaduta", "dettaglio": "", "pillola": "Scaduta da 12 giorni", "importo": 1830, "nota": "Fattura 2026/41", "promemoria": true }
+    },
+    {
+      "nome": "scaduta da un giorno, con la W provvisoria",
+      "voce": { "tipo": "fattura", "gravita": "urgente", "titolo": "Fattura W-3 scaduta da 1 giorno", "dettaglio": "Lanificio Valle Spa · restano 90,00 € di 120,00 €", "quanto": 90, "unita": "euro", "collegamento": { "pagina": "fattura", "id": 7 } },
+      "atteso": { "titolo": "La fattura di Lanificio Valle Spa è scaduta", "dettaglio": "", "pillola": "Scaduta da 1 giorno", "importo": 90, "nota": "Fattura W-3", "promemoria": true }
+    },
+    {
+      "nome": "tante fatture scadute: una voce sola, niente promemoria",
+      "voce": { "tipo": "fattura", "gravita": "urgente", "titolo": "5 fatture scadute", "dettaglio": "Restano 4.000,00 € da incassare · la più vecchia da 40 giorni", "quanto": 4000, "unita": "euro", "collegamento": { "pagina": "fatture" } },
+      "atteso": { "titolo": "5 fatture scadute", "dettaglio": "Restano 4.000,00 € da incassare · la più vecchia da 40 giorni", "pillola": "", "importo": 4000, "nota": "", "promemoria": false }
+    },
+    {
+      "nome": "una fattura da emettere non è scaduta",
+      "voce": { "tipo": "fattura", "gravita": "urgente", "titolo": "Emetti la fattura per Rossi entro venerdì", "dettaglio": "Già pagata", "quanto": 500, "unita": "euro", "collegamento": { "pagina": "fattura", "id": 8 } },
+      "atteso": { "titolo": "Emetti la fattura per Rossi entro venerdì", "dettaglio": "Già pagata", "pillola": "", "importo": 500, "nota": "", "promemoria": false }
+    },
+    {
+      "nome": "giorni senza rapportino: niente importo",
+      "voce": { "tipo": "giorni", "gravita": "attenzione", "titolo": "2 giorni senza rapportino", "dettaglio": "Lunedì e martedì", "quanto": 2, "unita": "giorni", "collegamento": { "pagina": "rapportini" } },
+      "atteso": { "titolo": "2 giorni senza rapportino", "dettaglio": "Lunedì e martedì", "pillola": "", "importo": null, "nota": "", "promemoria": false }
+    },
+    {
+      "nome": "una voce senza importo né unità",
+      "voce": { "tipo": "ticket", "gravita": "urgente", "titolo": "Ticket T-12 urgente", "dettaglio": "PLC in blocco", "collegamento": { "pagina": "ticket", "id": 12 } },
+      "atteso": { "titolo": "Ticket T-12 urgente", "dettaglio": "PLC in blocco", "pillola": "", "importo": null, "nota": "", "promemoria": false }
+    }
+  ]
+}

@@ -282,7 +282,7 @@ fun SchermataDettaglioTicket(dati: Dati, nav: Navigatore, chiave: String) {
                     }
                     if (scrive && interventi.isNotEmpty()) {
                         LineaElenco()
-                        RigaVoce("Un altro intervento", icona = Icone.piu, titoloColore = c.gialloTesto, freccia = false, onClick = { pianifica = true })
+                        RigaVoce("Un altro intervento", icona = Icone.piu, titoloColore = c.collegamento, freccia = false, onClick = { pianifica = true })
                     }
                 }
             }
@@ -383,7 +383,7 @@ fun SchermataDettaglioTicket(dati: Dati, nav: Navigatore, chiave: String) {
                     if (voci.isEmpty()) RigaCalma("Ancora niente.")
                     voci.forEachIndexed { i, v -> if (i > 0) LineaElenco(); RigaStorico(v, null) }
                     LineaElenco()
-                    RigaVoce("Vedi tutto lo storico", titoloColore = c.gialloTesto, onClick = { nav.vai("impianto/${t.idSede}") })
+                    RigaVoce("Vedi tutto lo storico", titoloColore = c.collegamento, onClick = { nav.vai("impianto/${t.idSede}") })
                 }
             }
 

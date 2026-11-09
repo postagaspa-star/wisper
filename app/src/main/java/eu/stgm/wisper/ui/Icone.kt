@@ -29,6 +29,10 @@ object Icone {
             }
         }.build()
 
+    /** Le icone delle voci del menu (fai.md §6): il tracciato sta in Sezione. */
+    fun voce(nome: String, d: String): ImageVector = tratto(nome, 2.1f, d)
+    val fumettoCasa = tratto("fumettoCasa", 2.2f, "M21 11.5a8.5 8.5 0 0 1-12.4 7.6L3 21l1.9-5.4A8.5 8.5 0 1 1 21 11.5z")
+    val cancellaTasto = tratto("cancellaTasto", 2.2f, "M9 5h11a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H9l-6-7z", "M12 9.5l5 5M17 9.5l-5 5")
     val piu = tratto("piu", 2.4f, "M12 5v14M5 12h14")
     val meno = tratto("meno", 2.6f, "M5 12h14")
     val chiudi = tratto("chiudi", 2.4f, "M6 6l12 12M18 6L6 18")
@@ -107,7 +111,7 @@ object Icone {
     val cartella = tratto("cartella", 2.2f, "M5 5h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z")
 
     // Il gestionale, fase 1 (docs/prototipo/Gestionale-fase1.html, le stesse del computer)
-    val menu = tratto("menu", 2.2f, "M4 6h16M4 12h16M4 18h10")
+    val menu = tratto("menu", 2.2f, "M4 7h16M4 12h16M4 17h10")
     val dashboard = tratto("dashboard", 2.2f, "M4 4h7v7H4z", "M13 4h7v4h-7z", "M13 10h7v10h-7z", "M4 13h7v7H4z")
     val clienti = tratto(
         "clienti", 2.2f,

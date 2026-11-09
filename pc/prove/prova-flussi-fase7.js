@@ -138,8 +138,8 @@ async function main() {
     await entra('manuel@esempio.it');
     const vociManuel = await menu();
     const nomi = vociManuel.map(v => v.replace(/ \d+$/, ''));
-    const iM = nomi.indexOf('Mezzi e attrezzature');
-    assert.deepEqual(nomi.slice(iM, iM + 4), ['Mezzi e attrezzature', 'WhatsApp e comunicazioni', 'Portale clienti', 'Collaboratori esterni'], 'l\'ordine del menu: ' + nomi.join(', '));
+    const iM = nomi.indexOf('Mezzi');
+    assert.deepEqual(nomi.slice(iM, iM + 4), ['Mezzi', 'WhatsApp', 'Portale clienti', 'Collaboratori'], 'l\'ordine del menu: ' + nomi.join(', '));
     const campanella = await valuta("(() => { const b = document.getElementById('campanella'); return b && !b.classList.contains('nascosto') ? b.innerText : null; })()");
     assert.ok(campanella && /Notifiche/.test(campanella), 'la campanella in fondo al menu');
     const dash = await server('dashboard');
@@ -469,7 +469,7 @@ async function main() {
     // ------------------------------------------------------------- 13. Marco (collaboratore): comunicazioni sì, portale no
     await entra('marco@esempio.it');
     const vociMarco = (await menu()).map(v => v.replace(/ \d+$/, ''));
-    assert.ok(vociMarco.indexOf('WhatsApp e comunicazioni') >= 0 && vociMarco.indexOf('Portale clienti') < 0, 'menu di Marco: ' + vociMarco.join(', '));
+    assert.ok(vociMarco.indexOf('WhatsApp') >= 0 && vociMarco.indexOf('Portale clienti') < 0, 'menu di Marco: ' + vociMarco.join(', '));
     await vai('#portale');
     assert.match(await testoPagina(), /Non hai il permesso/);
     assert.equal((await server('portale')).permesso, false, 'il server rifiuta il portale a Marco');
@@ -481,7 +481,7 @@ async function main() {
     // ------------------------------------------------------------- 14. Lettura: vede, niente gialli per scrivere
     await entra('lettura@esempio.it');
     const vociLett = (await menu()).map(v => v.replace(/ \d+$/, ''));
-    assert.ok(vociLett.indexOf('WhatsApp e comunicazioni') >= 0 && vociLett.indexOf('Portale clienti') >= 0, 'lettura vede le due voci');
+    assert.ok(vociLett.indexOf('WhatsApp') >= 0 && vociLett.indexOf('Portale clienti') >= 0, 'lettura vede le due voci');
     for (const h of ['#comunicazioni/storico', '#portale/clienti', '#portale/cliente/' + encodeURIComponent(rossi.id)]) {
       await vai(h);
       const g = await valuta("[...document.querySelectorAll('#principale .btn.giallo, .pannello .btn.giallo')].filter(x => x.offsetParent !== null).length");

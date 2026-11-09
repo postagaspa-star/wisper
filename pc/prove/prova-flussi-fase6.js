@@ -135,6 +135,10 @@ async function main() {
     const lunedi = d => { const x = new Date(d); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return x; };
     // Le ferie di prova: lunedì e martedì fra quattro settimane (lontane dalle assenze dei dati di esempio).
     const l4 = lunedi(oggi); l4.setDate(l4.getDate() + 28);
+    // Un lunedì o un martedì festivo (l'8 dicembre, per esempio) cambierebbe il conto: in quel caso una settimana dopo.
+    const martedi = d => { const x = new Date(d); x.setDate(x.getDate() + 1); return x; };
+    const festivo = d => P.festiviTra(iso(d), iso(d), '').indexOf(iso(d)) >= 0;
+    while (festivo(l4) || festivo(martedi(l4))) l4.setDate(l4.getDate() + 7);
     const m4 = new Date(l4); m4.setDate(m4.getDate() + 1);
     const dal = iso(l4);
     const al = iso(m4);
@@ -142,7 +146,7 @@ async function main() {
     // ------------------------------------------------------------- 1. Marco chiede le ferie
     await entra('marco@esempio.it');
     const menuMarco = await valuta("[...document.querySelectorAll('#voci .voce')].map(v => v.dataset.nome)");
-    assert.ok(menuMarco.indexOf('Persone e risorse umane') >= 0 && menuMarco.indexOf('Mezzi e attrezzature') >= 0 && menuMarco.indexOf('Collaboratori esterni') < 0, 'menu di Marco: ' + menuMarco.join(', '));
+    assert.ok(menuMarco.indexOf('Persone') >= 0 && menuMarco.indexOf('Mezzi') >= 0 && menuMarco.indexOf('Collaboratori') < 0, 'menu di Marco: ' + menuMarco.join(', '));
     await vai('#persone');
     let testo = await testoPagina();
     assert.match(testo, /La tua scheda/, 'il collaboratore entra in Persone sulla sua scheda (Io)');
@@ -166,6 +170,7 @@ async function main() {
 
     // ------------------------------------------------------------- 2. Manuel approva, Annulla, approva di nuovo: la pianificazione
     await entra('manuel@esempio.it');
+    await vai('#dashboard/tutto');
     testo = await testoPagina();
     // Fase 8 (§8.4): la Dashboard ha i quattro riquadri della persona (il titolare: Da fatturare, Scaduto, Ticket aperti,
     // Da approvare); i numeri della fase 6 restano nel server e nella pagina di Persone.
@@ -378,10 +383,10 @@ async function main() {
     // ------------------------------------------------------------- 8. Luca, esterno: vede solo il suo
     await entra('luca@esempio.it');
     const menuLuca = await valuta("[...document.querySelectorAll('#voci .voce')].map(v => v.dataset.nome)");
-    assert.deepEqual(menuLuca, ['Dashboard', 'Commesse', 'Progetti', 'Rapportini', 'Attività e calendario', 'Spese e trasferte', 'Documenti', 'Ticket e assistenza', 'La tua scheda'], 'il menu ridotto dell\'esterno');
+    assert.deepEqual(menuLuca, ['Casa', 'Commesse', 'Progetti', 'Rapportini', 'Calendario', 'Spese', 'Documenti', 'Ticket', 'La tua scheda'], 'il menu ridotto dell\'esterno');
     testo = await testoPagina();
     assert.match(testo, /Esterno · Impianti Veneti di Sartori Luca/, 'la pillola dell\'esterno');
-    assert.match(testo, /Scrivi il rapportino/);
+    assert.match(testo, /Scrivi un rapportino/);
     await vai('#collaboratori');
     testo = await testoPagina();
     assert.match(testo, /La tua scheda/);

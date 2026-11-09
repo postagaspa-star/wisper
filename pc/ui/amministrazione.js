@@ -1275,7 +1275,7 @@
             h('button', { type: 'button', class: 'btn', onclick: () => Api.post('/locale/cartella-pdf').catch(() => null) }, 'Apri la cartella')) : null,
           loc.server || loc.google ? h('div', { class: 'voce-imp' }, h('span', { class: 'testi' }, h('b', null, 'Collegamento'), fraseCollegamento),
             h('button', { type: 'button', class: 'btn', onclick: () => W.esci() }, 'Esci')) : null,
-          h('div', { class: 'voce-imp' }, h('span', { class: 'testi' }, h('b', null, 'Licenze'), h('span', null, 'Carattere Figtree, SIL OFL 1.1')),
+          h('div', { class: 'voce-imp' }, h('span', { class: 'testi' }, h('b', null, 'Licenze'), h('span', null, 'Caratteri Plus Jakarta Sans e Figtree, SIL OFL 1.1')),
             h('button', { type: 'button', class: 'btn', onclick: W.mostraLicenza }, 'Leggi')),
           S.versione ? h('div', { class: 'voce-imp' }, h('span', { class: 'testi' }, h('b', null, 'Versione ' + S.versione), h('span', null, W.statoAggiornamenti())),
             a && a.stato === 'pronto'

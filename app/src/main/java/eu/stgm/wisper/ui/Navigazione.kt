@@ -20,8 +20,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
@@ -35,6 +37,7 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.Role
@@ -60,31 +63,35 @@ import java.time.YearMonth
  * La casa e' la prima voce accesa (di solito la Dashboard: dal 03/11/2026 si spegne
  * anche lei, progetti.md §5).
  */
-enum class Sezione(val nome: String, val icona: ImageVector, val modulo: String) {
-    DASHBOARD("Dashboard", Icone.dashboard, Moduli.DASHBOARD),
-    CLIENTI("Clienti e fornitori", Icone.clienti, Moduli.CLIENTI),
+enum class Sezione(val nome: String, val fondo: Long, val tratto: Long, disegno: String, val modulo: String) {
+    // 09/11/2026 (design Fai, fai.md §6): voci di una parola, ognuna col suo colore. I nomi lunghi restano nei Permessi.
+    DASHBOARD("Casa", 0xFF16171B, 0xFFFFC53D, "M4 11l8-7 8 7v8a1 1 0 0 1-1 1h-4v-6H9v6H5a1 1 0 0 1-1-1z", Moduli.DASHBOARD),
+    CLIENTI("Clienti", 0xFFDDF5E8, 0xFF067647, "M16 19v-1a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v1M9.5 10a3 3 0 1 0 0-6 3 3 0 0 0 0 6M21 19v-1a4 4 0 0 0-3-3.9M15.5 4.1a3 3 0 0 1 0 5.8", Moduli.CLIENTI),
     // 03/11/2026 (progetti.md §4): i progetti hanno la loro voce subito sotto, e la voce di sopra torna "Commesse".
-    COMMESSE("Commesse", Icone.commesse, Moduli.COMMESSE),
-    PROGETTI("Progetti", Icone.progetti, Moduli.PROGETTI),
-    PREVENTIVI("Preventivi e contratti", Icone.preventivo, Moduli.PREVENTIVI),
-    ATTIVITA("Attività e calendario", Icone.calendario, Moduli.ATTIVITA),
+    COMMESSE("Commesse", 0xFFFFEBD1, 0xFFB54708, "M4 8h16v11H4zM9 8V5h6v3M4 13h16", Moduli.COMMESSE),
+    PROGETTI("Progetti", 0xFFFFF0E6, 0xFFC4320A, "M4 4h16v16H4zM4 15h16M12 15v5", Moduli.PROGETTI),
+    PREVENTIVI("Preventivi", 0xFFECE7FF, 0xFF5925DC, "M7 3h7l5 5v13H7zM14 3v5h5M10 13h6M10 17h4", Moduli.PREVENTIVI),
+    ATTIVITA("Calendario", 0xFFDCE8FF, 0xFF1849A9, "M4 6h16v14H4zM4 10h16M8 3v4M16 3v4", Moduli.ATTIVITA),
     // 07/11/2026 (richiesta del titolare): le Ore non ci sono più, la voce è solo "Rapportini".
-    RAPPORTINI("Rapportini", Icone.ore, Moduli.RAPPORTINI),
-    SPESE("Spese e trasferte", Icone.scontrino, Moduli.SPESE),
-    FATTURAZIONE("Fatturazione", Icone.fatturazione, Moduli.FATTURAZIONE),
-    BANCHE("Banche e scadenze", Icone.barre, Moduli.BANCHE),
+    RAPPORTINI("Rapportini", 0xFFFFF0C2, 0xFF7A5600, "M9 3h6v3H9zM7 4.5H5V21h14V4.5h-2M9 14l2 2 4-4", Moduli.RAPPORTINI),
+    SPESE("Spese", 0xFFFFE4DE, 0xFFB93815, "M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6M9 16h3", Moduli.SPESE),
+    FATTURAZIONE("Fatture", 0xFFD9F4FA, 0xFF0E7090, "M6 3h12v18H6zM9 8h6M9 12h6M9 16h4", Moduli.FATTURAZIONE),
+    BANCHE("Banche", 0xFFDDF3EF, 0xFF107569, "M3 10l9-6 9 6M5 10v8M9.5 10v8M14.5 10v8M19 10v8M3 20h18", Moduli.BANCHE),
     // Fase 6 (fase6.md §12): Persone dopo Banche, Mezzi dopo Ticket, Collaboratori dopo Mezzi.
-    PERSONE("Persone e risorse umane", Icone.persona, Moduli.PERSONE),
-    DOCUMENTI("Documenti", Icone.documento, Moduli.DOCUMENTI),
-    TICKET("Ticket e assistenza", Icone.chiave, Moduli.TICKET),
-    MEZZI("Mezzi e attrezzature", Icone.mezzo, Moduli.MEZZI),
-    // Fase 7 (fase7.md §12): dopo Mezzi e attrezzature, prima di Collaboratori esterni.
-    COMUNICAZIONI("WhatsApp e comunicazioni", Icone.fumetto, Moduli.COMUNICAZIONI),
-    PORTALE("Portale clienti", Icone.globo, Moduli.PORTALE),
-    COLLABORATORI("Collaboratori esterni", Icone.collab, Moduli.COLLABORATORI),
-    // Fase 8 (fase8.md §15): 17 Integrazioni (la spina) dopo Collaboratori esterni.
-    INTEGRAZIONI("Integrazioni", Icone.spina, Moduli.INTEGRAZIONI),
-    AMMINISTRAZIONE("Amministrazione", Icone.amministrazione, Moduli.AMMINISTRAZIONE),
+    PERSONE("Persone", 0xFFFCE7F6, 0xFFC11574, "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8M5 20a7 7 0 0 1 14 0", Moduli.PERSONE),
+    DOCUMENTI("Documenti", 0xFFEAECF0, 0xFF344054, "M3 6h6l2 2h10v11H3z", Moduli.DOCUMENTI),
+    TICKET("Ticket", 0xFFE0E7FF, 0xFF3538CD, "M14.7 6.3a4 4 0 0 0-5.4 5.4L4 17l3 3 5.3-5.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.5-.5-.5-2.5z", Moduli.TICKET),
+    MEZZI("Mezzi", 0xFFF4EBDD, 0xFF8A5A12, "M3 7h11v9H3zM14 10h4l3 3v3h-7M7 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4M17 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4", Moduli.MEZZI),
+    // Fase 7 (fase7.md §12): dopo Mezzi, prima di Collaboratori.
+    COMUNICAZIONI("WhatsApp", 0xFFDCF8E7, 0xFF087443, "M21 11.5a8.5 8.5 0 0 1-12.4 7.6L3 21l1.9-5.4A8.5 8.5 0 1 1 21 11.5z", Moduli.COMUNICAZIONI),
+    PORTALE("Portale clienti", 0xFFE0F2FE, 0xFF026AA2, "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18", Moduli.PORTALE),
+    COLLABORATORI("Collaboratori", 0xFFEAF8D7, 0xFF3B7C0F, "M10 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8M3 20a7 7 0 0 1 12-4.9M19 14v6M16 17h6", Moduli.COLLABORATORI),
+    // Fase 8 (fase8.md §15): 17 Integrazioni (la spina) dopo Collaboratori.
+    INTEGRAZIONI("Integrazioni", 0xFFF2F4F7, 0xFF475467, "M9 3v5M15 3v5M6 8h12v3a6 6 0 0 1-12 0zM12 17v4", Moduli.INTEGRAZIONI),
+    AMMINISTRAZIONE("Impostazioni", 0xFFF2F4F7, 0xFF16171B, "M4 7h10M18 7h2M4 17h4M12 17h8M16 5v4M10 15v4", Moduli.AMMINISTRAZIONE),
+    ;
+
+    val icona: ImageVector = Icone.voce(name, disegno)
 }
 
 /** I segmenti della sezione Rapportini, come sul computer. */
@@ -149,7 +156,7 @@ fun rottaCompito(rotta: String?): Boolean =
         rotta.startsWith("cliente-modifica/") || rotta.startsWith("cliente-nuovo") || rotta.startsWith("fornitore-nuovo") ||
         rotta.startsWith("preventivo-modifica/") || rotta.startsWith("preventivo-nuovo") ||
         rotta.startsWith("attivita-modifica/") || rotta.startsWith("attivita-nuova") ||
-        rotta.startsWith("spesa-nuova") || rotta.startsWith("spesa/") ||
+        rotta.startsWith("spesa-nuova") || rotta.startsWith("spesa/") || rotta.startsWith("spesa-veloce") ||
         rotta.startsWith("trasferta-nuova") || rotta.startsWith("trasferta/") || rotta.startsWith("amm/veicolo") ||
         // Fase 5: i moduli di ticket, contratti, documenti, scadenze e lettere.
         rotta.startsWith("ticket-nuovo") || rotta.startsWith("ticket-modifica/") || rotta.startsWith("contratto-ca-nuovo") ||
@@ -226,61 +233,61 @@ val LocalTitolare = staticCompositionLocalOf { "" }
 fun PulsanteMenu(onClick: () -> Unit, modifier: Modifier = Modifier) {
     val c = W.colori
     Row(
-        modifier.height(44.dp).clip(RoundedCornerShape(22.dp)).background(c.superficie2)
+        modifier.height(48.dp).clip(RoundedCornerShape(24.dp)).background(c.scheda)
             .clickable(onClick = onClick)
             .semantics { contentDescription = "Apri il menu"; role = Role.Button }
-            .padding(start = 10.dp, end = 14.dp),
+            .padding(start = 14.dp, end = 18.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Icon(Icone.menu, null, tint = c.testo, modifier = Modifier.size(22.dp))
-        Text("Menu", style = Testi.secondarioGrande.copy(fontWeight = FontWeight.ExtraBold), color = c.testo)
+        Text("Menu", style = Testi.pulsanteSecondario, color = c.testo)
     }
 }
 
-/** Il cerchio con le iniziali di una persona, nei colori ambra del prototipo. */
+/** Il cerchio con le iniziali di una persona: nero nel chiaro, chiaro nello scuro (fai.md §8). */
 @Composable
 fun CerchioPersona(iniziali: String, dimensione: Dp = 40.dp, modifier: Modifier = Modifier) {
     val c = W.colori
-    Box(modifier.size(dimensione).clip(CircleShape).background(c.ambraFondo), contentAlignment = Alignment.Center) {
+    Box(modifier.size(dimensione).clip(CircleShape).background(c.testo), contentAlignment = Alignment.Center) {
         Text(
             iniziali, style = Testi.forte.copy(fontSize = (dimensione.value * 0.35f).coerceIn(11f, 18f).sp),
-            color = c.ambraTesto, maxLines = 1,
+            color = c.foglio, maxLines = 1,
         )
     }
 }
 
 /** Fase 7 (§12): la campanella accanto al cerchio, col numero delle notifiche nuove. */
 @Composable
-private fun Campanella(g: Guscio) {
+internal fun Campanella(g: Guscio) {
     val apri = g.apriNotifiche ?: return
     val c = W.colori
     Box(
-        Modifier.size(48.dp).clip(CircleShape).clickable(onClick = apri)
-            .semantics { contentDescription = if (g.notifiche > 0) "Notifiche: ${g.notifiche} nuove" else "Notifiche"; role = Role.Button }
+        Modifier.size(48.dp)
+            .semantics(mergeDescendants = true) { contentDescription = if (g.notifiche > 0) "Notifiche: ${g.notifiche} nuove" else "Notifiche"; role = Role.Button }
             .bersaglio("campanella"),
         contentAlignment = Alignment.Center,
     ) {
-        Box(Modifier.size(44.dp).clip(CircleShape).background(c.superficie2), contentAlignment = Alignment.Center) {
+        Box(Modifier.size(44.dp).clip(CircleShape).background(c.scheda).clickable(onClick = apri), contentAlignment = Alignment.Center) {
             Icon(Icone.campanella, null, tint = c.testo, modifier = Modifier.size(20.dp))
         }
         if (g.notifiche > 0) {
             Box(
-                Modifier.align(Alignment.TopEnd).widthIn(min = 20.dp).height(20.dp).clip(RoundedCornerShape(10.dp)).background(c.giallo).padding(horizontal = 5.dp),
+                Modifier.align(Alignment.TopEnd).widthIn(min = 20.dp).height(20.dp).clip(RoundedCornerShape(10.dp)).background(c.testo).padding(horizontal = 5.dp),
                 contentAlignment = Alignment.Center,
-            ) { Text(if (g.notifiche > 99) "99" else "${g.notifiche}", style = Testi.pillola.copy(fontWeight = FontWeight.ExtraBold), color = c.suGiallo, maxLines = 1) }
+            ) { Text(if (g.notifiche > 99) "99" else "${g.notifiche}", style = Testi.pillola.copy(fontWeight = FontWeight.ExtraBold), color = c.foglio, maxLines = 1) }
         }
     }
 }
 
 /** Il cerchio in alto a destra: apre il foglio "Tu". */
 @Composable
-private fun CerchioTu(g: Guscio) {
+internal fun CerchioTu(g: Guscio) {
     Box(
         Modifier.size(48.dp).clip(CircleShape).clickable(onClick = g.apriTu)
             .semantics { contentDescription = "${g.utente.nome.ifBlank { "Tu" }}: password ed esci"; role = Role.Button },
         contentAlignment = Alignment.Center,
-    ) { CerchioPersona(g.utente.iniziali) }
+    ) { CerchioPersona(g.utente.iniziali, 48.dp) }
 }
 
 /**
@@ -363,68 +370,77 @@ fun CassettoMenu(
     onVoce: (Sezione) -> Unit,
     onRiprova: () -> Unit,
     onEsci: () -> Unit,
+    onChiudi: () -> Unit,
     /** Fase 6: per l'esterno il nome del suo collaboratore (la pillola "Esterno · …" e la voce "La tua scheda"). */
     esterno: String = "",
     /** Collega un computer col QR (collega-qr.md §7); null = la voce non c'è (la visita guidata). */
     onCollega: (() -> Unit)? = null,
 ) {
     val c = W.colori
-    Column(Modifier.fillMaxSize().padding(start = 12.dp, end = 12.dp, top = 16.dp, bottom = 18.dp)) {
-        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Row(
-                Modifier.fillMaxWidth().padding(start = 8.dp, end = 8.dp, top = 10.dp, bottom = 16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                CerchioPersona(utente.iniziali, 48.dp)
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text(utente.nome.ifBlank { "Wisper" }, style = Testi.forteGrande, color = c.testo, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    if (esterno.isNotBlank()) Pillolina("Esterno · $esterno", c.fatturatoTesto, c.fatturatoFondo)
-                    else Text(Ruoli.nome(utente.ruolo), style = Testi.secondario, color = c.tenue, maxLines = 1)
-                }
+    Column(Modifier.fillMaxSize()) {
+        Row(
+            Modifier.fillMaxWidth().statusBarsPadding().padding(start = 20.dp, end = 16.dp, top = 20.dp, bottom = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            CerchioPersona(utente.iniziali, 48.dp)
+            Column(Modifier.weight(1f)) {
+                Text(utente.nome.ifBlank { "Wisper" }, style = Testi.forteGrande, color = c.testo, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                if (esterno.isNotBlank()) Pillolina("Esterno · $esterno", c.fatturatoTesto, c.fatturatoFondo)
+                else Text(Ruoli.nome(utente.ruolo), style = Testi.secondario, color = c.tenue, maxLines = 1)
             }
-            Box(Modifier.fillMaxWidth().height(1.dp).background(c.riga))
-            Spacer(Modifier.height(0.dp))
+            Box(
+                Modifier.size(48.dp).clip(CircleShape).background(c.scheda).clickable(onClick = onChiudi)
+                    .semantics { contentDescription = "Chiudi il menu"; role = Role.Button },
+                contentAlignment = Alignment.Center,
+            ) { Icon(Icone.chiudi, null, tint = c.testo, modifier = Modifier.size(20.dp)) }
+        }
+        Column(
+            Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
             voci.forEach { s ->
+                if (s == Sezione.AMMINISTRAZIONE) Box(Modifier.fillMaxWidth().padding(start = 10.dp, end = 10.dp, top = 6.dp, bottom = 6.dp).height(1.dp).background(c.riga))
                 VoceCassetto(s, s == attiva, numeri[s] ?: 0, if (s == Sezione.COLLABORATORI && esterno.isNotBlank()) "La tua scheda" else s.nome) { onVoce(s) }
             }
-        }
-        Column(Modifier.fillMaxWidth()) {
-            Box(Modifier.fillMaxWidth().height(1.dp).background(c.riga))
-            // Nel gruppo in basso, prima dello stato del collegamento e di Esci (prototipo Collega-QR.html).
+            // Collega un computer col QR (prototipo Collega-QR.html): dopo le voci.
             if (onCollega != null) {
                 Row(
-                    Modifier.fillMaxWidth().padding(top = 8.dp).heightIn(min = 52.dp).clip(RoundedCornerShape(16.dp))
-                        .clickable(onClick = onCollega)
-                        .semantics { role = Role.Button }
-                        .padding(horizontal = 14.dp),
+                    Modifier.fillMaxWidth().height(52.dp).clip(RoundedCornerShape(16.dp)).clickable(onClick = onCollega)
+                        .semantics { role = Role.Button }.padding(horizontal = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    Icon(Icone.pc, null, tint = c.testo2, modifier = Modifier.size(22.dp))
-                    Text("Collega un computer", style = Testi.pulsanteSecondario, color = c.testo2, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Box(Modifier.size(36.dp).clip(RoundedCornerShape(11.dp)).background(c.scheda), contentAlignment = Alignment.Center) {
+                        Icon(Icone.pc, null, tint = c.testo, modifier = Modifier.size(20.dp))
+                    }
+                    Text("Collega un computer", style = Testi.pulsanteSecondario, color = c.testo, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
-            Column(Modifier.fillMaxWidth().padding(start = 8.dp, end = 8.dp, top = 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Row(
-                    Modifier.fillMaxWidth().heightIn(min = 32.dp).let { if (!collegato) it.clip(RoundedCornerShape(8.dp)).clickable(onClick = onRiprova) else it },
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    Box(Modifier.size(8.dp).clip(CircleShape).background(if (collegato) c.firmatoTesto else c.moltoTenue))
-                    Text(statoCollegamento, style = Testi.piccolo, color = c.tenue, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
-                    if (!collegato) Text("· Riprova", style = Testi.piccolo.copy(fontWeight = FontWeight.Bold), color = c.gialloTesto)
-                }
-                Row(
-                    Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(RoundedCornerShape(12.dp)).clickable(onClick = onEsci)
-                        .semantics { role = Role.Button },
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(14.dp),
-                ) {
-                    Icon(Icone.esci, null, tint = c.testo2, modifier = Modifier.size(20.dp))
-                    Text("Esci", style = Testi.pulsanteSecondario, color = c.testo2)
-                }
+        }
+        Row(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(bottomEnd = 28.dp)).background(c.lato).navigationBarsPadding()
+                .padding(start = 20.dp, end = 16.dp, top = 12.dp, bottom = 20.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Row(
+                Modifier.weight(1f).heightIn(min = 48.dp).let { if (!collegato) it.clip(RoundedCornerShape(8.dp)).clickable(onClick = onRiprova) else it },
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Box(Modifier.size(10.dp).clip(CircleShape).background(if (collegato) androidx.compose.ui.graphics.Color(0xFF12B76A) else c.moltoTenue))
+                Text(
+                    if (collegato) statoCollegamento.substringBefore(" · ") else statoCollegamento,
+                    style = Testi.secondario.copy(fontWeight = FontWeight.Bold), color = if (collegato) c.firmatoTesto else c.tenue,
+                    maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false),
+                )
+                if (!collegato) Text("· Riprova", style = Testi.secondario.copy(fontWeight = FontWeight.Bold), color = c.collegamento)
             }
+            Box(
+                Modifier.height(48.dp).clip(RoundedCornerShape(24.dp)).background(c.foglio).clickable(onClick = onEsci)
+                    .semantics { role = Role.Button }.padding(horizontal = 18.dp),
+                contentAlignment = Alignment.Center,
+            ) { Text("Esci", style = Testi.secondarioGrande.copy(fontWeight = FontWeight.Bold), color = c.testo) }
         }
     }
 }
@@ -432,23 +448,29 @@ fun CassettoMenu(
 @Composable
 private fun VoceCassetto(s: Sezione, attiva: Boolean, numero: Int, nome: String = s.nome, onClick: () -> Unit) {
     val c = W.colori
+    // Nel tema scuro il fondo è il tratto al 30% sulla scheda e il tratto si schiarisce (fai.md §3).
+    val tratto = androidx.compose.ui.graphics.Color(s.tratto)
+    val fondoIcona = if (c.scuro) lerp(c.scheda, tratto, 0.30f) else androidx.compose.ui.graphics.Color(s.fondo)
+    val trattoIcona = if (c.scuro) lerp(tratto, androidx.compose.ui.graphics.Color.White, 0.60f) else tratto
     Row(
-        Modifier.fillMaxWidth().heightIn(min = 52.dp).clip(RoundedCornerShape(16.dp))
+        Modifier.fillMaxWidth().height(52.dp).clip(RoundedCornerShape(16.dp))
             .background(if (attiva) c.gialloTenue else androidx.compose.ui.graphics.Color.Transparent)
             .clickable(onClick = onClick)
             .semantics { role = Role.Tab; selected = attiva }
-            .padding(horizontal = 14.dp),
+            .padding(horizontal = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Icon(s.icona, null, tint = if (attiva) c.testo else c.testo2, modifier = Modifier.size(22.dp))
+        Box(Modifier.size(36.dp).clip(RoundedCornerShape(11.dp)).background(fondoIcona), contentAlignment = Alignment.Center) {
+            Icon(s.icona, null, tint = trattoIcona, modifier = Modifier.size(20.dp))
+        }
         Text(
             nome, style = Testi.pulsanteSecondario.copy(fontWeight = if (attiva) FontWeight.ExtraBold else FontWeight.Bold),
-            color = if (attiva) c.testo else c.testo2, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis,
+            color = c.testo, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis,
         )
         if (numero > 0) {
             Box(
-                Modifier.widthIn(min = 24.dp).height(24.dp).clip(RoundedCornerShape(12.dp)).background(c.giallo).padding(horizontal = 7.dp)
+                Modifier.widthIn(min = 26.dp).height(26.dp).clip(RoundedCornerShape(13.dp)).background(c.testo).padding(horizontal = 8.dp)
                     .semantics {
                         contentDescription = when (s) {
                             Sezione.TICKET -> "$numero da prendere"
@@ -464,7 +486,7 @@ private fun VoceCassetto(s: Sezione, attiva: Boolean, numero: Int, nome: String 
                         }
                     },
                 contentAlignment = Alignment.Center,
-            ) { Text(if (numero > 99) "99+" else "$numero", style = Testi.piccolo.copy(fontWeight = FontWeight.ExtraBold), color = c.suGiallo) }
+            ) { Text(if (numero > 99) "99+" else "$numero", style = Testi.piccolo.copy(fontWeight = FontWeight.ExtraBold), color = c.foglio) }
         }
     }
 }

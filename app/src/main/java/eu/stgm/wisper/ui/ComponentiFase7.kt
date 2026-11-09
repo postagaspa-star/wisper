@@ -379,6 +379,8 @@ data class Bozza7(
     val ultimoMovimento: String = "",
     /** Un preparato già nello storico (riaperto): non si salva di nuovo, si apre WhatsApp e si chiede. */
     val esistente: Comunicazione? = null,
+    /** Dalla scheda gialla della casa: apre subito WhatsApp, con le regole di sempre (consenso, numero, "L'hai mandato?"). */
+    val subito: Boolean = false,
 ) {
     val pagamento: Boolean get() = uso == "pagamento" || modello.contains("pagamento")
 
@@ -519,6 +521,8 @@ fun FoglioMessaggio(dati: Dati, iniziale: Bozza7, onChiudi: () -> Unit) {
         }
     }
 
+    LaunchedEffect(Unit) { if (iniziale.subito) { if (iniziale.canale == "email") mandaEmail() else apriWhatsapp(false) } }
+
     // Pagina intera sopra quella di prima (§12.1): indietro la chiude; i tocchi non passano sotto.
     BackHandler(onBack = onChiudi)
     Box(Modifier.fillMaxSize().background(c.fondo).clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {}) {
@@ -579,7 +583,7 @@ fun FoglioMessaggio(dati: Dati, iniziale: Bozza7, onChiudi: () -> Unit) {
                         }
                     }
                     errore?.let { Text(it, style = Testi.secondario, color = c.rossoTesto) }
-                    PulsanteTesto("Copia il testo", { copiaTesto(ctx, "Messaggio", b.testo, avvisi) }, colore = c.gialloTesto)
+                    PulsanteTesto("Copia il testo", { copiaTesto(ctx, "Messaggio", b.testo, avvisi) }, colore = c.collegamento)
                 }
                 FondoConPulsante(Modifier.align(Alignment.BottomCenter), sopraBarra = true) {
                     if (b.canale == "email") PulsantePrincipale(if (mando) "Mando…" else "Manda l'email", { if (!mando) mandaEmail() }, icona = Icone.email, abilitato = !mando)

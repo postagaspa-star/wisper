@@ -82,7 +82,10 @@ object RicordoRapportini {
 }
 
 @Composable
-fun SchermataSezioneRapportini(dati: Dati, nav: Navigatore, filtro: FiltroRapportini, onFiltro: (FiltroRapportini) -> Unit) {
+fun SchermataSezioneRapportini(
+    dati: Dati, nav: Navigatore, filtro: FiltroRapportini, onFiltro: (FiltroRapportini) -> Unit,
+    onNuovo: (java.time.LocalDate) -> Unit, onComeIeri: (eu.stgm.wisper.rapportino.Rapportino) -> Unit,
+) {
     val sessione by dati.sessione.collectAsStateWithLifecycle()
     val dashboard by dati.dashboard.collectAsStateWithLifecycle()
     val puoApprovare = sessione.puoApprovare
@@ -92,6 +95,14 @@ fun SchermataSezioneRapportini(dati: Dati, nav: Navigatore, filtro: FiltroRappor
     val daApprovare = (lette ?: dashboard?.fase3?.approvare?.voci)?.takeIf { it > 0 }
     val testa: @Composable () -> Unit = {
         TitoloPagina("Rapportini")
+        // 09/11/2026 (fai.md §2): la settimana coi giorni che mancano, il rapportino di oggi e Come ieri stanno qui.
+        if (LocalPermessi.current.modifica(eu.stgm.wisper.rapportino.Moduli.RAPPORTINI) && seg == SegmentoRapportini.RAPPORTINI) {
+            IlTuoGiorno(
+                dati = dati, costi = LocalPermessi.current.costi, onNuovo = onNuovo, onComeIeri = onComeIeri,
+                onApri = { nav.apriRapportino(it) }, onApriLavoro = { nav.apriRapportino(it, lavoro = true) },
+                onMese = { onFiltro(FiltroRapportini()) }, onDaInviare = { }, soloGiorno = true,
+            )
+        }
         // Chi non approva ha solo i rapportini: niente segmenti da scegliere.
         if (puoApprovare) SegmentiScorrevoli(
             listOf(

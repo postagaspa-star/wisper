@@ -597,7 +597,7 @@ private fun PassiPreventivo(stato: String) {
                     Modifier.size(22.dp).clip(CircleShape).background(if (i < at) c.testo else if (i == at) c.giallo else c.superficie2),
                     contentAlignment = Alignment.Center,
                 ) {
-                    if (i < at) Icon(Icone.spunta, null, tint = c.scheda, modifier = Modifier.size(13.dp))
+                    if (i < at) Icon(Icone.spunta, null, tint = c.foglio, modifier = Modifier.size(13.dp))
                     else Text("${i + 1}", style = Testi.pillola.copy(fontWeight = FontWeight.ExtraBold), color = c.suGiallo)
                 }
                 Text(nome, style = Testi.piccolo.copy(fontWeight = FontWeight.ExtraBold), color = if (i <= at) c.testo else c.moltoTenue)
@@ -709,7 +709,7 @@ internal fun SchedaLegge(righe: List<eu.stgm.wisper.rapportino.RichiestaLegge>, 
                     r.nome + if (r.ok) "" else ": manca", style = Testi.secondarioGrande.copy(fontWeight = FontWeight.Bold),
                     color = if (r.ok) c.testo2 else c.gialloTesto, modifier = Modifier.weight(1f),
                 )
-                if (!r.ok && onSistema != null) Icon(Icone.freccia, null, tint = c.gialloTesto, modifier = Modifier.size(16.dp))
+                if (!r.ok && onSistema != null) Icon(Icone.freccia, null, tint = c.collegamento, modifier = Modifier.size(16.dp))
             }
         }
     }

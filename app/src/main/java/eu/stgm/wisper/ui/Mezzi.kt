@@ -273,7 +273,7 @@ internal fun FoglioKm(dati: Dati, m: Mezzo, onChiudi: () -> Unit) {
             textStyle = Testi.totale.copy(color = c.testo), cursorBrush = SolidColor(c.testo), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             decorationBox = { campo ->
                 Row(
-                    Modifier.fillMaxWidth().heightIn(min = 68.dp).clip(RoundedCornerShape(16.dp)).background(c.scheda)
+                    Modifier.fillMaxWidth().heightIn(min = 68.dp).clip(RoundedCornerShape(16.dp)).background(c.foglio)
                         .border(1.5.dp, if (errore != null) c.rossoPieno else c.bordoCampo, RoundedCornerShape(16.dp)).padding(horizontal = 16.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) { Box(Modifier.weight(1f)) { campo() }; Text("km", style = Testi.titoloScheda, color = c.tenue) }

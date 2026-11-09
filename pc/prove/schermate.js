@@ -233,7 +233,7 @@ const PAGINE = [
   // fase 8: integrazioni, calendario in altre app, ricerca dentro i file, Dashboard coi riquadri, amministrazione completa
   { nome: 'f8-dashboard', hash: '#dashboard', fai: ATTENDI(900) },
   { nome: 'f8-tutto', hash: '#dashboard/tutto', fai: ATTENDI(1200) },
-  { nome: 'f8-riquadri', hash: '#dashboard', fai: ATTENDI(900) + "; [...document.querySelectorAll('.piede-dash .btn')].find(b => /Cambia i riquadri/.test(b.textContent)).click()", dopo: CHIUDI },
+  { nome: 'f8-riquadri', hash: '#dashboard/tutto', fai: ATTENDI(1200) + "; [...document.querySelectorAll('#principale button, #principale a')].find(b => /Cambia i riquadri/.test(b.textContent)).click()", dopo: CHIUDI },
   { nome: 'f8-integrazioni', hash: '#integrazioni', fai: ATTENDI(1200) },
   { nome: 'f8-integrazione-errore', hash: '#integrazioni/vies', fai: ATTENDI(1600), dopo: "document.querySelectorAll('.pannello').forEach(p => p.remove())" },
   { nome: 'f8-integrazione-ricerca', hash: '#integrazioni/ricerca', fai: ATTENDI(1600), dopo: "document.querySelectorAll('.pannello').forEach(p => p.remove())" },

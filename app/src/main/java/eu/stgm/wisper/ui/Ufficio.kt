@@ -281,7 +281,7 @@ private fun PulsanteScheda(testo: String, giallo: Boolean, onClick: () -> Unit, 
     val forma = RoundedCornerShape(16.dp)
     Box(
         modifier.height(52.dp).clip(forma)
-            .background(if (giallo) c.giallo else c.scheda)
+            .background(if (giallo) c.giallo else c.foglio)
             .let { if (giallo) it else it.border(1.5.dp, c.bordoCampo, forma) }
             .clickable(onClick = onClick)
             .semantics { role = Role.Button }
@@ -351,8 +351,8 @@ private fun RigaMesiPrima(titolo: String, totale: String, mese: String, onClick:
             Text(totale, style = Testi.secondario.copy(fontWeight = FontWeight.Medium), color = c.tenue)
         }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(mese, style = Testi.secondarioGrande.copy(fontWeight = FontWeight.Bold), color = c.gialloTesto)
-            Icon(Icone.freccia, null, tint = c.gialloTesto, modifier = Modifier.size(16.dp))
+            Text(mese, style = Testi.secondarioGrande.copy(fontWeight = FontWeight.Bold), color = c.collegamento)
+            Icon(Icone.freccia, null, tint = c.collegamento, modifier = Modifier.size(16.dp))
         }
     }
 }
@@ -452,7 +452,7 @@ private fun RigaFoglio(agg: Archivio.Aggiornamento, onAggiorna: () -> Unit) {
                     agg.errore, style = stile, color = c.tenue, maxLines = 2, overflow = TextOverflow.Ellipsis,
                     textAlign = TextAlign.Center, modifier = Modifier.weight(1f, fill = false),
                 )
-                Text(" · Riprova", style = stile.copy(fontWeight = FontWeight.Bold), color = c.gialloTesto)
+                Text(" · Riprova", style = stile.copy(fontWeight = FontWeight.Bold), color = c.collegamento)
             }
             else -> {
                 if (agg.ultimo != null) {
@@ -463,7 +463,7 @@ private fun RigaFoglio(agg: Archivio.Aggiornamento, onAggiorna: () -> Unit) {
                     agg.ultimo?.let { "Letto alle " + it.format(DateTimeFormatter.ofPattern("H:mm")) } ?: "Non ancora letto",
                     style = stile, color = c.tenue,
                 )
-                Text(" · Aggiorna", style = stile.copy(fontWeight = FontWeight.Bold), color = c.gialloTesto)
+                Text(" · Aggiorna", style = stile.copy(fontWeight = FontWeight.Bold), color = c.collegamento)
             }
         }
     }

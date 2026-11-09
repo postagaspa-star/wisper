@@ -175,7 +175,7 @@ fun SchermataAttivita(dati: Dati, nav: Navigatore) {
                                 horizontalArrangement = Arrangement.SpaceBetween,
                             ) {
                                 EtichettaColorata("${g.nome} · ${l.size}", c.tenue)
-                                Text(if (aperto) "Chiudi" else "Mostra", style = Testi.secondario.copy(fontWeight = FontWeight.Bold), color = c.gialloTesto)
+                                Text(if (aperto) "Chiudi" else "Mostra", style = Testi.secondario.copy(fontWeight = FontWeight.Bold), color = c.collegamento)
                             }
                         } else {
                             EtichettaColorata("${g.nome} · ${l.size}", if (g == Agenda.Gruppo.SCADUTE) c.rossoTesto else c.tenue)

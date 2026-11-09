@@ -293,7 +293,7 @@ async function main() {
     assert.ok(elettro2 && settembre.every(v => elettro2.voci.some(x => x.id === v.id)), 'settembre torna in Da fatturare');
     const annullata = (await server('fattura?id=' + idBozza)).fattura;
     assert.equal(annullata.daRestituire, 500, 'i 500,00 € incassati sono da restituire o compensare');
-    await vai('#dashboard');
+    await vai('#dashboard/tutto');
     const cercaVoce = `(() => {
       const voce = [...document.querySelectorAll('.dash-corpo button.riga, #principale .scheda.righe button.riga')].find(b => /da restituire/.test(b.textContent));
       if (voce) { voce.click(); return 'riga'; }
@@ -346,7 +346,7 @@ async function main() {
     // ------------------------------------------------------------- 8. Collaboratore: niente Fatturazione né Banche
     await entra('marco@esempio.it');
     const voci = await valuta("[...document.querySelectorAll('#voci .voce')].map(v => v.dataset.nome)");
-    assert.ok(voci.indexOf('Fatturazione') < 0 && voci.indexOf('Banche e scadenze') < 0, 'nel menu di Marco: ' + voci.join(', '));
+    assert.ok(voci.indexOf('Fatture') < 0 && voci.indexOf('Banche') < 0, 'nel menu di Marco: ' + voci.join(', '));
     await vai('#fatturazione');
     assert.match(await testoPagina(), /Non hai il permesso/);
     const rifiuto = await server('daFatturare');

@@ -447,7 +447,9 @@ class DatiEsempio(oggi: LocalDate = LocalDate.now(), private val cartella: File?
      * di due clienti (Rossi e Mario Bianchi), e uno del mese con Rossi e Bianchi da inviare.
      */
     private fun iniziali(oggi: LocalDate): List<Vista> {
+        // Di lunedì la settimana è appena cominciata: si usa quella prima, altrimenti la visita resta senza rapportini.
         val passati = (0L until 5L).map { lunedi.plusDays(it) }.filter { it.isBefore(oggi) }
+            .ifEmpty { (0L until 5L).map { lunedi.minusWeeks(1).plusDays(it) } }
         val fatti = if (passati.size > 1) passati.dropLast(1) else passati
         val settimana = fatti.mapIndexed { i, d ->
             Rapportino(

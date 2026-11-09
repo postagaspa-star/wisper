@@ -130,7 +130,7 @@ internal fun SceltaGrande(titolo: String, scelto: Boolean, onClick: () -> Unit, 
             contentAlignment = Alignment.Center,
         ) {
             if (scelto) {
-                if (casella) Icon(Icone.spunta, null, tint = c.scheda, modifier = Modifier.size(14.dp))
+                if (casella) Icon(Icone.spunta, null, tint = c.foglio, modifier = Modifier.size(14.dp))
                 else Box(Modifier.size(10.dp).clip(CircleShape).background(c.testo))
             }
         }
@@ -156,7 +156,7 @@ internal fun CampoDaScegliere(
     Column(modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(etichetta, style = Testi.secondarioGrande.copy(fontWeight = FontWeight.Bold), color = c.testo)
         Row(
-            Modifier.fillMaxWidth().heightIn(min = 56.dp).clip(RoundedCornerShape(16.dp)).background(c.scheda)
+            Modifier.fillMaxWidth().heightIn(min = 56.dp).clip(RoundedCornerShape(16.dp)).background(c.foglio)
                 .border(1.5.dp, if (errore != null) c.rossoPieno else c.bordoCampo, RoundedCornerShape(16.dp))
                 .clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 10.dp)
                 .semantics(mergeDescendants = true) { contentDescription = "$etichetta: $valore" },
@@ -168,7 +168,7 @@ internal fun CampoDaScegliere(
                 color = when { vuoto && vuotoGiallo -> c.gialloTesto; vuoto -> c.moltoTenue; else -> c.testo },
                 modifier = Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis,
             )
-            Text(if (vuoto) "Scegli" else "Cambia", style = Testi.secondarioGrande.copy(fontWeight = FontWeight.Bold), color = c.gialloTesto)
+            Text(if (vuoto) "Scegli" else "Cambia", style = Testi.secondarioGrande.copy(fontWeight = FontWeight.Bold), color = c.collegamento)
         }
         if (errore != null) Text(errore, style = Testi.secondario, color = c.rossoTesto)
     }
@@ -189,7 +189,7 @@ internal fun CampoQuando(
     Column(modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(etichetta, style = Testi.secondarioGrande.copy(fontWeight = FontWeight.Bold), color = c.testo)
         Row(
-            Modifier.fillMaxWidth().heightIn(min = 54.dp).clip(RoundedCornerShape(16.dp)).background(c.scheda)
+            Modifier.fillMaxWidth().heightIn(min = 54.dp).clip(RoundedCornerShape(16.dp)).background(c.foglio)
                 .border(1.5.dp, if (errore != null) c.rossoPieno else c.bordoCampo, RoundedCornerShape(16.dp))
                 .clickable(onClick = onClick).padding(start = 16.dp, end = 6.dp)
                 .semantics(mergeDescendants = true) { contentDescription = "$etichetta: ${valore ?: "nessuna"}" },
@@ -237,7 +237,7 @@ internal fun FinestraOra(iniziale: LocalTime, titolo: String, onScelta: (LocalTi
     val stato = rememberTimePickerState(initialHour = iniziale.hour, initialMinute = iniziale.minute, is24Hour = true)
     Dialog(onDismissRequest = onChiudi) {
         Column(
-            Modifier.clip(RoundedCornerShape(28.dp)).background(c.scheda).padding(20.dp),
+            Modifier.clip(RoundedCornerShape(28.dp)).background(c.foglio).padding(20.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {

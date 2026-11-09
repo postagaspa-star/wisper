@@ -141,11 +141,12 @@ async function main() {
 
     // ------------------------------------------------------------- 1. nuovo ticket urgente
     await entra('manuel@esempio.it');
+    await vai('#dashboard/tutto');
     let testo = await testoPagina();
     assert.match(testo, /ticket aperti/, 'la Dashboard ha i riquadri dei ticket');
     // Dalla fase 6 fra Banche e scadenze e Documenti c'è Persone e risorse umane (l'ordine delle specifiche).
     const menu = await valuta("[...document.querySelectorAll('#voci .voce')].map(v => v.dataset.nome)");
-    assert.ok(menu.indexOf('Documenti') > menu.indexOf('Banche e scadenze') && menu.indexOf('Ticket e assistenza') === menu.indexOf('Documenti') + 1, 'menu nell\'ordine delle specifiche: ' + menu.join(', '));
+    assert.ok(menu.indexOf('Documenti') > menu.indexOf('Banche') && menu.indexOf('Ticket') === menu.indexOf('Documenti') + 1, 'menu nell\'ordine delle specifiche: ' + menu.join(', '));
     passo('Dashboard coi riquadri dei ticket; menu: Banche e scadenze, Documenti, Ticket e assistenza');
 
     await vai('#ticket');

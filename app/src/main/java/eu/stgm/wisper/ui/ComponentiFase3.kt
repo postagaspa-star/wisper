@@ -199,7 +199,7 @@ internal fun CasellaScelta(scelta: Boolean, descrizione: String, onCambia: () ->
             Modifier.size(28.dp).clip(RoundedCornerShape(8.dp)).background(if (scelta) c.testo else Color.Transparent)
                 .border(2.dp, if (scelta) c.testo else c.bordoCampo, RoundedCornerShape(8.dp)),
             contentAlignment = Alignment.Center,
-        ) { if (scelta) Icon(Icone.spunta, null, tint = c.scheda, modifier = Modifier.size(16.dp)) }
+        ) { if (scelta) Icon(Icone.spunta, null, tint = c.foglio, modifier = Modifier.size(16.dp)) }
     }
 }
 

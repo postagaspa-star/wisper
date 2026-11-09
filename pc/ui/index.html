@@ -23,8 +23,13 @@
         <div id="aggiornamento" class="aggiornamento nascosto" role="status"></div>
         <!-- Fase 7: la campanella delle notifiche, sopra il nome (fase7.md §12). -->
         <button type="button" id="campanella" class="voce campanella nascosto"></button>
-        <button type="button" id="stato-server" class="stato-server" title="Rileggi"></button>
-        <button type="button" id="chi" class="chi-entrato nascosto" aria-haspopup="menu"></button>
+        <div class="carta-chi">
+          <button type="button" id="stato-server" class="stato-server" title="Rileggi"></button>
+          <div class="riga-chi">
+            <button type="button" id="chi" class="chi-entrato nascosto" aria-haspopup="menu"></button>
+            <button type="button" id="esci-lato" class="esci-lato nascosto">Esci</button>
+          </div>
+        </div>
         <button type="button" id="richiudi" class="voce richiudi" aria-keyshortcuts="Control+B"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h16v14H4zM9 5v14"/></svg><span class="lab">Richiudi il menu</span></button>
       </div>
     </nav>
@@ -51,6 +56,7 @@
   <script src="regole-collegamento.js"></script>
   <script src="regole-comunicazioni.js"></script>
   <script src="regole-fase8.js"></script>
+  <script src="regole-casa.js"></script>
   <script src="api.js"></script>
   <script src="base.js"></script>
   <script src="esempio7.js"></script>
@@ -77,6 +83,7 @@
   <script src="comunicazioni.js"></script>
   <script src="portale.js"></script>
   <script src="dashboard8.js"></script>
+  <script src="casa.js"></script>
   <script src="integrazioni.js"></script>
   <script src="amministrazione8.js"></script>
   <script src="sistema8.js"></script>

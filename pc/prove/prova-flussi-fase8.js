@@ -121,7 +121,8 @@ async function main() {
       // Dal 02/11/2026 la pagina di accesso si apre sul codice per il telefono: si passa a email e password come una persona.
       for (let i = 0; i < 25 && !(await valuta("!!document.querySelector('.accesso') || (b => { if (b) b.click(); return false; })([...document.querySelectorAll('.pagina-accesso button')].find(x => x.textContent.trim() === 'Entra con email e password'))")); i++) await aspetta(200);
       await valuta(`(() => { const f = document.querySelector('.accesso'); f.querySelector('input[type=email]').value = ${JSON.stringify(email)}; f.querySelector('input[type=password]').value = 'prova'; f.requestSubmit(); return true; })()`);
-      await aspetta(3000);
+      for (let i = 0; i < 60 && !(await valuta("!!document.querySelector('#voci .voce')")); i++) await aspetta(250);
+      await aspetta(1200);
     };
     const integrazione = async chiave => { const r = await server('integrazione?chiave=' + chiave); return r.integrazione || r; };
     const vies = async comando => fetch(VIES + '/' + comando).then(r => r.json());
@@ -154,10 +155,11 @@ async function main() {
     const voci = await menu();
     const nomi = voci.map(v => v.replace(/ (\d+|99\+)$/, ''));
     const iI = nomi.indexOf('Integrazioni');
-    assert.ok(iI > 0 && nomi[iI - 1] === 'Collaboratori esterni' && nomi[iI + 1] === 'Amministrazione', 'Integrazioni fra Collaboratori esterni e Amministrazione: ' + nomi.join(', '));
+    assert.ok(iI > 0 && nomi[iI - 1] === 'Collaboratori' && nomi[iI + 1] === 'Impostazioni', 'Integrazioni fra Collaboratori e Impostazioni: ' + nomi.join(', '));
     assert.ok(voci.some(v => /^Integrazioni [1-9]/.test(v)), 'il numerino dei collegamenti in Errore: ' + voci.join(', '));
     const dash = await server('dashboard');
     assert.ok(Array.isArray(dash.riquadri) && dash.riquadri.length === 4, 'quattro riquadri dal server');
+    await vai('#dashboard/tutto');
     const riquadriPagina = await valuta("[...document.querySelectorAll('[data-riquadro]')].map(b => b.dataset.riquadro)");
     assert.deepEqual(riquadriPagina, dash.riquadri.map(r => r.chiave), 'in pagina i quattro della persona, in fila');
     assert.ok(dash.quante && typeof dash.quante.urgenti === 'number', 'quante per sezione');
@@ -285,18 +287,18 @@ async function main() {
     await clicca('Spegni', '.finestra', 2200);
     let io = await server('io');
     assert.ok((io.interfaccia.funzioniSpente || []).indexOf('mezzi') >= 0, 'il server la sa spenta');
-    assert.ok((await menu()).every(v => !/^Mezzi e attrezzature/.test(v)), 'sparita dal menu');
+    assert.ok((await menu()).every(v => !/^Mezzi/.test(v)), 'sparita dal menu');
     const spenta = await server('mezzi');
     assert.equal(spenta.ok, false, 'le sue azioni rispondono spenta');
     await valuta("document.querySelector('[data-modulo=\"mezzi\"] .interruttore').click(); true");
     await aspetta(2200);
     io = await server('io');
     assert.ok((io.interfaccia.funzioniSpente || []).indexOf('mezzi') < 0, 'riaccesa');
-    assert.ok((await menu()).some(v => /^Mezzi e attrezzature/.test(v)), 'di nuovo nel menu');
+    assert.ok((await menu()).some(v => /^Mezzi/.test(v)), 'di nuovo nel menu');
     passo('Funzioni accese: Mezzi e attrezzature spenta (conferma, menu, azioni spente) e riaccesa');
 
     // ------------------------------------------------------------- 7. Cambia i riquadri
-    await vai('#dashboard');
+    await vai('#dashboard/tutto');
     await clicca('Cambia i riquadri', '#principale', 700);
     await unGiallo('Cambia i riquadri');
     const scelti0 = await valuta("[...document.querySelectorAll('.finestra .scelta-riquadro.scelta')].map(b => b.dataset.riquadro)");

@@ -60,6 +60,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
+import kotlinx.coroutines.delay
 import androidx.compose.ui.unit.dp
 import kotlin.math.roundToInt
 
@@ -80,13 +81,11 @@ class Visita {
     )
 
     val passi = listOf(
-        Passo("menu", "Il menu", "Clienti, commesse, preventivi, attività, rapportini, spese, fatture, banche, documenti e ticket: tocca Menu, o scorri dal bordo sinistro.", false, "dashboard"),
-        Passo("cosa-fare", "La Dashboard", "Qui vedi cosa fare adesso: ogni riga porta dove si sistema.", false, "dashboard"),
-        Passo("settimana", "Questa settimana", "Appuntamenti di oggi, attività e preventivi in scadenza: tocca una riga per aprirla.", false, "dashboard"),
-        // Fase 8 (fase8.md §15.3): la riga Altre N della Dashboard.
-        Passo("altre", "Il resto", "Qui ci sono le prime cose da fare: il resto è in una pagina sola.", false, "dashboard"),
-        Passo("giorno", "Il tuo giorno", "Qui vedi subito se il rapportino di oggi è scritto.", false, "dashboard"),
-        Passo("scrivi", "Scrivi il rapportino", "Tocca il pulsante giallo.", true, "dashboard"),
+        // 09/11/2026 (fai.md §5): la casa nuova. La settimana è passata in cima ai Rapportini.
+        Passo("menu", "Il menu", "Clienti, commesse, preventivi, rapportini, spese, fatture e il resto: tocca Menu, o scorri dal bordo sinistro.", false, "dashboard"),
+        Passo("cosa-fare", "La casa", "Sulla scheda gialla c'è la cosa più importante di adesso.", false, "dashboard"),
+        Passo("altre", "Da sistemare", "Le prossime cose da fare: il resto e i numeri sono in Vedi tutto.", false, "dashboard"),
+        Passo("scrivi", "Cosa vuoi fare?", "Le cose che fai più spesso, a un tocco. Tocca Scrivi un rapportino.", true, "dashboard"),
         Passo("recente-0", "Per chi", "I clienti di questi giorni sono già qui. Tocca Elettrodinamica.", true, "rapportino"),
         Passo("ore-6", "Le ore", "Tocca 6 h, poi aggiusti con più e meno.", true, "rapportino"),
         Passo("km-ultimi", "I chilometri", "Wisper ricorda i km dell'ultima volta. Toccali.", true, "rapportino"),
@@ -97,17 +96,18 @@ class Visita {
         Passo("avanti", "Nel rapportino", "Tocca Aggiungi al rapportino: il lavoro va nel rapportino di oggi.", true, "rapportino"),
         Passo("aggiungi", "Più lavori in un giorno", "Hai lavorato anche per un altro cliente? Aggiungi un lavoro: ognuno ha le sue ore e i suoi km.", false, "rapportino"),
         Passo("salva-rapportino", "Salva il rapportino", "In basso ore, km e totale del giorno. Il pulsante giallo salva tutto.", false, "rapportino"),
-        Passo("manca", "I giorni che mancano", "Un giorno senza rapportino si vede subito: toccalo per scriverlo.", false, "dashboard"),
-        // Fase 3, come i passi nuovi del computer (pc/ui/visita.js): spese e i rapportini.
+        Passo("giorno", "Il tuo giorno", "In cima ai Rapportini vedi subito se quello di oggi è scritto.", false, "rapportini"),
+        Passo("manca", "I giorni che mancano", "Un giorno senza rapportino si vede subito: toccalo per scriverlo.", false, "rapportini"),
         // 07/11/2026: le Ore non ci sono più: via il passo del timer e quello del segmento Rapportini.
-        Passo("nuova-spesa", "Spese e trasferte", "Scontrini, trasferte e rimborsi da fare stanno qui: una spesa comincia dalla foto dello scontrino.", false, "spese"),
         Passo("azione-gialla", "I rapportini", "Tutti i rapportini, ognuno coi suoi lavori. Il pulsante giallo è sempre la cosa da fare adesso.", false, "rapportini"),
         // 06/11/2026: ogni riga ha la sua casella; la riga apre, la casella sceglie.
         Passo("casella-0", "Più lavori insieme", "Tocca la casella del rapportino per sceglierne tutti i lavori: la riga invece lo apre.", true, "rapportini"),
         Passo("cosa-faccio", "Cosa faccio", "Con almeno un lavoro scelto, da qui li mandi ai clienti o li segni.", false, "rapportini"),
+        // Fase 3, come i passi nuovi del computer (pc/ui/visita.js).
+        Passo("nuova-spesa", "Spese", "Scontrini, trasferte e rimborsi stanno qui: una spesa comincia dalla foto dello scontrino.", false, "spese"),
         // Fase 4: Fatturazione e Banche e scadenze (fase4.md §13).
-        Passo("prepara-bozza", "Fatturazione", "Quello che è pronto da fatturare, per cliente: scegli le voci e prepara la bozza per il tuo programma.", false, "fatturazione"),
-        Passo("scadenziario", "Banche e scadenze", "Quando entrano ed escono i soldi: tocca una scadenza per segnare l'incasso, anche in parte.", false, "banche"),
+        Passo("prepara-bozza", "Fatture", "Quello che è pronto da fatturare, per cliente: scegli le voci e prepara la bozza per il tuo programma.", false, "fatturazione"),
+        Passo("scadenziario", "Banche", "Quando entrano ed escono i soldi: tocca una scadenza per segnare l'incasso, anche in parte.", false, "banche"),
         // Fase 5 (fase5.md §12.5): le richieste d'intervento e il pulsante giallo del ticket.
         Passo("ticket-urgente", "Le richieste", "In cima c'è quello che va fatto prima.", false, "ticket"),
         Passo("ticket-giallo", "Il pulsante giallo", "Ti dice cosa fare adesso: prendere, pianificare, scrivere il rapportino.", false, "ticket-pagina"),
@@ -193,8 +193,14 @@ fun StratoVisita(visita: Visita) {
     }
     val passo = visita.corrente
     val margine = with(densita) { 8.dp.toPx() }
-    val bersaglio = passo.bersaglio?.let { visita.bersagli[it] }?.let {
+    // Un elemento fuori dallo schermo ha misure nulle: niente riflettore nell'angolo.
+    val bersaglio = passo.bersaglio?.let { visita.bersagli[it] }?.takeIf { it.width > 0f && it.height > 0f }?.let {
         Rect(it.left - margine, it.top - margine, it.right + margine, it.bottom + margine)
+    }
+    // Se quello da toccare non c'è (i dati di esempio di quel giorno non lo hanno) la visita non si ferma: compare Avanti.
+    var senzaBersaglio by remember(visita.indice) { mutableStateOf(false) }
+    LaunchedEffect(visita.indice, bersaglio == null) {
+        if (bersaglio == null) { delay(900); senzaBersaglio = true } else senzaBersaglio = false
     }
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
@@ -260,7 +266,7 @@ fun StratoVisita(visita: Visita) {
         ) {
             Spacer(Modifier.weight(1f))
             Box(
-                Modifier.height(40.dp).clip(RoundedCornerShape(50)).background(c.scheda).clickable { visita.salta() }.padding(horizontal = 14.dp),
+                Modifier.height(40.dp).clip(RoundedCornerShape(50)).background(c.foglio).clickable { visita.salta() }.padding(horizontal = 14.dp),
                 contentAlignment = Alignment.Center,
             ) { Text("Salta la visita", style = Testi.secondario.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Bold), color = c.testo) }
         }
@@ -276,7 +282,7 @@ fun StratoVisita(visita: Visita) {
         val y = when {
             bersaglio == null -> (altezza - altezzaFumetto) / 2
             buco.bottom + altezzaFumetto + 24 < altezza -> buco.bottom + with(densita) { 14.dp.toPx() }
-            else -> (buco.top - altezzaFumetto - with(densita) { 14.dp.toPx() }).coerceAtLeast(with(densita) { 60.dp.toPx() })
+            else -> (buco.top - altezzaFumetto - with(densita) { 14.dp.toPx() }).coerceAtLeast(with(densita) { 96.dp.toPx() })
         }
         Column(
             Modifier
@@ -285,7 +291,7 @@ fun StratoVisita(visita: Visita) {
                 .padding(horizontal = 20.dp)
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(20.dp))
-                .background(c.scheda)
+                .background(c.foglio)
                 .padding(18.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
@@ -304,7 +310,7 @@ fun StratoVisita(visita: Visita) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (visita.puoTornare) PulsanteTesto("Indietro", { visita.indietro() }, colore = c.testo2)
                 Spacer(Modifier.weight(1f))
-                if (!passo.fai) {
+                if (!passo.fai || senzaBersaglio) {
                     Box(
                         Modifier.height(48.dp).clip(RoundedCornerShape(14.dp)).background(c.giallo)
                             .clickable { visita.avanti() }.padding(horizontal = 20.dp),

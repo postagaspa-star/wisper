@@ -530,7 +530,9 @@
   /** Il nome della voce del menu: per l'esterno Collaboratori esterni è "La tua scheda" (fase6.md §12.7). */
   function nomeVoce(voce, esterno) {
     if (esterno && voce.modulo === 'collaboratori') return 'La tua scheda';
-    return voce.nome;
+    // Il design Fai (fai.md §6): nel menu il nome corto.
+    const fai = (typeof self !== 'undefined' && self.WisperRegoleCasa) ? self.WisperRegoleCasa.VOCI_FAI[voce.modulo] : null;
+    return fai ? fai.breve : voce.nome;
   }
 
   /** Il menu dell'esterno: Dashboard · Commesse · Progetti · Rapportini · Attività e calendario · Spese e trasferte · Documenti · Ticket e assistenza · La tua scheda. */

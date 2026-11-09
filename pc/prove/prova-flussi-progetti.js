@@ -477,7 +477,7 @@ async function main() {
     await clicca('Spegni', '.finestra', 2500);
     assert.deepEqual((await funzioniSpente()).slice().sort(), ['collaboratori', 'commesse', 'progetti']);
     let m = await menu();
-    assert.ok(!m.includes('Commesse') && !m.includes('Progetti') && !m.includes('Collaboratori esterni'), 'via dal menu tutte e tre: ' + m.join(', '));
+    assert.ok(!m.includes('Commesse') && !m.includes('Progetti') && !m.includes('Collaboratori'), 'via dal menu tutte e tre: ' + m.join(', '));
     assert.match(await testoAvvisi(), /Commesse spenta, e anche Progetti e Collaboratori esterni: i dati restano/);
     // Il rapportino non chiede neanche la commessa.
     await vai('#rapportini/elenco');
@@ -511,7 +511,7 @@ async function main() {
     await interruttore('amministrazione');
     await clicca('Spegni', '.finestra', 2500);
     m = await menu();
-    assert.ok(m.includes('Amministrazione'), 'il titolare vede ancora Amministrazione');
+    assert.ok(m.includes('Impostazioni'), 'il titolare vede ancora Impostazioni');
     await vai('#amministrazione');
     assert.equal(await valuta('location.hash'), '#amministrazione/funzioni', 'dentro c\'è solo Funzioni');
     await vai('#amministrazione/utenti');
@@ -519,7 +519,7 @@ async function main() {
     assert.match(await testoPagina(), /Funzioni accese/);
     // Laura (amministrazione) non la vede.
     await entra('laura@esempio.it');
-    assert.ok(!(await menu()).includes('Amministrazione'), 'gli altri non vedono Amministrazione');
+    assert.ok(!(await menu()).includes('Impostazioni'), 'gli altri non vedono Impostazioni');
     await entra('manuel@esempio.it');
     await vai('#amministrazione/funzioni');
     await interruttore('amministrazione');
@@ -537,7 +537,7 @@ async function main() {
     await ricarica('#dashboard');
     testo = await testoPagina();
     assert.match(testo, /Nessuna funzione accesa/);
-    assert.deepEqual(await menu(), ['Amministrazione'], 'resta solo Amministrazione per il titolare');
+    assert.deepEqual(await menu(), ['Impostazioni'], 'resta solo Impostazioni per il titolare');
     await unGiallo('Nessuna funzione accesa');
     await clicca('Funzioni', '#principale', 1500);
     assert.equal(await valuta('location.hash'), '#amministrazione/funzioni');

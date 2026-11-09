@@ -19,14 +19,15 @@
   const FATTURA = ['fatturazione', 2];
   const TUTTI_I_PASSI = [
     { bersaglio: 'lato', titolo: 'Il menu', frase: 'Tutte le parti di Wisper sono qui. Ctrl+B lo richiude a icone.' },
-    { bersaglio: 'dashboard', titolo: 'La Dashboard', frase: 'Qui vedi cosa fare adesso: ogni riga ti porta dove si sistema.', serve: ['dashboard', 1] },
+    { bersaglio: 'dashboard', titolo: 'La casa', frase: 'In giallo c\'è la cosa più importante di adesso: il pulsante la fa.', serve: ['dashboard', 1] },
+    { bersaglio: 'cosa-vuoi-fare', titolo: 'Cosa vuoi fare?', frase: 'Le cose di tutti i giorni sono qui: un clic, o la lettera sulla tastiera.', serve: ['dashboard', 1] },
     // Fase 2: due passi, uno da fare e uno da leggere.
-    { bersaglio: 'nav-preventivi', titolo: 'Preventivi', frase: 'Preventivi con i conti, l\'IVA e cosa chiede la legge. Fai clic su Preventivi e contratti.', fai: true, serve: ['preventivi', 1] },
-    { bersaglio: 'nav-attivita', titolo: 'Attività e calendario', frase: 'Le cose da fare oggi, gli appuntamenti e la settimana di tutti sono qui.', serve: ['attivita', 1] },
+    { bersaglio: 'nav-preventivi', titolo: 'Preventivi', frase: 'Preventivi con i conti, l\'IVA e cosa chiede la legge. Fai clic su Preventivi.', fai: true, serve: ['preventivi', 1] },
+    { bersaglio: 'nav-attivita', titolo: 'Calendario', frase: 'Le cose da fare oggi, gli appuntamenti e la settimana di tutti sono qui.', serve: ['attivita', 1] },
     // Fase 3: Spese e trasferte (da leggere); i Rapportini più sotto.
-    { bersaglio: 'nav-spese', titolo: 'Spese e trasferte', frase: 'Scontrini, trasferte e rimborsi da fare stanno qui.', serve: ['spese', 1] },
+    { bersaglio: 'nav-spese', titolo: 'Spese', frase: 'Scontrini, trasferte e rimborsi da fare stanno qui.', serve: ['spese', 1] },
     // Fase 4: il fine mese vive in Da fatturare; poi la bozza, che emette il programma delle fatture.
-    { bersaglio: 'nav-fatturazione', titolo: 'Fatturazione', frase: 'Quello che c\'è da fatturare, cliente per cliente. Fai clic su Fatturazione.', fai: true, serve: FATTURA },
+    { bersaglio: 'nav-fatturazione', titolo: 'Fatture', frase: 'Quello che c\'è da fatturare, cliente per cliente. Fai clic su Fatture.', fai: true, serve: FATTURA },
     { bersaglio: 'da-fatturare', titolo: 'Da fatturare', frase: 'Qui vedi quanto c\'è di pronto: rapportini, spese e scadenze dei contratti.', serve: FATTURA },
     { bersaglio: 'prepara-riepilogo', titolo: 'Il riepilogo', frase: 'I rapportini di un mese sono una voce. Fai clic su Prepara riepilogo.', fai: true, serve: FATTURA },
     { bersaglio: 'invia-email', titolo: 'Invia', frase: 'Il PDF parte per email con un clic. È un esempio: non parte niente.', fai: true, serve: FATTURA },

@@ -120,7 +120,7 @@ fun <T> Segmenti(opzioni: List<Pair<T, String>>, scelto: T, onScelta: (T) -> Uni
             val su = valore == scelto
             Box(
                 Modifier.weight(1f).fillMaxHeight().heightIn(min = 44.dp).clip(RoundedCornerShape(11.dp))
-                    .background(if (su) c.scheda else Color.Transparent)
+                    .background(if (su) c.foglio else Color.Transparent)
                     .clickable { onScelta(valore) }
                     .semantics { role = Role.Tab; selected = su }
                     .padding(horizontal = 4.dp, vertical = 4.dp),
@@ -154,7 +154,7 @@ fun <T> SegmentiScorrevoli(opzioni: List<Pair<T, String>>, scelto: T, onScelta: 
                 Box(
                     Modifier.let { m -> bersagli(valore)?.let { m.bersaglio(it) } ?: m }
                         .widthIn(min = minimo).height(44.dp).clip(RoundedCornerShape(10.dp))
-                        .background(if (su) c.scheda else Color.Transparent)
+                        .background(if (su) c.foglio else Color.Transparent)
                         .clickable { onScelta(valore) }
                         .semantics { role = Role.Tab; selected = su }
                         .padding(horizontal = 12.dp),
@@ -182,14 +182,14 @@ fun <T> SchedePillole(opzioni: List<Pair<T, String>>, scelta: T, onScelta: (T) -
             val su = valore == scelta
             Box(
                 Modifier.height(44.dp).clip(RoundedCornerShape(50))
-                    .background(if (su) c.testo else c.scheda)
+                    .background(if (su) c.testo else c.foglio)
                     .border(1.5.dp, if (su) c.testo else c.bordoCampo, RoundedCornerShape(50))
                     .clickable { onScelta(valore) }
                     .semantics { role = Role.Tab; selected = su }
                     .padding(horizontal = 16.dp),
                 contentAlignment = Alignment.Center,
             ) {
-                Text(nome, style = Testi.secondarioGrande.copy(fontWeight = if (su) FontWeight.ExtraBold else FontWeight.Bold), color = if (su) c.scheda else c.testo2)
+                Text(nome, style = Testi.secondarioGrande.copy(fontWeight = if (su) FontWeight.ExtraBold else FontWeight.Bold), color = if (su) c.foglio else c.testo2)
             }
         }
     }
@@ -224,7 +224,7 @@ fun CampoCerca(valore: String, onCambia: (String) -> Unit, segnaposto: String, m
         decorationBox = { campo ->
             // 07/11/2026: col carattere grande il segnaposto va a capo (niente puntini) e il campo si allunga.
             Row(
-                Modifier.fillMaxWidth().heightIn(min = 52.dp).clip(RoundedCornerShape(16.dp)).background(c.scheda)
+                Modifier.fillMaxWidth().heightIn(min = 52.dp).clip(RoundedCornerShape(16.dp)).background(c.foglio)
                     .border(1.5.dp, c.bordoCampo, RoundedCornerShape(16.dp)).padding(horizontal = 14.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -413,7 +413,7 @@ fun SiNo(valore: Boolean, onCambia: (Boolean) -> Unit, descrizione: String) {
             val su = v == valore
             Box(
                 Modifier.size(width = 56.dp, height = 40.dp).clip(RoundedCornerShape(10.dp))
-                    .background(if (su) c.scheda else Color.Transparent).clickable { onCambia(v) }
+                    .background(if (su) c.foglio else Color.Transparent).clickable { onCambia(v) }
                     .semantics { selected = su },
                 contentAlignment = Alignment.Center,
             ) { Text(nome, style = Testi.secondarioGrande.copy(fontWeight = if (su) FontWeight.ExtraBold else FontWeight.Bold), color = if (su) c.testo else c.testo2) }
@@ -438,10 +438,10 @@ fun FoglioDalBasso(onChiudi: () -> Unit, contenuto: @Composable ColumnScope.() -
     ModalBottomSheet(
         onDismissRequest = onChiudi,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = c.scheda,
+        containerColor = c.foglio,
         scrimColor = c.velo,
         shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
-        dragHandle = { Box(Modifier.padding(top = 10.dp, bottom = 6.dp).size(width = 40.dp, height = 5.dp).clip(RoundedCornerShape(3.dp)).background(c.bordoCampo)) },
+        dragHandle = { Box(Modifier.padding(top = 10.dp, bottom = 6.dp).size(width = 44.dp, height = 5.dp).clip(RoundedCornerShape(3.dp)).background(c.bordoCampo)) },
     ) {
         Column(
             Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, bottom = 24.dp).navigationBarsPadding(),

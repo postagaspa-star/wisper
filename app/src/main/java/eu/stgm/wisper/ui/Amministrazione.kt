@@ -1186,7 +1186,7 @@ internal fun CampoPassword(
             keyboardActions = KeyboardActions(onDone = { onAzione() }, onGo = { onAzione() }, onNext = { onAzione() }),
             decorationBox = { campo ->
                 Row(
-                    Modifier.fillMaxWidth().heightIn(min = 56.dp).clip(RoundedCornerShape(16.dp)).background(c.scheda)
+                    Modifier.fillMaxWidth().heightIn(min = 56.dp).clip(RoundedCornerShape(16.dp)).background(c.foglio)
                         .border(1.5.dp, if (errore != null) c.rossoPieno else c.bordoCampo, RoundedCornerShape(16.dp))
                         .padding(start = 16.dp, end = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,

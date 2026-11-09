@@ -75,7 +75,7 @@ object MessaggioDaAprire {
 @Composable
 fun FoglioMessaggioGlobale(dati: Dati) {
     val b = MessaggioDaAprire.bozza ?: return
-    FoglioMessaggio(dati, b) { MessaggioDaAprire.bozza = null }
+    FoglioMessaggio(dati, b) { MessaggioDaAprire.bozza = null; RicordoPromemoria.chiuso() }
 }
 
 /** Il destinatario per un messaggio del cliente: il referente scelto, o quello col sì a WhatsApp, o il primo (§9.5). */
@@ -130,7 +130,7 @@ internal fun SezionePortaleCliente(dati: Dati, nav: Navigatore, idCliente: Strin
                 if (cl.portale) "Acceso" else "Spento",
                 sotto = (if (refs.isEmpty()) "Nessun referente con l'accesso" else Testo.quanti(refs.size, "referente con l'accesso", "referenti con l'accesso")) + (ultimo?.let { " · ultimo accesso " + quando7(it) } ?: ""),
                 inizio = { IconaTinta(Icone.globo, if (cl.portale) "verde" else "grigio") },
-                fine = { Text("Apri", style = Testi.pulsanteSecondario, color = W.colori.gialloTesto) },
+                fine = { Text("Apri", style = Testi.pulsanteSecondario, color = W.colori.collegamento) },
                 freccia = false,
                 onClick = { nav.vai("portale-cliente/$idCliente") },
             )

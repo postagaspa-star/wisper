@@ -126,7 +126,7 @@ internal fun StrumentiUsati(stato: ModuloStato, dati: Dati) {
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text("Come l'ultima volta qui: " + ultimo.strumenti.orEmpty().joinToString(", ") { it.nome }, style = Testi.secondario.copy(fontWeight = FontWeight.Bold), color = c.testo2, modifier = Modifier.weight(1f))
-                Text("Usa", style = Testi.pulsanteSecondario, color = c.gialloTesto)
+                Text("Usa", style = Testi.pulsanteSecondario, color = c.collegamento)
             }
         }
         if (visibili.isEmpty()) Text("Non hai strumenti assegnati: cercali nel catalogo.", style = Testi.secondario, color = c.tenue)
@@ -167,13 +167,13 @@ private fun PillolaStrumento(k: Candidato, scelto: StrumentoUsato?, onClick: () 
     val c = W.colori
     val spento = k.stato?.spento == true
     Column(
-        Modifier.clip(RoundedCornerShape(16.dp)).background(if (scelto != null) c.testo else c.scheda)
+        Modifier.clip(RoundedCornerShape(16.dp)).background(if (scelto != null) c.testo else c.foglio)
             .border(1.5.dp, if (scelto != null) c.testo else c.bordoCampo, RoundedCornerShape(16.dp))
             .clickable(onClick = onClick).semantics { role = Role.Checkbox; selected = scelto != null }
             .alpha(if (spento) 0.55f else 1f).heightIn(min = 56.dp).padding(horizontal = 12.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        Text(k.nome, style = Testi.forte.copy(fontWeight = FontWeight.Bold), color = if (scelto != null) c.scheda else c.testo)
+        Text(k.nome, style = Testi.forte.copy(fontWeight = FontWeight.Bold), color = if (scelto != null) c.foglio else c.testo)
         k.stato?.let { s ->
             val parola = if (scelto?.confermato == true) s.parola + " · confermato" else s.parola
             Parola6(parola, colore = s.colore)

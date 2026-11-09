@@ -629,6 +629,28 @@
     return perChiPaga(attivi().filter(r => RL.daFatturare(r) && !r.fattura && String(r.data).slice(0, 7) === mese && !RO.bloccoInvio(r))).length;
   }
 
+  /** L'icona di una voce del menu, dal disegno del prototipo. */
+  function iconaDi(d) {
+    const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    s.setAttribute('width', 18);
+    s.setAttribute('height', 18);
+    s.setAttribute('viewBox', '0 0 24 24');
+    s.setAttribute('fill', 'none');
+    s.setAttribute('stroke-width', '2.1');
+    s.setAttribute('stroke-linecap', 'round');
+    s.setAttribute('stroke-linejoin', 'round');
+    s.setAttribute('aria-hidden', 'true');
+    s.innerHTML = '<path d="' + d + '"/>';
+    return s;
+  }
+
+  function quadratinoVoce(fai) {
+    const q = h('span', { class: 'icona-voce' }, iconaDi(fai.d));
+    q.style.setProperty('--v-f', fai.f);
+    q.style.setProperty('--v-t', fai.t);
+    return q;
+  }
+
   function disegnaLato() {
     const lato = $('#lato');
     lato.classList.toggle('chiuso', S.latoChiuso);
@@ -659,10 +681,12 @@
       const n = Q8.numerino(n0);
       const sua = attiva === v.modulo;
       const nomeV = window.WisperRegolePersone.nomeVoce(v, esterno);
+      // Il design Fai (fai.md §6): ogni voce ha il suo colore e la sua icona.
+      const fai = window.WisperRegoleCasa.VOCI_FAI[v.modulo] || {};
       aggiungi(voci, [h('a', {
-        href: '#' + v.modulo, class: 'voce' + (sua ? ' attiva' : ''), 'aria-current': sua ? 'page' : null,
+        href: '#' + v.modulo, class: 'voce' + (sua ? ' attiva' : '') + (fai.staccata ? ' staccata' : ''), 'aria-current': sua ? 'page' : null,
         'data-nome': nomeV, 'data-visita': 'nav-' + v.modulo,
-      }, icona(v.icona, 22, 2.2), h('span', { class: 'lab' }, nomeV), n ? h('span', { class: 'num-v', 'aria-label': n + ' da guardare' }, n) : null)]);
+      }, quadratinoVoce(fai), h('span', { class: 'lab' }, nomeV), n ? h('span', { class: 'num-v', 'aria-label': n + ' da guardare' }, n) : null)]);
     });
     voci.scrollTop = cima;
     mostraVoceAttiva(voci);
@@ -746,6 +770,7 @@
   function disegnaChi() {
     const b = svuota($('#chi'));
     const u = (S.io && S.io.utente) || {};
+    $('#esci-lato').classList.toggle('nascosto', !u.nome || !!S.esempio);
     if (!u.nome) { b.classList.add('nascosto'); return; }
     b.classList.remove('nascosto');
     b.setAttribute('data-nome', u.nome);
@@ -791,6 +816,7 @@
     S.esempio ? null : '-',
     S.esempio ? null : { testo: 'Esci', fn: esci },
   ]));
+  $('#esci-lato').addEventListener('click', () => esci());
   document.addEventListener('keydown', e => {
     // Ctrl+B richiude e riapre il menu (come nelle app con la barra laterale).
     if (e.ctrlKey && !e.altKey && !e.shiftKey && (e.key === 'b' || e.key === 'B') && !document.body.classList.contains('fuori')) {
@@ -1212,7 +1238,19 @@
     });
   }
 
+  /** "I tuoi incarichi" dell'esterno, con l'avanzamento (fase 6, §17.16). */
+  function incarichiEsterno() {
+    return h('div', { class: 'sezione-dash' }, h('span', { class: 'etichetta' }, 'I tuoi incarichi · ' + S.dash.incarichi.length),
+      h('div', { class: 'scheda righe' }, S.dash.incarichi.map(i => riga({
+        sinistra: h('span', { class: 'codice' }, i.idCommessa), titolo: i.titolo, sotto: [i.numero, i.commessa, i.al ? 'fino al ' + C.data(i.al) : ''].filter(Boolean).join(' · '),
+        destra: i.modo === 'corpo' ? h('span', { class: 'barra-incarico' }, h('span', { class: 'barra sottile' }, h('i', { style: { width: Math.max(0, Math.min(100, Number(i.avanzamento) || 0)) + '%' } })), h('b', null, (Number(i.avanzamento) || 0) + '%')) : h('span', { class: 'pill p-blu' }, 'A ore'),
+        onclick: () => vai('#collaboratori/in/' + i.id),
+      }))));
+  }
+
   function vistaDashboard(pagina) {
+    // Il design Fai (fai.md §5): col server che manda le voci la casa è "Cosa vuoi fare?"; il resto qui sotto vale per un server di prima.
+    if (Dash8.attiva()) { Casa.vista(pagina); return; }
     const u = (S.io && S.io.utente) || {};
     const nome = String(u.nome || '').split(' ')[0];
     const esterno = eEsterno();
@@ -1241,14 +1279,7 @@
     }
 
     // Fase 6 (§17.16): l'esterno vede i suoi incarichi in corso con l'avanzamento.
-    if (esterno && S.dash && (S.dash.incarichi || []).length) {
-      aggiungi(pagina, [h('div', { class: 'sezione-dash' }, h('span', { class: 'etichetta' }, 'I tuoi incarichi · ' + S.dash.incarichi.length),
-        h('div', { class: 'scheda righe' }, S.dash.incarichi.map(i => riga({
-          sinistra: h('span', { class: 'codice' }, i.idCommessa), titolo: i.titolo, sotto: [i.numero, i.commessa, i.al ? 'fino al ' + C.data(i.al) : ''].filter(Boolean).join(' · '),
-          destra: i.modo === 'corpo' ? h('span', { class: 'barra-incarico' }, h('span', { class: 'barra sottile' }, h('i', { style: { width: Math.max(0, Math.min(100, Number(i.avanzamento) || 0)) + '%' } })), h('b', null, (Number(i.avanzamento) || 0) + '%')) : h('span', { class: 'pill p-blu' }, 'A ore'),
-          onclick: () => vai('#collaboratori/in/' + i.id),
-        }))))]);
-    }
+    if (esterno && S.dash && (S.dash.incarichi || []).length) aggiungi(pagina, [incarichiEsterno()]);
 
     // Fase 6 (§17.17): per chi vede le persone, Assenti oggi · Ferie da approvare · Tarature scadute · Scadenze vicine (toccabili).
     const np = S.dash && S.dash.numeri && S.dash.numeri.persone;
@@ -2835,6 +2866,7 @@
   const Progetti = window.WisperProgetti(W);
   W.Progetti = Progetti;
   const Commesse = window.WisperCommesse(W);
+  W.Commesse = Commesse;
   const Amministrazione = window.WisperAmministrazione(W);
   const Preventivi = window.WisperPreventivi(W);
   const Attivita = window.WisperAttivita(W);
@@ -2870,8 +2902,12 @@
   W.Portale = Portale;
   // Fase 8: la Dashboard coi riquadri e i tetti, Integrazioni e il calendario in altre app.
   W.rigaDashboard = rigaDashboard;
+  W.iconaVoce = iconaVoce;
+  W.incarichiEsterno = incarichiEsterno;
   const Dash8 = window.WisperDashboard8(W);
   W.Dash8 = Dash8;
+  // Il design Fai: la casa (usa le voci di Dash8).
+  const Casa = window.WisperCasa(W);
   const Integrazioni = window.WisperIntegrazioni(W);
   W.Integrazioni = Integrazioni;
 
@@ -2949,8 +2985,11 @@
   }
 
   async function mostraLicenza() {
-    let testo = 'Figtree, SIL Open Font License 1.1.';
-    try { testo = await (await fetch('font/figtree-OFL.txt', { cache: 'no-store' })).text(); } catch (e) { /* resta la riga corta */ }
+    let testo = 'Plus Jakarta Sans e Figtree, SIL Open Font License 1.1.';
+    try {
+      const leggi = n => fetch('font/' + n, { cache: 'no-store' }).then(r => r.text());
+      testo = 'Plus Jakarta Sans (le schermate)\n\n' + await leggi('plus-jakarta-sans-OFL.txt') + '\n\nFigtree (i PDF)\n\n' + await leggi('figtree-OFL.txt');
+    } catch (e) { /* resta la riga corta */ }
     let chiudi;
     chiudi = finestra({ titolo: 'Licenze', corpo: h('pre', { class: 'licenza' }, testo), fuoco: false,
       pulsanti: ['spazio', h('button', { type: 'button', class: 'btn giallo grande', onclick: () => chiudi() }, 'Chiudi')] });

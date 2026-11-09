@@ -11,6 +11,7 @@ mai dati veri di clienti.
 
 | Data | Versione | In breve |
 |------|----------|----------|
+| 09/11/2026 | 1.3.0 | [Il design Fai: una casa che dice cosa fare](#v1-3-0) |
 | 07/11/2026 | server 0.13.2 | [La fattura vede il conto scritto dopo in Banche](#server-0-13-2) |
 | 07/11/2026 | 1.2.1, server 0.13.1 | [I rapportini di prima uniti per giorno, un rapportino per scheda](#v1-2-1) |
 | 07/11/2026 | 1.2.0, server 0.13.0 | [Il rapportino diventa la giornata: più lavori, niente firma, niente Ore](#v1-2-0) |
@@ -43,6 +44,57 @@ mai dati veri di clienti.
 | 26/09–14/10/2026 | 0.1 | [Un rapportino confermato non si perde più](#coda) |
 | 7–9/08/2026 | 0.1.0 | [Hackathon NGN Hacks: la versione a voce, senza mani](#v0-1-0) |
 | marzo–giugno 2026 | prima del repository | [Le prime versioni](#prima) |
+
+---
+
+<a id="v1-3-0"></a>
+## 9 novembre 2026 · 1.3.0 · Il design Fai: una casa che dice cosa fare
+
+**Perché.** Andrea: "Mio padre ha approvato il quarto design rinnovato". Sulla tela c'erano quattro idee; Manuel ha
+scelto la quarta, Fai. L'idea è una sola: si apre Wisper per fare una cosa, e quella cosa deve stare sotto il pollice.
+Guida per chi costruisce in `docs/gestionale/fai.md`, prototipi in `docs/prototipo/Fai-telefono.dc.html`,
+`Fai-spesa.dc.html` e `Fai-pc.dc.html`.
+
+<img src="docs/diario/2026-11-09-fai-tel-casa-chiaro.png" width="240" alt="La casa nuova sul telefono"> <img src="docs/diario/2026-11-09-fai-tel-casa-scuro.png" width="240" alt="La casa nel tema scuro"> <img src="docs/diario/2026-11-09-fai-tel-menu.png" width="240" alt="Il menu con le icone colorate">
+
+**Cosa cambia, su telefono e computer.**
+
+- **La casa.** In cima, su una scheda gialla, la cosa più importante di adesso col suo pulsante. Sotto, "Cosa vuoi fare?"
+  con sei azioni colorate, ognuna con una forma sua: Scrivi un rapportino, Aggiungi una spesa, Nuova commessa, Nuovo
+  cliente, Prepara un preventivo, Invia un rapportino (col numero di quelli da inviare). Poi Da sistemare e, sul
+  computer, In agenda. Sul computer ogni azione ha il suo tasto (R, S, N, C, P, I).
+- **Fattura scaduta.** Se la cosa più importante è una fattura scaduta, la scheda gialla ha "Manda un promemoria": un
+  foglio col testo già scritto, che si manda per email o WhatsApp o si cambia prima.
+- **Aggiungi una spesa** in tre passi: quanto, che cosa e per quale lavoro, lo scontrino.
+- **Il menu** ha voci di una parola sola, un'icona colorata per voce e i numerini.
+- **L'aspetto di tutta l'app.** Carattere Plus Jakarta Sans (licenza OFL, dentro le app, nessuna richiesta a Google durante
+  l'uso), fondo bianco, schede grigie senza bordo, angoli grandi, collegamenti blu, una piccola molla alla pressione, tema
+  chiaro e scuro. I PDF restano col carattere di prima.
+
+Scelte di Andrea del 9 novembre, perché la tela era di prima della 1.2.0: "Segna le ore" è diventato Nuova commessa, "Fai
+firmare un rapportino" è diventato Invia un rapportino, e la settimana coi giorni che mancano e i numeri non stanno in
+casa: la settimana è in cima a Rapportini, i numeri (i riquadri) in Vedi tutto. Un giorno senza rapportino compare
+comunque in casa.
+
+<img src="docs/diario/2026-11-09-fai-pc-casa-chiaro.png" width="620" alt="La casa sul computer">
+
+<img src="docs/diario/2026-11-09-fai-tel-spesa.png" width="240" alt="Il terzo passo della spesa"> <img src="docs/diario/2026-11-09-fai-tel-promemoria-scuro.png" width="240" alt="Il foglio del promemoria"> <img src="docs/diario/2026-11-09-fai-tel-tutto.png" width="240" alt="Vedi tutto coi riquadri">
+
+**Corretti strada facendo.** La visita guidata del telefono, di lunedì, si fermava: i rapportini di esempio erano solo
+quelli della settimana in corso, e il passo "tocca la casella" restava senza niente da toccare. Ora di lunedì usa la
+settimana prima, e se un elemento da toccare non c'è compare Avanti. Sul telefono "0 di 1 giorni" ora dice "0 di 1
+giorno".
+
+**Prove.** Telefono: 437 prove, tutte passate. Computer: 355 prove dei conti e delle regole e tutti i giri cliccati
+(fasi 2-8, rapportini a lavori, progetti, menu laterale, visita guidata). Le regole della casa sono le stesse sui due lati,
+controllate dagli stessi casi (`pc/prove/casi-casa.json`). La visita guidata del telefono l'ho percorsa tutta sull'emulatore,
+fino in fondo. Ho guardato le schermate di ogni sezione, in chiaro e in scuro, contro il prototipo. Il server non cambia:
+resta la 0.13.2.
+
+**Non provato.** I telefoni veri di Manuel e Andrea.
+
+**Pubblicata.** [Versione 1.3.0](https://github.com/postagaspa-star/wisper/releases/tag/v1.3.0): telefono codice 13,
+computer 1.3.0.
 
 ---
 

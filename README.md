@@ -231,11 +231,13 @@ the code.
 
 ## Look
 
-`docs/aspetto.md` is the design guide (research, principles, colours, type, every
-screen of phone and computer), `docs/prototipo/` the clickable prototype it came
-from. One family with the phone: warm light background, white cards with a
-border, yellow only on the thing to do, Figtree (SIL OFL, bundled), light and
-dark themes. No permanent help text: the first time, both apps open a guided
+Since 1.3.0 the look is the design called Fai (`docs/gestionale/fai.md`, prototypes
+in `docs/prototipo/Fai-*.dc.html`): the home screen shows the most important thing on
+a yellow card, then six coloured actions under "What do you want to do?", then what
+needs fixing. White background, grey borderless cards, large radii, Plus Jakarta Sans
+(SIL OFL, bundled, also used offline; PDFs keep Figtree), light and dark themes.
+`docs/aspetto.md` is the older general guide (research, principles, every screen),
+still valid for texts and behaviour. No permanent help text: the first time, both apps open a guided
 tour on the real screens with example data, and it can be replayed from the
 settings.
 

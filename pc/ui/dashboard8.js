@@ -150,8 +150,11 @@
     function paginaTutto(pagina, filtro) {
       if (filtro && filtro.sezione) M.sezione = filtro.sezione;
       if (filtro && filtro.area) M.area = filtro.area;
-      aggiungi(pagina, [h('div', { class: 'indietro-riga' }, tondo('indietro', 'Indietro', () => W.vai('#dashboard')), h('span', { class: 'dove' }, 'Dashboard')),
-        h('div', { class: 'testata' }, h('h1', null, 'Tutto quello che c\'è da fare'))]);
+      aggiungi(pagina, [h('div', { class: 'indietro-riga' }, tondo('indietro', 'Indietro', () => W.vai('#dashboard')), h('span', { class: 'dove' }, 'Casa')),
+        h('div', { class: 'testata' }, h('h1', null, 'Tutto quello che c\'è da fare'),
+          S.dash && S.dash.riquadri ? h('button', { type: 'button', class: 'btn collegamento', onclick: cambiaRiquadri }, 'Cambia i riquadri') : null)]);
+      // Il design Fai (fai.md §2): i numeri non stanno più in casa, stanno qui.
+      aggiungi(pagina, [riquadri()]);
       const zona = h('div', { class: 'sezione stretta-900' }, segnaposto(4, 64));
       aggiungi(pagina, [zona]);
       const leggi = M.tutto ? Promise.resolve() : Rete.get('/server/dashboard?tutto=1').then(r => { M.tutto = r; });
@@ -221,6 +224,6 @@
           } }, 'Salva i riquadri')] });
     }
 
-    return { attiva, riquadri, piuUrgente, corpo, paginaTutto, cambiaRiquadri, foglioApprovare, M };
+    return { attiva, riquadri, piuUrgente, corpo, paginaTutto, cambiaRiquadri, foglioApprovare, apriVoce, apriTutto, M };
   };
 })(window);

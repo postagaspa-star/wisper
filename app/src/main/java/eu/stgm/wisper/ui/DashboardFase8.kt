@@ -129,8 +129,8 @@ internal fun SezioneDashboard8(
                     altreModifier.fillMaxWidth().heightIn(min = 52.dp).clickable(onClick = onAltre).semantics { role = Role.Button }.padding(vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text("Altre $altre", style = Testi.forte, color = c.gialloTesto, modifier = Modifier.weight(1f))
-                    Icon(Icone.freccia, null, tint = c.gialloTesto, modifier = Modifier.size(18.dp))
+                    Text("Altre $altre", style = Testi.forte, color = c.collegamento, modifier = Modifier.weight(1f))
+                    Icon(Icone.freccia, null, tint = c.collegamento, modifier = Modifier.size(18.dp))
                 }
             }
         }
@@ -174,8 +174,8 @@ internal fun RigaDashboard8(v: VoceDashboard, onClick: () -> Unit, onLungo: (() 
 internal fun PiedeDashboard8(onTutto: () -> Unit, onRiquadri: () -> Unit) {
     val c = W.colori
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-        PulsanteTesto("Tutto quello che c'è da fare", onTutto, Modifier.bersaglio("tutto"), colore = c.gialloTesto)
-        PulsanteTesto("Cambia i riquadri", onRiquadri, colore = c.gialloTesto)
+        PulsanteTesto("Tutto quello che c'è da fare", onTutto, Modifier.bersaglio("tutto"), colore = c.collegamento)
+        PulsanteTesto("Cambia i riquadri", onRiquadri, colore = c.collegamento)
     }
 }
 
@@ -252,7 +252,7 @@ internal fun FoglioRiquadri(dati: Dati, d: Dashboard, onChiudi: () -> Unit) {
                     val n = scelti.indexOf(k)
                     val su = n >= 0
                     Row(
-                        Modifier.heightIn(min = 48.dp).clip(RoundedCornerShape(14.dp)).background(if (su) c.gialloTenue else c.scheda)
+                        Modifier.heightIn(min = 48.dp).clip(RoundedCornerShape(14.dp)).background(if (su) c.gialloTenue else c.foglio)
                             .border(1.5.dp, if (su) c.gialloTesto else c.bordoCampo, RoundedCornerShape(14.dp))
                             .clickable {
                                 errore = null
@@ -297,6 +297,10 @@ fun SchermataTutto(dati: Dati, nav: Navigatore) {
     var nascondi by remember { mutableStateOf<VoceDashboard?>(null) }
     var approvare by remember { mutableStateOf<VoceDashboard?>(null) }
     var mostro by remember { mutableStateOf(false) }
+    val dashboard by dati.dashboard.collectAsStateWithLifecycle()
+    var cambiaRiquadri by remember { mutableStateOf(false) }
+    var approvareRiquadro by remember { mutableStateOf<Pair<VoceDashboard?, String>?>(null) }
+    fun apri(col: Collegamento?) = apriCollegamento(col, nav, viste.map { it.rapportino })
 
     Column(
         Modifier.fillMaxSize().background(c.fondo).verticalScroll(rememberScrollState()).padding(MarginePagina).padding(bottom = 40.dp),
@@ -304,6 +308,15 @@ fun SchermataTutto(dati: Dati, nav: Navigatore) {
     ) {
         Testata(onIndietro = { nav.indietro() })
         TitoloPagina("Tutto quello che c'è da fare")
+        // 09/11/2026 (fai.md §2): i riquadri dei numeri stanno qui, non più in casa.
+        dashboard?.let { dd ->
+            RiquadriFase8(dd.riquadri.orEmpty()) { r ->
+                if (r.chiave == "daApprovare" && (r.collegamento == null || r.collegamento.pagina == "approvare")) {
+                    approvareRiquadro = dd.urgenti.plus(dd.settimana).plus(dd.pianificare).firstOrNull { it.tipo == "approvare" } to r.visto
+                } else apri(r.collegamento)
+            }
+            if (dd.regoleNuove) PulsanteTesto("Cambia i riquadri", { cambiaRiquadri = true }, Modifier.bersaglio("tutto"))
+        }
         when (lettura) {
             is Lettura.Pronta -> {
                 val d = lettura.dato
@@ -343,6 +356,8 @@ fun SchermataTutto(dati: Dati, nav: Navigatore) {
     }
     nascondi?.let { v -> FoglioNascondi(dati, v) { nascondi = null; giro++ } }
     approvare?.let { v -> FoglioDaApprovare(v, "", nav, dati) { approvare = null } }
+    approvareRiquadro?.let { (v, numero) -> FoglioDaApprovare(v, numero, nav, dati) { approvareRiquadro = null } }
+    if (cambiaRiquadri) dashboard?.let { d -> FoglioRiquadri(dati, d) { cambiaRiquadri = false } }
 }
 
 // ---------------------------------------------------------------------------------- icone e numeri delle voci

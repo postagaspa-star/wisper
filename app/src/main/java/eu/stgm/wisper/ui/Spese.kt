@@ -646,7 +646,7 @@ private fun ScontrinoDelServer(dati: Dati, f: FileRemoto, numero: Int, onApri: (
                 contentAlignment = Alignment.Center,
             ) {
                 Box(Modifier.size(28.dp).clip(CircleShape).background(c.testo), contentAlignment = Alignment.Center) {
-                    Icon(Icone.chiudi, null, tint = c.scheda, modifier = Modifier.size(14.dp))
+                    Icon(Icone.chiudi, null, tint = c.foglio, modifier = Modifier.size(14.dp))
                 }
             }
         }

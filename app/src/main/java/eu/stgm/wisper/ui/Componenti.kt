@@ -1,11 +1,15 @@
 package eu.stgm.wisper.ui
 
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -28,11 +32,15 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.geometry.CornerRadius
@@ -56,7 +64,14 @@ import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.sin
 
-/** Una scheda bianca col bordo: niente ombre, che al sole tolgono contrasto. */
+/** Vero dentro una scheda grigia: i pulsanti secondari diventano bianchi per staccarsi (fai.md §8). */
+val LocalSuScheda = staticCompositionLocalOf { false }
+
+/** Il fondo dei pulsanti secondari: grigio sulla pagina, bianco sopra una scheda. */
+val fondoSecondario: Color
+    @Composable get() = if (LocalSuScheda.current) W.colori.foglio else W.colori.scheda
+
+/** Una scheda grigia senza bordo: niente ombre, che al sole tolgono contrasto. */
 @Composable
 fun Scheda(
     modifier: Modifier = Modifier,
@@ -71,16 +86,22 @@ fun Scheda(
             .fillMaxWidth()
             .clip(RoundedCornerShape(raggio))
             .background(W.colori.scheda)
-            .border(1.dp, W.colori.bordoScheda, RoundedCornerShape(raggio))
             .padding(horizontal = orizzontale, vertical = verticale),
         verticalArrangement = Arrangement.spacedBy(spazio),
-        content = contenuto,
-    )
+    ) { CompositionLocalProvider(LocalSuScheda provides true) { contenuto() } }
 }
 
 @Composable
 fun Etichetta(testo: String, modifier: Modifier = Modifier) {
     Text(testo.uppercase(), style = Testi.etichetta, color = W.colori.tenue, modifier = modifier)
+}
+
+/** La pressione a molla del design Fai: scala .96 con un piccolo rimbalzo (fai.md §4). */
+@Composable
+fun Modifier.molla(sorgente: MutableInteractionSource): Modifier {
+    val premuto by sorgente.collectIsPressedAsState()
+    val scala by animateFloatAsState(if (premuto) 0.96f else 1f, spring(dampingRatio = 0.55f, stiffness = 700f), label = "molla")
+    return graphicsLayer { scaleX = scala; scaleY = scala }
 }
 
 /** Il pulsante della cosa da fare adesso: uno per schermata, giallo, in basso, alto 64. */
@@ -94,14 +115,16 @@ fun PulsantePrincipale(
     altezza: Dp = 64.dp,
 ) {
     val c = W.colori
+    val premi = remember { MutableInteractionSource() }
     // Alto almeno [altezza]: con i caratteri grandi un testo lungo va a capo e il pulsante cresce, non si taglia.
     Row(
         modifier
+            .molla(premi)
             .fillMaxWidth()
             .heightIn(min = altezza)
             .clip(RoundedCornerShape(18.dp))
             .background(if (abilitato) c.giallo else c.superficie2)
-            .clickable(onClick = onClick)
+            .clickable(interactionSource = premi, indication = LocalIndication.current, onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 6.dp),
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
@@ -114,7 +137,7 @@ fun PulsantePrincipale(
     }
 }
 
-/** Il pulsante secondario: bordo ben visibile, fondo della scheda. */
+/** Il pulsante secondario: pieno e senza bordo, grigio sulla pagina e bianco sopra una scheda. */
 @Composable
 fun PulsanteBordo(
     testo: String,
@@ -126,13 +149,16 @@ fun PulsanteBordo(
     tratteggiato: Boolean = false,
 ) {
     val c = W.colori
+    val premi = remember { MutableInteractionSource() }
+    val fondo = fondoSecondario
     Row(
         modifier
+            .molla(premi)
             .height(altezza)
             .clip(RoundedCornerShape(16.dp))
-            .background(if (tratteggiato) Color.Transparent else c.scheda)
-            .let { if (tratteggiato) it.bordoTratteggiato(c.bordoCampo, 16.dp) else it.border(1.5.dp, c.bordoCampo, RoundedCornerShape(16.dp)) }
-            .clickable(onClick = onClick)
+            .background(if (tratteggiato) Color.Transparent else fondo)
+            .let { if (tratteggiato) it.bordoTratteggiato(c.bordoCampo, 16.dp) else it }
+            .clickable(interactionSource = premi, indication = LocalIndication.current, onClick = onClick)
             .padding(horizontal = 16.dp),
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
@@ -146,7 +172,7 @@ fun PulsanteBordo(
 }
 
 @Composable
-fun PulsanteTesto(testo: String, onClick: () -> Unit, modifier: Modifier = Modifier, colore: Color = W.colori.gialloTesto) {
+fun PulsanteTesto(testo: String, onClick: () -> Unit, modifier: Modifier = Modifier, colore: Color = W.colori.collegamento) {
     Box(
         modifier
             .heightIn(min = 48.dp)
@@ -164,7 +190,7 @@ fun PulsanteTondo(icona: ImageVector, descrizione: String, onClick: () -> Unit, 
         modifier
             .size(dimensione)
             .clip(CircleShape)
-            .background(W.colori.superficie2)
+            .background(fondoSecondario)
             .clickable(onClick = onClick)
             .semantics { contentDescription = descrizione },
         contentAlignment = Alignment.Center,
@@ -180,13 +206,13 @@ fun Stepper(valore: String, onMeno: () -> Unit, onPiu: () -> Unit, cosa: String,
     val c = W.colori
     Row(modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         Box(
-            Modifier.size(52.dp).clip(CircleShape).background(c.superficie2).clickable(onClick = onMeno)
+            Modifier.size(52.dp).clip(CircleShape).background(fondoSecondario).clickable(onClick = onMeno)
                 .semantics { contentDescription = "Meno mezz'ora di $cosa" },
             contentAlignment = Alignment.Center,
         ) { Icon(Icone.meno, null, tint = c.testo, modifier = Modifier.size(24.dp)) }
         Text(valore, style = Testi.numeroGrande, color = c.testo, textAlign = TextAlign.Center, modifier = Modifier.widthIn(min = 76.dp))
         Box(
-            Modifier.size(52.dp).clip(CircleShape).background(c.superficie2).clickable(onClick = onPiu)
+            Modifier.size(52.dp).clip(CircleShape).background(fondoSecondario).clickable(onClick = onPiu)
                 .semantics { contentDescription = "Più mezz'ora di $cosa" },
             contentAlignment = Alignment.Center,
         ) { Icon(Icone.piu, null, tint = c.testo, modifier = Modifier.size(24.dp)) }
@@ -201,13 +227,12 @@ fun Pillola(testo: String, scelta: Boolean, onClick: () -> Unit, modifier: Modif
         modifier
             .height(altezza)
             .clip(RoundedCornerShape(50))
-            .background(if (scelta) c.testo else c.scheda)
-            .border(1.5.dp, if (scelta) c.testo else c.bordoCampo, RoundedCornerShape(50))
+            .background(if (scelta) c.testo else fondoSecondario)
             .clickable(onClick = onClick)
             .padding(horizontal = 14.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Text(testo, style = Testi.pulsanteSecondario, color = if (scelta) c.scheda else c.testo, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(testo, style = Testi.pulsanteSecondario, color = if (scelta) c.foglio else c.testo, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
@@ -308,7 +333,7 @@ fun CampoTesto(
                         .fillMaxWidth()
                         .heightIn(min = 54.dp)
                         .clip(RoundedCornerShape(16.dp))
-                        .background(c.scheda)
+                        .background(c.foglio)
                         .border(1.5.dp, if (errore != null) c.rossoPieno else c.bordoCampo, RoundedCornerShape(16.dp))
                         .padding(horizontal = 16.dp, vertical = 14.dp),
                     verticalAlignment = if (righe == 1) Alignment.CenterVertically else Alignment.Top,
@@ -384,7 +409,7 @@ fun EuroAnimati(valore: Double, stile: TextStyle, modifier: Modifier = Modifier,
 fun Simbolo(modifier: Modifier = Modifier, dimensione: Dp = 32.dp) {
     Canvas(modifier.size(dimensione)) {
         val s = size.minDimension
-        drawRoundRect(Color(0xFF1B1B1F), size = Size(s, s), cornerRadius = CornerRadius(s * 0.28f))
+        drawRoundRect(Color(0xFF16171B), size = Size(s, s), cornerRadius = CornerRadius(s * 0.28f))
         val centro = Offset(s / 2, s / 2)
         for (i in 0 until 8) {
             val a = Math.toRadians(i * 45.0 - 90)

@@ -504,12 +504,12 @@ private fun Casella(scelta: Boolean, parziale: Boolean = false) {
     val piena = scelta || parziale
     Box(
         Modifier.size(26.dp).clip(RoundedCornerShape(8.dp))
-            .background(if (piena) c.testo else c.scheda)
+            .background(if (piena) c.testo else c.foglio)
             .border(2.dp, if (piena) c.testo else c.bordoCampo, RoundedCornerShape(8.dp)),
         contentAlignment = Alignment.Center,
     ) {
         when {
-            scelta -> Icon(Icone.spunta, null, tint = c.scheda, modifier = Modifier.size(16.dp))
+            scelta -> Icon(Icone.spunta, null, tint = c.foglio, modifier = Modifier.size(16.dp))
             parziale -> Box(Modifier.width(12.dp).height(2.5.dp).clip(RoundedCornerShape(2.dp)).background(c.scheda))
         }
     }

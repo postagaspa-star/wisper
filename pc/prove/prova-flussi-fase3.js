@@ -142,9 +142,9 @@ async function main() {
     await entra('marco@esempio.it');
     const vociMarco = await valuta("[...document.querySelectorAll('#voci .voce')].map(x => x.dataset.nome)");
     // 07/11/2026 (Manuel: "le Ore vanno tolte, non servono, metti solamente i Rapportini"): la voce è Rapportini.
-    // Fase 5: dopo vengono Documenti e Ticket e assistenza; Spese e trasferte resta subito dopo Rapportini.
+    // Fase 5: dopo vengono Documenti e Ticket; Spese resta subito dopo Rapportini.
     assert.ok(vociMarco.indexOf('Ore e rapportini') < 0, 'niente più Ore e rapportini: ' + vociMarco.join(', '));
-    assert.equal(vociMarco[vociMarco.indexOf('Rapportini') + 1], 'Spese e trasferte', 'Spese e trasferte dopo Rapportini: ' + vociMarco.join(', '));
+    assert.equal(vociMarco[vociMarco.indexOf('Rapportini') + 1], 'Spese', 'Spese dopo Rapportini: ' + vociMarco.join(', '));
     passo('menu: Rapportini (non più Ore e rapportini), Spese e trasferte subito dopo');
     // Un rapportino di Marco: nasce da approvare (il titolare lo guarda più avanti).
     const rapMarco = (await server('salvaRapportino', { rapportino: { idLocale: 'fase3-marco-' + GIRO, data: C.oggiIso(), idCliente: 'C002', idCommessa: '26ST002',
@@ -253,11 +253,10 @@ async function main() {
     }
 
     // La Dashboard porta a Da approvare.
-    await vai('#dashboard');
+    await vai('#dashboard/tutto');
     // Fase 8 (§8.2): al massimo 7 urgenti. Con tante urgenze "N cose da approvare" finisce sotto "Altre N", cioè in
     // Tutto quello che c'è da fare; se è la cosa più urgente il pulsante dice "Apri Da approvare".
     const daApprovareDash = "[...document.querySelectorAll('#principale button')].find(b => /cos[ae] da approvare|Apri Da approvare/i.test(b.textContent))";
-    if (!(await valuta('!!' + daApprovareDash))) await cliccaCon('Altre', '.sezione-dash', 1500);
     assert.ok(await valuta('!!' + daApprovareDash), 'la voce delle cose da approvare');
     await valuta(daApprovareDash + '.click(); true');
     await aspetta(1500);

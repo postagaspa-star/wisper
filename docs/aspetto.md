@@ -6,6 +6,9 @@
 > la scheda "Il tuo giorno") e §8 (barra laterale del computer, voci e Fine mese spostato in Fatturazione). Tutto il
 > resto di questa guida vale ancora.
 
+> **Dalla 1.3.0 (novembre 2026)** colori, carattere, forme, casa e menu sono quelli del design Fai:
+> [`docs/gestionale/fai.md`](gestionale/fai.md), che vince su questa guida per quelle parti.
+
 Guida comune all'app Android e al programma per il computer (Wisper Ufficio). La direzione è il **prototipo
 approvato da Andrea il 15/10/2026**: la tela https://claude.ai/artifact/2Kk6nEnfHGpRfEabwjYk7G, copiata in
 `docs/prototipo/` (Main = Oggi, Rapportino, Firma, Mese, Ufficio = fine mese, UfficioRapportini). Chi costruisce

@@ -80,7 +80,6 @@ import eu.stgm.wisper.ui.SchermataClienti
 import eu.stgm.wisper.ui.SchermataAccesso
 import eu.stgm.wisper.ui.SchermataCommessa
 import eu.stgm.wisper.ui.SchermataCommesse
-import eu.stgm.wisper.ui.SchermataDashboard
 import eu.stgm.wisper.ui.SchermataInvio
 import eu.stgm.wisper.ui.SchermataModificaCliente
 import eu.stgm.wisper.ui.SchermataModificaCommessa
@@ -620,8 +619,9 @@ private fun Wisper(archivio: Archivio, attivita: ComponentActivity) {
                                 drawerContent = {
                                     ModalDrawerSheet(
                                         modifier = Modifier.width(312.dp),
-                                        drawerShape = RoundedCornerShape(topEnd = 24.dp, bottomEnd = 24.dp),
-                                        drawerContainerColor = W.colori.scheda,
+                                        drawerShape = RoundedCornerShape(topEnd = 28.dp, bottomEnd = 28.dp),
+                                        drawerContainerColor = W.colori.foglio,
+                                        windowInsets = androidx.compose.foundation.layout.WindowInsets(0),
                                     ) {
                                         CassettoMenu(
                                             utente = sessione.utente,
@@ -656,6 +656,7 @@ private fun Wisper(archivio: Archivio, attivita: ComponentActivity) {
                                             onVoce = { s -> scope.launch { cassetto.close() }; nav.sezione(s) },
                                             onRiprova = { dati.aggiorna() },
                                             onEsci = { scope.launch { cassetto.close() }; foglioTu = "esci" },
+                                            onChiudi = { scope.launch { cassetto.close() } },
                                             // Collega un computer: non nella visita guidata (dati di esempio).
                                             onCollega = if (dati.esempio) null else ({ scope.launch { cassetto.close() }; pagina = "collega" }),
                                         )
@@ -824,13 +825,13 @@ private fun PaginaSezione(
     }
     when {
         rotta == null -> when (sezione) {
-            Sezione.DASHBOARD -> SchermataDashboard(dati, nav, onNuovo, onComeIeri)
+            Sezione.DASHBOARD -> eu.stgm.wisper.ui.SchermataCasa(dati, nav, onNuovo)
             Sezione.CLIENTI -> SchermataClienti(dati, nav)
             Sezione.COMMESSE -> SchermataCommesse(dati, nav)
             Sezione.PROGETTI -> eu.stgm.wisper.ui.SchermataProgetti(dati, nav)
             Sezione.PREVENTIVI -> SchermataPreventivi(dati, nav)
             Sezione.ATTIVITA -> SchermataAttivita(dati, nav)
-            Sezione.RAPPORTINI -> SchermataSezioneRapportini(dati, nav, filtro, onFiltro)
+            Sezione.RAPPORTINI -> SchermataSezioneRapportini(dati, nav, filtro, onFiltro, onNuovo, onComeIeri)
             Sezione.SPESE -> SchermataSpese(dati, nav)
             Sezione.FATTURAZIONE -> eu.stgm.wisper.ui.SchermataFatturazione(dati, nav)
             Sezione.BANCHE -> eu.stgm.wisper.ui.SchermataBanche(dati, nav)
@@ -917,6 +918,7 @@ private fun PaginaSezione(
         // Fase 3: spese e trasferte (docs/gestionale/fase3.md). 07/11/2026: le Ore non ci sono più; una pagina
         // delle ore rimasta in una pila di prima (Registra ore, statistiche) torna subito ai Rapportini.
         rotta.startsWith("ore-") -> androidx.compose.runtime.LaunchedEffect(rotta) { nav.indietro() }
+        rotta.startsWith("spesa-veloce") -> eu.stgm.wisper.ui.SchermataSpesaVeloce(dati, nav)
         rotta.startsWith("spesa-nuova") -> SchermataSpesa(dati, nav, "nuova" + rotta.removePrefix("spesa-nuova"))
         rotta.startsWith("spesa/") -> SchermataSpesa(dati, nav, rotta.removePrefix("spesa/"))
         rotta == "trasferta-nuova" -> SchermataTrasferta(dati, nav, "nuova")

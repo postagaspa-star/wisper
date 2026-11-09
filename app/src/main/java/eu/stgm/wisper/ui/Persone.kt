@@ -572,7 +572,7 @@ private fun ScelteGiorni(giorni: List<LocalDate>, scelto: LocalDate, onScelto: (
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Text(g.dayOfWeek.getDisplayName(java.time.format.TextStyle.SHORT, ITALIA), style = Testi.piccolo.copy(fontWeight = FontWeight.Bold), color = if (su) c.scheda else c.tenue)
-                Text("${g.dayOfMonth}", style = Testi.titoloSezione, color = if (su) c.scheda else c.testo)
+                Text("${g.dayOfMonth}", style = Testi.titoloSezione, color = if (su) c.foglio else c.testo)
             }
         }
     }

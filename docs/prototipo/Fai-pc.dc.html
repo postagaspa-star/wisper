@@ -1,0 +1,377 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<title>Fai · computer · Cosa vuoi fare</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&amp;display=swap">
+<style>
+body { margin: 0; }
+.fai { font-family: 'Plus Jakarta Sans', system-ui, sans-serif; color: #16171B; -webkit-font-smoothing: antialiased; }
+.fai button, .fai textarea { font-family: inherit; }
+.fai button:focus-visible, .fai a:focus-visible, .fai textarea:focus-visible { outline: 3px solid #3D5AFE; outline-offset: 2px; }
+.molla { transition: transform .24s cubic-bezier(.34, 1.56, .64, 1), background-color .2s ease; }
+.molla:active { transform: scale(.96); transition-duration: .12s; }
+@keyframes entra { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+.entra { animation: entra .34s cubic-bezier(.2, .8, .2, 1) backwards; }
+.d1 { animation-delay: .04s; }
+.d2 { animation-delay: .09s; }
+.d3 { animation-delay: .14s; }
+.d4 { animation-delay: .19s; }
+.d5 { animation-delay: .24s; }
+.d6 { animation-delay: .29s; }
+.d7 { animation-delay: .34s; }
+.d8 { animation-delay: .39s; }
+.d9 { animation-delay: .44s; }
+.d10 { animation-delay: .49s; }
+.voce { display: flex; align-items: center; gap: 10px; width: 100%; height: 44px; padding: 0 8px; box-sizing: border-box; border: none; background: transparent; border-radius: 12px; font-size: 15px; font-weight: 700; color: #16171B; text-align: left; cursor: pointer; position: relative; }
+.voce:hover { background: #ECEEF2; }
+.voce.attiva { background: #FFF4D6; font-weight: 800; }
+.voce.staccata { margin-top: 12px; }
+.voce.staccata::before { content: ''; position: absolute; left: 8px; right: 8px; top: -7px; height: 1px; background: #E4E7EC; }
+.icona-voce { width: 30px; height: 30px; border-radius: 9px; display: flex; align-items: center; justify-content: center; flex: 0 0 auto; }
+.nome-voce { flex: 1; min-width: 0; }
+.segno { min-width: 24px; height: 24px; padding: 0 8px; box-sizing: border-box; border-radius: 999px; background: #16171B; color: #FFFFFF; font-size: 12px; font-weight: 800; display: flex; align-items: center; justify-content: center; flex: 0 0 auto; }
+.segno.rosso { background: #FDE3E1; color: #B42318; }
+.tile { position: relative; height: 120px; box-sizing: border-box; border: none; border-radius: 26px; padding: 0 20px; display: flex; align-items: center; gap: 16px; cursor: pointer; color: #16171B; text-align: left; }
+.tile:hover { transform: translateY(-3px); }
+.tile:active { transform: scale(.97); }
+.tile-testo { flex: 1; min-width: 0; font-size: 19px; font-weight: 700; letter-spacing: -0.2px; line-height: 1.25; }
+.cap { position: absolute; top: 14px; right: 14px; min-width: 28px; height: 28px; padding: 0 7px; box-sizing: border-box; border-radius: 8px; background: #FFFFFF; color: #44474F; font-size: 13px; font-weight: 800; display: flex; align-items: center; justify-content: center; box-shadow: inset 0 -2px 0 rgba(0, 0, 0, .10); }
+.riga { width: 100%; box-sizing: border-box; border: none; background: #F4F5F7; border-radius: 18px; min-height: 64px; padding: 12px 14px; display: flex; align-items: center; gap: 12px; cursor: pointer; text-align: left; color: #16171B; }
+.riga:hover { background: #ECEEF2; }
+.riga-titolo { display: block; font-size: 16px; font-weight: 800; line-height: 1.25; }
+.riga-dettaglio { display: block; font-size: 14px; font-weight: 600; color: #5C606A; margin-top: 2px; }
+.velo { position: fixed; inset: 0; width: 100%; height: 100%; border: none; padding: 0; margin: 0; background: rgba(0, 0, 0, .45); opacity: 0; pointer-events: none; transition: opacity .28s ease; z-index: 50; cursor: pointer; }
+.velo.aperto { opacity: 1; pointer-events: auto; }
+.finestra { position: fixed; left: 50%; top: 50%; width: 520px; max-width: calc(100% - 32px); box-sizing: border-box; background: #FFFFFF; border-radius: 28px; box-shadow: 0 24px 60px rgba(0, 0, 0, .22); transform: translate(-50%, -46%) scale(.96); opacity: 0; pointer-events: none; transition: transform .3s cubic-bezier(.2, .8, .2, 1), opacity .25s ease; z-index: 51; }
+.finestra.aperto { transform: translate(-50%, -50%) scale(1); opacity: 1; pointer-events: auto; }
+@media (prefers-reduced-motion: reduce) {
+  .entra { animation: none; }
+  .molla, .velo, .finestra { transition: none; }
+  .tile:hover { transform: none; }
+}
+</style>
+</helmet>
+<div class="fai" style="position: relative; width: 100%; min-height: 1000px; background: #FFFFFF; display: flex; flex-wrap: wrap;">
+
+  <aside style="flex: 0 0 248px; box-sizing: border-box; background: #F7F8FA; padding: 22px 14px 18px; display: flex; flex-direction: column; gap: 10px;">
+    <div style="display: flex; align-items: center; gap: 10px; padding: 0 8px 8px;">
+      <svg width="34" height="34" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="9" fill="#1B1B1F"></rect><circle cx="16" cy="7.5" r="2.2" fill="#FFC53D"></circle><circle cx="22" cy="10" r="2.2" fill="#FFC53D"></circle><circle cx="24.5" cy="16" r="2.2" fill="#FFC53D"></circle><circle cx="22" cy="22" r="2.2" fill="#FFC53D"></circle><circle cx="16" cy="24.5" r="2.2" fill="#FFC53D"></circle><circle cx="10" cy="22" r="2.2" fill="#FFC53D"></circle><circle cx="7.5" cy="16" r="2.2" fill="#FFC53D"></circle><circle cx="10" cy="10" r="2.2" fill="#FFC53D"></circle><circle cx="16" cy="16" r="3.2" fill="#F2F4F7"></circle></svg>
+      <div>
+        <div style="font-size: 19px; font-weight: 800; letter-spacing: -0.3px;">Wisper</div>
+        <div style="font-size: 13px; font-weight: 600; color: #5C606A;">Studio Tecnico GM</div>
+      </div>
+    </div>
+    <nav aria-label="Menu" style="flex: 1; display: flex; flex-direction: column; gap: 2px;">
+      <sc-for list="{{ voci }}" as="v" hint-placeholder-count="18">
+        <button type="button" class="voce {{ v.cls }}" aria-current="{{ v.corrente }}">
+          <span class="icona-voce" style="background: {{ v.fondo }};">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="{{ v.tratto }}" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{ v.d }}"></path></svg>
+          </span>
+          <span class="nome-voce">{{ v.nome }}</span>
+          <sc-if value="{{ v.haSegno }}" hint-placeholder-val="{{ false }}">
+            <span class="segno {{ v.segnoCls }}">{{ v.segno }}</span>
+          </sc-if>
+        </button>
+      </sc-for>
+    </nav>
+    <div style="background: #FFFFFF; border-radius: 20px; padding: 12px; display: flex; flex-direction: column; gap: 10px;">
+      <div style="display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; color: #245C40;">
+        <span style="width: 9px; height: 9px; border-radius: 50%; background: #12B76A;"></span>
+        Collegato
+      </div>
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <span style="width: 40px; height: 40px; border-radius: 50%; background: #16171B; color: #FFFFFF; font-size: 14px; font-weight: 800; display: flex; align-items: center; justify-content: center; flex: 0 0 auto;">MG</span>
+        <div style="flex: 1; min-width: 0;">
+          <div style="font-size: 14px; font-weight: 800;">Manuel Gasparotto</div>
+          <div style="font-size: 13px; font-weight: 600; color: #5C606A;">Titolare</div>
+        </div>
+        <button type="button" class="molla" style="height: 36px; padding: 0 12px; border: none; border-radius: 999px; background: #F4F5F7; font-size: 13px; font-weight: 700; color: #16171B; cursor: pointer;">Esci</button>
+      </div>
+    </div>
+  </aside>
+
+  <main style="flex: 999 1 560px; min-width: 0; box-sizing: border-box; padding: 40px 48px 56px;">
+    <div style="max-width: 1100px; margin: 0 auto; display: flex; flex-direction: column; gap: 32px;">
+
+      <div class="entra d1">
+        <div style="font-size: 15px; font-weight: 600; color: #5C606A;">Martedì 3 novembre</div>
+        <h1 style="margin: 4px 0 0; font-size: 40px; font-weight: 800; letter-spacing: -1px; line-height: 1.1;">Ciao Manuel</h1>
+      </div>
+
+      <sc-if value="{{ primaCosa }}" hint-placeholder-val="{{ true }}">
+        <section class="entra d2" aria-label="La cosa più importante" style="background: #FFC53D; border-radius: 28px; padding: 28px 32px; display: flex; flex-wrap: wrap; align-items: center; gap: 24px;">
+          <div style="flex: 1 1 420px; min-width: 0; display: flex; flex-direction: column; gap: 10px;">
+            <div style="font-size: 12px; font-weight: 800; letter-spacing: .08em; color: #4A3A00;">LA COSA PIÙ IMPORTANTE</div>
+            <h2 style="margin: 0; font-size: 26px; font-weight: 800; line-height: 1.2; letter-spacing: -0.4px; color: #1A1A1A;">La fattura di Rossi Impianti è scaduta</h2>
+            <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+              <span style="background: #FFFFFF; color: #B42318; font-size: 14px; font-weight: 800; padding: 6px 12px; border-radius: 999px;">Scaduta da 12 giorni</span>
+              <span style="font-size: 20px; font-weight: 800; color: #1A1A1A; font-variant-numeric: tabular-nums;">1.830,00 €</span>
+              <span style="font-size: 15px; font-weight: 700; color: #3A2E00;">Fattura 2026/41</span>
+            </div>
+          </div>
+          <button type="button" class="molla" onClick="{{ apriFinestra }}" style="height: 56px; padding: 0 28px; border: none; border-radius: 18px; background: #16171B; color: #FFFFFF; font-size: 17px; font-weight: 800; display: flex; align-items: center; gap: 10px; cursor: pointer;">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.5 8.5 0 0 1-12.4 7.6L3 21l1.9-5.4A8.5 8.5 0 1 1 21 11.5z"></path></svg>
+            Manda un promemoria
+          </button>
+        </section>
+      </sc-if>
+
+      <sc-if value="{{ mandato }}" hint-placeholder-val="{{ false }}">
+        <div style="display: flex; flex-direction: column; gap: 12px;">
+          <div class="entra" role="status" style="background: #E0F6EC; border-radius: 20px; padding: 14px 18px; display: flex; align-items: center; gap: 12px;">
+            <span style="width: 36px; height: 36px; border-radius: 50%; background: #12B76A; display: flex; align-items: center; justify-content: center; flex: 0 0 auto;">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0A0A0A" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg>
+            </span>
+            <div style="font-size: 16px; font-weight: 800; color: #0B5F37;">Promemoria mandato a Rossi Impianti Srl</div>
+            <div style="font-size: 14px; font-weight: 600; color: #245C40;">fattura 2026/41</div>
+          </div>
+          <section class="entra d2" aria-label="La cosa più importante" style="background: #FFC53D; border-radius: 28px; padding: 28px 32px; display: flex; flex-wrap: wrap; align-items: center; gap: 24px;">
+            <div style="flex: 1 1 420px; min-width: 0; display: flex; flex-direction: column; gap: 10px;">
+              <div style="font-size: 12px; font-weight: 800; letter-spacing: .08em; color: #4A3A00;">LA COSA PIÙ IMPORTANTE</div>
+              <h2 style="margin: 0; font-size: 26px; font-weight: 800; line-height: 1.2; letter-spacing: -0.4px; color: #1A1A1A;">3 rapportini da far firmare</h2>
+              <div style="font-size: 16px; font-weight: 700; color: #3A2E00;">2 di Marco · 1 tuo di oggi</div>
+            </div>
+            <button type="button" class="molla" style="height: 56px; padding: 0 28px; border: none; border-radius: 18px; background: #16171B; color: #FFFFFF; font-size: 17px; font-weight: 800; display: flex; align-items: center; gap: 10px; cursor: pointer;">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 19c2.5 0 3.5-3 5-3s1.5 3 3.5 3 2.5-2 4-2 2 1 5.5 1"></path><path d="M14.5 4.5l3 3L10 15l-3.5 1 1-3.5z"></path></svg>
+              Fai firmare
+            </button>
+          </section>
+        </div>
+      </sc-if>
+
+      <section aria-label="Cosa vuoi fare" style="display: flex; flex-direction: column; gap: 14px;">
+        <h2 class="entra d3" style="margin: 0; font-size: 22px; font-weight: 800; letter-spacing: -0.3px;">Cosa vuoi fare?</h2>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px;">
+
+          <button type="button" class="tile molla entra d4" aria-keyshortcuts="R" style="background: #FFF6DD;">
+            <svg width="52" height="52" viewBox="0 0 44 44" aria-hidden="true" style="flex: 0 0 auto;">
+              <g fill="#FFC53D"><circle cx="22" cy="22" r="16"></circle><circle cx="37.5" cy="22" r="6.2"></circle><circle cx="32.96" cy="32.96" r="6.2"></circle><circle cx="22" cy="37.5" r="6.2"></circle><circle cx="11.04" cy="32.96" r="6.2"></circle><circle cx="6.5" cy="22" r="6.2"></circle><circle cx="11.04" cy="11.04" r="6.2"></circle><circle cx="22" cy="6.5" r="6.2"></circle><circle cx="32.96" cy="11.04" r="6.2"></circle></g>
+              <g transform="translate(10 10)" fill="none" stroke="#1A1A1A" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"></path><path d="M14 3v5h5"></path><path d="M9 13h6M9 17h4"></path></g>
+            </svg>
+            <span class="tile-testo">Scrivi un rapportino</span>
+            <span class="cap" aria-hidden="true">R</span>
+          </button>
+
+          <button type="button" class="tile molla entra d5" aria-keyshortcuts="S" style="background: #FFECE9;">
+            <svg width="52" height="52" viewBox="0 0 44 44" aria-hidden="true" style="flex: 0 0 auto;">
+              <circle cx="22" cy="22" r="22" fill="#FF6B57"></circle>
+              <g transform="translate(10 10)" fill="none" stroke="#1A1A1A" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 7.6A5.4 5.4 0 1 0 16 16.4"></path><path d="M6 10.6h7M6 13.4h6"></path></g>
+            </svg>
+            <span class="tile-testo">Aggiungi una spesa</span>
+            <span class="cap" aria-hidden="true">S</span>
+          </button>
+
+          <button type="button" class="tile molla entra d6" aria-keyshortcuts="O" style="background: #E6EAFF;">
+            <svg width="52" height="52" viewBox="0 0 44 44" aria-hidden="true" style="flex: 0 0 auto;">
+              <rect width="44" height="44" rx="14" fill="#3D5AFE"></rect>
+              <g transform="translate(10 10)" fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></g>
+            </svg>
+            <span class="tile-testo">Segna le ore</span>
+            <span class="cap" aria-hidden="true">O</span>
+          </button>
+
+          <button type="button" class="tile molla entra d7" aria-keyshortcuts="C" style="background: #E0F6EC;">
+            <svg width="52" height="52" viewBox="0 0 44 44" aria-hidden="true" style="flex: 0 0 auto;">
+              <g fill="#12B76A"><circle cx="22" cy="22" r="12"></circle><circle cx="22" cy="11.5" r="11.3"></circle><circle cx="32.5" cy="22" r="11.3"></circle><circle cx="22" cy="32.5" r="11.3"></circle><circle cx="11.5" cy="22" r="11.3"></circle></g>
+              <g transform="translate(10 10)" fill="none" stroke="#0A0A0A" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="8" r="4"></circle><path d="M3 20c0-3.6 3.1-6 7-6s7 2.4 7 6"></path><path d="M19 8v6M16 11h6"></path></g>
+            </svg>
+            <span class="tile-testo">Nuovo cliente</span>
+            <span class="cap" aria-hidden="true">C</span>
+          </button>
+
+          <button type="button" class="tile molla entra d8" aria-keyshortcuts="P" style="background: #EEE9FE;">
+            <svg width="52" height="52" viewBox="0 0 44 44" aria-hidden="true" style="flex: 0 0 auto;">
+              <rect x="7" y="7" width="30" height="30" rx="9" fill="#7A5AF8" transform="rotate(45 22 22)"></rect>
+              <g transform="translate(10 10)" fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 5h8a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z"></path><path d="M9.5 10h5M9.5 13.5h5M9.5 17h3"></path></g>
+            </svg>
+            <span class="tile-testo">Prepara un preventivo</span>
+            <span class="cap" aria-hidden="true">P</span>
+          </button>
+
+          <button type="button" class="tile molla entra d9" aria-keyshortcuts="F" style="background: #DFF5F9;">
+            <svg width="52" height="52" viewBox="0 0 44 44" aria-hidden="true" style="flex: 0 0 auto;">
+              <rect x="0" y="7" width="44" height="30" rx="15" fill="#06AED4"></rect>
+              <g transform="translate(10 10)" fill="none" stroke="#0A0A0A" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18c2.5 0 3.5-3 5-3s1.5 3 3.5 3 2.5-2 4-2 2 1 5.5 1"></path><path d="M14.5 4.5l3 3L10 15l-3.5 1 1-3.5z"></path></g>
+            </svg>
+            <span class="tile-testo">Fai firmare un rapportino</span>
+            <span style="min-width: 28px; height: 28px; padding: 0 9px; box-sizing: border-box; border-radius: 999px; background: #16171B; color: #FFFFFF; font-size: 14px; font-weight: 800; display: flex; align-items: center; justify-content: center;">3</span>
+            <span class="cap" aria-hidden="true">F</span>
+          </button>
+
+        </div>
+      </section>
+
+      <div class="entra d10" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 24px;">
+
+        <section aria-label="Da sistemare" style="display: flex; flex-direction: column; gap: 10px;">
+          <div style="display: flex; align-items: center; justify-content: space-between;">
+            <h2 style="margin: 0; font-size: 20px; font-weight: 800; letter-spacing: -0.3px;">Da sistemare</h2>
+            <button type="button" class="molla" style="height: 40px; padding: 0 6px; border: none; background: transparent; font-size: 15px; font-weight: 700; color: #2F48D9; cursor: pointer;">Vedi tutto</button>
+          </div>
+          <button type="button" class="riga molla">
+            <span style="width: 40px; height: 40px; border-radius: 14px; background: #FFF1D6; display: flex; align-items: center; justify-content: center; flex: 0 0 auto;">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#8A5A00" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg>
+            </span>
+            <span style="flex: 1; min-width: 0;"><span class="riga-titolo">26ST014 oltre il budget</span><span class="riga-dettaglio">41,5 h su 40 · Rossi Impianti Srl</span></span>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#5C606A" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg>
+          </button>
+          <button type="button" class="riga molla">
+            <span style="width: 40px; height: 40px; border-radius: 14px; background: #FFECE9; display: flex; align-items: center; justify-content: center; flex: 0 0 auto;">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#A3321F" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 7.6A5.4 5.4 0 1 0 16 16.4"></path><path d="M6 10.6h7M6 13.4h6"></path></svg>
+            </span>
+            <span style="flex: 1; min-width: 0;"><span class="riga-titolo">4 spese di Marco da approvare</span><span class="riga-dettaglio">186,40 € in tutto</span></span>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#5C606A" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg>
+          </button>
+          <button type="button" class="riga molla">
+            <span style="width: 40px; height: 40px; border-radius: 14px; background: #EEE9FE; display: flex; align-items: center; justify-content: center; flex: 0 0 auto;">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#5B3FD9" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"></circle><path d="M5 20c0-3.6 3.1-6 7-6s7 2.4 7 6"></path></svg>
+            </span>
+            <span style="flex: 1; min-width: 0;"><span class="riga-titolo">26ST022 senza responsabile</span><span class="riga-dettaglio">Automazione linea 2 · Lanificio Valle Spa</span></span>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#5C606A" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg>
+          </button>
+          <button type="button" class="riga molla">
+            <span style="width: 40px; height: 40px; border-radius: 14px; background: #E0F6EC; display: flex; align-items: center; justify-content: center; flex: 0 0 auto;">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0B5F37" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3h7l5 5v13H7z"></path><path d="M14 3v5h5"></path><path d="M10 13h6M10 17h4"></path></svg>
+            </span>
+            <span style="flex: 1; min-width: 0;"><span class="riga-titolo">Da fatturare a ottobre</span><span class="riga-dettaglio">4.912,50 € su 3 clienti</span></span>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#5C606A" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg>
+          </button>
+        </section>
+
+        <section aria-label="In agenda" style="display: flex; flex-direction: column; gap: 10px;">
+          <div style="display: flex; align-items: center; justify-content: space-between; min-height: 40px;">
+            <h2 style="margin: 0; font-size: 20px; font-weight: 800; letter-spacing: -0.3px;">In agenda</h2>
+          </div>
+          <button type="button" class="riga molla">
+            <span style="width: 72px; flex: 0 0 auto; border-radius: 14px; background: #16171B; color: #FFFFFF; padding: 8px 0; display: flex; flex-direction: column; align-items: center;">
+              <span style="font-size: 12px; font-weight: 700; color: #D9DBE0;">Oggi</span>
+              <span style="font-size: 18px; font-weight: 800; font-variant-numeric: tabular-nums;">14:30</span>
+            </span>
+            <span style="flex: 1; min-width: 0;"><span class="riga-titolo">Lanificio Valle Spa</span><span class="riga-dettaglio">PLC in blocco sulla linea 2</span></span>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#5C606A" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg>
+          </button>
+          <div style="box-sizing: border-box; border-radius: 18px; min-height: 64px; padding: 12px 14px; display: flex; align-items: center; gap: 12px; background: #FFFFFF; box-shadow: inset 0 0 0 2px #F1F2F4;">
+            <span style="width: 72px; flex: 0 0 auto; border-radius: 14px; background: #F4F5F7; padding: 8px 0; display: flex; flex-direction: column; align-items: center;">
+              <span style="font-size: 12px; font-weight: 700; color: #5C606A;">Domani</span>
+              <span style="font-size: 18px; font-weight: 800; color: #44474F;">4</span>
+            </span>
+            <span style="font-size: 16px; font-weight: 600; color: #5C606A;">Niente in agenda</span>
+          </div>
+          <button type="button" class="riga molla">
+            <span style="width: 72px; flex: 0 0 auto; border-radius: 14px; background: #E6EAFF; padding: 8px 0; display: flex; flex-direction: column; align-items: center;">
+              <span style="font-size: 12px; font-weight: 700; color: #2F48D9;">Giovedì 5</span>
+              <span style="font-size: 18px; font-weight: 800; color: #16171B; font-variant-numeric: tabular-nums;">9:00</span>
+            </span>
+            <span style="flex: 1; min-width: 0;"><span class="riga-titolo">Meccanica Pasubio Srl</span><span class="riga-dettaglio">Sopralluogo · Illuminazione LED capannone</span></span>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#5C606A" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg>
+          </button>
+        </section>
+
+      </div>
+    </div>
+  </main>
+
+  <button type="button" aria-label="Chiudi il promemoria" class="velo {{ finestraCls }}" onClick="{{ chiudiFinestra }}"></button>
+  <section class="finestra {{ finestraCls }}" role="dialog" aria-label="Promemoria a Rossi Impianti" aria-hidden="{{ finestraNascosta }}">
+    <div style="padding: 26px 28px 28px; display: flex; flex-direction: column; gap: 16px;">
+      <div style="display: flex; align-items: flex-start; gap: 12px;">
+        <div style="flex: 1; min-width: 0;">
+          <h2 style="margin: 0; font-size: 22px; font-weight: 800; letter-spacing: -0.3px;">Promemoria a Rossi Impianti</h2>
+          <div style="font-size: 15px; font-weight: 600; color: #5C606A; margin-top: 4px;">Su WhatsApp, al Sig. Ferretti</div>
+        </div>
+        <button type="button" class="molla" aria-label="Chiudi" onClick="{{ chiudiFinestra }}" style="width: 44px; height: 44px; border: none; border-radius: 50%; background: #F4F5F7; display: flex; align-items: center; justify-content: center; cursor: pointer; flex: 0 0 auto;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#16171B" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg>
+        </button>
+      </div>
+      <sc-if value="{{ nonModifica }}" hint-placeholder-val="{{ true }}">
+        <div style="background: #E0F6EC; border-radius: 22px 22px 22px 6px; padding: 16px 18px; font-size: 16px; font-weight: 500; line-height: 1.5; color: #16171B; white-space: pre-line;">{{ testo }}</div>
+      </sc-if>
+      <sc-if value="{{ modifica }}" hint-placeholder-val="{{ false }}">
+        <div style="display: flex; flex-direction: column; gap: 6px;">
+          <label for="testo-promemoria-pc" style="font-size: 14px; font-weight: 700; color: #44474F;">Il messaggio</label>
+          <textarea id="testo-promemoria-pc" rows="6" value="{{ testo }}" onChange="{{ scrivi }}" style="box-sizing: border-box; width: 100%; border: 2px solid #3D5AFE; border-radius: 18px; padding: 12px 14px; font-size: 16px; line-height: 1.5; color: #16171B; resize: none;"></textarea>
+        </div>
+      </sc-if>
+      <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+        <button type="button" class="molla" onClick="{{ manda }}" style="flex: 1 1 220px; height: 54px; border: none; border-radius: 18px; background: #12B76A; color: #0A0A0A; font-size: 16px; font-weight: 800; display: flex; align-items: center; justify-content: center; gap: 10px; cursor: pointer;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0A0A0A" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.5 8.5 0 0 1-12.4 7.6L3 21l1.9-5.4A8.5 8.5 0 1 1 21 11.5z"></path></svg>
+          Manda su WhatsApp
+        </button>
+        <button type="button" class="molla" onClick="{{ cambiaTesto }}" style="flex: 0 1 180px; height: 54px; border: none; border-radius: 18px; background: #F4F5F7; color: #16171B; font-size: 16px; font-weight: 700; cursor: pointer;">{{ etichettaCambia }}</button>
+      </div>
+    </div>
+  </section>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1000}}'>
+class Component extends DCLogic {
+  constructor(...args) {
+    super(...args);
+    this.state = {
+      finestra: false,
+      mandato: false,
+      modifica: false,
+      testo: 'Buongiorno, le ricordo la fattura 2026/41 di 1.830,00 € scaduta il 22 ottobre. Se l’ha già pagata, non tenga conto di questo messaggio.\nGrazie,\nManuel Gasparotto · Studio Tecnico GM'
+    };
+  }
+  renderVals() {
+    const s = this.state;
+    const dati = [
+      { n: 'Casa', f: '#16171B', t: '#FFC53D', d: 'M4 11l8-7 8 7v8a1 1 0 0 1-1 1h-4v-6H9v6H5a1 1 0 0 1-1-1z' },
+      { n: 'Clienti', f: '#DDF5E8', t: '#067647', d: 'M16 19v-1a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v1M9.5 10a3 3 0 1 0 0-6 3 3 0 0 0 0 6M21 19v-1a4 4 0 0 0-3-3.9M15.5 4.1a3 3 0 0 1 0 5.8' },
+      { n: 'Commesse', f: '#FFEBD1', t: '#B54708', d: 'M4 8h16v11H4zM9 8V5h6v3M4 13h16' },
+      { n: 'Preventivi', f: '#ECE7FF', t: '#5925DC', d: 'M7 3h7l5 5v13H7zM14 3v5h5M10 13h6M10 17h4' },
+      { n: 'Calendario', f: '#DCE8FF', t: '#1849A9', d: 'M4 6h16v14H4zM4 10h16M8 3v4M16 3v4' },
+      { n: 'Rapportini', f: '#FFF0C2', t: '#7A5600', d: 'M9 3h6v3H9zM7 4.5H5V21h14V4.5h-2M9 14l2 2 4-4', s: '3' },
+      { n: 'Spese', f: '#FFE4DE', t: '#B93815', d: 'M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6M9 16h3', s: '4' },
+      { n: 'Fatture', f: '#D9F4FA', t: '#0E7090', d: 'M6 3h12v18H6zM9 8h6M9 12h6M9 16h4', s: '1 scaduta', r: true },
+      { n: 'Banche', f: '#DDF3EF', t: '#107569', d: 'M3 10l9-6 9 6M5 10v8M9.5 10v8M14.5 10v8M19 10v8M3 20h18' },
+      { n: 'Persone', f: '#FCE7F6', t: '#C11574', d: 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8M5 20a7 7 0 0 1 14 0' },
+      { n: 'Documenti', f: '#EAECF0', t: '#344054', d: 'M3 6h6l2 2h10v11H3z' },
+      { n: 'Ticket', f: '#E0E7FF', t: '#3538CD', d: 'M14.7 6.3a4 4 0 0 0-5.4 5.4L4 17l3 3 5.3-5.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.5-.5-.5-2.5z', s: '1' },
+      { n: 'Mezzi', f: '#F4EBDD', t: '#8A5A12', d: 'M3 7h11v9H3zM14 10h4l3 3v3h-7M7 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4M17 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4' },
+      { n: 'WhatsApp', f: '#DCF8E7', t: '#087443', d: 'M21 11.5a8.5 8.5 0 0 1-12.4 7.6L3 21l1.9-5.4A8.5 8.5 0 1 1 21 11.5z' },
+      { n: 'Portale clienti', f: '#E0F2FE', t: '#026AA2', d: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18' },
+      { n: 'Collaboratori', f: '#EAF8D7', t: '#3B7C0F', d: 'M10 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8M3 20a7 7 0 0 1 12-4.9M19 14v6M16 17h6' },
+      { n: 'Integrazioni', f: '#F2F4F7', t: '#475467', d: 'M9 3v5M15 3v5M6 8h12v3a6 6 0 0 1-12 0zM12 17v4' },
+      { n: 'Impostazioni', f: '#F2F4F7', t: '#16171B', d: 'M4 7h10M18 7h2M4 17h4M12 17h8M16 5v4M10 15v4', staccata: true }
+    ];
+    const voci = dati.map((v) => ({
+      nome: v.n,
+      fondo: v.f,
+      tratto: v.t,
+      d: v.d,
+      haSegno: !!v.s,
+      segno: v.s || '',
+      segnoCls: v.r ? 'rosso' : '',
+      cls: (v.n === 'Casa' ? 'attiva' : '') + (v.staccata ? ' staccata' : ''),
+      corrente: v.n === 'Casa' ? 'page' : 'false'
+    }));
+    return {
+      voci: voci,
+      finestraCls: s.finestra ? 'aperto' : '',
+      finestraNascosta: s.finestra ? 'false' : 'true',
+      apriFinestra: () => this.setState({ finestra: true }),
+      chiudiFinestra: () => this.setState({ finestra: false, modifica: false }),
+      manda: () => this.setState({ finestra: false, modifica: false, mandato: true }),
+      primaCosa: !s.mandato,
+      mandato: s.mandato,
+      modifica: s.modifica,
+      nonModifica: !s.modifica,
+      etichettaCambia: s.modifica ? 'Fatto' : 'Cambia il testo',
+      cambiaTesto: () => this.setState({ modifica: !s.modifica }),
+      testo: s.testo,
+      scrivi: (e) => this.setState({ testo: e.target.value })
+    };
+  }
+}
+</script>
+</body>
+</html>

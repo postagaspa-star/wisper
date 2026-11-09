@@ -122,7 +122,7 @@ internal fun FasciaRegole(onApri: (() -> Unit)?) {
     ) {
         Icon(Icone.avviso, null, tint = c.gialloTesto, modifier = Modifier.size(18.dp))
         Text("Regole delle fatture da confermare col commercialista", style = Testi.secondario.copy(fontWeight = FontWeight.Bold), color = c.gialloTesto, modifier = Modifier.weight(1f))
-        if (onApri != null) Text("Apri", style = Testi.secondario.copy(fontWeight = FontWeight.ExtraBold), color = c.gialloTesto)
+        if (onApri != null) Text("Apri", style = Testi.secondario.copy(fontWeight = FontWeight.ExtraBold), color = c.collegamento)
     }
 }
 
@@ -206,7 +206,7 @@ internal fun CampoImportoGrande(valore: String, onCambia: (String) -> Unit, erro
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
             decorationBox = { campo ->
                 Row(
-                    Modifier.fillMaxWidth().heightIn(min = 64.dp).clip(RoundedCornerShape(16.dp)).background(c.scheda)
+                    Modifier.fillMaxWidth().heightIn(min = 64.dp).clip(RoundedCornerShape(16.dp)).background(c.foglio)
                         .border(1.5.dp, if (errore != null) c.rossoPieno else c.bordoCampo, RoundedCornerShape(16.dp)).padding(horizontal = 16.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -241,12 +241,12 @@ internal fun PulsanteData(etichetta: String, data: LocalDate, onCambia: (LocalDa
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(etichetta, style = Testi.secondarioGrande.copy(fontWeight = FontWeight.Bold), color = c.testo)
         Row(
-            Modifier.fillMaxWidth().heightIn(min = 54.dp).clip(RoundedCornerShape(16.dp)).background(c.scheda)
+            Modifier.fillMaxWidth().heightIn(min = 54.dp).clip(RoundedCornerShape(16.dp)).background(c.foglio)
                 .border(1.5.dp, c.bordoCampo, RoundedCornerShape(16.dp)).clickable { apri = true }.padding(horizontal = 16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text((if (data == LocalDate.now()) "Oggi, " else "") + giornoEsteso(data), style = Testi.testoGrande, color = c.testo, modifier = Modifier.weight(1f))
-            Text("Cambia", style = Testi.pulsanteSecondario, color = c.gialloTesto)
+            Text("Cambia", style = Testi.pulsanteSecondario, color = c.collegamento)
         }
     }
     if (apri) FinestraGiorno(data, { onCambia(it); apri = false }, { apri = false })

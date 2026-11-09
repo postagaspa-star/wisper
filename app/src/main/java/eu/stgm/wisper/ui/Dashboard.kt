@@ -395,7 +395,7 @@ private fun CosaPiuUrgente(v: VoceDashboard, modifier: Modifier, onFai: () -> Un
 }
 
 /** Il pulsante della cosa più urgente dice cosa fa. */
-private fun azioneDi(col: Collegamento?): String = when (col?.pagina?.lowercase()) {
+internal fun azioneDi(col: Collegamento?): String = when (col?.pagina?.lowercase()) {
     "fatturazione" -> "Vedi cosa fatturare"
     "fattura" -> "Apri la fattura"
     "fatture" -> "Vedi le fatture"
@@ -616,7 +616,7 @@ private fun NumeriDelleCommesse(n: NumeriCommesse, onApri: (String) -> Unit) {
 
 /** Niente da sistemare: una riga calma con la spunta verde. */
 @Composable
-private fun NienteDaSistemare(modifier: Modifier) {
+internal fun NienteDaSistemare(modifier: Modifier) {
     val c = W.colori
     Row(
         modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(c.scheda)

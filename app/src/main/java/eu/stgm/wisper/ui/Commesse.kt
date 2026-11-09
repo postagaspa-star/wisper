@@ -1640,7 +1640,7 @@ internal fun CampoScelta(etichetta: String, valore: String, vuoto: Boolean, vuot
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(etichetta, style = Testi.secondarioGrande.copy(fontWeight = FontWeight.Bold), color = c.testo)
         Row(
-            Modifier.fillMaxWidth().heightIn(min = 56.dp).clip(RoundedCornerShape(16.dp)).background(c.scheda)
+            Modifier.fillMaxWidth().heightIn(min = 56.dp).clip(RoundedCornerShape(16.dp)).background(c.foglio)
                 .border(1.5.dp, c.bordoCampo, RoundedCornerShape(16.dp))
                 .clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 10.dp)
                 .semantics(mergeDescendants = true) { contentDescription = "$etichetta: $valore" },
@@ -1652,7 +1652,7 @@ internal fun CampoScelta(etichetta: String, valore: String, vuoto: Boolean, vuot
                 color = when { vuoto && vuotoGiallo -> c.gialloTesto; vuoto -> c.moltoTenue; else -> c.testo },
                 modifier = Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis,
             )
-            Text(if (vuoto) "Scegli" else "Cambia", style = Testi.secondarioGrande.copy(fontWeight = FontWeight.Bold), color = c.gialloTesto)
+            Text(if (vuoto) "Scegli" else "Cambia", style = Testi.secondarioGrande.copy(fontWeight = FontWeight.Bold), color = c.collegamento)
         }
     }
 }
@@ -1663,10 +1663,10 @@ internal fun CasellaScelta(scelta: Boolean) {
     val c = W.colori
     Box(
         Modifier.size(26.dp).clip(RoundedCornerShape(8.dp))
-            .background(if (scelta) c.testo else c.scheda)
+            .background(if (scelta) c.testo else c.foglio)
             .border(2.dp, if (scelta) c.testo else c.bordoCampo, RoundedCornerShape(8.dp)),
         contentAlignment = Alignment.Center,
-    ) { if (scelta) Icon(Icone.spunta, null, tint = c.scheda, modifier = Modifier.size(16.dp)) }
+    ) { if (scelta) Icon(Icone.spunta, null, tint = c.foglio, modifier = Modifier.size(16.dp)) }
 }
 
 /** Il cliente della commessa: si tocca e si sceglie dall'elenco, con la sua tariffa sotto il nome. */
@@ -1676,7 +1676,7 @@ private fun CampoCliente(cli: Cliente?, errore: String?, onClick: () -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text("Cliente", style = Testi.secondarioGrande.copy(fontWeight = FontWeight.Bold), color = c.testo)
         Row(
-            Modifier.fillMaxWidth().heightIn(min = 64.dp).clip(RoundedCornerShape(16.dp)).background(c.scheda)
+            Modifier.fillMaxWidth().heightIn(min = 64.dp).clip(RoundedCornerShape(16.dp)).background(c.foglio)
                 .border(1.5.dp, if (errore != null) c.rossoPieno else c.bordoCampo, RoundedCornerShape(16.dp))
                 .clickable(onClick = onClick).padding(horizontal = 14.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -1688,10 +1688,10 @@ private fun CampoCliente(cli: Cliente?, errore: String?, onClick: () -> Unit) {
                     Text(cli.nome, style = Testi.forte, color = c.testo, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Text(tariffaDi(cli), style = Testi.secondario.copy(fontWeight = FontWeight.Medium), color = c.tenue, maxLines = 1)
                 }
-                Text("Cambia", style = Testi.secondarioGrande.copy(fontWeight = FontWeight.Bold), color = c.gialloTesto)
+                Text("Cambia", style = Testi.secondarioGrande.copy(fontWeight = FontWeight.Bold), color = c.collegamento)
             } else {
                 Text("Scegli il cliente", style = Testi.testoGrande, color = c.moltoTenue, modifier = Modifier.weight(1f))
-                Text("Scegli", style = Testi.secondarioGrande.copy(fontWeight = FontWeight.Bold), color = c.gialloTesto)
+                Text("Scegli", style = Testi.secondarioGrande.copy(fontWeight = FontWeight.Bold), color = c.collegamento)
             }
         }
         if (errore != null) Text(errore, style = Testi.secondario, color = c.rossoTesto)
@@ -1753,7 +1753,7 @@ private fun CampoData(etichetta: String, valore: LocalDate?, onClick: () -> Unit
     Column(modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(etichetta, style = Testi.secondarioGrande.copy(fontWeight = FontWeight.Bold), color = c.testo)
         Row(
-            Modifier.fillMaxWidth().heightIn(min = 54.dp).clip(RoundedCornerShape(16.dp)).background(c.scheda)
+            Modifier.fillMaxWidth().heightIn(min = 54.dp).clip(RoundedCornerShape(16.dp)).background(c.foglio)
                 .border(1.5.dp, if (errore != null) c.rossoPieno else c.bordoCampo, RoundedCornerShape(16.dp))
                 .clickable(onClick = onClick).padding(start = 16.dp, end = 6.dp),
             verticalAlignment = Alignment.CenterVertically,

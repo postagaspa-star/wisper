@@ -541,7 +541,7 @@
     const numeri = { commesse: { aperte: conta.aperte, sospese: conta.sospese, chiuse: conta.chiuse, inRitardo: conta.inRitardo }, giorniSenzaRapportino: senzaRapportino };
     dashboardFase3(dati, { urgenti, settimana, pianificare, mio, soldi }, numeri);
     if (!mio) dashboardFase4(dati, numeri);
-    return { ok: true, per: mio ? 'collaboratore' : 'titolare', oggi, urgenti, settimana, pianificare, numeri };
+    return { ok: true, per: mio ? 'collaboratore' : 'titolare', oggi, urgenti, settimana, pianificare, numeri, agenda: agendaEsempio(dati, mio) };
   }
 
   // ======================================================================= risposte
@@ -2000,6 +2000,17 @@
   }
 
   /** Le voci della Dashboard della fase 2 (fase2.md §4), come le calcola il server. */
+  /** In agenda della casa (fai.md §5): gli appuntamenti di oggi e dei prossimi sette giorni, come il server. */
+  function agendaEsempio(dati, mio) {
+    if (!R.puo(dati.permessiIo, 'attivita')) return undefined;
+    const oggi = dati.oggi;
+    const fra7 = giorno(oggi, 7);
+    const mie = attivitaVisibili(dati).filter(a => a.stato !== 'fatta' && a.stato !== 'annullata' && RA.giornoDi(a) && (!mio || a.assegnataA === dati.io.id));
+    const breve = a => ({ id: a.id, tipo: a.tipo, titolo: a.titolo, giorno: RA.giornoDi(a), inizio: a.inizio || '', tuttoIlGiorno: !!a.tuttoIlGiorno, idCommessa: a.idCommessa || '', luogo: a.luogo || '' });
+    const perOra = (x, y) => (x.giorno + (x.inizio || '~') < y.giorno + (y.inizio || '~') ? -1 : 1);
+    return { oggi: mie.filter(a => RA.giornoDi(a) === oggi).map(breve).sort(perOra), settimana: mie.filter(a => RA.giornoDi(a) > oggi && RA.giornoDi(a) <= fra7).map(breve).sort(perOra) };
+  }
+
   function dashboardFase2(dati, d) {
     const oggi = dati.oggi;
     const fra7 = giorno(oggi, 7);

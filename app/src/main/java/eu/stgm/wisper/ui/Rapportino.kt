@@ -635,7 +635,7 @@ internal fun RigaData(data: LocalDate, abilitato: Boolean, onCambia: (LocalDate)
     val c = W.colori
     var aperto by remember { mutableStateOf(false) }
     Row(
-        Modifier.fillMaxWidth().heightIn(min = 52.dp).clip(RoundedCornerShape(16.dp)).background(c.scheda)
+        Modifier.fillMaxWidth().heightIn(min = 52.dp).clip(RoundedCornerShape(16.dp)).background(c.foglio)
             .border(1.5.dp, c.bordoCampo, RoundedCornerShape(16.dp)).clickable(enabled = abilitato) { aperto = true }
             .padding(horizontal = 16.dp, vertical = 8.dp).bersaglio("data-rapportino"),
         verticalAlignment = Alignment.CenterVertically,
@@ -643,7 +643,7 @@ internal fun RigaData(data: LocalDate, abilitato: Boolean, onCambia: (LocalDate)
         Icon(Icone.calendario, null, tint = c.testo, modifier = Modifier.size(20.dp))
         Spacer(Modifier.width(10.dp))
         Text(dataLungaIt(data), style = Testi.pulsanteSecondario, color = c.testo, modifier = Modifier.weight(1f))
-        if (abilitato) Text("Cambia", style = Testi.pulsanteSecondario, color = c.gialloTesto)
+        if (abilitato) Text("Cambia", style = Testi.pulsanteSecondario, color = c.collegamento)
     }
     if (aperto) {
         val s = rememberDatePickerState(initialSelectedDateMillis = data.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli())
@@ -847,7 +847,7 @@ private fun ColumnScope.PassoLavoro(
     val nessuna = remote.isEmpty() && inAttesa.isEmpty() && stato.fotoNuove.isEmpty()
     if (nessuna) {
         Column(
-            Modifier.fillMaxWidth().height(96.dp).clip(RoundedCornerShape(20.dp)).background(c.scheda)
+            Modifier.fillMaxWidth().height(96.dp).clip(RoundedCornerShape(20.dp)).background(c.foglio)
                 .bordoTratteggiato(c.bordoCampo, 20.dp).clickable(onClick = onScatta).bersaglio("scontrino"),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
@@ -916,7 +916,7 @@ private fun RiquadroFoto(file: File?, onApri: (() -> Unit)?, onTogli: () -> Unit
             Modifier.align(Alignment.TopEnd).padding(4.dp).size(28.dp).clip(CircleShape).background(c.testo.copy(alpha = 0.7f))
                 .clickable(onClick = onTogli).semantics { contentDescription = "Togli lo scontrino" },
             contentAlignment = Alignment.Center,
-        ) { Icon(Icone.chiudi, null, tint = c.scheda, modifier = Modifier.size(14.dp)) }
+        ) { Icon(Icone.chiudi, null, tint = c.foglio, modifier = Modifier.size(14.dp)) }
     }
 }
 
