@@ -105,8 +105,8 @@ senza filtro. Il server non cambia.
 ha una vera).
 
 **Pubblicata.** [Versione 1.3.2](https://github.com/postagaspa-star/wisper/releases/tag/v1.3.2) alle 18:59 col solo pulsante
-(telefono codice 15, computer 1.3.2; il NAS l'annuncia dalle 19:03). La sera stessa i file della stessa release sono stati
-sostituiti con la pagina unica e Scegli tutti: telefono codice 16, computer 1.3.2.1.
+(telefono codice 15, computer 1.3.2; il NAS l'annuncia dalle 19:03). Alle 19:51 i file della stessa release sono stati
+sostituiti con la pagina unica e Scegli tutti: telefono codice 16, computer 1.3.2.1; il NAS l'annuncia dalle 19:53.
 
 ---
 
