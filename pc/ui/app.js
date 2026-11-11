@@ -2567,7 +2567,7 @@
         km: C.num(v.km.value),
         spese: C.num(v.spese.value),
         noteSpese: v.noteSpese.value.trim(),
-        tariffa: C.numONull(v.tariffa.value),
+        tariffa: R.leggiCampo(v.tariffa.value),
         noteInterne: v.noteInterne.value.trim(),
         ...(r.idTicket && !esistente ? { idTicket: r.idTicket } : {}),
         // Fase 6: l'elenco intero degli strumenti (il server congela lo stato della taratura di quel giorno).

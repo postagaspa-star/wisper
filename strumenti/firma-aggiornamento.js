@@ -54,7 +54,9 @@ function main() {
     manifesto.android = Object.assign({ codice: Number(a.codice), nome: a.nome }, descrivi(a.cartella, a.apk, a.indirizzo));
   }
   if (a.exe) {
-    if (!/^\d+\.\d+\.\d+$/.test(a['versione-pc'] || '')) throw new Error('per l\'exe serve --versione-pc come 0.3.0');
+    // Il quarto numero (0.3.6.1) e' una correzione dentro la stessa versione: il programma
+    // mostra 0.3.6, ma l'aggiornamento automatico lo vede piu' nuovo di 0.3.6 e lo scarica.
+    if (!/^\d+\.\d+\.\d+(\.\d+)?$/.test(a['versione-pc'] || '')) throw new Error('per l\'exe serve --versione-pc come 0.3.0');
     manifesto.computer = Object.assign({ versione: a['versione-pc'] }, descrivi(a.cartella, a.exe, a.indirizzo));
   }
   if (!manifesto.android && !manifesto.computer) throw new Error('niente da pubblicare: --apk o --exe');

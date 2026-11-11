@@ -364,6 +364,23 @@ test('numeri nei campi: senza punto delle migliaia, così si rileggono uguali', 
   assert.notEqual(C.num(C.numero(2500)), 2500);
 });
 
+test('numeri scritti a mano: il punto delle migliaia vale come sul telefono (correzione 0.3.6.1)', () => {
+  assert.equal(R.leggiCampo('2.500'), 2500);
+  assert.equal(R.leggiCampo('1.234.567'), 1234567);
+  assert.equal(R.leggiCampo('2.500,50'), 2500.5);
+  assert.equal(R.leggiCampo(' 3 700 '), 3700);
+  assert.equal(R.leggiCampo('0,76'), 0.76);
+  assert.equal(R.leggiCampo('1.5'), 1.5);
+  assert.equal(R.leggiCampo('42'), 42);
+  assert.equal(R.leggiCampo(''), null);
+  assert.equal(R.leggiCampo(null), null);
+  assert.equal(R.leggiCampo('sei'), null);
+  // Quello che il campo mostra si rilegge uguale.
+  for (const n of [2500, 3700, 0.76, 42, 1234.5, 120000, 0]) assert.equal(R.leggiCampo(R.numeroCampo(n)), n, String(n));
+  // Il motivo: da solo C.numONull leggeva "2.500" come 2,5.
+  assert.equal(C.numONull('2.500'), 2.5);
+});
+
 // ------------------------------------------------------------------ password e CSV
 
 test('password iniziale: tre gruppi di quattro, senza lettere che si confondono', () => {

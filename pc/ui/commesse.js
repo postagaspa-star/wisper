@@ -733,14 +733,14 @@
         v.costoOrario.placeholder = costoImp !== null ? C.numero(costoImp) : '';
       };
       const ricalcola = cambiato => {
-        const ore = C.numONull(v.budgetOre.value);
-        const prezzo = C.numONull(v.prezzoOrario.value);
-        const euro = C.numONull(v.budgetEuro.value);
+        const ore = R.leggiCampo(v.budgetOre.value);
+        const prezzo = R.leggiCampo(v.prezzoOrario.value);
+        const euro = R.leggiCampo(v.budgetEuro.value);
         if ((cambiato === 'ore' || cambiato === 'prezzo') && ore && prezzo) v.budgetEuro.value = R.numeroCampo(Math.round(ore * prezzo * 100) / 100);
         if (cambiato === 'euro' && euro && prezzo) v.budgetOre.value = R.numeroCampo(Math.round(euro / prezzo * 10) / 10);
         if (cambiato === 'prezzo' && !ore && euro && prezzo) v.budgetOre.value = R.numeroCampo(Math.round(euro / prezzo * 10) / 10);
-        const b = C.budgetDi({ budgetOre: C.numONull(v.budgetOre.value), budgetEuro: C.numONull(v.budgetEuro.value),
-          prezzoOrario: C.numONull(v.prezzoOrario.value), costoOrario: C.numONull(v.costoOrario.value) }, clienteSel(), S.ana.impostazioni);
+        const b = C.budgetDi({ budgetOre: R.leggiCampo(v.budgetOre.value), budgetEuro: R.leggiCampo(v.budgetEuro.value),
+          prezzoOrario: R.leggiCampo(v.prezzoOrario.value), costoOrario: R.leggiCampo(v.costoOrario.value) }, clienteSel(), S.ana.impostazioni);
         const pezzi = [];
         if (b.margineOrario !== null) pezzi.push('Margine ' + C.numero(b.margineOrario) + ' €/h');
         if (b.costoPrevisto !== null) pezzi.push('costo previsto ' + C.euro(b.costoPrevisto));
@@ -785,16 +785,16 @@
           idCliente: v.cliente.value, descrizione: v.descrizione.value.trim(), indirizzo: v.indirizzo.value.trim(),
           sedeId: v.sede.value ? Number(v.sede.value) : null, responsabileId: v.responsabile.value ? Number(v.responsabile.value) : null,
           persone: persone.map(Number),
-          inizio: v.inizio.value, finePrevista: v.fine.value, budgetOre: C.numONull(v.budgetOre.value), note: v.note.value.trim(),
+          inizio: v.inizio.value, finePrevista: v.fine.value, budgetOre: R.leggiCampo(v.budgetOre.value), note: v.note.value.trim(),
         };
         if (soldi()) {
-          campi.budgetEuro = C.numONull(v.budgetEuro.value);
-          campi.euroKm = C.numONull(v.euroKm.value);
-          campi.importoContratto = C.numONull(v.importo.value);
+          campi.budgetEuro = R.leggiCampo(v.budgetEuro.value);
+          campi.euroKm = R.leggiCampo(v.euroKm.value);
+          campi.importoContratto = R.leggiCampo(v.importo.value);
           if (W.puo('fatturazione')) campi.modoFatturazione = modo;
           // Prezzo e costo fissi del cliente restano sulla sua scheda, non si copiano sulla commessa.
-          if (!v.prezzoOrario.disabled) campi.prezzoOrario = C.numONull(v.prezzoOrario.value);
-          if (!v.costoOrario.disabled) campi.costoOrario = C.numONull(v.costoOrario.value);
+          if (!v.prezzoOrario.disabled) campi.prezzoOrario = R.leggiCampo(v.prezzoOrario.value);
+          if (!v.costoOrario.disabled) campi.costoOrario = R.leggiCampo(v.costoOrario.value);
         }
         const codice = v.codice.value.trim().toUpperCase() === prossimo ? '' : v.codice.value.trim().toUpperCase();
         // Il codice di una commessa che c'è già: se cambia, prima la conferma, poi cambiaCodiceCommessa (il server lo
