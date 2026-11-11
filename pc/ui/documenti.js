@@ -102,6 +102,8 @@
       'td { border-bottom: 1px solid #EFEEEB; padding: 5px 4px; vertical-align: top; }' +
       'tr { break-inside: avoid; }' +
       '.n { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }' +
+      // 11/11/2026: il browser ripete il <tfoot> in fondo a ogni pagina stampata; come gruppo normale resta solo alla fine.
+      'tfoot { display: table-row-group; }' +
       'tfoot td { font-weight: 800; border-top: 1.5px solid #1B1B1F; border-bottom: none; }' +
       '.conto { margin-left: auto; width: 55%; } .conto td { border: none; padding: 3px 4px; } .conto .tot td { font-size: 13px; font-weight: 800; border-top: 1.5px solid #1B1B1F; padding-top: 6px; }' +
       '.sotto-riga { color: #5F5F67; font-size: 9px; }' +
@@ -417,6 +419,9 @@
     return pagina(imp, 'Rapportino ' + (r.id || ''), corpo, progetto ? STILE_PROGETTO : '');
   }
 
+  // 11/11/2026: la data su una riga sola, la descrizione col posto più largo.
+  const STILE_RIEPILOGO = 'table.riepilogo th, table.riepilogo td.data { white-space: nowrap; } table.riepilogo td.int { width: 15%; } table.riepilogo td.desc { width: 30%; }';
+
   /**
    * Il riepilogo di un periodo: le righe e i totali, per fare la fattura.
    * destinatario: { nome, righe[] }  (il cliente, per esempio Elettrodinamica)
@@ -436,21 +441,24 @@
     corpo += '<div class="parti">' + mittente(imp, righe.map(r => r.idCommessa)) + destinatario(intestatario.nome, intestatario.righe || []) + '</div>';
 
     const conImporti = !!o.conImporti;
-    corpo += '<table><thead><tr><th>Data</th><th>N°</th><th>Progetto</th><th>Lavoro svolto</th>' +
+    // 11/11/2026 (Andrea): dopo il progetto, il cliente a cui si riferisce (il suo "Intestato a"); la data corta (05/11/26) per fare spazio.
+    const dataCorta = r => C.data(r.data).replace(/\/\d{2}(\d{2})$/, '/$1');
+    corpo += '<table class="riepilogo"><thead><tr><th>Data</th><th>N°</th><th>Progetto</th><th>Intestato a</th><th>Lavoro svolto</th>' +
       '<th class="n">Lavoro</th><th class="n">Extra</th><th class="n">Viaggio</th><th class="n">Km</th><th class="n">Spese</th>' +
       (conImporti ? '<th class="n">Importo</th>' : '') + '</tr></thead><tbody>';
     righe.forEach(r => {
       const progetto = progettoDi(r, ana);
-      corpo += '<tr><td>' + esc(C.data(r.data)) + '</td><td>' + esc(numeroDi(r)) + '</td>' +
+      corpo += '<tr><td class="data">' + esc(dataCorta(r)) + '</td><td>' + esc(numeroDi(r)) + '</td>' +
         '<td>' + esc((progetto && progetto.codice) || '—') +
         (intestatario.mostraCliente ? '<div class="sotto-riga">' + esc(r.cliente) + '</div>' : '') + '</td>' +
-        '<td>' + esc(r.descrizione || '') + '</td>' +
+        '<td class="int">' + esc((progetto && progetto.intestatoA) || '—') + '</td>' +
+        '<td class="desc">' + esc(r.descrizione || '') + '</td>' +
         '<td class="n">' + esc(C.numero(r.oreLavoro)) + '</td><td class="n">' + esc(C.numero(r.oreExtra)) + '</td>' +
         '<td class="n">' + esc(C.numero(r.oreViaggio)) + '</td><td class="n">' + esc(C.numero(r.km)) + '</td>' +
         '<td class="n">' + esc(C.num(r.spese) ? C.euro(r.spese) : '') + '</td>' +
         (conImporti ? '<td class="n">' + esc(C.euro(r.totale)) + '</td>' : '') + '</tr>';
     });
-    corpo += '</tbody><tfoot><tr><td colspan="4">Totale</td>' +
+    corpo += '</tbody><tfoot><tr><td colspan="5">Totale</td>' +
       '<td class="n">' + esc(C.numero(t.oreLavoro)) + '</td><td class="n">' + esc(C.numero(t.oreExtra)) + '</td>' +
       '<td class="n">' + esc(C.numero(t.oreViaggio)) + '</td><td class="n">' + esc(C.numero(t.km)) + '</td>' +
       '<td class="n">' + esc(C.euro(t.spese)) + '</td>' + (conImporti ? '<td class="n">' + esc(C.euro(t.totale)) + '</td>' : '') +
@@ -476,7 +484,7 @@
           '</div></div>';
       }
     }
-    return pagina(imp, 'Riepilogo ' + (periodo || ''), corpo);
+    return pagina(imp, 'Riepilogo ' + (periodo || ''), corpo, STILE_RIEPILOGO);
   }
 
   // ======================================================================= preventivo e incarico (fase 2)

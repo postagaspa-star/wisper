@@ -108,6 +108,20 @@ test('PDF del riepilogo: la colonna Progetto, le commesse nel Mittente', () => {
   assert.equal(D.rigaCommesse(['26ST001', '', '26ST001']), 'Commessa 26ST001');
 });
 
+test('PDF del riepilogo (11/11/2026): "Intestato a" fra Progetto e Lavoro svolto, data corta, il totale una volta sola', () => {
+  const lista = [RAP, Object.assign({}, RAP, { id: 'RAP/2026/0154', data: '2026-11-06', idProgetto: null, progetto: '', progettoIntestatoA: '' }),
+    Object.assign({}, RAP, { id: 'RAP/2026/0155', data: '2026-11-07', idProgetto: 7, progetto: '', progettoDescrizione: '', progettoIntestatoA: '' })];
+  const html = D.riepilogo(lista, ANA(IMP), { nome: 'Elettrodinamica Srl', righe: [] }, 'novembre 2026', { conImporti: true });
+  assert.ok(html.indexOf('<th>Progetto</th><th>Intestato a</th><th>Lavoro svolto</th>') > 0, 'la colonna nuova fra le due');
+  assert.ok(html.indexOf('<td>ED-003</td><td class="int">Batokyo Srl</td><td class="desc">Cablaggio</td>') > 0, 'dal rapportino');
+  assert.ok(html.indexOf('<td>ED-007</td><td class="int">Acme Spa</td>') > 0, 'dall\'elenco dei progetti, se il rapportino ha solo l\'id');
+  assert.ok(html.indexOf('<td>—</td><td class="int">—</td>') > 0, 'senza progetto: due lineette');
+  assert.ok(html.indexOf('<td class="data">05/11/26</td>') > 0 && html.indexOf('05/11/2026</td>') < 0, 'la data corta');
+  assert.ok(html.indexOf('<tfoot><tr><td colspan="5">Totale</td>') > 0, 'il totale sotto le cinque colonne di testo');
+  assert.equal(html.split('<tfoot>').length, 2, 'una riga del totale');
+  assert.ok(html.indexOf('tfoot { display: table-row-group; }') > 0, 'il totale non si ripete in fondo a ogni pagina stampata');
+});
+
 test('PDF col logo e PDF_NOME spento: in cima solo il logo; Mittente e piè tengono il nome', () => {
   const conNome = D.rapportino(RAP, ANA(Object.assign({}, IMP, { STUDIO_LOGO: 'logoDiProva123' })), {});
   assert.ok(conNome.indexOf('<div class="studio-logo"><img src="/file/logoDiProva123" alt=""><div class="azienda">Studio Tecnico GM</div></div>') > 0, 'di base il nome c\'è');

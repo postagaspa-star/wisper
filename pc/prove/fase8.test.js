@@ -489,7 +489,9 @@ const DOCUMENTI = imp => ({
 // Mittente): le loro impronte sono quelle nuove, sempre uguali con e senza logo spento, nome breve, sito o PDF_NOME.
 // Il rapportino cambia ancora il 06/11/2026 sera (rapportino-lavori.md): niente stato "Firmato" in testa e niente riquadro
 // per la firma del cliente quando il lavoro non ha una firma vera.
-const PRIMA = { rapportino: '52d5344417e0c3ae', riepilogo: '4759a76f1c08a206', preventivo: '7c3df56de6a778b9', contratto: '3e004ffec6b44883', prospetto: '939e05a0d0fc89c3', avviso: '4da87281faef8a62' };
+// L'11/11/2026 cambiano tutti: il totale (<tfoot>) non si ripete più in fondo a ogni pagina; il riepilogo ha anche la
+// colonna "Intestato a" e la data corta. I quattro casi restano identici fra loro.
+const PRIMA = { rapportino: 'c1fccb2c2be9a4e2', riepilogo: '321f841ab85da115', preventivo: '548abf2cec40f5ab', contratto: '4607a1d8c85d8aaa', prospetto: 'c2a63b5dccb85821', avviso: '044c86bc963d7a67' };
 
 test('PDF senza logo identici a prima della fase 8, carattere per carattere (§9.3, §16, M18.3)', () => {
   const senza = [IMP, Object.assign({}, IMP, { STUDIO_LOGO: '', PDF_PIEDE: '', PDF_LOGO: true, STUDIO_NOME_BREVE: 'GM', STUDIO_SITO: 'www.esempio.it' }),

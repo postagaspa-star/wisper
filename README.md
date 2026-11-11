@@ -59,6 +59,17 @@ checkbox: you select whole reports, never a single job, and the bar counts repor
 draft invoice created before any bank account existed use today's default account, so writing the IBAN in Banche
 afterwards is enough to pass it to the invoicing program; the account is fixed in the invoice when it is passed.
 
+Version 1.3.1 (11 November) brings three changes I asked for. The period summary PDF (the one sent to a client
+to invoice a month) has a new column, **Intestato a**, between the project and the work description: the client the
+project is for, taken from the project. Dates are shortened to 05/11/26 to make room. The total row is printed only
+at the end: Chromium repeats a table's `<tfoot>` at the bottom of every printed page, so all PDF templates now render
+it as a normal row group. The report editor on the computer has three columns: the jobs on the left, every field of
+the chosen job in the middle, only the summary on the right (the job's bill and the day's total, unchanged). The field
+order comes from counting the real reports on the NAS: client, hours and description always, job code and project
+almost always, kilometres in about half, travel, extra hours, expenses, place, ticket, note and tools almost never, so
+those sit at the bottom or behind a tap. **Aggiungi un lavoro** moved to the bottom left, next to the buttons that
+close the window, outlined and bold; yellow stays only on Save. The phone editor is unchanged.
+
 Phase 1 (October 2026) replaces the Google Sheet with a small server on
 the home NAS (`server/`: Node.js 24 with its built-in SQLite, no npm dependencies, in
 Docker). It speaks the same protocol as the sheet script, so the phone and the office

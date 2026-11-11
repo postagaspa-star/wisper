@@ -11,6 +11,7 @@ mai dati veri di clienti.
 
 | Data | Versione | In breve |
 |------|----------|----------|
+| 11/11/2026 | 1.3.1 | [Il rapportino a tre colonne, il riepilogo col cliente del progetto](#v1-3-1) |
 | 09/11/2026 | 1.3.0 | [Il design Fai: una casa che dice cosa fare](#v1-3-0) |
 | 07/11/2026 | server 0.13.2 | [La fattura vede il conto scritto dopo in Banche](#server-0-13-2) |
 | 07/11/2026 | 1.2.1, server 0.13.1 | [I rapportini di prima uniti per giorno, un rapportino per scheda](#v1-2-1) |
@@ -44,6 +45,65 @@ mai dati veri di clienti.
 | 26/09–14/10/2026 | 0.1 | [Un rapportino confermato non si perde più](#coda) |
 | 7–9/08/2026 | 0.1.0 | [Hackathon NGN Hacks: la versione a voce, senza mani](#v0-1-0) |
 | marzo–giugno 2026 | prima del repository | [Le prime versioni](#prima) |
+
+---
+
+<a id="v1-3-1"></a>
+## 11 novembre 2026 · 1.3.1 · Il rapportino a tre colonne, il riepilogo col cliente del progetto
+
+**Perché.** Tre richieste di Andrea dell'11 novembre:
+
+1. nel riepilogo che si manda al cliente per fatturare i lavori del mese, "tra la colonna con il progetto/codice progetto
+   e la descrizione del lavoro svolto anche il nome del cliente a cui si riferisce il progetto (non la commessa, ma
+   proprio il progetto)", accorciando la data se serve;
+2. "togliere il totale che viene messo alla fine di ogni pagina del foglio": deve esserci solo alla fine;
+3. nel rapportino sul computer, "Aggiungi un lavoro" in basso a sinistra, vicino ai tasti che chiudono il rapportino, e
+   un po' più in vista; tutti i dati da compilare nella colonna di mezzo, dai più comuni e importanti; a destra solo il
+   riassunto, senza cambiarlo.
+
+**Il riepilogo (PDF, uguale su telefono e computer).**
+
+- Colonna nuova **Intestato a** fra Progetto e Lavoro svolto: il cliente scritto nel progetto. Senza progetto, una
+  lineetta. La data è corta (05/11/26) per fare spazio.
+- **Il totale una volta sola.** Il browser che fa i PDF ripeteva la riga del totale in fondo a ogni pagina: fa così con
+  la riga di piede delle tabelle. Ora è una riga normale e sta solo alla fine. Vale per tutti i PDF (rapportino,
+  riepilogo, preventivo); l'intestazione delle colonne invece si ripete ancora in cima a ogni pagina, ed è giusto così.
+
+<img src="docs/diario/2026-11-11-riepilogo-pagina-1.png" width="300" alt="La prima pagina del riepilogo, senza totale in fondo"> <img src="docs/diario/2026-11-11-riepilogo-ultima-pagina.png" width="300" alt="L'ultima pagina del riepilogo, col totale una volta sola">
+
+**Il rapportino sul computer.**
+
+- **Tre colonne.** A sinistra i lavori del rapportino; in mezzo tutti i campi del lavoro scelto; a destra solo il
+  riassunto, com'era: Il conto del lavoro scelto e Il rapportino (lavori, ore, km e totale del giorno). Chi non vede i
+  soldi a destra ha solo lavori, ore e km.
+- **L'ordine dei campi** viene dai rapportini veri sul NAS (contati l'11 novembre, solo i numeri). Su 37 lavori:
+  cliente, ore di lavoro, cosa hai fatto e tariffa ci sono sempre; commessa e progetto in 35; i km in 21; viaggio, ore
+  extra, spese, luogo, ticket, nota e strumenti in nessuno (prima della pulizia del 3 novembre: viaggio in 3 lavori su
+  20, spese in 8). Quindi: **Per chi** (cliente, commessa, progetto), **Il lavoro** (ore, cosa hai fatto), **Strada e
+  tariffa** (km, tariffa oraria), **Altro** (viaggio, spese e, con un tocco, ore extra, luogo, una nota per te,
+  strumenti usati).
+- **Aggiungi un lavoro** è in basso a sinistra, con accanto "Copia il lavoro scelto"; Annulla e Salva rapportino restano
+  a destra. "Aggiungere un rapportino" l'ho letto come questo pulsante: dentro la finestra è quello che aggiunge un lavoro
+  al rapportino aperto. È bianco col bordo scuro e la scritta in grassetto, quindi risalta più degli altri, ma il giallo
+  resta solo su Salva rapportino: un solo pulsante giallo per schermata.
+- Su uno schermo stretto (1024 pixel) le tre colonne si stringono senza spezzare i nomi.
+
+<img src="docs/diario/2026-11-11-rapportino-tre-colonne.png" width="620" alt="Il rapportino a tre colonne">
+
+<img src="docs/diario/2026-11-11-rapportino-tre-colonne-scuro.png" width="620" alt="Il rapportino a tre colonne nel tema scuro">
+
+Il rapportino sul telefono non cambia: la richiesta era per il computer.
+
+**Prove.** Computer: 356 prove dei conti e delle regole (una nuova per la colonna, la data corta e il totale) e tutti i
+giri cliccati (fasi 2-8, rapportini a lavori, progetti, menu laterale, collega, porta). Telefono: tutte le prove con
+`server/prove/telefono.js`. Un riepilogo di 60 lavori di esempio stampato in PDF con Edge: tre pagine, la riga del totale
+solo nell'ultima. Le impronte dei PDF nella prova del logo cambiano tutte (per la riga del totale): i quattro casi con e
+senza logo restano identici fra loro. Il server non cambia: resta la 0.13.2.
+
+**Non provato.** I telefoni veri di Manuel e Andrea; il PDF stampato dal telefono (usa lo stesso modello).
+
+**Pubblicata.** [Versione 1.3.1](https://github.com/postagaspa-star/wisper/releases/tag/v1.3.1): telefono codice 14,
+computer 1.3.1.
 
 ---
 

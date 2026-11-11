@@ -2158,19 +2158,22 @@
     const el = h('div', { class: 'lavoro-fermo' },
       h('div', { class: 'banda calma' }, icona('avviso', 20), h('span', { class: 'spazio' }, perche)),
       h('div', null, h('div', { style: { fontSize: '18px', fontWeight: '800' } }, l.cliente), h('div', { class: 't2' }, [commessaDi(l), progettoDi(l)].filter(Boolean).join(' · '))),
-      dettagliFissi(l));
-    return { lavoro: l, fermo: true, el, leggi: () => campiLavoro(l), valida: () => ({}), haErrori: () => false, riassunto: () => l, dataCambiata() {}, fuoco() {} };
+      dettagliFissi(l, true));
+    // 11/11/2026: il conto del lavoro sta nella colonna a destra, come quello dei lavori da scrivere.
+    const conto = soldi() ? h('div', { class: 'riassunto-lavoro' }, h('h3', null, 'Il conto'),
+      h('div', { class: 'conto' }, righeDelConto(l), h('div', { class: 'tot' }, h('span', null, 'Totale del lavoro'), h('span', null, C.euro(l.totale))))) : null;
+    return { lavoro: l, fermo: true, el, conto, leggi: () => campiLavoro(l), valida: () => ({}), haErrori: () => false, riassunto: () => l, dataCambiata() {}, fuoco() {} };
   }
 
-  /** Il dettaglio di un lavoro senza le azioni (per il lavoro fermo dentro il modulo). */
-  function dettagliFissi(r) {
+  /** Il dettaglio di un lavoro senza le azioni (per il lavoro fermo dentro il modulo); senzaConto: il conto è a parte. */
+  function dettagliFissi(r, senzaConto) {
     return h('div', { class: 'lavoro-dettagli' },
       h('div', { class: 'lavoro' }, r.descrizione || '—'),
       h('div', { class: 'tre-dati' },
         h('span', null, h('em', null, 'Ore'), h('b', null, C.ore(r.oreTotali))),
         h('span', null, h('em', null, 'Km'), h('b', null, C.numero(r.km) + ' km')),
         h('span', null, h('em', null, 'Spese'), h('b', null, C.num(r.spese) ? C.euro(r.spese) : '—'))),
-      soldi() ? h('div', { class: 'conto' }, righeDelConto(r), h('div', { class: 'tot' }, h('span', null, 'Totale del lavoro'), h('span', null, C.euro(r.totale)))) : null);
+      soldi() && !senzaConto ? h('div', { class: 'conto' }, righeDelConto(r), h('div', { class: 'tot' }, h('span', null, 'Totale del lavoro'), h('span', null, C.euro(r.totale)))) : null);
   }
 
   /**
@@ -2245,6 +2248,7 @@
 
     const zonaPerChi = h('div', { class: 'fila', style: { display: 'flex', flexDirection: 'column', gap: '10px' } });
     const zonaOre = h('div');
+    const zonaViaggio = h('div');
     const zonaKm = h('div', { class: 'fila', style: { display: 'flex', flexDirection: 'column', gap: '10px' } });
     const zonaTariffa = h('div');
     const zonaConto = h('div', { class: 'conto-vivo' });
@@ -2391,17 +2395,20 @@
         h('span', { class: 'stepper' }, tondo('meno', 'Meno ' + nome.toLowerCase(), () => cambia(-0.5)), valore, tondo('piu', 'Più ' + nome.toLowerCase(), () => cambia(0.5))));
     }
 
+    // 11/11/2026 (Andrea: "dai più comuni, importanti ed obbligatori"): nei rapportini veri le ore di lavoro ci sono
+    // sempre, quelle di viaggio quasi mai, le extra mai. Le ore di lavoro stanno con "Cosa hai fatto"; viaggio ed extra
+    // più sotto, con le spese.
     function disegnaOre() {
       const regole = regoleAttuali();
       aggiungi(svuota(zonaOre), [
-        stepper('Lavoro', 'oreLavoro'),
-        h('div', { class: 'pillole', style: { padding: '0 0 12px' } }, [4, 6, 8].map(n => h('button', {
+        stepper('Ore di lavoro', 'oreLavoro'),
+        h('div', { class: 'pillole' }, [4, 6, 8].map(n => h('button', {
           type: 'button', class: 'pillola' + (m.oreLavoro === n ? ' scelta' : ''), onclick: () => { m.oreLavoro = n; delete errori.oreLavoro; disegnaOre(); aggiornaConto(); },
         }, C.ore(n)))),
-        stepper('Viaggio', 'oreViaggio', regole.pagaViaggio ? 'pagato' : 'non pagato'),
-        m.extraAperto ? stepper('Extra', 'oreExtra', regole.maggExtra ? '+' + C.numero(regole.maggExtra) + '%' : null)
-          : h('div', { style: { paddingTop: '10px' } }, h('button', { type: 'button', class: 'pillola tratteggiata', onclick: () => { m.extraAperto = true; disegnaOre(); } }, '+ Ore extra')),
         errori.oreLavoro ? h('div', { class: 'campo' }, h('div', { class: 'errore' }, errori.oreLavoro)) : null]);
+      aggiungi(svuota(zonaViaggio), [
+        stepper('Viaggio', 'oreViaggio', regole.pagaViaggio ? 'pagato' : 'non pagato'),
+        m.extraAperto ? stepper('Extra', 'oreExtra', regole.maggExtra ? '+' + C.numero(regole.maggExtra) + '%' : null) : null]);
     }
 
     function disegnaKm() {
@@ -2435,17 +2442,22 @@
         h('div', { class: 'campo-tariffa' }, campo(null, conSuffisso(v.tariffa, '€/h'), errori.tariffa)))]);
     }
 
+    /** Quello che serve di rado: le spese, poi in una riga sola le aggiunte che nei rapportini veri non si usano quasi mai. */
     function disegnaAltro() {
       const ticket = S.ana.impostazioni.TICKET_ATTIVO === 'SI' || r.ticket;
+      const piu = [
+        !m.extraAperto ? h('button', { type: 'button', class: 'pillola tratteggiata', onclick: () => { m.extraAperto = true; disegnaOre(); disegnaAltro(); } }, '+ Ore extra') : null,
+        !luogoAperto ? h('button', { type: 'button', class: 'pillola tratteggiata', onclick: () => { luogoAperto = true; disegnaAltro(); v.luogo.focus(); } }, '+ Luogo') : null,
+        !notaAperta ? h('button', { type: 'button', class: 'pillola tratteggiata', onclick: () => { notaAperta = true; disegnaAltro(); v.noteInterne.focus(); } }, '+ Una nota per te') : null,
+        conStrumenti && !strumentiAperti ? h('button', { type: 'button', class: 'pillola tratteggiata', onclick: () => { strumentiAperti = true; disegnaAltro(); disegnaStrumenti(); } }, '+ Strumenti usati') : null,
+      ].filter(Boolean);
       aggiungi(svuota(zonaAltro), [
         h('div', { class: 'riga-campi' }, campo('Spese', conSuffisso(v.spese, '€'), errori.spese), campo('Di cosa', v.noteSpese)),
-        (!luogoAperto || !notaAperta) ? h('div', { class: 'pillole' },
-          !luogoAperto ? h('button', { type: 'button', class: 'pillola', onclick: () => { luogoAperto = true; disegnaAltro(); v.luogo.focus(); } }, '+ Luogo') : null,
-          !notaAperta ? h('button', { type: 'button', class: 'pillola', onclick: () => { notaAperta = true; disegnaAltro(); v.noteInterne.focus(); } }, '+ Una nota per te') : null) : null,
         luogoAperto ? campo('Luogo', v.luogo) : null,
         ticket ? campo('Ticket', v.ticket) : null,
         notaAperta ? campo('Nota per te, non va al cliente', v.noteInterne) : null,
-        conStrumenti ? (strumentiAperti ? zonaStrumenti : h('div', { class: 'pillole' }, h('button', { type: 'button', class: 'pillola', onclick: () => { strumentiAperti = true; disegnaAltro(); disegnaStrumenti(); } }, '+ Strumenti usati'))) : null]);
+        conStrumenti && strumentiAperti ? zonaStrumenti : null,
+        piu.length ? h('div', { class: 'pillole' }, piu) : null]);
     }
 
     /**
@@ -2616,17 +2628,21 @@
 
     disegnaPerChi0(); disegnaOre(); disegnaKm(); disegnaTariffa(); disegnaAltro(); disegnaDescrizione();
     if (conStrumenti && strumentiAperti) disegnaStrumenti();
-    const zonaConto0 = soldi() ? [h('h3', null, 'Il conto'), zonaConto] : [];
-    const el = h('div', { class: 'modulo' },
-      h('div', { class: 'col' }, r.numeroTicket || r.idTicket ? h('div', { class: 'pillole-testa' }, h('span', { class: 'pill p-grigio' }, icona('chiaveInglese', 14, 2.2), 'Ticket ' + (r.numeroTicket || ''))) : null,
-        h('h3', null, 'Per chi'), zonaPerChi, h('h3', null, 'Ore e strada'), zonaOre, zonaKm, zonaTariffa),
-      h('div', { class: 'col' }, h('h3', null, 'Il lavoro'), campoDescrizione, zonaAltro, zonaConto0));
+    // 11/11/2026 (Andrea): tutti i campi nella colonna di mezzo, dai più usati nei rapportini veri (cliente, commessa e
+    // progetto; ore e cosa hai fatto; km e tariffa) a quelli che servono di rado. Il conto va nella colonna a destra.
+    const conto = soldi() ? h('div', { class: 'riassunto-lavoro' }, h('h3', null, 'Il conto'), zonaConto) : null;
+    const el = h('div', { class: 'modulo modulo-lavoro' },
+      r.numeroTicket || r.idTicket ? h('div', { class: 'pillole-testa' }, h('span', { class: 'pill p-grigio' }, icona('chiaveInglese', 14, 2.2), 'Ticket ' + (r.numeroTicket || ''))) : null,
+      h('section', null, h('h3', null, 'Per chi'), zonaPerChi),
+      h('section', null, h('h3', null, 'Il lavoro'), zonaOre, campoDescrizione),
+      h('section', null, h('h3', null, soldi() ? 'Strada e tariffa' : 'Strada'), zonaKm, zonaTariffa),
+      h('section', null, h('h3', null, 'Altro'), zonaViaggio, zonaAltro));
     // Il conto all'inizio, senza avvisare l'editor (che non è ancora pronto).
     (() => { const regole = regoleAttuali(); const d = leggiModulo(); const conto = C.calcola(d, regole);
       aggiungi(svuota(zonaConto), [h('div', { class: 'conto' }, righeDelConto(Object.assign({}, d, conto), regole), h('div', { class: 'tot' }, h('span', null, 'Totale del lavoro'), h('span', null, C.euro(conto.totale))))]); })();
 
     return {
-      lavoro: r, fermo: false, el, leggi: leggiModulo, riassunto,
+      lavoro: r, fermo: false, el, conto, leggi: leggiModulo, riassunto,
       valida() {
         errori = valida(leggiModulo());
         disegnaPerChi0Pulito(); disegnaOre(); disegnaKm(); disegnaTariffa(); disegnaAltro(); disegnaDescrizione();
@@ -2661,6 +2677,7 @@
     const elenco = h('div', { class: 'elenco-lavori' });
     const zonaLavoro = h('div', { class: 'zona-lavoro' });
     const riassunto = h('div', { class: 'riassunto-giorno' });
+    const colDestra = h('div', { class: 'col-riassunto', 'aria-label': 'Il riassunto' });
     const forme = [];
     let scelto = 0;
     let pronto = false;
@@ -2702,9 +2719,7 @@
     }
 
     function disegnaElenco() {
-      aggiungi(svuota(elenco), [forme.map(schedaElenco),
-        h('button', { type: 'button', class: 'aggiungi-lavoro', 'data-azione': 'aggiungi-lavoro', onclick: aggiungiLavoro }, icona('piu', 18, 2.6), 'Aggiungi un lavoro'),
-        h('button', { type: 'button', class: 'btn collegamento', 'data-azione': 'copia-lavoro', onclick: copiaLavoro }, 'Copia il lavoro scelto')]);
+      aggiungi(svuota(elenco), [forme.map(schedaElenco)]);
     }
 
     function disegnaRiassunto() {
@@ -2714,8 +2729,15 @@
         soldi() ? h('span', { class: 'tot-giorno' }, 'Totale del giorno', h('b', null, C.euro(t.totale))) : null]);
     }
 
+    /** La colonna a destra: solo il riassunto, il conto del lavoro scelto e i numeri di tutto il rapportino. */
+    function disegnaDestra() {
+      const f = forme[scelto];
+      aggiungi(svuota(colDestra), [f.conto || null, h('div', { class: 'riassunto-rap' }, h('h3', null, 'Il rapportino'), riassunto)]);
+    }
+
     function mostraLavoro() {
       const f = forme[scelto];
+      disegnaDestra();
       aggiungi(svuota(zonaLavoro), [h('div', { class: 'testa-lavoro' },
         h('h3', null, 'Lavoro ' + (scelto + 1) + (forme.length > 1 ? ' di ' + forme.length : '')),
         !f.fermo && forme.length > 1 ? h('button', { type: 'button', class: 'btn collegamento rosso', 'data-azione': 'togli-lavoro', onclick: () => togli(scelto) }, 'Togli questo lavoro') : null),
@@ -2805,10 +2827,13 @@
     disegnaRiassunto();
     mostraLavoro();
     pronto = true;
-    const corpoF = h('div', { class: 'editor-rap' }, h('div', { class: 'col-elenco' }, elenco), zonaLavoro);
+    const corpoF = h('div', { class: 'editor-rap' }, h('div', { class: 'col-elenco' }, elenco), zonaLavoro, colDestra);
+    // 11/11/2026 (Andrea): "Aggiungi un lavoro" in basso a sinistra, un po' più in vista dei pulsanti normali.
     const chiudi = finestra({
       titolo: G.id ? 'Rapportino ' + G.id : 'Nuovo rapportino', larghezza: 'piena editor', corpo: corpoF, fuoco: false, testaExtra: zonaData,
-      pulsanti: [riassunto, 'spazio', h('button', { type: 'button', class: 'btn testo grande', onclick: () => chiudi() }, 'Annulla'),
+      pulsanti: [h('button', { type: 'button', class: 'btn grande aggiungi-lavoro', 'data-azione': 'aggiungi-lavoro', onclick: aggiungiLavoro }, icona('piu', 18, 2.6), 'Aggiungi un lavoro'),
+        h('button', { type: 'button', class: 'btn testo grande', 'data-azione': 'copia-lavoro', onclick: copiaLavoro }, 'Copia il lavoro scelto'),
+        'spazio', h('button', { type: 'button', class: 'btn testo grande', onclick: () => chiudi() }, 'Annulla'),
         h('button', { type: 'button', class: 'btn giallo grande', 'data-azione': 'salva-rapportino', onclick: salva }, 'Salva rapportino')],
     });
     forme[scelto].fuoco();

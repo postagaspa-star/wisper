@@ -2090,7 +2090,20 @@ button.imp-riga.collegamento-imp:hover .lab { text-decoration: underline; text-u
 .data-rap { flex: 1; min-width: 0; display: flex; align-items: center; flex-wrap: wrap; gap: 6px 14px; font-size: 16px; font-weight: 700; color: var(--testo2); }
 .data-rap .quando { white-space: nowrap; }
 .data-rap input { height: 40px; border-radius: 12px; border: 1.5px solid var(--bordo-campo); background: var(--scheda); color: var(--testo); padding: 0 10px; font-size: 15px; font-weight: 700; }
-.editor-rap { display: grid; grid-template-columns: 300px minmax(0, 1fr); height: calc(100vh - 230px); min-height: 380px; }
+.editor-rap { display: grid; grid-template-columns: 280px minmax(0, 1fr) 330px; height: calc(100vh - 230px); min-height: 380px; }
+/* 11/11/2026: a destra solo il riassunto (il conto del lavoro scelto e i numeri del rapportino), come prima. */
+.editor-rap .col-riassunto { overflow: auto; border-left: 1px solid var(--riga); padding: 18px 22px 24px; display: flex; flex-direction: column; gap: 26px; min-width: 0; }
+.col-riassunto h3 { font-size: 18px; margin-bottom: 12px; }
+.col-riassunto .riassunto-giorno { flex-direction: column; align-items: stretch; gap: 8px; border-top: 1px solid var(--riga); padding-top: 12px; }
+.col-riassunto .riassunto-giorno .tot-giorno { justify-content: space-between; }
+.modulo.modulo-lavoro { display: flex; flex-direction: column; gap: 28px; max-width: 760px; }
+.modulo-lavoro section { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.modulo-lavoro section > h3 { font-size: 18px; }
+/* Il totale del conto nella colonna stretta: la cifra resta intera, al massimo va sotto l'etichetta. */
+.col-riassunto .conto .tot { flex-wrap: wrap; gap: 0 10px; }
+.col-riassunto .conto .tot span:last-child { font-size: 26px; white-space: nowrap; }
+.col-riassunto .tot-giorno b { white-space: nowrap; }
+@container (max-width: 460px) { .zona-lavoro .griglia-scelte { grid-template-columns: minmax(0, 1fr); } }
 .editor-rap .col-elenco { overflow: auto; border-right: 1px solid var(--riga); background: var(--superficie-tenue); padding: 18px 16px 18px 22px; }
 .elenco-lavori { display: flex; flex-direction: column; gap: 10px; }
 .card-lavoro { display: flex; align-items: flex-start; gap: 12px; width: 100%; text-align: left; border: 1.5px solid var(--bordo-scheda); border-radius: 18px; background: var(--scheda); padding: 12px 14px; color: var(--testo); }
@@ -2100,14 +2113,13 @@ button.imp-riga.collegamento-imp:hover .lab { text-decoration: underline; text-u
 .card-lavoro .num-lav { flex: none; width: 30px; height: 30px; border-radius: 15px; background: var(--testo); color: var(--scheda); display: inline-flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 800; }
 .card-lavoro.sbagliata .num-lav { background: var(--rosso); color: #fff; }
 .card-lavoro .testi { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
-.card-lavoro .testi b { font-size: 15px; font-weight: 800; line-height: 1.3; overflow-wrap: anywhere; }
+.card-lavoro .testi b { font-size: 15px; font-weight: 800; line-height: 1.3; overflow-wrap: break-word; }
 .card-lavoro .testi > span { font-size: 13px; font-weight: 600; color: var(--tenue); line-height: 1.35; overflow-wrap: anywhere; }
 .card-lavoro .numeri { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; }
 .card-lavoro .numeri b { font-size: 15px; color: var(--testo); font-variant-numeric: tabular-nums; white-space: nowrap; }
-.aggiungi-lavoro { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 52px; width: 100%; border: 1.5px dashed var(--bordo-campo); border-radius: 18px; background: transparent; color: var(--testo); font-size: 15px; font-weight: 800; }
-.aggiungi-lavoro:hover { border-color: var(--testo2); background: var(--scheda); }
+.btn.aggiungi-lavoro { background: var(--scheda); border-color: var(--testo); color: var(--testo); font-weight: 800; }
+.btn.aggiungi-lavoro:hover { background: var(--giallo-scelto); }
 .aggiungi-lavoro svg { stroke: currentColor; }
-.elenco-lavori > .btn.collegamento { align-self: center; padding: 6px 0; }
 .zona-lavoro { overflow: auto; padding: 18px 26px 24px; container-type: inline-size; min-width: 0; }
 .testa-lavoro { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
 .testa-lavoro h3 { flex: 1; font-size: 20px; }
@@ -2122,7 +2134,23 @@ button.imp-riga.collegamento-imp:hover .lab { text-decoration: underline; text-u
 .riassunto-giorno .tot-giorno { display: inline-flex; align-items: baseline; gap: 10px; font-size: 15px; font-weight: 700; color: var(--testo2); }
 .riassunto-giorno .tot-giorno b { font-size: 24px; font-weight: 800; color: var(--testo); font-variant-numeric: tabular-nums; letter-spacing: -0.4px; }
 /* I nomi lunghi nelle schede da scegliere vanno a capo (niente puntini). */
-.finestra.editor .scelta-card .testi b, .finestra.editor .scelta-card .testi span { white-space: normal; overflow-wrap: anywhere; }
+.finestra.editor .scelta-card .testi b, .finestra.editor .scelta-card .testi span { white-space: normal; overflow-wrap: break-word; }
+
+/* 11/11/2026: sugli schermi stretti (1024) le tre colonne si stringono; dopo le regole di base, che altrimenti vincono. */
+@media (max-width: 1100px) {
+  .editor-rap { grid-template-columns: 230px minmax(0, 1fr) 240px; }
+  .editor-rap .col-elenco { padding-left: 16px; padding-right: 12px; }
+  .editor-rap .col-riassunto { padding: 16px 16px 20px; }
+  .zona-lavoro { padding: 16px 18px 22px; }
+  .card-lavoro { padding: 10px 11px; gap: 9px; }
+  .card-lavoro .num-lav { width: 26px; height: 26px; font-size: 13px; }
+  .card-lavoro .testi b { font-size: 14px; }
+}
+@media (max-width: 900px) {
+  .editor-rap { grid-template-columns: 220px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; }
+  .editor-rap .col-elenco { grid-row: 1 / span 2; }
+  .editor-rap .col-riassunto { grid-column: 2; border-left: none; border-top: 1px solid var(--riga); max-height: 40vh; }
+}
 
 /* Invio: una scheda per destinatario, l'anteprima del suo foglio a sinistra. */
 .invio-f .destinatari { display: flex; flex-direction: column; gap: 10px; max-height: calc(100vh - 420px); min-height: 120px; overflow: auto; padding: 2px; }
