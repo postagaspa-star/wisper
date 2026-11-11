@@ -68,9 +68,16 @@ the chosen job in the middle, only the summary on the right (the job's bill and 
 order comes from counting the real reports on the NAS: client, hours and description always, job code and project
 almost always, kilometres in about half, travel, extra hours, expenses, place, ticket, note and tools almost never, so
 those sit at the bottom or behind a tap. **Aggiungi un lavoro** moved to the bottom left, next to the buttons that
-close the window, outlined and bold; yellow stays only on Save. The phone editor is unchanged. Version 1.3.2 (same day)
-puts **Aggiungi un lavoro** right between Cancel and Save on the computer, and in the phone's bottom bar right next to
-the yellow button.
+close the window, outlined and bold; yellow stays only on Save. Version 1.3.2 (same day) puts **Aggiungi un lavoro**
+right between Cancel and Save on the computer, and in the phone's bottom bar right next to the yellow button. Later that
+evening the same 1.3.2 (phone code 16, computer 1.3.2.1, still shown as 1.3.2) brought the computer's three columns to
+the phone as one page: the jobs as a strip of cards at the top (scrolls sideways), every field of the chosen job in the
+middle in the same groups as the computer (Per chi, Il lavoro, Strada e tariffa, Altro, Il conto), and at the bottom
+the job's bill, the day's total, Add a job and Save. The three-step wizard is gone: what you type goes straight into
+the strip and the totals (`GiornataStato.sincronizza`), and Save checks the jobs one by one like the computer, picking
+the first one with a missing field and scrolling to it. The same update adds **Scegli tutti** to the report list on
+both devices (a checkbox in the table header on the computer, a row above the list on the phone): it selects every
+report currently shown, so with filters on only the ones that pass them.
 
 Phase 1 (October 2026) replaces the Google Sheet with a small server on
 the home NAS (`server/`: Node.js 24 with its built-in SQLite, no npm dependencies, in

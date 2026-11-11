@@ -459,7 +459,7 @@ private fun Wisper(archivio: Archivio, attivita: ComponentActivity) {
                 eu.stgm.wisper.rapportino.RegoleProgetti.apertiDi(anag, dati.viste.value.map { it.rapportino }, com.id) else null
             if (aperti?.size == 1) r = eu.stgm.wisper.ui.rapportinoDelProgetto(r, anag, aperti.first())
             g.aperto = ModuloStato(r, nuovo = true).also { m ->
-                if (aperti != null && aperti.size != 1) { m.sceltaCommessa = true; m.sceltaProgetto = true }
+                if (aperti != null && aperti.size != 1) { m.perChiAperto = true; m.sceltaCommessa = true; m.sceltaProgetto = true }
             }
             modulo = g
             pagina = "rapportino"

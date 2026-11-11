@@ -1534,10 +1534,21 @@
       aggiungi(area, [h('p', { class: 'vuoto' }, S.rapportini.length ? 'Nessun lavoro con questi filtri.' : 'Ancora nessun rapportino.')]);
       return;
     }
+    // 11/11/2026 (Andrea): "una volta applicati i filtri e anche prima, si deve poter selezionare tutto". La casella nella
+    // testata sceglie (o toglie) tutti i rapportini che si vedono, cioè quelli che passano i filtri.
+    const statoTutti = RL.casellaRapportino(lista, S.scelti, chiaveLavoro);
+    const scegliTutti = () => {
+      const tutti = statoTutti !== 'tutti';
+      lista.forEach(l => (tutti ? S.scelti.add(chiaveLavoro(l)) : S.scelti.delete(chiaveLavoro(l))));
+      ridisegnaElenco();
+    };
+    const casellaTutti = sceglie ? h('input', { type: 'checkbox', class: 'casella casella-rap casella-tutti', 'aria-label': 'Scegli tutti i rapportini in vista',
+      title: statoTutti === 'tutti' ? 'Togli la scelta' : 'Scegli tutti', 'data-azione': 'scegli-tutti', checked: statoTutti === 'tutti', onclick: scegliTutti }) : null;
+    if (casellaTutti) casellaTutti.indeterminate = statoTutti === 'alcuni';
     // 07/11/2026 ("non si capisce quando inizia un rapportino e quando finisce"): ogni rapportino è una scheda a sé, con la
     // sua testata e i suoi lavori; fra una scheda e l'altra c'è spazio.
     const tab = h('div', { class: 'tab lavori a-blocchi' + (sceglie ? ' con-casella' : '') + (soldi() ? ' con-soldi' : '') + (S.scelti.size ? ' con-scelti' : '') },
-      h('div', { class: 'r testa' }, sceglie ? h('span') : null, h('span', { class: 'c-cliente' }, 'Cliente'), h('span', { class: 'c-commessa' }, 'Commessa'),
+      h('div', { class: 'r testa' }, sceglie ? h('span', null, casellaTutti) : null, h('span', { class: 'c-cliente' }, 'Cliente'), h('span', { class: 'c-commessa' }, 'Commessa'),
         h('span', { class: 'c-progetto' }, 'Progetto'), h('span', null, 'Lavoro svolto'), h('span', { class: 'n' }, 'Ore'), h('span', { class: 'n' }, 'Km'),
         soldi() ? h('span', { class: 'n' }, 'Totale') : null, h('span', null, 'Stato')));
     const aperta = S.aperto ? (giornata(S.aperto) || {}).id : null;
@@ -1574,6 +1585,8 @@
         // Si scelgono rapportini interi: la barra li conta, sotto quanti lavori e clienti (07/11/2026).
         h('div', { class: 'scelti-testo' }, h('b', null, (n => (n === 1 ? '1 rapportino scelto' : n + ' rapportini scelti'))(RL.raggruppa(sel).length)),
           h('span', null, [RL.nLavori(sel.length), RL.nClienti(RL.contaClienti(sel))].join(' · ') + (soldi() ? ' · ' + C.euro(somma(sel)) : ''))),
+        // Scelto qualcosa ma non tutto: "Scegli tutti" a portata di mano (quelli che passano i filtri).
+        sel.length < lista.length ? h('button', { type: 'button', class: 'btn piccolo', 'data-azione': 'scegli-tutti-barra', onclick: scegliTutti }, 'Scegli tutti') : null,
         h('button', { type: 'button', class: 'btn piccolo', 'data-azione': 'da-inviare', onclick: () => preparaInvio(sel) }, 'Da inviare'),
         // I fatturati restano fatturati: "inviato" viene prima.
         h('button', { type: 'button', class: 'btn piccolo', onclick: () => cambiaStato(sel.filter(r => r.stato !== 'FATTURATO'), 'INVIATO') }, 'Segna inviati'),
@@ -2829,7 +2842,7 @@
     pronto = true;
     const corpoF = h('div', { class: 'editor-rap' }, h('div', { class: 'col-elenco' }, elenco), zonaLavoro, colDestra);
     // 11/11/2026 (Andrea): "Aggiungi un lavoro" un po' più in vista dei pulsanti normali, subito a sinistra di Salva
-    // rapportino e a destra di Annulla (12/11: "di fianco (sinistra) al tasto per chiudere il rapportino").
+    // rapportino e a destra di Annulla (poco dopo: "di fianco (sinistra) al tasto per chiudere il rapportino").
     const chiudi = finestra({
       titolo: G.id ? 'Rapportino ' + G.id : 'Nuovo rapportino', larghezza: 'piena editor', corpo: corpoF, fuoco: false, testaExtra: zonaData,
       pulsanti: [h('button', { type: 'button', class: 'btn testo grande', 'data-azione': 'copia-lavoro', onclick: copiaLavoro }, 'Copia il lavoro scelto'),

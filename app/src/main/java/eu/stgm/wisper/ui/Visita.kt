@@ -90,11 +90,9 @@ class Visita {
         Passo("ore-6", "Le ore", "Tocca 6 h, poi aggiusti con più e meno.", true, "rapportino"),
         Passo("km-ultimi", "I chilometri", "Wisper ricorda i km dell'ultima volta. Toccali.", true, "rapportino"),
         Passo("totale", "Il conto", "Il totale si aggiorna mentre scrivi.", false, "rapportino"),
-        Passo("avanti", "Il lavoro", "Tocca Avanti per scrivere cosa hai fatto.", true, "rapportino"),
         Passo("scontrino", "Gli scontrini", "Fotografa lo scontrino subito, o aggiungilo dopo.", false, "rapportino"),
-        // 06/11/2026 (rapportino-lavori.md): il lavoro va nel rapportino del giorno, che può averne più di uno. Niente firma.
-        Passo("avanti", "Nel rapportino", "Tocca Aggiungi al rapportino: il lavoro va nel rapportino di oggi.", true, "rapportino"),
-        Passo("aggiungi", "Più lavori in un giorno", "Hai lavorato anche per un altro cliente? Aggiungi un lavoro: ognuno ha le sue ore e i suoi km.", false, "rapportino"),
+        // 11/11/2026: una pagina sola, niente piu' Avanti e Aggiungi al rapportino. Il rapportino del giorno può avere più lavori.
+        Passo("aggiungi", "Più lavori in un giorno", "Hai lavorato anche per un altro cliente? Aggiungi un lavoro: va nella fila in alto, con le sue ore e i suoi km.", false, "rapportino"),
         Passo("salva-rapportino", "Salva il rapportino", "In basso ore, km e totale del giorno. Il pulsante giallo salva tutto.", false, "rapportino"),
         Passo("giorno", "Il tuo giorno", "In cima ai Rapportini vedi subito se quello di oggi è scritto.", false, "rapportini"),
         Passo("manca", "I giorni che mancano", "Un giorno senza rapportino si vede subito: toccalo per scriverlo.", false, "rapportini"),

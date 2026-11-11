@@ -5,6 +5,7 @@ import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -14,12 +15,14 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -35,8 +38,10 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -44,7 +49,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -59,18 +66,25 @@ import eu.stgm.wisper.rapportino.Giornata
 import eu.stgm.wisper.rapportino.Giornate
 import eu.stgm.wisper.rapportino.Numeri
 import eu.stgm.wisper.rapportino.Rapportino
+import eu.stgm.wisper.rapportino.RegoleProgetti
 import eu.stgm.wisper.rapportino.Stato
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.launch
 
 /**
- * Il rapportino della giornata (rapportino-lavori.md §5.1): "Rapportino", la data con Cambia, "N lavori · per N
- * clienti", una scheda per lavoro e **Aggiungi un lavoro**. In basso ore e km del giorno, il totale e **Salva
- * rapportino**; dopo il salvataggio il foglio "Rapportino salvato" con **Invia ai clienti** e **Più tardi**.
+ * Il rapportino della giornata, su una pagina sola (11/11/2026, Andrea: "Fai lo stesso editor a tre colonne anche sul
+ * telefono", scelta "Pagina unica"). Le tre colonne del computer, una sopra l'altra:
+ * - **in alto** "Rapportino", la data con Cambia e la **fila dei lavori** (scorre di lato; toccarne uno lo sceglie);
+ * - **in mezzo** tutti i campi del lavoro scelto ([LavoroNellaPagina]): Per chi, Il lavoro, Strada e tariffa, Altro, Il
+ *   conto; quello che si scrive va subito nel lavoro della fila;
+ * - **in basso** il conto del lavoro scelto e il totale del giorno, **Aggiungi un lavoro** e **Salva rapportino**.
  *
+ * Salva rapportino controlla i lavori uno per uno, come il computer: il primo con qualcosa che manca si sceglie e
+ * l'avviso dice quale ("Lavoro 2: scrivi che lavoro hai fatto"). Un lavoro aggiunto e lasciato vuoto non si salva.
  * Riaperto (non cambiato) il pulsante giallo e' **Invia ai clienti** se c'e' qualcosa da inviare; nel menu ⋯ Segna
- * inviato senza email, Segna fatturato, Riporta da inviare, Elimina. Toccare un lavoro lo apre (i suoi 3 passi, o il
- * suo riepilogo; uno Inviato o Fatturato in sola lettura).
+ * inviato senza email, Segna fatturato, Riporta da inviare, Elimina. Mentre si scrive (tastiera aperta) la parte in
+ * basso si nasconde, per lasciare posto ai campi.
  *
  * @param onInvia gli idLocale dei lavori da mandare: si apre l'Invio, diviso per destinatario.
  * @param onSalvata dopo Salva rapportino (fase 5: un lavoro col ticket chiede "Il lavoro è finito?").
@@ -85,13 +99,6 @@ fun SchermataGiornata(
     onInvia: (List<String>) -> Unit,
     onSalvata: (Giornata) -> Unit = {},
 ) {
-    // Un lavoro aperto prende tutto lo schermo; Indietro (o Fatto) torna qui.
-    val aperto = stato.aperto
-    if (aperto != null) {
-        SchermataLavoro(dati, stato, aperto, bozza, onEsciDalRapportino = { bozza.cancella(); onChiudi() })
-        return
-    }
-
     val c = W.colori
     val avvisi = LocalAvvisi.current
     val visita = LocalVisita.current
@@ -99,10 +106,16 @@ fun SchermataGiornata(
     val costi = perm.costi
     val scrive = perm.modifica(eu.stgm.wisper.rapportino.Moduli.RAPPORTINI)
     val fattura = perm.modifica(eu.stgm.wisper.rapportino.Moduli.FATTURAZIONE) && costi
+    // Il lavoro da mostrare si sceglie subito (un rapportino nuovo ne ha gia' uno, con la scelta del cliente aperta).
+    remember(stato) { stato.preparaPagina(scrive); true }
     val ana by dati.anagrafiche.collectAsStateWithLifecycle()
     val viste by dati.viste.collectAsStateWithLifecycle()
     val storico by dati.storico.collectAsStateWithLifecycle()
+    val sessione by dati.sessione.collectAsStateWithLifecycle()
+    val progettiAttivi = RegoleProgetti.attivi(sessione)
     val perId = remember(viste, storico) { (storico.associateBy { it.rapportino.idLocale } + viste.associateBy { it.rapportino.idLocale }) }
+    val scope = rememberCoroutineScope()
+    val scorri = rememberScrollState()
 
     // Quello che sa il server (numero, stato di ogni lavoro) arriva mentre la pagina e' aperta: si aggiorna senza
     // toccare quello che si sta scrivendo.
@@ -117,6 +130,13 @@ fun SchermataGiornata(
             }
             if (stato.id.isBlank() && v.idGiornata.isNotBlank()) stato.id = v.idGiornata
         }
+    }
+    // Il lavoro scelto va nella fila a ogni tasto (cliente, ore, km, conto: la fila e i totali si aggiornano subito).
+    val scelto = stato.aperto
+    LaunchedEffect(scelto, scrive) {
+        val m = scelto ?: return@LaunchedEffect
+        if (!scrive) return@LaunchedEffect
+        snapshotFlow { if (m.base.bloccato) null else m.rapportino() to m.fotoNuove.toList() }.collect { if (it != null) stato.sincronizza(m) }
     }
     // La copia su disco mentre c'e' qualcosa da salvare (se Android chiude l'app); niente nella visita.
     LaunchedEffect(stato) {
@@ -139,20 +159,54 @@ fun SchermataGiornata(
     fun uscita() {
         if (stato.cambiata && !dati.esempio) chiediUscita = true else esci()
     }
-    BackHandler { uscita() }
-
-    /** Un lavoro nuovo: i suoi 3 passi. */
-    fun aggiungi() {
-        visita?.azione("aggiungi")
-        stato.aperto = ModuloStato(stato.lavoroNuovo(), nuovo = true)
+    // Indietro dentro la scelta di cliente, commessa o progetto torna com'era (o un passo indietro); se no esce.
+    BackHandler {
+        val m = stato.aperto
+        when {
+            m == null || !m.perChiAperto -> uscita()
+            m.perChiAnnullabile -> m.annullaPerChi()
+            m.sceltaProgetto -> m.sceltaProgetto = false
+            m.sceltaCommessa -> m.sceltaCommessa = false
+            else -> uscita()
+        }
     }
 
-    fun apri(l: Rapportino) {
-        stato.aperto = ModuloStato(l, nuovo = false).also { m -> stato.fotoNuove[l.idLocale]?.let { m.fotoNuove.addAll(it) } }
+    /** Un lavoro nuovo: in fondo alla fila, scelto, con la scelta del cliente aperta; la pagina torna in cima. */
+    fun aggiungi() {
+        visita?.azione("aggiungi")
+        stato.aggiungiLavoro()
+        scope.launch { scorri.animateScrollTo(0) }
+    }
+
+    /** Le regole del lavoro (tariffa fissa, km, viaggio) per controllarlo: quelle del suo cliente e della sua commessa. */
+    fun valido(m: ModuloStato): Boolean {
+        m.progettiAttivi = progettiAttivi
+        val cl = ana.cliente(m.idCliente, if (m.idCliente.isBlank()) m.cliente else "")
+        return m.valida(ana.regoleDi(cl, ana.commessa(m.idCommessa)), costi)
     }
 
     fun salva() {
+        // Un lavoro aggiunto e lasciato vuoto non si salva (se ce n'e' almeno uno scritto).
+        if (stato.lavori.any { !stato.vuoto(it) }) stato.togliVuoti()
         if (stato.lavori.isEmpty()) { avvisi.mostra("Aggiungi almeno un lavoro"); return }
+        if (stato.aperto == null) stato.preparaPagina(scrive)
+        // I controlli lavoro per lavoro, come il computer: il primo con un errore si sceglie e l'avviso dice quale.
+        val sbagliati = stato.lavori.mapIndexedNotNull { i, l -> i.takeIf { !l.bloccato && stato.daControllare(l) && !valido(stato.moduloDi(l)) } }
+        if (sbagliati.isNotEmpty()) {
+            val i = sbagliati.first()
+            val m = stato.moduloDi(stato.lavori[i])
+            stato.aperto = m
+            if ("progetto" in m.errori) { m.perChiAperto = true; m.sceltaCommessa = true; m.sceltaProgetto = true }
+            else if ("cliente" in m.errori) { m.perChiAperto = true; m.sceltaCommessa = m.cliente.isNotBlank(); m.sceltaProgetto = false }
+            if ("cliente" in m.errori || "progetto" in m.errori) scope.launch { scorri.animateScrollTo(0) } else m.mostraErrore++
+            val frase = m.errori.values.first()
+            val altri = sbagliati.drop(1).map { it + 1 }
+            avvisi.mostra(
+                (if (stato.lavori.size > 1) "Lavoro ${i + 1}: " + frase.replaceFirstChar { it.lowercase() } else frase) +
+                    (if (altri.isEmpty()) "" else " (anche " + (if (altri.size == 1) "il lavoro " else "i lavori ") + altri.joinToString(", ") + ")"),
+            )
+            return
+        }
         val g = stato.giornata()
         dati.salvaGiornata(g)
         // Le foto dopo il rapportino: il lavoro deve esistere sul server quando arriva la sua foto.
@@ -176,6 +230,8 @@ fun SchermataGiornata(
     val inviati = lavori.filter { it.stato == Stato.INVIATO }
     val nonFatturati = lavori.filter { it.stato != Stato.FATTURATO }
     val tuttiBloccati = lavori.isNotEmpty() && lavori.any { it.bloccato }
+    val iScelto = lavori.indexOfFirst { it.idLocale == scelto?.base?.idLocale }
+    val tastiera = WindowInsets.isImeVisible
 
     Box(Modifier.fillMaxSize().background(c.fondo)) {
         Column(Modifier.fillMaxSize().statusBarsPadding()) {
@@ -184,9 +240,10 @@ fun SchermataGiornata(
                 Spacer(Modifier.weight(1f))
                 if (!stato.nuova && scrive && lavori.isNotEmpty()) PulsanteTondo(Icone.altro, "Altre azioni", { menu = true })
             }
-            Box(Modifier.weight(1f).fillMaxWidth()) {
+            // Con la tastiera aperta la parte in basso si nasconde e i campi scorrono sopra la tastiera.
+            Box(Modifier.weight(1f).fillMaxWidth().imePadding()) {
                 Column(
-                    Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).padding(top = 14.dp, bottom = 24.dp),
+                    Modifier.fillMaxSize().verticalScroll(scorri).padding(horizontal = 20.dp).padding(top = 14.dp, bottom = 24.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     TitoloPagina("Rapportino", sopra = stato.id.takeIf { it.isNotBlank() }?.let { "N° $it" })
@@ -197,42 +254,55 @@ fun SchermataGiornata(
                             Text(stato.riassunto, style = Testi.secondarioGrande.copy(fontWeight = FontWeight.Bold), color = c.testo)
                             if (!stato.nuova && lavori.any { !it.daInviare }) Text(Giornate.riassunto(lavori), style = Testi.secondario, color = c.tenue)
                         }
+                        FilaLavori(lavori, conti, iScelto, costi, errore = { l -> stato.erroriDi(l.idLocale) || perId[l.idLocale]?.errore?.isNotBlank() == true }) { stato.scegli(it) }
                     }
-                    lavori.forEachIndexed { i, l ->
-                        SchedaLavoro(l, perId[l.idLocale], conti[i], costi, Modifier.bersaglio("lavoro-$i")) { apri(l) }
-                    }
-                    // Con almeno un lavoro "Aggiungi un lavoro" sta nella barra in basso, accanto al pulsante giallo.
-                    if (scrive && lavori.isEmpty()) {
+                    if (scelto != null && iScelto >= 0) key(scelto) {
+                        LavoroNellaPagina(dati, stato, scelto, iScelto + 1, onTolto = {
+                            val resto = stato.lavori
+                            if (resto.isEmpty()) stato.aperto = null else stato.scegli(resto[(iScelto - 1).coerceIn(0, resto.lastIndex)])
+                        })
+                    } else if (scrive && lavori.isEmpty()) {
                         PulsanteBordo("Aggiungi un lavoro", { aggiungi() }, Modifier.fillMaxWidth().bersaglio("aggiungi"), icona = Icone.piu, altezza = 56.dp, tratteggiato = true)
                     }
                 }
                 StratoAvvisi(avvisi, Modifier.align(Alignment.BottomCenter).padding(bottom = 8.dp))
             }
 
-            // ---------------------------------------------------------- in basso: il giorno e il pulsante
-            if (lavori.isNotEmpty()) Column(
+            // ---------------------------------------------------------- in basso: il lavoro, il giorno e i pulsanti
+            if (lavori.isNotEmpty() && !tastiera) Column(
                 // Una riga sottile sopra, non una cornice: ai lati il fondo continua.
                 Modifier.fillMaxWidth().background(c.fondo)
                     .drawBehind { drawLine(c.bordoScheda, Offset(0f, 0f), Offset(size.width, 0f), 1.dp.toPx()) }
-                    .navigationBarsPadding().imePadding()
+                    .navigationBarsPadding()
                     .padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 14.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text(
-                        listOf(Numeri.ore(lavori.sumOf { it.oreTotali }), Numeri.scrivi(lavori.sumOf { it.km }) + " km").joinToString(" · "),
-                        style = Testi.secondario.copy(fontWeight = FontWeight.Bold), color = c.tenue, modifier = Modifier.weight(1f),
-                    )
-                    if (costi) Column(horizontalAlignment = Alignment.End, modifier = Modifier.bersaglio("totale-giorno")) {
-                        Text("Totale del giorno", style = Testi.piccolo.copy(fontWeight = FontWeight.Bold), color = c.tenue)
-                        EuroAnimati(conti.sumOf { it.totale }, Testi.titoloScheda)
+                fun oreKm(l: List<Rapportino>) = listOf(Numeri.ore(l.sumOf { it.oreTotali }), Numeri.scrivi(l.sumOf { it.km }) + " km").joinToString(" · ")
+                val totaleGiorno = conti.sumOf { it.totale }
+                if (lavori.size == 1 || iScelto < 0) {
+                    // Un lavoro solo: il suo conto e' il totale del giorno.
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text(oreKm(lavori), style = Testi.secondario.copy(fontWeight = FontWeight.Bold), color = c.tenue, modifier = Modifier.weight(1f))
+                        if (costi) Column(horizontalAlignment = Alignment.End, modifier = Modifier.bersaglio("totale").bersaglio("totale-giorno")) {
+                            Text("Totale del giorno", style = Testi.piccolo.copy(fontWeight = FontWeight.Bold), color = c.tenue)
+                            EuroAnimati(totaleGiorno, Testi.titoloScheda)
+                        }
+                    }
+                } else Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Column(Modifier.weight(1f).bersaglio("totale")) {
+                        Text("Lavoro ${iScelto + 1} · " + oreKm(listOf(lavori[iScelto])), style = Testi.piccolo.copy(fontWeight = FontWeight.Bold), color = c.tenue)
+                        if (costi) EuroAnimati(conti[iScelto].totale, Testi.titoloScheda)
+                    }
+                    Column(Modifier.weight(1f).bersaglio("totale-giorno"), horizontalAlignment = Alignment.End) {
+                        Text("Il giorno · " + oreKm(lavori), style = Testi.piccolo.copy(fontWeight = FontWeight.Bold), color = c.tenue, textAlign = TextAlign.End)
+                        if (costi) EuroAnimati(totaleGiorno, Testi.titoloScheda)
                     }
                 }
-                // 12/11/2026 (Andrea): "Aggiungi un lavoro" subito a sinistra del pulsante che chiude il rapportino.
+                // 11/11/2026 (Andrea): "Aggiungi un lavoro" subito a sinistra del pulsante che chiude il rapportino.
                 if (scrive) Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     PulsanteAggiungiLavoro({ aggiungi() }, Modifier.weight(1f).fillMaxHeight().bersaglio("aggiungi"))
                     when {
-                        stato.cambiata -> PulsantePrincipale("Salva rapportino", { salva() }, Modifier.weight(1f).fillMaxHeight().bersaglio("salva-rapportino"))
+                        stato.cambiata || stato.nuova -> PulsantePrincipale("Salva rapportino", { salva() }, Modifier.weight(1f).fillMaxHeight().bersaglio("salva-rapportino"))
                         daInviare.isNotEmpty() -> PulsantePrincipale("Invia ai clienti", { onInvia(daInviare.map { it.idLocale }) }, Modifier.weight(1f).fillMaxHeight())
                         else -> Unit
                     }
@@ -367,7 +437,61 @@ internal fun SchedaLavoro(l: Rapportino, v: Vista?, conto: Conto?, costi: Boolea
 }
 
 /**
- * "Aggiungi un lavoro" nella barra in basso (12/11/2026): bianco col bordo scuro e la scritta in grassetto, come sul
+ * La fila dei lavori in cima alla pagina (11/11/2026): una scheda stretta per lavoro, che scorre di lato. Quella scelta
+ * e' bianca col bordo scuro; un lavoro con qualcosa che manca ha il bordo rosso. Le schede hanno tutte la stessa
+ * altezza e i nomi vanno a capo (niente puntini).
+ */
+@Composable
+private fun FilaLavori(
+    lavori: List<Rapportino>,
+    conti: List<Conto>,
+    scelto: Int,
+    costi: Boolean,
+    errore: (Rapportino) -> Boolean,
+    onScegli: (Rapportino) -> Unit,
+) {
+    val scorri = rememberScrollState()
+    val passo = with(LocalDensity.current) { (LARGHEZZA_SCHEDA_FILA + 10.dp).toPx() }
+    // Il lavoro scelto si vede sempre, con un pezzo di quello prima.
+    LaunchedEffect(scelto, lavori.size) {
+        if (scelto >= 0) scorri.animateScrollTo(((scelto - 0.4f).coerceAtLeast(0f) * passo).toInt())
+    }
+    Row(
+        Modifier.fillMaxWidth().horizontalScroll(scorri).height(IntrinsicSize.Max),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        lavori.forEachIndexed { i, l ->
+            SchedaFila(i + 1, l, conti.getOrNull(i), costi, i == scelto, errore(l), Modifier.fillMaxHeight().bersaglio("lavoro-$i")) { onScegli(l) }
+        }
+    }
+}
+
+private val LARGHEZZA_SCHEDA_FILA = 168.dp
+
+@Composable
+private fun SchedaFila(n: Int, l: Rapportino, conto: Conto?, costi: Boolean, scelta: Boolean, errore: Boolean, modifier: Modifier, onClick: () -> Unit) {
+    val c = W.colori
+    val forma = RoundedCornerShape(18.dp)
+    val commessa = listOf(l.idCommessa.ifBlank { l.codiceProposto }.ifBlank { l.commessa }, l.progetto).filter { it.isNotBlank() }.joinToString(" · ")
+    Column(
+        modifier.width(LARGHEZZA_SCHEDA_FILA).clip(forma).background(if (scelta) c.foglio else c.scheda)
+            .border(if (scelta || errore) 2.dp else 1.dp, when { errore -> c.rossoPieno; scelta -> c.testo; else -> c.bordoScheda }, forma)
+            .clickable(onClick = onClick).semantics { selected = scelta }
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        Text("Lavoro $n", style = Testi.piccolo.copy(fontWeight = FontWeight.Bold), color = c.tenue)
+        Text(l.cliente.ifBlank { "Manca il cliente" }, style = Testi.forte, color = if (l.cliente.isBlank()) c.tenue else c.testo)
+        if (commessa.isNotBlank()) Text(commessa, style = Testi.piccolo, color = c.tenue)
+        Spacer(Modifier.weight(1f).heightIn(min = 6.dp))
+        Text(listOf(Numeri.ore(l.oreTotali), Numeri.scrivi(l.km) + " km").joinToString(" · "), style = Testi.piccolo.copy(fontWeight = FontWeight.Bold), color = c.testo)
+        if (costi && conto != null) Text(Numeri.euro(conto.totale), style = Testi.forte, color = c.testo)
+        if (!l.daInviare) ParolaStato(l.stato, Modifier.padding(top = 4.dp))
+    }
+}
+
+/**
+ * "Aggiungi un lavoro" nella barra in basso (11/11/2026): bianco col bordo scuro e la scritta in grassetto, come sul
  * computer; risalta più di un pulsante normale ma il giallo resta solo sul pulsante principale. Alto almeno 64 come
  * quello accanto; su un telefono stretto la scritta va a capo e il pulsante cresce.
  */

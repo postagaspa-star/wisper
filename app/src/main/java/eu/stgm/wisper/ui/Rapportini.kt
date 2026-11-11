@@ -224,6 +224,27 @@ fun SchermataRapportini(
                 }
             }
 
+            // 11/11/2026 (Andrea): "una volta applicati i filtri e anche prima, si deve poter selezionare tutto". La casella
+            // sceglie (o toglie) tutti i rapportini in vista, cioè quelli che passano i filtri; sta in fila con le caselle dei
+            // rapportini.
+            if (scrive && lista.isNotEmpty()) {
+                val visti = lista.map { it.rapportino.idLocale }
+                val quantiVisti = visti.count { it in scelti }
+                val tuttiVisti = quantiVisti == visti.size
+                Row(
+                    Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(RoundedCornerShape(12.dp))
+                        .toggleable(value = tuttiVisti, role = Role.Checkbox, onValueChange = {
+                            scelti = if (tuttiVisti) scelti - visti.toSet() else (scelti + visti).distinct()
+                        })
+                        .padding(start = 7.dp, end = 12.dp).bersaglio("scegli-tutti"),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) { Casella(tuttiVisti, parziale = quantiVisti > 0 && !tuttiVisti) }
+                    Spacer(Modifier.width(6.dp))
+                    Text("Scegli tutti", style = Testi.pulsanteSecondario, color = c.testo)
+                }
+            }
+
             // Un blocco per rapportino, il più recente prima; dentro, i lavori nel loro ordine. Fra un rapportino e l'altro
             // più aria che fra le altre cose (07/11/2026: "non si capisce quando inizia un rapportino e quando finisce").
             Column(verticalArrangement = Arrangement.spacedBy(20.dp)) { gruppi.forEachIndexed { i, g ->

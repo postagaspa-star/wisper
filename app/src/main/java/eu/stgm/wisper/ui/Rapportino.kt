@@ -4,18 +4,10 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
-import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -25,25 +17,22 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -60,19 +49,20 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -86,20 +76,17 @@ import eu.stgm.wisper.rapportino.Numeri
 import eu.stgm.wisper.rapportino.Progetto
 import eu.stgm.wisper.rapportino.ProgettoNuovo
 import eu.stgm.wisper.rapportino.RegoleProgetti
-import eu.stgm.wisper.rapportino.Stampa
 import eu.stgm.wisper.rapportino.Stato
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.debounce
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import java.io.File
 import java.time.Instant
 import java.time.LocalDate
-import java.time.LocalDateTime
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private val IT = Locale.ITALY
 
@@ -114,24 +101,26 @@ internal fun dataLungaIt(d: LocalDate): String {
 }
 
 /**
- * Un lavoro del rapportino (rapportino-lavori.md §5.2): fino alla 1.1 era il rapportino intero, ora e' una voce del
- * rapportino della giornata ([GiornataStato]). Un lavoro nuovo si scrive in 3 passi brevi (Per chi → Ore e strada →
- * Il lavoro), l'ultimo pulsante e' **Aggiungi al rapportino** e si torna al rapportino. Un lavoro che c'era gia' si
- * apre sul suo riepilogo, con "Cambia" per ogni parte e **Fatto**; uno Inviato o Fatturato si vede in sola lettura.
+ * Il lavoro scelto nella pagina del rapportino (11/11/2026, Andrea: "Fai lo stesso editor a tre colonne anche sul
+ * telefono", scelta "Pagina unica"). Tutti i campi uno sotto l'altro, negli stessi gruppi e nello stesso ordine del
+ * computer (dai piu' usati nei rapportini veri): **Per chi**, **Il lavoro**, **Strada e tariffa**, **Altro**, poi **Il
+ * conto**. Niente piu' 3 passi ne' "Aggiungi al rapportino": quello che si scrive va subito nel lavoro della fila in
+ * alto ([GiornataStato.sincronizza]) e si salva tutto con Salva rapportino.
  *
- * Niente firma (06/11/2026: "La firma non ha più senso"), niente PDF o invio da qui: quelli sono del rapportino.
+ * Un lavoro Inviato o Fatturato (o per chi legge soltanto) si vede col suo riepilogo, senza Cambia. Niente firma
+ * (06/11/2026: "La firma non ha più senso").
  *
- * @param onEsciDalRapportino il primo lavoro di un rapportino nuovo lasciato a meta': senza lavori il rapportino non
- *        serve, si chiude tutto.
+ * @param numero il posto del lavoro nella fila: "Lavoro 2".
+ * @param onTolto dopo "Togli questo lavoro": la pagina sceglie un altro lavoro.
  */
-@OptIn(ExperimentalMaterial3Api::class, kotlinx.coroutines.FlowPreview::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-fun SchermataLavoro(
+internal fun ColumnScope.LavoroNellaPagina(
     dati: Dati,
     giornata: GiornataStato,
     stato: ModuloStato,
-    bozza: BozzaModulo,
-    onEsciDalRapportino: () -> Unit,
+    numero: Int,
+    onTolto: () -> Unit,
 ) {
     val c = W.colori
     val ctx = LocalContext.current
@@ -139,6 +128,7 @@ fun SchermataLavoro(
     val scope = rememberCoroutineScope()
     val visita = LocalVisita.current
     val avvisi = LocalAvvisi.current
+    val perm = LocalPermessi.current
     val ana by dati.anagrafiche.collectAsStateWithLifecycle()
     val viste by dati.viste.collectAsStateWithLifecycle()
     val storico by dati.storico.collectAsStateWithLifecycle()
@@ -155,15 +145,11 @@ fun SchermataLavoro(
                 idTicket = r.idTicket.ifBlank { stato.base.idTicket }, numeroTicket = r.numeroTicket.ifBlank { stato.base.numeroTicket }, nonSiFattura = r.nonSiFattura)
         }
     }
-    // La copia su disco a ogni modifica, se Android chiude l'app (non nella visita).
-    LaunchedEffect(stato) {
-        if (!dati.esempio) snapshotFlow { stato.aJson().toString() }.debounce(400).collect { bozza.scrivi(giornata) }
-    }
 
     // Senza il permesso dei soldi (il collaboratore) niente tariffa, totale e conto: ore, km e spese sì.
-    val costi = LocalPermessi.current.costi
+    val costi = perm.costi
     // Chi vede i rapportini solo in lettura non cambia niente; un lavoro Inviato o Fatturato non si cambia.
-    val scrive = LocalPermessi.current.modifica(eu.stgm.wisper.rapportino.Moduli.RAPPORTINI)
+    val scrive = perm.modifica(eu.stgm.wisper.rapportino.Moduli.RAPPORTINI)
     val bloccato = stato.base.bloccato || !scrive
     val clienteScelto: Cliente? = ana.cliente(stato.idCliente, if (stato.idCliente.isBlank()) stato.cliente else "")
     val regole = ana.regoleDi(clienteScelto, ana.commessa(stato.idCommessa))
@@ -183,12 +169,12 @@ fun SchermataLavoro(
     }?.tariffa?.takeIf { it > 0 }
     val proposta = prezzoCommessa ?: propostaQui ?: dati.tariffaProposta(clienteScelto, stato.cliente)
     val ultimiKm = Riepiloghi.ultimiKm(viste.filterNot { it.rapportino.idLocale == stato.base.idLocale }, stato.idCommessa, stato.idCliente, stato.cliente)
-    // Il numero del lavoro nel rapportino: "Lavoro 2".
-    val numero = giornata.lavori.indexOfFirst { it.idLocale == stato.base.idLocale }.let { if (it >= 0) it + 1 else giornata.lavori.size + 1 }
+    // "Come il lavoro prima": l'ultimo lavoro scritto prima di questo nella fila.
+    val prima = giornata.lavori.takeWhile { it.idLocale != stato.base.idLocale }.lastOrNull { it.cliente.isNotBlank() }
 
-    // Nella visita la descrizione non si può scrivere (è sotto il velo): c'è già.
-    LaunchedEffect(stato.passo) {
-        if (dati.esempio && stato.passo == 3 && stato.descrizione.isBlank()) stato.descrizione = "Collaudo del quadro della linea 2"
+    // Nella visita la descrizione non si può scrivere (è sotto il velo): c'è già, appena scelto il cliente.
+    LaunchedEffect(stato.cliente) {
+        if (dati.esempio && !bloccato && stato.cliente.isNotBlank() && stato.descrizione.isBlank()) stato.descrizione = "Collaudo del quadro della linea 2"
     }
 
     // La tariffa libera si propone da sola: il prezzo della commessa o l'ultima usata per questo cliente.
@@ -196,81 +182,8 @@ fun SchermataLavoro(
         if (!bloccato && !stato.tariffaToccata && regole.tariffaFissa == null) stato.tariffa = Numeri.scrivi(proposta)
     }
 
-    var chiediUscita by remember { mutableStateOf(false) }
     var chiediTogli by remember { mutableStateOf(false) }
     var menu by remember { mutableStateOf(false) }
-    var sceltaScontrino by remember { mutableStateOf(false) }
-
-    /** Le foto di questo lavoro che erano gia' nel rapportino (non nuove di questa apertura): non si buttano uscendo. */
-    val fotoDiPrima = remember(stato) { giornata.fotoNuove[stato.base.idLocale].orEmpty().toSet() }
-
-    fun esci() {
-        if (!dati.esempio) stato.fotoNuove.filter { it !in fotoDiPrima }.forEach { it.delete() }
-        giornata.aperto = null
-        if (giornata.nuova && giornata.lavori.isEmpty()) onEsciDalRapportino()
-    }
-
-    fun vaiA(n: Int) {
-        stato.passo = n
-    }
-
-    fun uscita() {
-        if (stato.cambiato && !bloccato && !dati.esempio) chiediUscita = true else esci()
-    }
-
-    fun indietro() {
-        when {
-            stato.passo == 1 && stato.sceltaProgetto && !stato.tornaAlRiepilogo -> stato.sceltaProgetto = false
-            stato.tornaAlRiepilogo -> { stato.tornaAlRiepilogo = false; stato.sceltaProgetto = false; vaiA(4) }
-            stato.passo == 1 || (stato.passo == 4 && !stato.nuovo) -> uscita()
-            else -> vaiA(stato.passo - 1)
-        }
-    }
-
-    fun avanti() {
-        if (!stato.validaPasso(stato.passo, regole, costi)) return
-        visita?.azione("avanti")
-        if (stato.tornaAlRiepilogo) { stato.tornaAlRiepilogo = false; vaiA(4) } else vaiA(stato.passo + 1)
-    }
-
-    fun cambiaDa(n: Int) {
-        stato.tornaAlRiepilogo = true
-        if (n == PASSO_PROGETTO) {
-            // "Cambia" sulla riga del progetto: si torna ai progetti della commessa.
-            stato.sceltaCommessa = true; stato.sceltaProgetto = true
-            vaiA(1)
-            return
-        }
-        if (n == 1) { stato.sceltaCommessa = false; stato.sceltaProgetto = false }
-        vaiA(n)
-    }
-
-    BackHandler { indietro() }
-
-    /**
-     * Aggiungi al rapportino / Fatto: il lavoro va (o torna) nel rapportino, che si salva tutto insieme. False se mancano
-     * dei dati (e si torna al passo che li ha).
-     */
-    fun nelRapportino(): Boolean {
-        if (bloccato) { esci(); return true }
-        if (!stato.valida(regole, costi)) {
-            if ("progetto" in stato.errori) { stato.sceltaCommessa = true; stato.sceltaProgetto = true }
-            else if ("cliente" in stato.errori && stato.cliente.isNotBlank()) { stato.sceltaCommessa = true; stato.sceltaProgetto = false }
-            val passoConErrore = when {
-                "cliente" in stato.errori || "progetto" in stato.errori -> 1
-                stato.errori.keys.any { it in setOf("oreLavoro", "oreExtra", "oreViaggio", "km", "tariffa") } -> 2
-                else -> 3
-            }
-            if (!stato.nuovo) stato.tornaAlRiepilogo = true
-            vaiA(passoConErrore)
-            return false
-        }
-        // Nella visita il pulsante Aggiungi al rapportino è il passo "avanti".
-        visita?.azione("avanti")
-        giornata.metti(stato.rapportino().copy(data = giornata.data, idLocaleGiornata = giornata.idLocale, idGiornata = giornata.id), stato.fotoNuove.toList())
-        giornata.aperto = null
-        return true
-    }
 
     // ---- foto ----
     var scattoInCorso by rememberSaveable { mutableStateOf<String?>(null) }
@@ -302,127 +215,67 @@ fun SchermataLavoro(
 
     val r = stato.rapportino()
     val conto = if (!stato.cambiato && vista?.conto != null) vista.conto else Calcolo.calcola(r, regole)
-    val oreTotali = listOf(stato.oreLavoro, stato.oreExtra, stato.oreViaggio).sumOf { Numeri.leggi(it) ?: 0.0 }
-    val progresso by animateFloatAsState(stato.passo.coerceAtMost(3) / 3f, tween(300), label = "passo")
-    // L'ultimo passo di un lavoro nuovo non va avanti: il lavoro entra nel rapportino.
-    val ultimo = stato.passo == 3 && stato.nuovo && !stato.tornaAlRiepilogo
+    // Fase 5 (§3.3): legare dopo un lavoro scritto dalla strada solita, o toglierlo dal ticket.
+    val conTicket = scrive && stato.base.id.isNotBlank() && stato.base.stato != Stato.FATTURATO && perm.vede(eu.stgm.wisper.rapportino.Moduli.TICKET) && !dati.esempio
+    // L'unico lavoro di un rapportino nuovo non si toglie: per lasciar perdere c'e' la X in alto.
+    val puoTogliere = scrive && eu.stgm.wisper.rapportino.Giornate.puoTogliere(stato.base) && !(giornata.nuova && giornata.lavori.size == 1)
 
-    Box(Modifier.fillMaxSize().background(c.fondo)) {
-        Column(Modifier.fillMaxSize().statusBarsPadding()) {
-            // ---------------------------------------------------------- in alto
-            Column(Modifier.padding(horizontal = 20.dp).padding(top = 10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
-                    val chiude = !stato.tornaAlRiepilogo && (stato.passo == 1 || (stato.passo == 4 && !stato.nuovo))
-                    PulsanteTondo(if (chiude) Icone.chiudi else Icone.indietro, if (chiude) "Chiudi" else "Indietro", { indietro() })
-                    Spacer(Modifier.width(12.dp))
-                    Text(
-                        if (stato.passo == 4) "Lavoro $numero" else "Lavoro $numero · passo ${stato.passo} di 3",
-                        style = Testi.secondario.copy(fontWeight = FontWeight.Bold), color = c.tenue,
-                        modifier = Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis,
-                    )
-                    if (stato.passo == 4 && !stato.nuovo) {
-                        ParolaStato(stato.base.stato)
-                        // "Togli questo lavoro" (solo Da inviare) e il ticket: nel menu ⋯ del lavoro.
-                        if (scrive) {
-                            Spacer(Modifier.width(8.dp))
-                            PulsanteTondo(Icone.altro, "Altre azioni", { menu = true })
-                        }
-                    }
-                }
-                if (stato.passo < 4 || stato.tornaAlRiepilogo) {
-                    Box(Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)).background(c.superficie2)) {
-                        Box(Modifier.fillMaxWidth(progresso).fillMaxHeight().clip(RoundedCornerShape(3.dp)).background(c.testo))
-                    }
-                }
-            }
+    // ---------------------------------------------------------- la testa del lavoro
+    Row(Modifier.fillMaxWidth().padding(top = 4.dp).heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
+        Etichetta(if (giornata.lavori.size > 1) "Lavoro $numero di ${giornata.lavori.size}" else "Lavoro $numero", Modifier.weight(1f))
+        if (!stato.nuovo) ParolaStato(stato.base.stato)
+        if (conTicket || puoTogliere) {
+            Spacer(Modifier.width(8.dp))
+            PulsanteTondo(Icone.altro, "Altre azioni del lavoro", { menu = true })
+        }
+    }
+    vista?.errore?.takeIf { it.isNotBlank() }?.let {
+        Text("Il server non l'ha accettato: $it", style = Testi.secondario, color = c.rossoTesto)
+    }
+    if (stato.base.numeroTicket.isNotBlank() || stato.base.nonSiFattura.isNotBlank()) Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        if (stato.base.numeroTicket.isNotBlank()) Parola5("Ticket ${stato.base.numeroTicket}", colore = eu.stgm.wisper.rapportino.ColoreFase5.GRIGIO)
+        if (stato.base.nonSiFattura.isNotBlank()) Parola5(stato.base.nonSiFattura, colore = eu.stgm.wisper.rapportino.ColoreFase5.GRIGIO)
+    }
 
-            // ---------------------------------------------------------- i passi
-            Box(Modifier.weight(1f).fillMaxWidth()) {
-                AnimatedContent(
-                    targetState = stato.passo,
-                    transitionSpec = {
-                        if (targetState > initialState) (slideInHorizontally(tween(300)) { it / 4 } + fadeIn(tween(300))) togetherWith
-                            (slideOutHorizontally(tween(300)) { -it / 4 } + fadeOut(tween(200)))
-                        else (slideInHorizontally(tween(300)) { -it / 4 } + fadeIn(tween(300))) togetherWith
-                            (slideOutHorizontally(tween(300)) { it / 4 } + fadeOut(tween(200)))
-                    },
-                    modifier = Modifier.fillMaxSize(),
-                    label = "passi",
-                ) { passo ->
-                    Column(
-                        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)
-                            .padding(top = 16.dp, bottom = 24.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        when (passo) {
-                            1 -> PassoPerChi(stato, dati, viste, ana, regole, progettiAttivi, commesseAccese,
-                                prima = if (stato.nuovo) nelRapportino.lastOrNull() else null,
-                                onScelto = {
-                                    visita?.azione(it); stato.sceltaProgetto = false
-                                    vaiA(if (stato.tornaAlRiepilogo) 4 else 2); stato.tornaAlRiepilogo = false
-                                })
-                            2 -> PassoOre(stato, regole, proposta, ultimiKm, clienteScelto, prezzoCommessa != null)
-                            3 -> PassoLavoro(stato, ana.ticketAttivo, vista, onScatta = { scatta() }, onGalleria = { dallaGalleria() }, dati = dati)
-                            else -> PassoRiepilogo(stato, vista, conto, regole, dati, numero, onCambia = { cambiaDa(it) }, solaLettura = bloccato, commesseAccese = commesseAccese)
-                        }
-                    }
-                }
-                StratoAvvisi(avvisi, Modifier.align(Alignment.BottomCenter).padding(bottom = 8.dp))
-            }
+    if (bloccato) {
+        PassoRiepilogo(stato, vista, conto, regole, dati, solaLettura = true, commesseAccese = commesseAccese)
+    } else {
+        // ---------------------------------------------------------- Per chi
+        TitoloGruppo("Per chi")
+        if (stato.perChiAperto) {
+            PassoPerChi(stato, dati, viste, ana, regole, progettiAttivi, commesseAccese, prima = if (stato.nuovo) prima else null,
+                onScelto = { visita?.azione(it); stato.chiudiPerChi() })
+            if (stato.perChiAnnullabile) PulsanteTesto("Lascia com'era", { stato.annullaPerChi() }, Modifier.fillMaxWidth(), colore = c.testo)
+        } else {
+            PerChiScelto(stato, regole, commesseAccese)
+        }
 
-            // ---------------------------------------------------------- in basso
-            Box(Modifier.fillMaxWidth().background(c.fondo).navigationBarsPadding().imePadding()) {
-                when {
-                    stato.passo == 2 || stato.passo == 3 -> Column(
-                        // Solo la riga sopra, come la pagina del rapportino: la cornice intera si vedeva ai lati e sotto.
-                        Modifier.fillMaxWidth()
-                            .drawBehind { drawLine(c.bordoScheda, androidx.compose.ui.geometry.Offset(0f, 0f), androidx.compose.ui.geometry.Offset(size.width, 0f), 1.dp.toPx()) }
-                            .padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 14.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
-                        val pronto = stato.passo != 2 || oreTotali > 0
-                        if (ultimo) {
-                            // Il pulsante lungo va sotto al totale, largo quanto lo schermo: con i caratteri grandi sta intero.
-                            if (costi) Row(Modifier.fillMaxWidth().bersaglio("totale"), verticalAlignment = Alignment.CenterVertically) {
-                                Text("Totale del lavoro", style = Testi.secondario.copy(fontWeight = FontWeight.Bold), color = c.tenue, modifier = Modifier.weight(1f))
-                                EuroAnimati(conto.totale, Testi.titoloScheda)
-                            }
-                            PulsantePrincipale("Aggiungi al rapportino", { nelRapportino() }, Modifier.bersaglio("avanti"), icona = Icone.piu)
-                        } else Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                            if (costi) Column(Modifier.weight(1f).bersaglio("totale")) {
-                                Text("Totale", style = Testi.piccolo.copy(fontWeight = FontWeight.Bold), color = c.tenue)
-                                EuroAnimati(conto.totale, Testi.titoloScheda.copy(fontSize = Testi.titoloScheda.fontSize * 1.08f))
-                            } else Spacer(Modifier.weight(1f))
-                            Box(
-                                Modifier.widthIn(min = 150.dp).heightIn(min = 60.dp).clip(RoundedCornerShape(18.dp))
-                                    .background(if (pronto) c.giallo else c.superficie2).clickable { avanti() }.bersaglio("avanti")
-                                    .padding(horizontal = 24.dp, vertical = 8.dp),
-                                contentAlignment = Alignment.Center,
-                            ) { Text("Avanti", style = Testi.pulsante, color = if (pronto) c.suGiallo else c.moltoTenue) }
-                        }
-                    }
-                    stato.passo == 4 && !bloccato -> Column(
-                        Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 16.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                    ) {
-                        PulsantePrincipale(if (stato.nuovo) "Aggiungi al rapportino" else "Fatto", { nelRapportino() }, Modifier.bersaglio("fatto-lavoro"), icona = Icone.spunta)
-                    }
-                    // Inviato, fatturato o senza permesso di scrivere: si guarda e basta, si esce con la ×.
-                    else -> Unit
-                }
-            }
+        // ---------------------------------------------------------- Il lavoro
+        TitoloGruppo("Il lavoro")
+        OreDiLavoro(stato)
+        CampoTesto(
+            stato.descrizione, { stato.descrizione = it; stato.errori = stato.errori - "descrizione" }, "Cosa hai fatto",
+            Modifier.vaiAllErrore(stato, "descrizione"), righe = 4, errore = stato.errori["descrizione"],
+        )
+
+        // ---------------------------------------------------------- Strada e tariffa
+        TitoloGruppo(if (costi) "Strada e tariffa" else "Strada")
+        Chilometri(stato, regole, ultimiKm)
+        if (costi) Tariffa(stato, regole, proposta, clienteScelto, prezzoCommessa != null)
+
+        // ---------------------------------------------------------- Altro
+        TitoloGruppo("Altro")
+        ViaggioEdExtra(stato, regole)
+        SpeseDelLavoro(stato, vista, dati, onScatta = { scatta() }, onGalleria = { dallaGalleria() })
+        AltroDelLavoro(stato, ana.ticketAttivo, dati)
+
+        // ---------------------------------------------------------- Il conto
+        if (costi) {
+            TitoloGruppo("Il conto")
+            ContoDelLavoro(r, conto, regole)
         }
     }
 
-    if (chiediUscita) {
-        AlertDialog(
-            onDismissRequest = { chiediUscita = false },
-            title = { Text("Uscire senza salvare?", style = Testi.titoloSezione) },
-            text = { Text("Quello che hai scritto in questo lavoro si perde.", style = Testi.testo) },
-            confirmButton = { TextButton(onClick = { chiediUscita = false; esci() }) { Text("Esci", color = c.rossoTesto) } },
-            dismissButton = { TextButton(onClick = { chiediUscita = false }) { Text("Resta", color = c.testo) } },
-        )
-    }
     if (chiediTogli) {
         FoglioConferma(
             titolo = "Togliere questo lavoro?",
@@ -432,8 +285,8 @@ fun SchermataLavoro(
                 chiediTogli = false
                 val foto = giornata.togli(stato.base.idLocale)
                 if (!dati.esempio) (foto + stato.fotoNuove).distinct().forEach { it.delete() }
-                giornata.aperto = null
                 avvisi.mostra("Lavoro tolto: salva il rapportino")
+                onTolto()
             },
             onAnnulla = { chiediTogli = false },
             pericolo = true,
@@ -442,11 +295,8 @@ fun SchermataLavoro(
 
     // ---------------------------------------------------------- il menu ⋯ del lavoro
     if (menu) {
-        val st = stato.base.stato
         FoglioDalBasso({ menu = false }) {
-            if (!bloccato) VoceMenu(Icone.scontrino, "Aggiungi uno scontrino", { menu = false; sceltaScontrino = true })
-            // Fase 5 (§3.3): legare dopo un lavoro scritto dalla strada solita, o toglierlo dal ticket.
-            if (stato.base.id.isNotBlank() && st != Stato.FATTURATO && LocalPermessi.current.vede(eu.stgm.wisper.rapportino.Moduli.TICKET) && !dati.esempio) {
+            if (conTicket) {
                 if (stato.base.conTicket) VoceMenu(Icone.chiudi, "Togli dal ticket", {
                     menu = false
                     scope.launch {
@@ -456,24 +306,291 @@ fun SchermataLavoro(
                 })
                 else VoceMenu(Icone.chiave, "Lega a un ticket", { menu = false; legaTicket = true })
             }
-            if (eu.stgm.wisper.rapportino.Giornate.puoTogliere(stato.base)) {
-                VoceMenu(Icone.cestino, "Togli questo lavoro", { menu = false; chiediTogli = true }, pericolo = true)
-            }
+            if (puoTogliere) VoceMenu(Icone.cestino, "Togli questo lavoro", { menu = false; chiediTogli = true }, pericolo = true)
         }
     }
 
-    if (legaTicket) FoglioLegaTicket(dati, stato.base, onChiudi = { legaTicket = false }, onLegato = { legaTicket = false; giornata.aperto = null })
+    if (legaTicket) FoglioLegaTicket(dati, stato.base, onChiudi = { legaTicket = false }, onLegato = { legaTicket = false })
+}
 
-    if (sceltaScontrino) {
-        FoglioDalBasso({ sceltaScontrino = false }) {
-            Text("Aggiungi uno scontrino", style = Testi.titoloScheda, color = c.testo)
-            VoceMenu(Icone.fotocamera, "Fotografa lo scontrino", { sceltaScontrino = false; scatta() })
-            VoceMenu(Icone.galleria, "Dalla galleria", { sceltaScontrino = false; dallaGalleria() })
+/** Il titolo di un gruppo di campi della pagina (come le sezioni dell'editor del computer). */
+@Composable
+private fun TitoloGruppo(testo: String) {
+    Text(testo, style = Testi.titoloScheda, color = W.colori.testo, modifier = Modifier.padding(top = 14.dp))
+}
+
+/**
+ * Cliente, commessa e progetto scelti, ognuno col suo "Cambia" (che riapre la scelta da quel punto). La commessa col suo
+ * codice (26ST047), come la conosce lo studio.
+ */
+@Composable
+private fun PerChiScelto(stato: ModuloStato, regole: eu.stgm.wisper.rapportino.Regole, commesseAccese: Boolean) {
+    val c = W.colori
+    val r = stato.rapportino()
+    Scheda(verticale = 4.dp, spazio = 0.dp) {
+        RigaRiepilogo(
+            r.cliente.ifBlank { "Manca il cliente" },
+            if (stato.idCliente.isBlank()) "Cliente nuovo · tariffa libera" else if (regole.tariffaFissa != null) "Tariffa fissa" else "Tariffa libera",
+            false,
+        ) { stato.apriPerChi(commessa = false, progetto = false) }
+        val conCommessa = r.idCommessa.isNotBlank() || r.codiceProposto.isNotBlank()
+        if (commesseAccese || conCommessa) {
+            Box(Modifier.fillMaxWidth().height(1.dp).background(c.riga))
+            RigaRiepilogo(
+                listOf(r.idCommessa.ifBlank { r.codiceProposto }, r.commessa).filter { it.isNotBlank() }.joinToString(" · ").ifBlank { "Senza commessa" },
+                if (r.idCommessa.isBlank() && r.codiceProposto.isNotBlank()) "Commessa nuova" else "Commessa",
+                !commesseAccese,
+            ) { stato.apriPerChi(commessa = true, progetto = false) }
+        }
+        // I progetti (progetti.md §4.6-7): dal 06/11/2026 obbligatorio solo per Elettrodinamica; per gli altri "Nessun
+        // progetto", e senza commessa niente riga.
+        if (r.conProgetto || (stato.progettiAttivi && (stato.progettoRichiesto || conCommessa))) {
+            Box(Modifier.fillMaxWidth().height(1.dp).background(c.riga))
+            RigaRiepilogo(
+                r.etichettaProgetto.ifBlank { if (stato.progettoRichiesto) "Manca il progetto" else "Nessun progetto" },
+                r.progettoIntestatoA.takeIf { it.isNotBlank() }?.let { "Intestato a $it" } ?: "Progetto",
+                !stato.progettiAttivi,
+            ) { if (conCommessa || stato.progettoRichiesto) stato.apriPerChi(commessa = true, progetto = true) else stato.apriPerChi(commessa = false, progetto = false) }
+        }
+    }
+    (stato.errori["cliente"] ?: stato.errori["progetto"])?.let { Text(it, style = Testi.secondario, color = c.rossoTesto) }
+}
+
+/** Le ore di lavoro: il più e il meno, e 4, 6, 8 a un tocco. */
+@Composable
+private fun OreDiLavoro(stato: ModuloStato) {
+    val c = W.colori
+    val visita = LocalVisita.current
+    Scheda(Modifier.vaiAllErrore(stato, "oreLavoro")) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text("Ore di lavoro", style = Testi.titoloSezione, color = c.testo, modifier = Modifier.weight(1f))
+            Stepper(Numeri.ore(Numeri.leggi(stato.oreLavoro) ?: 0.0), { stato.cambia("oreLavoro", -0.5) }, { stato.cambia("oreLavoro", 0.5) }, "lavoro")
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf(4.0, 6.0, 8.0).forEach { h ->
+                Pillola(
+                    Numeri.ore(h), (Numeri.leggi(stato.oreLavoro) ?: 0.0) == h,
+                    {
+                        stato.oreLavoro = Numeri.scrivi(h); stato.errori = stato.errori - "oreLavoro"
+                        visita?.azione("ore-${h.toInt()}")
+                    },
+                    Modifier.weight(1f).bersaglio("ore-${h.toInt()}").portaInVista("ore-${h.toInt()}"),
+                )
+            }
+        }
+        stato.errori["oreLavoro"]?.let { Text(it, style = Testi.secondario, color = c.rossoTesto) }
+    }
+}
+
+/** I chilometri: scritti, "Ultima volta" (quelli dell'ultimo lavoro per la stessa commessa o cliente) o "Senza auto". */
+@Composable
+private fun Chilometri(stato: ModuloStato, regole: eu.stgm.wisper.rapportino.Regole, ultimiKm: Double?) {
+    val c = W.colori
+    val visita = LocalVisita.current
+    Scheda(Modifier.vaiAllErrore(stato, "km")) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text("Chilometri", style = Testi.titoloSezione, color = c.testo, modifier = Modifier.weight(1f))
+            CampoTesto(
+                stato.km, { t -> if (t.all { it.isDigit() || it == ',' || it == '.' }) { stato.km = t; stato.errori = stato.errori - "km" } }, null,
+                Modifier.width(128.dp), segnaposto = "0", tastiera = KeyboardType.Decimal, suffisso = "km",
+                stile = Testi.titoloScheda, errore = stato.errori["km"],
+            )
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (ultimiKm != null) {
+                Pillola(
+                    "Ultima volta · ${Numeri.scrivi(ultimiKm)} km", Numeri.leggi(stato.km) == ultimiKm,
+                    { stato.km = Numeri.scrivi(ultimiKm); stato.errori = stato.errori - "km"; visita?.azione("km-ultimi") },
+                    Modifier.weight(1.7f).bersaglio("km-ultimi").portaInVista("km-ultimi"), altezza = 44.dp,
+                )
+            }
+            Pillola("Senza auto", stato.km.isNotBlank() && Numeri.leggi(stato.km) == 0.0, { stato.km = "0"; stato.errori = stato.errori - "km" }, Modifier.weight(1f), altezza = 44.dp)
+        }
+        if (!regole.kmRimborsati) Text("Questo cliente non rimborsa i km", style = Testi.piccolo, color = c.tenue)
+    }
+}
+
+/** La tariffa: fissa per il cliente, o quella scritta qui (proposta: il prezzo della commessa o l'ultima usata). */
+@Composable
+private fun Tariffa(
+    stato: ModuloStato,
+    regole: eu.stgm.wisper.rapportino.Regole,
+    proposta: Double?,
+    cliente: Cliente?,
+    /** La tariffa proposta e' il prezzo della commessa, non l'ultima del cliente. */
+    daCommessa: Boolean,
+) {
+    val c = W.colori
+    Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp).vaiAllErrore(stato, "tariffa"), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(if (regole.tariffaFissa != null) "Tariffa fissa ${stato.cliente}" else "Tariffa oraria", style = Testi.secondarioGrande.copy(fontWeight = FontWeight.Bold), color = c.testo)
+            if (regole.tariffaFissa == null) Text(
+                when {
+                    stato.cliente.isBlank() -> "scegli prima il cliente"
+                    daCommessa && Numeri.leggi(stato.tariffa) == proposta -> "il prezzo della commessa"
+                    daCommessa -> "la commessa è a ${Numeri.scrivi(proposta)} €/h"
+                    proposta != null && Numeri.leggi(stato.tariffa) == proposta -> "l'ultima usata per ${(cliente?.nome ?: stato.cliente).substringBefore(' ')}"
+                    proposta != null -> "l'ultima volta era ${Numeri.scrivi(proposta)} €/h"
+                    else -> "prima volta per questo cliente"
+                },
+                style = Testi.piccolo, color = c.tenue,
+            )
+        }
+        if (regole.tariffaFissa != null) {
+            Text(
+                "${Numeri.scrivi(regole.tariffaFissa)} €/h", style = Testi.forte, color = c.testo,
+                modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(c.superficie2).padding(horizontal = 12.dp, vertical = 10.dp),
+            )
+        } else {
+            CampoTesto(
+                stato.tariffa, { t -> if (t.all { it.isDigit() || it == ',' || it == '.' }) { stato.tariffa = t; stato.tariffaToccata = true; stato.errori = stato.errori - "tariffa" } },
+                null, Modifier.width(132.dp), segnaposto = "0", tastiera = KeyboardType.Decimal, suffisso = "€/h", stile = Testi.forteGrande,
+            )
+        }
+    }
+    stato.errori["tariffa"]?.let { Text(it, style = Testi.secondario, color = c.rossoTesto, modifier = Modifier.padding(horizontal = 4.dp)) }
+}
+
+/** Le ore di viaggio (pagate o no, per il cliente) e, se aperte, le ore extra. */
+@Composable
+private fun ViaggioEdExtra(stato: ModuloStato, regole: eu.stgm.wisper.rapportino.Regole) {
+    val c = W.colori
+    Scheda(Modifier.vaiAllErrore(stato, "oreViaggio", "oreExtra")) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Viaggio", style = Testi.titoloSezione, color = c.testo)
+                Text(if (regole.pagaViaggio) "pagato" else "non pagato", style = Testi.piccolo, color = c.tenue)
+            }
+            Stepper(Numeri.ore(Numeri.leggi(stato.oreViaggio) ?: 0.0), { stato.cambia("oreViaggio", -0.5) }, { stato.cambia("oreViaggio", 0.5) }, "viaggio")
+        }
+        if (stato.extraAperto) {
+            Box(Modifier.fillMaxWidth().height(1.dp).background(c.riga))
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Extra", style = Testi.titoloSezione, color = c.testo)
+                    if (regole.maggExtra > 0) Text("+${Numeri.scrivi(regole.maggExtra)}%", style = Testi.piccolo, color = c.tenue)
+                }
+                Stepper(Numeri.ore(Numeri.leggi(stato.oreExtra) ?: 0.0), { stato.cambia("oreExtra", -0.5) }, { stato.cambia("oreExtra", 0.5) }, "extra")
+            }
         }
     }
 }
 
-// ============================================================================ Passo 1
+/** Le spese: importo e di cosa, gli scontrini fotografati o presi dalla galleria. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun SpeseDelLavoro(stato: ModuloStato, vista: Vista?, dati: Dati, onScatta: () -> Unit, onGalleria: () -> Unit) {
+    val c = W.colori
+    val ctx = LocalContext.current
+    val remote = stato.base.foto
+    val inAttesa = vista?.fotoInAttesa.orEmpty()
+    val nessuna = remote.isEmpty() && inAttesa.isEmpty() && stato.fotoNuove.isEmpty()
+    Scheda(Modifier.vaiAllErrore(stato, "spese")) {
+        Text("Spese", style = Testi.titoloSezione, color = c.testo)
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            CampoTesto(
+                stato.spese, { t -> if (t.all { it.isDigit() || it == ',' || it == '.' }) { stato.spese = t; stato.errori = stato.errori - "spese" } },
+                "Importo", Modifier.weight(1f), segnaposto = "0", tastiera = KeyboardType.Decimal, suffisso = "€", errore = stato.errori["spese"],
+            )
+            CampoTesto(stato.noteSpese, { stato.noteSpese = it }, "Di cosa", Modifier.weight(1.4f), segnaposto = "Pranzo, pedaggio…")
+        }
+        if (!nessuna) {
+            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                remote.forEach { f ->
+                    RiquadroFoto(Immagini.fotoLocale(ctx, f.id), onApri = { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(f.url))) },
+                        onTogli = { dati.togliFoto(stato.base.idLocale, f, null) })
+                }
+                inAttesa.forEach { f -> RiquadroFoto(f, null, onTogli = { dati.togliFoto(stato.base.idLocale, null, f) }) }
+                stato.fotoNuove.forEach { f -> RiquadroFoto(f, null, onTogli = { stato.fotoNuove.remove(f); if (!dati.esempio) f.delete() }) }
+            }
+        }
+        // Ognuno largo quanto la sua scritta: se non stanno in una riga, "Dalla galleria" va sotto (mai scritte tagliate).
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            PulsanteBordo(
+                if (nessuna) "Fotografa lo scontrino" else "Un altro scontrino", onScatta,
+                Modifier.bersaglio("scontrino").portaInVista("scontrino"), icona = Icone.fotocamera, altezza = 48.dp, tratteggiato = true,
+            )
+            PulsanteBordo("Dalla galleria", onGalleria, icona = Icone.galleria, altezza = 48.dp)
+        }
+    }
+}
+
+/** Quello che serve di rado: chiuso in una riga di pillole finché non serve (ore extra, luogo, nota, strumenti). */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ColumnScope.AltroDelLavoro(stato: ModuloStato, ticketAttivo: Boolean, dati: Dati) {
+    // Fase 6 (§3.9): gli strumenti usati, chiusi in una riga come la nota; aperti se il rapportino ne ha.
+    val conMezzi = LocalPermessi.current.vede(eu.stgm.wisper.rapportino.Moduli.MEZZI)
+    if (stato.luogoAperto) CampoTesto(stato.luogo, { stato.luogo = it }, "Luogo")
+    if (ticketAttivo || stato.ticket.isNotBlank()) CampoTesto(stato.ticket, { stato.ticket = it }, "Ticket")
+    if (stato.notaAperta) CampoTesto(stato.noteInterne, { stato.noteInterne = it }, "Nota per te, non va al cliente", righe = 2)
+    if (conMezzi && stato.strumentiAperti) StrumentiUsati(stato, dati)
+    val chiusi = listOfNotNull(
+        if (!stato.extraAperto) "+ Ore extra" to { stato.extraAperto = true } else null,
+        if (!stato.luogoAperto) "+ Luogo" to { stato.luogoAperto = true } else null,
+        if (!stato.notaAperta) "+ Una nota per te" to { stato.notaAperta = true } else null,
+        if (conMezzi && !stato.strumentiAperti) "+ Strumenti usati" to { stato.strumentiAperti = true; if (stato.strumenti == null) stato.strumenti = emptyList() } else null,
+    )
+    if (chiusi.isNotEmpty()) FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        chiusi.forEach { (testo, apri) -> Pillola(testo, false, apri, altezza = 44.dp) }
+    }
+}
+
+/** Il conto del lavoro (come la colonna a destra del computer): ore per tariffa, km, spese e il totale. */
+@Composable
+private fun ContoDelLavoro(r: eu.stgm.wisper.rapportino.Rapportino, conto: eu.stgm.wisper.rapportino.Conto, regole: eu.stgm.wisper.rapportino.Regole) {
+    val c = W.colori
+    Scheda(verticale = 16.dp, spazio = 8.dp) {
+        val orePagate = r.oreLavoro + r.oreExtra + if (conto.pagaViaggio || regole.pagaViaggio) r.oreViaggio else 0.0
+        RigaConto("Ore · ${Numeri.ore(orePagate)} × ${Numeri.scrivi(conto.tariffa)} €", Numeri.euro(conto.compensoOre))
+        RigaConto("Km · ${Numeri.scrivi(r.km)} × ${Numeri.scrivi(conto.euroKm)} €", Numeri.euro(conto.rimborsoKm))
+        RigaConto("Spese", Numeri.euro(r.spese))
+        Box(Modifier.fillMaxWidth().height(1.dp).background(c.bordoScheda))
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
+            Text("Totale del lavoro", style = Testi.forteGrande, color = c.testo, modifier = Modifier.weight(1f))
+            EuroAnimati(conto.totale, Testi.titoloScheda)
+        }
+    }
+}
+
+/** Dopo Salva rapportino con qualcosa che manca: la pagina scorre fino al primo campo con l'errore. */
+@OptIn(ExperimentalFoundationApi::class)
+private fun Modifier.vaiAllErrore(stato: ModuloStato, vararg campi: String): Modifier = composed {
+    val richiesta = remember { BringIntoViewRequester() }
+    var alto by remember { mutableStateOf(0) }
+    // Sotto il campo resta lo spazio per l'avviso (se no copre la frase rossa).
+    val spazio = with(LocalDensity.current) { 120.dp.toPx() }
+    val volta = stato.mostraErrore
+    LaunchedEffect(volta) {
+        if (volta > 0 && stato.primoErrore?.let { it in campi } == true) {
+            delay(150)
+            richiesta.bringIntoView(Rect(0f, 0f, 1f, alto + spazio))
+        }
+    }
+    this.bringIntoViewRequester(richiesta).onSizeChanged { alto = it.height }
+}
+
+/**
+ * Nella visita guidata la pagina scorre da sola fino all'elemento del passo (le ore, i km, lo scontrino), lasciando
+ * sotto lo spazio per il fumetto.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+internal fun Modifier.portaInVista(id: String): Modifier = composed {
+    val v = LocalVisita.current
+    val qui = v != null && v.attiva && v.corrente.bersaglio == id
+    val richiesta = remember { BringIntoViewRequester() }
+    var alto by remember { mutableStateOf(0) }
+    val spazio = with(LocalDensity.current) { 220.dp.toPx() }
+    LaunchedEffect(qui) {
+        if (qui) {
+            delay(120)
+            richiesta.bringIntoView(Rect(0f, 0f, 1f, alto + spazio))
+        }
+    }
+    this.bringIntoViewRequester(richiesta).onSizeChanged { alto = it.height }
+}
+
+// ============================================================================ Per chi
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -518,8 +635,7 @@ private fun ColumnScope.PassoPerChi(
         stato.sceltaProgetto = true
     }
 
-    Text("Per chi?", style = Testi.titoloPagina, color = c.testo)
-    // La data e' del rapportino (si cambia li'), non del lavoro.
+    // Il titolo "Per chi" e' della pagina; la data e' del rapportino (si cambia li'), non del lavoro.
 
     if (!stato.sceltaCommessa || !commesseAccese) {
         // rapportino-lavori.md §5.2: dal secondo lavoro, in cima, lo stesso cliente con la stessa commessa e lo stesso
@@ -694,210 +810,6 @@ private fun SchedaScelta(
     }
 }
 
-// ============================================================================ Passo 2
-
-@Composable
-private fun ColumnScope.PassoOre(
-    stato: ModuloStato,
-    regole: eu.stgm.wisper.rapportino.Regole,
-    proposta: Double?,
-    ultimiKm: Double?,
-    cliente: Cliente?,
-    /** La tariffa proposta e' il prezzo della commessa, non l'ultima del cliente. */
-    daCommessa: Boolean = false,
-) {
-    val c = W.colori
-    val visita = LocalVisita.current
-    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Text(listOf(stato.cliente, stato.idCommessa.ifBlank { stato.codiceProposto }.ifBlank { stato.commessa }, stato.progetto).filter { it.isNotBlank() }.joinToString(" · "),
-            style = Testi.secondarioGrande, color = c.tenue)
-        // Fase 5 (§3.3): il rapportino del ticket lo dice con la pillola grigia.
-        if (stato.base.numeroTicket.isNotBlank()) Parola5("Ticket ${stato.base.numeroTicket}", Modifier.padding(vertical = 4.dp), colore = eu.stgm.wisper.rapportino.ColoreFase5.GRIGIO)
-        Text("Ore e strada", style = Testi.titoloPagina, color = c.testo)
-    }
-
-    Scheda {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text("Lavoro", style = Testi.titoloSezione, color = c.testo, modifier = Modifier.weight(1f))
-            Stepper(Numeri.ore(Numeri.leggi(stato.oreLavoro) ?: 0.0), { stato.cambia("oreLavoro", -0.5) }, { stato.cambia("oreLavoro", 0.5) }, "lavoro")
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf(4.0, 6.0, 8.0).forEach { h ->
-                Pillola(
-                    Numeri.ore(h), (Numeri.leggi(stato.oreLavoro) ?: 0.0) == h,
-                    {
-                        stato.oreLavoro = Numeri.scrivi(h); stato.errori = stato.errori - "oreLavoro"
-                        visita?.azione("ore-${h.toInt()}")
-                    },
-                    Modifier.weight(1f).bersaglio("ore-${h.toInt()}"),
-                )
-            }
-        }
-        stato.errori["oreLavoro"]?.let { Text(it, style = Testi.secondario, color = c.rossoTesto) }
-    }
-
-    Scheda {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text("Viaggio", style = Testi.titoloSezione, color = c.testo)
-                Text(
-                    if (regole.pagaViaggio) "pagato" else "non pagato",
-                    style = Testi.piccolo, color = c.tenue,
-                )
-            }
-            Stepper(Numeri.ore(Numeri.leggi(stato.oreViaggio) ?: 0.0), { stato.cambia("oreViaggio", -0.5) }, { stato.cambia("oreViaggio", 0.5) }, "viaggio")
-        }
-    }
-
-    if (!stato.extraAperto) {
-        PulsanteBordo("Ore extra", { stato.extraAperto = true }, Modifier.fillMaxWidth(), icona = Icone.piu, altezza = 48.dp, tratteggiato = true)
-    } else {
-        Scheda {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("Extra", style = Testi.titoloSezione, color = c.testo)
-                    if (regole.maggExtra > 0) Text("+${Numeri.scrivi(regole.maggExtra)}%", style = Testi.piccolo, color = c.tenue)
-                }
-                Stepper(Numeri.ore(Numeri.leggi(stato.oreExtra) ?: 0.0), { stato.cambia("oreExtra", -0.5) }, { stato.cambia("oreExtra", 0.5) }, "extra")
-            }
-        }
-    }
-
-    Scheda {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text("Chilometri", style = Testi.titoloSezione, color = c.testo, modifier = Modifier.weight(1f))
-            CampoTesto(
-                stato.km, { t -> if (t.all { it.isDigit() || it == ',' || it == '.' }) { stato.km = t; stato.errori = stato.errori - "km" } }, null,
-                Modifier.width(128.dp), segnaposto = "0", tastiera = KeyboardType.Decimal, suffisso = "km",
-                stile = Testi.titoloScheda, errore = stato.errori["km"],
-            )
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (ultimiKm != null) {
-                Pillola(
-                    "Ultima volta · ${Numeri.scrivi(ultimiKm)} km", Numeri.leggi(stato.km) == ultimiKm,
-                    { stato.km = Numeri.scrivi(ultimiKm); visita?.azione("km-ultimi") },
-                    Modifier.weight(1.7f).bersaglio("km-ultimi"), altezza = 44.dp,
-                )
-            }
-            Pillola("Senza auto", stato.km.isNotBlank() && Numeri.leggi(stato.km) == 0.0, { stato.km = "0" }, Modifier.weight(1f), altezza = 44.dp)
-        }
-        if (!regole.kmRimborsati) Text("Questo cliente non rimborsa i km", style = Testi.piccolo, color = c.tenue)
-    }
-
-    // La tariffa: fissa per il gruppo, o quella scritta qui (proposta: l'ultima usata). Solo con i soldi.
-    if (LocalPermessi.current.costi) Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f)) {
-            Text(if (regole.tariffaFissa != null) "Tariffa fissa ${stato.cliente}" else "Tariffa oraria", style = Testi.secondarioGrande.copy(fontWeight = FontWeight.Bold), color = c.testo)
-            if (regole.tariffaFissa == null) Text(
-                when {
-                    daCommessa && Numeri.leggi(stato.tariffa) == proposta -> "il prezzo della commessa"
-                    daCommessa -> "la commessa è a ${Numeri.scrivi(proposta)} €/h"
-                    proposta != null && Numeri.leggi(stato.tariffa) == proposta -> "l'ultima usata per ${(cliente?.nome ?: stato.cliente).substringBefore(' ')}"
-                    proposta != null -> "l'ultima volta era ${Numeri.scrivi(proposta)} €/h"
-                    else -> "prima volta per questo cliente"
-                },
-                style = Testi.piccolo, color = c.tenue,
-            )
-        }
-        if (regole.tariffaFissa != null) {
-            Text(
-                "${Numeri.scrivi(regole.tariffaFissa)} €/h", style = Testi.forte, color = c.testo,
-                modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(c.superficie2).padding(horizontal = 12.dp, vertical = 10.dp),
-            )
-        } else {
-            CampoTesto(
-                stato.tariffa, { t -> if (t.all { it.isDigit() || it == ',' || it == '.' }) { stato.tariffa = t; stato.tariffaToccata = true; stato.errori = stato.errori - "tariffa" } },
-                null, Modifier.width(132.dp), segnaposto = "0", tastiera = KeyboardType.Decimal, suffisso = "€/h", stile = Testi.forteGrande,
-            )
-        }
-    }
-    stato.errori["tariffa"]?.let { Text(it, style = Testi.secondario, color = c.rossoTesto, modifier = Modifier.padding(horizontal = 4.dp)) }
-}
-
-// ============================================================================ Passo 3
-
-@Composable
-private fun ColumnScope.PassoLavoro(
-    stato: ModuloStato,
-    ticketAttivo: Boolean,
-    vista: Vista?,
-    onScatta: () -> Unit,
-    onGalleria: () -> Unit,
-    dati: Dati,
-) {
-    val c = W.colori
-    val ctx = LocalContext.current
-    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Text(
-            listOf(stato.cliente, Numeri.ore(listOf(stato.oreLavoro, stato.oreExtra, stato.oreViaggio).sumOf { Numeri.leggi(it) ?: 0.0 }),
-                "${stato.km.ifBlank { "0" }} km").joinToString(" · "),
-            style = Testi.secondarioGrande, color = c.tenue,
-        )
-        Text("Il lavoro", style = Testi.titoloPagina, color = c.testo)
-    }
-    CampoTesto(
-        stato.descrizione, { stato.descrizione = it; stato.errori = stato.errori - "descrizione" }, "Cosa hai fatto",
-        righe = 5, errore = stato.errori["descrizione"],
-    )
-
-    Text("Spese", style = Testi.secondarioGrande.copy(fontWeight = FontWeight.Bold), color = c.testo, modifier = Modifier.padding(top = 6.dp))
-    val remote = stato.base.foto
-    val inAttesa = vista?.fotoInAttesa.orEmpty()
-    val nessuna = remote.isEmpty() && inAttesa.isEmpty() && stato.fotoNuove.isEmpty()
-    if (nessuna) {
-        Column(
-            Modifier.fillMaxWidth().height(96.dp).clip(RoundedCornerShape(20.dp)).background(c.foglio)
-                .bordoTratteggiato(c.bordoCampo, 20.dp).clickable(onClick = onScatta).bersaglio("scontrino"),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center,
-        ) {
-            Icon(Icone.fotocamera, null, tint = c.testo, modifier = Modifier.size(30.dp))
-            Spacer(Modifier.height(6.dp))
-            Text("Fotografa lo scontrino", style = Testi.pulsanteSecondario, color = c.testo)
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Pillola("Dalla galleria", false, onGalleria, Modifier.weight(1f), altezza = 44.dp)
-            if (!stato.speseAperte) Pillola("Spesa senza scontrino", false, { stato.speseAperte = true }, Modifier.weight(1.3f), altezza = 44.dp)
-        }
-    } else {
-        Row(Modifier.horizontalScroll(rememberScrollState()).bersaglio("scontrino"), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            remote.forEach { f ->
-                RiquadroFoto(Immagini.fotoLocale(ctx, f.id), onApri = { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(f.url))) },
-                    onTogli = { dati.togliFoto(stato.base.idLocale, f, null) })
-            }
-            inAttesa.forEach { f -> RiquadroFoto(f, null, onTogli = { dati.togliFoto(stato.base.idLocale, null, f) }) }
-            stato.fotoNuove.forEach { f -> RiquadroFoto(f, null, onTogli = { stato.fotoNuove.remove(f); if (!dati.esempio) f.delete() }) }
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Pillola("+ Un altro scontrino", false, onScatta, Modifier.weight(1.3f), altezza = 44.dp)
-            Pillola("Dalla galleria", false, onGalleria, Modifier.weight(1f), altezza = 44.dp)
-        }
-    }
-    if (stato.speseAperte || !nessuna) {
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            CampoTesto(stato.noteSpese, { stato.noteSpese = it }, "Di cosa", Modifier.weight(1.4f), segnaposto = "Pranzo, pedaggio…")
-            CampoTesto(
-                stato.spese, { t -> if (t.all { it.isDigit() || it == ',' || it == '.' }) { stato.spese = t; stato.errori = stato.errori - "spese" } },
-                "Importo", Modifier.weight(1f), segnaposto = "0", tastiera = KeyboardType.Decimal, suffisso = "€", errore = stato.errori["spese"],
-            )
-        }
-    }
-
-    // Fase 6 (§3.9): gli strumenti usati, chiusi in una riga come la nota; aperti se il rapportino ne ha.
-    val conMezzi = LocalPermessi.current.vede(eu.stgm.wisper.rapportino.Moduli.MEZZI)
-    if (conMezzi && stato.strumentiAperti) StrumentiUsati(stato, dati)
-    // Le cose che servono ogni tanto: chiuse finché non servono.
-    Row(Modifier.padding(top = 4.dp).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        if (conMezzi && !stato.strumentiAperti) Pillola("+ Strumenti usati", false, { stato.strumentiAperti = true; if (stato.strumenti == null) stato.strumenti = emptyList() }, altezza = 44.dp)
-        if (!stato.luogoAperto) Pillola("+ Luogo", false, { stato.luogoAperto = true }, altezza = 44.dp)
-        if (!stato.notaAperta) Pillola("+ Una nota per te", false, { stato.notaAperta = true }, altezza = 44.dp)
-    }
-    if (stato.luogoAperto) CampoTesto(stato.luogo, { stato.luogo = it }, "Luogo")
-    if (ticketAttivo || stato.ticket.isNotBlank()) CampoTesto(stato.ticket, { stato.ticket = it }, "Ticket")
-    if (stato.notaAperta) CampoTesto(stato.noteInterne, { stato.noteInterne = it }, "Nota per te, non va al cliente", righe = 2)
-}
-
 @Composable
 private fun RiquadroFoto(file: File?, onApri: (() -> Unit)?, onTogli: () -> Unit) {
     val c = W.colori
@@ -929,9 +841,7 @@ private fun ColumnScope.PassoRiepilogo(
     conto: eu.stgm.wisper.rapportino.Conto,
     regole: eu.stgm.wisper.rapportino.Regole,
     dati: Dati,
-    /** Il posto del lavoro nel rapportino: "Lavoro 2". */
-    numero: Int,
-    onCambia: (Int) -> Unit,
+    onCambia: (Int) -> Unit = {},
     /** Chi vede i rapportini solo in lettura: niente "Cambia". */
     solaLettura: Boolean = false,
     /** Commesse spenta: sotto il cliente non si scrive "Senza commessa" (una commessa gia' messa resta). */
@@ -942,20 +852,7 @@ private fun ColumnScope.PassoRiepilogo(
     val bloccato = stato.base.bloccato || solaLettura
     val r = stato.rapportino()
 
-    vista?.errore?.takeIf { it.isNotBlank() }?.let {
-        Text("Il server non l'ha accettato: $it", style = Testi.secondario, color = c.rossoTesto)
-    }
-    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Text(listOf(dataLungaIt(stato.data), stato.base.id).filter { it.isNotBlank() }.joinToString(" · "), style = Testi.secondarioGrande, color = c.tenue)
-        Text("Lavoro $numero", style = Testi.titoloPagina, color = c.testo)
-        if (stato.base.numeroTicket.isNotBlank() || stato.base.nonSiFattura.isNotBlank()) Row(
-            Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            if (stato.base.numeroTicket.isNotBlank()) Parola5("Ticket ${stato.base.numeroTicket}", colore = eu.stgm.wisper.rapportino.ColoreFase5.GRIGIO)
-            if (stato.base.nonSiFattura.isNotBlank()) Parola5(stato.base.nonSiFattura, colore = eu.stgm.wisper.rapportino.ColoreFase5.GRIGIO)
-        }
-    }
-
+    // La testa (Lavoro N, lo stato, il ticket, l'errore del server) e' della pagina: qui le righe e il conto.
     Scheda(verticale = 4.dp, spazio = 0.dp) {
         // La commessa col suo codice (26ST047), non con la descrizione: come la conosce lo studio.
         RigaRiepilogo(r.cliente.ifBlank { "Manca il cliente" }, r.idCommessa.ifBlank { r.codiceProposto }.ifBlank { r.commessa }.ifBlank { if (commesseAccese) "Senza commessa" else "Cliente" }, bloccato) { onCambia(1) }

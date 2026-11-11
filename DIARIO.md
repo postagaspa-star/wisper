@@ -11,7 +11,7 @@ mai dati veri di clienti.
 
 | Data | Versione | In breve |
 |------|----------|----------|
-| 11/11/2026 | 1.3.2 | [Aggiungi un lavoro accanto a Salva rapportino](#v1-3-2) |
+| 11/11/2026 | 1.3.2 | [Aggiungi un lavoro accanto a Salva, il rapportino del telefono su una pagina, Scegli tutti](#v1-3-2) |
 | 11/11/2026 | 1.3.1 | [Il rapportino a tre colonne, il riepilogo col cliente del progetto](#v1-3-1) |
 | 09/11/2026 | 1.3.0 | [Il design Fai: una casa che dice cosa fare](#v1-3-0) |
 | 07/11/2026 | server 0.13.2 | [La fattura vede il conto scritto dopo in Banche](#server-0-13-2) |
@@ -50,30 +50,63 @@ mai dati veri di clienti.
 ---
 
 <a id="v1-3-2"></a>
-## 11 novembre 2026 · 1.3.2 · Aggiungi un lavoro accanto a Salva rapportino
+## 11 novembre 2026 · 1.3.2 · Aggiungi un lavoro accanto a Salva, il rapportino del telefono su una pagina, Scegli tutti
 
 **Perché.** Andrea, la sera stessa della 1.3.1: "il tasto per creare una nuova commessa dentro un rapportino deve essere
 di fianco (sinistra) al tasto per chiudere il rapportino, e quindi a destra di quello per annullarlo", su tutti i
-dispositivi, da mandare subito. Nella 1.3.1 l'avevo messo in fondo a sinistra della finestra, lontano da Salva.
+dispositivi, da mandare subito. Nella 1.3.1 l'avevo messo in fondo a sinistra della finestra, lontano da Salva. Nello
+stesso messaggio: "Fai lo stesso editor a tre colonne anche sul telefono" (fra le due strade proposte ha scelto la
+pagina unica). E mentre lo costruivo: "In questa stessa versione 1.3.2 devi anche fare in modo che, una volta applicati
+i filtri e anche prima, si debba poter selezionare tutto". Come per il budget della 0.4.0 la versione resta 1.3.2: ho
+sostituito i file della release con un numero interno nuovo (telefono codice 16, computer 1.3.2.1, che a schermo dice
+1.3.2), così telefoni e computer si aggiornano da soli.
 
 **Cosa cambia.**
 
 - **Computer.** In basso a destra l'ordine è Annulla · **Aggiungi un lavoro** · Salva rapportino. "Copia il lavoro
   scelto" resta da solo a sinistra.
-- **Telefono.** "Aggiungi un lavoro" non è più il pulsante tratteggiato in fondo all'elenco dei lavori: sta nella barra
-  in basso, subito a sinistra del pulsante giallo (Salva rapportino, o Invia ai clienti se il rapportino non è stato
-  cambiato). È bianco col bordo scuro, come sul computer; su un telefono stretto la scritta va su due righe. Il rapportino
-  senza lavori tiene il pulsante nell'elenco. Sul telefono il tasto per annullare è la X in alto, che non cambia.
+- **Telefono, il pulsante.** "Aggiungi un lavoro" sta nella barra in basso, subito a sinistra del pulsante giallo (Salva
+  rapportino, o Invia ai clienti se il rapportino non è stato cambiato). È bianco col bordo scuro, come sul computer; su
+  un telefono stretto la scritta va su due righe. Il tasto per annullare è la X in alto, che non cambia.
+- **Telefono, il rapportino su una pagina sola.** Le tre colonne del computer, una sopra l'altra. In alto la data e la
+  **fila dei lavori**: una scheda per lavoro (cliente, commessa, ore e km, importo) che scorre di lato; quella scelta è
+  bianca col bordo scuro. In mezzo tutti i campi del lavoro scelto, negli stessi gruppi e nello stesso ordine del
+  computer: **Per chi** (cliente, commessa e progetto, ognuno col suo Cambia), **Il lavoro** (ore e cosa hai fatto),
+  **Strada e tariffa**, **Altro** (viaggio, spese con la foto dello scontrino, e le pillole per ore extra, luogo, nota,
+  strumenti) e **Il conto**. In basso il conto del lavoro scelto, il totale del giorno, Aggiungi un lavoro e Salva
+  rapportino. Niente più 3 passi, Avanti e "Aggiungi al rapportino": quello che si scrive va subito nella fila e nei
+  totali. Salva rapportino controlla i lavori uno per uno, come il computer: sceglie il primo che ha qualcosa che manca,
+  la pagina scorre fino al campo e l'avviso dice quale ("Lavoro 1: scrivi che lavoro hai fatto (anche il lavoro 2)");
+  le schede con un errore hanno il bordo rosso. Un lavoro aggiunto e lasciato vuoto non si salva e non fa chiedere
+  "Uscire senza salvare?". Con la tastiera aperta la parte in basso si nasconde, per lasciare posto ai campi. La
+  visita guidata ha due passi in meno (i due Avanti) e scorre da sola fino alle ore, ai km e allo scontrino.
+- **Scegli tutti.** Sul computer una casella nella testata della tabella dei rapportini, in fila con quelle dei
+  rapportini; sul telefono la riga **Scegli tutti** sopra l'elenco. Scelgono i rapportini che si vedono: tutti quelli
+  del mese senza filtri, solo quelli che passano i filtri (ricerca, Da inviare, Da fatturare, cliente) con i filtri.
+  Ritoccata, toglie la scelta; con una parte scelta mostra il trattino. Sul computer, scelto qualcosa ma non tutto,
+  nella barra in basso compare anche il pulsante **Scegli tutti**.
 
-<img src="docs/diario/2026-11-11-aggiungi-lavoro-computer.png" width="620" alt="Annulla, Aggiungi un lavoro e Salva rapportino sul computer"> <img src="docs/diario/2026-11-11-aggiungi-lavoro-telefono.png" width="240" alt="Aggiungi un lavoro accanto al pulsante giallo sul telefono">
+<img src="docs/diario/2026-11-11-aggiungi-lavoro-computer.png" width="620" alt="Annulla, Aggiungi un lavoro e Salva rapportino sul computer">
 
-**Prove.** Computer: 356 prove dei conti e delle regole e i giri cliccati dei rapportini (rapportini a lavori, progetti,
-fase 6). Telefono: tutte le prove con `server/prove/telefono.js` e la barra guardata sull'emulatore. Il server non cambia.
+<img src="docs/diario/2026-11-11-pagina-unica-telefono.png" width="240" alt="Il rapportino del telefono su una pagina: la fila dei lavori, Per chi, i totali in basso"> <img src="docs/diario/2026-11-11-pagina-unica-telefono-scuro.png" width="240" alt="La stessa pagina in tema scuro, col secondo lavoro scelto"> <img src="docs/diario/2026-11-11-scegli-tutti-telefono.png" width="240" alt="Scegli tutti sopra l'elenco dei rapportini del telefono">
 
-**Non provato.** I telefoni veri di Manuel e Andrea.
+<img src="docs/diario/2026-11-11-scegli-tutti-computer.png" width="720" alt="La casella Scegli tutti nella testata della tabella dei rapportini sul computer">
 
-**Pubblicata.** [Versione 1.3.2](https://github.com/postagaspa-star/wisper/releases/tag/v1.3.2): telefono codice 15,
-computer 1.3.2.
+**Prove.** Telefono: tutte le prove con `server/prove/telefono.js` più 8 nuove sulla pagina unica
+(`PaginaRapportinoTest`: il lavoro nuovo già scelto, la copia nella fila, il modulo ritrovato tornando a un lavoro,
+"Lascia com'era", i lavori vuoti, i controlli solo sui lavori toccati, il primo errore nell'ordine della pagina).
+Sull'emulatore, contro un server di prova: rapportino con due lavori per due clienti salvato, arrivato al server e
+riaperto col suo numero; la copia su disco ritrovata dopo aver chiuso l'app; togliere un lavoro; la visita guidata fino ai
+Rapportini; tema scuro e telefono stretto (360 dp); Scegli tutti con e senza ricerca. Computer: 356 prove dei conti e
+delle regole e i giri cliccati (rapportini a lavori, progetti, flussi, fase 6, visita); Scegli tutti cliccato con e
+senza filtro. Il server non cambia.
+
+**Non provato.** I telefoni veri di Manuel e Andrea; la foto di uno scontrino vero dalla fotocamera (l'emulatore non ne
+ha una vera).
+
+**Pubblicata.** [Versione 1.3.2](https://github.com/postagaspa-star/wisper/releases/tag/v1.3.2) alle 18:59 col solo pulsante
+(telefono codice 15, computer 1.3.2; il NAS l'annuncia dalle 19:03). La sera stessa i file della stessa release sono stati
+sostituiti con la pagina unica e Scegli tutti: telefono codice 16, computer 1.3.2.1.
 
 ---
 

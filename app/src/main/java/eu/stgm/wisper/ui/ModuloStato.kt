@@ -50,6 +50,39 @@ class ModuloStato(
      */
     val progettoRichiesto: Boolean get() = progettiAttivi && RegoleProgetti.progettoObbligatorio(cliente)
     var ricerca by mutableStateOf("")
+
+    /**
+     * La pagina unica del rapportino (11/11/2026): la scelta di cliente, commessa e progetto aperta dentro "Per chi".
+     * Aperta da sola per un lavoro nuovo senza cliente; "Cambia" la riapre ([apriPerChi]).
+     */
+    var perChiAperto by mutableStateOf(nuovo && base.cliente.isBlank())
+    /** Cliente, commessa, progetto e tariffa di prima di "Cambia": "Lascia com'era" li rimette ([annullaPerChi]). */
+    private var perChiPrima by mutableStateOf<Rapportino?>(null)
+    private var perChiTariffaToccata = false
+    val perChiAnnullabile: Boolean get() = perChiPrima != null
+
+    /** "Cambia" su cliente, commessa o progetto: si riapre la scelta da quel punto. */
+    fun apriPerChi(commessa: Boolean, progetto: Boolean) {
+        if (!perChiAperto || perChiPrima == null) { perChiPrima = rapportino().copy(tariffa = Numeri.leggi(tariffa)); perChiTariffaToccata = tariffaToccata }
+        sceltaCommessa = commessa; sceltaProgetto = progetto; ricerca = ""
+        perChiAperto = true
+    }
+
+    /** Scelti cliente, commessa e progetto: restano le righe con "Cambia". */
+    fun chiudiPerChi() {
+        perChiPrima = null; perChiAperto = false; sceltaCommessa = false; sceltaProgetto = false; ricerca = ""
+    }
+
+    fun annullaPerChi() {
+        perChiPrima?.let { p ->
+            cliente = p.cliente; idCliente = p.idCliente; commessa = p.commessa; idCommessa = p.idCommessa; codiceProposto = p.codiceProposto
+            idProgetto = p.idProgetto; progetto = p.progetto; progettoDescrizione = p.progettoDescrizione
+            progettoIntestatoA = p.progettoIntestatoA; progettoNuovo = p.progettoNuovo
+            tariffa = Numeri.scrivi(p.tariffa); tariffaToccata = perChiTariffaToccata
+        }
+        chiudiPerChi()
+    }
+
     var extraAperto by mutableStateOf(base.oreExtra > 0)
     var speseAperte by mutableStateOf(base.spese > 0 || base.noteSpese.isNotBlank())
     var luogoAperto by mutableStateOf(base.luogo.isNotBlank())
@@ -90,6 +123,12 @@ class ModuloStato(
     val fotoNuove = mutableStateListOf<File>()
 
     var errori by mutableStateOf(emptyMap<String, String>())
+
+    /** Cresce a ogni Salva rapportino che trova qualcosa che manca: la pagina scorre al primo campo con l'errore. */
+    var mostraErrore by mutableIntStateOf(0)
+
+    /** Il primo campo con un errore, nell'ordine della pagina. */
+    val primoErrore: String? get() = listOf("cliente", "progetto", "oreLavoro", "descrizione", "km", "tariffa", "oreViaggio", "oreExtra", "spese").firstOrNull { it in errori }
 
     /** "ED-003 · Quadro QE1", vuoto se non c'e' progetto. */
     val etichettaProgetto: String get() = Progetto.etichetta(progetto, progettoDescrizione)
