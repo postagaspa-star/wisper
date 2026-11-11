@@ -11,6 +11,7 @@ mai dati veri di clienti.
 
 | Data | Versione | In breve |
 |------|----------|----------|
+| 11/11/2026 | 1.3.2 | [Aggiungi un lavoro accanto a Salva rapportino](#v1-3-2) |
 | 11/11/2026 | 1.3.1 | [Il rapportino a tre colonne, il riepilogo col cliente del progetto](#v1-3-1) |
 | 09/11/2026 | 1.3.0 | [Il design Fai: una casa che dice cosa fare](#v1-3-0) |
 | 07/11/2026 | server 0.13.2 | [La fattura vede il conto scritto dopo in Banche](#server-0-13-2) |
@@ -45,6 +46,34 @@ mai dati veri di clienti.
 | 26/09–14/10/2026 | 0.1 | [Un rapportino confermato non si perde più](#coda) |
 | 7–9/08/2026 | 0.1.0 | [Hackathon NGN Hacks: la versione a voce, senza mani](#v0-1-0) |
 | marzo–giugno 2026 | prima del repository | [Le prime versioni](#prima) |
+
+---
+
+<a id="v1-3-2"></a>
+## 11 novembre 2026 · 1.3.2 · Aggiungi un lavoro accanto a Salva rapportino
+
+**Perché.** Andrea, la sera stessa della 1.3.1: "il tasto per creare una nuova commessa dentro un rapportino deve essere
+di fianco (sinistra) al tasto per chiudere il rapportino, e quindi a destra di quello per annullarlo", su tutti i
+dispositivi, da mandare subito. Nella 1.3.1 l'avevo messo in fondo a sinistra della finestra, lontano da Salva.
+
+**Cosa cambia.**
+
+- **Computer.** In basso a destra l'ordine è Annulla · **Aggiungi un lavoro** · Salva rapportino. "Copia il lavoro
+  scelto" resta da solo a sinistra.
+- **Telefono.** "Aggiungi un lavoro" non è più il pulsante tratteggiato in fondo all'elenco dei lavori: sta nella barra
+  in basso, subito a sinistra del pulsante giallo (Salva rapportino, o Invia ai clienti se il rapportino non è stato
+  cambiato). È bianco col bordo scuro, come sul computer; su un telefono stretto la scritta va su due righe. Il rapportino
+  senza lavori tiene il pulsante nell'elenco. Sul telefono il tasto per annullare è la X in alto, che non cambia.
+
+<img src="docs/diario/2026-11-11-aggiungi-lavoro-computer.png" width="620" alt="Annulla, Aggiungi un lavoro e Salva rapportino sul computer"> <img src="docs/diario/2026-11-11-aggiungi-lavoro-telefono.png" width="240" alt="Aggiungi un lavoro accanto al pulsante giallo sul telefono">
+
+**Prove.** Computer: 356 prove dei conti e delle regole e i giri cliccati dei rapportini (rapportini a lavori, progetti,
+fase 6). Telefono: tutte le prove con `server/prove/telefono.js` e la barra guardata sull'emulatore. Il server non cambia.
+
+**Non provato.** I telefoni veri di Manuel e Andrea.
+
+**Pubblicata.** [Versione 1.3.2](https://github.com/postagaspa-star/wisper/releases/tag/v1.3.2): telefono codice 15,
+computer 1.3.2.
 
 ---
 

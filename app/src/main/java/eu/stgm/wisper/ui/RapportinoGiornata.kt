@@ -1,18 +1,23 @@
 package eu.stgm.wisper.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -42,6 +47,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -195,7 +201,8 @@ fun SchermataGiornata(
                     lavori.forEachIndexed { i, l ->
                         SchedaLavoro(l, perId[l.idLocale], conti[i], costi, Modifier.bersaglio("lavoro-$i")) { apri(l) }
                     }
-                    if (scrive) {
+                    // Con almeno un lavoro "Aggiungi un lavoro" sta nella barra in basso, accanto al pulsante giallo.
+                    if (scrive && lavori.isEmpty()) {
                         PulsanteBordo("Aggiungi un lavoro", { aggiungi() }, Modifier.fillMaxWidth().bersaglio("aggiungi"), icona = Icone.piu, altezza = 56.dp, tratteggiato = true)
                     }
                 }
@@ -221,10 +228,14 @@ fun SchermataGiornata(
                         EuroAnimati(conti.sumOf { it.totale }, Testi.titoloScheda)
                     }
                 }
-                when {
-                    scrive && stato.cambiata -> PulsantePrincipale("Salva rapportino", { salva() }, Modifier.bersaglio("salva-rapportino"), icona = Icone.spunta)
-                    scrive && daInviare.isNotEmpty() -> PulsantePrincipale("Invia ai clienti", { onInvia(daInviare.map { it.idLocale }) }, icona = Icone.invia)
-                    else -> Unit
+                // 12/11/2026 (Andrea): "Aggiungi un lavoro" subito a sinistra del pulsante che chiude il rapportino.
+                if (scrive) Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    PulsanteAggiungiLavoro({ aggiungi() }, Modifier.weight(1f).fillMaxHeight().bersaglio("aggiungi"))
+                    when {
+                        stato.cambiata -> PulsantePrincipale("Salva rapportino", { salva() }, Modifier.weight(1f).fillMaxHeight().bersaglio("salva-rapportino"))
+                        daInviare.isNotEmpty() -> PulsantePrincipale("Invia ai clienti", { onInvia(daInviare.map { it.idLocale }) }, Modifier.weight(1f).fillMaxHeight())
+                        else -> Unit
+                    }
                 }
             }
         }
@@ -352,5 +363,32 @@ internal fun SchedaLavoro(l: Rapportino, v: Vista?, conto: Conto?, costi: Boolea
             }
             v?.errore?.takeIf { it.isNotBlank() }?.let { Text(it, style = Testi.secondario, color = c.rossoTesto) }
         }
+    }
+}
+
+/**
+ * "Aggiungi un lavoro" nella barra in basso (12/11/2026): bianco col bordo scuro e la scritta in grassetto, come sul
+ * computer; risalta più di un pulsante normale ma il giallo resta solo sul pulsante principale. Alto almeno 64 come
+ * quello accanto; su un telefono stretto la scritta va a capo e il pulsante cresce.
+ */
+@Composable
+private fun PulsanteAggiungiLavoro(onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val c = W.colori
+    val premi = remember { MutableInteractionSource() }
+    Row(
+        modifier
+            .molla(premi)
+            .heightIn(min = 64.dp)
+            .clip(RoundedCornerShape(18.dp))
+            .background(c.fondo)
+            .border(1.5.dp, c.testo, RoundedCornerShape(18.dp))
+            .clickable(interactionSource = premi, indication = LocalIndication.current, onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(Icone.piu, null, tint = c.testo, modifier = Modifier.size(20.dp))
+        Spacer(Modifier.width(8.dp))
+        Text("Aggiungi un lavoro", style = Testi.pulsante, color = c.testo, textAlign = TextAlign.Center)
     }
 }

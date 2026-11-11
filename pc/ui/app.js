@@ -2828,12 +2828,13 @@
     mostraLavoro();
     pronto = true;
     const corpoF = h('div', { class: 'editor-rap' }, h('div', { class: 'col-elenco' }, elenco), zonaLavoro, colDestra);
-    // 11/11/2026 (Andrea): "Aggiungi un lavoro" in basso a sinistra, un po' più in vista dei pulsanti normali.
+    // 11/11/2026 (Andrea): "Aggiungi un lavoro" un po' più in vista dei pulsanti normali, subito a sinistra di Salva
+    // rapportino e a destra di Annulla (12/11: "di fianco (sinistra) al tasto per chiudere il rapportino").
     const chiudi = finestra({
       titolo: G.id ? 'Rapportino ' + G.id : 'Nuovo rapportino', larghezza: 'piena editor', corpo: corpoF, fuoco: false, testaExtra: zonaData,
-      pulsanti: [h('button', { type: 'button', class: 'btn grande aggiungi-lavoro', 'data-azione': 'aggiungi-lavoro', onclick: aggiungiLavoro }, icona('piu', 18, 2.6), 'Aggiungi un lavoro'),
-        h('button', { type: 'button', class: 'btn testo grande', 'data-azione': 'copia-lavoro', onclick: copiaLavoro }, 'Copia il lavoro scelto'),
+      pulsanti: [h('button', { type: 'button', class: 'btn testo grande', 'data-azione': 'copia-lavoro', onclick: copiaLavoro }, 'Copia il lavoro scelto'),
         'spazio', h('button', { type: 'button', class: 'btn testo grande', onclick: () => chiudi() }, 'Annulla'),
+        h('button', { type: 'button', class: 'btn grande aggiungi-lavoro', 'data-azione': 'aggiungi-lavoro', onclick: aggiungiLavoro }, icona('piu', 18, 2.6), 'Aggiungi un lavoro'),
         h('button', { type: 'button', class: 'btn giallo grande', 'data-azione': 'salva-rapportino', onclick: salva }, 'Salva rapportino')],
     });
     forme[scelto].fuoco();

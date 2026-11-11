@@ -68,7 +68,9 @@ the chosen job in the middle, only the summary on the right (the job's bill and 
 order comes from counting the real reports on the NAS: client, hours and description always, job code and project
 almost always, kilometres in about half, travel, extra hours, expenses, place, ticket, note and tools almost never, so
 those sit at the bottom or behind a tap. **Aggiungi un lavoro** moved to the bottom left, next to the buttons that
-close the window, outlined and bold; yellow stays only on Save. The phone editor is unchanged.
+close the window, outlined and bold; yellow stays only on Save. The phone editor is unchanged. Version 1.3.2 (same day)
+puts **Aggiungi un lavoro** right between Cancel and Save on the computer, and in the phone's bottom bar right next to
+the yellow button.
 
 Phase 1 (October 2026) replaces the Google Sheet with a small server on
 the home NAS (`server/`: Node.js 24 with its built-in SQLite, no npm dependencies, in
