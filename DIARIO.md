@@ -103,7 +103,8 @@ senza logo restano identici fra loro. Il server non cambia: resta la 0.13.2.
 **Non provato.** I telefoni veri di Manuel e Andrea; il PDF stampato dal telefono (usa lo stesso modello).
 
 **Pubblicata.** [Versione 1.3.1](https://github.com/postagaspa-star/wisper/releases/tag/v1.3.1): telefono codice 14,
-computer 1.3.1.
+computer 1.3.1, pubblicata alle 17:45 dell'11 novembre. Il NAS la annuncia dalle 17:53: telefoni e computer si aggiornano
+da soli.
 
 ---
 
