@@ -111,8 +111,9 @@ corretti a mano e salvati, il lavoro dopo con "Ultima volta", tema scuro e telef
 **Non provato.** La mappa di Google vera: finché Andrea non incolla lo script nuovo il NAS non può chiedere le strade (lo
 dice nel log e riprova ogni ora; intanto i km si propongono dall'ultima volta). I telefoni veri di Manuel e Andrea.
 
-**Pubblicata.** [Versione 1.3.3](https://github.com/postagaspa-star/wisper/releases/tag/v1.3.3): telefono codice 17,
-computer 1.3.3, server 0.14.0 sul NAS.
+**Pubblicata.** [Versione 1.3.3](https://github.com/postagaspa-star/wisper/releases/tag/v1.3.3) alle 15:15: telefono
+codice 17, computer 1.3.3. Server 0.14.0 sul NAS dalle 15:16 (prima una copia intera dei dati); il NAS annuncia la
+versione nuova dalle 15:26.
 
 ---
 
