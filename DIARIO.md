@@ -123,7 +123,7 @@ non scriveva più il file (il programma vero stampa con WebView2 e non cambia). 
 <img src="docs/diario/2026-11-12-preventivo.png" width="420" alt="Il preventivo d'esempio nella veste nuova, con le sezioni, le voci facoltative e alternative e il riepilogo">
 
 **Versione:** [v1.4.0](https://github.com/postagaspa-star/wisper/releases/tag/v1.4.0) (telefono codice 18, computer
-1.4.0); server 0.15.0 sul NAS (schema 14).
+1.4.0), pubblicata alle 21:45; server 0.15.0 sul NAS dalle 20:59 (schema 14), che la annuncia alle app dalle 21:49.
 
 ---
 
