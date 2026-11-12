@@ -62,6 +62,8 @@ data class Cliente(
     val collaboratore: Boolean = false,
     /** Fase 7 (fase7.md §10.4): il portale è acceso per questo cliente. */
     val portale: Boolean = false,
+    /** 12/11/2026 (km.md): i km dallo studio alla sede, andata e ritorno, calcolati dal server; null = non si sanno. */
+    val kmStudio: Double? = null,
 ) {
     /** "C001 · Thiene": la citta', o l'indirizzo se la citta' non c'e' ancora (i clienti del foglio). */
     val luogo: String get() = citta.ifBlank { indirizzo }
@@ -89,6 +91,7 @@ data class Cliente(
         .apply {
             if (collaboratore) put("collaboratore", true)
             if (portale) put("portale", true)
+            if (kmStudio != null) put("kmStudio", kmStudio)
             if (fatturazioneLetta) {
                 put("sostitutoImposta", sostitutoImposta ?: JSONObject.NULL)
                 put("pagamentoGiorni", pagamentoGiorni ?: JSONObject.NULL)
@@ -106,6 +109,7 @@ data class Cliente(
             gruppo = c.testo("gruppo"),
             email = c.testo("email"),
             indirizzo = c.testo("indirizzo"),
+            kmStudio = c.numero("kmStudio"),
             tariffaFissa = c.numero("tariffaFissa"),
             ultimaTariffa = c.numero("ultimaTariffa"),
             pagaViaggio = c.booleanoONull("pagaViaggio"),
@@ -178,6 +182,8 @@ data class Commessa(
     val modoFatturazione: String? = null,
     /** Fase 5 (§16.2): il contratto di assistenza di cui è la commessa (pillola Assistenza). */
     val idContratto: String = "",
+    /** 12/11/2026 (km.md): i km dallo studio all'indirizzo della commessa (o della sua sede), andata e ritorno; null = non si sanno. */
+    val kmStudio: Double? = null,
 ) {
     /**
      * Solo le aperte si propongono nei rapportini nuovi. Le sospese e le chiuse
@@ -210,6 +216,7 @@ data class Commessa(
         .put("archiviata", archiviata).put("modello", modello)
         .apply { if (modoFatturazione != null) put("modoFatturazione", modoFatturazione) }
         .put("idContratto", idContratto)
+        .apply { if (kmStudio != null) put("kmStudio", kmStudio) }
 
     companion object {
         /** Gli stati che lo script accetta, in ordine. */
@@ -247,6 +254,7 @@ data class Commessa(
             modello = m.vero("modello"),
             modoFatturazione = m.testo("modoFatturazione").lowercase().takeIf { it in setOf("ore", "corpo", "misto") },
             idContratto = m.testo("idContratto"),
+            kmStudio = m.numero("kmStudio"),
         )
     }
 }

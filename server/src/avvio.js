@@ -153,6 +153,20 @@ function avvia(o) {
   // lettura dei file dei dati di esempio.
   if (o.pianifica !== false) wisper.pianificaIntegrazioni(o.prova ? 1500 : 5000);
   if (o.prova) setImmediate(() => wisper.letturaNotturna(5).catch(() => null));
+  // 12/11/2026: i km dallo studio. Ogni 2 minuti si chiede allo script la strada degli indirizzi nuovi (azioni/km.js); in
+  // prova il postino finto la inventa, sempre uguale per lo stesso indirizzo.
+  if (o.pianifica !== false) {
+    // Il motivo per cui il giro si ferma si scrive una volta sola, quando cambia (non ogni 2 minuti).
+    const giro = () => wisper.giroKm().then(r => {
+      if (r.fatte) console.log('[km] strade calcolate: ' + r.fatte + (r.mancano ? ', ne mancano ' + r.mancano : ''));
+      const motivo = r.motivo && r.motivo !== 'in pausa' && r.motivo !== 'giro già in corso' ? r.motivo : (r.fatte ? '' : wisper.motivoKm || '');
+      if (motivo !== (wisper.motivoKm || '')) { if (motivo) console.log('[km] il giro si ferma: ' + motivo); wisper.motivoKm = motivo; }
+    })
+      .catch(err => console.error('[km] ' + (err && err.message ? err.message : err)));
+    wisper.giroKmPrimo = setTimeout(giro, o.prova ? 1000 : 20000);
+    wisper.giroKmTimer = setInterval(giro, 120000);
+    [wisper.giroKmPrimo, wisper.giroKmTimer].forEach(t => { if (t.unref) t.unref(); });
+  }
   // 03/11/2026: il NAS guarda le versioni nuove e le annuncia alle app (versioni.js). In prova solo con un elenco finto.
   if (o.pianifica !== false && String(env.WISPER_VERSIONI || '').toLowerCase() !== 'no' && (!o.prova || env.WISPER_AGGIORNAMENTI_URL)) {
     // WISPER_VERSIONI_CHIAVE (solo in prova): la chiave pubblica di un elenco firmato per le prove, al posto di quella vera.

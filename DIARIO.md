@@ -11,6 +11,7 @@ mai dati veri di clienti.
 
 | Data | Versione | In breve |
 |------|----------|----------|
+| 12/11/2026 | 1.3.3, server 0.14.0 | [Il rapportino nel formato del riepilogo, i km scritti da soli](#v1-3-3) |
 | 11/11/2026 | 1.3.2 | [Aggiungi un lavoro accanto a Salva, il rapportino del telefono su una pagina, Scegli tutti](#v1-3-2) |
 | 11/11/2026 | 1.3.1 | [Il rapportino a tre colonne, il riepilogo col cliente del progetto](#v1-3-1) |
 | 09/11/2026 | 1.3.0 | [Il design Fai: una casa che dice cosa fare](#v1-3-0) |
@@ -46,6 +47,72 @@ mai dati veri di clienti.
 | 26/09–14/10/2026 | 0.1 | [Un rapportino confermato non si perde più](#coda) |
 | 7–9/08/2026 | 0.1.0 | [Hackathon NGN Hacks: la versione a voce, senza mani](#v0-1-0) |
 | marzo–giugno 2026 | prima del repository | [Le prime versioni](#prima) |
+
+---
+
+<a id="v1-3-3"></a>
+## 12 novembre 2026 · 1.3.3 · server 0.14.0 · Il rapportino nel formato del riepilogo, i km scritti da soli
+
+**Perché.** Andrea: "i file per la fatturazione dei rapportini, anche quelli giornalieri (quindi con un solo
+rapportino) devono essere fatti secondo questo formato", col riepilogo di un mese allegato. E: "i kilometri percorsi
+per un cliente. Manuel vuole che siano suggeriti in automatico". Andrea era indeciso fra la posizione del telefono
+(Wisper vede che Manuel è da un cliente e riempie il campo) e i km calcolati dalla sede del cliente, che però vorrebbe
+dire gestire anche gli intestatari di tutti i progetti di Elettrodinamica, che sono come dei sotto-clienti. Fra le
+strade proposte ha scelto: i km **dal luogo del lavoro**, **andata e ritorno**, calcolati con la **mappa di Google
+attraverso lo script del foglio**, e in alto sul PDF **il numero del rapportino**.
+
+Perché non la posizione: per capire che Manuel è "da un cliente" servono comunque gli indirizzi di tutti i clienti;
+il telefono dovrebbe poter seguire la posizione sempre (permesso "Consenti sempre", batteria); per i collaboratori
+seguire gli spostamenti tocca le regole sul controllo a distanza dei lavoratori; e i km di un giorno cambiano, mentre
+per il rimborso serve un numero stabile. Nei rapportini veri sul NAS 21 lavori su 22 con i km sono su un progetto, con
+13 "Intestato a" diversi: per questo il luogo sta nel progetto, e gli intestatari non diventano clienti.
+
+**Cosa cambia.**
+
+- **Il PDF del rapportino** (anche di un giorno con un lavoro solo) è il foglio del riepilogo: in alto a destra
+  "Rapportino di lavoro", il numero e "cliente · giorno · N lavori"; sotto mittente e destinatario, la tabella con
+  data, numero, progetto, Intestato a, lavoro svolto, ore, km, spese e importo, il totale e il conto (con gli importi
+  quando si sceglie di mandarli). Il riepilogo e il rapportino ora escono dallo stesso modello: quello che cambia in uno
+  cambia anche nell'altro.
+- **Dove, nel progetto.** Un campo nuovo, "Via, numero e comune", sotto Intestato a, sul computer e sul telefono.
+  Scrivendo un Intestato a già usato in un altro progetto, Dove si riempie da solo col suo indirizzo. Nella scheda del
+  progetto: "Via dei Mulini 4, Schio · 48 km andata e ritorno".
+- **La strada la calcola il NAS.** Ogni 2 minuti guarda quali luoghi non hanno ancora i loro km (Dove dei progetti
+  aperti, indirizzi delle commesse e dei clienti) e li chiede allo script del foglio, che usa la mappa di Google (gratis,
+  senza chiavi). Una volta per indirizzo: la risposta si ricorda. Si parte dall'indirizzo dello studio (Impostazioni ›
+  Dati dello studio); se cambia, le strade si rifanno.
+- **Nel rapportino** i km di un lavoro nuovo si scrivono da soli: quelli dell'ultima volta sullo stesso progetto,
+  altrimenti quelli dallo studio; senza progetto, la stessa cosa per la commessa e poi per il cliente. Sotto il campo
+  tre pillole: **Ultima volta · N km**, **Dallo studio · N km** e **Senza auto**. Un numero scritto a mano o scelto
+  con una pillola non si cambia più, e un rapportino già salvato non cambia mai da solo. La visita guidata del telefono
+  lo dice al passo dei km.
+- **Un viaggio si conta una volta.** Se nello stesso rapportino un lavoro prima ha già i km, Wisper non li riscrive da
+  solo nel lavoro dopo (le pillole restano, per aggiungerli con un tocco). L'ho deciso guardando i rapportini veri: nei
+  12 giorni con più lavori i km non sono mai su tutti, in 9 sono su un lavoro solo.
+- **Telefono, il modulo del progetto.** Con Dove i campi sono cinque e, a tastiera aperta, Salva copriva il campo in cui
+  si scriveva: ora la parte in basso si nasconde finché la tastiera è aperta, come nel rapportino.
+- Nella finestra per mandare i rapportini, "con gli importi" è già scelto per chi può vedere i soldi.
+
+<img src="docs/diario/2026-11-12-km-computer.png" width="620" alt="I km scritti da soli nel rapportino nuovo, con le pillole Ultima volta, Dallo studio e Senza auto"> <img src="docs/diario/2026-11-12-km-telefono.png" width="240" alt="Le stesse pillole sul telefono">
+
+<img src="docs/diario/2026-11-12-progetto-dove-computer.png" width="620" alt="La scheda del progetto con Dove e i km dallo studio"> <img src="docs/diario/2026-11-12-progetto-dove-telefono.png" width="240" alt="Dove nel progetto sul telefono">
+
+<img src="docs/diario/2026-11-12-rapportino-pdf.png" width="520" alt="Il PDF del rapportino di un giorno con due lavori, nel formato del riepilogo">
+
+**Prove.** Server: 686 prove, 6 nuove sui km (il giro una volta per indirizzo, il Dove ripreso dall'Intestato a, lo
+studio che cambia, la pausa dopo un errore dello script). Script: 93 prove, con `postinoDistanza` sul finto Google.
+Computer: 358 prove dei conti e delle regole, con i 12 casi dei km condivisi col telefono e i due PDF nel formato nuovo;
+i giri cliccati (rapportini a lavori, progetti, flussi, fase 6, visita); sullo schermo coi dati di esempio i km scritti
+da soli, le pillole, il secondo lavoro dello stesso giorno senza km, il Dove ripreso dall'Intestato a e la scheda del
+progetto, anche in tema scuro. Telefono: 447 prove con `server/prove/telefono.js`; sull'emulatore, contro un server di
+prova: progetto nuovo con Dove, i km dallo studio arrivati dal giro del server, rapportino con i km scritti da soli,
+corretti a mano e salvati, il lavoro dopo con "Ultima volta", tema scuro e telefono stretto (360 dp).
+
+**Non provato.** La mappa di Google vera: finché Andrea non incolla lo script nuovo il NAS non può chiedere le strade (lo
+dice nel log e riprova ogni ora; intanto i km si propongono dall'ultima volta). I telefoni veri di Manuel e Andrea.
+
+**Pubblicata.** [Versione 1.3.3](https://github.com/postagaspa-star/wisper/releases/tag/v1.3.3): telefono codice 17,
+computer 1.3.3, server 0.14.0 sul NAS.
 
 ---
 

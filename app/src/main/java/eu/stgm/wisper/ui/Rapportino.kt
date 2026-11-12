@@ -72,6 +72,7 @@ import eu.stgm.wisper.Vista
 import eu.stgm.wisper.rapportino.Calcolo
 import eu.stgm.wisper.rapportino.Cliente
 import eu.stgm.wisper.rapportino.Immagini
+import eu.stgm.wisper.rapportino.Km
 import eu.stgm.wisper.rapportino.Numeri
 import eu.stgm.wisper.rapportino.Progetto
 import eu.stgm.wisper.rapportino.ProgettoNuovo
@@ -168,7 +169,20 @@ internal fun ColumnScope.LavoroNellaPagina(
             (stato.cliente.isNotBlank() && eu.stgm.wisper.rapportino.Anagrafiche.normalizza(l.cliente) == eu.stgm.wisper.rapportino.Anagrafiche.normalizza(stato.cliente))
     }?.tariffa?.takeIf { it > 0 }
     val proposta = prezzoCommessa ?: propostaQui ?: dati.tariffaProposta(clienteScelto, stato.cliente)
-    val ultimiKm = Riepiloghi.ultimiKm(viste.filterNot { it.rapportino.idLocale == stato.base.idLocale }, stato.idCommessa, stato.idCliente, stato.cliente)
+    // 12/11/2026 (km.md): i km da proporre (rapportino/Km.kt): l'ultima volta per lo stesso posto o la strada dallo studio.
+    val kmProposte = run {
+        val idProgetto = stato.idProgetto.ifBlank { stato.progettoNuovo?.idLocale.orEmpty() }
+        val luogo = stato.progettoNuovo?.let { Km.Luogo(it.intestatoA, it.dove, null) }
+            ?: ana.progetti.firstOrNull { stato.idProgetto.isNotBlank() && it.id == stato.idProgetto }?.let { Km.Luogo(it.intestatoA, it.dove, it.kmStudio) }
+        // Dal più recente: gli altri lavori di questo rapportino (anche non ancora salvati) e quelli già scritti.
+        val storico = (giornata.lavori + viste.map { it.rapportino }.filterNot { v -> giornata.lavori.any { it.idLocale == v.idLocale } })
+            .filter { it.idLocale != stato.base.idLocale }.sortedByDescending { it.data }
+            .map { Km.Storia(it.data.toString(), it.idCliente, it.idCommessa, it.idProgetto, it.km) }
+        // Un viaggio una volta sola: con i km gia' in un lavoro prima di questo nel rapportino, Wisper non li riscrive da solo.
+        val kmPrima = giornata.lavori.takeWhile { it.idLocale != stato.base.idLocale }.any { it.km > 0 }
+        Km.proposte(Km.Lavoro(stato.idCliente, stato.idCommessa, idProgetto), luogo, ana.commessa(stato.idCommessa)?.kmStudio, clienteScelto?.kmStudio, storico, kmPrima)
+    }
+    LaunchedEffect(kmProposte.proposta, bloccato) { if (!bloccato) stato.proponiKm(kmProposte.proposta?.km) }
     // "Come il lavoro prima": l'ultimo lavoro scritto prima di questo nella fila.
     val prima = giornata.lavori.takeWhile { it.idLocale != stato.base.idLocale }.lastOrNull { it.cliente.isNotBlank() }
 
@@ -260,7 +274,7 @@ internal fun ColumnScope.LavoroNellaPagina(
 
         // ---------------------------------------------------------- Strada e tariffa
         TitoloGruppo(if (costi) "Strada e tariffa" else "Strada")
-        Chilometri(stato, regole, ultimiKm)
+        Chilometri(stato, regole, kmProposte)
         if (costi) Tariffa(stato, regole, proposta, clienteScelto, prezzoCommessa != null)
 
         // ---------------------------------------------------------- Altro
@@ -382,29 +396,38 @@ private fun OreDiLavoro(stato: ModuloStato) {
     }
 }
 
-/** I chilometri: scritti, "Ultima volta" (quelli dell'ultimo lavoro per la stessa commessa o cliente) o "Senza auto". */
+/**
+ * I chilometri (12/11/2026, km.md): in un lavoro nuovo li scrive Wisper (ModuloStato.proponiKm); le pillole "Ultima volta"
+ * (l'ultimo lavoro per lo stesso posto), "Dallo studio" (la strada dallo studio, andata e ritorno) e "Senza auto".
+ */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun Chilometri(stato: ModuloStato, regole: eu.stgm.wisper.rapportino.Regole, ultimiKm: Double?) {
+private fun Chilometri(stato: ModuloStato, regole: eu.stgm.wisper.rapportino.Regole, proposte: Km.Proposte) {
     val c = W.colori
     val visita = LocalVisita.current
     Scheda(Modifier.vaiAllErrore(stato, "km")) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text("Chilometri", style = Testi.titoloSezione, color = c.testo, modifier = Modifier.weight(1f))
             CampoTesto(
-                stato.km, { t -> if (t.all { it.isDigit() || it == ',' || it == '.' }) { stato.km = t; stato.errori = stato.errori - "km" } }, null,
+                stato.km, { t -> if (t.all { it.isDigit() || it == ',' || it == '.' }) stato.scegliKm(t) }, null,
                 Modifier.width(128.dp), segnaposto = "0", tastiera = KeyboardType.Decimal, suffisso = "km",
                 stile = Testi.titoloScheda, errore = stato.errori["km"],
             )
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (ultimiKm != null) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            val ultima = proposte.ultima?.takeIf { it != proposte.studio }
+            if (ultima != null) {
                 Pillola(
-                    "Ultima volta · ${Numeri.scrivi(ultimiKm)} km", Numeri.leggi(stato.km) == ultimiKm,
-                    { stato.km = Numeri.scrivi(ultimiKm); stato.errori = stato.errori - "km"; visita?.azione("km-ultimi") },
-                    Modifier.weight(1.7f).bersaglio("km-ultimi").portaInVista("km-ultimi"), altezza = 44.dp,
+                    "Ultima volta · ${Numeri.scrivi(ultima)} km", Numeri.leggi(stato.km) == ultima,
+                    { stato.scegliKm(Numeri.scrivi(ultima)); visita?.azione("km-ultimi") },
+                    Modifier.bersaglio("km-ultimi").portaInVista("km-ultimi"), altezza = 44.dp,
                 )
             }
-            Pillola("Senza auto", stato.km.isNotBlank() && Numeri.leggi(stato.km) == 0.0, { stato.km = "0"; stato.errori = stato.errori - "km" }, Modifier.weight(1f), altezza = 44.dp)
+            proposte.studio?.let { km ->
+                Pillola("Dallo studio · ${Numeri.scrivi(km)} km", Numeri.leggi(stato.km) == km, { stato.scegliKm(Numeri.scrivi(km)); visita?.azione("km-ultimi") },
+                    if (ultima == null) Modifier.bersaglio("km-ultimi").portaInVista("km-ultimi") else Modifier, altezza = 44.dp)
+            }
+            Pillola("Senza auto", stato.km.isNotBlank() && Numeri.leggi(stato.km) == 0.0, { stato.scegliKm("0") }, altezza = 44.dp)
         }
         if (!regole.kmRimborsati) Text("Questo cliente non rimborsa i km", style = Testi.piccolo, color = c.tenue)
     }
@@ -1041,6 +1064,9 @@ private fun NuovoProgettoNelRapportino(
         }
     }
     var intestatoA by remember(commessa) { mutableStateOf("") }
+    // 12/11/2026 (km.md): dove si lavora; lo stesso Intestato a di un altro progetto lo riempie da solo (finché non lo si cambia).
+    var dove by remember(commessa) { mutableStateOf("") }
+    var doveAuto by remember(commessa) { mutableStateOf("") }
     var descrizione by remember(commessa) { mutableStateOf("") }
     var errori by remember(commessa) { mutableStateOf(emptyMap<String, String>()) }
 
@@ -1051,7 +1077,11 @@ private fun NuovoProgettoNelRapportino(
     Scheda {
         Text("Nuovo progetto", style = Testi.titoloScheda, color = W.colori.testo)
         CampoTesto(codice, { codice = it; errori = errori - "codice" }, "Codice", segnaposto = "Per esempio ED-001", errore = errori["codice"])
-        CampoTesto(intestatoA, { intestatoA = it }, "Intestato a", segnaposto = "Facoltativo")
+        CampoTesto(intestatoA, {
+            intestatoA = it
+            if (dove.isBlank() || dove == doveAuto) Km.doveDiIntestato(ana.progetti, it).let { d -> if (d.isNotBlank() || doveAuto.isNotBlank()) { dove = d; doveAuto = d } }
+        }, "Intestato a", segnaposto = "Facoltativo")
+        CampoTesto(dove, { dove = it }, "Dove", segnaposto = "Via, numero e comune")
         CampoTesto(descrizione, { descrizione = it; errori = errori - "descrizione" }, "Descrizione", segnaposto = "Per esempio Quadro QE1", errore = errori["descrizione"])
         PulsanteBordo("Usa questo progetto", {
             val e = mutableMapOf<String, String>()
@@ -1063,7 +1093,7 @@ private fun NuovoProgettoNelRapportino(
             if (descrizione.isBlank()) e["descrizione"] = "Scrivi la descrizione del progetto"
             errori = e
             if (e.isEmpty()) {
-                stato.nuovoProgetto(ProgettoNuovo(ProgettoNuovo.nuovoIdLocale(), cod, proposto.isNotBlank() && cod.equals(proposto, ignoreCase = true), intestatoA.trim(), descrizione.trim()))
+                stato.nuovoProgetto(ProgettoNuovo(ProgettoNuovo.nuovoIdLocale(), cod, proposto.isNotBlank() && cod.equals(proposto, ignoreCase = true), intestatoA.trim(), descrizione.trim(), dove.trim()))
                 onScelto()
             }
         }, Modifier.fillMaxWidth(), icona = Icone.spunta)

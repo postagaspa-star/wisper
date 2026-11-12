@@ -220,3 +220,16 @@ test('permessi: il modulo progetti dopo commesse, nei ruoli come il server (tito
   assert.equal(R.moduloDi('#progetti/3'), 'progetti');
   assert.deepEqual(R.destinazione({ pagina: 'progetto', id: 3 }), { hash: '#progetti/3', filtro: null });
 });
+
+test('doveDiIntestato (12/11/2026): il Dove del progetto più recente con lo stesso Intestato a, senza contare sé stesso', () => {
+  const lista = [
+    { id: 1, intestatoA: 'Batokyo Srl', dove: 'Via dei Mulini 4, Schio', creato: '2026-11-01T08:00:00' },
+    { id: 2, intestatoA: '  batokyo   SRL ', dove: 'Via dei Mulini 6, Schio', creato: '2026-11-05T08:00:00' },
+    { id: 3, intestatoA: 'Batokyo Srl', dove: '', creato: '2026-11-08T08:00:00' },
+    { id: 4, intestatoA: 'Nuova Srl', dove: 'Via Roma 1, Thiene', creato: '2026-11-02T08:00:00' },
+  ];
+  assert.equal(RP.doveDiIntestato(lista, 'Batokyo srl'), 'Via dei Mulini 6, Schio', 'il più recente che ce l\'ha');
+  assert.equal(RP.doveDiIntestato(lista, 'Batokyo Srl', 2), 'Via dei Mulini 4, Schio', 'non sé stesso');
+  assert.equal(RP.doveDiIntestato(lista, 'Altra Srl'), '');
+  assert.equal(RP.doveDiIntestato(lista, ''), '');
+});

@@ -171,7 +171,8 @@ fun SchermataInvio(dati: Dati, nav: Navigatore, cosa: String) {
     val firmaEmail = ana.impostazione(Anagrafiche.TECNICO).ifBlank { ana.ragioneSociale }
 
     // Le scelte: gli importi di solito nel riepilogo (serve per la fattura), non nel rapportino di un giorno.
-    var conImporti by rememberSaveable(cosa) { mutableStateOf(!unRapportino && costi) }
+    // 12/11/2026: gli importi di base sì anche per un rapportino solo (è il foglio per la fattura, come il riepilogo).
+    var conImporti by rememberSaveable(cosa) { mutableStateOf(costi) }
     var conFoto by rememberSaveable(cosa) { mutableStateOf(false) }
     // Per destinatario (la chiave di chi paga): quello che si è scritto a mano, e come è andata.
     val aScritto = remember(cosa) { mutableStateMapOf<String, String>() }
@@ -537,7 +538,7 @@ private fun SchedaDestinatario(
 /**
  * Il PDF di un destinatario con gli stessi modelli del computer (rapportino/Stampa.kt): i lavori di un rapportino solo
  * col modello del rapportino (contratto del 06/11/2026: il primo argomento porta `lavori`), se no il riepilogo, una riga
- * per lavoro.
+ * per lavoro. Dal 12/11/2026 i due sono lo stesso foglio (foglioLavori in pc/ui/documenti.js), cambia solo la testa.
  */
 private suspend fun creaPdf(ctx: Context, dati: Dati, d: Giornate.Destinatario, conImporti: Boolean, conFoto: Boolean): File {
     val ds = withContext(Dispatchers.Default) { dati.perStampa(d.lavori.map { it.idLocale }) }

@@ -431,14 +431,17 @@ async function main() {
     await clicca('PDF', '.pannello .piede', 400);
     await clicca('PDF per Rossi Impianti Srl', '.menu', 900);
     const html = await valuta('window.__ultimoPdf || ""');
-    assert.ok(html.indexOf('<table class="lavori">') > 0, 'il PDF coi lavori');
+    // 12/11/2026: il rapportino ha il foglio del riepilogo (tabella riepilogo, il numero in alto, il Totale in fondo).
+    assert.ok(html.indexOf('<table class="riepilogo">') > 0, 'il PDF coi lavori');
     const corpoPdf = html.slice(html.indexOf('<tbody>'), html.indexOf('</tbody>'));
     assert.equal((corpoPdf.match(/<tr>/g) || []).length, 2, 'i 2 lavori di Rossi');
     assert.ok(html.indexOf(LUNGO) < 0, 'niente lavori di un altro cliente');
     assert.ok(html.indexOf('Firma per accettazione') < 0, 'niente riquadro per la firma del cliente');
     const testoPdf = await fotoHtml('pdf', html);
-    assert.match(testoPdf, /Totale del giorno/);
-    passo('PDF per Rossi: 2 righe, il totale del giorno, niente lavori dell\'altro cliente, niente firma del cliente');
+    assert.match(testoPdf, /Rapportino di lavoro/i);
+    assert.match(testoPdf, /Rossi Impianti Srl · \d\d\/\d\d\/\d{4} · 2 lavori/);
+    assert.match(testoPdf, /Totale/);
+    passo('PDF per Rossi nel formato del riepilogo: il numero, "Rossi Impianti Srl · giorno · 2 lavori", 2 righe, il totale, niente lavori dell\'altro cliente, niente firma del cliente');
 
     // ------------------------------------------------------------- l'invio diviso per destinatario
     await clicca('Invia ai clienti', '.pannello', 1200);

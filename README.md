@@ -79,6 +79,21 @@ the first one with a missing field and scrolling to it. The same update adds **S
 both devices (a checkbox in the table header on the computer, a row above the list on the phone): it selects every
 report currently shown, so with filters on only the ones that pass them.
 
+Version 1.3.3 (12 November, server 0.14.0, schema 13) has two changes. The report PDF, even a single day with one job,
+now uses the same sheet as the period summary (`foglioLavori` in `pc/ui/documenti.js`): "Rapportino di lavoro", the
+report number and "client · day · N jobs" at the top right, then sender and recipient, the jobs table (date, number,
+project, Intestato a, description, hours, km, expenses, amount), the total and the bill. And the **kilometres are
+suggested by themselves** (`docs/gestionale/km.md`). Each project has a **Dove** (where the work is: usually the site
+of the company it is "Intestato a"; a name already used fills it in), and the server asks the sheet script for the
+driving route from the studio (`postinoDistanza`, Apps Script's free `Maps` service, no key), once per address, kept
+in the new `distanze` table and sent to the apps as `kmStudio` (round trip, whole km) on projects, jobs and clients.
+A new job gets last time's km on the same project, or else the km from the studio; the same rule falls back to the
+job and then the client (`pc/ui/regole-km.js` = `rapportino/Km.kt`, shared cases in `pc/prove/casi-km.json`). Under
+the field, pills offer **Ultima volta · N km**, **Dallo studio · N km** and **Senza auto**; a number typed by hand or
+picked from a pill is never replaced. One trip is counted once: if an earlier job in the same report already has km,
+nothing is filled in by itself (on the real NAS data, days with several jobs never have km on every job). Phone location tracking was considered and left out: it needs every client's
+coordinates anyway, the "allow all the time" permission, and it raises workplace-monitoring rules for collaborators.
+
 Phase 1 (October 2026) replaces the Google Sheet with a small server on
 the home NAS (`server/`: Node.js 24 with its built-in SQLite, no npm dependencies, in
 Docker). It speaks the same protocol as the sheet script, so the phone and the office

@@ -88,7 +88,8 @@ class Visita {
         Passo("scrivi", "Cosa vuoi fare?", "Le cose che fai più spesso, a un tocco. Tocca Scrivi un rapportino.", true, "dashboard"),
         Passo("recente-0", "Per chi", "I clienti di questi giorni sono già qui. Tocca Elettrodinamica.", true, "rapportino"),
         Passo("ore-6", "Le ore", "Tocca 6 h, poi aggiusti con più e meno.", true, "rapportino"),
-        Passo("km-ultimi", "I chilometri", "Wisper ricorda i km dell'ultima volta. Toccali.", true, "rapportino"),
+        // 12/11/2026: i km li scrive Wisper da soli (l'ultima volta qui o la strada dallo studio); la pillola li conferma.
+        Passo("km-ultimi", "I chilometri", "Wisper scrive da solo i km dell'ultima volta qui. Tocca la pillola per confermarli.", true, "rapportino"),
         Passo("totale", "Il conto", "Il totale si aggiorna mentre scrivi.", false, "rapportino"),
         Passo("scontrino", "Gli scontrini", "Fotografa lo scontrino subito, o aggiungilo dopo.", false, "rapportino"),
         // 11/11/2026: una pagina sola, niente piu' Avanti e Aggiungi al rapportino. Il rapportino del giorno può avere più lavori.

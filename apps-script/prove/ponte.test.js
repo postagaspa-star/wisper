@@ -270,3 +270,19 @@ test('postinoEsporta: il foglio intero in Excel, come File > Scarica, con la chi
     contesto.ScriptApp = scriptApp;
   }
 });
+
+test('postinoDistanza: la strada in auto dalla mappa (Maps di Apps Script), sola andata; introvabile = non trovata', () => {
+  modulo.mappe.length = 0;
+  const r = post({ azione: 'postinoDistanza', segreto: SEGRETO, da: 'Via dell\'Esempio 1, 36016 Thiene (VI)', a: 'Via dei Mulini 4, Schio' });
+  assert.equal(r.ok, true);
+  assert.equal(r.trovata, true);
+  assert.ok(r.metri >= 4000 && r.metri <= 60000);
+  assert.equal(r.a, 'Via dei Mulini 4, Schio, Italia');
+  assert.deepEqual(modulo.mappe[0], { lingua: 'it', regione: 'it', da: 'Via dell\'Esempio 1, 36016 Thiene (VI)', a: 'Via dei Mulini 4, Schio', modo: 'driving' });
+  assert.deepEqual(post({ azione: 'postinoDistanza', segreto: SEGRETO, da: 'Thiene', a: 'Via Introvabile 9' }), { ok: true, trovata: false, stato: 'NOT_FOUND' });
+  assert.equal(post({ azione: 'postinoDistanza', segreto: SEGRETO, da: 'Thiene', a: '' }).errore, 'Mancano gli indirizzi');
+  assert.equal(post({ azione: 'postinoDistanza', da: 'Thiene', a: 'Schio' }).errore, 'Segreto sbagliato');
+  // La stessa strada del postino finto del server (le prove del telefono e del computer usano quello).
+  const { distanzaFinta } = require('../../server/src/postino.js');
+  assert.equal(r.metri, distanzaFinta('Thiene', 'Via dei Mulini 4, Schio').metri);
+});

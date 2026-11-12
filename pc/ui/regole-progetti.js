@@ -142,7 +142,19 @@
     return String((p && p.stato) || 'APERTO').toUpperCase() === 'CHIUSO' ? { testo: 'Chiuso', colore: 'grigio' } : { testo: 'Aperto', colore: 'verde' };
   }
 
-  const Regole = { etichetta, delRapportino, intestatoDelRapportino, conta, filtra, perRapportino, sceltoDaSolo, intestatiDelCliente, mancaProgetto, progettoObbligatorio, accesa, parolaStato };
+  /**
+   * 12/11/2026 (km.md): il Dove di un altro progetto con lo stesso "Intestato a" (lo stesso posto), il più recente che ce
+   * l'ha; '' se nessuno. Come doveDiIntestato del server, che lo fa anche quando il progetto arriva senza Dove.
+   */
+  function doveDiIntestato(progetti, intestatoA, tranneId) {
+    const k = norm(intestatoA).replace(/\s+/g, ' ');
+    if (!k) return '';
+    const p = (progetti || []).filter(x => String(x.id) !== String(tranneId) && norm(x.intestatoA).replace(/\s+/g, ' ') === k && String(x.dove || '').trim())
+      .sort(recentiPrima)[0];
+    return p ? String(p.dove).trim() : '';
+  }
+
+  const Regole = { etichetta, delRapportino, intestatoDelRapportino, conta, filtra, perRapportino, sceltoDaSolo, intestatiDelCliente, mancaProgetto, progettoObbligatorio, accesa, parolaStato, doveDiIntestato };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = Regole;
   else radice.WisperRegoleProgetti = Regole;

@@ -1,8 +1,9 @@
 /*
  * Il postino: lo script del foglio (apps-script/Ponte.gs), che fa per il server
  * le cose che solo Google sa fare. Manda le email dal Gmail del foglio, salva le
- * copie fuori casa su Drive (Wisper/Copie NAS/) e riscrive le schede del foglio
- * ogni notte. Il protocollo e' in docs/gestionale/postino.md.
+ * copie fuori casa su Drive (Wisper/Copie NAS/), riscrive le schede del foglio
+ * ogni notte e (dal 12/11/2026) misura la strada in auto dallo studio al luogo
+ * di un lavoro. Il protocollo e' in docs/gestionale/postino.md.
  *
  * Ogni chiamata porta il segreto (lo stesso SEGRETO_SERVER del .env): Apps
  * Script non legge le intestazioni HTTP, quindi sta nel corpo.
@@ -115,6 +116,14 @@ class Postino {
   impronta({ cartella, nome }) {
     return this.chiama('postinoImpronta', { cartella, nome });
   }
+
+  /**
+   * 12/11/2026: la strada in auto da un indirizzo a un altro (Maps di Apps Script): {ok, trovata, metri, a} (a = come la
+   * mappa ha capito l'indirizzo). L'azione postinoDistanza va incollata nello script come le altre (azioni/km.js).
+   */
+  distanza(da, a) {
+    return this.chiama('postinoDistanza', { da, a });
+  }
 }
 
 function conRete(err) {
@@ -154,6 +163,7 @@ function scriviSuDisco(cartella, d) {
     return { ok: true, righe: (d.righe || []).length };
   }
   if (d.azione === 'postinoProva') return { ok: true, quando: new Date().toISOString(), rimaste: 100 };
+  if (d.azione === 'postinoDistanza') return distanzaFinta(d.da, d.a);
   if (d.azione === 'postinoImpronta') {
     if (['database', 'file'].indexOf(d.cartella) < 0) return { ok: false, errore: 'Cartella non valida: ' + d.cartella };
     const p = path.join(cartella, 'copie', d.cartella, path.basename(String(d.nome || '')));
@@ -164,4 +174,16 @@ function scriviSuDisco(cartella, d) {
   return { ok: false, errore: 'Azione sconosciuta: ' + d.azione };
 }
 
-module.exports = { Postino, scriviSuDisco, PEZZO };
+/**
+ * La strada finta delle prove (12/11/2026): sempre la stessa per lo stesso indirizzo, fra 4 e 60 km di andata (in metri,
+ * a 100 m). Un indirizzo con "introvabile" non si trova, come uno sbagliato sulla mappa vera.
+ */
+function distanzaFinta(da, a) {
+  const s = String(a || '').toLowerCase().replace(/\s+/g, ' ').trim();
+  if (!String(da || '').trim() || !s) return { ok: false, errore: 'Mancano gli indirizzi' };
+  if (s.indexOf('introvabile') >= 0) return { ok: true, trovata: false, stato: 'NOT_FOUND' };
+  const n = parseInt(require('node:crypto').createHash('sha256').update(s).digest('hex').slice(0, 8), 16);
+  return { ok: true, trovata: true, metri: 4000 + (n % 561) * 100, a: String(a).trim() };
+}
+
+module.exports = { Postino, scriviSuDisco, PEZZO, distanzaFinta };

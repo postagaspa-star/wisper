@@ -25,6 +25,10 @@ data class Progetto(
     val codice: String,
     val intestatoA: String = "",
     val descrizione: String = "",
+    /** 12/11/2026 (km.md): dove si lavora (di solito la sede di chi e' Intestato a). */
+    val dove: String = "",
+    /** I km dallo studio, andata e ritorno, calcolati dal server dal [dove]; null = non si sanno. */
+    val kmStudio: Double? = null,
     /** "APERTO" o "CHIUSO". */
     val stato: String = APERTO,
     val codiceAutomatico: Boolean = false,
@@ -53,6 +57,7 @@ data class Progetto(
         .put("codice", codice).put("intestatoA", intestatoA).put("descrizione", descrizione).put("stato", stato)
         .put("codiceAutomatico", codiceAutomatico).put("creato", creato).put("modificato", modificato)
         .put("rapportini", rapportini).put("ore", ore).put("ultimoRapportino", ultimoRapportino)
+        .put("dove", dove).apply { if (kmStudio != null) put("kmStudio", kmStudio) }
 
     companion object {
         const val APERTO = "APERTO"
@@ -69,6 +74,8 @@ data class Progetto(
             codice = o.testo("codice"),
             intestatoA = o.testo("intestatoA"),
             descrizione = o.testo("descrizione"),
+            dove = o.testo("dove"),
+            kmStudio = o.numero("kmStudio"),
             stato = o.testo("stato").uppercase().ifBlank { APERTO },
             codiceAutomatico = o.vero("codiceAutomatico"),
             creato = o.testo("creato"),
@@ -92,14 +99,16 @@ data class ProgettoNuovo(
     val codiceProposto: Boolean,
     val intestatoA: String = "",
     val descrizione: String = "",
+    /** 12/11/2026: dove si lavora (km.md). */
+    val dove: String = "",
 ) {
     fun aJson(): JSONObject = JSONObject().put("idLocale", idLocale).put("codice", codice).put("codiceProposto", codiceProposto)
-        .put("intestatoA", intestatoA).put("descrizione", descrizione)
+        .put("intestatoA", intestatoA).put("descrizione", descrizione).apply { if (dove.isNotBlank()) put("dove", dove) }
 
     /** Come un progetto (in attesa) della commessa [idCommessa]: per le scelte e la regola del codice. */
     fun comeProgetto(idCommessa: String, idCliente: String, creato: String): Progetto =
         Progetto(id = "", idLocale = idLocale, idCommessa = idCommessa, idCliente = idCliente, codice = codice, intestatoA = intestatoA,
-            descrizione = descrizione, creato = creato)
+            descrizione = descrizione, dove = dove, creato = creato)
 
     companion object {
         fun nuovoIdLocale(): String = "P-" + UUID.randomUUID().toString().replace("-", "").take(16)
@@ -108,10 +117,10 @@ data class ProgettoNuovo(
             if (o == null) return null
             val idLocale = o.testo("idLocale")
             if (idLocale.isBlank() && o.testo("codice").isBlank() && o.testo("descrizione").isBlank()) return null
-            return ProgettoNuovo(idLocale, o.testo("codice"), o.vero("codiceProposto"), o.testo("intestatoA"), o.testo("descrizione"))
+            return ProgettoNuovo(idLocale, o.testo("codice"), o.vero("codiceProposto"), o.testo("intestatoA"), o.testo("descrizione"), o.testo("dove"))
         }
 
-        fun da(p: Progetto, codiceProposto: Boolean): ProgettoNuovo = ProgettoNuovo(p.idLocale, p.codice, codiceProposto, p.intestatoA, p.descrizione)
+        fun da(p: Progetto, codiceProposto: Boolean): ProgettoNuovo = ProgettoNuovo(p.idLocale, p.codice, codiceProposto, p.intestatoA, p.descrizione, p.dove)
     }
 }
 
@@ -381,16 +390,17 @@ class AzioniProgetti(private val t: TrasportoFase5) {
         return CodiciProgetto.Proposta(r.testo("codice"), r.testo("da"))
     }
 
-    suspend fun crea(idCommessa: String, codice: String, codiceProposto: Boolean, intestatoA: String, descrizione: String, idLocale: String = ""): Salvataggio<Progetto> {
+    suspend fun crea(idCommessa: String, codice: String, codiceProposto: Boolean, intestatoA: String, descrizione: String, idLocale: String = "", dove: String = ""): Salvataggio<Progetto> {
         val c = corpo("creaProgetto").put("idCommessa", idCommessa).put("codiceProgetto", codice.trim())
             .put("intestatoA", intestatoA.trim()).put("descrizione", descrizione.trim())
+        if (dove.isNotBlank()) c.put("dove", dove.trim())
         if (codiceProposto) c.put("codiceProposto", true)
         if (idLocale.isNotBlank()) c.put("idLocale", idLocale)
         val o = t.scriviAzione(c).optJSONObject("progetto") ?: throw PonteServer.Rifiutato("Il server non ha restituito il progetto")
         return Salvataggio(Progetto.daJson(o), o.vero("giaEsisteva"))
     }
 
-    /** [campi]: codice, intestatoA, descrizione, stato, idCommessa (solo quelli da cambiare). */
+    /** [campi]: codice, intestatoA, dove, descrizione, stato, idCommessa (solo quelli da cambiare). */
     suspend fun aggiorna(id: String, campi: Map<String, String>): Progetto =
         conProgetto(t.scriviAzione(corpo("aggiornaProgetto").put("id", PonteServer.idJson(id)).put("campi", JSONObject(campi))))
 
@@ -418,10 +428,10 @@ class ServizioProgetti(
     suspend fun scheda(id: String) = leggi { scheda(id) }
     suspend fun codice(idCommessa: String, idCliente: String = "") = leggi { codice(idCommessa, idCliente) }
 
-    suspend fun crea(idCommessa: String, codice: String, codiceProposto: Boolean, intestatoA: String, descrizione: String): Result<Salvataggio<Progetto>> {
+    suspend fun crea(idCommessa: String, codice: String, codiceProposto: Boolean, intestatoA: String, descrizione: String, dove: String = ""): Result<Salvataggio<Progetto>> {
         if (idCommessa.isBlank()) return Result.failure(PonteServer.Rifiutato("Scegli la commessa del progetto"))
         if (descrizione.isBlank()) return Result.failure(PonteServer.Rifiutato("Scrivi la descrizione del progetto"))
-        return scrivi { crea(idCommessa, codice, codiceProposto, intestatoA, descrizione) }
+        return scrivi { crea(idCommessa, codice, codiceProposto, intestatoA, descrizione, dove = dove) }
     }
 
     suspend fun aggiorna(id: String, campi: Map<String, String>) = scrivi { aggiorna(id, campi) }

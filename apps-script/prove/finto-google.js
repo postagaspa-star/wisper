@@ -272,6 +272,29 @@ const Utilities = {
   sleep: ms => { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, Math.max(0, Number(ms) || 0)); },
 };
 
+/**
+ * Maps (12/11/2026, postinoDistanza): la strada finta, sempre la stessa per lo stesso indirizzo (come il postino finto del
+ * server). Un indirizzo con "introvabile" non si trova (NOT_FOUND). modulo.mappe conta le domande.
+ */
+const Maps = {
+  DirectionFinder: { Mode: { DRIVING: 'driving', WALKING: 'walking' } },
+  newDirectionFinder() {
+    const o = {};
+    const f = {
+      setLanguage(x) { o.lingua = x; return f; }, setRegion(x) { o.regione = x; return f; }, setOrigin(x) { o.da = x; return f; },
+      setDestination(x) { o.a = x; return f; }, setMode(x) { o.modo = x; return f; },
+      getDirections() {
+        modulo.mappe.push(Object.assign({}, o));
+        const s = String(o.a || '').toLowerCase().replace(/\s+/g, ' ').trim();
+        if (s.indexOf('introvabile') >= 0) return { status: 'NOT_FOUND', routes: [] };
+        const n = parseInt(crypto.createHash('sha256').update(s).digest('hex').slice(0, 8), 16);
+        return { status: 'OK', routes: [{ legs: [{ distance: { value: 4000 + (n % 561) * 100, text: '' }, end_address: String(o.a).trim() + ', Italia' }] }] };
+      },
+    };
+    return f;
+  },
+};
+
 const MailApp = {
   sendEmail(a, oggetto, corpo, opzioni) {
     fs.mkdirSync(CARTELLA_POSTA, { recursive: true });
@@ -307,7 +330,7 @@ function urlFetchVero(url, opzioni) {
   if (fuori.errore) throw new Error('Indirizzo non raggiungibile: ' + url);
   return fuori;
 }
-const modulo = { urlFetch: urlFetchVero, chiamate: [] };
+const modulo = { urlFetch: urlFetchVero, chiamate: [], mappe: [] };
 const UrlFetchApp = {
   fetch(url, opzioni) {
     modulo.chiamate.push({ url, opzioni: opzioni || {} });
@@ -330,7 +353,7 @@ const ScriptApp = {
 
 const contesto = {
   SpreadsheetApp: { getActiveSpreadsheet: () => Cartella },
-  DriveApp, PropertiesService, LockService, CacheService, Utilities, MailApp, UrlFetchApp, ScriptApp,
+  DriveApp, PropertiesService, LockService, CacheService, Utilities, MailApp, UrlFetchApp, ScriptApp, Maps,
   Session: { getEffectiveUser: () => ({ getEmail: () => 'proprietario@example.com' }) },
   ContentService: {
     MimeType: { JSON: 'application/json', TEXT: 'text/plain', ICAL: 'text/calendar' },

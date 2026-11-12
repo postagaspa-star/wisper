@@ -11,7 +11,7 @@ import java.time.LocalTime
 
 /**
  * Le cose che il sistema ricorda per non fartele riscrivere (docs/aspetto.md,
- * principio 4): le commesse di questi giorni, i km dell'ultima volta, il
+ * principio 4): le commesse di questi giorni, il
  * rapportino di ieri, i giorni della settimana senza rapportino.
  */
 object Riepiloghi {
@@ -83,17 +83,6 @@ object Riepiloghi {
             .distinctBy { it.id }.filter { chiave(it.id, it.nome) !in visti }
             .map { Recente(it.id, it.nome, it.gruppo, "", "") }
         return (usati + altri).take(quante)
-    }
-
-    /** I km dell'ultimo rapportino di quella commessa, o di quel cliente. */
-    fun ultimiKm(viste: List<Vista>, idCommessa: String, idCliente: String, cliente: String): Double? {
-        val tutti = viste.map { it.rapportino }.sortedByDescending { it.data }
-        val perCommessa = if (idCommessa.isNotBlank()) tutti.firstOrNull { it.idCommessa == idCommessa && it.km > 0 } else null
-        val perCliente = tutti.firstOrNull {
-            it.km > 0 && ((idCliente.isNotBlank() && it.idCliente == idCliente) ||
-                Anagrafiche.normalizza(it.cliente) == Anagrafiche.normalizza(cliente))
-        }
-        return (perCommessa ?: perCliente)?.km
     }
 
     /** L'ultimo rapportino prima di oggi: è quello che "Come ieri" ricopia. */

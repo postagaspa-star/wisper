@@ -5,10 +5,13 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -34,7 +37,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import eu.stgm.wisper.Dati
 import eu.stgm.wisper.rapportino.Anagrafiche
 import eu.stgm.wisper.rapportino.Commessa
+import eu.stgm.wisper.rapportino.Km
 import eu.stgm.wisper.rapportino.Moduli
+import eu.stgm.wisper.rapportino.Numeri
 import eu.stgm.wisper.rapportino.Progetto
 import eu.stgm.wisper.rapportino.Rapportino
 import eu.stgm.wisper.rapportino.RegoleProgetti
@@ -278,6 +283,10 @@ fun SchermataProgetto(dati: Dati, nav: Navigatore, id: String) {
                 RigaVoce(p.intestatoA.ifBlank { "Nessuno" }, sotto = "Intestato a", freccia = false, icona = Icone.persona,
                     titoloColore = if (p.intestatoA.isBlank()) c.tenue else c.testo)
                 LineaElenco()
+                // 12/11/2026 (km.md): dove si lavora e, quando la mappa l'ha calcolata, la strada dallo studio.
+                RigaVoce(p.dove.ifBlank { "Non scritto" }, sotto = p.kmStudio?.let { "Dove · ${Numeri.scrivi(it)} km andata e ritorno" } ?: "Dove", freccia = false,
+                    icona = Icone.luogo, titoloColore = if (p.dove.isBlank()) c.tenue else c.testo)
+                LineaElenco()
                 RigaVoce(cliente?.nome ?: p.idCliente.ifBlank { "Cliente" }, sotto = "Cliente", inizio = { Iniziali(cliente?.nome ?: "?", dimensione = 40.dp) },
                     onClick = cliente?.let { cl -> { nav.vai("cliente/${cl.id}") } })
                 LineaElenco()
@@ -344,6 +353,7 @@ fun SchermataProgetto(dati: Dati, nav: Navigatore, id: String) {
  * Nuovo o Modifica progetto: Commessa (gia' messa se si arriva da una commessa), Codice (gia' scritto quello proposto,
  * cambiabile), Intestato a, Descrizione. La commessa si cambia solo finche' il progetto non ha rapportini.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun SchermataModificaProgetto(dati: Dati, nav: Navigatore, id: String?, idCommessa: String?) {
     val c = W.colori
@@ -374,6 +384,9 @@ fun SchermataModificaProgetto(dati: Dati, nav: Navigatore, id: String?, idCommes
     var codice by rememberSaveable { mutableStateOf(esistente?.codice ?: proposto) }
     var codiceToccato by rememberSaveable { mutableStateOf(!nuovo) }
     var intestatoA by rememberSaveable { mutableStateOf(esistente?.intestatoA.orEmpty()) }
+    // 12/11/2026 (km.md): dove si lavora; lo stesso Intestato a di un altro progetto lo riempie da solo (finché non lo si cambia).
+    var dove by rememberSaveable { mutableStateOf(esistente?.dove.orEmpty()) }
+    var doveAuto by rememberSaveable { mutableStateOf("") }
     var descrizione by rememberSaveable { mutableStateOf(esistente?.descrizione.orEmpty()) }
     var sceltaCommessa by remember { mutableStateOf(false) }
     var provato by remember { mutableStateOf(false) }
@@ -397,7 +410,7 @@ fun SchermataModificaProgetto(dati: Dati, nav: Navigatore, id: String?, idCommes
         scope.launch {
             if (nuovo) {
                 val propostoUsato = proposto.isNotBlank() && codice.trim().equals(proposto, ignoreCase = true)
-                dati.progetti.crea(commessa.id, codice.trim(), propostoUsato, intestatoA.trim(), descrizione.trim())
+                dati.progetti.crea(commessa.id, codice.trim(), propostoUsato, intestatoA.trim(), descrizione.trim(), dove.trim())
                     .onSuccess { s ->
                         avvisi.mostra(if (s.giaEsisteva) "C'era già: ${s.dato.codice}" else "Creato ${s.dato.codice}")
                         nav.indietro()
@@ -409,6 +422,7 @@ fun SchermataModificaProgetto(dati: Dati, nav: Navigatore, id: String?, idCommes
                 val campi = buildMap {
                     if (codice.trim() != e.codice) put("codice", codice.trim())
                     if (intestatoA.trim() != e.intestatoA) put("intestatoA", intestatoA.trim())
+                    if (dove.trim() != e.dove) put("dove", dove.trim())
                     if (descrizione.trim() != e.descrizione) put("descrizione", descrizione.trim())
                     if (!commessa.id.equals(e.idCommessa, ignoreCase = true)) put("idCommessa", commessa.id)
                 }
@@ -421,9 +435,12 @@ fun SchermataModificaProgetto(dati: Dati, nav: Navigatore, id: String?, idCommes
         }
     }
 
+    // 12/11/2026: con Dove i campi sono cinque e, a tastiera aperta, Salva copriva quello in cui si scrive: come in Invio e
+    // nel rapportino, la parte in basso si nasconde finche' la tastiera e' aperta.
+    val tastiera = WindowInsets.isImeVisible
     Box(Modifier.fillMaxSize().background(c.fondo)) {
         Column(
-            Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(MarginePagina).padding(bottom = 120.dp),
+            Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(MarginePagina).padding(bottom = if (tastiera) 24.dp else 120.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             Testata(onIndietro = { nav.indietro() }, chiudi = true)
@@ -436,10 +453,16 @@ fun SchermataModificaProgetto(dati: Dati, nav: Navigatore, id: String?, idCommes
             }
             if (commessa != null) Text(ana.cliente(commessa.idCliente)?.nome.orEmpty(), style = Testi.secondario, color = c.tenue)
             CampoTesto(codice, { codice = it; codiceToccato = true }, "Codice", Modifier.bersaglio("progetto-codice"), segnaposto = "Per esempio ED-001", errore = erroreCodice)
-            CampoTesto(intestatoA, { intestatoA = it }, "Intestato a", segnaposto = "Facoltativo")
+            CampoTesto(intestatoA, {
+                intestatoA = it
+                if (dove.isBlank() || dove == doveAuto) {
+                    Km.doveDiIntestato(ana.progetti, it, esistente?.id.orEmpty()).let { d -> if (d.isNotBlank() || doveAuto.isNotBlank()) { dove = d; doveAuto = d } }
+                }
+            }, "Intestato a", segnaposto = "Facoltativo")
+            CampoTesto(dove, { dove = it }, "Dove", Modifier.bersaglio("progetto-dove"), segnaposto = "Via, numero e comune")
             CampoTesto(descrizione, { descrizione = it }, "Descrizione", segnaposto = "Per esempio Quadro QE1", errore = erroreDescrizione)
         }
-        FondoConPulsante(Modifier.align(Alignment.BottomCenter), sopraBarra = false) {
+        if (!tastiera) FondoConPulsante(Modifier.align(Alignment.BottomCenter), sopraBarra = false) {
             PulsantePrincipale(if (salvo) "Salvo…" else "Salva", ::salva, Modifier.bersaglio("progetto-salva"), icona = Icone.spunta, abilitato = !salvo)
         }
     }

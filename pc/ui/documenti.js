@@ -1,12 +1,14 @@
 /*
  * Wisper Ufficio: i documenti da stampare in PDF.
  *
- * Due documenti:
- *  - il rapportino singolo, impaginato come quello di Pleya (che a chi lo deve
- *    usare piace): intestazione, mittente e cliente affiancati, la commessa, i
- *    dati in griglia, il lavoro, le firme. Gli importi solo se richiesti.
- *  - il riepilogo di un periodo per un cliente: le righe del mese
- *    con i totali, quello da cui si fa la fattura.
+ * I documenti dei rapportini:
+ *  - il riepilogo di un periodo per un cliente: le righe del mese con i
+ *    totali, quello da cui si fa la fattura;
+ *  - dal 12/11/2026 il rapportino di un giorno (con i suoi lavori) è lo stesso
+ *    foglio del riepilogo (foglioLavori), col numero del rapportino in alto;
+ *  - il rapportino di un lavoro solo di prima (senza "lavori"), impaginato come
+ *    quello di Pleya: intestazione, mittente e cliente affiancati, i dati in
+ *    griglia, il lavoro, le firme. Gli importi solo se richiesti.
  *
  * Sono HTML fisso: il programma lo stampa con una WebView senza script. Il
  * formato della pagina (A4, margini, "Pagina X / Y") lo decide il CSS qui sotto.
@@ -240,22 +242,15 @@
     }).filter(Boolean).join(' · ');
   }
 
-  // 06/11/2026 (rapportino-lavori.md): il rapportino con più lavori, una riga per lavoro nella tabella.
-  const STILE_LAVORI = 'table.lavori td.prog { width: 26%; } table.lavori td.desc { width: 34%; } table.lavori .cod-l { font-family: Consolas, monospace; font-weight: 700; }' +
-    'table.lavori td .nome-l { font-weight: 700; } table.lavori tfoot td:first-child { white-space: nowrap; }';
-
   /** Le parole dello stato sul PDF: niente "da firmare" (06/11/2026); un lavoro da inviare non scrive niente. */
   const STATO_PDF = { INVIATO: 'Inviato', FATTURATO: 'Fatturato' };
 
-  /** "4 h" com'è nelle tabelle: "" per lo zero (le colonne vuote si leggono meglio). */
-  const oreCella = n => (C.num(n) ? C.numero(n) : '');
-
   /**
-   * Il rapportino con i suoi lavori (06/11/2026): g = { id (il numero del rapportino), data, tecnico, lavori: [i lavori
-   * dello stesso rapportino e dello STESSO destinatario] }. Una riga per lavoro: progetto (codice e descrizione, a chi è
-   * intestato), commessa, cosa si è fatto, ore di lavoro, extra e viaggio, km, spese, l'importo con "Con gli importi"; in
-   * fondo il totale del giorno. I codici delle commesse nel Mittente. Niente riquadro per la firma del cliente: solo un
-   * lavoro di prima che ha la firma la mostra ancora.
+   * Il rapportino con i suoi lavori: g = { id (il numero del rapportino), data, tecnico, lavori: [i lavori dello stesso
+   * rapportino e dello STESSO destinatario] }. Dal 12/11/2026 (Andrea: "i file per la fatturazione dei rapportini, anche
+   * quelli giornalieri, devono essere fatti secondo questo formato") è il foglio del riepilogo (foglioLavori): in alto
+   * "Rapportino di lavoro", il numero e "cliente · giorno · lavori"; il resto identico al riepilogo. Le note per sé
+   * (noteInterne) non ci vanno MAI. Solo un lavoro di prima con la firma del cliente la mostra ancora, in fondo.
    */
   function rapportinoLavori(g, ana, o) {
     const imp = ana.impostazioni || {};
@@ -266,82 +261,16 @@
     const nomeCliente = g.cliente || primo.cliente || '';
     const cliente = (ana.clienti || []).find(c => c.id === idCliente) || (ana.soggetti || []).find(c => c.id === idCliente) || { nome: nomeCliente };
     const data = String(g.data || primo.data || '').slice(0, 10);
-    const tecnico = g.tecnico || primo.tecnico || imp.TECNICO || '';
+    const numero = g.id || primo.idGiornata || primo.id || '';
     const n = lavori.length;
-    const conImporti = !!o.conImporti;
-    let corpo = intestazione(imp, 'Rapportino di lavoro', g.id || primo.idGiornata || primo.id || 'Rapportino', 'del ' + C.data(data) + ' · ' + (n === 1 ? '1 lavoro' : n + ' lavori'));
-    corpo += '<div class="parti">' + mittente(imp, lavori.map(l => l.idCommessa)) + destinatario(cliente.nome || nomeCliente, [
-      cliente.indirizzo,
-      cliente.partitaIva ? 'P.IVA ' + cliente.partitaIva : '',
-      cliente.email,
-    ]) + '</div>';
-    const t = C.totali(lavori);
-    const oreGiorno = C.centesimi(t.oreLavoro + t.oreExtra + t.oreViaggio);
-    const luoghi = Array.from(new Set(lavori.map(l => String(l.luogo || '').trim()).filter(Boolean)));
-    corpo += '<div class="griglia">' +
-      cella('Data', C.data(data)) +
-      cella('Tecnico', tecnico) +
-      cella('Luogo', luoghi.length === 1 ? luoghi[0] : luoghi.length ? 'vedi i lavori' : '—') +
-      cella('Ore', C.ore(oreGiorno)) +
-      '</div>';
-    corpo += '<table class="lavori"><thead><tr><th>Progetto · Commessa</th><th>Lavoro svolto</th>' +
-      '<th class="n">Lavoro</th><th class="n">Extra</th><th class="n">Viaggio</th><th class="n">Km</th><th class="n">Spese</th>' +
-      (conImporti ? '<th class="n">Importo</th>' : '') + '</tr></thead><tbody>';
-    lavori.forEach(l => {
-      const p = progettoDi(l, ana);
-      const commessa = (ana.commesse || []).find(m => m.id === l.idCommessa);
-      const nomeCommessa = l.idCommessa ? 'Commessa ' + l.idCommessa : (l.commessa ? 'Commessa ' + l.commessa : '');
-      const sottoLavoro = [
-        luoghi.length > 1 && l.luogo ? 'Luogo: ' + l.luogo : '',
-        rigaStrumenti(l.strumenti) ? 'Strumenti: ' + rigaStrumenti(l.strumenti) : '',
-        l.ticket ? 'Ticket ' + l.ticket : '',
-      ].filter(Boolean);
-      corpo += '<tr><td class="prog">' +
-        (p && p.codice ? '<div><span class="cod-l">' + esc(p.codice) + '</span>' + (p.descrizione ? ' · ' + esc(p.descrizione) : '') + '</div>' : '') +
-        (p && p.intestatoA ? '<div class="sotto-riga">Intestato a ' + esc(p.intestatoA) + '</div>' : '') +
-        (nomeCommessa ? '<div' + (p && p.codice ? ' class="sotto-riga"' : ' class="nome-l"') + '>' + esc(nomeCommessa) + '</div>' : '') +
-        (commessa && commessa.descrizione && !(p && p.codice) ? '<div class="sotto-riga">' + esc(commessa.descrizione) + '</div>' : '') +
-        (!(p && p.codice) && !nomeCommessa ? '—' : '') + '</td>' +
-        '<td class="desc"><div class="testo-l">' + esc(l.descrizione || '') + '</div>' +
-        sottoLavoro.map(x => '<div class="sotto-riga">' + esc(x) + '</div>').join('') + '</td>' +
-        '<td class="n">' + esc(oreCella(l.oreLavoro)) + '</td><td class="n">' + esc(oreCella(l.oreExtra)) + '</td>' +
-        '<td class="n">' + esc(oreCella(l.oreViaggio)) + '</td><td class="n">' + esc(C.num(l.km) ? C.numero(l.km) : '') + '</td>' +
-        '<td class="n">' + esc(C.num(l.spese) ? C.euro(l.spese) : '') + (l.noteSpese && C.num(l.spese) ? '<div class="sotto-riga">' + esc(l.noteSpese) + '</div>' : '') + '</td>' +
-        (conImporti ? '<td class="n">' + esc(C.euro(l.totale)) + '</td>' : '') + '</tr>';
-    });
-    corpo += '</tbody><tfoot><tr><td colspan="2">Totale del giorno</td>' +
-      '<td class="n">' + esc(C.numero(t.oreLavoro)) + '</td><td class="n">' + esc(C.numero(t.oreExtra)) + '</td>' +
-      '<td class="n">' + esc(C.numero(t.oreViaggio)) + '</td><td class="n">' + esc(C.numero(t.km)) + '</td>' +
-      '<td class="n">' + esc(C.euro(t.spese)) + '</td>' + (conImporti ? '<td class="n">' + esc(C.euro(t.totale)) + '</td>' : '') +
-      '</tr></tfoot></table>';
-    if (conImporti) {
-      corpo += '<table class="conto"><tbody>' +
-        '<tr><td>Compenso ore<div class="sotto-riga">' + esc(C.ore(oreGiorno)) + '</div></td><td class="n">' + esc(C.euro(t.compenso)) + '</td></tr>' +
-        '<tr><td>Rimborso km<div class="sotto-riga">' + esc(C.numero(t.km)) + ' km</div></td><td class="n">' + esc(C.euro(t.rimborso)) + '</td></tr>' +
-        '<tr><td>Spese</td><td class="n">' + esc(C.euro(t.spese)) + '</td></tr>' +
-        '<tr class="tot"><td>Totale del giorno</td><td class="n">' + esc(C.euro(t.totale)) + '</td></tr>' +
-        '</tbody></table>';
-    }
-    // Le note per sé (noteInterne) non ci vanno MAI.
-    const firmaTecnico = idDaUrl(imp.FIRMA_TECNICO);
-    // Solo un lavoro di prima con la firma del cliente la mostra ancora (il primo che ce l'ha).
+    const nome = cliente.nome || nomeCliente;
+    const testa = { etichetta: 'Rapportino di lavoro', numero: numero || 'Rapportino', sotto: [nome, C.data(data), n === 1 ? '1 lavoro' : n + ' lavori'].filter(Boolean).join(' · ') };
+    const chi = { nome, righe: [indirizzoCompleto(cliente), cliente.partitaIva ? 'P.IVA ' + cliente.partitaIva : '', cliente.email] };
     const vecchio = lavori.find(l => l.firma && l.firma.id);
-    corpo += '<div class="firme">' +
-      '<div class="firma"><div class="spazio">' + immagine(firmaTecnico, 'sig') + '</div>' +
-      '<div class="chi">Firma del compilatore · ' + esc(tecnico) + '</div></div>' +
-      (vecchio ? '<div class="firma"><div class="spazio">' + immagine(vecchio.firma.id, 'sig') + '</div>' +
-        '<div class="chi">Firma per accettazione' + (vecchio.firmatario ? ' · ' + esc(vecchio.firmatario) : '') +
-        (vecchio.firmatoIl ? ' · firmato il ' + esc(C.data(vecchio.firmatoIl)) : '') + '</div></div>' : '<div class="firma"></div>') +
-      '</div>';
-    const conFoto = lavori.filter(l => (l.foto || []).length);
-    if (o.conFoto && conFoto.length) {
-      corpo += '<div class="allegati"><h2>Scontrini · ' + esc(g.id || '') + '</h2><div class="foto">' +
-        conFoto.map(l => l.foto.map((f, i) => '<figure>' + immagine(f.id, '') + '<figcaption>' +
-          esc((l.cliente || '') + (l.noteSpese ? ' · ' + l.noteSpese : '') + (l.foto.length > 1 ? ' · ' + (i + 1) : '')) +
-          '</figcaption></figure>').join('')).join('') +
-        '</div></div>';
-    }
-    return pagina(imp, 'Rapportino ' + (g.id || ''), corpo, STILE_LAVORI);
+    const fondo = vecchio ? '<div class="firme"><div class="firma"></div><div class="firma"><div class="spazio">' + immagine(vecchio.firma.id, 'sig') + '</div>' +
+      '<div class="chi">Firma per accettazione' + (vecchio.firmatario ? ' · ' + esc(vecchio.firmatario) : '') +
+      (vecchio.firmatoIl ? ' · firmato il ' + esc(C.data(vecchio.firmatoIl)) : '') + '</div></div></div>' : '';
+    return foglioLavori(imp, ana, lavori, testa, chi, () => numero, o, 'Rapportino ' + numero, fondo);
   }
 
   /**
@@ -419,26 +348,32 @@
     return pagina(imp, 'Rapportino ' + (r.id || ''), corpo, progetto ? STILE_PROGETTO : '');
   }
 
-  // 11/11/2026: la data su una riga sola, la descrizione col posto più largo.
-  const STILE_RIEPILOGO = 'table.riepilogo th, table.riepilogo td.data { white-space: nowrap; } table.riepilogo td.int { width: 15%; } table.riepilogo td.desc { width: 30%; }';
+  // 11/11/2026: la data su una riga sola, la descrizione col posto più largo. 12/11/2026: anche il N° (RAP/2026/0027
+  // andava su tre righe).
+  const STILE_RIEPILOGO = 'table.riepilogo th, table.riepilogo td.data, table.riepilogo td.num { white-space: nowrap; } table.riepilogo td.int { width: 15%; } table.riepilogo td.desc { width: 30%; }';
+
+  /** "Via Arrigo Boito 2, 36031 Dueville (VI)": come indirizzoCompleto di pc/ui/regole.js (lo Spett.le del riepilogo). */
+  function indirizzoCompleto(x) {
+    const c = x || {};
+    const luogo = [c.cap, c.citta].filter(Boolean).join(' ') + (c.provincia ? ' (' + String(c.provincia).toUpperCase() + ')' : '');
+    return [c.indirizzo, luogo.trim()].filter(Boolean).join(', ');
+  }
 
   /**
-   * Il riepilogo di un periodo: le righe e i totali, per fare la fattura.
-   * destinatario: { nome, righe[] }  (il cliente, per esempio Elettrodinamica)
-   * opzioni: conImporti (di solito sì), conFoto
+   * Il foglio dei lavori per la fattura (12/11/2026): lo stesso per il riepilogo di un periodo e per il rapportino di un
+   * giorno. In alto testa = { etichetta, numero, sotto }; Mittente (con le commesse) e Spett.le (chi = { nome, righe,
+   * mostraCliente }); la tabella, una riga per lavoro (Data, N° = numeroDi(r), Progetto, Intestato a, Lavoro svolto, ore,
+   * km, spese, l'importo con conImporti) e il totale; con conImporti il conto; con conFoto gli scontrini. Sotto il lavoro
+   * il luogo, gli strumenti e il ticket, sotto le spese la nota: solo quando ci sono.
    */
-  function riepilogo(lista, ana, intestatario, periodo, opzioni) {
-    const o = opzioni || {};
-    const imp = ana.impostazioni || {};
-    const righe = C.ordina(lista, 'data', 1);
+  function foglioLavori(imp, ana, lista, testa, chi, numeroDi, o, titolo, fondo) {
+    // In ordine di giorno, poi di rapportino e di posizione (prima, a parità di giorno, i lavori di un rapportino uscivano al contrario).
+    const righe = lista.map((r, i) => ({ r, i })).sort((a, b) => String(a.r.data || '').slice(0, 10).localeCompare(String(b.r.data || '').slice(0, 10)) ||
+      String(numeroDi(a.r)).localeCompare(String(numeroDi(b.r))) || ((Number(a.r.posizione) || 1) - (Number(b.r.posizione) || 1)) || a.i - b.i).map(x => x.r);
     const t = C.totali(righe);
-    // 06/11/2026: una riga per lavoro; il N° è quello del rapportino (numero / idGiornata), che più lavori condividono.
-    const numeroDi = r => r.numero || r.idGiornata || r.id || '';
-    const nr = new Set(righe.map(numeroDi)).size;
-    let corpo = intestazione(imp, 'Riepilogo rapportini', periodo || '', intestatario.nome + ' · ' +
-      (nr === t.n ? (t.n === 1 ? '1 rapportino' : t.n + ' rapportini') : t.n + ' lavori in ' + (nr === 1 ? '1 rapportino' : nr + ' rapportini')));
+    let corpo = intestazione(imp, testa.etichetta, testa.numero, testa.sotto);
     // 06/11/2026: le commesse dei rapportini nel Mittente; nella tabella, al posto della commessa, il progetto.
-    corpo += '<div class="parti">' + mittente(imp, righe.map(r => r.idCommessa)) + destinatario(intestatario.nome, intestatario.righe || []) + '</div>';
+    corpo += '<div class="parti">' + mittente(imp, righe.map(r => r.idCommessa)) + destinatario(chi.nome, chi.righe || []) + '</div>';
 
     const conImporti = !!o.conImporti;
     // 11/11/2026 (Andrea): dopo il progetto, il cliente a cui si riferisce (il suo "Intestato a"); la data corta (05/11/26) per fare spazio.
@@ -448,14 +383,19 @@
       (conImporti ? '<th class="n">Importo</th>' : '') + '</tr></thead><tbody>';
     righe.forEach(r => {
       const progetto = progettoDi(r, ana);
-      corpo += '<tr><td class="data">' + esc(dataCorta(r)) + '</td><td>' + esc(numeroDi(r)) + '</td>' +
+      const sotto = [
+        r.luogo ? 'Luogo: ' + r.luogo : '',
+        rigaStrumenti(r.strumenti) ? 'Strumenti: ' + rigaStrumenti(r.strumenti) : '',
+        r.ticket ? 'Ticket ' + r.ticket : '',
+      ].filter(Boolean);
+      corpo += '<tr><td class="data">' + esc(dataCorta(r)) + '</td><td class="num">' + esc(numeroDi(r)) + '</td>' +
         '<td>' + esc((progetto && progetto.codice) || '—') +
-        (intestatario.mostraCliente ? '<div class="sotto-riga">' + esc(r.cliente) + '</div>' : '') + '</td>' +
+        (chi.mostraCliente ? '<div class="sotto-riga">' + esc(r.cliente) + '</div>' : '') + '</td>' +
         '<td class="int">' + esc((progetto && progetto.intestatoA) || '—') + '</td>' +
-        '<td class="desc">' + esc(r.descrizione || '') + '</td>' +
+        '<td class="desc">' + esc(r.descrizione || '') + sotto.map(x => '<div class="sotto-riga">' + esc(x) + '</div>').join('') + '</td>' +
         '<td class="n">' + esc(C.numero(r.oreLavoro)) + '</td><td class="n">' + esc(C.numero(r.oreExtra)) + '</td>' +
         '<td class="n">' + esc(C.numero(r.oreViaggio)) + '</td><td class="n">' + esc(C.numero(r.km)) + '</td>' +
-        '<td class="n">' + esc(C.num(r.spese) ? C.euro(r.spese) : '') + '</td>' +
+        '<td class="n">' + esc(C.num(r.spese) ? C.euro(r.spese) : '') + (r.noteSpese && C.num(r.spese) ? '<div class="sotto-riga">' + esc(r.noteSpese) + '</div>' : '') + '</td>' +
         (conImporti ? '<td class="n">' + esc(C.euro(r.totale)) + '</td>' : '') + '</tr>';
     });
     corpo += '</tbody><tfoot><tr><td colspan="5">Totale</td>' +
@@ -473,6 +413,7 @@
         '<tr class="tot"><td>Totale</td><td class="n">' + esc(C.euro(t.totale)) + '</td></tr>' +
         '</tbody></table>';
     }
+    corpo += fondo || '';
 
     if (o.conFoto) {
       const conFoto = righe.filter(r => (r.foto || []).length);
@@ -484,7 +425,24 @@
           '</div></div>';
       }
     }
-    return pagina(imp, 'Riepilogo ' + (periodo || ''), corpo, STILE_RIEPILOGO);
+    return pagina(imp, titolo, corpo, STILE_RIEPILOGO);
+  }
+
+  /**
+   * Il riepilogo di un periodo: le righe e i totali, per fare la fattura.
+   * intestatario: { nome, righe[], mostraCliente }  (il cliente, per esempio Elettrodinamica)
+   * opzioni: conImporti (di solito sì), conFoto
+   */
+  function riepilogo(lista, ana, intestatario, periodo, opzioni) {
+    const o = opzioni || {};
+    const imp = ana.impostazioni || {};
+    const t = C.totali(lista);
+    // 06/11/2026: una riga per lavoro; il N° è quello del rapportino (numero / idGiornata), che più lavori condividono.
+    const numeroDi = r => r.numero || r.idGiornata || r.id || '';
+    const nr = new Set(lista.map(numeroDi)).size;
+    const testa = { etichetta: 'Riepilogo rapportini', numero: periodo || '', sotto: intestatario.nome + ' · ' +
+      (nr === t.n ? (t.n === 1 ? '1 rapportino' : t.n + ' rapportini') : t.n + ' lavori in ' + (nr === 1 ? '1 rapportino' : nr + ' rapportini')) };
+    return foglioLavori(imp, ana, lista, testa, intestatario, numeroDi, o, 'Riepilogo ' + (periodo || ''), '');
   }
 
   // ======================================================================= preventivo e incarico (fase 2)

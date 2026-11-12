@@ -108,6 +108,8 @@ class ModuloStato(
     var oreExtra by mutableStateOf(Numeri.scrivi(base.oreExtra, vuotoSeZero = true))
     var oreViaggio by mutableStateOf(Numeri.scrivi(base.oreViaggio, vuotoSeZero = true))
     var km by mutableStateOf(Numeri.scrivi(base.km, vuotoSeZero = true))
+    /** 12/11/2026 (km.md): i km che Wisper ha scritto da solo nel campo; null = scritti dalla persona (o niente). */
+    var kmAuto by mutableStateOf<String?>(null)
     var spese by mutableStateOf(Numeri.scrivi(base.spese, vuotoSeZero = true))
     var noteSpese by mutableStateOf(base.noteSpese)
     var tariffa by mutableStateOf(Numeri.scrivi(base.tariffa))
@@ -150,6 +152,20 @@ class ModuloStato(
         progetto = n.codice; progettoDescrizione = n.descrizione; progettoIntestatoA = n.intestatoA
         errori = errori - "progetto"
     }
+
+    /**
+     * 12/11/2026 (Manuel: i km "suggeriti in automatico"): in un lavoro nuovo il campo segue la proposta (rapportino/Km.kt)
+     * finché la persona non lo cambia o tocca una pillola. Un lavoro già salvato non cambia mai da solo.
+     */
+    fun proponiKm(proposta: Double?) {
+        if (!nuovo || base.bloccato) return
+        if (km.isNotBlank() && km != kmAuto) return
+        val scritto = proposta?.let { Numeri.scrivi(it) }.orEmpty()
+        if (scritto != km) { km = scritto; kmAuto = scritto.ifBlank { null }; errori = errori - "km" }
+    }
+
+    /** I km scelti dalla persona (una pillola o il campo): da qui Wisper non li cambia più. */
+    fun scegliKm(valore: String) { km = valore; kmAuto = null; errori = errori - "km" }
 
     /** Cambiata la commessa (o il cliente), il progetto di prima non vale piu'. */
     fun togliProgetto() {

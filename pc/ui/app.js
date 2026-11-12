@@ -27,6 +27,8 @@
   const K7 = window.WisperRegoleComunicazioni;
   const Q8 = window.WisperRegoleFase8;
   const RP = window.WisperRegoleProgetti;
+  // 12/11/2026: i km da proporre nel lavoro (dal luogo del lavoro, docs/gestionale/km.md).
+  const RK = window.WisperRegoleKm;
   const RI = window.WisperRegoleInvio;
   // 06/11/2026: il rapportino con più lavori (raggruppare, stati senza firma, invio diviso per destinatario).
   const RL = window.WisperRegoleLavori;
@@ -1967,8 +1969,8 @@
    * Invio rapportino / Invio rapportini (rapportino-lavori.md §4): i lavori scelti si dividono per destinatario (chi paga:
    * il cliente del lavoro) e partono in un'email per destinatario, con solo i suoi lavori (inviaEmail con i suoi ids).
    * Per ognuno: l'email già scritta, oggetto e frase da periodoInvio sui suoi lavori (un rapportino solo: "Rapportino
-   * N del gg/mm/aaaa"), il PDF (un rapportino: il rapportino coi suoi lavori; più rapportini: il riepilogo, una riga per
-   * lavoro). A sinistra l'anteprima della pagina del destinatario scelto; a destra una scheda per destinatario.
+   * N del gg/mm/aaaa"), il PDF (un rapportino: il rapportino coi suoi lavori; più rapportini: il riepilogo; dal 12/11/2026
+   * sono lo stesso foglio, una riga per lavoro). A sinistra l'anteprima della pagina del destinatario scelto; a destra una scheda per destinatario.
    */
   function preparaInvio(lista0) {
     // In ordine di giorno, poi di rapportino e di posizione: i destinatari nell'ordine in cui compaiono i loro lavori.
@@ -1999,8 +2001,8 @@
       return x;
     });
     const unoSolo = !!RL.unRapportino(lista);
-    // Gli importi: di base sì nei riepiloghi (servono per la fattura), no nel rapportino (al cliente serve il lavoro).
-    const conImporti = h('input', { type: 'checkbox', checked: soldi() && gruppi.some(x => !x.numero) });
+    // Gli importi: di base sì (12/11/2026: anche il rapportino di un giorno è il foglio per la fattura, come il riepilogo).
+    const conImporti = h('input', { type: 'checkbox', checked: soldi() });
     const conFoto = h('input', { type: 'checkbox' });
     const opzioni = () => ({ conImporti: conImporti.checked, conFoto: conFoto.checked });
     const htmlDi = x => (x.numero
@@ -2144,10 +2146,18 @@
     return out;
   }
 
-  function ultimiKm(idCommessa, idCliente, escludi) {
-    const lista = C.ordina(attivi().filter(r => r.idLocale !== escludi && C.num(r.km) > 0), 'data', -1);
-    const x = (idCommessa && lista.find(r => r.idCommessa === idCommessa)) || (idCliente && lista.find(r => r.idCliente === idCliente));
-    return x ? C.num(x.km) : null;
+  /**
+   * I km da proporre in un lavoro (12/11/2026, regole-km.js): "Ultima volta" per lo stesso posto e "Dallo studio" (kmStudio
+   * che il server mette su progetti, commesse e clienti). l = { idCliente, idCommessa, idProgetto, progettoNuovo }.
+   */
+  function kmProposti(l, escludi, kmPrima) {
+    const idProgetto = l.idProgetto !== undefined && l.idProgetto !== null && l.idProgetto !== '' ? l.idProgetto : (l.progettoNuovo ? l.progettoNuovo.idLocale : '');
+    const progetto = l.progettoNuovo || (idProgetto !== '' ? (S.ana.progetti || []).find(p => String(p.id) === String(idProgetto)) : null) || null;
+    // Dal più recente: a parità di giorno conta il primo dell'elenco.
+    const storico = C.ordina(attivi().filter(r => r.idLocale !== escludi), 'data', -1)
+      .map(r => ({ data: r.data, idCliente: r.idCliente || '', idCommessa: r.idCommessa || '', idProgetto: r.idProgetto === null || r.idProgetto === undefined ? '' : r.idProgetto, km: C.num(r.km) }));
+    return RK.proposte({ lavoro: { idCliente: l.idCliente || '', idCommessa: l.idCommessa || '', idProgetto }, progetto, commessa: commessa(l.idCommessa) || null,
+      cliente: cliente(l.idCliente) || null, storico, kmPrima: !!kmPrima });
   }
 
   /** I campi di un lavoro come li vuole salvaRapportino (gli stessi di un rapportino della 1.1). */
@@ -2242,6 +2252,7 @@
       ricerca: h('input', { type: 'search', placeholder: 'Scrivi il nome', 'aria-label': 'Cerca il cliente' }),
       nuovaCommessa: h('input', { type: 'text', placeholder: 'Come la chiami tu', 'aria-label': 'Il nome della commessa nuova' }),
       km: h('input', { type: 'text', inputmode: 'decimal', value: r.km !== '' && r.km !== null && r.km !== undefined && (esistente || C.num(r.km)) ? R.numeroCampo(r.km) : '' }),
+      // (kmAuto, qui sotto: il valore scritto da Wisper nel campo, finché la persona non lo cambia.)
       tariffa: h('input', { type: 'text', inputmode: 'decimal', value: r.tariffa ? R.numeroCampo(r.tariffa) : '', 'aria-label': 'Tariffa oraria' }),
       descrizione: h('textarea', { rows: 5 }),
       spese: h('input', { type: 'text', inputmode: 'decimal', value: C.num(r.spese) ? R.numeroCampo(r.spese) : '' }),
@@ -2252,6 +2263,7 @@
     };
     v.descrizione.value = r.descrizione || '';
     v.noteInterne.value = r.noteInterne || '';
+    let kmAuto = null;
 
     const clienteScelto = () => (m.idCliente && cliente(m.idCliente)) || null;
     const regoleAttuali = () => C.regoleDi(clienteScelto(), S.ana.gruppi, S.ana.impostazioni, commessa(m.idCommessa));
@@ -2307,6 +2319,8 @@
     function disegnaPerChi() {
       svuota(zonaPerChi);
       disegnaPerChi0();
+      // 12/11/2026: col progetto (o la commessa) cambia anche il posto, e i km proposti con lui.
+      if (zonaKm.isConnected || zonaKm.childNodes.length) disegnaKm();
       ctx.cambiato();
     }
 
@@ -2395,7 +2409,7 @@
       Progetti.modulo(null, { senzaServer: true, nomeCommessa: (m.codiceProposto ? m.codiceProposto + ' · ' : '') + m.commessa + ' (nuova)', idCliente: m.idCliente, codiceCommessa: m.codiceProposto, dati: m.progettoNuovo,
         dopo: d => {
           // Il codice proposto e non toccato va vuoto: il server lo propone di nuovo con la commessa vera.
-          m.progettoNuovo = { idLocale: (m.progettoNuovo && m.progettoNuovo.idLocale) || 'P-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), codice: d.proposto ? '' : d.codice, codiceVisto: d.codice, codiceProposto: false, intestatoA: d.intestatoA, descrizione: d.descrizione };
+          m.progettoNuovo = { idLocale: (m.progettoNuovo && m.progettoNuovo.idLocale) || 'P-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), codice: d.proposto ? '' : d.codice, codiceVisto: d.codice, codiceProposto: false, intestatoA: d.intestatoA, dove: d.dove || '', descrizione: d.descrizione };
           m.idProgetto = null; delete errori.progetto; disegnaPerChi();
         } });
     }
@@ -2424,15 +2438,25 @@
         m.extraAperto ? stepper('Extra', 'oreExtra', regole.maggExtra ? '+' + C.numero(regole.maggExtra) + '%' : null) : null]);
     }
 
+    /**
+     * 12/11/2026 (Manuel: i km "suggeriti in automatico"): in un lavoro nuovo il campo si riempie da solo con la proposta
+     * (regole-km.js) e la segue se cambiano cliente, commessa o progetto, finché la persona non lo cambia (o tocca una
+     * pillola). Un lavoro già salvato non cambia mai da solo.
+     */
     function disegnaKm() {
-      const ultimi = ultimiKm(m.idCommessa, m.idCliente, r.idLocale);
+      const pr = kmProposti(m, r.idLocale, ctx.kmPrima && ctx.kmPrima(r.idLocale));
+      if (!esistente && (v.km.value === '' || v.km.value === kmAuto)) {
+        const nuovo = pr.proposta ? R.numeroCampo(pr.proposta.km) : '';
+        if (nuovo !== v.km.value) { v.km.value = nuovo; kmAuto = nuovo || null; if (errori.km) delete errori.km; aggiornaConto(); }
+      }
       aggiungi(svuota(zonaKm), [
         campo('Chilometri', conSuffisso(v.km, 'km'), errori.km),
         h('div', { class: 'pillole' },
-          ultimi !== null ? h('button', { type: 'button', class: 'pillola', onclick: () => impostaKm(ultimi) }, 'Ultima volta · ' + C.numero(ultimi) + ' km') : null,
+          pr.ultima !== null && pr.ultima !== pr.studio ? h('button', { type: 'button', class: 'pillola', 'data-km': 'ultima', onclick: () => impostaKm(pr.ultima) }, 'Ultima volta · ' + C.numero(pr.ultima) + ' km') : null,
+          pr.studio !== null ? h('button', { type: 'button', class: 'pillola', 'data-km': 'studio', onclick: () => impostaKm(pr.studio) }, 'Dallo studio · ' + C.numero(pr.studio) + ' km') : null,
           h('button', { type: 'button', class: 'pillola', onclick: () => impostaKm(0) }, 'Senza auto'))]);
     }
-    function impostaKm(n) { v.km.value = R.numeroCampo(n); if (errori.km) { delete errori.km; disegnaKm(); } aggiornaConto(); }
+    function impostaKm(n) { v.km.value = R.numeroCampo(n); kmAuto = null; if (errori.km) { delete errori.km; disegnaKm(); } aggiornaConto(); }
 
     function disegnaTariffa() {
       const regole = regoleAttuali();
@@ -2694,7 +2718,9 @@
     const forme = [];
     let scelto = 0;
     let pronto = false;
-    const ctx = { data: () => dataInput.value || G.data, cambiato: () => { if (pronto) { disegnaElenco(); disegnaRiassunto(); } } };
+    // kmPrima: un lavoro prima di questo (o tutti, per uno che nasce adesso) ha gia' i km: allora i km non si scrivono da soli.
+    const ctx = { data: () => dataInput.value || G.data, cambiato: () => { if (pronto) { disegnaElenco(); disegnaRiassunto(); } },
+      kmPrima: idLocale => { const i = forme.findIndex(f => f.lavoro && f.lavoro.idLocale === idLocale); return (i < 0 ? forme : forme.slice(0, i)).some(f => C.num(f.riassunto().km) > 0); } };
     if (g0) g0.lavori.forEach(l => forme.push(RL.fermo(l) ? formaFerma(l) : formaLavoro(l, null, ctx)));
     else forme.push(formaLavoro(null, p, ctx));
     if (g0) {

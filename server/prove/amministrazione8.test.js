@@ -256,7 +256,7 @@ test('SESSIONE_GIORNI: da 30 a 365; un dispositivo fermo da piu\' giorni esce', 
 
 test('stato del sistema: server, database, disco, lavori, collegamenti, versioni; l\'ora del NAS confrontata con quella del dispositivo', async () => {
   const st = ok(await manuel('statoSistema', { oraDispositivo: new Date(Date.now() - 6 * 60000).toISOString() }));
-  assert.deepEqual([st.server.versione, st.server.schema, st.server.node], [require('../package.json').version, 12, process.versions.node]);
+  assert.deepEqual([st.server.versione, st.server.schema, st.server.node], [require('../package.json').version, 13, process.versions.node]);
   assert.match(st.server.avvisoOra, /^L'ora del NAS è avanti di 6 minuti: i rapportini prendono l'ora del NAS$/);
   assert.ok(st.database.righe.rapportini > 0);
   assert.ok(Array.isArray(st.lavori) && st.lavori.some(l => l.nome === 'Copia'));

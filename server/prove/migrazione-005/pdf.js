@@ -42,8 +42,11 @@ function uscite(w) {
   }
   for (const id of commesse) conti.commesse[id] = w.costoDellaCommessa({ id });
   // Del testo (HTML con lo stile, decine di KB ciascuno) si tiene l'impronta: se cambia anche una lettera, cambia.
+  // L'11/11/2026 (1.3.1) lo stile di tutti i PDF ha una regola in piu', apposta: il totale (<tfoot>) non si ripete in fondo a
+  // ogni pagina. Si toglie prima dell'impronta, cosi' il resto si confronta ancora al byte (col codice di prima non c'e').
+  const senzaRegola = s => s.split('tfoot { display: table-row-group; }').join('');
   const impronte = {};
-  for (const k of Object.keys(pdf)) impronte[k] = { sha256: crypto.createHash('sha256').update(pdf[k]).digest('hex'), caratteri: pdf[k].length };
+  for (const k of Object.keys(pdf)) { const t = senzaRegola(pdf[k]); impronte[k] = { sha256: crypto.createHash('sha256').update(t).digest('hex'), caratteri: t.length }; }
   return { rapportini, documenti, pdf: impronte, conti };
 }
 

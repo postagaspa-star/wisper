@@ -1,0 +1,130 @@
+{
+  "nota": "I km da proporre in un lavoro (12/11/2026, docs/gestionale/km.md). Gli stessi casi per pc/ui/regole-km.js (pc/prove/km.test.js) e rapportino/Km.kt (KmTest). atteso = proposte(x).",
+  "casi": [
+    {
+      "nome": "niente cliente, niente proposta",
+      "x": { "lavoro": {}, "storico": [] },
+      "atteso": { "proposta": null, "ultima": null, "studio": null }
+    },
+    {
+      "nome": "progetto: i km dell'ultimo lavoro dello stesso progetto prima di quelli dallo studio",
+      "x": {
+        "lavoro": { "idCliente": "C001", "idCommessa": "26ST001", "idProgetto": "3" },
+        "progetto": { "intestatoA": "Batokyo Srl", "dove": "Via Roma 1, Schio", "kmStudio": 48 },
+        "commessa": { "kmStudio": 30 },
+        "cliente": { "kmStudio": 30 },
+        "storico": [
+          { "data": "2026-11-03", "idCliente": "C001", "idCommessa": "26ST001", "idProgetto": 3, "km": 50 },
+          { "data": "2026-11-05", "idCliente": "C001", "idCommessa": "26ST001", "idProgetto": 4, "km": 12 }
+        ]
+      },
+      "atteso": { "proposta": { "km": 50, "da": "ultima" }, "ultima": 50, "studio": 48 }
+    },
+    {
+      "nome": "progetto nuovo col suo Dove: i km dallo studio",
+      "x": {
+        "lavoro": { "idCliente": "C001", "idCommessa": "26ST001", "idProgetto": "7" },
+        "progetto": { "intestatoA": "Batokyo Srl", "dove": "Via Roma 1, Schio", "kmStudio": 48 },
+        "commessa": { "kmStudio": 30 },
+        "storico": [{ "data": "2026-11-05", "idCliente": "C001", "idCommessa": "26ST001", "idProgetto": 4, "km": 12 }]
+      },
+      "atteso": { "proposta": { "km": 48, "da": "studio" }, "ultima": null, "studio": 48 }
+    },
+    {
+      "nome": "progetto intestato a un altro, senza Dove e senza storia: niente (mai i km di un altro progetto o della sede del cliente)",
+      "x": {
+        "lavoro": { "idCliente": "C001", "idCommessa": "26ST001", "idProgetto": "8" },
+        "progetto": { "intestatoA": "Nuova Srl", "dove": "", "kmStudio": null },
+        "commessa": { "kmStudio": 30 },
+        "cliente": { "kmStudio": 30 },
+        "storico": [
+          { "data": "2026-11-05", "idCliente": "C001", "idCommessa": "26ST001", "idProgetto": 4, "km": 12 },
+          { "data": "2026-11-06", "idCliente": "C001", "idCommessa": "26ST001", "idProgetto": "", "km": 30 }
+        ]
+      },
+      "atteso": { "proposta": null, "ultima": null, "studio": null }
+    },
+    {
+      "nome": "progetto del cliente stesso (senza Intestato a e senza Dove): dopo il progetto, commessa e cliente",
+      "x": {
+        "lavoro": { "idCliente": "C002", "idCommessa": "26ST004", "idProgetto": "9" },
+        "progetto": { "intestatoA": "", "dove": "", "kmStudio": null },
+        "commessa": { "kmStudio": null },
+        "cliente": { "kmStudio": 36 },
+        "storico": []
+      },
+      "atteso": { "proposta": { "km": 36, "da": "studio" }, "ultima": null, "studio": 36 }
+    },
+    {
+      "nome": "senza progetto: l'ultima volta per la commessa (i lavori con un progetto non contano)",
+      "x": {
+        "lavoro": { "idCliente": "C002", "idCommessa": "26ST004" },
+        "commessa": { "kmStudio": 40 },
+        "cliente": { "kmStudio": 36 },
+        "storico": [
+          { "data": "2026-11-02", "idCliente": "C002", "idCommessa": "26ST004", "km": 44 },
+          { "data": "2026-11-04", "idCliente": "C002", "idCommessa": "26ST004", "idProgetto": 9, "km": 90 },
+          { "data": "2026-11-01", "idCliente": "C002", "idCommessa": "26ST004", "km": 41 }
+        ]
+      },
+      "atteso": { "proposta": { "km": 44, "da": "ultima" }, "ultima": 44, "studio": 40 }
+    },
+    {
+      "nome": "senza progetto e senza storia della commessa: i km dallo studio della commessa prima della storia del cliente",
+      "x": {
+        "lavoro": { "idCliente": "C002", "idCommessa": "26ST005" },
+        "commessa": { "kmStudio": 40 },
+        "cliente": { "kmStudio": 36 },
+        "storico": [{ "data": "2026-11-02", "idCliente": "C002", "idCommessa": "26ST004", "km": 44 }]
+      },
+      "atteso": { "proposta": { "km": 40, "da": "studio" }, "ultima": 44, "studio": 40 }
+    },
+    {
+      "nome": "commessa senza indirizzo: l'ultima volta per il cliente, poi la sua sede",
+      "x": {
+        "lavoro": { "idCliente": "C002", "idCommessa": "26ST005" },
+        "commessa": { "kmStudio": null },
+        "cliente": { "kmStudio": 36 },
+        "storico": [{ "data": "2026-11-02", "idCliente": "C002", "idCommessa": "26ST004", "km": 44 }]
+      },
+      "atteso": { "proposta": { "km": 44, "da": "ultima" }, "ultima": 44, "studio": 36 }
+    },
+    {
+      "nome": "solo il cliente scelto (la commessa nasce col rapportino): la sua sede",
+      "x": { "lavoro": { "idCliente": "C003" }, "cliente": { "kmStudio": 18 }, "storico": [] },
+      "atteso": { "proposta": { "km": 18, "da": "studio" }, "ultima": null, "studio": 18 }
+    },
+    {
+      "nome": "i lavori Senza auto (0 km) non contano; a parita' di giorno il primo dell'elenco",
+      "x": {
+        "lavoro": { "idCliente": "C002", "idCommessa": "26ST004" },
+        "storico": [
+          { "data": "2026-11-06", "idCliente": "C002", "idCommessa": "26ST004", "km": 0 },
+          { "data": "2026-11-05", "idCliente": "C002", "idCommessa": "26ST004", "km": 22 },
+          { "data": "2026-11-05", "idCliente": "C002", "idCommessa": "26ST004", "km": 24 }
+        ]
+      },
+      "atteso": { "proposta": { "km": 22, "da": "ultima" }, "ultima": 22, "studio": null }
+    },
+    {
+      "nome": "km dallo studio a 0 o mancanti non sono una proposta",
+      "x": {
+        "lavoro": { "idCliente": "C002", "idCommessa": "26ST004" },
+        "commessa": { "kmStudio": 0 },
+        "cliente": {},
+        "storico": []
+      },
+      "atteso": { "proposta": null, "ultima": null, "studio": null }
+    },
+    {
+      "nome": "un lavoro prima di questo nello stesso rapportino ha gia' i km: niente scritto da solo, le pillole restano",
+      "x": {
+        "lavoro": { "idCliente": "C001", "idCommessa": "26ST001", "idProgetto": "3" },
+        "progetto": { "intestatoA": "Batokyo Srl", "dove": "Via Roma 1, Schio", "kmStudio": 48 },
+        "storico": [{ "data": "2026-11-03", "idCliente": "C001", "idCommessa": "26ST001", "idProgetto": 3, "km": 50 }],
+        "kmPrima": true
+      },
+      "atteso": { "proposta": null, "ultima": 50, "studio": 48 }
+    }
+  ]
+}

@@ -491,7 +491,8 @@ const DOCUMENTI = imp => ({
 // per la firma del cliente quando il lavoro non ha una firma vera.
 // L'11/11/2026 cambiano tutti: il totale (<tfoot>) non si ripete più in fondo a ogni pagina; il riepilogo ha anche la
 // colonna "Intestato a" e la data corta. I quattro casi restano identici fra loro.
-const PRIMA = { rapportino: 'c1fccb2c2be9a4e2', riepilogo: '321f841ab85da115', preventivo: '548abf2cec40f5ab', contratto: '4607a1d8c85d8aaa', prospetto: 'c2a63b5dccb85821', avviso: '044c86bc963d7a67' };
+// Il 12/11/2026 il N° del riepilogo resta su una riga (RAP/2026/0027 andava su tre): cambia solo l'impronta del riepilogo.
+const PRIMA = { rapportino: 'c1fccb2c2be9a4e2', riepilogo: 'cf87fde41e96cf5e', preventivo: '548abf2cec40f5ab', contratto: '4607a1d8c85d8aaa', prospetto: 'c2a63b5dccb85821', avviso: '044c86bc963d7a67' };
 
 test('PDF senza logo identici a prima della fase 8, carattere per carattere (§9.3, §16, M18.3)', () => {
   const senza = [IMP, Object.assign({}, IMP, { STUDIO_LOGO: '', PDF_PIEDE: '', PDF_LOGO: true, STUDIO_NOME_BREVE: 'GM', STUDIO_SITO: 'www.esempio.it' }),

@@ -536,6 +536,8 @@ for (const parte of ['anagrafiche', 'rapportini', 'file', 'accesso', 'amministra
   // Collegare il computer col QR (docs/gestionale/collega-qr.md).
   'collega',
   // 03/11/2026: i progetti (cliente -> commessa -> progetto -> rapportino).
-  'progetti']) {
+  'progetti',
+  // 12/11/2026: i km dallo studio al luogo del lavoro (azioni/km.js).
+  'km']) {
   Object.assign(Wisper.prototype, require('./azioni/' + parte));
 }

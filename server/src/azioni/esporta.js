@@ -72,7 +72,7 @@ const COLONNE = {
   // 03/11/2026: i progetti delle commesse.
   progetti: [
     ['Codice', p => p.codice], ['Codice commessa', p => p.idCommessa], ['Codice cliente', p => p.idCliente], ['Cliente', p => p.nomeCliente],
-    ['Intestato a', p => p.intestatoA], ['Descrizione', p => p.descrizione], ['Stato', p => p.stato], ['Rapportini', p => p.rapportini],
+    ['Intestato a', p => p.intestatoA], ['Dove', p => p.dove], ['Descrizione', p => p.descrizione], ['Stato', p => p.stato], ['Rapportini', p => p.rapportini],
     ['Ore', p => p.ore], ['Ultimo rapportino', p => data(p.ultimoRapportino)], ['Creato il', p => dataOra(p.creato)],
   ],
   registro: [

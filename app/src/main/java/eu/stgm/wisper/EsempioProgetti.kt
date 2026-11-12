@@ -84,8 +84,10 @@ class EsempioProgetti(
                     codice = proposta.codice
                 }
                 val id = ((progetti().mapNotNull { it.id.toIntOrNull() }.maxOrNull() ?: 0) + 1).toString()
+                // 12/11/2026 (km.md): senza Dove, quello di un altro progetto con lo stesso Intestato a.
+                val dove = corpo.testo("dove").ifBlank { eu.stgm.wisper.rapportino.Km.doveDiIntestato(progetti(), corpo.testo("intestatoA")) }
                 val nuovo = Progetto(id, idLocale = corpo.testo("idLocale"), idCommessa = c.id, idCliente = c.idCliente, codice = codice,
-                    intestatoA = corpo.testo("intestatoA"), descrizione = descrizione,
+                    intestatoA = corpo.testo("intestatoA"), descrizione = descrizione, dove = dove,
                     codiceAutomatico = proposta.codice.isNotBlank() && codice.equals(proposta.codice, ignoreCase = true), creato = ora, modificato = ora)
                 salvaElenco(progetti() + nuovo)
                 JSONObject().put("ok", true).put("progetto", nuovo.aJson().put("giaEsisteva", false))
@@ -108,6 +110,7 @@ class EsempioProgetti(
                 }
                 if ((k.has("codice") || k.has("idCommessa")) && giaPreso(pr.codice, pr.idCliente, pr.id)) no("Il codice ${pr.codice} è già di un altro progetto di questo cliente")
                 if (k.has("intestatoA")) pr = pr.copy(intestatoA = k.testo("intestatoA"))
+                if (k.has("dove")) pr = pr.copy(dove = k.testo("dove"), kmStudio = null)
                 if (k.has("descrizione")) {
                     if (k.testo("descrizione").isBlank()) no("La descrizione del progetto non può essere vuota")
                     pr = pr.copy(descrizione = k.testo("descrizione"))

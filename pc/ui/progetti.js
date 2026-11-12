@@ -157,6 +157,8 @@
             icona('piu', 18, 2.6), 'Nuovo rapportino') : null),
         h('div', { class: 'scheda persone-commessa scheda-progetto' },
           h('div', { class: 'coppia' }, h('span', { class: 'k' }, 'Intestato a'), h('span', { class: 'v' }, p.intestatoA || '—')),
+          // 12/11/2026: dove si lavora e, quando la mappa l'ha calcolata, la strada dallo studio (andata e ritorno).
+          h('div', { class: 'coppia' }, h('span', { class: 'k' }, 'Dove'), h('span', { class: 'v', 'data-dove': '' }, p.dove ? p.dove + (p.kmStudio ? ' · ' + C.numero(p.kmStudio) + ' km andata e ritorno' : '') : '—')),
           h('div', { class: 'coppia' }, h('span', { class: 'k' }, 'Cliente'), c ? aprire(c.nome, '#clienti/' + encodeURIComponent(c.id), puo('clienti')) : h('span', { class: 'v' }, p.idCliente || '—')),
           h('div', { class: 'coppia' }, h('span', { class: 'k' }, 'Commessa'), aprire(p.idCommessa + (m ? ' · ' + m.descrizione : ''), '#commesse/' + encodeURIComponent(p.idCommessa), puo('commesse') && !!m)),
           h('div', { class: 'coppia' }, h('span', { class: 'k' }, 'Stato'),
@@ -237,6 +239,8 @@
             h('option', { value: m.id, selected: m.id === idIniziale }, m.id + ' · ' + m.descrizione + ' · ' + nomeCliente(m))))),
         codice: h('input', { type: 'text', value: p.codice || (o.dati && o.dati.codice) || '', autocomplete: 'off', maxlength: '60' }),
         intestato: h('input', { type: 'text', value: p.intestatoA || (o.dati && o.dati.intestatoA) || '', autocomplete: 'off' }),
+        // 12/11/2026: dove si lavora (di solito la sede di chi è Intestato a): da qui i km dallo studio (km.md).
+        dove: h('input', { type: 'text', value: p.dove || (o.dati && o.dati.dove) || '', autocomplete: 'off', maxlength: '300', placeholder: 'Via, numero e comune' }),
         descrizione: h('input', { type: 'text', value: p.descrizione || (o.dati && o.dati.descrizione) || '' }),
       };
       let errori = {};
@@ -254,7 +258,7 @@
       const disegnaNomi = () => {
         const nomi = RP.intestatiDelCliente(progetti().filter(x => String(x.id) !== String(p.id)), clienteScelto(), 4)
           .filter(n => n.toLowerCase() !== v.intestato.value.trim().toLowerCase());
-        aggiungi(svuota(zonaNomi), nomi.length ? [h('div', { class: 'pillole' }, nomi.map(n => h('button', { type: 'button', class: 'pillola', onclick: () => { v.intestato.value = n; disegnaNomi(); } }, n)))] : []);
+        aggiungi(svuota(zonaNomi), nomi.length ? [h('div', { class: 'pillole' }, nomi.map(n => h('button', { type: 'button', class: 'pillola', onclick: () => { v.intestato.value = n; disegnaNomi(); doveDaIntestato(); } }, n)))] : []);
       };
       /** Il codice che propone il server per la commessa scelta: già scritto nel campo, finché non lo cambia la persona. */
       const proponi = async () => {
@@ -273,7 +277,14 @@
         } catch (e) { /* senza proposta il campo resta com'è */ }
       };
       v.codice.addEventListener('input', () => { toccato = v.codice.value.trim() !== proposto; if (errori.codice) { delete errori.codice; disegna(); v.codice.focus(); } });
-      v.intestato.addEventListener('input', disegnaNomi);
+      // Lo stesso Intestato a di un altro progetto: lo stesso posto. Il Dove si riempie da solo finché non lo cambia la persona.
+      let doveAuto = '';
+      const doveDaIntestato = () => {
+        if (v.dove.value.trim() && v.dove.value !== doveAuto) return;
+        const d = RP.doveDiIntestato(progetti(), v.intestato.value, p.id);
+        if (d || doveAuto) { v.dove.value = d; doveAuto = d; }
+      };
+      v.intestato.addEventListener('input', () => { disegnaNomi(); doveDaIntestato(); });
       v.descrizione.addEventListener('input', () => { if (errori.descrizione) { delete errori.descrizione; disegna(); v.descrizione.focus(); } });
       v.commessa.addEventListener('change', () => { delete errori.commessa; disegna(); disegnaNomi(); proponi(); });
 
@@ -281,6 +292,7 @@
         campo('Commessa', v.commessa, errori.commessa),
         campo('Codice', v.codice, errori.codice),
         h('div', null, campo('Intestato a', v.intestato), zonaNomi),
+        campo('Dove', v.dove),
         campo('Descrizione', v.descrizione, errori.descrizione)]);
       disegna();
       disegnaNomi();
@@ -289,7 +301,7 @@
       let chiudi;
       const salva = async () => {
         errori = {};
-        const dati = { codice: v.codice.value.trim(), intestatoA: v.intestato.value.trim(), descrizione: v.descrizione.value.trim() };
+        const dati = { codice: v.codice.value.trim(), intestatoA: v.intestato.value.trim(), dove: v.dove.value.trim(), descrizione: v.descrizione.value.trim() };
         if (!o.senzaServer && !v.commessa.value) errori.commessa = 'Scegli la commessa del progetto';
         if (!dati.descrizione) errori.descrizione = 'Scrivi la descrizione del progetto';
         if (esistente && !dati.codice) errori.codice = 'Il codice del progetto non può essere vuoto';
@@ -302,12 +314,12 @@
         const ris = await lavora('Salvo il progetto', async () => {
           try {
             if (esistente) {
-              const campi = { codice: dati.codice, intestatoA: dati.intestatoA, descrizione: dati.descrizione };
+              const campi = { codice: dati.codice, intestatoA: dati.intestatoA, dove: dati.dove, descrizione: dati.descrizione };
               if (!conRapportini && v.commessa.value !== p.idCommessa) campi.idCommessa = v.commessa.value;
               return await Rete.post('/server/aggiornaProgetto', { id: p.id, campi });
             }
             // Il codice va in codiceProgetto: il server toglie "codice" da ogni richiesta (era il codice d'accesso del foglio).
-            return await Rete.post('/server/creaProgetto', { idCommessa: v.commessa.value, codiceProgetto: dati.codice, intestatoA: dati.intestatoA, descrizione: dati.descrizione, idLocale });
+            return await Rete.post('/server/creaProgetto', { idCommessa: v.commessa.value, codiceProgetto: dati.codice, intestatoA: dati.intestatoA, dove: dati.dove, descrizione: dati.descrizione, idLocale });
           } catch (e) {
             if (e && (e.accesso === false || e.rete || e.permesso === false)) throw e;
             rifiuto = (e && e.message) || String(e);

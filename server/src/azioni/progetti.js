@@ -21,6 +21,8 @@ function progettoDaRiga(r, conti) {
     idCliente: testo(r.cliente_id),
     codice: testo(r.codice),
     intestatoA: testo(r.intestato_a),
+    // 12/11/2026: dove si lavora (di solito la sede di chi e' Intestato a), per i km dallo studio (azioni/km.js).
+    dove: testo(r.dove),
     descrizione: testo(r.descrizione),
     stato: testo(r.stato) || 'APERTO',
     codiceAutomatico: r.codice_automatico === 1,
@@ -141,11 +143,14 @@ module.exports = {
     }
     const ora = adesso();
     const c = this.chi();
+    // 12/11/2026: senza Dove, quello di un altro progetto con lo stesso Intestato a (e' lo stesso posto).
+    const dove = testo(d.dove).slice(0, 300) || this.doveDiIntestato(d.intestatoA);
     const id = this.inserisci('progetti', {
       id_locale: idLocale || null,
       commessa_id: commessa.id,
       codice,
       intestato_a: testo(d.intestatoA),
+      dove,
       descrizione,
       stato: 'APERTO',
       codice_automatico: proposta.codice && codice.toUpperCase() === proposta.codice.toUpperCase() ? 1 : 0,
@@ -157,7 +162,7 @@ module.exports = {
   },
 
   /**
-   * aggiornaProgetto {id, campi: {codice?, intestatoA?, descrizione?, stato?, idCommessa?}}. La commessa si cambia solo
+   * aggiornaProgetto {id, campi: {codice?, intestatoA?, dove?, descrizione?, stato?, idCommessa?}}. La commessa si cambia solo
    * finche' il progetto non ha rapportini (i rapportini restano dove sono stati scritti).
    */
   aggiornaProgetto(id, campi) {
@@ -189,6 +194,7 @@ module.exports = {
       throw new Rifiuto('Il codice ' + codiceFinale + ' è già di un altro progetto di questo cliente');
     }
     if (k.intestatoA !== undefined) valori.intestato_a = testo(k.intestatoA);
+    if (k.dove !== undefined) valori.dove = testo(k.dove).slice(0, 300);
     if (k.descrizione !== undefined) {
       if (!testo(k.descrizione)) throw new Rifiuto('La descrizione del progetto non può essere vuota');
       valori.descrizione = testo(k.descrizione);
@@ -221,7 +227,7 @@ module.exports = {
 
   /**
    * Il progetto di un rapportino (salvaRapportino): quello scelto (idProgetto) o uno nuovo nato sul telefono
-   * (progettoNuovo {idLocale, codice, codiceProposto, intestatoA, descrizione}). Prima i controlli: torna
+   * (progettoNuovo {idLocale, codice, codiceProposto, intestatoA, dove, descrizione}). Prima i controlli: torna
    * {riga, nuovo} senza scrivere niente; il nuovo lo crea creaProgettoPerRapportino.
    */
   progettoPerRapportino(r, commessa) {
@@ -258,7 +264,7 @@ module.exports = {
     if (!commessa) throw new Rifiuto('Per un progetto nuovo serve la commessa');
     const p = this.creaProgetto({
       idCommessa: commessa.id, codice: testo(nuovo.codice), codiceProposto: nuovo.codiceProposto === true || nuovo.codiceProposto === 'true',
-      intestatoA: testo(nuovo.intestatoA), descrizione: testo(nuovo.descrizione) || testo(nuovo.codice), idLocale: testo(nuovo.idLocale),
+      intestatoA: testo(nuovo.intestatoA), dove: testo(nuovo.dove), descrizione: testo(nuovo.descrizione) || testo(nuovo.codice), idLocale: testo(nuovo.idLocale),
     });
     return this.progettoRiga(p.id);
   },

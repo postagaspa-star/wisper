@@ -196,6 +196,11 @@
       progetto(2, aa + 'ST044', 'ED-002', 'Batokyo Srl', 'Quadri di zona del magazzino', 'APERTO', istante(oggi, -40, '09:00')),
       progetto(3, aa + 'ST046', 'ED-003', 'Acme Spa', 'Quadro QE1', 'APERTO', istante(oggi, -30, '09:00')),
     ];
+    // 12/11/2026 (km.md): dove si lavora e i km dallo studio (andata e ritorno) come li calcolerebbe il server.
+    [['Via dei Mulini 4, 36015 Schio (VI)', 48], ['Via dei Mulini 4, 36015 Schio (VI)', 48], ['Via Roma 40, 36010 Zanè (VI)', 36]]
+      .forEach(([dove, km], i) => Object.assign(progetti[i], { dove, kmStudio: km }));
+    soggetti.forEach(s => { s.kmStudio = ({ C001: 22, C002: 40, C003: 18 })[s.id] || null; });
+    commesse.forEach(m => { m.kmStudio = null; });
     const ana = { clienti: [], fornitori: [], soggetti, commesse, progetti, referenti, sedi, prestazioni, utenti, numerazioni, gruppi: [], impostazioni };
 
     // ------------------------------------------------------------- rapportini
@@ -626,6 +631,26 @@
   }
 
   /** I progetti coi conti (rapportini non annullati, ore, l'ultimo); il collaboratore conta solo i suoi. I più recenti prima. */
+  /** Il Dove del progetto più recente con lo stesso Intestato a (come regole-progetti.js e il server). */
+  function doveDi(progetti, intestatoA) {
+    const k = String(intestatoA || '').toLowerCase().replace(/\s+/g, ' ').trim();
+    const p = k ? progetti.filter(x => String(x.intestatoA || '').toLowerCase().replace(/\s+/g, ' ').trim() === k && String(x.dove || '').trim())
+      .sort((x, y) => String(y.creato || '').localeCompare(String(x.creato || '')))[0] : null;
+    return p ? String(p.dove).trim() : '';
+  }
+
+  /** I km dallo studio di un indirizzo dei dati di esempio (andata e ritorno): sempre gli stessi per lo stesso indirizzo
+   *  (come la tabella distanze del server: un indirizzo già calcolato per un altro progetto tiene i suoi km). */
+  function kmFinti(dove, progetti) {
+    const s = String(dove || '').toLowerCase().replace(/\s+/g, ' ').trim();
+    if (!s) return null;
+    const gia = (progetti || []).find(x => x.kmStudio && String(x.dove || '').toLowerCase().replace(/\s+/g, ' ').trim() === s);
+    if (gia) return gia.kmStudio;
+    let n = 0;
+    for (let i = 0; i < s.length; i++) n = (n * 31 + s.charCodeAt(i)) % 100000;
+    return 8 + (n % 113);
+  }
+
   function progettiConConti(dati, filtro) {
     const f = filtro || {};
     const mio = dati.io.ruolo === 'collaboratore';
@@ -799,8 +824,11 @@
         let codice = String(b.codiceProgetto !== undefined ? b.codiceProgetto : (b.codice || '')).trim();
         if (!codice) { if (!proposto) return { ok: false, errore: 'Scrivi il codice del progetto: dopo i primi due Wisper lo propone da solo' }; codice = proposto; }
         if (a.progetti.some(p => p.idCliente === m.idCliente && p.codice.toUpperCase() === codice.toUpperCase())) return { ok: false, errore: 'Il codice ' + codice + ' è già di un altro progetto di questo cliente' };
-        const p = { id: a.progetti.reduce((x, y) => Math.max(x, y.id), 0) + 1, idLocale: b.idLocale || '', idCommessa: m.id, idCliente: m.idCliente, codice, intestatoA: String(b.intestatoA || '').trim(),
-          descrizione, stato: 'APERTO', codiceAutomatico: !!proposto && codice.toUpperCase() === proposto.toUpperCase(), creato: adesso, modificato: adesso };
+        const intestatoA = String(b.intestatoA || '').trim();
+        // 12/11/2026: senza Dove, quello di un altro progetto con lo stesso Intestato a; i km li "calcola" kmFinti.
+        const dove = String(b.dove || '').trim() || doveDi(a.progetti, intestatoA);
+        const p = { id: a.progetti.reduce((x, y) => Math.max(x, y.id), 0) + 1, idLocale: b.idLocale || '', idCommessa: m.id, idCliente: m.idCliente, codice, intestatoA,
+          dove, kmStudio: kmFinti(dove, a.progetti), descrizione, stato: 'APERTO', codiceAutomatico: !!proposto && codice.toUpperCase() === proposto.toUpperCase(), creato: adesso, modificato: adesso };
         a.progetti.push(p);
         scrivi(dati, 'creaProgetto', 'progetti', p.id, p.codice, null, { codice: p.codice, descrizione: p.descrizione });
         return { ok: true, progetto: Object.assign({ giaEsisteva: false }, progettiConConti(dati).find(x => x.id === p.id)) };
@@ -826,6 +854,7 @@
         if (k.idCommessa !== undefined) { const nuova = trova(a.commesse, k.idCommessa); p.idCommessa = nuova.id; p.idCliente = nuova.idCliente; }
         p.codice = codice;
         if (k.intestatoA !== undefined) p.intestatoA = String(k.intestatoA).trim();
+        if (k.dove !== undefined) { p.dove = String(k.dove).trim(); p.kmStudio = kmFinti(p.dove, a.progetti.filter(x => x !== p)); }
         if (k.descrizione !== undefined) p.descrizione = String(k.descrizione).trim();
         if (k.stato !== undefined) p.stato = String(k.stato).toUpperCase();
         p.modificato = adesso;

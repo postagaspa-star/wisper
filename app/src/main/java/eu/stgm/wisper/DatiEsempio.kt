@@ -212,10 +212,13 @@ class DatiEsempio(oggi: LocalDate = LocalDate.now(), private val cartella: File?
             // I progetti (03/11/2026, progetti.md §2): due sotto la commessa di Elettrodinamica, uno sotto quella di Rossi.
             // I conti (rapportini, ore) si fanno dai rapportini d'esempio, in [contaProgetti].
             progetti = listOf(
+                // 12/11/2026 (km.md): dove si lavora e i km dallo studio (andata e ritorno), come li calcolerebbe il server.
                 Progetto("1", idCommessa = "26ST044", idCliente = "C001", codice = "ED-001", intestatoA = "Batokyo Srl",
-                    descrizione = "Quadro di linea QL1", creato = oggi.minusMonths(3).atTime(9, 0).toString()),
+                    descrizione = "Quadro di linea QL1", dove = "Via dei Mulini 4, 36015 Schio (VI)", kmStudio = 48.0,
+                    creato = oggi.minusMonths(3).atTime(9, 0).toString()),
                 Progetto("2", idCommessa = "26ST044", idCliente = "C001", codice = "ED-002", intestatoA = "Batokyo Srl",
-                    descrizione = "Nastro trasportatore", creato = oggi.minusMonths(2).atTime(9, 0).toString()),
+                    descrizione = "Nastro trasportatore", dove = "Via dei Mulini 4, 36015 Schio (VI)", kmStudio = 48.0,
+                    creato = oggi.minusMonths(2).atTime(9, 0).toString()),
                 Progetto("3", idCommessa = "26ST045", idCliente = "C002", codice = "RS-01",
                     descrizione = "Quadro generale QG2", creato = oggi.minusMonths(2).atTime(10, 0).toString()),
             ),
@@ -755,7 +758,7 @@ class DatiEsempio(oggi: LocalDate = LocalDate.now(), private val cartella: File?
             val id = ((ana.progetti.mapNotNull { it.id.toIntOrNull() }.maxOrNull() ?: 0) + 1).toString()
             val c = ana.commessa(r.idCommessa)
             Progetto(id, idLocale = nuovo.idLocale, idCommessa = r.idCommessa, idCliente = c?.idCliente ?: r.idCliente,
-                codice = nuovo.codice.ifBlank { "P-" + id }, intestatoA = nuovo.intestatoA, descrizione = nuovo.descrizione,
+                codice = nuovo.codice.ifBlank { "P-" + id }, intestatoA = nuovo.intestatoA, descrizione = nuovo.descrizione, dove = nuovo.dove,
                 codiceAutomatico = nuovo.codiceProposto, creato = LocalDateTime.now().toString()).also {
                 _ana.value = ana.copy(progetti = ana.progetti + it)
             }

@@ -355,7 +355,7 @@ test('migrazione 011: ogni riga di prima e\' un rapportino con un lavoro, stesso
   db.chiudi();
   const w2 = new Wisper({ dati });
   try {
-    assert.equal(w2.db.versione(), 12);
+    assert.equal(w2.db.versione(), 13);
     const copia = new Database(path.join(dati, 'wisper.db.prima-11'));
     assert.equal(copia.versione(), 10, 'la copia e\' com\'era prima');
     copia.chiudi();
@@ -425,7 +425,7 @@ test('migrazione 012: i rapportini di prima dello stesso giorno e della stessa p
   db.chiudi();
   const w2 = new Wisper({ dati });
   try {
-    assert.equal(w2.db.versione(), 12);
+    assert.equal(w2.db.versione(), 13);
     const copiaPrima = new Database(path.join(dati, 'wisper.db.prima-12'));
     assert.equal(copiaPrima.versione(), 11, 'la copia e\' com\'era prima');
     copiaPrima.chiudi();

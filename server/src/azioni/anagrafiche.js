@@ -385,7 +385,8 @@ module.exports = {
       r.mezzi = this.mezziPerAnagrafiche();
       r.mieiStrumenti = this.mieiStrumenti();
     }
-    return r;
+    // 12/11/2026: i km dallo studio (andata e ritorno) su progetti, commesse e clienti, per proporli nel rapportino.
+    return this.conKmStudio(r);
   },
 
   /**
@@ -404,7 +405,7 @@ module.exports = {
     const impostazioni = {};
     for (const k of ['RAGIONE_SOCIALE', 'INDIRIZZO', 'PARTITA_IVA', 'EMAIL', 'TELEFONO', 'PEC', 'TICKET_ATTIVO', 'APPROVAZIONE', 'ORE_GIORNALIERE']) impostazioni[k] = imp[k];
     const c = this.chi();
-    return {
+    return this.conKmStudio({
       ok: true,
       clienti: this.leggiClienti({ archiviati: true }).filter(s => idClienti.has(s.id)).map(s => ({ id: s.id, nome: s.nome, alias: [], gruppo: '', cliente: true, fornitore: false })),
       commesse,
@@ -418,7 +419,7 @@ module.exports = {
       progetti: this.leggiProgetti({}),
       utenti: c.utente ? [{ id: c.utente.id, nome: c.utente.nome, ruolo: 'esterno', attivo: true, idPersona: null }] : [],
       numerazioni: this.leggiNumerazioni().filter(n => n.tipo === 'rapportino'),
-    };
+    }, { clienti: false });
   },
 
   // ------------------------------------------------------------------ clienti (azioni di oggi)

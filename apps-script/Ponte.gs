@@ -115,6 +115,7 @@ function postino(d) {
       case 'postinoCopia': risposta = postinoCopia(d); break;
       case 'postinoFoglio': risposta = postinoFoglio(d); break;
       case 'postinoImpronta': risposta = postinoImpronta(d); break;
+      case 'postinoDistanza': risposta = postinoDistanza(d); break;
       case 'postinoPonte': risposta = postinoPonte(d); break;
       case 'postinoLeggi': risposta = postinoLeggi(d); break;
       case 'postinoEsporta': risposta = postinoEsporta(); break;
@@ -239,6 +240,22 @@ function postinoImpronta(d) {
     return ((b & 0xff) + 0x100).toString(16).slice(1);
   }).join('');
   return { ok: true, byte: byte.length, md5: md5 };
+}
+
+/**
+ * 12/11/2026: la strada in auto da un indirizzo a un altro, per i km del rapportino (server/src/azioni/km.js): il server
+ * la chiede una volta per indirizzo e se la ricorda. Il servizio Maps di Apps Script e' gratis e non vuole chiavi.
+ * {ok, trovata, metri, a} (metri della sola andata; a = come la mappa ha capito l'indirizzo), o trovata false.
+ */
+function postinoDistanza(d) {
+  var da = testo(d.da).slice(0, 300);
+  var a = testo(d.a).slice(0, 300);
+  if (!da || !a) throw new Error('Mancano gli indirizzi');
+  var r = Maps.newDirectionFinder().setLanguage('it').setRegion('it').setOrigin(da).setDestination(a)
+    .setMode(Maps.DirectionFinder.Mode.DRIVING).getDirections();
+  var tratto = r && r.status === 'OK' && r.routes && r.routes[0] && r.routes[0].legs && r.routes[0].legs[0];
+  if (!tratto || !tratto.distance) return { ok: true, trovata: false, stato: testo(r && r.status) };
+  return { ok: true, trovata: true, metri: Number(tratto.distance.value) || 0, a: testo(tratto.end_address) };
 }
 
 /**
