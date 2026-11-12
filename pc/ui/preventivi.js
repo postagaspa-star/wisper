@@ -62,7 +62,8 @@
     /** "#preventivi", "#preventivi/listino", "#preventivi/12", "#preventivi/12/modifica", "#preventivi/nuovo". */
     function vista(pagina, a1, a2) {
       if (!a1) return conDati(pagina, leggiElenco, () => elenco(pagina));
-      if (a1 === 'listino') return conDati(pagina, () => leggiListino(M.archiviateListino), () => listino(pagina));
+      // 1.4.0: il listino è diventato i Servizi, con la sua voce nel menu.
+      if (a1 === 'listino') { W.vai('#servizi'); return; }
       if (a1 === 'contratti') return conDati(pagina, leggiElenco, () => contratti(pagina));
       if (a1 === 'nuovo') {
         if (!scrive()) return W.senzaPermesso(pagina);
@@ -87,7 +88,7 @@
       aggiungi(pagina, [
         h('div', { class: 'testata alta' },
           h('div', { class: 'titoli' }, h('span', { class: 'dove' }, 'Preventivi e contratti'), h('h1', null, 'Preventivi')),
-          h('button', { type: 'button', class: 'btn', onclick: () => W.vai('#preventivi/listino') }, icona('libro', 18, 2.2), 'Listino'),
+          h('button', { type: 'button', class: 'btn', onclick: () => W.vai('#servizi') }, icona('libro', 18, 2.2), 'Servizi'),
           h('button', { type: 'button', class: 'btn', onclick: () => W.vai('#preventivi/contratti') }, icona('contratto', 18, 2.2), 'Contratti'),
           daModello,
           scrive() ? h('button', { type: 'button', class: 'btn giallo', 'data-visita': 'nuovo-preventivo', onclick: () => W.vai('#preventivi/nuovo') }, icona('piu', 18, 2.6), 'Nuovo preventivo') : null),
@@ -728,9 +729,9 @@
         ]));
         const corpo = h('div', { class: 'voci-sez', 'data-sezione': s.id });
         s.voci.forEach((v, vi) => aggiungi(corpo, [rigaVoce(b, s, v, vi, ricalcola, ridisegna)]));
-        if (!s.voci.length) aggiungi(corpo, [h('div', { class: 'vuoto-sez' }, 'Prendi una voce dal listino o scrivine una.')]);
+        if (!s.voci.length) aggiungi(corpo, [h('div', { class: 'vuoto-sez' }, 'Prendi un servizio o scrivi una voce.')]);
         destinazioneVoci(corpo, b, s, ridisegna);
-        const dalListino = h('button', { type: 'button', class: 'btn piccolo', 'data-visita': si === 0 ? 'dal-listino' : null }, icona('libro', 16, 2.2), 'Dal listino');
+        const dalListino = h('button', { type: 'button', class: 'btn piccolo', 'data-visita': si === 0 ? 'dal-listino' : null }, icona('libro', 16, 2.2), 'Dai servizi');
         dalListino.addEventListener('click', () => sceltaListino(dalListino, v => { s.voci.push(v); ridisegna(); W.Visita.azione('dal-listino'); }));
         aggiungi(zona, [h('div', { class: 'scheda sez-editor' + (chiusa ? ' chiusa' : '') },
           h('div', { class: 'testa-sez-editor' },
@@ -857,8 +858,8 @@
     function sceltaListino(ancora, aggiungiVoce) {
       B.chiudiMenu();
       const lista = h('div', { class: 'lista-listino' });
-      const input = h('input', { type: 'search', placeholder: 'Cerca nel listino', 'aria-label': 'Cerca nel listino' });
-      const m = h('div', { class: 'menu listino-menu', role: 'dialog', 'aria-label': 'Listino' }, h('label', { class: 'cerca piccola' }, icona('cerca', 16), input), lista);
+      const input = h('input', { type: 'search', placeholder: 'Cerca nei servizi', 'aria-label': 'Cerca nei servizi' });
+      const m = h('div', { class: 'menu listino-menu', role: 'dialog', 'aria-label': 'Servizi' }, h('label', { class: 'cerca piccola' }, icona('cerca', 16), input), lista);
       const chiudi = () => { m.remove(); document.removeEventListener('mousedown', fuori, true); document.removeEventListener('keydown', esc, true); };
       const fuori = e => { if (!m.contains(e.target) && e.target !== ancora) chiudi(); };
       const esc = e => { if (e.key === 'Escape') { e.stopPropagation(); chiudi(); } };
@@ -867,7 +868,7 @@
         const voci = (M.listino || []).filter(l => l.attivo !== false && (!t || R.norm(l.nome + ' ' + (l.codice || '')).indexOf(t) >= 0));
         aggiungi(svuota(lista), voci.length ? voci.map(l => h('button', { type: 'button', role: 'menuitem', onclick: () => { chiudi(); aggiungiVoce(RP.voceDaListino(l)); } },
           h('span', { class: 'nome-listino' }, l.nome), h('span', { class: 'piccolo' }, (l.modo === 'ore' ? 'a ore' : l.modo === 'quantita' ? 'a quantità' : 'a corpo') +
-            (soldi() ? ' · ' + (C.num(l.prezzo) > 0 ? C.euro(l.prezzo) + (l.modo === 'ore' ? '/h' : '') : 'senza prezzo') : '')))) : [h('div', { class: 'vuoto piccolo' }, 'Niente nel listino con questo nome')]);
+            (soldi() ? ' · ' + (C.num(l.prezzo) > 0 ? C.euro(l.prezzo) + (l.modo === 'ore' ? '/h' : '') : 'senza prezzo') : '')))) : [h('div', { class: 'vuoto piccolo' }, 'Nessun servizio con questo nome')]);
       };
       input.addEventListener('input', disegna);
       input.addEventListener('keydown', e => { if (e.key === 'Enter') { const p = lista.querySelector('button'); if (p) p.click(); } });
@@ -926,80 +927,6 @@
         campo('Oneri ipotizzabili dal conferimento alla conclusione', area('oneriPrevisti')),
         campo('Condizioni', area('condizioni')),
         campo('Note per te, non vanno al cliente', area('noteInterne')));
-    }
-
-    // ===================================================================== listino
-
-    function listino(pagina) {
-      const lista = (M.listino || []).slice().sort((a, b) => (Number(a.ordine) || 0) - (Number(b.ordine) || 0));
-      const attive = lista.filter(l => l.attivo !== false);
-      const archiviate = lista.filter(l => l.attivo === false);
-      const rigaListino = l => riga({
-        titolo: l.nome + (l.codice ? '' : ''), sotto: [l.codice, l.modo === 'ore' ? 'a ore' : l.modo === 'quantita' ? 'a quantità' + (l.unita ? ' (' + l.unita + ')' : '') : 'a corpo', l.descrizione].filter(Boolean).join(' · '),
-        destra: soldi() ? h('span', { class: 'quanto' }, C.num(l.prezzo) > 0 ? C.euro(l.prezzo) + (l.modo === 'ore' ? '/h' : '') : h('span', { class: 'da-scegliere' }, 'senza prezzo')) : null,
-        onclick: scrive() ? () => moduloListino(l) : null, freccia: scrive(),
-      });
-      aggiungi(pagina, [
-        h('div', { class: 'indietro-riga' }, tondo('indietro', 'Torna ai preventivi', () => W.vai('#preventivi')), h('span', { class: 'dove' }, 'Preventivi')),
-        h('div', { class: 'testata' }, h('div', { class: 'titoli' }, h('h1', null, 'Listino delle prestazioni')),
-          scrive() ? h('button', { type: 'button', class: 'btn giallo', onclick: () => moduloListino(null) }, icona('piu', 18, 2.6), 'Nuova prestazione') : null),
-        h('div', { class: 'stretta-820 sezione' },
-          attive.length ? h('div', { class: 'scheda righe' }, attive.map(rigaListino)) : h('div', { class: 'calmo' }, 'Il listino è vuoto.'),
-          M.archiviateListino && archiviate.length ? [h('span', { class: 'etichetta' }, 'Archiviate'), h('div', { class: 'scheda righe' }, archiviate.map(rigaListino))] : null,
-          h('div', null, h('button', { type: 'button', class: 'btn collegamento', onclick: async () => { M.archiviateListino = !M.archiviateListino; await leggiListino(M.archiviateListino).catch(() => null); W.ridisegna(); } },
-            M.archiviateListino ? 'Nascondi le archiviate' : 'Mostra le archiviate')))]);
-    }
-
-    function moduloListino(l) {
-      const x = l ? Object.assign({}, l) : { nome: '', codice: '', descrizione: '', modo: 'corpo', unita: '', prezzo: null };
-      const v = {
-        nome: h('input', { type: 'text', value: x.nome || '' }),
-        codice: h('input', { type: 'text', value: x.codice || '' }),
-        descrizione: h('textarea', { rows: 2 }),
-        unita: h('input', { type: 'text', value: x.unita || '' }),
-        prezzo: h('input', { type: 'text', inputmode: 'decimal', value: x.prezzo === null || x.prezzo === undefined ? '' : R.numeroCampo(x.prezzo) }),
-      };
-      v.descrizione.value = x.descrizione || '';
-      let modo = x.modo || 'corpo';
-      let errori = {};
-      const zona = h('div', { class: 'fila' });
-      const disegna = () => aggiungi(svuota(zona), [
-        h('div', { class: 'riga-campi' }, campo('Nome', v.nome, errori.nome), campo('Codice', v.codice)),
-        campo('Descrizione', v.descrizione),
-        h('div', { class: 'campo' }, h('label', null, 'Come si conta'), segmenti(RP.MODI, modo, m => { modo = m; disegna(); })),
-        h('div', { class: 'riga-campi' }, modo === 'quantita' ? campo('Unità', v.unita) : null,
-          soldi() ? campo(modo === 'ore' ? 'Prezzo all\'ora' : 'Prezzo', conSuffisso(v.prezzo, '€'), errori.prezzo) : null)]);
-      disegna();
-      let chiudi;
-      const salva = async () => {
-        errori = {};
-        if (!v.nome.value.trim()) errori.nome = 'Scrivi come si chiama la prestazione';
-        if (v.prezzo.value.trim() && C.numONull(v.prezzo.value) === null) errori.prezzo = 'Non è un numero';
-        if (Object.keys(errori).length) { disegna(); return; }
-        const voce = { nome: v.nome.value.trim(), codice: v.codice.value.trim(), descrizione: v.descrizione.value.trim(), modo, unita: modo === 'ore' ? 'h' : v.unita.value.trim() };
-        if (l) voce.id = l.id;
-        if (soldi()) voce.prezzo = C.numONull(v.prezzo.value);
-        const ris = await lavora('Salvo la prestazione', () => Rete.post('/server/salvaVoceListino', { voce }));
-        if (!ris) return;
-        chiudi();
-        await leggiListino(M.archiviateListino).catch(() => null);
-        avviso(l ? 'Prestazione salvata' : 'Prestazione aggiunta al listino');
-        W.ridisegna();
-      };
-      const archivia = async si => {
-        const ris = await lavora(si ? 'Archivio' : 'Ripristino', () => Rete.post('/server/archiviaVoceListino', { id: l.id, archiviata: si }));
-        if (!ris) return;
-        chiudi();
-        await leggiListino(M.archiviateListino).catch(() => null);
-        avviso(si ? 'Prestazione archiviata: non si propone più nei preventivi nuovi' : 'Prestazione ripristinata', false, null, si ? { testo: 'Annulla', fn: () => archivia(false) } : null);
-        W.ridisegna();
-      };
-      chiudi = finestra({
-        titolo: l ? l.nome : 'Nuova prestazione', corpo: zona,
-        pulsanti: [l ? h('button', { type: 'button', class: 'btn testo grande pericolo', onclick: () => archivia(l.attivo !== false) }, l.attivo !== false ? 'Archivia' : 'Ripristina') : null,
-          'spazio', h('button', { type: 'button', class: 'btn testo grande', onclick: () => chiudi() }, 'Annulla'),
-          h('button', { type: 'button', class: 'btn giallo grande', onclick: salva }, 'Salva')].filter(Boolean),
-      });
     }
 
     // ===================================================================== contratti

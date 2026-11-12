@@ -2379,3 +2379,27 @@ button.casa-riga:hover { background: var(--carta-sopra); }
   .molla, .btn { transition: none; }
   .tessera:hover { transform: none; }
 }
+
+/* ======================================================================= 1.4.0: Servizi e indennità (servizi.md) */
+.tab.tab-servizi .r { grid-template-columns: 130px minmax(0, 1fr) 100px 70px; }
+.tab.tab-servizi.con-soldi .r { grid-template-columns: 130px minmax(0, 1fr) 100px 70px 120px; }
+.tab.tab-servizi .cella-due { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.tab.tab-servizi .cella-due .t2 { font-size: 13px; }
+.tab .r.spenta { opacity: .6; }
+.servizio-campi { display: flex; flex-direction: column; gap: 14px; }
+.servizio-campi .servizio-testa { grid-template-columns: minmax(0, 1.4fr) minmax(230px, 1fr) 130px; }
+.servizio-campi .servizio-testa.con-quantita { grid-template-columns: minmax(0, 1.4fr) minmax(230px, 1fr) 120px 100px; }
+.servizio-campi h3.sotto-titolo { margin: 6px 0 -4px; font-size: 13px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.immagine-servizio { display: flex; align-items: center; gap: 10px; min-height: 48px; }
+.immagine-servizio img { width: 56px; height: 56px; object-fit: cover; border-radius: 10px; border: 1px solid var(--bordo-scheda); }
+.immagine-servizio .immagine-vuota { width: 56px; height: 56px; border-radius: 10px; background: var(--superficie-tenue); color: var(--tenue); display: inline-flex; align-items: center; justify-content: center; }
+.indennita-lavoro { display: flex; flex-direction: column; gap: 6px; }
+.riga-indennita { display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 8px 14px; border: 1px solid var(--bordo-scheda); border-radius: 12px; background: var(--carta); color: var(--testo); font: inherit; text-align: left; cursor: pointer; }
+.riga-indennita:hover { background: var(--superficie-tenue); }
+.riga-indennita .spazio { flex: 1; min-width: 0; font-weight: 700; }
+@media (max-width: 900px) {
+  .servizio-campi .servizio-testa, .servizio-campi .servizio-testa.con-quantita { grid-template-columns: 1fr 1fr; }
+  .tab.tab-servizi .r, .tab.tab-servizi.con-soldi .r { grid-template-columns: 110px minmax(0, 1fr) 90px; }
+  .tab.tab-servizi .r > :nth-child(4) { display: none; }
+  .tab.tab-servizi.con-soldi .r { grid-template-columns: 110px minmax(0, 1fr) 80px 100px; }
+}

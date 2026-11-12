@@ -37,13 +37,14 @@ class FattureTest {
         val tutto = JSONObject(f!!.readText(Charsets.UTF_8))
         val base = tutto.getJSONObject("base")
         val casi = tutto.getJSONArray("casi")
-        assertTrue("almeno i 16 casi del contratto", casi.length() >= 16)
+        // 1.4.0: 32 casi (i due ultimi sono le parcelle d'esempio di servizi.md §3, il 32 con lo sconto sulle righe).
+        assertTrue("almeno i 32 casi del contratto", casi.length() >= 32)
         for (i in 0 until casi.length()) {
             val caso = casi.getJSONObject(i)
             val nome = caso.getString("nome")
             val fattura = caso.getJSONObject("fattura")
             val righe = fattura.getJSONArray("righe").oggetti().map {
-                RigaPerConti(it.getString("tipo"), it.numero("quantita"), it.numero("prezzo"), it.numero("importo"), it.optBoolean("tributoCliente"))
+                RigaPerConti(it.getString("tipo"), it.numero("quantita"), it.numero("prezzo"), it.numero("importo"), it.optBoolean("tributoCliente"), it.numero("sconto"))
             }
             val k = RegoleFattura.calcola(parametri(base, fattura), righe)
             val a = caso.getJSONObject("atteso")
@@ -63,6 +64,22 @@ class FattureTest {
         assertEquals(20.73, RegoleFattura.centesimi(414.5 * 5 / 100), 0.0)
         assertEquals(0.0, RegoleFattura.importoRiga(RigaPerConti("compenso", 4.0, null)), 0.0)
         assertEquals(450.0, RegoleFattura.importoRiga(RigaPerConti("compenso", null, 450.0)), 0.0)
+    }
+
+    @Test
+    fun `lo sconto della riga in percento e l'IVA riga per riga come Flextaxa`() {
+        // 2 h a 50 € meno il 40% = 60 €; senza sconto (0 o null) resta quantità per prezzo.
+        assertEquals(60.0, RegoleFattura.importoRiga(RigaPerConti("compenso", 2.0, 50.0, sconto = 40.0)), 0.0)
+        assertEquals(100.0, RegoleFattura.importoRiga(RigaPerConti("compenso", 2.0, 50.0, sconto = 0.0)), 0.0)
+        // L'importo scritto vince sullo sconto (come il server: lo sconto conta solo quando "importo" manca).
+        assertEquals(75.0, RegoleFattura.importoRiga(RigaPerConti("compenso", 2.0, 50.0, 75.0, sconto = 40.0)), 0.0)
+        // Tre righe da 0,35 € al 22%: riga per riga 0,08 × 3 = 0,24; sul totale (1,05 × 22%) sarebbe 0,23.
+        val p = ParametriFattura(regime = "ordinario", ivaPercentuale = 22.0, eppiPercentuale = 0.0, ritenutaPercentuale = 0.0,
+            ritenuta = false, bolloSoglia = 77.47, bolloImporto = 2.0, bolloRivalsa = false)
+        val k = RegoleFattura.calcola(p, List(3) { RigaPerConti("compenso", 1.0, 0.35) })
+        assertEquals(0.24, k.iva, 0.0)
+        // Forfettario: niente IVA.
+        assertEquals(0.0, RegoleFattura.calcola(p.copy(regime = "forfettario"), List(3) { RigaPerConti("compenso", 1.0, 0.35) }).iva, 0.0)
     }
 
     // ------------------------------------------------------------------ le risposte della §15

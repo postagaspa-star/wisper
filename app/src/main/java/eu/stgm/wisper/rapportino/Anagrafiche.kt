@@ -64,6 +64,12 @@ data class Cliente(
     val portale: Boolean = false,
     /** 12/11/2026 (km.md): i km dallo studio alla sede, andata e ritorno, calcolati dal server; null = non si sanno. */
     val kmStudio: Double? = null,
+    /**
+     * 1.4.0 (servizi.md §3): come si chiama la commessa nei documenti di questo cliente ("JOB" per EPPI; vuoto =
+     * Commessa). Null = non letta (un server o una copia di prima): allora non si manda, e non cancella quella scritta
+     * dal computer.
+     */
+    val etichettaCommessa: String? = null,
 ) {
     /** "C001 · Thiene": la citta', o l'indirizzo se la citta' non c'e' ancora (i clienti del foglio). */
     val luogo: String get() = citta.ifBlank { indirizzo }
@@ -92,6 +98,7 @@ data class Cliente(
             if (collaboratore) put("collaboratore", true)
             if (portale) put("portale", true)
             if (kmStudio != null) put("kmStudio", kmStudio)
+            if (etichettaCommessa != null) put("etichettaCommessa", etichettaCommessa)
             if (fatturazioneLetta) {
                 put("sostitutoImposta", sostitutoImposta ?: JSONObject.NULL)
                 put("pagamentoGiorni", pagamentoGiorni ?: JSONObject.NULL)
@@ -136,6 +143,7 @@ data class Cliente(
             fatturazioneLetta = c.has("sostitutoImposta") || c.has("pagamentoGiorni") || c.has("pagamentoFineMese"),
             collaboratore = c.vero("collaboratore"),
             portale = c.vero("portale"),
+            etichettaCommessa = if (c.has("etichettaCommessa")) c.testo("etichettaCommessa") else null,
         )
     }
 }

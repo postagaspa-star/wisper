@@ -21,10 +21,13 @@ data class CampoImpostazione(
 /** Le voci della pagina Dati dello studio, nell'ordine in cui si vedono (06/11/2026). */
 object CampiStudio {
     const val STUDIO_SDI = "STUDIO_SDI"
+    const val STUDIO_QUALIFICA = "STUDIO_QUALIFICA"
     const val PDF_NOME = "PDF_NOME"
 
     val STUDIO = listOf(
         CampoImpostazione("Ragione sociale", Anagrafiche.RAGIONE_SOCIALE, altre = "nome dello studio intestazione"),
+        // 1.4.0 (servizi.md §3): sotto il nome nei documenti ("Perito Industriale").
+        CampoImpostazione("Qualifica", STUDIO_QUALIFICA, altre = "titolo professione perito industriale"),
         CampoImpostazione("Nome breve", "STUDIO_NOME_BREVE", altre = "menu email portale"),
         CampoImpostazione("Chi compila i rapportini", Anagrafiche.TECNICO, altre = "tecnico firma email"),
         CampoImpostazione("Partita IVA", Anagrafiche.PARTITA_IVA, "cifre", altre = "piva p.iva"),

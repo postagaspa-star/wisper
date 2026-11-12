@@ -224,6 +224,8 @@ class PonteServer(
         idAttivita: String = "",
         idPreventivo: String = "",
         idSpesa: String = "",
+        /** 1.4.0: per un'immagine di un servizio ("servizio") caricata da un'indennità del rapportino: "indennita". */
+        per: String = "",
     ): FileRemoto = withContext(Dispatchers.IO) {
         if (dati.isEmpty()) throw Rifiutato("Il file è vuoto")
         val corpo = JSONObject()
@@ -241,6 +243,7 @@ class PonteServer(
         if (idPreventivo.isNotBlank()) corpo.put("idPreventivo", idJson(idPreventivo))
         if (idSpesa.isNotBlank()) corpo.put("idSpesa", idJson(idSpesa))
         if (nome.isNotBlank()) corpo.put("nome", nome)
+        if (per.isNotBlank()) corpo.put("per", per)
         val f = scrivi(corpo).optJSONObject("file") ?: throw Rifiutato("Il server non ha salvato il file")
         FileRemoto.daJson(f)
     }
@@ -452,6 +455,8 @@ class PonteServer(
             .put("codiceSdi", s.codiceSdi.trim()).put("indirizzo", s.indirizzo.trim()).put("cap", s.cap.trim())
             .put("citta", s.citta.trim()).put("provincia", s.provincia.trim()).put("nazione", s.nazione.trim().ifBlank { "IT" })
             .put("note", s.note.trim())
+        // 1.4.0: solo se letta (o scritta nel modulo): null non cancella quella scritta dal computer.
+        s.etichettaCommessa?.let { o.put("etichettaCommessa", it.trim()) }
         if (!nuovo) o.put("id", s.id)
         if (costi) {
             o.put("tariffaFissa", s.tariffaFissa ?: JSONObject.NULL).put("costoFisso", s.costoFisso ?: JSONObject.NULL)
@@ -652,16 +657,23 @@ class PonteServer(
 
     // ------------------------------------------------------------- fase 2: preventivi (fase2.md §4, architettura.md §13)
 
-    suspend fun listino(): List<VoceListino> = withContext(Dispatchers.IO) {
-        val r = leggi("listino")
+    /** I servizi (servizi.md §1); con [tutte] anche gli archiviati (attivo = false), che i Servizi mostrano a parte. */
+    suspend fun listino(tutte: Boolean = false): List<VoceListino> = withContext(Dispatchers.IO) {
+        val r = if (tutte) leggi("listino", "tutte" to "1") else leggi("listino")
         (r.optJSONArray("listino") ?: r.optJSONArray("voci")).oggetti().map(VoceListino::daJson)
     }
 
-    /** Il prezzo si manda solo con il permesso dei soldi. */
+    /**
+     * Un servizio coi campi di Flextaxa (servizi.md §1). Prezzo di vendita e costo di acquisto si mandano solo con il
+     * permesso dei soldi; l'immagine come {id}, o null per toglierla.
+     */
     suspend fun salvaVoceListino(v: VoceListino, costi: Boolean): VoceListino = withContext(Dispatchers.IO) {
         val o = JSONObject().put("nome", v.nome.trim()).put("codice", v.codice.trim()).put("descrizione", v.descrizione.trim())
             .put("modo", v.modo).put("unita", v.unita.trim()).put("ordine", v.ordine)
-        if (costi) o.put("prezzo", v.prezzo ?: JSONObject.NULL)
+            .put("tipo", v.tipo).put("aliquotaIva", v.aliquotaIva).put("aliquotaAcquisto", v.aliquotaAcquisto)
+            .put("fornitore", v.fornitore.trim()).put("tag", JSONArray(v.tag)).put("note", v.note.trim())
+            .put("immagine", v.immagine?.let { JSONObject().put("id", it.id) } ?: JSONObject.NULL)
+        if (costi) o.put("prezzo", v.prezzo ?: JSONObject.NULL).put("prezzoAcquisto", v.prezzoAcquisto ?: JSONObject.NULL)
         if (v.id.isNotBlank()) o.put("id", idJson(v.id))
         val r = scrivi(JSONObject().put("azione", "salvaVoceListino").put("voce", o))
         VoceListino.daJson(r.optJSONObject("voce") ?: r.optJSONObject("listino") ?: throw Rifiutato("Il server non ha restituito la voce del listino"))

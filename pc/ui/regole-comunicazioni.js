@@ -94,7 +94,7 @@
   };
   /** I tipi dello storico che non sono modelli (§5.4), con le parole per le righe. */
   const NOMI_TIPI = {
-    rapportino: 'Rapportino', riepilogo: 'Riepilogo', preventivo: 'Preventivo', documento: 'Documento', avviso_parcella: 'Avviso di parcella',
+    rapportino: 'Rapportino', riepilogo: 'Riepilogo', preventivo: 'Preventivo', documento: 'Documento', avviso_parcella: 'Pre-parcella',
     invito_portale: 'Invito al portale', avviso_portale: 'Avviso del portale', conferma_portale: 'Conferma del portale', messaggio: 'Messaggio',
     domanda: 'Domanda', segnalazione: 'Segnalazione', libero: 'Messaggio libero',
   };

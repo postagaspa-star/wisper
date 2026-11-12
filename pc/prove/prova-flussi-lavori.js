@@ -469,7 +469,8 @@ async function main() {
     await aspetta(300);
     await guardaAvvisi();
     await clicca('Invia 2 email', finestra, 6000);
-    for (let i = 0; i < 30 && (await valuta("!!document.querySelector('.velo .finestra .dest')")); i++) await aspetta(500);
+    // 12/11/2026: con Edge 157 i PDF da riga di comando ci mettono anche 40 secondi: si aspetta fino a 90.
+    for (let i = 0; i < 180 && (await valuta("!!document.querySelector('.velo .finestra .dest')")); i++) await aspetta(500);
     assert.match(await testoAvvisi(), /2 email mandate/);
     const dopo = (await server('rapportini')).rapportini.filter(r => r.idGiornata === ID);
     assert.deepEqual(dopo.map(r => r.stato), ['INVIATO', 'INVIATO', 'INVIATO'], 'i 3 lavori inviati');

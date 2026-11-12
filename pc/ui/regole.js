@@ -40,7 +40,9 @@
     { modulo: 'commesse', nome: 'Commesse', spiega: 'Commesse e prestazioni', icona: 'commesse' },
     { modulo: 'progetti', nome: 'Progetti', spiega: 'I progetti dentro le commesse', icona: 'progetti' },
     // Fase 2 (docs/gestionale/fase2.md §5): voci 4 e 5 del menu.
-    { modulo: 'preventivi', nome: 'Preventivi e contratti', spiega: 'Preventivi, listino, incarichi', icona: 'preventivo' },
+    { modulo: 'preventivi', nome: 'Preventivi e contratti', spiega: 'Preventivi e incarichi', icona: 'preventivo' },
+    // 1.4.0 (servizi.md §1): i Servizi subito dopo i Preventivi; non sono un permesso, si vedono con uno dei tre moduli che li usano.
+    { modulo: 'servizi', nome: 'Servizi', spiega: 'Servizi e prezzi, per preventivi, indennità e fatture', icona: 'libro' },
     { modulo: 'attivita', nome: 'Attività e calendario', spiega: 'Le attività di tutti o solo le sue', icona: 'calendario' },
     // 07/11/2026 (Manuel: "le Ore vanno tolte, non servono, metti solamente i Rapportini"): era "Ore e rapportini".
     { modulo: 'rapportini', nome: 'Rapportini', spiega: 'Rapportini e approvazioni', icona: 'rapportini' },
@@ -65,8 +67,14 @@
     { modulo: 'amministrazione', nome: 'Amministrazione', spiega: 'Studio, utenti, permessi, copie', icona: 'amministrazione' },
   ];
 
+  /**
+   * 1.4.0: le voci del menu che non sono un permesso, ma si vedono con uno di questi moduli (il server legge il listino
+   * con preventivi, rapportini o fatturazione: richieste.js).
+   */
+  const VEDE_CON = { servizi: ['preventivi', 'rapportini', 'fatturazione'] };
+
   /** Le righe di Ruoli e permessi: i moduli del menu più i soldi. */
-  const RIGHE_PERMESSI = VOCI_MENU.map(v => ({ modulo: v.modulo, nome: v.nome, spiega: v.spiega }))
+  const RIGHE_PERMESSI = VOCI_MENU.filter(v => !VEDE_CON[v.modulo]).map(v => ({ modulo: v.modulo, nome: v.nome, spiega: v.spiega }))
     .concat([{ modulo: 'costi', nome: 'Soldi', spiega: 'Tariffe, totali, costi e margini' },
       // Fase 6 (fase6.md §3.2): costo dell'anno, CCNL, giudizi di idoneità, documenti riservati, tipo delle assenze sanitarie.
       { modulo: 'riservati', nome: 'Dati riservati', spiega: 'Costo dell\'anno, contratti e cedolini, giudizi del medico, malattie' }]);
@@ -97,7 +105,8 @@
   /** Le voci della barra laterale per questi permessi. */
   /** Fatturazione e Banche si vedono solo col modulo e anche il permesso dei soldi (fase4.md §12). */
   const CON_SOLDI = ['fatturazione', 'banche'];
-  const vede = (permessi, modulo) => puo(permessi, modulo, 1) && (CON_SOLDI.indexOf(modulo) < 0 || puo(permessi, 'costi', 1));
+  const vede = (permessi, modulo) => VEDE_CON[modulo] ? VEDE_CON[modulo].some(m => vede(permessi, m))
+    : puo(permessi, modulo, 1) && (CON_SOLDI.indexOf(modulo) < 0 || puo(permessi, 'costi', 1));
 
   /** Per l'esterno il menu ridotto, nel suo ordine (fase6.md §12.7): Rapportini prima di Attività. */
   const ORDINE_ESTERNO = ['dashboard', 'commesse', 'progetti', 'rapportini', 'attivita', 'spese', 'documenti', 'ticket', 'collaboratori'];
@@ -159,7 +168,7 @@
     const vede = [];
     const legge = [];
     const no = [];
-    VOCI_MENU.forEach(v => {
+    VOCI_MENU.filter(v => !VEDE_CON[v.modulo]).forEach(v => {
       const l = livello(permessiRuolo, v.modulo);
       if (l === 2) vede.push(v.nome);
       else if (l === 1) legge.push(v.nome);
@@ -587,7 +596,8 @@
       // Fase 2: preventivi, attività, calendario.
       case 'preventivi': return { hash: '#preventivi', filtro: c.filtro || null };
       case 'preventivo': return { hash: '#preventivi/' + id, filtro: null };
-      case 'listino': return { hash: '#preventivi/listino', filtro: null };
+      case 'listino': return { hash: '#servizi', filtro: null };
+      case 'servizi': return { hash: '#servizi', filtro: null };
       case 'contratti': return { hash: '#preventivi/contratti', filtro: null };
       case 'attivita': return { hash: '#attivita' + (c.id ? '/' + id : ''), filtro: c.filtro || null };
       case 'calendario': return { hash: '#attivita/calendario', filtro: c.filtro || null };
@@ -958,7 +968,7 @@
   }
 
   const Regole = {
-    RUOLI, ORDINE_RUOLI, ORDINE_RUOLI_PERMESSI, VIETATI_ESTERNO, VOCI_MENU, RIGHE_PERMESSI, LIVELLI,
+    RUOLI, ORDINE_RUOLI, ORDINE_RUOLI_PERMESSI, VIETATI_ESTERNO, VOCI_MENU, VEDE_CON, RIGHE_PERMESSI, LIVELLI,
     permessiTutti, livello, puo, vociMenu, moduloDi, paginaPermessa, primaPagina, titolareDi, ultimoTitolare, quantiAttivi, descriviRuolo,
     saluto, dataTitolo, giornoRegistro, quando, raggruppaPerGiorno, periodo, isoGiorno, oggiIso,
     errorePartitaIva, erroreCodiceFiscale, erroreSdi, erroreEmail, erroreCap, erroreProvincia, validaSoggetto,

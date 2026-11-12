@@ -94,6 +94,26 @@ picked from a pill is never replaced. One trip is counted once: if an earlier jo
 nothing is filled in by itself (on the real NAS data, days with several jobs never have km on every job). Phone location tracking was considered and left out: it needs every client's
 coordinates anyway, the "allow all the time" permission, and it raises workplace-monitoring rules for collaborators.
 
+Version 1.4.0 (12 November, server 0.15.0, schema 14, `docs/gestionale/servizi.md`) adds **Servizi**, a side-menu
+entry right after Preventivi on both devices. It is the phase-2 quote price list grown into the product/service card of
+Flextaxa, the program the studio issues invoices with: description, sale price and VAT rate, then code, purchase price
+and its VAT rate, type (service or product), unit (Nr, Ore, Pz, Km, Giorni, A corpo), supplier, search tags, an image
+(JPG or PNG up to 1 MB) and private notes. It is visible to anyone with quotes, reports or invoicing (prices only with
+the money permission) and editable by whoever can edit quotes. The studio's 35 Flextaxa services were imported on the
+NAS with `server/strumenti/importa-servizi.js` (reads the Flextaxa CSV from stdin, prints counts only; the CSV and the
+real prices never enter the repository). A report job can now carry **indennità** (allowances): **+ Indennità**, the
+last of the pills under Altro, opens a window with the same fields plus a quantity, prefilled from a chosen service
+(allowances first). They add up into the job total, show on the report PDF and become invoice lines with their code.
+Quotes, **pre-parcelle** (the old "avviso di parcella": the draft, not a tax document) and **parcelle** (the issued
+invoice with the number Flextaxa gave it) now share the layout of the studio's model: logo, type, number and date on
+top; sender and recipient in two columns; a Code / Description / Qty / Unit / Price / Discount / VAT / Total table;
+payment details on the left and the summary (taxable, 5% EPPI surcharge, expenses, VAT, total, withholding, amount due)
+on the right; notes; and a footer with the studio and "Parcella n. 24 · Pagina 1 / 1". New data for it: the studio's
+qualification, BIC and beneficiary on the bank account, a per-client label for the job code ("JOB" for EPPI), and code
+and discount on invoice lines (also read from the returned XML). VAT is now rounded line by line like Flextaxa: on one of
+the model invoices Wisper used to give one cent less VAT than Flextaxa; both model invoices now match to the cent
+(shared cases with made-up amounts in `server/prove/casi-fattura.json`).
+
 Phase 1 (October 2026) replaces the Google Sheet with a small server on
 the home NAS (`server/`: Node.js 24 with its built-in SQLite, no npm dependencies, in
 Docker). It speaks the same protocol as the sheet script, so the phone and the office

@@ -23,6 +23,8 @@ data class RigaPerConti(
     val prezzo: Double? = null,
     val importo: Double? = null,
     val tributoCliente: Boolean = false,
+    /** 1.4.0 (servizi.md §3): lo sconto della riga in percento, come in Flextaxa (50 €/h meno 40%); null = nessuno. */
+    val sconto: Double? = null,
 )
 
 /** I parametri fiscali congelati nella fattura (o quelli delle impostazioni, per una bozza nuova). */
@@ -80,18 +82,28 @@ data class ContiFattura(
 object RegoleFattura {
     fun centesimi(n: Double): Double = Math.floor(n * 100 + 0.5) / 100.0
 
-    /** importoRigaFattura(): l'importo se c'è, se no quantità × prezzo (quantità mancante 1, prezzo mancante 0). */
+    /**
+     * importoRigaFattura(): l'importo se c'è, se no quantità × prezzo × (1 − sconto/100) (quantità mancante 1, prezzo
+     * mancante 0, sconto mancante 0).
+     */
     fun importoRiga(r: RigaPerConti): Double {
         r.importo?.let { return centesimi(it) }
         val q = r.quantita ?: 1.0
-        return centesimi(q * (r.prezzo ?: 0.0))
+        return centesimi(q * (r.prezzo ?: 0.0) * (1 - (r.sconto ?: 0.0) / 100))
     }
 
+    /**
+     * Dal 12/11/2026 (servizi.md §3) l'IVA è quella di Flextaxa, il programma che emette le fatture: arrotondata riga per
+     * riga (ogni compenso × aliquota, al centesimo) e a parte quella del contributo, poi sommata: a volte un centesimo
+     * più che sul totale (casi 31 e 32 di casi-fattura.json). Il forfettario resta senza IVA.
+     */
     fun calcola(p: ParametriFattura, righe: List<RigaPerConti>): ContiFattura {
         val forfettario = p.regime == "forfettario"
         var compenso = 0.0
         var anticipazioni = 0.0
         var perIlBollo = 0.0
+        val aliquota = p.ivaPercentuale / 100
+        var ivaRighe = 0.0
         val importi = ArrayList<Double>()
         for (r in righe) {
             if (r.tipo == "bollo") continue
@@ -102,11 +114,12 @@ object RegoleFattura {
                 if (!r.tributoCliente) perIlBollo = centesimi(perIlBollo + importo)
             } else {
                 compenso = centesimi(compenso + importo)
+                ivaRighe = centesimi(ivaRighe + centesimi(importo * aliquota))
             }
         }
         val contributo = centesimi(compenso * p.eppiPercentuale / 100)
         val baseIva = if (forfettario) 0.0 else centesimi(compenso + contributo)
-        val iva = if (forfettario) 0.0 else centesimi(baseIva * p.ivaPercentuale / 100)
+        val iva = if (forfettario) 0.0 else centesimi(ivaRighe + centesimi(contributo * aliquota))
         val parteSenzaIva = if (forfettario) centesimi(compenso + contributo + perIlBollo) else perIlBollo
         val bollo = if (parteSenzaIva > p.bolloSoglia) centesimi(p.bolloImporto) else 0.0
         val bolloAddebitato = if (p.bolloRivalsa) bollo else 0.0
@@ -324,6 +337,9 @@ data class RigaFattura(
     val tributoCliente: Boolean = false,
     val idCommessa: String = "",
     val importoSorgenti: Double? = null,
+    /** 1.4.0 (servizi.md §3): il codice articolo (IND-TR, DL...) e lo sconto in percento, anche dall'XML tornato. */
+    val codice: String = "",
+    val sconto: Double? = null,
 ) {
     val bollo: Boolean get() = tipo == "bollo"
 
@@ -331,13 +347,16 @@ data class RigaFattura(
     val cambiata: Boolean get() = importoSorgenti != null && gruppo.isNotBlank() && Math.abs(importoSorgenti - importo) >= 0.005
 
     fun perConti(ricalcola: Boolean): RigaPerConti =
-        if (!ricalcola && gruppo.isNotBlank()) RigaPerConti(tipo, quantita, prezzo, importo, tributoCliente)
-        else RigaPerConti(tipo, quantita, prezzo, null, tributoCliente)
+        if (!ricalcola && gruppo.isNotBlank()) RigaPerConti(tipo, quantita, prezzo, importo, tributoCliente, sconto)
+        else RigaPerConti(tipo, quantita, prezzo, null, tributoCliente, sconto)
 
     fun perSalvare(): JSONObject {
         val o = JSONObject().put("tipo", tipo).put("descrizione", descrizione.trim())
             .put("quantita", quantita ?: JSONObject.NULL).put("unita", unita.trim())
             .put("prezzo", prezzo ?: JSONObject.NULL).put("tributoCliente", tributoCliente)
+        // 1.4.0: codice e sconto tornano come sono arrivati (il telefono non li cambia, ma salvando non si perdono).
+        if (codice.isNotBlank()) o.put("codice", codice.trim())
+        if (sconto != null) o.put("sconto", sconto)
         if (id.isNotBlank() && !id.startsWith(PonteServer.NUOVO)) o.put("id", PonteServer.idJson(id))
         return o
     }
@@ -360,6 +379,8 @@ data class RigaFattura(
             tributoCliente = o.vero("tributoCliente"),
             idCommessa = o.testo("idCommessa"),
             importoSorgenti = o.numero("importoSorgenti"),
+            codice = o.testo("codice"),
+            sconto = o.numero("sconto")?.takeIf { it != 0.0 },
         )
     }
 }
@@ -957,6 +978,8 @@ data class ContoBanca(
     val id: String, val nome: String, val banca: String = "", val ultimeCifre: String = "", val iban: String = "", val predefinito: Boolean = false,
     val soglia: Double? = null, val attivo: Boolean = true, val note: String = "", val saldo: Double? = null, val saldoAl: String = "",
     val saldoScritto: Double? = null, val movimentiDopo: Int = 0, val verificatiDopo: Int = 0,
+    /** 1.4.0 (servizi.md §3): il BIC/SWIFT e chi incassa (il nome sul conto, diverso dal nome dello studio), per le parcelle. */
+    val bic: String = "", val beneficiario: String = "",
 ) {
     /** "Conto studio …3456": l'IBAN intero non si mostra negli elenchi. */
     val nomeCorto: String get() = nome + if (ultimeCifre.isNotBlank()) " …$ultimeCifre" else ""
@@ -966,6 +989,7 @@ data class ContoBanca(
             o.testo("id"), o.testo("nome"), o.testo("banca"), o.testo("ultimeCifre"), o.testo("iban"), o.vero("predefinito"),
             o.numero("soglia"), if (o.has("attivo")) o.vero("attivo") else true, o.testo("note"), o.numero("saldo"), o.testo("saldoAl"),
             o.numero("saldoScritto"), o.intero("movimentiDopo"), o.intero("verificatiDopo"),
+            o.testo("bic"), o.testo("beneficiario"),
         )
 
         /** Il controllo dell'IBAN (modulo 97), come ibanValido del server: solo per l'avviso prima di mandare. */

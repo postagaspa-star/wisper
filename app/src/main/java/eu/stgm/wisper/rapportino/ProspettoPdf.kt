@@ -4,7 +4,7 @@ import org.json.JSONObject
 import java.time.LocalDate
 
 /**
- * Le pagine del prospetto e dell'avviso di parcella fatte dal telefono (fase4.md
+ * Le pagine del prospetto e della pre-parcella fatte dal telefono (fase4.md
  * §8.3), finché pc/ui/documenti.js non ha prospettoFattura() e avvisoParcella():
  * stesso carattere, stessi grigi dei PDF di Wisper, niente giallo (si stampa in
  * bianco e nero). I dati sono solo quelli del pacchetto del server: il telefono
@@ -52,16 +52,25 @@ object ProspettoPdf {
     }
 
     /**
-     * L'avviso di parcella (fase4.md §8.3): cliente, righe, totali, netto, IBAN, e il
+     * La pre-parcella (fase4.md §8.3, fino alla 1.3 "avviso di parcella"): cliente, righe, totali, netto, IBAN, e il
      * piede "Documento senza valore fiscale: la fattura si emette al pagamento".
+     *
+     * 1.4.0 (servizi.md §3): la stessa pagina fa da ripiego anche per la parcella di una fattura emessa ([titolo]
+     * "Parcella", "Fattura" o "Nota di credito", [preParcella] falso: il numero della fattura e niente frase sul valore
+     * fiscale), finché pc/ui/documenti.js nel telefono non ha parcella().
      */
-    fun avviso(modello: JSONObject, studio: String, regole: RegoleFiscali, oggi: LocalDate = LocalDate.now()): String {
+    fun avviso(
+        modello: JSONObject, studio: String, regole: RegoleFiscali, oggi: LocalDate = LocalDate.now(),
+        titolo: String = "Pre-parcella", preParcella: Boolean = true,
+    ): String {
         val cl = modello.optJSONObject("committente") ?: JSONObject()
         val nome = cl.testo("denominazione").ifBlank { listOf(cl.testo("nome"), cl.testo("cognome")).filter { it.isNotBlank() }.joinToString(" ") }
         val sede = cl.optJSONObject("sede")
         val corpo = StringBuilder()
-        corpo.append("<div class=\"testa\"><div class=\"azienda\">${esc(studio)}</div><div class=\"tipo\"><div class=\"etichetta\">Avviso di parcella</div>")
-            .append("<div class=\"numero\">Rif. ${esc(modello.testo("riferimento"))}</div><div>${esc(dataIt(oggi.toString()))}</div></div></div>")
+        val numero = if (preParcella) "Rif. " + modello.testo("riferimento") else modello.testo("numero").ifBlank { "Rif. " + modello.testo("riferimento") }
+        val data = if (preParcella) oggi.toString() else modello.testo("data").ifBlank { oggi.toString() }
+        corpo.append("<div class=\"testa\"><div class=\"azienda\">${esc(studio)}</div><div class=\"tipo\"><div class=\"etichetta\">${esc(titolo)}</div>")
+            .append("<div class=\"numero\">${esc(numero)}</div><div>${esc(dataIt(data))}</div></div></div>")
         corpo.append("<h3>Cliente</h3><table><tr><td class=\"e\">Nome</td><td class=\"v\">${esc(nome)}</td></tr>")
         if (sede != null) corpo.append("<tr><td class=\"e\">Indirizzo</td><td class=\"v\">${esc(listOf(sede.testo("indirizzo"), listOf(sede.testo("cap"), sede.testo("comune")).filter { it.isNotBlank() }.joinToString(" "), sede.testo("provincia")).filter { it.isNotBlank() }.joinToString(", "))}</td></tr>")
         corpo.append("</table><h3>Prestazioni</h3><table><tr><th>Descrizione</th><th class=\"n\">Importo</th></tr>")
@@ -80,9 +89,13 @@ object ProspettoPdf {
             if (d.testo("istituto").isNotBlank()) corpo.append("<tr><td class=\"e\">Banca</td><td class=\"v\">${esc(d.testo("istituto"))}</td></tr>")
             corpo.append("</table>")
         }
-        corpo.append("<div class=\"piede\">Documento senza valore fiscale: la fattura si emette al pagamento.")
-        if (!regole.confermate) corpo.append(" Conti da verificare: regole non confermate dal commercialista.")
-        corpo.append("</div>")
-        return pagina("Avviso di parcella", corpo.toString())
+        if (preParcella) {
+            corpo.append("<div class=\"piede\">Documento senza valore fiscale: la fattura si emette al pagamento.")
+            if (!regole.confermate) corpo.append(" Conti da verificare: regole non confermate dal commercialista.")
+            corpo.append("</div>")
+        } else {
+            corpo.append("<div class=\"piede\">Copia di cortesia per il cliente: fa fede la fattura elettronica.</div>")
+        }
+        return pagina(titolo, corpo.toString())
     }
 }

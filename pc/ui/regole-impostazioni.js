@@ -23,7 +23,7 @@
    * [chiave, etichetta, unità] per pagina; la chiave è il data-chiave del campo nella pagina.
    */
   const VOCI_PAGINE = {
-    studio: [['RAGIONE_SOCIALE', 'Ragione sociale'], ['STUDIO_NOME_BREVE', 'Nome breve'], ['TECNICO', 'Chi compila i rapportini'], ['PARTITA_IVA', 'Partita IVA'],
+    studio: [['RAGIONE_SOCIALE', 'Ragione sociale'], ['STUDIO_NOME_BREVE', 'Nome breve'], ['STUDIO_QUALIFICA', 'Qualifica'], ['TECNICO', 'Chi compila i rapportini'], ['PARTITA_IVA', 'Partita IVA'],
       ['CODICE_FISCALE', 'Codice fiscale'], ['INDIRIZZO', 'Indirizzo'], ['STUDIO_CAP', 'CAP'], ['STUDIO_COMUNE', 'Comune'], ['STUDIO_PROVINCIA', 'Provincia'],
       ['STUDIO_SDI', 'Codice SDI'], ['EMAIL', 'Email per le risposte'], ['TELEFONO', 'Telefono'], ['PEC', 'PEC'], ['STUDIO_SITO', 'Sito'],
       ['PDF_PIEDE', 'Riga in fondo ai PDF'], ['ALBO', 'Albo'], ['ALBO_PROVINCIA', 'Provincia dell\'albo'], ['ALBO_NUMERO', 'Numero di iscrizione all\'albo'],

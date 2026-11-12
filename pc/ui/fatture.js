@@ -436,7 +436,7 @@
         const altro = h('button', { type: 'button', class: 'btn grande', 'aria-label': 'Altre azioni', title: 'Altre azioni', style: { width: '52px', padding: '0' } }, icona('altro', 20));
         altro.addEventListener('click', () => apriMenu(altro, [
           { testo: 'Il prospetto (anteprima)', fn: () => apriPassaggio(f, { soloVedere: true }) },
-          !nota ? { testo: 'Avviso di parcella per il cliente', fn: () => avvisoParcella(f) } : null,
+          !nota ? { testo: 'Pre-parcella per il cliente', fn: () => avvisoParcella(f) } : null,
           modificabile() ? '-' : null,
           modificabile() ? { testo: 'Scarta la bozza', pericolo: true, fn: () => scarta(f, () => W.vai('#fatturazione')) } : null,
         ]));
@@ -662,8 +662,8 @@
         uscite.indexOf('prospetto') >= 0 ? h('button', { type: 'button', class: 'btn grande largo', onclick: () => pdfProspetto(f, modello) }, icona('scarica', 18, 2.2), 'Scarica il prospetto (PDF)') : null,
         uscite.indexOf('xml') >= 0 && p.xml ? h('button', { type: 'button', class: 'btn grande largo', onclick: () => salvaXml(p.xml) }, icona('file', 18, 2.2), 'Scarica l\'XML da completare') : null,
         tuttoBtn,
-        // L'avviso di parcella (fase4.md §8.3, facoltativo): per chi fattura all'incasso. Non cambia lo stato.
-        scrive() && f.tipo !== 'nota' && (f.stato === 'bozza' || f.stato === 'pronta') ? h('button', { type: 'button', class: 'btn grande largo', onclick: () => avvisoParcella(f) }, icona('email', 18, 2.2), 'Avviso di parcella per il cliente') : null,
+        // La pre-parcella (era l'avviso di parcella, fase4.md §8.3, facoltativa): per chi fattura all'incasso. Non cambia lo stato.
+        scrive() && f.tipo !== 'nota' && (f.stato === 'bozza' || f.stato === 'pronta') ? h('button', { type: 'button', class: 'btn grande largo', onclick: () => avvisoParcella(f) }, icona('email', 18, 2.2), 'Pre-parcella per il cliente') : null,
         h('div', { class: 'scheda totali-prospetto' },
           h('div', { class: 'rc' }, h('span', null, f.tipo === 'nota' ? 'Totale della nota' : 'Totale della fattura'), h('b', null, euro(modello.totaleDocumento !== undefined ? modello.totaleDocumento : k.totale))),
           h('div', { class: 'rc' }, h('span', null, f.tipo === 'nota' ? 'Netto stornato' : 'Netto da incassare'), h('b', null, euro(modello.nettoAPagare !== undefined ? modello.nettoAPagare : k.netto)))),
@@ -695,6 +695,17 @@
       if (ris) avviso('PDF salvato in ' + ris.percorso);
     }
 
+    /** 1.4.0: la parcella emessa in PDF (numero e data dell'XML tornato), come il modello della parcella di Manuel. */
+    async function pdfParcella(f) {
+      if (S.esempio) { avviso('Nella visita il PDF non si crea'); return; }
+      const p = await lavora('Preparo il PDF', () => Rete.get('/server/pacchetto?id=' + f.id));
+      if (!p) return;
+      const html = D.parcella(p.modello, { oggi: oggi(), logo: D.logoDi(S.ana.impostazioni), conNome: D.nomeAccantoAlLogo(S.ana.impostazioni), impostazioni: S.ana.impostazioni });
+      const tipo = (p.modello && p.modello.tipoDocumento) === 'TD04' ? 'Nota di credito' : (p.modello && p.modello.tipoDocumento) === 'TD01' ? 'Fattura' : 'Parcella';
+      const ris = await lavora('Preparo il PDF', () => Rete.post('/locale/pdf', { html, nome: W.nomeFile(tipo + ' ' + String(f.numero || f.riferimento).replace(/\//g, '-'), f.cliente), apri: true }));
+      if (ris) avviso('PDF salvato in ' + ris.percorso);
+    }
+
     /** L'XML da completare: si salva col nome che dice di non inviarlo ("Bozza W-15 Rossi Impianti Srl - non inviare.xml"). */
     async function salvaXml(x) {
       if (S.esempio) { avviso('Nella visita non si salva niente'); return; }
@@ -702,16 +713,16 @@
       if (ris && ris.ok) avviso('Salvato in ' + ris.percorso + ': completalo nel programma, non inviarlo così');
     }
 
-    /** L'avviso di parcella: un PDF senza valore fiscale, per email al cliente (inviaAvviso) o solo il PDF. */
+    /** La pre-parcella (era l'avviso di parcella): un PDF senza valore fiscale, per email al cliente (inviaAvviso) o solo il PDF. */
     async function avvisoParcella(f) {
-      const p = await lavora('Preparo l\'avviso', () => Rete.get('/server/pacchetto?id=' + f.id));
+      const p = await lavora('Preparo la pre-parcella', () => Rete.get('/server/pacchetto?id=' + f.id));
       if (!p) return;
       const c = W.cliente(f.idCliente) || {};
       const a = h('input', { type: 'email', value: c.email || '', placeholder: 'email di ' + f.cliente });
-      const oggetto = h('input', { type: 'text', value: 'Avviso di parcella · ' + (imp().RAGIONE_SOCIALE || '') });
+      const oggetto = h('input', { type: 'text', value: 'Pre-parcella · ' + (imp().RAGIONE_SOCIALE || '') });
       const messaggio = h('textarea', { rows: 5 });
-      messaggio.value = 'Buongiorno,\nin allegato l\'avviso di parcella. La fattura arriva al pagamento.\n\nCordiali saluti\n' + (imp().TECNICO || imp().RAGIONE_SOCIALE || '');
-      const html = () => D.avvisoParcella(p.modello, { oggi: oggi(), logo: D.logoDi(S.ana.impostazioni), conNome: D.nomeAccantoAlLogo(S.ana.impostazioni) });
+      messaggio.value = 'Buongiorno,\nin allegato la pre-parcella. La fattura arriva al pagamento.\n\nCordiali saluti\n' + (imp().TECNICO || imp().RAGIONE_SOCIALE || '');
+      const html = () => D.avvisoParcella(p.modello, { oggi: oggi(), logo: D.logoDi(S.ana.impostazioni), conNome: D.nomeAccantoAlLogo(S.ana.impostazioni), impostazioni: S.ana.impostazioni });
       let chiudi;
       const zonaA = h('div', null, campo('A', a));
       // Senza email in memoria si rilegge il cliente: un'email appena scritta (anche altrove) c'è già (06/11/2026).
@@ -719,22 +730,22 @@
       const manda = async () => {
         if (!a.value.trim()) { aggiungi(svuota(zonaA), [campo('A', a, 'Manca l\'indirizzo: scrivilo qui (lo puoi salvare in Clienti)')]); a.focus(); return; }
         if (S.esempio) { chiudi(); avviso('Avviso inviato (esempio: non è partito niente)'); return; }
-        const ris = await lavora('Mando l\'avviso', async () => {
-          const pdf = await Rete.post('/locale/pdf', { html: html(), nome: W.nomeFile('Avviso di parcella ' + f.riferimento, f.cliente), apri: false, base64: true });
+        const ris = await lavora('Mando la pre-parcella', async () => {
+          const pdf = await Rete.post('/locale/pdf', { html: html(), nome: W.nomeFile('Pre-parcella ' + f.riferimento, f.cliente), apri: false, base64: true });
           return Rete.post('/server/inviaAvviso', { id: f.id, a: a.value.trim(), oggetto: oggetto.value, messaggio: messaggio.value,
             allegati: pdf && pdf.base64 ? [{ nome: pdf.nome, mime: 'application/pdf', base64: pdf.base64 }] : [] });
         });
         if (!ris) return;
         chiudi();
-        avviso('Avviso di parcella inviato a ' + a.value.trim());
+        avviso('Pre-parcella inviata a ' + a.value.trim());
         W.disegnaPagina();
       };
       chiudi = finestra({
-        titolo: 'Avviso di parcella', corpo: [h('p', { class: 'sotto-titolo', style: { margin: 0 } }, f.cliente + ' · ' + euro((p.modello || {}).nettoAPagare) + ' da pagare · non è una fattura'), zonaA, campo('Oggetto', oggetto), campo('Messaggio', messaggio)],
+        titolo: 'Pre-parcella', corpo: [h('p', { class: 'sotto-titolo', style: { margin: 0 } }, f.cliente + ' · ' + euro((p.modello || {}).nettoAPagare) + ' da pagare · non è una fattura'), zonaA, campo('Oggetto', oggetto), campo('Messaggio', messaggio)],
         pulsanti: ['spazio', h('button', { type: 'button', class: 'btn testo grande', onclick: () => chiudi() }, 'Annulla'),
           h('button', { type: 'button', class: 'btn grande', onclick: async () => {
             if (S.esempio) { avviso('Nella visita il PDF non si crea'); return; }
-            const r = await lavora('Preparo il PDF', () => Rete.post('/locale/pdf', { html: html(), nome: W.nomeFile('Avviso di parcella ' + f.riferimento, f.cliente), apri: true }));
+            const r = await lavora('Preparo il PDF', () => Rete.post('/locale/pdf', { html: html(), nome: W.nomeFile('Pre-parcella ' + f.riferimento, f.cliente), apri: true }));
             if (r) { chiudi(); avviso('PDF salvato in ' + r.percorso); }
           } }, 'Solo il PDF'),
           h('button', { type: 'button', class: 'btn giallo grande', onclick: manda }, 'Invia per email')],
@@ -921,7 +932,9 @@
         { testo: 'Prospetto (PDF)', fn: async () => { const p = await lavora('Preparo il prospetto', () => Rete.get('/server/pacchetto?id=' + f.id)); if (p) pdfProspetto(f, p.modello); } },
         f.stato === 'pronta' ? { testo: 'Rivedi il prospetto e l\'XML da completare', fn: () => apriPassaggio(f, { soloVedere: true }) } : null,
         f.file ? { testo: 'XML emesso', fn: () => W.apriFile({ id: f.file.id, nome: f.file.nome }) } : null,
-        scrive() && f.stato === 'pronta' && !nota ? { testo: 'Avviso di parcella', fn: () => avvisoParcella(f) } : null,
+        scrive() && f.stato === 'pronta' && !nota ? { testo: 'Pre-parcella', fn: () => avvisoParcella(f) } : null,
+        // 1.4.0 (servizi.md §3): la parcella col numero dato dal programma, nella veste del modello (copia per il cliente).
+        f.stato === 'emessa' || f.stato === 'annullata' ? { testo: (nota ? 'Nota di credito' : f.tipoDocumento === 'TD01' ? 'Fattura' : 'Parcella') + ' in PDF', fn: () => pdfParcella(f) } : null,
         scriveBanche() && f.stato === 'pronta' && !nota && C.num(f.residuo) > 0.004 ? { testo: 'Segna un incasso (ha già pagato)', fn: () => W.Banche.segnaIncasso(f, ricarica) } : null,
         scrive() && f.stato === 'pronta' ? { testo: 'Torna in bozza', fn: () => tornaInBozza(f) } : null,
         scrive() && f.stato === 'pronta' ? { testo: 'Segna emessa senza XML', fn: () => segnaEmessa(f) } : null,

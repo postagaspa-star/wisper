@@ -12,11 +12,11 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { cartellaNuova, COLONNE_008: SOLO_008, COLONNE_009, COLONNE_011, valoreAtteso, numeriDashboardDopoLavori, numeriDashboardSenzaOre } = require('./aiuto');
+const { cartellaNuova, COLONNE_008: SOLO_008, COLONNE_009, COLONNE_011, COLONNE_014, valoreAtteso, numeriDashboardDopoLavori, numeriDashboardSenzaOre } = require('./aiuto');
 
 // 03/11/2026: la prova arriva fino all'ultima migrazione: anche le colonne della 009 (i progetti) partono col valore di base.
 const COLONNE_008 = {};
-for (const g of [SOLO_008, COLONNE_009, COLONNE_011]) for (const [t, c] of Object.entries(g)) COLONNE_008[t] = Object.assign({}, COLONNE_008[t] || {}, c);
+for (const g of [SOLO_008, COLONNE_009, COLONNE_011, COLONNE_014]) for (const [t, c] of Object.entries(g)) COLONNE_008[t] = Object.assign({}, COLONNE_008[t] || {}, c);
 const { Database } = require('../src/db');
 const { Wisper } = require('../src/wisper');
 const PRIMA = require('./migrazione-008/prima.json');
@@ -94,7 +94,7 @@ const comeTitolare = fn => w.come({ utente: w.titolare(), permessi: w.permessiDi
 
 test('migrazione 008: versione 8, la copia wisper.db.prima-8 com\'era; le tabelle di prima riga per riga uguali (le colonne nuove col valore di base)', () => {
   assert.equal(PRIMA.versione, '0.10.0');
-  assert.equal(w.db.versione(), 13);
+  assert.equal(w.db.versione(), 14);
   const copia = new Database(path.join(cartella, 'wisper.db.prima-8'));
   assert.equal(copia.versione(), 7, 'la copia e\' com\'era prima');
   copia.chiudi();
@@ -258,7 +258,7 @@ test('riaperto il server: la migrazione non si rifa\'', () => {
   const r = w.db.riga('SELECT COUNT(*) n FROM registro').n;
   w.chiudi();
   w = new Wisper({ dati: cartella });
-  assert.equal(w.db.versione(), 13);
+  assert.equal(w.db.versione(), 14);
   assert.equal(w.db.riga('SELECT COUNT(*) n FROM controlli_finali').n, n);
   assert.equal(w.db.riga('SELECT COUNT(*) n FROM registro').n, r);
 });

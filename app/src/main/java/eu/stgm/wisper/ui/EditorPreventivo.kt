@@ -462,11 +462,11 @@ private fun normalizzaAlternative(sezioni: List<SezionePreventivo>): List<Sezion
 private fun FoglioAggiungiVoce(listino: List<VoceListino>, costi: Boolean, onChiudi: () -> Unit, onListino: (VoceListino) -> Unit, onLibera: (String) -> Unit) {
     val c = W.colori
     var cerca by remember { mutableStateOf("") }
-    val t = Anagrafiche.normalizza(cerca)
-    val trovate = listino.filter { it.attivo && (t.isEmpty() || Anagrafiche.normalizza(it.nome + " " + it.codice).contains(t)) }.sortedBy { it.ordine }
+    // 1.4.0 (servizi.md §1): il listino sono i Servizi; si cerca anche nei tag.
+    val trovate = eu.stgm.wisper.rapportino.Servizi.elenco(listino, cerca)
     FoglioDalBasso(onChiudi) {
         Text("Aggiungi una voce", style = Testi.titoloScheda, color = c.testo)
-        CampoCerca(cerca, { cerca = it }, "Cerca nel listino")
+        CampoCerca(cerca, { cerca = it }, "Cerca nei servizi")
         Column(Modifier.fillMaxWidth().heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
             trovate.forEachIndexed { i, l ->
                 if (i > 0) LineaElenco()

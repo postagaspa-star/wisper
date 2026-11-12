@@ -355,7 +355,7 @@ test('migrazione 011: ogni riga di prima e\' un rapportino con un lavoro, stesso
   db.chiudi();
   const w2 = new Wisper({ dati });
   try {
-    assert.equal(w2.db.versione(), 13);
+    assert.equal(w2.db.versione(), 14);
     const copia = new Database(path.join(dati, 'wisper.db.prima-11'));
     assert.equal(copia.versione(), 10, 'la copia e\' com\'era prima');
     copia.chiudi();
@@ -367,6 +367,10 @@ test('migrazione 011: ogni riga di prima e\' un rapportino con un lavoro, stesso
       const x = Object.assign({}, r);
       delete x.id_giornata;
       delete x.posizione;
+      // 1.4.0: le colonne della 014 col valore di base.
+      assert.deepEqual([x.indennita, x.importo_indennita], ['', 0]);
+      delete x.indennita;
+      delete x.importo_indennita;
       assert.deepEqual(x, prima[i], r.id);
     });
     // Un rapportino per riga, col suo stesso numero, idLocale, data, tecnico e orari.
@@ -425,7 +429,7 @@ test('migrazione 012: i rapportini di prima dello stesso giorno e della stessa p
   db.chiudi();
   const w2 = new Wisper({ dati });
   try {
-    assert.equal(w2.db.versione(), 13);
+    assert.equal(w2.db.versione(), 14);
     const copiaPrima = new Database(path.join(dati, 'wisper.db.prima-12'));
     assert.equal(copiaPrima.versione(), 11, 'la copia e\' com\'era prima');
     copiaPrima.chiudi();
@@ -445,7 +449,7 @@ test('migrazione 012: i rapportini di prima dello stesso giorno e della stessa p
     const dopo = w2.db.righe('SELECT * FROM rapportini ORDER BY id').map(r => Object.assign({}, r));
     dopo.forEach((r, i) => {
       const a = Object.assign({}, r); const b = Object.assign({}, prima[i]);
-      for (const x of [a, b]) { delete x.id_giornata; delete x.posizione; }
+      for (const x of [a, b]) { delete x.id_giornata; delete x.posizione; delete x.indennita; delete x.importo_indennita; }
       assert.deepEqual(a, b, r.id);
     });
     // Nel registro, uno spostamento per lavoro spostato.

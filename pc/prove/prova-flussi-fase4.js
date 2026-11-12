@@ -174,6 +174,8 @@ async function main() {
     const nomePdf = path.join(STAMPE, 'Prospetto ' + bozza.riferimento + ' Elettrodinamica.pdf');
     if (fs.existsSync(nomePdf)) fs.unlinkSync(nomePdf);
     await clicca('Scarica il prospetto (PDF)', '.finestra', 6000);
+    // 12/11/2026: con Edge 157 la stampa da riga di comando ci mette anche 40 secondi.
+    for (let i = 0; i < 70 && !(fs.existsSync(nomePdf) && fs.statSync(nomePdf).size > 3000); i++) await aspetta(1000);
     assert.ok(fs.existsSync(nomePdf) && fs.statSync(nomePdf).size > 3000, 'il PDF del prospetto è salvato: ' + nomePdf);
     creati.push(nomePdf);
     const nomeXml = path.join(STAMPE, 'Bozza ' + bozza.riferimento + ' Elettrodinamica - non inviare.xml');

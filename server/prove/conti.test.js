@@ -16,7 +16,11 @@ const casi = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'apps-s
 
 for (const c of casi) {
   test('calcolo: ' + c.nome, () => {
-    assert.deepEqual(JSON.parse(JSON.stringify(C.calcola(c.rapportino, c.regole))), c.atteso);
+    // 1.4.0: calcola() dice anche importoIndennita (0 senza indennità); gli altri pezzi sono quelli dei casi condivisi.
+    const r = JSON.parse(JSON.stringify(C.calcola(c.rapportino, c.regole)));
+    assert.equal(r.importoIndennita, 0);
+    delete r.importoIndennita;
+    assert.deepEqual(r, c.atteso);
   });
 }
 

@@ -28,7 +28,9 @@ const fs = require('node:fs');
 const os = require('node:os');
 const http = require('node:http');
 const path = require('node:path');
-const { execFile } = require('node:child_process');
+const { spawn } = require('node:child_process');
+const { chiudiEdge, togliCartella } = require('./edge-prova.js');
+const aspettaMs = ms => new Promise(r => setTimeout(r, ms));
 
 const argomenti = process.argv.slice(2);
 const opzione = nome => { const i = argomenti.indexOf(nome); return i >= 0 ? argomenti[i + 1] : null; };
@@ -200,32 +202,53 @@ async function statoQr() {
 }
 
 // ----------------------------------------------------------------------------- PDF
-function stampa(html, nome) {
-  return new Promise((risolvi, rifiuta) => {
-    fs.mkdirSync(STAMPE, { recursive: true });
-    const id = Math.random().toString(36).slice(2);
-    daStampare.set(id, html);
-    const pdf = path.join(STAMPE, nome.replace(/[\\/:*?"<>|]+/g, '-') + '.pdf');
-    if (fs.existsSync(pdf)) fs.unlinkSync(pdf);
-    // Un profilo a parte: senza, Edge passa la richiesta a quello gia' aperto ed esce subito.
-    execFile(EDGE, ['--headless=new', '--disable-gpu', '--no-pdf-header-footer',
-      '--user-data-dir=' + path.join(os.tmpdir(), 'wisper-edge-stampa'), '--print-to-pdf=' + pdf,
-      'http://localhost:' + PORTA + '/stampa/' + id + '.html'], { timeout: 60000 }, err => {
-      // msedge.exe passa il lavoro a un processo figlio ed esce subito: si
-      // aspetta che il PDF compaia, e che smetta di crescere.
-      let attese = 0;
-      let ultima = -1;
-      const guarda = setInterval(() => {
-        const dim = fs.existsSync(pdf) ? fs.statSync(pdf).size : -1;
-        if (dim > 0 && dim === ultima) {
-          clearInterval(guarda); daStampare.delete(id); risolvi(pdf);
-        } else if (++attese > 120) {
-          clearInterval(guarda); daStampare.delete(id); rifiuta(err || new Error('Edge non ha scritto il PDF'));
-        }
-        ultima = dim;
-      }, 250);
-    });
-  });
+// 12/11/2026: con Edge 157 la stampa da riga di comando (--print-to-pdf) esce subito e il PDF non arriva, o arriva
+// dopo più di un minuto. Si stampa da DevTools (Page.printToPDF), come fa WebView2 nel programma vero: un Edge senza
+// finestra e un profilo nuovo per ogni stampa, chiusi alla fine (Browser.close, poi la cartella si toglie).
+async function stampa(html, nome) {
+  fs.mkdirSync(STAMPE, { recursive: true });
+  const id = Math.random().toString(36).slice(2);
+  daStampare.set(id, html);
+  const pdf = path.join(STAMPE, nome.replace(/[\\/:*?"<>|]+/g, '-') + '.pdf');
+  if (fs.existsSync(pdf)) fs.unlinkSync(pdf);
+  const profilo = fs.mkdtempSync(path.join(os.tmpdir(), 'wisper-edge-stampa-'));
+  // Porte a parte (10100-10399): le prove cliccate usano 9450-9989 per il loro Edge.
+  const porta = 10100 + Math.floor(Math.random() * 300);
+  const edge = spawn(EDGE, ['--headless=new', '--disable-gpu', '--no-first-run', '--no-default-browser-check',
+    '--user-data-dir=' + profilo, '--remote-debugging-port=' + porta, 'about:blank'], { stdio: 'ignore' });
+  let ws = null;
+  try {
+    let pagina = null;
+    for (let i = 0; i < 100 && !pagina; i++) {
+      await aspettaMs(200);
+      const lista = await fetch('http://127.0.0.1:' + porta + '/json/list').then(r => r.json()).catch(() => null);
+      pagina = (lista || []).find(x => x.type === 'page');
+    }
+    if (!pagina) throw new Error('Edge non si è acceso per stampare');
+    ws = new WebSocket(pagina.webSocketDebuggerUrl);
+    await new Promise((ok, no) => { ws.onopen = ok; ws.onerror = () => no(new Error('DevTools di Edge non risponde')); });
+    let n = 0;
+    let caricata = false;
+    const attese = new Map();
+    ws.onmessage = m => {
+      const d = JSON.parse(m.data);
+      if (d.id && attese.has(d.id)) { attese.get(d.id)(d); attese.delete(d.id); } else if (d.method === 'Page.loadEventFired') caricata = true;
+    };
+    const cdp = (method, params) => new Promise(ok => { const k = ++n; attese.set(k, ok); ws.send(JSON.stringify({ id: k, method, params: params || {} })); });
+    await cdp('Page.enable');
+    await cdp('Page.navigate', { url: 'http://localhost:' + PORTA + '/stampa/' + id + '.html' });
+    for (let i = 0; i < 300 && !caricata; i++) await aspettaMs(100);
+    await cdp('Runtime.evaluate', { expression: 'document.fonts.ready.then(() => true)', awaitPromise: true });
+    const r = await cdp('Page.printToPDF', { preferCSSPageSize: true, printBackground: true });
+    if (!r.result || !r.result.data) throw new Error('Edge non ha scritto il PDF');
+    fs.writeFileSync(pdf, Buffer.from(r.result.data, 'base64'));
+    return pdf;
+  } finally {
+    daStampare.delete(id);
+    try { if (ws) ws.close(); } catch (e) { /* già chiuso */ }
+    await chiudiEdge(porta, edge);
+    togliCartella(profilo);
+  }
 }
 
 // ----------------------------------------------------------------------------- /locale/*

@@ -142,7 +142,7 @@ test('listino: si parte con le prestazioni tipiche senza prezzi; il prezzo lo sc
   const nuova = await manuel('salvaVoceListino', { voce: { codice: 'FV', nome: 'Pratica fotovoltaico', modo: 'corpo', prezzo: 250 } });
   assert.equal(nuova.ok, true, nuova.errore);
   assert.equal(nuova.voce.prezzo, 250);
-  assert.equal((await manuel('salvaVoceListino', { voce: { nome: '' } })).errore, 'Nome: scrivi il nome della prestazione');
+  assert.equal((await manuel('salvaVoceListino', { voce: { nome: '' } })).errore, 'Descrizione: scrivi la descrizione del servizio');
   assert.equal((await manuel('salvaVoceListino', { voce: { nome: 'X', modo: 'boh' } })).errore, 'Modo: corpo, ore o quantita');
   assert.equal((await manuel('archiviaVoceListino', { id: nuova.voce.id })).voce.attivo, false);
   assert.equal((await manuel('listino')).listino.some(v => v.id === nuova.voce.id), false, 'archiviata non si propone');
@@ -424,7 +424,8 @@ test('duplicare e modelli: un preventivo nasce da un modello col numero nuovo', 
 test('permessi: il collaboratore non vede preventivi, listino ne\' prezzi; lettura vede e non scrive', async () => {
   const p = (await manuel('preventivi')).preventivi[0];
   for (const [azione, dati] of [
-    ['listino'], ['salvaVoceListino', { voce: { nome: 'X' } }], ['archiviaVoceListino', { id: 1 }], ['preventivi'], ['preventivo', { id: p.id }],
+    // 1.4.0: il listino (i Servizi) lo vede anche chi fa i rapportini, senza prezzi (servizi.test.js); cambiarlo no.
+    ['salvaVoceListino', { voce: { nome: 'X' } }], ['archiviaVoceListino', { id: 1 }], ['preventivi'], ['preventivo', { id: p.id }],
     ['salvaPreventivo', { preventivo: { idCliente: 'C001', oggetto: 'X' } }], ['duplicaPreventivo', { id: p.id }], ['nuovaRevisione', { id: p.id }],
     ['segnaInviato', { id: p.id }], ['inviaPreventivo', { id: p.id, a: 'x@example.com' }], ['accettaPreventivo', { id: p.id, modo: 'voce', nome: 'X' }],
     ['rifiutaPreventivo', { id: p.id }], ['riapriPreventivo', { id: p.id }], ['creaCommessaDaPreventivo', { id: p.id }], ['esporta', { cosa: 'preventivi' }],

@@ -122,6 +122,12 @@ data class Rapportino(
     val idGiornata: String = "",
     val idLocaleGiornata: String = "",
     val posizione: Int = 0,
+    /**
+     * 1.4.0 (servizi.md §2): le indennità del lavoro. Null = non conosciute (un server o una copia di prima che non le
+     * manda): allora non si mandano, e il server tiene quelle che il lavoro aveva (anche fatte dal computer). Un elenco
+     * (anche vuoto) si manda intero: è quello letto, con le modifiche fatte qui.
+     */
+    val indennita: List<Indennita>? = null,
 ) {
     /** Da inviare: scritto e non ancora mandato (il FIRMATO di prima vale come Da inviare: la firma non c'e' piu'). */
     val daInviare: Boolean get() = stato == Stato.BOZZA || stato == Stato.FIRMATO
@@ -163,6 +169,8 @@ data class Rapportino(
         tariffa = tariffa, noteInterne = noteInterne,
         idTicket = idTicket, idLocaleTicket = idLocaleTicket, numeroTicket = numeroTicket,
         strumenti = strumenti,
+        // L'importo del server non e' una cosa compilata: due elenchi uguali coi conti fatti o no sono lo stesso elenco.
+        indennita = indennita?.map { it.copy(importoServer = null) },
     )
 
     /** Quello che si manda allo script con "salvaRapportino". */
@@ -197,6 +205,8 @@ data class Rapportino(
             // salvato senza: per questo l'id parte sempre, anche con la funzione Progetti spenta.
             if (idProgetto.isNotBlank()) put("idProgetto", PonteServer.idJson(idProgetto))
             else progettoNuovo?.let { put("progettoNuovo", it.aJson()) }
+            // 1.4.0: l'elenco intero delle indennità, se conosciuto (anche vuoto: si sono tolte tutte).
+            indennita?.let { l -> put("indennita", JSONArray().apply { l.forEach { put(it.perServer()) } }) }
         }
 
     /** Tutto, per le copie sul telefono (coda e ultimo elenco letto). */
@@ -227,6 +237,8 @@ data class Rapportino(
             progettoNuovo?.let { if (!has("progettoNuovo")) put("progettoNuovo", it.aJson()) }
             // Sul telefono gli strumenti restano interi (nome, matricola, stato di quel giorno).
             strumenti?.let { l -> put("strumenti", JSONArray().apply { l.forEach { put(it.aJson()) } }) }
+            // Sul telefono le indennità tengono anche l'importo.
+            indennita?.let { l -> put("indennita", JSONArray().apply { l.forEach { put(it.aJson()) } }) }
             if (idTicket.isNotBlank() && !has("idTicket")) put("idTicket", PonteServer.idJson(idTicket))
             conto?.let {
                 put("oreTotali", it.oreTotali)
@@ -238,6 +250,7 @@ data class Rapportino(
                 put("pagaViaggio", it.pagaViaggio)
                 put("kmRimborsati", it.kmRimborsati)
                 put("maggExtra", it.maggExtra)
+                put("importoIndennita", it.indennita)
             }
         }
 
@@ -275,6 +288,8 @@ data class Rapportino(
                 pagaViaggio = o.optBoolean("pagaViaggio", false),
                 kmRimborsati = o.optBoolean("kmRimborsati", true),
                 maggExtra = o.numero("maggExtra") ?: 0.0,
+                // 1.4.0: la somma delle indennità (un server di prima non la manda: 0).
+                indennita = o.numero("importoIndennita") ?: 0.0,
             ) else null
             val id = o.testo("id")
             return Rapportino(
@@ -336,6 +351,7 @@ data class Rapportino(
                 idGiornata = o.testo("idGiornata"),
                 idLocaleGiornata = o.testo("idLocaleGiornata"),
                 posizione = o.numero("posizione")?.toInt() ?: 0,
+                indennita = if (o.has("indennita") && !o.isNull("indennita")) Indennita.lista(o.optJSONArray("indennita")) else null,
             )
         }
     }
@@ -404,6 +420,9 @@ data class Rapportino(
         .put("modificato", modificato)
         // Fase 6 (§3.9): la riga Strumenti del PDF la fa pc/ui/documenti.js, solo quando ce ne sono.
         .put("strumenti", JSONArray().apply { strumenti.orEmpty().forEach { put(it.aJson()) } })
+        // 1.4.0 (servizi.md §2): le indennità sotto il lavoro, col loro importo (dentro l'importo del lavoro).
+        .put("indennita", JSONArray().apply { indennita.orEmpty().forEach { put(it.aJson()) } })
+        .put("importoIndennita", conto?.indennita ?: Servizi.somma(indennita))
         // 06/11/2026: il rapportino del lavoro (la colonna N° del riepilogo) e il posto nel rapportino.
         .put("idGiornata", idGiornata.ifBlank { id })
         .put("numero", idGiornata.ifBlank { id })
@@ -421,6 +440,8 @@ data class Conto(
     val pagaViaggio: Boolean = false,
     val kmRimborsati: Boolean = true,
     val maggExtra: Double = 0.0,
+    /** 1.4.0: la somma delle indennità del lavoro (importoIndennita), già dentro [totale]. */
+    val indennita: Double = 0.0,
 )
 
 /** Un file su Drive: la foto di uno scontrino o una firma. */

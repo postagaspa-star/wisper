@@ -17,6 +17,8 @@
     commesse: { breve: 'Commesse', f: '#FFEBD1', t: '#B54708', d: 'M4 8h16v11H4zM9 8V5h6v3M4 13h16' },
     progetti: { breve: 'Progetti', f: '#FFF0E6', t: '#C4320A', d: 'M4 4h16v16H4zM4 15h16M12 15v5' },
     preventivi: { breve: 'Preventivi', f: '#ECE7FF', t: '#5925DC', d: 'M7 3h7l5 5v13H7zM14 3v5h5M10 13h6M10 17h4' },
+    // 1.4.0: i Servizi, col cartellino del prezzo.
+    servizi: { breve: 'Servizi', f: '#FFE4E8', t: '#C01048', d: 'M20.6 13.4l-7.2 7.2a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8zM7.5 7.5h.01' },
     attivita: { breve: 'Calendario', f: '#DCE8FF', t: '#1849A9', d: 'M4 6h16v14H4zM4 10h16M8 3v4M16 3v4' },
     rapportini: { breve: 'Rapportini', f: '#FFF0C2', t: '#7A5600', d: 'M9 3h6v3H9zM7 4.5H5V21h14V4.5h-2M9 14l2 2 4-4' },
     spese: { breve: 'Spese', f: '#FFE4DE', t: '#B93815', d: 'M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6M9 16h3' },

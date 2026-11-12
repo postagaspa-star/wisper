@@ -25,6 +25,7 @@ const {
   dataOraIso, oggi, centesimi,
 } = require('../utili');
 const { ELETTRODINAMICA, STATI, STATI_BLOCCATI, regoleDi, calcola, tariffaProposta } = require('../conti');
+const Servizi = require('../servizi');
 const { diverso } = require('./ore');
 
 const urlFile = id => '/file/' + id;
@@ -256,6 +257,17 @@ module.exports = {
       const s = this.db.riga('SELECT tariffa_fissa FROM soggetti WHERE id = ?', riga.id_cliente);
       if (!s || s.tariffa_fissa === null || s.tariffa_fissa === undefined || s.tariffa_fissa === '') return false;
     }
+    // 1.4.0: le indennita' (servizi.md §2), se il lavoro le porta: le stesse, campo per campo, dopo la pulizia.
+    if (Array.isArray(l.indennita)) {
+      const vecchie = Servizi.indennitaDi(riga);
+      let nuove;
+      try {
+        nuove = Servizi.pulisciIndennita(l.indennita, vecchie, id => this.db.riga('SELECT * FROM listino WHERE id = ?', id), this.vedeCosti());
+      } catch (e) {
+        return false;
+      }
+      if (JSON.stringify(nuove) !== JSON.stringify(vecchie)) return false;
+    }
     if (Array.isArray(l.strumenti) && STATI_FERMI.indexOf(statoDi(riga)) < 0 && !this.sorgenteAttiva('rapportino', riga.id)) {
       const voluti = new Set(l.strumenti.map(s => Number(s && typeof s === 'object' ? s.idAttrezzatura : s)).filter(Boolean));
       const usati = new Set(this.db.righe('SELECT attrezzatura_id a FROM strumenti_usati WHERE rapportino_id = ?', riga.id).map(x => x.a));
@@ -388,7 +400,10 @@ module.exports = {
       if (regole.tariffaFissa !== null) regole.tariffaFissa = numero(esistente.tariffa);
     }
 
-    const conto = calcola(r, regole);
+    // 1.4.0 (servizi.md §2): le indennita' del lavoro. Senza il campo (app vecchie) restano quelle che aveva.
+    const indennita = Servizi.pulisciIndennita(r.indennita, esistente ? Servizi.indennitaDi(esistente) : [],
+      id => this.db.riga('SELECT * FROM listino WHERE id = ?', id), this.vedeCosti());
+    const conto = calcola(Object.assign({}, r, { indennita }), regole);
     const ora = adesso();
     const c = this.chi();
     // Un collaboratore scrive solo per se': il suo nome, non quello dello studio.
@@ -423,6 +438,8 @@ module.exports = {
       magg_extra: numero(regole.maggExtra),
       compenso_ore: conto.compensoOre,
       rimborso_km: conto.rimborsoKm,
+      indennita: Servizi.indennitaPerDb(indennita),
+      importo_indennita: conto.importoIndennita,
       totale: conto.totale,
       costo_orario: regole.costoOrario === null || regole.costoOrario === undefined ? null : numero(regole.costoOrario),
       note_interne: testo(r.noteInterne),
@@ -617,6 +634,9 @@ module.exports = {
       maggExtra: numero(r.magg_extra),
       compensoOre: numero(r.compenso_ore),
       rimborsoKm: numero(r.rimborso_km),
+      // 1.4.0: le indennita' (servizi.md §2) e la loro somma, gia' dentro il totale.
+      indennita: Servizi.indennitaDi(r).map(Servizi.indennitaInRisposta),
+      importoIndennita: numero(r.importo_indennita),
       totale: numero(r.totale),
       costoOrario: numeroONull(r.costo_orario),
       noteInterne: testo(r.note_interne),

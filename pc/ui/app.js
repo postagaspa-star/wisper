@@ -32,6 +32,7 @@
   const RI = window.WisperRegoleInvio;
   // 06/11/2026: il rapportino con più lavori (raggruppare, stati senza firma, invio diviso per destinatario).
   const RL = window.WisperRegoleLavori;
+  const RSV = window.WisperRegoleServizi;
   const { $, h, aggiungi, svuota, icona, tondo, iniziali, stato, avviso, lavora, finestra, conferma, apriMenu, chiudiMenu,
     campo, conSuffisso, selezione, segmenti, cerca, riga, quadrato, segnaposto } = B;
 
@@ -554,6 +555,7 @@
     else if (nome === 'banche') { const f = S.filtroBanche; S.filtroBanche = null; Banche.vista(pagina, a1 || '', f); }
     else if (nome === 'amministrazione') Amministrazione.vista(pagina, a1 || '', a2 ? decodeURIComponent(a2) : '');
     else if (nome === 'preventivi') Preventivi.vista(pagina, a1 ? decodeURIComponent(a1) : '', a2 || '');
+    else if (nome === 'servizi') Servizi.vista(pagina);
     else if (nome === 'attivita' && a1 === 'altreapp') Integrazioni.calendarioAltre(pagina);
     else if (nome === 'attivita') { const f = S.filtroAttivita; S.filtroAttivita = null; Attivita.vista(pagina, a1 ? decodeURIComponent(a1) : '', f); }
     // Fase 5: Documenti e Ticket e assistenza.
@@ -603,7 +605,9 @@
    * spenta il titolare la vede lo stesso (dentro c'è solo Funzioni accese, per riaccendere quello che ha spento).
    */
   function vociAccese() {
-    const voci = Q8.senzaSpente(R.vociMenu(perm(), eEsterno()), spente());
+    // 1.4.0: i Servizi spariscono solo se sono spente tutte e tre le funzioni che li usano.
+    const voci = Q8.senzaSpente(R.vociMenu(perm(), eEsterno()), spente())
+      .filter(v => !R.VEDE_CON[v.modulo] || R.VEDE_CON[v.modulo].some(m => funzioneAccesa(m) && puo(m, 1)));
     if (eTitolare() && !funzioneAccesa('amministrazione') && !voci.some(v => v.modulo === 'amministrazione')) {
       const amm = R.VOCI_MENU.find(v => v.modulo === 'amministrazione');
       if (amm) voci.push(amm);
@@ -1669,6 +1673,8 @@
       rigaConto(ore, C.euro(r.compensoOre)),
       rigaConto(kmRimborsati ? C.numero(r.km) + ' km × ' + C.numero(euroKm) + ' €' : 'Km non rimborsati', C.euro(r.rimborsoKm)),
       C.num(r.spese) > 0 ? rigaConto('Spese' + (r.noteSpese ? ' · ' + r.noteSpese : ''), C.euro(r.spese)) : null,
+      // 1.4.0 (servizi.md §2): le indennità del lavoro, in una riga.
+      C.num(r.importoIndennita) > 0 ? rigaConto((r.indennita || []).length === 1 ? (/^indennit/i.test(r.indennita[0].descrizione || '') ? r.indennita[0].descrizione : 'Indennità · ' + (r.indennita[0].descrizione || '')) : 'Indennità · ' + (r.indennita || []).length, C.euro(r.importoIndennita)) : null,
     ];
   }
 
@@ -1700,6 +1706,8 @@
         h('span', null, h('em', null, 'Spese'), h('b', null, C.num(r.spese) ? C.euro(r.spese) : '—'))),
       // Fase 6 (§3.9): gli strumenti usati, con lo stato della taratura di quel giorno.
       bloccoStrumenti(r),
+      // 1.4.0: le indennità, una per riga.
+      (r.indennita || []).length ? h('div', null, h('div', { class: 'etichetta' }, 'Indennità'), r.indennita.map(x => h('div', null, RSV.rigaIndennita(x, soldi())))) : null,
       soldi() ? h('div', { class: 'conto' }, righeDelConto(r), h('div', { class: 'tot' }, h('span', null, 'Totale del lavoro'), h('span', null, C.euro(r.totale)))) : null,
       (r.foto || []).length ? h('div', null, h('div', { class: 'etichetta', style: { marginBottom: '8px' } }, 'Scontrini'),
         h('div', { class: 'miniature' }, r.foto.map(f => h('a', { href: '#', title: 'Apri lo scontrino', onclick: e => { e.preventDefault(); apriFile(f); } }, h('img', { src: '/file/' + f.id, alt: 'Scontrino' }))))) : null,
@@ -2285,6 +2293,8 @@
     const conStrumenti = puo('mezzi') && !eEsterno();
     const strumentiScelti = (r.strumenti || []).map(s => ({ idAttrezzatura: s.idAttrezzatura, confermato: !!s.confermato, nome: s.nome, codice: s.codice, scadeAllora: s.scadeAllora, statoAllora: s.statoAllora }));
     let strumentiAperti = strumentiScelti.length > 0 || !!p.verifica;
+    // 1.4.0 (servizi.md §2): le indennità del lavoro; si aggiungono con "+ Indennità", l'ultima delle pillole di Altro.
+    const indennitaScelte = (r.indennita || []).map(x => Object.assign({}, x));
     let catalogo = null;
     const zonaStrumenti = h('div', { class: 'fila', style: { display: 'flex', flexDirection: 'column', gap: '10px' } });
 
@@ -2487,6 +2497,7 @@
         !luogoAperto ? h('button', { type: 'button', class: 'pillola tratteggiata', onclick: () => { luogoAperto = true; disegnaAltro(); v.luogo.focus(); } }, '+ Luogo') : null,
         !notaAperta ? h('button', { type: 'button', class: 'pillola tratteggiata', onclick: () => { notaAperta = true; disegnaAltro(); v.noteInterne.focus(); } }, '+ Una nota per te') : null,
         conStrumenti && !strumentiAperti ? h('button', { type: 'button', class: 'pillola tratteggiata', onclick: () => { strumentiAperti = true; disegnaAltro(); disegnaStrumenti(); } }, '+ Strumenti usati') : null,
+        h('button', { type: 'button', class: 'pillola tratteggiata', 'data-visita': 'piu-indennita', onclick: () => apriIndennita(-1) }, '+ Indennità'),
       ].filter(Boolean);
       aggiungi(svuota(zonaAltro), [
         h('div', { class: 'riga-campi' }, campo('Spese', conSuffisso(v.spese, '€'), errori.spese), campo('Di cosa', v.noteSpese)),
@@ -2494,7 +2505,23 @@
         ticket ? campo('Ticket', v.ticket) : null,
         notaAperta ? campo('Nota per te, non va al cliente', v.noteInterne) : null,
         conStrumenti && strumentiAperti ? zonaStrumenti : null,
+        indennitaScelte.length ? h('div', { class: 'indennita-lavoro' }, h('div', { class: 'etichetta' }, 'Indennità'),
+          indennitaScelte.map((x, i) => h('button', { type: 'button', class: 'riga-indennita', onclick: () => apriIndennita(i) },
+            h('span', { class: 'spazio' }, [x.codice, x.descrizione].filter(Boolean).join(' ')),
+            h('span', { class: 't2' }, C.numero(x.quantita === undefined || x.quantita === null || x.quantita === '' ? 1 : x.quantita) + (x.unita ? ' ' + x.unita : '')),
+            soldi() ? h('span', { class: 'forte' }, C.euro(C.importoUnaIndennita(x))) : null))) : null,
         piu.length ? h('div', { class: 'pillole' }, piu) : null]);
+    }
+
+    /** La finestra Indennità (servizi.js): i = -1 per una nuova. */
+    async function apriIndennita(i) {
+      const ris = await W.Servizi.finestraIndennita(i >= 0 ? indennitaScelte[i] : null);
+      if (!ris) return;
+      if (ris.togli) indennitaScelte.splice(i, 1);
+      else if (i >= 0) indennitaScelte[i] = ris.indennita;
+      else indennitaScelte.push(ris.indennita);
+      disegnaAltro();
+      aggiornaConto();
     }
 
     /**
@@ -2609,6 +2636,8 @@
         ...(r.idTicket && !esistente ? { idTicket: r.idTicket } : {}),
         // Fase 6: l'elenco intero degli strumenti (il server congela lo stato della taratura di quel giorno).
         ...(conStrumenti ? { strumenti: strumentiScelti.map(s => ({ idAttrezzatura: s.idAttrezzatura, confermato: !!s.confermato })) } : {}),
+        // 1.4.0: l'elenco intero delle indennità (vuoto = nessuna); il server le ricontrolla e tiene i prezzi per chi non vede i soldi.
+        indennita: indennitaScelte.map(x => Object.assign({}, x)),
         // 03/11/2026: il progetto. Con la funzione spenta un lavoro già scritto tiene il suo (se resta sulla stessa commessa):
         // senza idProgetto il server lo staccherebbe.
         ...(conProgetti ? (m.progettoNuovo && !m.idProgetto ? { idProgetto: null, progettoNuovo: m.progettoNuovo } : { idProgetto: m.idProgetto || null })
@@ -2934,6 +2963,9 @@
   W.Commesse = Commesse;
   const Amministrazione = window.WisperAmministrazione(W);
   const Preventivi = window.WisperPreventivi(W);
+  // 1.4.0 (servizi.md): i Servizi hanno la loro voce; la finestra Indennità del rapportino sta lì.
+  const Servizi = window.WisperServizi(W);
+  W.Servizi = Servizi;
   const Attivita = window.WisperAttivita(W);
   const Ore = window.WisperOre(W);
   const Spese = window.WisperSpese(W);

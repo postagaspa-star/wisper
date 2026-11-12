@@ -58,7 +58,8 @@ class GiornataStato(
     /** Un lavoro aggiunto qui e lasciato com'era: niente cliente, ore, km, lavoro, spese, note, scontrini. */
     fun vuoto(l: Rapportino): Boolean = base.none { it.idLocale == l.idLocale } && fotoNuove[l.idLocale].isNullOrEmpty() &&
         l.cliente.isBlank() && l.descrizione.isBlank() && l.oreLavoro + l.oreExtra + l.oreViaggio == 0.0 && l.km == 0.0 &&
-        l.spese == 0.0 && l.noteSpese.isBlank() && l.luogo.isBlank() && l.noteInterne.isBlank() && l.idTicket.isBlank() && l.foto.isEmpty()
+        l.spese == 0.0 && l.noteSpese.isBlank() && l.luogo.isBlank() && l.noteInterne.isBlank() && l.idTicket.isBlank() && l.foto.isEmpty() &&
+        l.indennita.isNullOrEmpty()
 
     // ---- la pagina unica (11/11/2026): i lavori in una fila, quello scelto ([aperto]) coi suoi campi sotto
 

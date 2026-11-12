@@ -309,6 +309,8 @@ fun SchermataGiornata(
                 }
             }
         }
+        // 1.4.0 (servizi.md §2): l'indennità aperta copre tutta la pagina finché non si chiude o si salva.
+        scelto?.let { m -> m.indennitaAperta?.let { a -> key(a) { SchermataIndennita(dati, m, a) } } }
     }
 
     // ---------------------------------------------------------- dopo il salvataggio

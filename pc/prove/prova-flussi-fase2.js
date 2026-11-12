@@ -122,7 +122,8 @@ async function main() {
     assert.match(await valuta("document.querySelector('h1').textContent"), /Manuel/);
     const voci = await valuta("[...document.querySelectorAll('#voci .voce')].map(x => x.dataset.nome)");
     // Dal 03/11/2026 (progetti.md §4) Commesse e Progetti sono due voci.
-    assert.deepEqual(voci.slice(0, 6), ['Casa', 'Clienti', 'Commesse', 'Progetti', 'Preventivi', 'Calendario']);
+    // 1.4.0 (servizi.md §1): Servizi subito dopo Preventivi.
+    assert.deepEqual(voci.slice(0, 7), ['Casa', 'Clienti', 'Commesse', 'Progetti', 'Preventivi', 'Servizi', 'Calendario']);
     passo('menu: Preventivi e contratti e Attività e calendario al loro posto');
 
     // ------------------------------------------------------------ preventivo nuovo, dal listino
@@ -133,9 +134,9 @@ async function main() {
     await scrivi('Oggetto', OGGETTO, '.griglia-editor');
     await clicca('Media', '.griglia-editor', 300);
     // Dal listino: Sopralluogo e Direzione lavori.
-    await clicca('Dal listino', '.griglia-editor', 400);
+    await clicca('Dai servizi', '.griglia-editor', 400);
     await clicca('Sopralluogo e rilievo', '.listino-menu', 500);
-    await clicca('Dal listino', '.griglia-editor', 400);
+    await clicca('Dai servizi', '.griglia-editor', 400);
     await clicca('Direzione lavori', '.listino-menu', 500);
     // La direzione lavori a ore: 10 ore a 45 € (nel listino di prova non ha prezzo, lo si scrive).
     await valuta(`(() => {
@@ -179,7 +180,8 @@ async function main() {
     await clicca('Invia per email', '.riepilogo-f', 6000);
     // Il PDF lo fa Edge e a volte ci mette più dei 6 secondi: si aspetta che il server lo segni inviato, fino a 30.
     let inviato = (await server('preventivo?id=' + id)).preventivo;
-    for (let i = 0; i < 24 && inviato.stato !== 'INVIATO'; i++) { await aspetta(1000); inviato = (await server('preventivo?id=' + id)).preventivo; }
+    // 12/11/2026: con Edge 157 la stampa da riga di comando ci mette anche 40 secondi: si aspetta fino a 70.
+    for (let i = 0; i < 64 && inviato.stato !== 'INVIATO'; i++) { await aspetta(1000); inviato = (await server('preventivo?id=' + id)).preventivo; }
     assert.equal(inviato.stato, 'INVIATO', 'il server lo segna inviato: ' + (await testoAvvisi()));
     passo('invio: PDF fatto da Edge, email al postino finto, preventivo INVIATO');
 
@@ -239,7 +241,7 @@ async function main() {
     await clicca('PDF dell\'incarico', '.menu', 5000);
     // Anche qui Edge può metterci più dei 5 secondi: si aspetta l'incarico, fino a 30.
     const stampati = () => fs.readdirSync(STAMPE).filter(x => /^(Preventivo|Incarico) /.test(x) && x.indexOf(GIRO) < 0);
-    for (let i = 0; i < 25 && !stampati().some(x => /^Incarico /.test(x)); i++) await aspetta(1000);
+    for (let i = 0; i < 70 && !stampati().some(x => /^Incarico /.test(x)); i++) await aspetta(1000);
     const nuovi = stampati();
     assert.ok(fs.readdirSync(STAMPE).length >= pdfPrima, 'i PDF ci sono');
     assert.ok(nuovi.some(x => /^Preventivo /.test(x)) && nuovi.some(x => /^Incarico /.test(x)), 'preventivo e incarico in pc/prove/stampe: ' + nuovi.join(', '));

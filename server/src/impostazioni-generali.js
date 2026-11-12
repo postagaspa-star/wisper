@@ -116,7 +116,9 @@ const GRUPPI = [
 const ALTROVE = {
   studio: ['RAGIONE_SOCIALE', 'INDIRIZZO', 'PARTITA_IVA', 'EMAIL', 'TELEFONO', 'PEC', 'FIRMA_TECNICO', 'POLIZZA_COMPAGNIA', 'POLIZZA_NUMERO', 'POLIZZA_MASSIMALE',
     'TITOLI', 'CODICE_FISCALE', 'STUDIO_CAP', 'STUDIO_COMUNE', 'STUDIO_PROVINCIA', 'STUDIO_SDI', 'ALBO', 'ALBO_PROVINCIA', 'ALBO_NUMERO', 'ALBO_DATA',
-    'STUDIO_LOGO', 'STUDIO_NOME_BREVE', 'STUDIO_SITO', 'PDF_LOGO', 'PDF_NOME', 'PDF_PIEDE'],
+    'STUDIO_LOGO', 'STUDIO_NOME_BREVE', 'STUDIO_SITO', 'PDF_LOGO', 'PDF_NOME', 'PDF_PIEDE',
+    // 1.4.0 (servizi.md §3): la qualifica sotto il nome dello studio nei documenti.
+    'STUDIO_QUALIFICA'],
   fiscale: ['REGIME_FISCALE', 'TIPO_DOCUMENTO', 'RITENUTA_TIPO', 'RITENUTA_CAUSALE', 'EPPI_TIPO_CASSA', 'BOLLO_SOGLIA', 'BOLLO_IMPORTO', 'BOLLO_RIVALSA',
     'GIORNI_PAGAMENTO', 'PAGAMENTO_FINE_MESE', 'MODALITA_PAGAMENTO', 'IVA', 'EPPI_INTEGRATIVO', 'RITENUTA'],
   notifiche: ['EMAIL_AVVISI', 'NOTIFICHE_ORA'],
@@ -144,6 +146,7 @@ const ALTRE_VOCI = [
   { chiave: 'NOTIFICHE_ORA', etichetta: 'Ora del riepilogo del mattino', tipo: 'ora' },
   { chiave: 'STUDIO_NOME_BREVE', etichetta: 'Nome breve', tipo: 'testo', max: 40 },
   { chiave: 'STUDIO_SITO', etichetta: 'Sito', tipo: 'testo', max: 120 },
+  { chiave: 'STUDIO_QUALIFICA', etichetta: 'Qualifica', tipo: 'testo', max: 80 },
   { chiave: 'PDF_PIEDE', etichetta: 'Riga in fondo ai PDF', tipo: 'testo', max: 160 },
   siNo('PDF_LOGO', 'Logo sui PDF'),
   // 06/11/2026: il nome dello studio accanto al logo nei PDF; il codice SDI dello studio (7 lettere o cifre, o vuoto).

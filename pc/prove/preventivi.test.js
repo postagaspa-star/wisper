@@ -241,9 +241,9 @@ test('PDF: il preventivo ha tutto quello che chiede la legge, senza giallo pieno
   const ana = Object.assign({}, dati.ana, { clienti: dati.ana.soggetti });
   const p = dati.preventivi.find(x => x.id === 12);
   const html = D.preventivo(p, ana, {});
-  for (const pezzo of ['Preventivo', 'PR/2026/012 rev. 1', 'Rossi Impianti Srl', 'Oggetto: Adeguamento impianto elettrico capannone', 'Grado di complessità', 'Media',
-    'Progettazione', 'Cantiere', 'Direzione lavori', '16 h', 'facoltativa', 'in alternativa', 'scelta', 'Imponibile', 'Contributo integrativo EPPI 5%', 'IVA 22%',
-    '4.291,35 €', 'Pagamenti', 'alla firma', '1.005,00 €', 'Oneri ipotizzabili', 'Condizioni', 'Validità', 'Assicurazioni Esempio Spa', 'n. 0012345', 'massimale 1.000.000 €',
+  for (const pezzo of ['Preventivo', 'PR/2026/012 rev. 1', 'Rossi Impianti Srl', 'Oggetto: Adeguamento impianto elettrico capannone', 'Grado di complessità: media',
+    'Progettazione', 'Cantiere', 'Direzione lavori', '16,00', 'facoltativa', 'in alternativa', 'scelta', 'Imponibile', 'Totale rivalsa (5% EPPI)', 'Totale IVA (22%)',
+    '4.291,35 €', 'Pagamento', 'Codice', 'Sconto', 'Valuta EUR (€)', 'Preventivo PR/2026/012 rev. 1 · Pagina', 'alla firma', '1.005,00 €', 'Oneri ipotizzabili', 'Condizioni', 'Validità', 'Assicurazioni Esempio Spa', 'n. 0012345', 'massimale 1.000.000 €',
     'Perito industriale', 'Per accettazione', 'Alla cortese attenzione di Andrea Rossi']) {
     assert.ok(html.includes(pezzo), 'manca: ' + pezzo);
   }

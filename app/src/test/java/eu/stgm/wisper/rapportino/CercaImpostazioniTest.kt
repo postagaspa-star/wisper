@@ -92,13 +92,15 @@ class CercaImpostazioniTest {
     fun `dati dello studio nell'ordine della riunione, l'albo a parte`() {
         assertEquals(
             listOf(
-                "Ragione sociale", "Nome breve", "Chi compila i rapportini", "Partita IVA", "Codice fiscale", "Indirizzo", "CAP",
+                // 1.4.0 (servizi.md §3): la Qualifica sotto il nome.
+                "Ragione sociale", "Qualifica", "Nome breve", "Chi compila i rapportini", "Partita IVA", "Codice fiscale", "Indirizzo", "CAP",
                 "Comune", "Provincia", "Codice SDI", "Email per le risposte", "Telefono", "PEC", "Sito", "Riga in fondo ai PDF",
             ),
             CampiStudio.STUDIO.map { it.titolo },
         )
         assertEquals(listOf("ALBO", "ALBO_PROVINCIA", "ALBO_NUMERO", "ALBO_DATA"), CampiStudio.ALBO.map { it.chiave })
-        assertEquals(Anagrafiche.TECNICO, CampiStudio.STUDIO[2].chiave)
+        assertEquals(Anagrafiche.TECNICO, CampiStudio.STUDIO[3].chiave)
+        assertEquals("STUDIO_QUALIFICA", CampiStudio.STUDIO[1].chiave)
     }
 
     @Test

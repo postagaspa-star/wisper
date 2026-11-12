@@ -59,7 +59,7 @@ test('chiuso "una riga per l\'intervento": la voce, la bozza con le sorgenti del
   const compensi = f.righe.filter(r => r.tipo === 'compenso');
   assert.equal(compensi.length, 1);
   assert.equal(compensi[0].descrizione, 'Intervento TK/2026/0012 del 21/10/2026: Inverter in errore di isolamento - Impianto fotovoltaico 6 kW (2 ore, 24 km, materiale e spese 18,50 €, commessa 26ST006)');
-  assert.deepEqual([compensi[0].importo, f.conti.compenso, f.conti.contributo, f.conti.iva, f.conti.totale, f.conti.ritenuta], [126.74, 126.74, 6.34, 29.28, 162.36, 0]);
+  assert.deepEqual([compensi[0].importo, f.conti.compenso, f.conti.contributo, f.conti.iva, f.conti.totale, f.conti.ritenuta], [126.74, 126.74, 6.34, 29.27, 162.35, 0]); // 1.4.0: IVA come Flextaxa, 27,88 + 1,39 (sul totale era 29,28)
   assert.equal(f.causale, 'Intervento TK/2026/0012, commessa 26ST006');
   const sorgenti = s.wisper.db.righe('SELECT tipo, sorgente_id, gruppo FROM fattura_sorgenti WHERE fattura_id = ? AND attiva = 1 ORDER BY id', f.id);
   assert.deepEqual(sorgenti.map(x => x.tipo), ['ticket', 'rapportino', 'spesa']);

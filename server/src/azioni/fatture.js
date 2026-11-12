@@ -23,6 +23,7 @@ const {
 } = require('../utili');
 const C = require('../conti');
 const passaggio = require('../passaggio');
+const Servizi = require('../servizi');
 const { etichettaPreventivo } = require('./preventivi');
 
 const si = v => v === true || v === 1 || v === '1' || v === 'true' || v === 'SI' || v === 'si' || v === 'Sì';
@@ -246,7 +247,7 @@ module.exports = {
       const v = {
         // 06/11/2026: il numero che si vede e' quello del rapportino (la giornata), non quello del lavoro.
         tipo: 'rapportino', id: r.id, idCliente: r.id_cliente, idCommessa: testo(r.id_commessa), data: dataIso(r.data), titolo: testo(r.descrizione) || 'Rapportino ' + (testo(r.id_giornata) || r.id),
-        dettaglio, pronta: true, importo: centesimi(numero(r.compenso_ore) + numero(r.rimborso_km) + speseSenzaRighe),
+        dettaglio, pronta: true, importo: centesimi(numero(r.compenso_ore) + numero(r.rimborso_km) + speseSenzaRighe + numero(r.importo_indennita)),
         anticipazione: false, gruppo: 'rapportini:' + r.id_cliente + ':' + String(dataIso(r.data)).slice(0, 7), riga: r, speseSenzaRighe, spese: [],
       };
       elencati[r.id] = v;
@@ -466,6 +467,8 @@ module.exports = {
           oreViaggio: v.riga.ore_viaggio, pagaViaggio: v.riga.paga_viaggio === 1, tariffa: v.riga.tariffa, maggExtra: v.riga.magg_extra,
           compensoOre: v.riga.compenso_ore, km: v.riga.km, euroKm: v.riga.euro_km, rimborsoKm: v.riga.rimborso_km,
           speseSenzaRighe: v.speseSenzaRighe, idCommessa: testo(v.riga.id_commessa), progetto: testo(v.riga.progetto),
+          // 1.4.0: le indennita' del lavoro diventano righe loro, col codice del servizio.
+          indennita: Servizi.indennitaDi(v.riga),
           // 06/11/2026: "Rapportino RAP/2026/0153 del ...": il numero del rapportino, non quello del lavoro.
           numero: testo(v.riga.id_giornata) || v.id,
         })),
@@ -521,6 +524,8 @@ module.exports = {
       natura: compenso ? (f.regime === 'forfettario' ? 'N2.2' : '') : 'N1',
       soggetta_ritenuta: compenso ? 1 : 0, tributo_cliente: r.tributoCliente ? 1 : 0, commessa_id: testo(r.idCommessa),
       periodo_da: testo(r.periodoDa), periodo_a: testo(r.periodoA),
+      // 1.4.0 (servizi.md §3): il codice del servizio e lo sconto in percento, come le righe di Flextaxa.
+      codice: testo(r.codice), sconto: numero(r.sconto),
     };
   },
 
@@ -943,6 +948,7 @@ module.exports = {
       unita: r.unita, prezzo: r.prezzo, importo: r.importo, aliquotaIva: r.aliquota_iva, natura: r.natura,
       ritenuta: r.soggetta_ritenuta === 1 && f.ritenuta_applicata === 1, tributoCliente: r.tributo_cliente === 1, idCommessa: r.commessa_id,
       periodoDa: r.periodo_da, periodoA: r.periodo_a, importoSorgenti: r.importo_sorgenti === null ? null : r.importo_sorgenti,
+      codice: testo(r.codice), sconto: numero(r.sconto),
     }));
     o.sorgenti = sorgenti.map(s => ({
       tipo: s.tipo, id: s.sorgente_id, gruppo: s.gruppo, descrizione: this.descrizioneSorgente(s.tipo, s.sorgente_id), importo: s.importo,
@@ -1125,11 +1131,15 @@ module.exports = {
       const prezzo = r.prezzo !== undefined ? numeroONull(r.prezzo) : vecchia ? vecchia.prezzo : null;
       if (prezzo !== null && prezzo < 0) throw new Rifiuto('Prezzo: non può essere negativo');
       const unita = r.unita !== undefined ? testo(r.unita) : vecchia ? vecchia.unita : '';
+      const codice = r.codice !== undefined ? testo(r.codice) : vecchia ? testo(vecchia.codice) : '';
+      const sconto = r.sconto !== undefined ? numero(r.sconto) : vecchia ? numero(vecchia.sconto) : 0;
+      if (sconto < 0 || sconto > 100) throw new Rifiuto('Sconto: fra 0 e 100%');
       const tributo = r.tributoCliente !== undefined ? si(r.tributoCliente) : vecchia ? vecchia.tributo_cliente === 1 : false;
       // L'importo segue quantita' x prezzo; una riga di un gruppo non cambiata tiene la somma delle sue sorgenti.
-      const cambiati = !vecchia || numero(quantita) !== numero(vecchia.quantita) || numero(prezzo) !== numero(vecchia.prezzo) || (quantita === null) !== (vecchia.quantita === null);
-      const importo = !cambiati ? vecchia.importo : C.importoRigaFattura({ quantita, prezzo });
-      const base = this.rigaPerDb({ tipo, descrizione, quantita, unita, prezzo, importo, tributoCliente: tributo && tipo === 'anticipazione',
+      const cambiati = !vecchia || numero(quantita) !== numero(vecchia.quantita) || numero(prezzo) !== numero(vecchia.prezzo) || (quantita === null) !== (vecchia.quantita === null) ||
+        sconto !== numero(vecchia.sconto);
+      const importo = !cambiati ? vecchia.importo : C.importoRigaFattura({ quantita, prezzo, sconto });
+      const base = this.rigaPerDb({ tipo, codice, sconto, descrizione, quantita, unita, prezzo, importo, tributoCliente: tributo && tipo === 'anticipazione',
         idCommessa: vecchia ? vecchia.commessa_id : testo(r.idCommessa), periodoDa: vecchia ? vecchia.periodo_da : '', periodoA: vecchia ? vecchia.periodo_a : '' }, f, vecchia ? vecchia.gruppo : '', ordine);
       if (vecchia) {
         delete base.origine;
@@ -1212,6 +1222,7 @@ module.exports = {
       numero: i + 1, descrizione: r.descrizione, quantita: r.quantita === null ? 1 : r.quantita, unitaMisura: r.unita,
       prezzoUnitario: r.prezzo === null ? 0 : r.prezzo, prezzoTotale: r.importo, aliquotaIva: r.aliquota_iva, natura: r.natura,
       ritenuta: r.soggetta_ritenuta === 1 && ritenutaSi, periodoDa: r.periodo_da || '', periodoA: r.periodo_a || '',
+      codice: testo(r.codice), sconto: numero(r.sconto),
     }));
     const riepilogo = [];
     if (forfettario) {
@@ -1236,12 +1247,15 @@ module.exports = {
         sede: { indirizzo: testo(imp.INDIRIZZO).replace(/,\s*\d{5}\b.*$/, ''), cap: testo(imp.STUDIO_CAP), comune: testo(imp.STUDIO_COMUNE),
           provincia: testo(imp.STUDIO_PROVINCIA).toUpperCase(), nazione: 'IT' },
         pec: testo(imp.PEC), email: testo(imp.EMAIL),
+        // 1.4.0 (servizi.md §3): per il PDF (pre-parcella e parcella), non vanno nell'XML.
+        qualifica: testo(imp.STUDIO_QUALIFICA), telefono: testo(imp.TELEFONO), sito: testo(imp.STUDIO_SITO),
       },
       committente: {
         denominazione: privato ? '' : testo(s.nome), nome: privato ? nc.nome : '', cognome: privato ? nc.cognome : '',
         partitaIva: chiavePiva(s.partita_iva), codiceFiscale: testo(s.codice_fiscale).toUpperCase(),
         sede: { indirizzo: testo(s.indirizzo), cap: testo(s.cap), comune: testo(s.citta), provincia: testo(s.provincia).toUpperCase(), nazione: testo(s.nazione).toUpperCase() || 'IT' },
         codiceDestinatario: !privato && testo(s.codice_sdi) ? testo(s.codice_sdi).toUpperCase() : '0000000', pec: testo(s.pec),
+        etichettaCommessa: testo(s.etichetta_commessa),
       },
       righe: modelloRighe,
       cassa: numero(f.contributo) > 0 || (numero(f.eppi_percentuale) > 0 && numero(f.compenso) > 0) ? {
@@ -1255,8 +1269,11 @@ module.exports = {
       pagamento: {
         condizioni: scadenze.length > 1 ? 'TP01' : 'TP02',
         dettagli: scadenze.map(x => ({ modalita: x.modalita || f.modalita_pagamento, scadenza: x.data, importo: x.importo,
-          iban: iban(x.iban || (conto ? conto.iban : '')), istituto: conto ? testo(conto.banca) : '' })),
+          iban: iban(x.iban || (conto ? conto.iban : '')), istituto: conto ? testo(conto.banca) : '',
+          bic: conto ? testo(conto.bic) : '', beneficiario: conto ? testo(conto.beneficiario) : '' })),
       },
+      // 1.4.0: le note del documento (la causale scritta, senza il riferimento di Wisper).
+      note: testo(f.causale),
       causale: [(testo(f.causale) ? testo(f.causale) + '. ' : '') + 'Rif. Wisper ' + f.riferimento],
       fattureCollegate: collegata ? [{ idDocumento: collegata.numero || collegata.riferimento, data: collegata.data }] : [],
       regoleConfermate: confermate,

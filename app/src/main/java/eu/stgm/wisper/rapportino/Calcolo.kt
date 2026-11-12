@@ -33,6 +33,8 @@ object Calcolo {
         spese: Double,
         tariffa: Double?,
         regole: Regole,
+        /** 1.4.0 (servizi.md §2): la somma delle indennità del lavoro, già al centesimo ([Servizi.somma]). */
+        indennita: Double = 0.0,
     ): Conto {
         val t = regole.tariffaFissa ?: tariffa ?: 0.0
         val compenso = centesimi(
@@ -45,16 +47,18 @@ object Calcolo {
             tariffa = t,
             compensoOre = compenso,
             rimborsoKm = rimborso,
-            totale = centesimi(compenso + rimborso + centesimi(spese)),
+            // Senza indennità (+ 0) il conto è quello di sempre, al bit: i casi di casi-calcolo.json non cambiano.
+            totale = centesimi(compenso + rimborso + centesimi(spese) + centesimi(indennita)),
             euroKm = regole.euroKm,
             pagaViaggio = regole.pagaViaggio,
             kmRimborsati = regole.kmRimborsati,
             maggExtra = regole.maggExtra,
+            indennita = centesimi(indennita),
         )
     }
 
     fun calcola(r: Rapportino, regole: Regole): Conto =
-        calcola(r.oreLavoro, r.oreExtra, r.oreViaggio, r.km, r.spese, r.tariffa, regole)
+        calcola(r.oreLavoro, r.oreExtra, r.oreViaggio, r.km, r.spese, r.tariffa, regole, Servizi.somma(r.indennita))
 
     private fun centesimi(n: Double): Double = (n * 100).roundHalfUp() / 100.0
 

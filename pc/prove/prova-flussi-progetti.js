@@ -405,8 +405,9 @@ async function main() {
     await valuta(`(() => { const r = [...document.querySelectorAll('.tab .r[data-chiave]')].find(x => x.textContent.includes('Cablaggio del quadro QE2')); r.click(); return true; })()`);
     await aspetta(1200);
     await clicca('PDF', '.pannello', 300);
-    // L'avviso dura 3 s e arriva quando Edge ha finito di stampare: si guarda spesso, fino a 15 s.
-    for (let i = 0; i < 75 && !/PDF salvato in/.test(await testoAvvisi()); i++) await aspetta(200);
+    // L'avviso dura 3 s e arriva quando Edge ha finito di stampare: si guarda spesso, fino a 70 s
+    // (12/11/2026: con Edge 157 la stampa da riga di comando ci mette anche 40 secondi).
+    for (let i = 0; i < 350 && !/PDF salvato in/.test(await testoAvvisi()); i++) await aspetta(200);
     assert.match(await testoAvvisi(), /PDF salvato in/, 'il PDF esce (Edge stampa nel finto ponte)');
     const html = await valuta(`(async () => {
       const rap = (await fetch('/server/rapportini').then(r => r.json())).rapportini.find(r => r.descrizione === 'Cablaggio del quadro QE2');

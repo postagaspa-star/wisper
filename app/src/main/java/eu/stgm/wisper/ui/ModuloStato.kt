@@ -5,6 +5,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import eu.stgm.wisper.rapportino.Indennita
 import eu.stgm.wisper.rapportino.Numeri
 import eu.stgm.wisper.rapportino.Progetto
 import eu.stgm.wisper.rapportino.ProgettoNuovo
@@ -121,6 +122,37 @@ class ModuloStato(
     var strumenti by mutableStateOf(base.strumenti)
     var strumentiAperti by mutableStateOf(!base.strumenti.isNullOrEmpty())
 
+    /**
+     * 1.4.0 (servizi.md §2): le indennità del lavoro. Null = non conosciute (lette da un server di prima): non si mandano
+     * finché non se ne aggiunge una; un elenco, anche vuoto, si manda intero.
+     */
+    var indennita by mutableStateOf(base.indennita)
+
+    /** L'indennità aperta nella sua schermata (sopra la pagina del rapportino), o null. */
+    var indennitaAperta by mutableStateOf<IndennitaAperta?>(null)
+
+    /** "+ Indennità": la schermata vuota, che si apre sulla scelta del servizio. */
+    fun nuovaIndennita() { indennitaAperta = IndennitaAperta(-1, Indennita()) }
+
+    /** Una riga toccata: la sua schermata, coi campi com'erano. */
+    fun apriIndennita(posizione: Int) {
+        indennita?.getOrNull(posizione)?.let { indennitaAperta = IndennitaAperta(posizione, it) }
+    }
+
+    /** L'indennità fatta o cambiata nella sua schermata: al suo posto, o in fondo se è nuova. */
+    fun mettiIndennita(posizione: Int, i: Indennita) {
+        val l = indennita.orEmpty().toMutableList()
+        if (posizione in l.indices) l[posizione] = i else l.add(i)
+        indennita = l
+        indennitaAperta = null
+    }
+
+    /** Toglie un'indennità: l'elenco resta (anche vuoto), così il server toglie quella che aveva. */
+    fun togliIndennita(posizione: Int) {
+        indennita = indennita.orEmpty().filterIndexed { j, _ -> j != posizione }
+        indennitaAperta = null
+    }
+
     /** Foto fatte in questo modulo: partono quando si salva, dopo il rapportino. */
     val fotoNuove = mutableStateListOf<File>()
 
@@ -199,6 +231,7 @@ class ModuloStato(
         tariffa = Numeri.leggi(tariffa),
         noteInterne = noteInterne.trim(),
         strumenti = strumenti,
+        indennita = indennita,
     )
 
     /** Vero se c'e' qualcosa da salvare rispetto a com'era all'apertura. */
@@ -284,6 +317,11 @@ class ModuloStato(
             }
         }
     }
+}
+
+/** 1.4.0: l'indennità nella sua schermata: il posto nell'elenco del lavoro (-1 = nuova) e i campi da cui si parte. */
+data class IndennitaAperta(val posizione: Int, val indennita: Indennita) {
+    val nuova: Boolean get() = posizione < 0
 }
 
 /**

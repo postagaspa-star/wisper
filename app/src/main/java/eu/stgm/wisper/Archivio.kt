@@ -1177,12 +1177,45 @@ class Archivio(private val ctx: Context) : Dati {
     }
 
     private suspend fun leggiPreventivi() {
+        // 1.4.0 (servizi.md §1): i servizi li vede anche chi fa i rapportini o le fatture (le indennità), non solo i preventivi.
+        if (_sessione.value.permessi.vedeServizi) provaONull { leggiServizi() }
         if (!_sessione.value.permessi.vede(Moduli.PREVENTIVI)) return
         // Con i modelli: servono a "Nuovo preventivo · Da un modello".
         val elenco = ponte.preventivi(modelli = true)
         _preventivi.value = elenco
         copia.scriviPreventivi(elenco)
-        provaONull { ponte.listino() }?.let { l -> _listino.value = l; copia.scriviListino(l) }
+    }
+
+    /** I servizi, anche gli archiviati (i Servizi li mostrano a parte). */
+    private suspend fun leggiServizi() {
+        val l = ponte.listino(tutte = true)
+        _listino.value = l
+        copia.scriviListino(l)
+    }
+
+    override fun aggiornaServizi() {
+        if (!ponte.configurato) return
+        scope.launch {
+            try {
+                leggiServizi()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: PonteServer.AccessoScaduto) {
+                segnaUscito()
+            } catch (e: Exception) {
+                _aggiornamento.update { it.copy(inCorso = false, errore = spiega(e)) }
+            }
+        }
+    }
+
+    override suspend fun caricaImmagineServizio(jpg: ByteArray, perIndennita: Boolean): Result<FileRemoto> = inDiretta {
+        val f = ponte.caricaFile(
+            "servizio", jpg, "image/jpeg", nome = "servizio.jpg",
+            idFile = java.util.UUID.randomUUID().toString().replace("-", "").take(20), per = if (perIndennita) "indennita" else "",
+        )
+        // Si vede subito anche senza rete: la copia resta sul telefono come le foto gia' arrivate.
+        copia.scriviFileDelFoglio(f.id, jpg, "image/jpeg")
+        f
     }
 
     /** Un preventivo arrivato dal server al suo posto: nell'elenco e fra quelli aperti. */
@@ -1199,16 +1232,17 @@ class Archivio(private val ctx: Context) : Dati {
     }
 
     override suspend fun salvaVoceListino(v: VoceListino): Result<VoceListino> = inDiretta {
-        if (v.nome.isBlank()) throw PonteServer.Rifiutato("Nome: scrivi il nome della prestazione")
+        if (v.nome.isBlank()) throw PonteServer.Rifiutato("Descrizione: scrivi la descrizione del servizio")
         val salvata = ponte.salvaVoceListino(v, costi)
         _listino.update { l -> sostituisci(l, salvata) { it.id == salvata.id } }
         copia.scriviListino(_listino.value)
         salvata
     }
 
-    override suspend fun archiviaVoceListino(id: String): Result<Unit> = inDiretta {
-        ponte.archiviaVoceListino(id)
-        _listino.update { l -> l.filterNot { it.id == id } }
+    override suspend fun archiviaVoceListino(id: String, archiviata: Boolean): Result<Unit> = inDiretta {
+        ponte.archiviaVoceListino(id, archiviata)
+        // Dalla 1.4.0 un servizio archiviato resta, fra gli archiviati (servizi.md §1).
+        _listino.update { l -> l.map { if (it.id == id) it.copy(attivo = !archiviata) else it } }
         copia.scriviListino(_listino.value)
     }
 

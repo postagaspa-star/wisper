@@ -235,9 +235,18 @@ function valoreAtteso(v, riga, righe) {
   return typeof v === 'function' ? v(riga, righe) : v;
 }
 
+/** 1.4.0 (servizi.md): le colonne nuove della 014, coi loro valori di base. */
+const COLONNE_014 = {
+  listino: { tipo: 'servizio', aliquota_iva: 22, prezzo_acquisto: null, aliquota_acquisto: 22, fornitore: '', tag: '', note: '', immagine: '', modificato: null },
+  rapportini: { indennita: '', importo_indennita: 0 },
+  fattura_righe: { codice: '', sconto: 0 },
+  conti: { bic: '', beneficiario: '' },
+  soggetti: { etichetta_commessa: '' },
+};
+
 /** Le colonne nuove dalla 007 in poi, insieme: le prove delle migrazioni di prima (003-007) le tolgono prima di confrontare. */
 const COLONNE_DOPO_007 = {};
-for (const gruppo of [COLONNE_007, COLONNE_008, COLONNE_009, COLONNE_011]) {
+for (const gruppo of [COLONNE_007, COLONNE_008, COLONNE_009, COLONNE_011, COLONNE_014]) {
   for (const [t, c] of Object.entries(gruppo)) COLONNE_DOPO_007[t] = Object.assign({}, COLONNE_DOPO_007[t] || {}, c);
 }
 
@@ -323,5 +332,5 @@ function numeriDashboardSenzaOre(numeri, w) {
 module.exports = {
   numeriDashboardDopoLavori, numeriDashboardSenzaOre,
   serverDiProva, postinoFinto, viesFinto, cartellaNuova, ascolta, chiudi, SEGRETO, PNG, giornoDeiPrototipi, GIORNO_DEI_PROTOTIPI, COLONNE_007,
-  COLONNE_008, COLONNE_009, COLONNE_011, COLONNE_DOPO_007, valoreAtteso,
+  COLONNE_008, COLONNE_009, COLONNE_011, COLONNE_014, COLONNE_DOPO_007, valoreAtteso,
 };

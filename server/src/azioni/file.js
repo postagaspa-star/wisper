@@ -120,6 +120,14 @@ module.exports = {
     return { id: f.id, url: urlFile(f.id) };
   },
 
+  /** L'immagine di un servizio: JPG o PNG fino a 1 MB. Resta "libera" finche' un servizio non la usa. */
+  caricaImmagineServizio(d, dati, mime, estensione) {
+    if (d.per === 'indennita' ? this.livello('rapportini') < 2 : this.livello('preventivi') < 2) throw senzaPermesso(d.per === 'indennita' ? 'caricare le immagini delle indennità' : 'cambiare i servizi');
+    if (['image/png', 'image/jpeg'].indexOf(mime) < 0 || dati.length > 1048576) throw new Rifiuto('L\'immagine deve essere un JPG o un PNG di al massimo 1 MB');
+    const f = this.fileGiaArrivato('servizio', d.idFile, '', '') || this.salvaFile({ dati, nome: (testo(d.nome) || 'servizio').replace(/\.[a-z0-9]+$/i, '') + estensione, mime, tipo: 'servizio', idClient: testo(d.idFile) });
+    return { id: f.id, url: urlFile(f.id), nome: f.nome };
+  },
+
   caricaFile(d) {
     const tipo = d.tipo;
     // Fase 5: la foto di un ticket, anche gia' arrivata con /carica (idFileCaricato, senza base64).
@@ -137,6 +145,8 @@ module.exports = {
 
     // Fase 8 (§9.3, §13.7): il logo dello studio (PNG o JPG fino a 1 MB, almeno 300 px di lato), in STUDIO_LOGO.
     if (tipo === 'logo') return this.caricaLogo(d, dati, mime, estensione);
+    // 1.4.0 (servizi.md §1): l'immagine di un servizio, JPG (o PNG) fino a 1 MB come in Flextaxa; la lega salvaVoceListino.
+    if (tipo === 'servizio') return this.caricaImmagineServizio(d, dati, mime, estensione);
 
     if (tipo === 'firmaTecnico') {
       const f = this.fileGiaArrivato('firmaTecnico', d.idFile, '', '') || (this.controllaSpazio('lavoro'), null) ||
@@ -265,6 +275,8 @@ module.exports = {
     if (f.tipo === 'caricato') return !!this.chi().utente && f.caricato_da === this.chi().utente.id;
     // Fase 8: il logo dello studio lo vede chiunque sia entrato (menu, PDF, portale).
     if (f.tipo === 'logo') return !!this.chi().utente || this.chi().sistema;
+    // 1.4.0: l'immagine di un servizio la vede chi e' entrato (come i servizi, che servono a tutti per le indennita').
+    if (f.tipo === 'servizio') return !!this.chi().utente || this.chi().sistema;
     // Fase 6: le foto dei km e dei guasti chi vede i mezzi; la firma di una consegna chi vede i dati personali della persona.
     if (f.tipo === 'km' || f.tipo === 'guasto') return this.livello('mezzi') >= 1;
     if (f.tipo === 'firma_consegna') {

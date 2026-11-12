@@ -21,6 +21,7 @@ const {
 } = require('../utili');
 const { contiPreventivo, gruppoAlternativa } = require('../conti');
 const { formatta } = require('../formati');
+const S = require('../servizi');
 
 const MODI = ['corpo', 'ore', 'quantita'];
 const MODI_ACCETTAZIONE = ['firma', 'email', 'documento', 'voce', 'portale'];
@@ -54,12 +55,8 @@ function statoVisto(r) {
   return r.stato === 'INVIATO' && r.scadenza && r.scadenza < oggi() ? 'SCADUTO' : r.stato;
 }
 
-function voceListinoDaRiga(r) {
-  return {
-    id: r.id, codice: r.codice, nome: r.nome, descrizione: r.descrizione, modo: r.modo, unita: r.unita,
-    prezzo: numeroONull(r.prezzo), attivo: r.attivo === 1, ordine: r.ordine,
-  };
-}
+/** 12/11/2026: la voce del listino e' un servizio, coi campi di Flextaxa (servizi.md §1). */
+const voceListinoDaRiga = S.servizioDaRiga;
 
 function voceDaRiga(v) {
   return {
@@ -92,39 +89,69 @@ module.exports = {
     return this.db.righe('SELECT * FROM listino ' + (tutte ? '' : 'WHERE attivo = 1 ') + 'ORDER BY ordine, id').map(voceListinoDaRiga);
   },
 
-  /** Una prestazione del listino: nome, modo, unita' e (solo chi vede i costi) il prezzo. */
+  /**
+   * Un servizio (servizi.md §1): i campi di Flextaxa. Il modo del preventivo segue l'unita' di misura (Ore -> ore,
+   * A corpo -> corpo, le altre -> quantita), se non arriva scritto. Prezzi solo da chi vede i costi. Un servizio
+   * nuovo (dalla 1.4.0, che manda l'aliquota) vuole il prezzo e l'unita' di misura, come in Flextaxa.
+   */
   salvaVoceListino(x) {
     x = x || {};
     const prima = x.id ? this.db.riga('SELECT * FROM listino WHERE id = ?', Number(x.id)) : null;
-    if (x.id && !prima) throw new Rifiuto('Voce del listino ' + x.id + ' non trovata');
+    if (x.id && !prima) throw new Rifiuto('Servizio ' + x.id + ' non trovato');
     const v = {};
-    ['codice', 'nome', 'descrizione', 'unita'].forEach(k => { if (x[k] !== undefined) v[k] = testo(x[k]); });
+    ['codice', 'nome', 'descrizione', 'unita', 'fornitore', 'note'].forEach(k => { if (x[k] !== undefined) v[k] = testo(x[k]); });
+    if (x.unita !== undefined && x.modo === undefined) v.modo = S.modoDaUnita(v.unita);
     if (x.modo !== undefined) {
       v.modo = testo(x.modo).toLowerCase() || 'corpo';
       if (MODI.indexOf(v.modo) < 0) throw new Rifiuto('Modo: corpo, ore o quantita');
     }
-    if (x.prezzo !== undefined && this.vedeCosti()) {
-      v.prezzo = numeroOVuoto(x.prezzo);
-      if (v.prezzo !== null && v.prezzo < 0) throw new Rifiuto('Prezzo: non può essere negativo');
+    if (x.tipo !== undefined) {
+      v.tipo = testo(x.tipo).toLowerCase() || 'servizio';
+      if (S.TIPI.indexOf(v.tipo) < 0) throw new Rifiuto('Tipo: servizio o prodotto');
+    }
+    if (x.aliquotaIva !== undefined) v.aliquota_iva = S.aliquotaDa(x.aliquotaIva, 22);
+    if (x.aliquotaAcquisto !== undefined) v.aliquota_acquisto = S.aliquotaDa(x.aliquotaAcquisto, 22);
+    if (x.tag !== undefined) v.tag = S.tagDa(x.tag).join(', ');
+    if (x.immagine !== undefined) v.immagine = x.immagine && typeof x.immagine === 'object' ? testo(x.immagine.id) : testo(x.immagine);
+    if (this.vedeCosti()) {
+      if (x.prezzo !== undefined) {
+        v.prezzo = numeroOVuoto(x.prezzo);
+        if (v.prezzo !== null && v.prezzo < 0) throw new Rifiuto('Prezzo di vendita: non può essere negativo');
+      }
+      if (x.prezzoAcquisto !== undefined) {
+        v.prezzo_acquisto = numeroOVuoto(x.prezzoAcquisto);
+        if (v.prezzo_acquisto !== null && v.prezzo_acquisto < 0) throw new Rifiuto('Costo di acquisto: non può essere negativo');
+      }
     }
     if (x.ordine !== undefined) v.ordine = Math.round(numero(x.ordine));
     if (x.attivo !== undefined) v.attivo = si(x.attivo) ? 1 : 0;
     const modo = v.modo || (prima ? prima.modo : 'corpo');
     if (modo === 'ore' && !(v.unita !== undefined ? v.unita : prima ? prima.unita : '')) v.unita = 'ore';
+    if (v.immagine) {
+      const f = this.db.riga('SELECT id, mime FROM file WHERE id = ? AND cestinato IS NULL', v.immagine);
+      if (!f) throw new Rifiuto('Immagine: il file non c\'è più, caricala di nuovo');
+    }
     if (prima) {
-      if (v.nome !== undefined && !v.nome) throw new Rifiuto('Nome: scrivi il nome della prestazione');
+      if (v.nome !== undefined && !v.nome) throw new Rifiuto('Descrizione: scrivi la descrizione del servizio');
+      v.modificato = adesso();
       this.aggiorna('listino', prima.id, v);
       return voceListinoDaRiga(this.db.riga('SELECT * FROM listino WHERE id = ?', prima.id));
     }
-    if (!v.nome) throw new Rifiuto('Nome: scrivi il nome della prestazione');
+    if (!v.nome) throw new Rifiuto('Descrizione: scrivi la descrizione del servizio');
+    // Dalla 1.4.0 (le app che mandano l'aliquota) un servizio nuovo e' completo come in Flextaxa.
+    if (x.aliquotaIva !== undefined) {
+      if (!v.unita) throw new Rifiuto('Unità di misura: scegli come si conta (Nr, Ore, A corpo...)');
+      if (this.vedeCosti() && (v.prezzo === undefined || v.prezzo === null)) throw new Rifiuto('Prezzo di vendita: scrivi il prezzo, anche 0');
+    }
     if (v.ordine === undefined) v.ordine = (this.db.riga('SELECT MAX(ordine) m FROM listino').m || 0) + 1;
+    v.modificato = adesso();
     const id = this.inserisci('listino', Object.assign({ modo: 'corpo', attivo: 1 }, v));
     return voceListinoDaRiga(this.db.riga('SELECT * FROM listino WHERE id = ?', id));
   },
 
   archiviaVoceListino(id, archiviata) {
     const r = this.db.riga('SELECT * FROM listino WHERE id = ?', Number(id));
-    if (!r) throw new Rifiuto('Voce del listino ' + id + ' non trovata');
+    if (!r) throw new Rifiuto('Servizio ' + id + ' non trovato');
     this.aggiorna('listino', r.id, { attivo: archiviata === false || archiviata === 'false' ? 1 : 0 });
     return voceListinoDaRiga(this.db.riga('SELECT * FROM listino WHERE id = ?', r.id));
   },
@@ -159,8 +186,10 @@ module.exports = {
       sezioni[s.id] = x;
       prendi(s.preventivo_id).sezioni.push(x);
     }
+    // 1.4.0 (servizi.md §3): il codice del servizio della voce, per la colonna Codice del PDF.
+    const codici = new Map(this.db.righe('SELECT id, codice FROM listino').map(l => [l.id, l.codice]));
     for (const v of this.db.righe('SELECT * FROM preventivo_voci' + dove + ' ORDER BY ordine, id')) {
-      if (sezioni[v.sezione_id]) sezioni[v.sezione_id].voci.push(voceDaRiga(v));
+      if (sezioni[v.sezione_id]) sezioni[v.sezione_id].voci.push(Object.assign(voceDaRiga(v), { codice: v.listino_id ? codici.get(v.listino_id) || '' : '' }));
     }
     for (const s of this.db.righe('SELECT * FROM scadenze_pagamento' + (dove || ' WHERE preventivo_id IS NOT NULL') + ' ORDER BY ordine, id')) {
       prendi(s.preventivo_id).scadenze.push(scadenzaDaRiga(s));

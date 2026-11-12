@@ -289,7 +289,8 @@ async function main() {
     assert.match(testo, new RegExp('Intervento ' + nuovo.numero.replace(/\//g, '\\/') + ' del'), 'la riga di fattura che nascerà');
     const rigaPrevista = (testo.split(/la riga che nascerà\n/i)[1] || '').split('\n')[0].trim();
     // 4 ore: quelle del rapportino del ticket (dal 07/11/2026 niente più "+ Ore" sul ticket).
-    assert.match(rigaPrevista, /\(4 ore, materiale e spese 18,50 €, commessa /, 'la riga coi numeri del server: ' + rigaPrevista);
+    // Dalla 1.3.3 il lavoro nuovo ha anche i km proposti (dallo studio), e la riga li dice.
+    assert.match(rigaPrevista, /\(4 ore, (\d+ km, )?materiale e spese 18,50 €, commessa /, 'la riga coi numeri del server: ' + rigaPrevista);
     await unGiallo('Chiudi il ticket');
     await foto('6-chiudi');
     await valuta("[...document.querySelectorAll('.finestra .btn.giallo')].pop().click()");

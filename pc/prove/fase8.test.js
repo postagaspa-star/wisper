@@ -492,14 +492,17 @@ const DOCUMENTI = imp => ({
 // L'11/11/2026 cambiano tutti: il totale (<tfoot>) non si ripete più in fondo a ogni pagina; il riepilogo ha anche la
 // colonna "Intestato a" e la data corta. I quattro casi restano identici fra loro.
 // Il 12/11/2026 il N° del riepilogo resta su una riga (RAP/2026/0027 andava su tre): cambia solo l'impronta del riepilogo.
-const PRIMA = { rapportino: 'c1fccb2c2be9a4e2', riepilogo: 'cf87fde41e96cf5e', preventivo: '548abf2cec40f5ab', contratto: '4607a1d8c85d8aaa', prospetto: 'c2a63b5dccb85821', avviso: '044c86bc963d7a67' };
+// 1.4.0 (12/11/2026): preventivo e pre-parcella con la veste del modello della parcella (servizi.md §3): impronte nuove.
+const PRIMA = { rapportino: 'c1fccb2c2be9a4e2', riepilogo: 'cf87fde41e96cf5e', preventivo: '7d87179c83029bfc', contratto: '4607a1d8c85d8aaa', prospetto: 'c2a63b5dccb85821', avviso: 'b17c5747f0646d33' };
 
 test('PDF senza logo identici a prima della fase 8, carattere per carattere (§9.3, §16, M18.3)', () => {
   const senza = [IMP, Object.assign({}, IMP, { STUDIO_LOGO: '', PDF_PIEDE: '', PDF_LOGO: true, STUDIO_NOME_BREVE: 'GM', STUDIO_SITO: 'www.esempio.it' }),
     Object.assign({}, IMP, { STUDIO_LOGO: 'logoDiProva123', PDF_LOGO: false }), Object.assign({}, IMP, { PDF_NOME: false })];
   senza.forEach((imp, i) => {
     const docs = DOCUMENTI(imp);
-    Object.keys(docs).forEach(k => assert.equal(impronta(docs[k]()), PRIMA[k], k + ' (caso ' + i + ')'));
+    // 1.4.0: il preventivo ha la veste della parcella, col sito dello studio nel Mittente ("Telefono: … | Web: …").
+    Object.keys(docs).forEach(k => { if (!(k === 'preventivo' && i === 1)) assert.equal(impronta(docs[k]()), PRIMA[k], k + ' (caso ' + i + ')'); });
+    if (i === 1) assert.ok(docs.preventivo().indexOf('<div>PEO: studio@esempio.it</div><div>Web: www.esempio.it</div>') > 0, 'il sito nel Mittente');
   });
   const prospetto = { prestatore: { denominazione: 'Studio' }, riferimento: 'W-1', tipoDocumento: 'TD01', dataProposta: '2026-10-22', righe: [] };
   assert.equal(impronta(D.prospettoFattura(prospetto, { oggi: '2026-10-22' })), PRIMA.prospetto);

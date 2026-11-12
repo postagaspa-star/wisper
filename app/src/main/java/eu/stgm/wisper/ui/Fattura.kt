@@ -283,17 +283,47 @@ fun SchermataFattura(dati: Dati, nav: Navigatore, id: String) {
         FoglioDalBasso({ menu = false }) {
             Text("Altre azioni", style = Testi.titoloScheda, color = c.testo)
             VoceMenu(Icone.pdf, "Prospetto (PDF)", { menu = false; nav.vai("fattura-passa/${x.id}") })
-            if (scrive && (x.bozza || x.pronta) && !x.nota) VoceMenu(Icone.email, "Avviso di parcella per il cliente", {
+            // 1.4.0: "Avviso di parcella" si chiama Pre-parcella (le azioni del server restano avvisoParcella e inviaAvviso).
+            if (scrive && (x.bozza || x.pronta) && !x.nota) VoceMenu(Icone.email, "Pre-parcella per il cliente", {
                 menu = false
-                avvisi.mostra("Preparo l'avviso…")
+                avvisi.mostra("Preparo la pre-parcella…")
                 scope.launch {
                     dati.fase4.pacchetto(x.id).fold(
-                        { p -> runCatching { Stampa.documentoFase4(ctx, "avvisoParcella", p.modello, ProspettoPdf.avviso(p.modello, ana.ragioneSociale, regole), "Avviso di parcella ${x.riferimento} ${x.cliente}",
-                            org.json.JSONObject().put("oggi", LocalDate.now().toString())) } },
+                        { p -> runCatching { Stampa.documentoFase4(ctx, "avvisoParcella", p.modello, ProspettoPdf.avviso(p.modello, ana.ragioneSociale, regole), "Pre-parcella ${x.riferimento} ${x.cliente}",
+                            org.json.JSONObject().put("oggi", LocalDate.now().toString()).put("impostazioni", org.json.JSONObject(ana.impostazioni))) } },
                         { Result.failure(it) },
-                    ).onSuccess { avviso = it }.onFailure { avvisi.mostra(spiegaErrore2(it, "L'avviso non si è preparato: riprova")) }
+                    ).onSuccess { avviso = it }.onFailure { avvisi.mostra(spiegaErrore2(it, "La pre-parcella non si è preparata: riprova")) }
                 }
             })
+            // 1.4.0 (servizi.md §3): la copia in PDF di una fattura emessa, col suo numero. Dal modello parcella del
+            // computer; finché il telefono non l'ha, dalla pagina della pre-parcella col titolo giusto.
+            if (x.emessa) {
+                val titoloPdf = when {
+                    x.nota -> "Nota di credito"
+                    x.tipoDocumento.equals("TD01", ignoreCase = true) -> "Fattura"
+                    else -> "Parcella"
+                }
+                VoceMenu(Icone.pdf, "$titoloPdf in PDF", {
+                    menu = false
+                    avvisi.mostra("Preparo il PDF…")
+                    scope.launch {
+                        dati.fase4.pacchetto(x.id).fold(
+                            { p ->
+                                runCatching {
+                                    Stampa.documentoFase4(
+                                        ctx, "parcella", p.modello,
+                                        ProspettoPdf.avviso(p.modello, ana.ragioneSociale, regole, titolo = titoloPdf, preParcella = false),
+                                        "$titoloPdf ${x.numero.ifBlank { x.riferimento }} ${x.cliente}",
+                                        org.json.JSONObject().put("oggi", LocalDate.now().toString()).put("titolo", titoloPdf).put("impostazioni", org.json.JSONObject(ana.impostazioni)),
+                                    )
+                                }
+                            },
+                            { Result.failure(it) },
+                        ).onSuccess { pdf -> if (!Stampa.apri(ctx, pdf)) Stampa.condividi(ctx, pdf, "$titoloPdf ${x.numero.ifBlank { x.riferimento }}") }
+                            .onFailure { avvisi.mostra(spiegaErrore2(it, "Il PDF non si è preparato: riprova")) }
+                    }
+                })
+            }
             if (scrive && x.pronta) {
                 VoceMenu(Icone.indietroStato, "Torna in bozza", {
                     menu = false
@@ -630,7 +660,7 @@ private fun FoglioSegnaEmessa(dati: Dati, x: Fattura, onChiudi: () -> Unit, onFa
     }
 }
 
-/** L'avviso di parcella: condividere il PDF o mandarlo dal postino (segna la data). */
+/** La pre-parcella (fino alla 1.3 "avviso di parcella"): condividere il PDF o mandarlo dal postino (segna la data). */
 @Composable
 private fun FoglioAvvisoParcella(dati: Dati, x: Fattura, pdf: File, email: String, onChiudi: () -> Unit, onMandato: () -> Unit) {
     val c = W.colori
@@ -643,18 +673,18 @@ private fun FoglioAvvisoParcella(dati: Dati, x: Fattura, pdf: File, email: Strin
     LaunchedEffect(Unit) { if (!dati.esempio) dati.aggiorna() }
     var inCorso by remember { mutableStateOf(false) }
     FoglioDalBasso(onChiudi) {
-        Text("Avviso di parcella", style = Testi.titoloScheda, color = c.testo)
+        Text("Pre-parcella", style = Testi.titoloScheda, color = c.testo)
         Text("Documento senza valore fiscale: la fattura si emette al pagamento", style = Testi.secondarioGrande, color = c.tenue)
         PulsanteBordo("Apri il PDF", { Stampa.apri(ctx, pdf) }, Modifier.fillMaxWidth(), icona = Icone.pdf)
-        PulsanteBordo("Condividi il PDF", { Stampa.condividi(ctx, pdf, "Avviso di parcella ${x.riferimento}") }, Modifier.fillMaxWidth(), icona = Icone.condividi)
+        PulsanteBordo("Condividi il PDF", { Stampa.condividi(ctx, pdf, "Pre-parcella ${x.riferimento}") }, Modifier.fillMaxWidth(), icona = Icone.condividi)
         CampoTesto(a, { aScritto = it.trim() }, "A", Modifier.fillMaxWidth(), tastiera = KeyboardType.Email)
         PulsantePrincipale(if (inCorso) "Mando…" else "Mandalo per email", {
             if (inCorso || !a.contains('@')) { if (!a.contains('@')) avvisi.mostra("Scrivi l'email del cliente"); return@PulsantePrincipale }
             inCorso = true
             scope.launch {
-                dati.fase4.inviaAvviso(x.id, a, "Avviso di parcella", "Buongiorno,\nin allegato l'avviso di parcella. La fattura la emetto al pagamento.\n\nCordiali saluti", pdf)
-                    .onSuccess { avvisi.mostra("Avviso mandato a $a"); onMandato() }
-                    .onFailure { avvisi.mostra(spiegaErrore2(it, "L'avviso non è partito: guarda la posta inviata prima di riprovare")) }
+                dati.fase4.inviaAvviso(x.id, a, "Pre-parcella", "Buongiorno,\nin allegato la pre-parcella. La fattura la emetto al pagamento.\n\nCordiali saluti", pdf)
+                    .onSuccess { avvisi.mostra("Pre-parcella mandata a $a"); onMandato() }
+                    .onFailure { avvisi.mostra(spiegaErrore2(it, "La pre-parcella non è partita: guarda la posta inviata prima di riprovare")) }
                 inCorso = false
             }
         }, altezza = 56.dp, abilitato = !inCorso)

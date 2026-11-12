@@ -67,6 +67,8 @@ const AZIONI = {
           // Fase 6: la foto dei km e le foto dei guasti (chi ha la cosa, con mezzi 1: lo controlla caricaFotoMezzo).
           : d.tipo === 'km' || d.tipo === 'guasto' ? ['mezzi', 1, 'caricare le foto dei mezzi']
           : d.tipo === 'spesa' && testo(d.idSpesa) ? ['spese', 2, 'caricare le foto delle spese']
+          // 1.4.0: l'immagine di un servizio (dai Servizi) o di un'indennita' (dal rapportino, per: 'indennita').
+          : d.tipo === 'servizio' ? (d.per === 'indennita' ? ['rapportini', 2, 'caricare le immagini delle indennità'] : ['preventivi', 2, 'cambiare i servizi'])
             : ['rapportini', 2, 'caricare foto e firme dei rapportini']),
     fn: (w, d) => ({ ok: true, file: w.caricaFile(d) }),
   },
@@ -144,9 +146,10 @@ const AZIONI = {
   esporta: { libera: 'il modulo dipende da cosa si esporta (MODULO di esporta.js)', fn: (w, d) => w.esporta(d) },
 
   // --- preventivi e listino (fase 2)
-  listino: legge('preventivi', 'vedere il listino', (w, d) => ({ ok: true, listino: w.leggiListino(siVuole(d.tutte)) })),
-  salvaVoceListino: scrive('preventivi', 'cambiare il listino', (w, d) => ({ ok: true, voce: w.salvaVoceListino(d.voce || {}) })),
-  archiviaVoceListino: scrive('preventivi', 'cambiare il listino', (w, d) => ({ ok: true, voce: w.archiviaVoceListino(d.id, d.archiviata) })),
+  // 1.4.0 (servizi.md §1): il listino sono i Servizi; li vede anche chi fa i rapportini (le indennita') o le fatture.
+  listino: { vede: ['preventivi', 'rapportini', 'fatturazione'], cosa: 'vedere i servizi', fn: (w, d) => ({ ok: true, listino: w.leggiListino(siVuole(d.tutte)) }) },
+  salvaVoceListino: scrive('preventivi', 'cambiare i servizi', (w, d) => ({ ok: true, voce: w.salvaVoceListino(d.voce || {}) })),
+  archiviaVoceListino: scrive('preventivi', 'cambiare i servizi', (w, d) => ({ ok: true, voce: w.archiviaVoceListino(d.id, d.archiviata) })),
   preventivi: legge('preventivi', 'vedere i preventivi', (w, d) => ({ ok: true, oggi: oggi(), preventivi: w.leggiPreventivi(d) })),
   preventivo: legge('preventivi', 'vedere i preventivi', (w, d) => ({ ok: true, preventivo: w.preventivoCompleto(w.rigaPreventivo(d.id)) })),
   salvaPreventivo: scrive('preventivi', 'scrivere i preventivi', (w, d) => ({ ok: true, preventivo: w.salvaPreventivo(d.preventivo || {}) })),

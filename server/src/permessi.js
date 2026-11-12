@@ -89,6 +89,8 @@ const CAMPI_COSTI = new Set([
   'costiMezzo', 'euroKmMezzo', 'tetto', 'compensiDaFatturare', 'compensi', 'speseDaRiconoscere', 'costoAcquisto',
   // Fase 7: il residuo nelle proposte di pagamento, il totale accettato nel portale (Dashboard, Da guardare).
   'importoResiduo', 'totaleAccettato',
+  // 1.4.0 (servizi.md): il costo di acquisto dei servizi, la somma delle indennita' di un lavoro.
+  'prezzoAcquisto', 'prezzo_acquisto', 'importoIndennita', 'importo_indennita',
 ]);
 
 /**

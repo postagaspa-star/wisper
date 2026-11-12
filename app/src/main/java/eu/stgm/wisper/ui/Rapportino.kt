@@ -538,21 +538,36 @@ private fun SpeseDelLavoro(stato: ModuloStato, vista: Vista?, dati: Dati, onScat
     }
 }
 
-/** Quello che serve di rado: chiuso in una riga di pillole finché non serve (ore extra, luogo, nota, strumenti). */
+/**
+ * Quello che serve di rado: chiuso in una riga di pillole finché non serve (ore extra, luogo, nota, strumenti). Dalla
+ * 1.4.0 le indennità (servizi.md §2): le righe sopra le pillole, "+ Indennità" sempre per ultima.
+ */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ColumnScope.AltroDelLavoro(stato: ModuloStato, ticketAttivo: Boolean, dati: Dati) {
     // Fase 6 (§3.9): gli strumenti usati, chiusi in una riga come la nota; aperti se il rapportino ne ha.
     val conMezzi = LocalPermessi.current.vede(eu.stgm.wisper.rapportino.Moduli.MEZZI)
+    val avvisi = LocalAvvisi.current
     if (stato.luogoAperto) CampoTesto(stato.luogo, { stato.luogo = it }, "Luogo")
     if (ticketAttivo || stato.ticket.isNotBlank()) CampoTesto(stato.ticket, { stato.ticket = it }, "Ticket")
     if (stato.notaAperta) CampoTesto(stato.noteInterne, { stato.noteInterne = it }, "Nota per te, non va al cliente", righe = 2)
     if (conMezzi && stato.strumentiAperti) StrumentiUsati(stato, dati)
+    RigheIndennita(
+        stato.indennita.orEmpty(), LocalPermessi.current.costi,
+        onApri = { stato.apriIndennita(it) },
+        onTogli = { n ->
+            val prima = stato.indennita
+            stato.togliIndennita(n)
+            avvisi.mostra("Indennità tolta", annulla = { stato.indennita = prima })
+        },
+    )
     val chiusi = listOfNotNull(
         if (!stato.extraAperto) "+ Ore extra" to { stato.extraAperto = true } else null,
         if (!stato.luogoAperto) "+ Luogo" to { stato.luogoAperto = true } else null,
         if (!stato.notaAperta) "+ Una nota per te" to { stato.notaAperta = true } else null,
         if (conMezzi && !stato.strumentiAperti) "+ Strumenti usati" to { stato.strumentiAperti = true; if (stato.strumenti == null) stato.strumenti = emptyList() } else null,
+        // Sempre l'ultima: un lavoro può avere più indennità.
+        "+ Indennità" to { stato.nuovaIndennita() },
     )
     if (chiusi.isNotEmpty()) FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         chiusi.forEach { (testo, apri) -> Pillola(testo, false, apri, altezza = 44.dp) }
@@ -568,6 +583,7 @@ private fun ContoDelLavoro(r: eu.stgm.wisper.rapportino.Rapportino, conto: eu.st
         RigaConto("Ore · ${Numeri.ore(orePagate)} × ${Numeri.scrivi(conto.tariffa)} €", Numeri.euro(conto.compensoOre))
         RigaConto("Km · ${Numeri.scrivi(r.km)} × ${Numeri.scrivi(conto.euroKm)} €", Numeri.euro(conto.rimborsoKm))
         RigaConto("Spese", Numeri.euro(r.spese))
+        if (!r.indennita.isNullOrEmpty() || conto.indennita > 0) RigaConto("Indennità", Numeri.euro(conto.indennita))
         Box(Modifier.fillMaxWidth().height(1.dp).background(c.bordoScheda))
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
             Text("Totale del lavoro", style = Testi.forteGrande, color = c.testo, modifier = Modifier.weight(1f))
@@ -919,11 +935,15 @@ private fun ColumnScope.PassoRiepilogo(
         }
     }
 
+    // 1.4.0: le indennità del lavoro, in lettura (si cambiano solo da Da inviare).
+    RigheIndennita(r.indennita.orEmpty(), LocalPermessi.current.costi, onApri = null, onTogli = null)
+
     if (LocalPermessi.current.costi) Scheda(verticale = 16.dp, spazio = 8.dp) {
         val orePagate = r.oreLavoro + r.oreExtra + if (conto.pagaViaggio || regole.pagaViaggio) r.oreViaggio else 0.0
         RigaConto("Ore · ${Numeri.ore(orePagate)} × ${Numeri.scrivi(conto.tariffa)} €", Numeri.euro(conto.compensoOre))
         RigaConto("Km · ${Numeri.scrivi(r.km)} × ${Numeri.scrivi(conto.euroKm)} €", Numeri.euro(conto.rimborsoKm))
         RigaConto("Spese", Numeri.euro(r.spese))
+        if (!r.indennita.isNullOrEmpty() || conto.indennita > 0) RigaConto("Indennità", Numeri.euro(conto.indennita))
         Box(Modifier.fillMaxWidth().height(1.dp).background(c.bordoScheda))
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
             Text("Totale", style = Testi.forteGrande, color = c.testo, modifier = Modifier.weight(1f))

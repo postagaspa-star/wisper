@@ -15,7 +15,11 @@ const D = require('../ui/documenti.js');
 const casi = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'apps-script', 'prove', 'casi-calcolo.json'), 'utf8'));
 for (const c of casi) {
   test('calcolo: ' + c.nome, () => {
-    assert.deepEqual(C.calcola(c.rapportino, c.regole), c.atteso);
+    // 1.4.0: calcola() dice anche importoIndennita (0 senza indennità); gli altri pezzi sono quelli dei casi condivisi.
+    const r = C.calcola(c.rapportino, c.regole);
+    assert.equal(r.importoIndennita, 0);
+    delete r.importoIndennita;
+    assert.deepEqual(r, c.atteso);
   });
 }
 

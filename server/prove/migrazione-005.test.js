@@ -93,7 +93,7 @@ const comeTitolare = fn => w.come({ utente: w.titolare(), permessi: w.permessiDi
 
 test('migrazione 005: versione 5, la copia wisper.db.prima-5 com\'era, le tabelle di prima riga per riga uguali', () => {
   // Fase 6: il server apre il database fino alla versione 6 (la 006 parte dopo la 005); la copia della 005 resta.
-  assert.equal(w.db.versione(), 13);
+  assert.equal(w.db.versione(), 14);
   const copia = new Database(path.join(cartella, 'wisper.db.prima-5'));
   assert.equal(copia.versione(), 4, 'la copia e\' com\'era prima');
   copia.chiudi();
@@ -149,7 +149,9 @@ test('i rapportini, i conti e i PDF di oggi sono identici a quelli del server 0.
   assert.deepEqual(Object.keys(ora.pdf).sort(), Object.keys(PRIMA.pdf).sort());
   // 06/11/2026 (il rapportino con piu' lavori, senza firma): il modello del PDF del rapportino e del riepilogo e' cambiato
   // apposta (pc/ui/documenti.js); gli altri PDF restano identici al byte.
-  const cambiatiApposta = k => /^(rapportino|riepilogo) /.test(k);
+  // 12/11/2026 (1.4.0, servizi.md §3): anche preventivo e pre-parcella (l'avviso) hanno la veste nuova del modello della
+  // parcella di Manuel, apposta. Restano da confrontare al byte i prospetti delle fatture.
+  const cambiatiApposta = k => /^(rapportino|riepilogo|preventivo|avviso) /.test(k);
   assert.ok(Object.keys(PRIMA.pdf).some(k => !cambiatiApposta(k)), 'resta qualche PDF da confrontare');
   for (const k of Object.keys(PRIMA.pdf).filter(k => !cambiatiApposta(k))) assert.deepEqual(ora.pdf[k], PRIMA.pdf[k], 'il PDF ' + k);
   // Fase 6 (fase6.md §8.6): il costo della commessa ha tre voci in piu' (collaboratori, collaboratoriPrevisto,
@@ -229,7 +231,7 @@ test('riaperto il server: la migrazione non si rifa\'', () => {
   const documenti = w.db.riga('SELECT COUNT(*) n FROM documenti').n;
   w.chiudi();
   w = new Wisper({ dati: cartella });
-  assert.equal(w.db.versione(), 13);
+  assert.equal(w.db.versione(), 14);
   assert.equal(w.db.riga('SELECT COUNT(*) n FROM documenti').n, documenti);
   assert.equal(w.db.riga('SELECT COUNT(*) n FROM documento_categorie').n, 25);
 });

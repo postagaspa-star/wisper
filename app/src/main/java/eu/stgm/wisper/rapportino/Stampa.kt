@@ -154,9 +154,10 @@ object Stampa {
 
     /**
      * Un documento della fase 4 (fase4.md §8.3): il prospetto per il programma delle
-     * fatture o l'avviso di parcella. Dal modello di pc/ui/documenti.js quando c'è
-     * ([funzione]: prospettoFattura, avvisoParcella, col modello del pacchetto); finché
-     * il computer non l'ha, dalla pagina [riserva] scritta dal telefono (ProspettoPdf).
+     * fatture, la pre-parcella (avvisoParcella) o, dalla 1.4.0, la parcella di una fattura
+     * emessa (parcella). Dal modello di pc/ui/documenti.js quando c'è ([funzione]:
+     * prospettoFattura, avvisoParcella, parcella, col modello del pacchetto); finché il
+     * computer non l'ha, dalla pagina [riserva] scritta dal telefono (ProspettoPdf).
      */
     suspend fun documentoFase4(ctx: Context, funzione: String, modello: JSONObject, riserva: String, nome: String, opzioni: JSONObject = JSONObject()): File = stampa(
         ctx,

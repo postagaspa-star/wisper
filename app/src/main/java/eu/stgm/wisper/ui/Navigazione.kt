@@ -71,6 +71,9 @@ enum class Sezione(val nome: String, val fondo: Long, val tratto: Long, disegno:
     COMMESSE("Commesse", 0xFFFFEBD1, 0xFFB54708, "M4 8h16v11H4zM9 8V5h6v3M4 13h16", Moduli.COMMESSE),
     PROGETTI("Progetti", 0xFFFFF0E6, 0xFFC4320A, "M4 4h16v16H4zM4 15h16M12 15v5", Moduli.PROGETTI),
     PREVENTIVI("Preventivi", 0xFFECE7FF, 0xFF5925DC, "M7 3h7l5 5v13H7zM14 3v5h5M10 13h6M10 17h4", Moduli.PREVENTIVI),
+    // 1.4.0 (servizi.md §1): i Servizi subito dopo Preventivi; un'etichetta del prezzo, fucsia (un colore che il menu non aveva).
+    // Non e' un modulo del server: si vede con Preventivi, Rapportini o Fatture ([accesa]).
+    SERVIZI("Servizi", 0xFFFBE8FF, 0xFF9F1AB1, "M4 4h7.2l9.3 9.3-7.2 7.2L4 11.2zM8.5 8.5h.01", Moduli.SERVIZI),
     ATTIVITA("Calendario", 0xFFDCE8FF, 0xFF1849A9, "M4 6h16v14H4zM4 10h16M8 3v4M16 3v4", Moduli.ATTIVITA),
     // 07/11/2026 (richiesta del titolare): le Ore non ci sono più, la voce è solo "Rapportini".
     RAPPORTINI("Rapportini", 0xFFFFF0C2, 0xFF7A5600, "M9 3h6v3H9zM7 4.5H5V21h14V4.5h-2M9 14l2 2 4-4", Moduli.RAPPORTINI),
@@ -92,6 +95,17 @@ enum class Sezione(val nome: String, val fondo: Long, val tratto: Long, disegno:
     ;
 
     val icona: ImageVector = Icone.voce(name, disegno)
+
+    /**
+     * La voce c'e' nel menu: il ruolo vede il suo modulo e la funzione e' accesa. Servizi (1.4.0) non ha un modulo suo: c'e'
+     * se il ruolo vede Preventivi, Rapportini o Fatture e almeno una di quelle funzioni e' accesa.
+     */
+    fun accesa(p: Permessi, spente: Collection<String>): Boolean =
+        if (this == SERVIZI) Moduli.CHI_VEDE_SERVIZI.any { p.vede(it) && it !in spente }
+        else p.vede(modulo) && modulo !in spente
+
+    /** Il ruolo puo' aprire le pagine della voce (senza guardare le funzioni spente). */
+    fun vista(p: Permessi): Boolean = if (this == SERVIZI) p.vedeServizi else p.vede(modulo)
 }
 
 /** I segmenti della sezione Rapportini, come sul computer. */
@@ -155,6 +169,8 @@ fun rottaCompito(rotta: String?): Boolean =
         rotta.startsWith("progetto-nuovo") || rotta.startsWith("progetto-modifica/") ||
         rotta.startsWith("cliente-modifica/") || rotta.startsWith("cliente-nuovo") || rotta.startsWith("fornitore-nuovo") ||
         rotta.startsWith("preventivo-modifica/") || rotta.startsWith("preventivo-nuovo") ||
+        // 1.4.0: la scheda di un servizio (nuovo o da cambiare).
+        rotta.startsWith("servizio-nuovo") || rotta.startsWith("servizio/") ||
         rotta.startsWith("attivita-modifica/") || rotta.startsWith("attivita-nuova") ||
         rotta.startsWith("spesa-nuova") || rotta.startsWith("spesa/") || rotta.startsWith("spesa-veloce") ||
         rotta.startsWith("trasferta-nuova") || rotta.startsWith("trasferta/") || rotta.startsWith("amm/veicolo") ||
@@ -181,7 +197,9 @@ fun sezioneDiRotta(rotta: String?, base: Sezione): Sezione = when {
     rotta.startsWith("client") || rotta.startsWith("fornitor") || rotta.startsWith("soggett") -> Sezione.CLIENTI
     rotta.startsWith("commess") -> Sezione.COMMESSE
     rotta.startsWith("progett") -> Sezione.PROGETTI
-    rotta.startsWith("preventiv") || rotta == "listino" || rotta == "contratti" || rotta.startsWith("invio/preventivo") -> Sezione.PREVENTIVI
+    rotta.startsWith("preventiv") || rotta == "contratti" || rotta.startsWith("invio/preventivo") -> Sezione.PREVENTIVI
+    // 1.4.0: il listino sono i Servizi (anche la rotta "listino" rimasta in una pila di prima).
+    rotta.startsWith("servizi") || rotta == "listino" -> Sezione.SERVIZI
     rotta.startsWith("attivita") || rotta.startsWith("calendario") -> Sezione.ATTIVITA
     rotta.startsWith("ore-") -> Sezione.RAPPORTINI
     rotta.startsWith("spes") || rotta.startsWith("trasfert") -> Sezione.SPESE

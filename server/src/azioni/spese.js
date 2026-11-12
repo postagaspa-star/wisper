@@ -535,7 +535,7 @@ module.exports = {
     const somma = centesimi(this.db.righe("SELECT importo FROM spese WHERE rapportino_id = ? AND tolta IS NULL AND destinazione = 'cliente'", r.id)
       .reduce((t, s) => t + numero(s.importo), 0));
     if (centesimi(numero(r.spese)) === somma) return;
-    const v = { spese: somma, totale: centesimi(numero(r.compenso_ore) + numero(r.rimborso_km) + somma), modificato: adesso() };
+    const v = { spese: somma, totale: centesimi(numero(r.compenso_ore) + numero(r.rimborso_km) + somma + numero(r.importo_indennita)), modificato: adesso() };
     Object.assign(v, this.approvazioneRapportinoDopo(r, r.utente_id, true));
     this.aggiorna('rapportini', r.id, v);
     this.allineaSpeseRapportino(r.id);

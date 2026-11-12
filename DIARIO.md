@@ -11,6 +11,7 @@ mai dati veri di clienti.
 
 | Data | Versione | In breve |
 |------|----------|----------|
+| 12/11/2026 | 1.4.0, server 0.15.0 | [Servizi, indennità nei rapportini, preventivi e parcelle col modello di Manuel](#v1-4-0) |
 | 12/11/2026 | 1.3.3, server 0.14.0 | [Il rapportino nel formato del riepilogo, i km scritti da soli](#v1-3-3) |
 | 11/11/2026 | 1.3.2 | [Aggiungi un lavoro accanto a Salva, il rapportino del telefono su una pagina, Scegli tutti](#v1-3-2) |
 | 11/11/2026 | 1.3.1 | [Il rapportino a tre colonne, il riepilogo col cliente del progetto](#v1-3-1) |
@@ -47,6 +48,82 @@ mai dati veri di clienti.
 | 26/09–14/10/2026 | 0.1 | [Un rapportino confermato non si perde più](#coda) |
 | 7–9/08/2026 | 0.1.0 | [Hackathon NGN Hacks: la versione a voce, senza mani](#v0-1-0) |
 | marzo–giugno 2026 | prima del repository | [Le prime versioni](#prima) |
+
+---
+
+<a id="v1-4-0"></a>
+## 12 novembre 2026 · 1.4.0 · server 0.15.0 · Servizi, indennità, preventivi e parcelle col modello di Manuel
+
+**Perché.** Andrea: "Ora bisogna aggiungere anche la possibilità di aggiungere le indennità. Nei rapportini bisogna
+fare in modo che come ultima cosa, a fianco dei bottoni tipo "ore extra" "Luogo" eccetera ci sia anche un bottone per
+le indennità, che apra una schermata con gli stessi campi che vedi nella foto. Inoltre bisogna aggiungere anche i
+servizi (che devono essere raggiungibili anche dal menù laterale) [...] (devi inserirli già tu dentro al database).
+infine [...] devi anche fare in modo che i preventivi, pre-parcelle e parcelle siano così". Con tre allegati: i 35
+servizi esportati da Flextaxa, la foto della scheda "Anagrafica prodotti/servizi" di Flextaxa e il "Modello parcella
+WISPER" con due parcelle d'esempio e le indicazioni per l'impaginazione.
+
+**Cosa cambia.**
+
+- **Servizi**, una voce nuova del menu laterale subito dopo Preventivi, sul computer e sul telefono. È il listino dei
+  preventivi della fase 2, ora coi campi della scheda di Flextaxa: Descrizione, Prezzo di vendita (IVA esclusa),
+  Aliquota IVA e, nei Dettagli, Codice articolo, Costo di acquisto, Aliquota IVA acquisto, Tipo (servizio o prodotto),
+  Unità di misura (Nr, Ore, Pz, Km, Giorni, A corpo), Fornitore, Tag per la ricerca, Immagine (JPG o PNG fino a 1 MB),
+  e le Note personali che non vanno nei documenti. L'elenco ha la ricerca (codice, descrizione, tag, fornitore) e i
+  segmenti Tutti, Indennità e Servizi (sul telefono Servizi e Archiviati). Lo vede chi ha Preventivi, Rapportini o
+  Fatture (i prezzi solo chi vede i soldi); lo cambia chi può cambiare i preventivi. Il vecchio "Listino" dei preventivi porta qui, e "Dal listino"
+  nell'editor del preventivo ora dice "Dai servizi".
+- **I 35 servizi di Flextaxa** sono nel database del NAS, coi prezzi veri (lo strumento `importa-servizi.js` li legge
+  dal CSV; il CSV e i prezzi non sono nel repository). Prima nel database del NAS non c'era nessun
+  servizio: sono entrati tutti e 35 come nuovi, 4 sono indennità.
+- **Indennità nei rapportini.** Nella parte Altro del lavoro, dopo "+ Ore extra", "+ Luogo", "+ Una nota per te" e
+  "+ Strumenti usati", c'è **+ Indennità**. Apre una schermata con gli stessi campi della scheda dei servizi più la
+  Quantità; in cima si sceglie il servizio (prima quelli che si chiamano "Indennità...") e i campi si riempiono da
+  soli. Un lavoro può avere più indennità: ognuna è una riga che si tocca per cambiarla o toglierla. L'importo
+  (quantità per prezzo) va nel conto del lavoro e nel totale, nel PDF del rapportino (una riga sotto il lavoro e una
+  nel conto) e, quando si fattura, in una riga della fattura col suo codice. Chi non vede i soldi sceglie il servizio
+  e il prezzo lo mette il server; un'indennità salvata tiene il suo prezzo anche se poi il servizio cambia.
+- **Preventivo, pre-parcella e parcella** hanno la veste del modello di Manuel: logo a sinistra, a destra il tipo, il
+  numero e "data · Valuta EUR (€)", il filetto; Mittente (con la qualifica, P.IVA e C.F., PEO, PEC, telefono e sito) e
+  Spett.le su due colonne; la tabella Codice, Descrizione, Q.tà, U.M., Unit. €, Sconto, IVA, Totale € senza righe
+  verticali, anche le righe a zero; in fondo a sinistra il Pagamento (modalità, scadenza, importo, beneficiario, IBAN,
+  BIC) e a destra il riepilogo (Imponibile, Totale rivalsa 5% EPPI, Spese, Totale IVA, Totale documento, Ritenuta
+  d'acconto, Totale ritenute, Importo dovuto); le Note intere; il piè con lo studio a sinistra e "Parcella n. 24 ·
+  Pagina 1 / 1" a destra. L'"Avviso di parcella" si chiama ora **Pre-parcella** (la bozza coi numeri di Wisper, "non è
+  una fattura"); la **Parcella** è la fattura emessa, col numero dato dal programma: "Parcella in PDF" nel menu della
+  fattura emessa (o "Fattura in PDF", "Nota di credito in PDF").
+- **Dati nuovi per i documenti**: la Qualifica dello studio (Impostazioni › Dati dello studio), BIC/SWIFT e
+  Beneficiario del conto in banca (Banche e scadenze › Conti), e sul cliente "Nei documenti la commessa si chiama"
+  (per EPPI "JOB": sul documento per esempio "JOB: 26ST045"; vuoto = "Commessa"). Le righe delle fatture hanno codice e sconto,
+  letti anche dall'XML che torna da Flextaxa.
+- **L'IVA si arrotonda come Flextaxa**, riga per riga (più quella della rivalsa), non più sul totale. Su una delle
+  parcelle del modello Wisper dava un centesimo di IVA in meno di Flextaxa: ora tornano tutte e due al centesimo, sul
+  server, sul computer e sul telefono (nelle prove ci sono due parcelle inventate, gli importi veri restano fuori).
+
+**Scelte fatte senza chiedere** (dette nel messaggio ad Andrea): Servizi è il listino di prima allargato, non una cosa
+nuova accanto; le indennità stanno nel lavoro e non nelle spese; la pre-parcella è l'avviso di parcella di prima con la
+veste nuova; l'etichetta della commessa è del cliente; la regola dell'IVA viene dai due esempi (da confermare con un
+caso: una riga sola da 126,74 € deve dare 29,27 € di IVA). Le altre decisioni sono in
+`docs/gestionale/servizi.md` §4.
+
+**Prove.** Server 695 prove; computer 368, e tutti e dieci i giri cliccati; telefono 460 (col server di prova acceso,
+nessuna saltata). I 35 servizi veri sono stati importati sul NAS controllando solo i conteggi (35 attivi, 4 indennità,
+accenti a posto). Nelle prove cliccate il finto ponte stampa i PDF da DevTools: con Edge 157 la stampa da riga di comando
+non scriveva più il file (il programma vero stampa con WebView2 e non cambia). Le schermate sono coi dati di esempio.
+
+<img src="docs/diario/2026-11-12-servizi-computer.png" width="620" alt="La pagina Servizi sul computer: codice, descrizione, unità, IVA e prezzo, coi segmenti Tutti, Indennità e Servizi"> <img src="docs/diario/2026-11-12-servizi-telefono.png" width="240" alt="Servizi sul telefono">
+
+<img src="docs/diario/2026-11-12-servizio-scheda-computer.png" width="620" alt="La scheda di un servizio coi campi di Flextaxa: descrizione, prezzo di vendita, aliquota, codice, costo di acquisto, tipo, unità, fornitore, tag, immagine, note">
+
+<img src="docs/diario/2026-11-12-indennita-rapportino-computer.png" width="620" alt="Il lavoro del rapportino con l'indennità di trasferta nella parte Altro, la pillola + Indennità per ultima e la riga nel conto"> <img src="docs/diario/2026-11-12-indennita-telefono.png" width="240" alt="La schermata dell'indennità sul telefono">
+
+<img src="docs/diario/2026-11-12-indennita-finestra-computer.png" width="620" alt="La finestra dell'indennità: il servizio da cui parte, gli stessi campi della scheda e la quantità">
+
+<img src="docs/diario/2026-11-12-parcella.png" width="420" alt="Una parcella d'esempio nella veste nuova: mittente e destinatario, la tabella con codice e sconto, pagamento e riepilogo con la rivalsa EPPI e la ritenuta"> <img src="docs/diario/2026-11-12-pre-parcella.png" width="420" alt="La pre-parcella con la stessa veste e la nota che non è una fattura">
+
+<img src="docs/diario/2026-11-12-preventivo.png" width="420" alt="Il preventivo d'esempio nella veste nuova, con le sezioni, le voci facoltative e alternative e il riepilogo">
+
+**Versione:** [v1.4.0](https://github.com/postagaspa-star/wisper/releases/tag/v1.4.0) (telefono codice 18, computer
+1.4.0); server 0.15.0 sul NAS (schema 14).
 
 ---
 

@@ -184,7 +184,7 @@ test('prospetto del PDF: sezioni e campi uguali a quelli del server, per una fat
   const confermato = D.prospettoFattura(Object.assign({}, modello, { regoleConfermate: true }), { confermateIl: '2026-11-05' });
   assert.ok(confermato.indexOf('confermate dal commercialista il 05/11/2026') > 0);
   const avviso = D.avvisoParcella(modello);
-  assert.ok(avviso.indexOf('Avviso di parcella') > 0 && avviso.indexOf('Documento senza valore fiscale') > 0);
+  assert.ok(avviso.indexOf('Pre-parcella') > 0 && avviso.indexOf('Documento senza valore fiscale') > 0);
   assert.ok(avviso.indexOf('<script') < 0 && html.indexOf('<script') < 0);
 });
 

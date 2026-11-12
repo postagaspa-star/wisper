@@ -1,5 +1,5 @@
 {
-  "nota": "I conti della fattura (docs/gestionale/fase4.md §6). Li fa il server (server/src/conti.js, contiFattura); telefono e computer li rifanno per l'anteprima e devono dare gli stessi numeri al centesimo. Importo riga = importo se c'e', se no quantita x prezzo; compenso = righe compenso; contributo = compenso x EPPI / 100; base IVA = compenso + contributo; IVA = base x IVA / 100; parte senza IVA = anticipazioni che non sono tributi del cliente; bollo se la parte senza IVA supera la soglia; totale = base + IVA + anticipazioni + bollo riaddebitato; ritenuta = compenso x ritenuta / 100 solo se il cliente e' sostituto; netto = totale - ritenuta. Ogni pezzo arrotondato al centesimo (Math.round(n * 100) / 100) prima di sommare. Forfettario: niente IVA e niente ritenuta, la parte senza IVA comprende compenso e contributo. Valori fatti a mano. I casi dal 17 in poi li ha aggiunti il server (casi limite: importo gia' fatto, centesimi, soglia del bollo, tributi del cliente, nota di credito, fattura a zero, forfettario).",
+  "nota": "I conti della fattura (docs/gestionale/fase4.md §6). Li fa il server (server/src/conti.js, contiFattura); telefono e computer li rifanno per l'anteprima e devono dare gli stessi numeri al centesimo. Importo riga = importo se c'e', se no quantita x prezzo; compenso = righe compenso; contributo = compenso x EPPI / 100; base IVA = compenso + contributo; IVA (dal 12/11/2026, come Flextaxa, servizi.md §3) = somma di arrotonda(riga di compenso x IVA / 100) + arrotonda(contributo x IVA / 100): i casi 11 e 14 prima davano un centesimo in meno; importo riga con lo sconto = quantita x prezzo x (1 - sconto / 100); parte senza IVA = anticipazioni che non sono tributi del cliente; bollo se la parte senza IVA supera la soglia; totale = base + IVA + anticipazioni + bollo riaddebitato; ritenuta = compenso x ritenuta / 100 solo se il cliente e' sostituto; netto = totale - ritenuta. Ogni pezzo arrotondato al centesimo (Math.round(n * 100) / 100) prima di sommare. Forfettario: niente IVA e niente ritenuta, la parte senza IVA comprende compenso e contributo. Valori fatti a mano. I casi dal 17 in poi li ha aggiunti il server (casi limite: importo gia' fatto, centesimi, soglia del bollo, tributi del cliente, nota di credito, fattura a zero, forfettario).",
   "base": {"regime": "ordinario", "ivaPercentuale": 22, "eppiPercentuale": 5, "ritenutaPercentuale": 20, "bolloSoglia": 77.47, "bolloImporto": 2, "bolloRivalsa": true},
   "casi": [
     {"nome": "1. acconto 30% di 26ST003 (3.800 x 30%), cliente sostituto",
@@ -34,7 +34,7 @@
      "atteso": {"righe": [150], "compenso": 0, "contributo": 0, "baseIva": 0, "iva": 0, "anticipazioni": 150, "parteSenzaIva": 150, "bollo": 2, "bolloAddebitato": 2, "totale": 152, "ritenuta": 0, "netto": 152}},
     {"nome": "11. ore con i resti: 7,5 a 42,30 e 2,5 a 38,90 (il contributo vale 20,725: mezzo centesimo in su)",
      "fattura": {"ritenuta": true, "righe": [{"tipo": "compenso", "quantita": 7.5, "prezzo": 42.3},{"tipo": "compenso", "quantita": 2.5, "prezzo": 38.9}]},
-     "atteso": {"righe": [317.25,97.25], "compenso": 414.5, "contributo": 20.73, "baseIva": 435.23, "iva": 95.75, "anticipazioni": 0, "parteSenzaIva": 0, "bollo": 0, "bolloAddebitato": 0, "totale": 530.98, "ritenuta": 82.9, "netto": 448.08}},
+     "atteso": {"righe": [317.25,97.25], "compenso": 414.5, "contributo": 20.73, "baseIva": 435.23, "iva": 95.76, "anticipazioni": 0, "parteSenzaIva": 0, "bollo": 0, "bolloAddebitato": 0, "totale": 530.99, "ritenuta": 82.9, "netto": 448.09}},
     {"nome": "12. nota di credito parziale: 200 di compenso stornati",
      "fattura": {"ritenuta": true, "righe": [{"tipo": "compenso", "quantita": 1, "prezzo": 200}]},
      "atteso": {"righe": [200], "compenso": 200, "contributo": 10, "baseIva": 210, "iva": 46.2, "anticipazioni": 0, "parteSenzaIva": 0, "bollo": 0, "bolloAddebitato": 0, "totale": 256.2, "ritenuta": 40, "netto": 216.2}},
@@ -43,7 +43,7 @@
      "atteso": {"righe": [1000], "compenso": 1000, "contributo": 50, "baseIva": 0, "iva": 0, "anticipazioni": 0, "parteSenzaIva": 1050, "bollo": 2, "bolloAddebitato": 2, "totale": 1052, "ritenuta": 0, "netto": 1052}},
     {"nome": "14. quantita' con i resti: 3 a 123,45 e 2 a 61,15",
      "fattura": {"ritenuta": true, "righe": [{"tipo": "compenso", "quantita": 3, "prezzo": 123.45},{"tipo": "compenso", "quantita": 2, "prezzo": 61.15}]},
-     "atteso": {"righe": [370.35,122.3], "compenso": 492.65, "contributo": 24.63, "baseIva": 517.28, "iva": 113.8, "anticipazioni": 0, "parteSenzaIva": 0, "bollo": 0, "bolloAddebitato": 0, "totale": 631.08, "ritenuta": 98.53, "netto": 532.55}},
+     "atteso": {"righe": [370.35,122.3], "compenso": 492.65, "contributo": 24.63, "baseIva": 517.28, "iva": 113.81, "anticipazioni": 0, "parteSenzaIva": 0, "bollo": 0, "bolloAddebitato": 0, "totale": 631.09, "ritenuta": 98.53, "netto": 532.56}},
     {"nome": "15. un tributo del cliente non conta per il bollo (16 + 70 = 86, ma conta 70)",
      "fattura": {"ritenuta": true, "righe": [{"tipo": "compenso", "quantita": 1, "prezzo": 300},{"tipo": "anticipazione", "quantita": 1, "prezzo": 16, "tributoCliente": true},{"tipo": "anticipazione", "quantita": 1, "prezzo": 70}]},
      "atteso": {"righe": [300,16,70], "compenso": 300, "contributo": 15, "baseIva": 315, "iva": 69.3, "anticipazioni": 86, "parteSenzaIva": 70, "bollo": 0, "bolloAddebitato": 0, "totale": 470.3, "ritenuta": 60, "netto": 410.3}},
@@ -91,7 +91,13 @@
      "atteso": {"righe": [1000], "compenso": 1000, "contributo": 20, "baseIva": 1020, "iva": 224.4, "anticipazioni": 0, "parteSenzaIva": 0, "bollo": 0, "bolloAddebitato": 0, "totale": 1244.4, "ritenuta": 200, "netto": 1044.4}},
     {"nome": "30. la riga del bollo, se arriva, non conta (la mette il server)",
      "fattura": {"ritenuta": true, "righe": [{"tipo": "compenso", "quantita": 1, "prezzo": 100},{"tipo": "anticipazione", "quantita": 1, "prezzo": 77.48},{"tipo": "bollo", "quantita": 1, "prezzo": 2}]},
-     "atteso": {"righe": [100,77.48], "compenso": 100, "contributo": 5, "baseIva": 105, "iva": 23.1, "anticipazioni": 77.48, "parteSenzaIva": 77.48, "bollo": 2, "bolloAddebitato": 2, "totale": 207.58, "ritenuta": 20, "netto": 187.58}}
+     "atteso": {"righe": [100,77.48], "compenso": 100, "contributo": 5, "baseIva": 105, "iva": 23.1, "anticipazioni": 77.48, "parteSenzaIva": 77.48, "bollo": 2, "bolloAddebitato": 2, "totale": 207.58, "ritenuta": 20, "netto": 187.58}},
+    {"nome": "31. una parcella come quelle di Flextaxa: km, indennita', una riga a zero (sul totale l'IVA sarebbe 641,75)",
+     "fattura": {"ritenuta": true, "righe": [{"tipo": "compenso", "quantita": 118, "prezzo": 0.5},{"tipo": "compenso", "quantita": 1, "prezzo": 250},{"tipo": "compenso", "quantita": 1, "prezzo": 1234.56},{"tipo": "compenso", "quantita": 0, "prezzo": 0},{"tipo": "compenso", "quantita": 1, "prezzo": 1234.56}]},
+     "atteso": {"righe": [59,250,1234.56,0,1234.56], "compenso": 2778.12, "contributo": 138.91, "baseIva": 2917.03, "iva": 641.74, "anticipazioni": 0, "parteSenzaIva": 0, "bollo": 0, "bolloAddebitato": 0, "totale": 3558.77, "ritenuta": 555.62, "netto": 3003.15}},
+    {"nome": "32. ore a 45 col 40% di sconto e km, come Flextaxa (sul totale l'IVA sarebbe 589,42)",
+     "fattura": {"ritenuta": true, "righe": [{"tipo": "compenso", "quantita": 60.5, "prezzo": 45, "sconto": 40},{"tipo": "compenso", "quantita": 319, "prezzo": 0.76},{"tipo": "compenso", "quantita": 21, "prezzo": 45, "sconto": 40},{"tipo": "compenso", "quantita": 143, "prezzo": 0.76}]},
+     "atteso": {"righe": [1633.5,242.44,567,108.68], "compenso": 2551.62, "contributo": 127.58, "baseIva": 2679.2, "iva": 589.43, "anticipazioni": 0, "parteSenzaIva": 0, "bollo": 0, "bolloAddebitato": 0, "totale": 3268.63, "ritenuta": 510.32, "netto": 2758.31}}
   ],
   "raggruppamenti": [
     {"nome": "A. Elettrodinamica, settembre: una riga per il mese",

@@ -64,13 +64,24 @@ function calcola(r, regole) {
   );
   const rimborso = regole.kmRimborsati ? centesimi(numero(r.km) * numero(regole.euroKm)) : 0;
   const spese = centesimi(numero(r.spese));
+  // 1.4.0 (servizi.md §2): le indennita' del lavoro, ognuna quantita' x prezzo al centesimo (o la somma gia' fatta).
+  const indennita = Array.isArray(r.indennita) ? importoIndennita(r.indennita) : centesimi(numero(r.importoIndennita));
   return {
     oreTotali: Math.round((lavoro + extra + viaggio) * 100) / 100,
     tariffa: tariffa,
     compensoOre: compenso,
     rimborsoKm: rimborso,
-    totale: centesimi(compenso + rimborso + spese),
+    importoIndennita: indennita,
+    totale: centesimi(compenso + rimborso + spese + indennita),
   };
+}
+
+/** La somma delle indennita' di un lavoro: ognuna quantita' (vuota = 1) x prezzo, al centesimo. */
+function importoIndennita(lista) {
+  return centesimi((lista || []).reduce((t, x) => {
+    const q = x.quantita === undefined || x.quantita === null || x.quantita === '' ? 1 : numero(x.quantita);
+    return t + centesimi(q * numero(x.prezzo));
+  }, 0));
 }
 
 /**
@@ -432,7 +443,8 @@ function costoCommessa({ commessa, cliente, impostazioni, rapportini, ore, spese
 function importoRigaFattura(r) {
   if (r.importo !== undefined && r.importo !== null && r.importo !== '') return centesimi(numero(r.importo));
   const q = r.quantita === undefined || r.quantita === null || r.quantita === '' ? 1 : numero(r.quantita);
-  return centesimi(q * numero(r.prezzo));
+  // 12/11/2026 (servizi.md §3): lo sconto della riga, in percento, come in Flextaxa (50 €/h meno 40%).
+  return centesimi(q * numero(r.prezzo) * (1 - numero(r.sconto) / 100));
 }
 
 /**
@@ -443,7 +455,9 @@ function importoRigaFattura(r) {
  *      righe: [{tipo: 'compenso'|'anticipazione', quantita, prezzo, importo?, tributoCliente?}]}
  *
  * Ogni pezzo arrotondato al centesimo PRIMA di sommare, come i rapportini e i
- * preventivi. La riga del bollo non entra in f (la aggiunge il server quando
+ * preventivi. Dal 12/11/2026 (servizi.md §3) l'IVA e' quella di Flextaxa, il programma che emette le fatture:
+ * arrotondata riga per riga, piu' quella della rivalsa EPPI arrotondata a parte (a volte un centesimo piu' che sul
+ * totale: casi 31 e 32 di casi-fattura.json). La riga del bollo non entra in f (la aggiunge il server quando
  * bolloAddebitato e' piu' di zero): se arriva, si salta.
  */
 function contiFattura(f) {
@@ -452,6 +466,8 @@ function contiFattura(f) {
   let anticipazioni = 0;
   let perIlBollo = 0;
   const righe = [];
+  const aliquota = numero(f.ivaPercentuale) / 100;
+  let ivaRighe = 0;
   for (const r of f.righe || []) {
     if (r.tipo === 'bollo') continue;
     const importo = importoRigaFattura(r);
@@ -461,11 +477,12 @@ function contiFattura(f) {
       if (!r.tributoCliente) perIlBollo = centesimi(perIlBollo + importo);
     } else {
       compenso = centesimi(compenso + importo);
+      ivaRighe = centesimi(ivaRighe + centesimi(importo * aliquota));
     }
   }
   const contributo = centesimi(compenso * numero(f.eppiPercentuale) / 100);
   const baseIva = forfettario ? 0 : centesimi(compenso + contributo);
-  const iva = forfettario ? 0 : centesimi(baseIva * numero(f.ivaPercentuale) / 100);
+  const iva = forfettario ? 0 : centesimi(ivaRighe + centesimi(contributo * aliquota));
   const parteSenzaIva = forfettario ? centesimi(compenso + contributo + perIlBollo) : perIlBollo;
   const bollo = parteSenzaIva > numero(f.bolloSoglia) ? centesimi(numero(f.bolloImporto)) : 0;
   const bolloAddebitato = f.bolloRivalsa ? bollo : 0;
@@ -515,7 +532,20 @@ function orePagate(r, pagaViaggioCliente) {
 
 /** Quanto vale un rapportino come sorgente: compenso ore + rimborso km (+ le spese vecchie senza righe, §5.1). */
 function importoRapportino(r) {
-  return centesimi(numero(r.compensoOre) + numero(r.rimborsoKm) + numero(r.speseSenzaRighe));
+  return centesimi(numero(r.compensoOre) + numero(r.rimborsoKm) + numero(r.speseSenzaRighe) + importoIndennita(r.indennita));
+}
+
+/**
+ * 1.4.0 (servizi.md §2): le righe delle indennita' di un lavoro, una per indennita', col codice del servizio, come
+ * le scrive Flextaxa ("IND-TR Indennità di trasferta | Cantiere di via Roma, 2 Giorni x 30,00").
+ * Sono compenso: contano per la rivalsa, l'IVA e la ritenuta come le ore.
+ */
+function righeIndennita(r, periodoDa, periodoA) {
+  return (r.indennita || []).map(x => {
+    const q = x.quantita === undefined || x.quantita === null || x.quantita === '' ? 1 : numero(x.quantita);
+    return { tipo: 'compenso', codice: testo(x.codice), descrizione: testo(x.descrizione), quantita: q, unita: testo(x.unita), prezzo: numero(x.prezzo),
+      importo: centesimi(q * numero(x.prezzo)), idCommessa: testo(r.idCommessa), periodoDa: periodoDa || r.data, periodoA: periodoA || r.data };
+  });
 }
 
 /**
@@ -587,7 +617,8 @@ function righeRapportini(x) {
       const progetto = testoProgetti(progettiDi([r]));
       const descrizione = 'Rapportino ' + (testo(r.numero) || r.id) + ' del ' + dataIt(r.data) + (progetto ? ', ' + progetto : '') + (testo(r.descrizione) ? ': ' + testo(r.descrizione) : '') +
         (parti.length ? ' (' + parti.join(', ') + ')' : '');
-      const righe = [{ tipo: 'compenso', descrizione, quantita: 1, unita: '', prezzo: importo, importo, idCommessa: testo(r.idCommessa), periodoDa: r.data, periodoA: r.data }];
+      const righe = importo > 0 || !(r.indennita || []).length ? [{ tipo: 'compenso', descrizione, quantita: 1, unita: '', prezzo: importo, importo, idCommessa: testo(r.idCommessa), periodoDa: r.data, periodoA: r.data }] : [];
+      righe.push(...righeIndennita(r));
       sue.filter(s => s.anticipazione).forEach(s => righe.push(anticipazione(s)));
       gruppi.push({
         gruppo: 'rapportino:' + r.id, righe,
@@ -660,6 +691,8 @@ function righeRapportini(x) {
     if (nonAnticipate > 0) {
       righe.push({ tipo: 'compenso', descrizione: 'Spese di viaggio e materiale di ' + quando, quantita: 1, unita: '', prezzo: nonAnticipate, importo: nonAnticipate, idCommessa: commessa, periodoDa, periodoA });
     }
+    // 1.4.0: le indennita', una riga ciascuna col suo codice.
+    for (const r of lista) righe.push(...righeIndennita(r));
     sue.filter(s => s.anticipazione).forEach(s => righe.push(anticipazione(s)));
     gruppi.push({
       gruppo: 'rapportini:' + testo(cliente.id) + ':' + mese, righe,
@@ -1223,6 +1256,6 @@ module.exports = {
   importoVoce, vociCheContano, gruppoAlternativa, contiPreventivo,
   minutiDa, oraDaMinuti, oreDaOrari, rimborsoTrasferta, oreDelRapportino, contaNeiConti, rimborsiDovuti, costoCommessa,
   // fase 4
-  importoRigaFattura, contiFattura, MESI, nomeMese, numeroIt, euroIt, dataIt, orePagate, importoRapportino, righeRapportini, progettiDi, testoProgetti,
+  importoRigaFattura, contiFattura, MESI, nomeMese, numeroIt, euroIt, dataIt, orePagate, importoRapportino, importoIndennita, righeIndennita, righeRapportini, progettiDi, testoProgetti,
   rigaScadenza, rigaSpesa, rigaOre, giorniDopo, fineMese, scadenzaFattura, pasqua, nonLavorativo, primoLavorativo, ibanValido,
 };

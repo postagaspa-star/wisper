@@ -273,6 +273,8 @@
           // Riunione del 06/11/2026: tutti i dati dello studio in una scheda sola, nell'ordine in cui si leggono.
           h('div', { class: 'scheda', 'data-scheda': 'studio' }, h('h2', null, 'Lo studio'), h('div', { class: 'fila' },
             coppia(input('RAGIONE_SOCIALE', 'Ragione sociale'), input('STUDIO_NOME_BREVE', 'Nome breve')),
+            // 1.4.0 (servizi.md §3): sotto il nome nel Mittente di preventivi e parcelle ("Perito industriale").
+            input('STUDIO_QUALIFICA', 'Qualifica'),
             input('TECNICO', 'Chi compila i rapportini'),
             coppia(input('PARTITA_IVA', 'Partita IVA'), input('CODICE_FISCALE', 'Codice fiscale')),
             input('INDIRIZZO', 'Indirizzo'),

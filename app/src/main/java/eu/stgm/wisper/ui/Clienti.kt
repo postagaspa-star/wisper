@@ -283,6 +283,7 @@ fun SchermataCliente(dati: Dati, nav: Navigatore, id: String) {
                     add("Telefono" to cl.telefono)
                     add("Indirizzo" to cl.indirizzoCompleto)
                     if (cl.alias.isNotEmpty()) add("Altri nomi" to cl.alias.joinToString(", "))
+                    if (cl.cliente && !cl.etichettaCommessa.isNullOrBlank()) add("Nei documenti la commessa si chiama" to cl.etichettaCommessa.orEmpty())
                     if (cl.cliente && perm.costi) {
                         add("Tariffa" to tariffaBreve(cl))
                         add("Viaggio" to if (cl.pagaViaggio == true) "pagato" else "non pagato")
@@ -664,6 +665,9 @@ fun SchermataModificaCliente(dati: Dati, nav: Navigatore, id: String?, fornitore
     var giorniPagamento by rememberSaveable(id) { mutableStateOf(esistente?.pagamentoGiorni?.toString().orEmpty()) }
     var fineMese by rememberSaveable(id) { mutableStateOf(when (esistente?.pagamentoFineMese) { true -> "si"; false -> "no"; null -> "auto" }) }
     var fattureToccate by rememberSaveable(id) { mutableStateOf(false) }
+    // 1.4.0 (servizi.md §3): come si chiama la commessa nei documenti di questo cliente (vuoto = Commessa; EPPI: JOB).
+    var etichettaCommessa by rememberSaveable(id) { mutableStateOf(esistente?.etichettaCommessa.orEmpty()) }
+    var etichettaToccata by rememberSaveable(id) { mutableStateOf(false) }
     var provato by rememberSaveable(id) { mutableStateOf(false) }
     var salvo by remember { mutableStateOf(false) }
     var erroreSalva by remember { mutableStateOf<String?>(null) }
@@ -729,6 +733,8 @@ fun SchermataModificaCliente(dati: Dati, nav: Navigatore, id: String?, fornitore
             provincia = provincia.trim().uppercase(),
             alias = alias,
             note = note.trim(),
+            // Si manda solo se il modulo la conosce (letta dal server o scritta qui): un server di prima non la toglie.
+            etichettaCommessa = if (base.etichettaCommessa != null || etichettaToccata) etichettaCommessa.trim() else null,
         ).let { s ->
             // Le regole della tariffa si scrivono solo se si vedono: senza i soldi restano com'erano.
             if (!conSoldi) s else s.copy(
@@ -830,6 +836,10 @@ fun SchermataModificaCliente(dati: Dati, nav: Navigatore, id: String?, fornitore
             }
             CampoTesto(provincia, { provincia = it.uppercase().take(2) }, "Provincia", Modifier.fillMaxWidth(), segnaposto = "VI", errore = errProvincia)
             CampoTesto(altriNomi, { altriNomi = it }, "Altri nomi", Modifier.fillMaxWidth(), segnaposto = "—")
+            if (eCliente) CampoTesto(
+                etichettaCommessa, { etichettaCommessa = it; etichettaToccata = true }, "Nei documenti la commessa si chiama",
+                Modifier.fillMaxWidth(), segnaposto = "Commessa",
+            )
 
             // ---- tariffa (solo clienti, solo con i soldi)
             if (conSoldi) {

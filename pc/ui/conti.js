@@ -108,13 +108,27 @@
     );
     const rimborso = regole.kmRimborsati ? centesimi(num(r.km) * num(regole.euroKm)) : 0;
     const spese = centesimi(num(r.spese));
+    // 1.4.0 (servizi.md §2): le indennità del lavoro, come il server.
+    const indennita = Array.isArray(r.indennita) ? importoIndennita(r.indennita) : centesimi(num(r.importoIndennita));
     return {
       oreTotali: Math.round((lavoro + extra + viaggio) * 100) / 100,
       tariffa: tariffa,
       compensoOre: compenso,
       rimborsoKm: rimborso,
-      totale: centesimi(compenso + rimborso + spese),
+      importoIndennita: indennita,
+      totale: centesimi(compenso + rimborso + spese + indennita),
     };
+  }
+
+  /** L'importo di un'indennità: quantità (vuota = 1) per prezzo, al centesimo. */
+  function importoUnaIndennita(x) {
+    const q = x.quantita === undefined || x.quantita === null || x.quantita === '' ? 1 : num(x.quantita);
+    return centesimi(q * num(x.prezzo));
+  }
+
+  /** La somma delle indennità di un lavoro (ognuna già al centesimo). */
+  function importoIndennita(lista) {
+    return centesimi((lista || []).reduce((t, x) => t + importoUnaIndennita(x), 0));
   }
 
   /**
@@ -190,7 +204,7 @@
   }
 
   function totali(lista) {
-    const t = { n: 0, oreLavoro: 0, oreExtra: 0, oreViaggio: 0, ore: 0, km: 0, spese: 0, compenso: 0, rimborso: 0, totale: 0 };
+    const t = { n: 0, oreLavoro: 0, oreExtra: 0, oreViaggio: 0, ore: 0, km: 0, spese: 0, compenso: 0, rimborso: 0, indennita: 0, totale: 0 };
     (lista || []).forEach(r => {
       t.n += 1;
       t.oreLavoro += num(r.oreLavoro);
@@ -201,6 +215,8 @@
       t.spese += num(r.spese);
       t.compenso += num(r.compensoOre);
       t.rimborso += num(r.rimborsoKm);
+      // 1.4.0 (servizi.md §2): le indennità del lavoro (dal server, o dalla lista se il lavoro è ancora sul computer).
+      t.indennita += Array.isArray(r.indennita) && (r.importoIndennita === undefined || r.importoIndennita === null || r.importoIndennita === '') ? importoIndennita(r.indennita) : num(r.importoIndennita);
       t.totale += num(r.totale);
     });
     Object.keys(t).forEach(k => { if (k !== 'n') t[k] = centesimi(t[k]); });
@@ -480,7 +496,7 @@
 
   const Conti = {
     num, numONull, centesimi, euro, numero, ore, data, dataOra, nomeMese, oggiIso, normalizza,
-    regoleDi, calcola, tariffaProposta, prossimoCodiceCommessa, prezzoOrarioDi, costoOrarioDi, budgetDi,
+    regoleDi, calcola, importoUnaIndennita, importoIndennita, tariffaProposta, prossimoCodiceCommessa, prezzoOrarioDi, costoOrarioDi, budgetDi,
     STATI, ETICHETTE_STATO, filtra, ordina, totali, cruscotto, settimane,
     importoVoce, vociCheContano, contaVoce, gruppoAlternativa, applicaScelte, vociDelPreventivo, contiPreventivo, importoScadenza,
   };

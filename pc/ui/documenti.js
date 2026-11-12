@@ -70,7 +70,7 @@
    * Il formato: A4, Figtree, i grigi di docs/aspetto.md. Niente giallo pieno:
    * si stampa anche in bianco e nero.
    */
-  function stile(imp, extra) {
+  function stile(imp, extra, destra) {
     const piede = [imp.RAGIONE_SOCIALE, imp.PARTITA_IVA ? 'P.IVA ' + imp.PARTITA_IVA : ''].filter(Boolean).join(' · ');
     const carattere = '"Figtree", "Segoe UI", Arial, sans-serif';
     // Fase 8: con la riga in fondo ai PDF il piè ha due righe; senza, la regola di prima com'era.
@@ -82,7 +82,10 @@
       '@font-face { font-family: "Figtree"; src: url("/font/Figtree.ttf") format("truetype"); font-weight: 300 900; font-display: block; }' +
       '@page { size: A4; margin: 14mm 14mm 18mm 14mm;' +
       bassoSinistra +
-      '  @bottom-right { content: url("' + SIMBOLO + '") "  Pagina " counter(page) " / " counter(pages); font: 500 8.5px ' + carattere + '; color: #8A8A92; } }' +
+      // 1.4.0 (servizi.md §3): preventivo, pre-parcella e parcella hanno a destra "Parcella n. 24 · Pagina 1 / 1", senza il simbolo.
+      (destra
+        ? '  @bottom-right { content: "' + escCss(destra) + ' · Pagina " counter(page) " / " counter(pages); font: 500 8.5px ' + carattere + '; color: #8A8A92; } }'
+        : '  @bottom-right { content: url("' + SIMBOLO + '") "  Pagina " counter(page) " / " counter(pages); font: 500 8.5px ' + carattere + '; color: #8A8A92; } }') +
       '* { box-sizing: border-box; }' +
       'body { margin: 0; font: 500 10.5px/1.45 ' + carattere + '; color: #1B1B1F; }' +
       '.testa { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #1B1B1F; padding-bottom: 10px; margin-bottom: 14px; }' +
@@ -208,6 +211,144 @@
       stile(imp, extra) + '</head><body>' + corpo + '</body></html>';
   }
 
+  // ======================================================================= 1.4.0: il modello della parcella
+
+  /*
+   * Preventivo, pre-parcella e parcella (docs/gestionale/servizi.md §3): il linguaggio del riepilogo dei rapportini, come
+   * il "Modello parcella WISPER" di Manuel. Logo a sinistra, a destra tipo, numero e "data · Valuta EUR (€)", il filetto;
+   * Mittente e Spett.le su due colonne senza riquadri; la tabella Codice, Descrizione, Q.tà, U.M., Unit. €, Sconto, IVA,
+   * Totale € senza righe verticali (anche le righe a zero); in fondo a sinistra il Pagamento e a destra il riepilogo; le
+   * Note; il piè con lo studio a sinistra e "Parcella n. 24 · Pagina 1 / 1" a destra. I numeri arrivano già fatti.
+   */
+  const STILE_DOC =
+    'body { font-size: 11px; line-height: 1.5; color: #1F1F23; }' +
+    '.testa { padding-bottom: 12px; margin-bottom: 20px; }' +
+    '.doc-parti { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; margin-bottom: 24px; }' +
+    '.doc-parte .etichetta, .doc-blocco .etichetta, .doc-pagamento .etichetta { font-size: 8.5px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: #8A8A92; margin-bottom: 9px; }' +
+    '.doc-parte .nome { font-weight: 800; font-size: 11.5px; margin-bottom: 2px; } .doc-parte div { line-height: 1.7; } .doc-parte .rif { margin-top: 7px; }' +
+    '.doc-oggetto { font-weight: 800; font-size: 12px; margin: 0 0 4px; } .doc-intro { white-space: pre-wrap; margin: 0 0 6px; } .doc-sotto { color: #5F5F67; margin: 0 0 16px; }' +
+    'table.doc-righe { margin-bottom: 0; } table.doc-righe th { font-size: 8px; font-weight: 600; letter-spacing: .04em; color: #3F3F46; border-bottom: 1.5px solid #1B1B1F; padding: 0 6px 9px; }' +
+    'table.doc-righe td { padding: 11px 6px; border-bottom: 1px solid #E6E5E1; } table.doc-righe td.cod { white-space: nowrap; } table.doc-righe td.desc { width: 40%; }' +
+    'table.doc-righe tr.sez td { font-weight: 800; padding-top: 16px; } table.doc-righe tr.sub td { color: #3F3F46; font-weight: 700; }' +
+    '.doc-fondo { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; margin-top: 22px; break-inside: avoid; }' +
+    '.doc-pagamento div { line-height: 1.8; }' +
+    '.doc-riepilogo table { margin: 0; } .doc-riepilogo td { padding: 4px 0; border: none; } .doc-riepilogo tr.forte td { font-weight: 800; }' +
+    '.doc-riepilogo tr.dovuto td { font-size: 16px; font-weight: 800; border-top: 1.5px solid #1B1B1F; padding-top: 12px; } .doc-riepilogo tr.prima td { padding-bottom: 10px; }' +
+    '.doc-blocco { border-top: 1px solid #E6E5E1; margin-top: 22px; padding-top: 12px; break-inside: avoid; } .doc-blocco .testo { white-space: pre-wrap; }' +
+    '.doc-blocco + .doc-blocco { margin-top: 12px; }' +
+    // Le voci fuori dal totale (facoltative non scelte, alternative scartate): grigie, barrato solo il totale.
+    'table.doc-righe tr.fuori td.n { text-decoration: none; } table.doc-righe tr.fuori td:last-child { text-decoration: line-through; }';
+
+  const centDoc = n => Math.round((numIt(n) + Number.EPSILON) * 100) / 100;
+  const euroDoc = n => numeroIt(n, 2, 2);
+  const prezzoDoc = n => numeroIt(n, 2, 4);
+  const percentoDoc = n => numeroIt(n, 2, 2) + '%';
+
+  /** La P.IVA dello studio come nel modello: "IT03123456786" (col paese davanti, se non c'è già). */
+  function pivaConPaese(piva, nazione) {
+    const p = String(piva || '').replace(/\s/g, '');
+    if (!p) return '';
+    return /^[A-Z]{2}/i.test(p) ? p.toUpperCase() : (nazione || 'IT') + p;
+  }
+
+  /**
+   * Lo studio del Mittente: { denominazione, qualifica, indirizzo, cap, comune, provincia, nazione, partitaIva,
+   * codiceFiscale, email (PEO), pec, telefono, sito } -> la parte HTML.
+   */
+  function mittenteDoc(s) {
+    const luogo = ([s.cap, s.comune].filter(Boolean).join(' ') + (s.provincia ? ' (' + s.provincia + ')' : '')).trim();
+    const paese = s.comune ? (!s.nazione || s.nazione === 'IT' ? 'Italia' : s.nazione) : '';
+    const righe = [
+      s.qualifica,
+      [s.indirizzo, luogo, paese].filter(Boolean).join(' - '),
+      [s.partitaIva ? 'P.IVA: ' + pivaConPaese(s.partitaIva, s.nazione) : '', s.codiceFiscale ? 'C.F.: ' + s.codiceFiscale : ''].filter(Boolean).join(' | '),
+      s.email ? 'PEO: ' + s.email : '',
+      s.pec ? 'PEC: ' + s.pec : '',
+      [s.telefono ? 'Telefono: ' + s.telefono : '', s.sito ? 'Web: ' + s.sito : ''].filter(Boolean).join(' | '),
+    ].filter(Boolean);
+    return '<div class="doc-parte"><div class="etichetta">Mittente</div><div class="nome">' + esc(s.denominazione || '') + '</div>' +
+      righe.map(r => '<div>' + esc(r) + '</div>').join('') + '</div>';
+  }
+
+  /** Lo studio dalle impostazioni (per il preventivo): INDIRIZZO è via e numero quando ci sono CAP e comune. */
+  function studioDaImpostazioni(imp) {
+    const conCampi = !!(imp.STUDIO_CAP || imp.STUDIO_COMUNE);
+    return {
+      denominazione: imp.RAGIONE_SOCIALE || '', qualifica: imp.STUDIO_QUALIFICA || '',
+      indirizzo: conCampi ? String(imp.INDIRIZZO || '').replace(/,\s*\d{5}\b.*$/, '') : String(imp.INDIRIZZO || ''),
+      cap: conCampi ? imp.STUDIO_CAP || '' : '', comune: conCampi ? imp.STUDIO_COMUNE || '' : '', provincia: conCampi ? String(imp.STUDIO_PROVINCIA || '').toUpperCase() : '',
+      nazione: 'IT', partitaIva: imp.PARTITA_IVA || '', codiceFiscale: String(imp.CODICE_FISCALE || '').toUpperCase(),
+      email: imp.EMAIL || '', pec: imp.PEC || '', telefono: imp.TELEFONO || '', sito: imp.STUDIO_SITO || '',
+    };
+  }
+
+  /**
+   * Il destinatario (Spett.le): { nome, indirizzo, cap, comune, provincia, nazione, partitaIva, codiceFiscale, altre[],
+   * riferimento } -> la parte HTML. riferimento: "Commessa: 26ST003" o "JOB: 26ST045" (l'etichetta la sceglie il cliente).
+   */
+  function destinatarioDoc(c) {
+    const luogo = ([c.cap, c.comune].filter(Boolean).join(' ') + (c.provincia ? ' (' + c.provincia + ')' : '') + (c.comune ? ' ' + (c.nazione || 'IT') : '')).trim();
+    const righe = [c.indirizzo, luogo, c.partitaIva ? 'P.IVA: ' + c.partitaIva : '', c.codiceFiscale ? 'C.F.: ' + c.codiceFiscale : ''].concat(c.altre || []).filter(Boolean);
+    return '<div class="doc-parte"><div class="etichetta">Spett.le</div><div class="nome">' + esc(c.nome || '') + '</div>' +
+      righe.map(r => '<div>' + esc(r) + '</div>').join('') + (c.riferimento ? '<div class="rif">' + esc(c.riferimento) + '</div>' : '') + '</div>';
+  }
+
+  /** "Commessa: 26ST003", "Commesse: 26ST001, 26ST004", "JOB: 26ST045" ('' senza commesse). */
+  function riferimentoCommesse(codici, etichetta) {
+    const l = [];
+    (codici || []).forEach(c => { const x = String(c || '').trim(); if (x && l.indexOf(x) < 0) l.push(x); });
+    if (!l.length) return '';
+    const e = String(etichetta || '').trim();
+    return (e || (l.length > 1 ? 'Commesse' : 'Commessa')) + ': ' + l.join(', ');
+  }
+
+  /**
+   * La tabella delle righe: [{ codice, descrizione, segni[], quantita, unita, prezzo, sconto, iva (testo), totale, fuori,
+   * sezione (una riga titolo), subtotale (una riga "Totale ...") }].
+   */
+  function tabellaDoc(righe) {
+    const corpo = righe.map(r => {
+      if (r.sezione !== undefined) return '<tr class="sez"><td colspan="8">' + esc(r.sezione) + '</td></tr>';
+      if (r.subtotale !== undefined) return '<tr class="sub"><td></td><td colspan="6">' + esc(r.etichetta || 'Totale') + '</td><td class="n">' + esc(euroDoc(r.subtotale)) + '</td></tr>';
+      return '<tr class="' + (r.fuori ? 'fuori' : '') + '"><td class="cod">' + esc(r.codice || '') + '</td>' +
+        '<td class="desc">' + esc(r.descrizione || '') + (r.segni || []).map(x => '<span class="segno">' + esc(x) + '</span>').join('') +
+        (r.sotto ? '<div class="sotto-riga">' + esc(r.sotto) + '</div>' : '') + '</td>' +
+        '<td class="n">' + esc(numeroIt(r.quantita, 2, 2)) + '</td><td>' + esc(r.unita || '') + '</td>' +
+        '<td class="n">' + esc(prezzoDoc(r.prezzo)) + '</td><td class="n">' + esc(percentoDoc(r.sconto)) + '</td>' +
+        '<td class="n">' + esc(r.iva || '') + '</td><td class="n">' + esc(euroDoc(r.totale)) + '</td></tr>';
+    }).join('');
+    return '<table class="doc-righe"><thead><tr><th>Codice</th><th>Descrizione</th><th class="n">Q.tà</th><th>U.M.</th><th class="n">Unit. €</th>' +
+      '<th class="n">Sconto</th><th class="n">IVA</th><th class="n">Totale €</th></tr></thead><tbody>' + corpo + '</tbody></table>';
+  }
+
+  /** Il fondo: a sinistra il pagamento (righe di testo, o niente), a destra il riepilogo [{ etichetta, valore, classe }]. */
+  function fondoDoc(pagamento, riepilogo) {
+    const ultima = riepilogo.length - 1;
+    return '<div class="doc-fondo"><div class="doc-pagamento">' + (pagamento && pagamento.length
+      ? '<div class="etichetta">Pagamento</div>' + pagamento.map(r => '<div>' + esc(r) + '</div>').join('') : '') + '</div>' +
+      '<div class="doc-riepilogo"><table><tbody>' + riepilogo.map((r, i) => '<tr class="' + [r.classe || '', i === ultima - 1 && riepilogo[ultima].classe === 'dovuto' ? 'prima' : ''].join(' ').trim() + '">' +
+        '<td>' + esc(r.etichetta) + '</td><td class="n">' + esc(euroDoc(r.valore) + ' €') + '</td></tr>').join('') + '</tbody></table></div></div>';
+  }
+
+  /** Un blocco col titolo piccolo e il testo intero (le note non si tagliano). */
+  function bloccoDoc(etichetta, testo) {
+    return String(testo || '').trim() ? '<div class="doc-blocco"><div class="etichetta">' + esc(etichetta) + '</div><div class="testo">' + esc(String(testo).trim()) + '</div></div>' : '';
+  }
+
+  /** La pagina intera: intestazione col logo, il corpo, il piè (studio a sinistra, "Parcella n. 24 · Pagina" a destra). */
+  function paginaDoc(imp, testa, corpo, titolo, destra) {
+    return '<!doctype html><html lang="it"><head><meta charset="utf-8"><title>' + esc(titolo) + '</title>' +
+      stile(imp, STILE_DOC, destra) + '</head><body>' + intestazione(imp, testa.etichetta, testa.numero, testa.sotto) + corpo + '</body></html>';
+  }
+
+  /** "N. 24 / 2026": il numero dato dal programma (col suo anno, se non l'ha già). */
+  function numeroFiscale(numero, data) {
+    const n = String(numero || '').trim();
+    if (!n) return '';
+    if (n.indexOf('/') >= 0) return 'N. ' + n.split('/').map(x => x.trim()).join(' / ');
+    return 'N. ' + n + (data ? ' / ' + String(data).slice(0, 4) : '');
+  }
+
   function righeConto(r) {
     const orePagate = C.num(r.oreLavoro) + (r.pagaViaggio ? C.num(r.oreViaggio) : 0);
     let dettaglioOre = C.ore(orePagate) + ' × ' + C.euro(r.tariffa);
@@ -220,6 +361,7 @@
       esc(r.kmRimborsati ? C.numero(r.km) + ' km × ' + C.numero(r.euroKm) + ' €' : 'non rimborsati') +
       '</div></td><td class="n">' + esc(C.euro(r.rimborsoKm)) + '</td></tr>' +
       '<tr><td>Spese</td><td class="n">' + esc(C.euro(r.spese)) + '</td></tr>' +
+      (C.num(r.importoIndennita) > 0 ? '<tr><td>Indennità<div class="sotto-riga">' + esc(righeIndennita(r).map(x => x.replace(/^Indennità: /, '')).join(' · ')) + '</div></td><td class="n">' + esc(C.euro(r.importoIndennita)) + '</td></tr>' : '') +
       '<tr class="tot"><td>Totale</td><td class="n">' + esc(C.euro(r.totale)) + '</td></tr>' +
       '</tbody></table>';
   }
@@ -366,6 +508,18 @@
    * km, spese, l'importo con conImporti) e il totale; con conImporti il conto; con conFoto gli scontrini. Sotto il lavoro
    * il luogo, gli strumenti e il ticket, sotto le spese la nota: solo quando ci sono.
    */
+  /**
+   * 1.4.0 (servizi.md §2): le indennità di un lavoro, una per riga sotto il lavoro svolto: "Indennità: IND-TR Indennità di
+   * trasferta, 2 Giorni" (la quantità solo se non è 1, senza prezzi: il conto le somma sotto).
+   */
+  function righeIndennita(r) {
+    return (Array.isArray(r.indennita) ? r.indennita : []).map(x => {
+      const q = x.quantita === undefined || x.quantita === null || x.quantita === '' ? 1 : C.num(x.quantita);
+      const quanto = q !== 1 || x.unita ? ', ' + C.numero(q) + (x.unita ? ' ' + x.unita : '') : '';
+      return 'Indennità: ' + [x.codice, x.descrizione].filter(Boolean).join(' ') + quanto;
+    });
+  }
+
   function foglioLavori(imp, ana, lista, testa, chi, numeroDi, o, titolo, fondo) {
     // In ordine di giorno, poi di rapportino e di posizione (prima, a parità di giorno, i lavori di un rapportino uscivano al contrario).
     const righe = lista.map((r, i) => ({ r, i })).sort((a, b) => String(a.r.data || '').slice(0, 10).localeCompare(String(b.r.data || '').slice(0, 10)) ||
@@ -387,7 +541,7 @@
         r.luogo ? 'Luogo: ' + r.luogo : '',
         rigaStrumenti(r.strumenti) ? 'Strumenti: ' + rigaStrumenti(r.strumenti) : '',
         r.ticket ? 'Ticket ' + r.ticket : '',
-      ].filter(Boolean);
+      ].concat(righeIndennita(r)).filter(Boolean);
       corpo += '<tr><td class="data">' + esc(dataCorta(r)) + '</td><td class="num">' + esc(numeroDi(r)) + '</td>' +
         '<td>' + esc((progetto && progetto.codice) || '—') +
         (chi.mostraCliente ? '<div class="sotto-riga">' + esc(r.cliente) + '</div>' : '') + '</td>' +
@@ -410,6 +564,7 @@
         '<tr><td>Compenso ore</td><td class="n">' + esc(C.euro(t.compenso)) + '</td></tr>' +
         '<tr><td>Rimborso km<div class="sotto-riga">' + esc(C.numero(t.km)) + ' km</div></td><td class="n">' + esc(C.euro(t.rimborso)) + '</td></tr>' +
         '<tr><td>Spese</td><td class="n">' + esc(C.euro(t.spese)) + '</td></tr>' +
+        (t.indennita > 0 ? '<tr><td>Indennità</td><td class="n">' + esc(C.euro(t.indennita)) + '</td></tr>' : '') +
         '<tr class="tot"><td>Totale</td><td class="n">' + esc(C.euro(t.totale)) + '</td></tr>' +
         '</tbody></table>';
     }
@@ -586,34 +741,64 @@
     const k = C.contiPreventivo(p, tutte);
     const cliente = clienteDi(p, ana);
     const accettato = p.stato === 'ACCETTATO';
-    const validita = p.scadenza ? 'valido fino al ' + C.data(p.scadenza) : '';
-    let corpo = intestazione(imp, 'Preventivo', numeroPreventivo(p), ['del ' + C.data(p.data), validita].filter(Boolean).join(' · '));
-    corpo += '<div class="parti">' + mittente(imp) + destinatario(cliente.nome || '', righeCliente(cliente, ana, p)) + '</div>';
-    corpo += '<div class="barra">Oggetto: ' + esc(p.oggetto || '') + '</div>';
-    if (p.introduzione) corpo += '<div class="blocco"><div class="testo">' + esc(p.introduzione) + '</div></div>';
-    corpo += '<div class="griglia">' +
-      cella('Grado di complessità', COMPLESSITA[p.complessita] || '—') +
-      cella('Data', C.data(p.data)) +
-      cella('Validità', p.scadenza ? 'fino al ' + C.data(p.scadenza) : '—') +
-      cella('Totale', C.euro(k.totale)) +
-      '</div>';
-    if (p.complessitaNota) corpo += '<div class="blocco"><div class="etichetta">La complessità dell\'incarico</div><div class="testo">' + esc(p.complessitaNota) + '</div></div>';
+    // 1.4.0 (servizi.md §3): la veste del modello della parcella; restano tutte le parti che chiede la legge.
+    const testa = { etichetta: 'Preventivo', numero: 'N. ' + numeroPreventivo(p),
+      sotto: [C.data(p.data), p.scadenza ? 'valido fino al ' + C.data(p.scadenza) : '', 'Valuta EUR (€)'].filter(Boolean).join(' · ') };
+    const sede = (ana.sedi || []).find(s => String(s.id) === String(p.idSede !== undefined ? p.idSede : p.sedeId));
+    const referente = (ana.referenti || []).find(r => String(r.id) === String(p.idReferente !== undefined ? p.idReferente : p.referenteId));
+    let corpo = '<div class="doc-parti">' + mittenteDoc(studioDaImpostazioni(imp)) + destinatarioDoc({
+      nome: cliente.nome || '', indirizzo: cliente.indirizzo, cap: cliente.cap, comune: cliente.citta, provincia: String(cliente.provincia || '').toUpperCase(),
+      nazione: cliente.nazione, partitaIva: cliente.partitaIva, codiceFiscale: cliente.codiceFiscale,
+      altre: [cliente.pec ? 'PEC: ' + cliente.pec : cliente.email ? 'Email: ' + cliente.email : '', sede ? 'Presso: ' + sede.nome + (sede.citta ? ', ' + sede.citta : '') : '',
+        referente ? 'Alla cortese attenzione di ' + referente.nome : ''],
+    }) + '</div>';
+    corpo += '<div class="doc-oggetto">Oggetto: ' + esc(p.oggetto || '') + '</div>';
+    if (p.introduzione) corpo += '<div class="doc-intro">' + esc(p.introduzione) + '</div>';
+    corpo += '<div class="doc-sotto">' + esc('Grado di complessità: ' + (COMPLESSITA[p.complessita] || '—').toLowerCase() + (p.complessitaNota ? ' · ' + p.complessitaNota : '')) + '</div>';
     const contano = C.vociCheContano(tutte);
     const contaDi = v => contano[tutte.indexOf(v)];
     const nelPortale = rigaAccettatoNelPortale(p);
-    sezioni.forEach(s => { if (s.voci.length) corpo += tabellaSezione(s, k, accettato, contaDi, !!nelPortale); });
-    corpo += tabellaConto(p, k);
-    corpo += '<div class="sotto-riga" style="margin:-6px 0 12px">Importi comprensivi di spese. Contributo integrativo e IVA come indicati; le voci facoltative non scelte e le alternative scartate non sono nel totale.</div>';
-    if ((p.scadenzePagamento || []).length) corpo += '<h3 class="sez">Pagamenti</h3>' + tabellaScadenze(p, k);
+    const conTitoli = sezioni.filter(s => s.voci.length).length > 1 || sezioni.some(s => s.voci.length && s.titolo);
+    const righe = [];
+    sezioni.forEach(s => {
+      if (!s.voci.length) return;
+      if (conTitoli && s.titolo) righe.push({ sezione: s.titolo });
+      s.voci.forEach(v => {
+        const conta = contaDi(v);
+        const segni = [];
+        if (nelPortale && !conta && (C.gruppoAlternativa(v) || v.facoltativa === true || v.facoltativa === 1)) segni.push('non inclusa');
+        else if (C.gruppoAlternativa(v)) segni.push(conta ? 'scelta' : 'in alternativa');
+        else if (v.facoltativa === true || v.facoltativa === 1) segni.push(conta ? 'facoltativa, compresa' : (accettato ? 'facoltativa, non scelta' : 'facoltativa'));
+        const q = v.modo === 'corpo' || !v.modo ? 1 : C.num(v.quantita === undefined || v.quantita === null || v.quantita === '' ? 1 : v.quantita);
+        righe.push({ codice: v.codice || '', descrizione: v.descrizione, segni, quantita: q,
+          unita: v.modo === 'corpo' || !v.modo ? 'a corpo' : (v.unita || (v.modo === 'ore' ? 'Ore' : '')), prezzo: v.prezzo, sconto: v.scontoPercentuale,
+          iva: percentoDoc(p.ivaPercentuale), totale: C.importoVoce(v), fuori: !conta });
+      });
+      if (conTitoli && s.titolo && sezioni.filter(x => x.voci.length).length > 1) righe.push({ subtotale: k.perSezione[String(s.id === undefined ? '' : s.id)] || 0, etichetta: 'Totale ' + s.titolo.toLowerCase() });
+    });
+    corpo += tabellaDoc(righe);
+    const riepilogo = [];
+    if (k.sconto > 0) {
+      riepilogo.push({ etichetta: 'Totale delle prestazioni', valore: k.sommaVoci });
+      if (k.scontoDaPercentuale > 0) riepilogo.push({ etichetta: 'Sconto ' + C.numero(p.scontoPercentuale) + '%', valore: -k.scontoDaPercentuale });
+      if (k.scontoEuro > 0) riepilogo.push({ etichetta: 'Sconto', valore: -k.scontoEuro });
+    }
+    riepilogo.push({ etichetta: 'Imponibile', valore: k.imponibile });
+    riepilogo.push({ etichetta: 'Totale rivalsa (' + C.numero(p.eppiPercentuale) + '% EPPI)', valore: k.contributo });
+    riepilogo.push({ etichetta: 'Totale IVA (' + C.numero(p.ivaPercentuale) + '%)', valore: k.iva });
+    riepilogo.push({ etichetta: 'Totale preventivo', valore: k.totale, classe: 'dovuto' });
+    const pagamenti = (p.scadenzePagamento || []).map(s => (s.descrizione || '') + ' ' +
+      (s.quando === 'data' && s.data ? 'il ' + C.data(s.data) : (QUANDO_PAGARE[s.quando] || '')) + (s.tipo === 'importo' ? '' : ' (' + C.numero(s.valore) + '%)') + ': ' +
+      euroDoc(s.importo !== undefined && s.importo !== null && s.importo !== '' ? s.importo : C.importoScadenza(s, k.imponibile)) + ' €');
+    corpo += fondoDoc(pagamenti.map(x => x.replace(/^\s+/, '')), riepilogo);
+    corpo += '<div class="sotto-riga" style="margin-top:8px">Importi comprensivi di spese. Rivalsa EPPI e IVA come indicate; le voci facoltative non scelte e le alternative scartate non sono nel totale.</div>';
     const pt = polizzaETitoli(imp);
-    corpo += '<div class="due-blocchi">' +
-      '<div class="blocco"><div class="etichetta">Oneri ipotizzabili dal conferimento alla conclusione</div><div class="testo">' + esc(p.oneriPrevisti || 'Nessun onere oltre a quelli indicati.') + '</div></div>' +
-      '<div class="blocco"><div class="etichetta">Polizza professionale e titoli</div><div class="testo">' + esc(
-        (pt.polizza ? 'Polizza: ' + pt.polizza : 'Polizza: —') + '\n' + (pt.titoli || 'Titoli: —')) + '</div></div></div>';
-    if (p.condizioni) corpo += '<div class="blocco"><div class="etichetta">Condizioni</div><div class="testo">' + esc(p.condizioni) + '</div></div>';
-    if (p.scadenza) corpo += '<div class="blocco"><div class="etichetta">Validità dell\'offerta</div><div class="testo">' + esc('Questa offerta vale fino al ' + C.data(p.scadenza) + '. Dopo l\'accettazione i prezzi non cambiano.') + '</div></div>';
+    corpo += bloccoDoc('Oneri ipotizzabili dal conferimento alla conclusione', p.oneriPrevisti || 'Nessun onere oltre a quelli indicati.');
+    corpo += bloccoDoc('Polizza professionale e titoli', (pt.polizza ? 'Polizza: ' + pt.polizza : 'Polizza: —') + '\n' + (pt.titoli || 'Titoli: —'));
+    corpo += bloccoDoc('Condizioni', p.condizioni);
+    if (p.scadenza) corpo += bloccoDoc('Validità dell\'offerta', 'Questa offerta vale fino al ' + C.data(p.scadenza) + '. Dopo l\'accettazione i prezzi non cambiano.');
     corpo += firmeDocumento(p, imp, 'Per lo studio', nelPortale);
-    return pagina(imp, 'Preventivo ' + numeroPreventivo(p), corpo);
+    return paginaDoc(imp, testa, corpo, 'Preventivo ' + numeroPreventivo(p), 'Preventivo ' + numeroPreventivo(p));
   }
 
   /**
@@ -782,45 +967,100 @@
   }
 
   /**
-   * L'avviso di parcella (fase4.md §8.3): cliente, righe, totali, netto, IBAN; non è una
-   * fattura ("Documento senza valore fiscale: la fattura si emette al pagamento").
+   * 1.4.0 (servizi.md §3): il corpo di pre-parcella e parcella dal modello del server (lo stesso del prospetto e
+   * dell'XML): le parti, le righe col codice e lo sconto, pagamento e riepilogo, le note. I numeri sono quelli del
+   * modello (della bozza, o dell'XML tornato da Flextaxa): qui non si ricalcola niente.
    */
-  function avvisoParcella(modello, opzioni) {
-    const m = modello || {};
+  function corpoDaModello(m, nota) {
     const p = m.prestatore || {};
     const c = m.committente || {};
     const sp = p.sede || {};
     const sc = c.sede || {};
-    const piede = 'Documento senza valore fiscale: la fattura si emette al pagamento';
-    const indirizzo = s => [s.indirizzo, [s.cap, s.comune, s.provincia ? '(' + s.provincia + ')' : ''].filter(Boolean).join(' ')].filter(Boolean).join(', ');
-    const o = opzioni || {};
-    let corpo = '<div class="testa">' + (o.logo ? aziendaInTesta(p.denominazione, o.logo, o.conNome) : '<div class="azienda">' + esc(p.denominazione || '') + '</div>') + '<div class="tipo"><div class="etichetta">Avviso di parcella</div>' +
-      '<div class="numero">Rif. ' + esc(m.riferimento || '') + '</div><div class="sotto">' + esc('del ' + dataIt(m.dataProposta || m.data)) + '</div></div></div>';
-    corpo += '<div class="parti"><div class="parte"><div class="etichetta">Da</div><div class="nome">' + esc(p.denominazione || '') + '</div>' +
-      // 06/11/2026: le commesse della fattura nella parte di chi manda, solo se il modello le porta (m.commesse, codici).
-      [indirizzo(sp), p.partitaIva ? 'P.IVA ' + p.partitaIva : '', p.pec ? 'PEC ' + p.pec : p.email, rigaCommesse(m.commesse)].filter(Boolean).map(r => '<div>' + esc(r) + '</div>').join('') + '</div>' +
-      '<div class="parte"><div class="etichetta">Spett.le</div><div class="nome">' + esc(c.denominazione || [c.nome, c.cognome].filter(Boolean).join(' ')) + '</div>' +
-      [indirizzo(sc), c.partitaIva ? 'P.IVA ' + c.partitaIva : c.codiceFiscale ? 'C.F. ' + c.codiceFiscale : ''].filter(Boolean).map(r => '<div>' + esc(r) + '</div>').join('') + '</div></div>';
-    corpo += '<table class="voci"><thead><tr><th>Descrizione</th><th class="n">Quantità</th><th class="n">Prezzo</th><th class="n">Importo</th></tr></thead><tbody>' +
-      (m.righe || []).map(r => '<tr><td class="desc">' + esc(r.descrizione) + (r.natura ? '<div class="sotto-riga">' + esc(ivaRiga(r)) + '</div>' : '') + '</td><td class="n">' + esc(numeroIt(r.quantita === null || r.quantita === undefined ? 1 : r.quantita, 0, 8) + (r.unitaMisura ? ' ' + r.unitaMisura : '')) +
-        '</td><td class="n">' + esc(euroIt(r.prezzoUnitario)) + ' €</td><td class="n">' + esc(euroIt(r.prezzoTotale)) + ' €</td></tr>').join('') + '</tbody></table>';
-    const riga = (k, v, classe) => '<tr' + (classe ? ' class="' + classe + '"' : '') + '><td>' + esc(k) + '</td><td class="n">' + esc(v) + '</td></tr>';
-    let conto = '';
-    if (m.cassa) conto += riga('Contributo integrativo ' + (CASSE[m.cassa.tipo] || '') + ' ' + percentoIt(m.cassa.aliquota), euroIt(m.cassa.importo) + ' €');
-    (m.riepilogo || []).forEach(r => { if (!r.natura) conto += riga('IVA ' + percentoIt(r.aliquotaIva), euroIt(r.imposta) + ' €'); });
-    conto += riga('Totale', euroIt(m.totaleDocumento) + ' €', 'tot');
-    if (m.ritenuta) conto += riga('Ritenuta ' + percentoIt(m.ritenuta.aliquota) + ' (la trattiene il cliente)', '− ' + euroIt(m.ritenuta.importo) + ' €');
-    conto += riga('Netto da pagare', euroIt(m.nettoAPagare) + ' €', 'tot');
-    corpo += '<table class="conto"><tbody>' + conto + '</tbody></table>';
-    const pag = ((m.pagamento && m.pagamento.dettagli) || [])[0];
-    if (pag) {
-      corpo += '<div class="blocco"><div class="etichetta">Pagamento</div><div class="testo">' + esc([
-        (MODALITA_PAGAMENTO[pag.modalita] || 'Pagamento') + (pag.scadenza ? ' entro il ' + dataIt(pag.scadenza) : ''),
-        pag.iban ? 'IBAN ' + pag.iban : '', pag.istituto || ''].filter(Boolean).join('\n')) + '</div></div>';
+    let corpo = '<div class="doc-parti">' + mittenteDoc({
+      denominazione: p.denominazione, qualifica: p.qualifica, indirizzo: sp.indirizzo, cap: sp.cap, comune: sp.comune, provincia: sp.provincia, nazione: sp.nazione,
+      partitaIva: p.partitaIva, codiceFiscale: p.codiceFiscale, email: p.email, pec: p.pec, telefono: p.telefono, sito: p.sito,
+    }) + destinatarioDoc({
+      nome: c.denominazione || [c.nome, c.cognome].filter(Boolean).join(' '), indirizzo: sc.indirizzo, cap: sc.cap, comune: sc.comune, provincia: sc.provincia, nazione: sc.nazione,
+      partitaIva: c.partitaIva, codiceFiscale: c.codiceFiscale, riferimento: riferimentoCommesse(m.commesse, c.etichettaCommessa),
+    }) + '</div>';
+    const righe = (m.righe || []);
+    corpo += tabellaDoc(righe.map(r => ({
+      codice: r.codice || '', descrizione: r.descrizione, quantita: r.quantita === null || r.quantita === undefined || r.quantita === '' ? 1 : r.quantita,
+      unita: r.unitaMisura || '', prezzo: r.prezzoUnitario, sconto: r.sconto || 0, iva: r.natura ? r.natura : percentoDoc(r.aliquotaIva), totale: r.prezzoTotale,
+    })));
+    const esente = r => r.natura === 'N1';
+    const imponibile = centDoc(righe.filter(r => !esente(r)).reduce((t, r) => t + numIt(r.prezzoTotale), 0));
+    const spese = centDoc(righe.filter(esente).reduce((t, r) => t + numIt(r.prezzoTotale), 0));
+    const iva = centDoc((m.riepilogo || []).filter(r => !r.natura).reduce((t, r) => t + numIt(r.imposta), 0));
+    const riepilogo = [{ etichetta: 'Imponibile', valore: imponibile }];
+    if (m.cassa) riepilogo.push({ etichetta: 'Totale rivalsa (' + numeroIt(m.cassa.aliquota, 0, 2) + '% ' + (CASSE[m.cassa.tipo] || 'cassa') + ')', valore: m.cassa.importo });
+    riepilogo.push({ etichetta: 'Spese', valore: spese });
+    riepilogo.push({ etichetta: 'Totale IVA', valore: iva });
+    riepilogo.push({ etichetta: m.tipoDocumento === 'TD04' ? 'Totale della nota' : 'Totale documento', valore: m.totaleDocumento, classe: 'forte' });
+    if (m.ritenuta) {
+      riepilogo.push({ etichetta: 'Ritenuta d\'acconto (' + (m.ritenuta.tipo || 'RT01') + ')', valore: -numIt(m.ritenuta.importo) });
+      riepilogo.push({ etichetta: 'Totale ritenute', valore: -numIt(m.ritenuta.importo) });
     }
-    corpo += '<div class="blocco"><div class="testo">' + esc(piede) + '</div></div>';
-    return '<!doctype html><html lang="it"><head><meta charset="utf-8"><title>' + esc('Avviso di parcella ' + (m.riferimento || '')) + '</title>' +
-      stile(o.logo ? { RAGIONE_SOCIALE: piede, PARTITA_IVA: '', STUDIO_LOGO: o.logo } : { RAGIONE_SOCIALE: piede, PARTITA_IVA: '' }) + '</head><body>' + corpo + '</body></html>';
+    riepilogo.push({ etichetta: m.tipoDocumento === 'TD04' ? 'Netto stornato' : 'Importo dovuto', valore: m.nettoAPagare, classe: 'dovuto' });
+    const dettagli = (m.pagamento && m.pagamento.dettagli) || [];
+    const pagamento = [];
+    if (dettagli.length) {
+      const primo = dettagli[0];
+      pagamento.push('Modalità: ' + String(MODALITA_PAGAMENTO[primo.modalita] || 'Pagamento').toUpperCase());
+      if (dettagli.length === 1) {
+        if (primo.scadenza) pagamento.push('Scadenza: ' + dataIt(primo.scadenza));
+        pagamento.push('Importo in scadenza: ' + euroDoc(primo.importo) + ' €');
+      } else {
+        dettagli.forEach(d => pagamento.push('Scadenza ' + dataIt(d.scadenza) + ': ' + euroDoc(d.importo) + ' €'));
+      }
+      if (primo.beneficiario) pagamento.push('Beneficiario: ' + primo.beneficiario);
+      if (primo.iban) pagamento.push('IBAN: ' + primo.iban);
+      if (primo.bic) pagamento.push('BIC/SWIFT: ' + primo.bic);
+    }
+    corpo += fondoDoc(pagamento, riepilogo);
+    corpo += bloccoDoc('Note', [m.note || '', nota || ''].filter(Boolean).join('\n'));
+    return corpo;
+  }
+
+  /** Le impostazioni per intestazione e piè di un documento dal modello (logo e nome come nelle opzioni). */
+  function impDaModello(m, o) {
+    const p = m.prestatore || {};
+    const imp = Object.assign({}, o.impostazioni || {});
+    imp.RAGIONE_SOCIALE = imp.RAGIONE_SOCIALE || p.denominazione || '';
+    imp.PARTITA_IVA = imp.PARTITA_IVA || p.partitaIva || '';
+    if (o.logo) imp.STUDIO_LOGO = o.logo;
+    if (o.conNome === false) imp.PDF_NOME = false;
+    if (!o.logo && !o.impostazioni) imp.PDF_LOGO = false;
+    return imp;
+  }
+
+  /**
+   * La pre-parcella (prima "Avviso di parcella", fase4.md §8.3; 1.4.0 col modello della parcella): la bozza o la
+   * fattura pronta coi numeri di Wisper. Non è una fattura: lo dice nelle note.
+   * opzioni: logo, conNome (come prima), impostazioni (per il piè: nome breve, riga in fondo).
+   */
+  function avvisoParcella(modello, opzioni) {
+    const m = modello || {};
+    const o = opzioni || {};
+    const imp = impDaModello(m, o);
+    const testa = { etichetta: 'Pre-parcella', numero: 'Rif. ' + (m.riferimento || ''), sotto: dataIt(m.dataProposta || m.data) + ' · Valuta EUR (€)' };
+    const corpo = corpoDaModello(m, 'Documento senza valore fiscale: la fattura si emette al pagamento.');
+    return paginaDoc(imp, testa, corpo, 'Pre-parcella ' + (m.riferimento || ''), 'Pre-parcella ' + (m.riferimento || ''));
+  }
+
+  /**
+   * 1.4.0: la parcella (o fattura, o nota di credito: lo dice il tipo documento), cioè la fattura emessa col numero dato
+   * dal programma. È la copia per il cliente, coi numeri dell'XML tornato se c'è (il modello li porta già).
+   */
+  function parcella(modello, opzioni) {
+    const m = modello || {};
+    const o = opzioni || {};
+    const imp = impDaModello(m, o);
+    const tipo = TIPI_DOCUMENTO[m.tipoDocumento] || 'Fattura';
+    const numero = numeroFiscale(m.numero, m.data || m.dataProposta) || 'Rif. ' + (m.riferimento || '');
+    const testa = { etichetta: tipo, numero, sotto: dataIt(m.data || m.dataProposta) + ' · Valuta EUR (€)' };
+    const breve = tipo + ' n. ' + (String(m.numero || '').trim() || m.riferimento || '');
+    return paginaDoc(imp, testa, corpoDaModello(m, ''), breve, breve);
   }
 
   /**
@@ -880,7 +1120,7 @@
     return pagina(imp, 'Contratto di assistenza ' + (k.numero || ''), corpo);
   }
 
-  const Documenti = { rapportino, rigaStrumenti, riepilogo, preventivo, incarico, numeroPreventivo, esc, idDaUrl, sezioniProspetto, prospettoFattura, avvisoParcella, lettera, contrattoAssistenza, logoDi, nomeAccantoAlLogo, rigaCommesse };
+  const Documenti = { rapportino, rigaStrumenti, riepilogo, preventivo, incarico, numeroPreventivo, esc, idDaUrl, sezioniProspetto, prospettoFattura, avvisoParcella, parcella, lettera, contrattoAssistenza, logoDi, nomeAccantoAlLogo, rigaCommesse };
   if (typeof module !== 'undefined' && module.exports) module.exports = Documenti;
   else radice.WisperDocumenti = Documenti;
 })(typeof window !== 'undefined' ? window : globalThis);

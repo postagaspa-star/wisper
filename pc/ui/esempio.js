@@ -255,7 +255,9 @@
     rg(nelMese(oggi, 8), 1, 'BOZZA', [
       ['C003', c47, 'Sopralluogo sul tetto e misure per i pannelli.', 4, 0.5, 18, 0],
       ['C002', c45, 'Controllo del quadro generale dopo il temporale.', 2, 0, 12, 0]]);
-    r(nelMese(oggi, 6), 'C001', c46, 'Verifica dei finecorsa e prova a vuoto.', 6, 1, 64, 0, 'BOZZA', 3);
+    // 1.4.0: un lavoro con un'indennità di trasferta (due giorni).
+    r(nelMese(oggi, 6), 'C001', c46, 'Verifica dei finecorsa e prova a vuoto.', 6, 1, 64, 0, 'BOZZA', 3, { indennita: [{ idServizio: 9, codice: 'IND-TR', descrizione: 'Indennità di trasferta',
+      quantita: 2, unita: 'Giorni', prezzo: 30, aliquotaIva: 22, tipo: 'servizio', prezzoAcquisto: null, aliquotaAcquisto: 22, fornitore: '', tag: [], note: '', immagine: null, importo: 60 }] });
     r(nelMese(oggi, 5), 'C002', c45, 'Sostituzione interruttore generale.', 3.5, 0.5, 22, 0, 'BOZZA', 1);
     r(nelMese(oggi, 3), 'C001', c46, 'Programmazione PLC della linea.', 8, 1, 64, 0, 'BOZZA', 3);
     r(nelMese(oggi, 2), 'C001', c46, 'Taratura dei sensori di linea.', 6, 1, 64, 0, 'BOZZA', 3);
@@ -309,7 +311,10 @@
       ['SR', 'Sopralluogo e rilievo', 'corpo', '', 350], ['PP', 'Progetto preliminare', 'corpo', '', 600], ['PE', 'Progetto esecutivo', 'corpo', '', 1900],
       ['DL', 'Direzione lavori', 'ore', 'h', 45], ['DIRI', 'Dichiarazione di rispondenza (DiRi)', 'corpo', '', 450], ['VP', 'Verifiche periodiche', 'corpo', '', null],
       ['CO', 'Collaudo', 'corpo', '', 380], ['OC', 'Ore di consulenza', 'ore', 'h', 45],
-    ].map((x, i) => ({ id: i + 1, codice: x[0], nome: x[1], descrizione: '', modo: x[2], unita: x[3], prezzo: x[4], attivo: true, ordine: i + 1 }));
+      // 1.4.0 (servizi.md): i Servizi coi campi di Flextaxa e tre indennità di esempio (prezzi inventati).
+      ['IND-TR', 'Indennità di trasferta', 'quantita', 'Giorni', 30], ['IND-NOT', 'Indennità notturna', 'ore', 'Ore', 12], ['IND-FES', 'Indennità festiva', 'ore', 'Ore', 15],
+    ].map((x, i) => ({ id: i + 1, codice: x[0], nome: x[1], descrizione: '', modo: x[2], unita: x[3] === 'h' ? 'Ore' : x[3] || (x[2] === 'corpo' ? 'A corpo' : 'Nr'), prezzo: x[4], attivo: true, ordine: i + 1,
+      tipo: 'servizio', aliquotaIva: 22, prezzoAcquisto: null, aliquotaAcquisto: 22, fornitore: '', tag: /^IND/.test(x[0]) ? ['indennità', 'rapportini'] : ['preventivi'], note: '', immagine: null, modificato: '' }));
     const vp = (id, descrizione, modo, quantita, prezzo, extra) => Object.assign({ id, idListino: null, descrizione, modo, quantita, unita: modo === 'ore' ? 'h' : '', prezzo,
       scontoPercentuale: 0, facoltativa: false, alternativa: '', scelta: false }, extra || {});
     const pr = (n, extra) => Object.assign({
@@ -1326,7 +1331,8 @@
         return { ok: true, listino: dati.listino.filter(l => l.attivo || b.tutte === true || b.tutte === '1' || b.tutte === 'true') };
       case 'salvaVoceListino': {
         const x = Object.assign({}, b.voce || {});
-        if (!String(x.nome || '').trim()) return { ok: false, errore: 'Nome: scrivi il nome della prestazione' };
+        if (!String(x.nome || '').trim()) return { ok: false, errore: 'Descrizione: scrivi la descrizione del servizio' };
+        if (x.immagine && typeof x.immagine === 'string') x.immagine = { id: x.immagine, url: '/file/' + x.immagine };
         const es = x.id ? trova(dati.listino, x.id) : null;
         if (es) { Object.assign(es, x); scrivi(dati, azione, 'listino', es.id, es.nome, {}, { nome: es.nome }); return { ok: true, voce: es }; }
         const nuova = Object.assign({ codice: '', descrizione: '', modo: 'corpo', unita: '', prezzo: null, attivo: true, ordine: dati.listino.length + 1 }, x, { id: ++dati.contatori.lis });

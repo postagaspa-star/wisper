@@ -54,7 +54,11 @@ object StatoPreventivo {
     }
 }
 
-/** Una prestazione del listino dello studio: si prende con un tocco quando si scrive un preventivo. */
+/**
+ * Un servizio (fino alla 1.3 "una prestazione del listino"): si prende con un tocco in un preventivo e, dalla 1.4.0, in
+ * un'indennità del rapportino. I campi sono quelli di Flextaxa (servizi.md §1): [nome] è la Descrizione, [codice] il
+ * Codice articolo; [modo] non si vede, lo decide l'unità ([Servizi.modoDaUnita]).
+ */
 data class VoceListino(
     val id: String,
     val nome: String,
@@ -62,16 +66,47 @@ data class VoceListino(
     val descrizione: String = "",
     val modo: String = ModoVoce.CORPO,
     val unita: String = "",
-    /** Null = senza prezzo (lo scrive Manuel), o senza il permesso dei soldi. */
+    /** Prezzo di vendita unitario, IVA esclusa. Null = senza prezzo (i servizi di prima), o senza il permesso dei soldi. */
     val prezzo: Double? = null,
     val attivo: Boolean = true,
     val ordine: Int = 0,
+    // ---- dalla 1.4.0 (servizi.md §1)
+    /** "servizio" o "prodotto". */
+    val tipo: String = Servizi.SERVIZIO,
+    val aliquotaIva: Double = 22.0,
+    /** Costo di acquisto unitario, IVA esclusa; null = non scritto (o senza il permesso dei soldi). */
+    val prezzoAcquisto: Double? = null,
+    val aliquotaAcquisto: Double = 22.0,
+    val fornitore: String = "",
+    val tag: List<String> = emptyList(),
+    /** Note personali: non vanno mai nei documenti. */
+    val note: String = "",
+    val immagine: FileRemoto? = null,
 ) {
     fun aJson(): JSONObject = JSONObject().put("id", PonteServer.idJson(id).takeIf { id.isNotBlank() } ?: JSONObject.NULL)
         .put("codice", codice).put("nome", nome).put("descrizione", descrizione).put("modo", modo).put("unita", unita)
         .put("prezzo", prezzo ?: JSONObject.NULL).put("attivo", attivo).put("ordine", ordine)
+        .put("tipo", tipo).put("aliquotaIva", aliquotaIva).put("prezzoAcquisto", prezzoAcquisto ?: JSONObject.NULL)
+        .put("aliquotaAcquisto", aliquotaAcquisto).put("fornitore", fornitore).put("tag", JSONArray(tag)).put("note", note)
+        .put("immagine", immagine?.aJson() ?: JSONObject.NULL)
+
+    /** "45,00 €/h", "350,00 €", "0,76 €/km"; null senza prezzo. */
+    fun prezzoPerUnita(): String? = prezzo?.let { p -> Numeri.euro(p) + perUnita(unita) }
 
     companion object {
+        /**
+         * 1.4.0: come si scrive l'unità dopo il prezzo. Le unità di Flextaxa (Nr, Ore, Pz, Km, Giorni, A corpo) dicono
+         * "45,00 €/h", "30,00 €/giorno", "0,76 €/km", "12,00 €/pz"; Nr e A corpo niente (il prezzo è per uno).
+         */
+        fun perUnita(unita: String): String = when (unita.trim().lowercase()) {
+            "", "nr", "a corpo" -> ""
+            "ore", "ora", "h" -> "/h"
+            "giorni", "giorno" -> "/giorno"
+            "km" -> "/km"
+            "pz" -> "/pz"
+            else -> "/" + unita.trim()
+        }
+
         fun daJson(o: JSONObject) = VoceListino(
             id = o.testo("id"),
             nome = o.testo("nome"),
@@ -82,6 +117,14 @@ data class VoceListino(
             prezzo = o.numero("prezzo"),
             attivo = if (o.has("attivo")) o.vero("attivo") else true,
             ordine = o.optInt("ordine", 0),
+            tipo = if (o.testo("tipo").equals(Servizi.PRODOTTO, ignoreCase = true)) Servizi.PRODOTTO else Servizi.SERVIZIO,
+            aliquotaIva = o.numero("aliquotaIva") ?: 22.0,
+            prezzoAcquisto = o.numero("prezzoAcquisto"),
+            aliquotaAcquisto = o.numero("aliquotaAcquisto") ?: 22.0,
+            fornitore = o.testo("fornitore"),
+            tag = Servizi.tagDaJson(o),
+            note = o.testo("note"),
+            immagine = Indennita.immagineDa(o),
         )
     }
 }

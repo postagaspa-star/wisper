@@ -144,6 +144,7 @@ test('PDF col logo e PDF_NOME spento: in cima solo il logo; Mittente e piè teng
   const m = { prestatore: { denominazione: 'Studio' }, committente: { denominazione: 'Rossi' }, riferimento: 'W-1', tipoDocumento: 'TD01', righe: [], riepilogo: [] };
   assert.ok(D.prospettoFattura(m, { oggi: '2026-11-06', logo: 'logoDiProva123', conNome: false }).indexOf('alt=""></div>') > 0);
   assert.ok(D.avvisoParcella(m, { logo: 'logoDiProva123', conNome: false }).indexOf('alt=""></div>') > 0);
-  assert.ok(D.avvisoParcella(Object.assign({}, m, { commesse: ['26ST001'] }), {}).indexOf('<div>Commessa 26ST001</div>') > 0);
+  // 1.4.0: nella pre-parcella la commessa sta sotto lo Spett.le, come nel modello della parcella.
+  assert.ok(D.avvisoParcella(Object.assign({}, m, { commesse: ['26ST001'] }), {}).indexOf('<div class="rif">Commessa: 26ST001</div>') > 0);
   assert.ok(D.avvisoParcella(m, {}).indexOf('Commess') < 0, 'senza commesse nel modello l\'avviso resta com\'era');
 });

@@ -75,6 +75,48 @@ object Immagini {
         return idFile to destinazione
     }
 
+    /**
+     * 1.4.0 (servizi.md §1): l'immagine di un servizio o di un'indennità, come la vuole Flextaxa: JPG di al massimo 1 MB.
+     * Si gira come la foto (EXIF), si riduce a [lato] pixel e si abbassa la qualità finché non sta in [massimo] byte.
+     */
+    fun jpegPerServizio(ctx: Context, sorgente: Uri, lato: Int = 1200, massimo: Int = 1_000_000): ByteArray {
+        val limiti = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        ctx.contentResolver.openInputStream(sorgente)?.use { BitmapFactory.decodeStream(it, null, limiti) }
+        val grande = max(limiti.outWidth, limiti.outHeight)
+        if (grande <= 0) throw IllegalArgumentException("Non riesco a leggere l'immagine")
+        var campione = 1
+        while (grande / (campione * 2) >= lato) campione *= 2
+        val bitmap = ctx.contentResolver.openInputStream(sorgente)?.use {
+            BitmapFactory.decodeStream(it, null, BitmapFactory.Options().apply { inSampleSize = campione })
+        } ?: throw IllegalArgumentException("Non riesco a leggere l'immagine")
+        val gradi = ctx.contentResolver.openInputStream(sorgente)?.use {
+            when (ExifInterface(it).getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)) {
+                ExifInterface.ORIENTATION_ROTATE_90 -> 90f
+                ExifInterface.ORIENTATION_ROTATE_180 -> 180f
+                ExifInterface.ORIENTATION_ROTATE_270 -> 270f
+                else -> 0f
+            }
+        } ?: 0f
+        val scala = lato.toFloat() / max(bitmap.width, bitmap.height)
+        val m = Matrix().apply {
+            if (scala < 1f) postScale(scala, scala)
+            if (gradi != 0f) postRotate(gradi)
+        }
+        var pronta = if (m.isIdentity) bitmap else Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, m, true)
+        if (pronta !== bitmap) bitmap.recycle()
+        var qualita = 88
+        while (true) {
+            val byte = java.io.ByteArrayOutputStream().use { out -> pronta.compress(Bitmap.CompressFormat.JPEG, qualita, out); out.toByteArray() }
+            if (byte.size <= massimo) { pronta.recycle(); return byte }
+            if (qualita > 50) { qualita -= 12; continue }
+            // Ancora troppo pesante: si rimpicciolisce di un quarto e si riprova.
+            val piccola = Bitmap.createScaledBitmap(pronta, (pronta.width * 0.75f).toInt().coerceAtLeast(1), (pronta.height * 0.75f).toInt().coerceAtLeast(1), true)
+            if (piccola !== pronta) pronta.recycle()
+            pronta = piccola
+            qualita = 80
+        }
+    }
+
     /** Salva la firma disegnata. Torna l'id del file e il file. */
     fun salvaFirma(ctx: Context, firma: Bitmap): Pair<String, File> {
         val idFile = UUID.randomUUID().toString().replace("-", "").take(12)

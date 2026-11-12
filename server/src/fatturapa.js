@@ -546,6 +546,9 @@ function documentoFattura(radice, testata, body, chiave, nomeFile) {
       aliquotaIva: num(val(r, 'AliquotaIVA')),
       natura: val(r, 'Natura'),
       ritenuta: val(r, 'Ritenuta').toUpperCase() === 'SI',
+      // 1.4.0 (servizi.md §3): il codice del servizio (il primo CodiceArticolo) e lo sconto in percento (SC; MG in negativo).
+      codice: val(r, 'CodiceArticolo', 'CodiceValore'),
+      sconto: tutti(r, 'ScontoMaggiorazione').reduce((t, s) => t + (val(s, 'Tipo').toUpperCase() === 'MG' ? -1 : 1) * (num(val(s, 'Percentuale')) || 0), 0),
       periodoDa: giorno(val(r, 'DataInizioPeriodo')),
       periodoA: giorno(val(r, 'DataFinePeriodo')),
       altriDati: tutti(r, 'AltriDatiGestionali').map(a => ({
@@ -948,12 +951,15 @@ function scriviFatturaPA(modello, opzioni) {
 
   const righe = (m.righe || []).map((r, k) => el('DettaglioLinee', [
     el('NumeroLinea', String(r.numero || k + 1)),
+    // 1.4.0: il codice del servizio, come lo scrive Flextaxa.
+    r.codice ? el('CodiceArticolo', [el('CodiceTipo', 'INTERNO'), el('CodiceValore', testoLatino(r.codice, 35))]) : '',
     el('Descrizione', testoLatino(r.descrizione, 1000) || '-'),
     r.quantita !== null && r.quantita !== undefined && r.quantita !== '' ? el('Quantita', decimali(r.quantita)) : '',
     el('UnitaMisura', testoLatino(r.unitaMisura, 10)),
     el('DataInizioPeriodo', giorno(r.periodoDa)),
     el('DataFinePeriodo', giorno(r.periodoA)),
     el('PrezzoUnitario', decimali(r.prezzoUnitario)),
+    Number(r.sconto) > 0 ? el('ScontoMaggiorazione', [el('Tipo', 'SC'), el('Percentuale', importo(r.sconto))]) : '',
     el('PrezzoTotale', importo(r.prezzoTotale)),
     el('AliquotaIVA', aliquota(r.aliquotaIva)),
     r.ritenuta ? el('Ritenuta', 'SI') : '',

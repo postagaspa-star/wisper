@@ -42,7 +42,6 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -51,7 +50,6 @@ import eu.stgm.wisper.Dati
 import eu.stgm.wisper.rapportino.Anagrafiche
 import eu.stgm.wisper.rapportino.ContiPreventivo
 import eu.stgm.wisper.rapportino.ContoPreventivo
-import eu.stgm.wisper.rapportino.ModoVoce
 import eu.stgm.wisper.rapportino.Moduli
 import eu.stgm.wisper.rapportino.Numeri
 import eu.stgm.wisper.rapportino.Preventivo
@@ -59,7 +57,6 @@ import eu.stgm.wisper.rapportino.ScadenzaPagamento
 import eu.stgm.wisper.rapportino.Stampa
 import eu.stgm.wisper.rapportino.InCoda7
 import eu.stgm.wisper.rapportino.StatoPreventivo
-import eu.stgm.wisper.rapportino.VoceListino
 import eu.stgm.wisper.rapportino.VocePreventivo
 import eu.stgm.wisper.rapportino.istanteLocale
 import kotlinx.coroutines.MainScope
@@ -177,7 +174,8 @@ fun SchermataPreventivi(dati: Dati, nav: Navigatore) {
                 seg, { RicordoPreventivi.segmento = it },
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                PulsanteRiga("Listino", { nav.vai("listino") })
+                // 1.4.0 (servizi.md §1): il listino sono i Servizi, con la loro voce nel menu.
+                PulsanteRiga("Servizi", { nav.sezione(Sezione.SERVIZI) })
                 PulsanteRiga("Contratti", { nav.vai("contratti") })
             }
             CampoCerca(RicordoPreventivi.cerca, { RicordoPreventivi.cerca = it }, "Numero, oggetto, cliente")
@@ -798,107 +796,6 @@ private fun FoglioAccetta(dati: Dati, nav: Navigatore, p: Preventivo, ana: Anagr
                 when { salvo -> "Salvo…"; modo == "firma" -> "Fai firmare"; else -> "Segna accettato" },
                 { conferma() }, icona = if (modo == "firma") Icone.firma else Icone.spunta, abilitato = !salvo,
             )
-        }
-    }
-}
-
-// ---------------------------------------------------------------------------------- listino
-
-@Composable
-fun SchermataListino(dati: Dati, nav: Navigatore) {
-    val c = W.colori
-    val perm = LocalPermessi.current
-    val avvisi = LocalAvvisi.current
-    val listino by dati.listino.collectAsStateWithLifecycle()
-    val puo = perm.modifica(Moduli.PREVENTIVI)
-    var modifica by remember { mutableStateOf<VoceListino?>(null) }
-    LaunchedEffect(Unit) { dati.aggiornaPreventivi() }
-
-    Box(Modifier.fillMaxSize().background(c.fondo)) {
-        Column(
-            Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(MarginePagina).padding(bottom = if (puo) SpazioSottoBarra else 40.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
-        ) {
-            Testata(onIndietro = { nav.indietro() })
-            TitoloPagina("Listino")
-            SchedaElenco {
-                if (listino.isEmpty()) RigaCalma("Nessuna prestazione nel listino")
-                listino.sortedBy { it.ordine }.forEachIndexed { i, v ->
-                    if (i > 0) LineaElenco()
-                    Row(
-                        Modifier.fillMaxWidth().heightIn(min = 64.dp).let { if (puo) it.clickable { modifica = v } else it }.padding(vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                            Text(v.nome, style = Testi.forte, color = c.testo)
-                            Text(listOfNotNull(ModoVoce.nome(v.modo), v.codice.ifBlank { null }).joinToString(" · "), style = Testi.secondario, color = c.tenue)
-                        }
-                        if (perm.costi) {
-                            if (v.prezzo == null) Text("senza prezzo", style = Testi.secondarioGrande.copy(fontWeight = FontWeight.Bold), color = c.gialloTesto)
-                            else Text(
-                                Numeri.euro(v.prezzo) + when (v.modo) { ModoVoce.ORE -> "/h"; ModoVoce.QUANTITA -> v.unita.takeIf { it.isNotBlank() }?.let { "/$it" } ?: ""; else -> "" },
-                                style = Testi.secondarioGrande.copy(fontWeight = FontWeight.ExtraBold), color = c.testo,
-                            )
-                        }
-                    }
-                }
-            }
-        }
-        if (puo) {
-            FondoConPulsante(Modifier.align(Alignment.BottomCenter)) {
-                PulsantePrincipale("Nuova prestazione", { modifica = VoceListino("", "", ordine = listino.size + 1) }, icona = Icone.piu)
-            }
-        }
-    }
-
-    modifica?.let { v ->
-        FoglioVoceListino(v, perm.costi, onChiudi = { modifica = null }, onSalva = { nuova, errore ->
-            ambitoPreventivi.launch {
-                dati.salvaVoceListino(nuova).onSuccess { modifica = null; avvisi.mostra("Salvata ${it.nome}") }.onFailure { errore(spiegaErrore2(it, "Non è stata salvata: riprova")) }
-            }
-        }, onArchivia = {
-            modifica = null
-            ambitoPreventivi.launch {
-                dati.archiviaVoceListino(v.id).onSuccess { avvisi.mostra("Tolta dal listino") }.onFailure { avvisi.mostra(spiegaErrore2(it, "Non è stata tolta: riprova")) }
-            }
-        })
-    }
-}
-
-/** Una prestazione del listino: nome, codice, modo, unità, prezzo. */
-@Composable
-private fun FoglioVoceListino(v: VoceListino, costi: Boolean, onChiudi: () -> Unit, onSalva: (VoceListino, (String) -> Unit) -> Unit, onArchivia: () -> Unit) {
-    val c = W.colori
-    var nome by remember { mutableStateOf(v.nome) }
-    var codice by remember { mutableStateOf(v.codice) }
-    var descrizione by remember { mutableStateOf(v.descrizione) }
-    var modo by remember { mutableStateOf(v.modo) }
-    var unita by remember { mutableStateOf(v.unita) }
-    var prezzo by remember { mutableStateOf(Numeri.scrivi(v.prezzo)) }
-    var errore by remember { mutableStateOf<String?>(null) }
-    FoglioDalBasso(onChiudi) {
-        Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text(if (v.id.isBlank()) "Nuova prestazione" else "Prestazione", style = Testi.titoloScheda, color = c.testo)
-            CampoTesto(nome, { nome = it; errore = null }, "Nome", segnaposto = "Progetto esecutivo")
-            Segmenti(ModoVoce.ELENCO.map { it to ModoVoce.nome(it).replaceFirstChar { ch -> ch.uppercase() } }, modo, { modo = it })
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                if (costi) CampoTesto(
-                    prezzo, { prezzo = it; errore = null }, "Prezzo", Modifier.weight(1f), segnaposto = "—", tastiera = KeyboardType.Decimal,
-                    suffisso = if (modo == ModoVoce.ORE) "€/h" else "€", errore = erroreDelNumero(prezzo),
-                )
-                if (modo == ModoVoce.QUANTITA) CampoTesto(unita, { unita = it }, "Unità", Modifier.weight(1f), segnaposto = "pz")
-            }
-            CampoTesto(codice, { codice = it.uppercase() }, "Codice", segnaposto = "—")
-            CampoTesto(descrizione, { descrizione = it }, "Descrizione", righe = 2)
-            errore?.let { Text(it, style = Testi.secondario, color = c.rossoTesto) }
-            PulsantePrincipale("Salva", {
-                if (nome.isBlank()) { errore = "Scrivi il nome della prestazione"; return@PulsantePrincipale }
-                if (erroreDelNumero(prezzo) != null) return@PulsantePrincipale
-                onSalva(v.copy(nome = nome.trim(), codice = codice.trim(), descrizione = descrizione.trim(), modo = modo,
-                    unita = if (modo == ModoVoce.ORE) "ore" else unita.trim(), prezzo = if (costi) numeroScritto(prezzo) else v.prezzo)) { errore = it }
-            }, altezza = 56.dp)
-            if (v.id.isNotBlank()) PulsanteTesto("Togli dal listino", onArchivia, Modifier.fillMaxWidth(), colore = c.rossoTesto)
         }
     }
 }

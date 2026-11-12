@@ -608,11 +608,14 @@
     /** Nuovo conto o correggi: nome, banca, IBAN intero (solo chi scrive lo vede), predefinito, soglia, note. */
     function moduloConto(c0) {
       const sola = !scrive();
-      const c = c0 ? Object.assign({}, c0) : { nome: '', banca: '', iban: '', predefinito: !contiAttivi().length, soglia: null, attivo: true, note: '' };
+      const c = c0 ? Object.assign({}, c0) : { nome: '', banca: '', iban: '', bic: '', beneficiario: '', predefinito: !contiAttivi().length, soglia: null, attivo: true, note: '' };
       const v = {
         nome: h('input', { type: 'text', value: c.nome || '', disabled: sola }),
         banca: h('input', { type: 'text', value: c.banca || '', disabled: sola }),
         iban: h('input', { type: 'text', value: c.iban ? RF.ibanAGruppi(c.iban) : '', disabled: sola, autocomplete: 'off', spellcheck: 'false', placeholder: c0 && !c.iban && c.ultimeCifre ? '…' + c.ultimeCifre : '' }),
+        // 1.4.0 (servizi.md §3): nel Pagamento di pre-parcella e parcella, sotto l'IBAN.
+        bic: h('input', { type: 'text', value: c.bic || '', disabled: sola, autocomplete: 'off', spellcheck: 'false', maxlength: '11' }),
+        beneficiario: h('input', { type: 'text', value: c.beneficiario || '', disabled: sola, placeholder: S.ana.impostazioni.RAGIONE_SOCIALE || '' }),
         soglia: h('input', { type: 'text', inputmode: 'decimal', value: c.soglia === null || c.soglia === undefined ? '' : C.numero(c.soglia), placeholder: C.numero(S.ana.impostazioni.SOGLIA_CASSA || 3000) + ' (di tutti i conti)', disabled: sola }),
         predefinito: h('input', { type: 'checkbox', checked: !!c.predefinito, disabled: sola }),
         attivo: h('input', { type: 'checkbox', checked: c.attivo !== false, disabled: sola }),
@@ -620,11 +623,15 @@
       };
       v.note.value = c.note || '';
       const zonaIban = h('div', null, campo('IBAN', v.iban));
+      const zonaBic = h('div', { class: 'riga-campi' }, campo('BIC/SWIFT', v.bic), campo('Beneficiario', v.beneficiario));
       let chiudi;
       const salva = async () => {
         const iban = v.iban.value.replace(/\s+/g, '').toUpperCase();
         if (iban && !RF.ibanValido(iban)) { aggiungi(svuota(zonaIban), [campo('IBAN', v.iban, 'IBAN: non sembra giusto')]); v.iban.focus(); return; }
+        const bic = v.bic.value.replace(/\s+/g, '').toUpperCase();
+        if (bic && !/^[A-Z]{6}[A-Z0-9]{2}([A-Z0-9]{3})?$/.test(bic)) { aggiungi(svuota(zonaBic), [campo('BIC/SWIFT', v.bic, 'Sono 8 o 11 lettere e numeri'), campo('Beneficiario', v.beneficiario)]); v.bic.focus(); return; }
         const conto = { nome: v.nome.value.trim(), banca: v.banca.value.trim(), predefinito: v.predefinito.checked, attivo: v.attivo.checked, note: v.note.value,
+          bic, beneficiario: v.beneficiario.value.trim(),
           soglia: v.soglia.value.trim() ? RF.leggiImporto(v.soglia.value) : null };
         if (iban || (c0 && c0.iban !== undefined)) conto.iban = iban;
         if (c0) conto.id = c0.id;
@@ -634,7 +641,7 @@
         avviso(c0 ? 'Conto salvato' : 'Conto aggiunto');
         aggiorna();
       };
-      chiudi = finestra({ titolo: c0 ? nomeConto(c0) : 'Nuovo conto', corpo: [h('div', { class: 'fila' }, h('div', { class: 'riga-campi' }, campo('Nome', v.nome), campo('Banca', v.banca)), zonaIban,
+      chiudi = finestra({ titolo: c0 ? nomeConto(c0) : 'Nuovo conto', corpo: [h('div', { class: 'fila' }, h('div', { class: 'riga-campi' }, campo('Nome', v.nome), campo('Banca', v.banca)), zonaIban, zonaBic,
         campo('Soglia del saldo', B.conSuffisso(v.soglia, '€')), h('label', { class: 'spunta-campo' }, v.predefinito, 'Conto predefinito (per le fatture e i pagamenti)'),
         c0 ? h('label', { class: 'spunta-campo' }, v.attivo, 'Conto in uso') : null, campo('Note', v.note))],
       pulsanti: sola ? ['spazio', h('button', { type: 'button', class: 'btn grande', onclick: () => chiudi() }, 'Chiudi')]

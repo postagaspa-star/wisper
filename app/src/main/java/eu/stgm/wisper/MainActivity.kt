@@ -59,7 +59,6 @@ import eu.stgm.wisper.ui.SchermataDettaglioAttivita
 import eu.stgm.wisper.ui.SchermataEditorPreventivo
 import eu.stgm.wisper.ui.SchermataFirmaPreventivo
 import eu.stgm.wisper.ui.SchermataInvioPreventivo
-import eu.stgm.wisper.ui.SchermataListino
 import eu.stgm.wisper.ui.SchermataModificaAttivita
 import eu.stgm.wisper.ui.SchermataPreventivi
 import eu.stgm.wisper.ui.SchermataPreventivo
@@ -818,8 +817,9 @@ private fun PaginaSezione(
     }
     // Una pagina del modulo che il ruolo non vede: la scheda calma "Non hai il permesso".
     // L'app (tema, visita, versione) è di tutti.
-    val modulo = sezioneDiRotta(rotta, sezione).modulo
-    if (rotta != "amm/app" && rotta?.startsWith("tu/") != true && permessi.livelli.isNotEmpty() && !permessi.vede(modulo)) {
+    // 1.4.0: Servizi non ha un modulo suo (si vede con Preventivi, Rapportini o Fatture): lo dice Sezione.vista.
+    val sezioneRotta = sezioneDiRotta(rotta, sezione)
+    if (rotta != "amm/app" && rotta?.startsWith("tu/") != true && permessi.livelli.isNotEmpty() && !sezioneRotta.vista(permessi)) {
         NonPermesso(if (rotta != null) ({ nav.indietro() }) else null)
         return
     }
@@ -830,6 +830,7 @@ private fun PaginaSezione(
             Sezione.COMMESSE -> SchermataCommesse(dati, nav)
             Sezione.PROGETTI -> eu.stgm.wisper.ui.SchermataProgetti(dati, nav)
             Sezione.PREVENTIVI -> SchermataPreventivi(dati, nav)
+            Sezione.SERVIZI -> eu.stgm.wisper.ui.SchermataServizi(dati, nav)
             Sezione.ATTIVITA -> SchermataAttivita(dati, nav)
             Sezione.RAPPORTINI -> SchermataSezioneRapportini(dati, nav, filtro, onFiltro, onNuovo, onComeIeri)
             Sezione.SPESE -> SchermataSpese(dati, nav)
@@ -900,7 +901,10 @@ private fun PaginaSezione(
         rotta == "preventivi" -> SchermataPreventivi(dati, nav)
         rotta.startsWith("preventivo/") -> SchermataPreventivo(dati, nav, rotta.removePrefix("preventivo/"))
         rotta.startsWith("preventivo-nuovo") || rotta.startsWith("preventivo-modifica/") -> SchermataEditorPreventivo(dati, nav, rotta)
-        rotta == "listino" -> SchermataListino(dati, nav)
+        // 1.4.0 (servizi.md §1): il listino sono i Servizi; la scheda di un servizio, nuovo o da cambiare.
+        rotta == "listino" || rotta == "servizi" -> eu.stgm.wisper.ui.SchermataServizi(dati, nav)
+        rotta == "servizio-nuovo" -> eu.stgm.wisper.ui.SchermataServizio(dati, nav, null)
+        rotta.startsWith("servizio/") -> eu.stgm.wisper.ui.SchermataServizio(dati, nav, rotta.removePrefix("servizio/"))
         rotta == "contratti" -> SchermataContratti(dati, nav)
         rotta == "attivita" -> SchermataAttivita(dati, nav)
         rotta.startsWith("attivita/") -> SchermataDettaglioAttivita(dati, nav, rotta.removePrefix("attivita/"))
@@ -945,7 +949,7 @@ private fun PaginaSezione(
  * Le voci vere del menu: le funzioni accese che il ruolo vede (progetti.md §5). La prima e' la casa.
  */
 private fun vociVere(s: eu.stgm.wisper.rapportino.Sessione): List<Sezione> =
-    Sezione.entries.filter { s.permessi.vede(it.modulo) && it.modulo !in s.interfaccia.funzioniSpente }
+    Sezione.entries.filter { it.accesa(s.permessi, s.interfaccia.funzioniSpente) }
 
 /** Le voci del menu: quelle vere, piu' Amministrazione per il titolare quando e' spenta (con la sola pagina Funzioni). */
 private fun vociMenu(s: eu.stgm.wisper.rapportino.Sessione): List<Sezione> {

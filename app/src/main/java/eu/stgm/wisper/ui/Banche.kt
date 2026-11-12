@@ -624,6 +624,9 @@ private fun FoglioConto(dati: Dati, k: ContoBanca?, onChiudi: () -> Unit, onFatt
     var nome by remember { mutableStateOf(k?.nome.orEmpty()) }
     var banca by remember { mutableStateOf(k?.banca.orEmpty()) }
     var iban by remember { mutableStateOf(k?.iban.orEmpty()) }
+    // 1.4.0 (servizi.md §3): nella parcella sotto l'IBAN; il beneficiario è chi incassa, se non è il nome dello studio.
+    var bic by remember { mutableStateOf(k?.bic.orEmpty()) }
+    var beneficiario by remember { mutableStateOf(k?.beneficiario.orEmpty()) }
     var predefinito by remember { mutableStateOf(k?.predefinito ?: false) }
     var soglia by remember { mutableStateOf(importoNelCampo(k?.soglia)) }
     var attivo by remember { mutableStateOf(k?.attivo ?: true) }
@@ -635,6 +638,8 @@ private fun FoglioConto(dati: Dati, k: ContoBanca?, onChiudi: () -> Unit, onFatt
             CampoTesto(banca, { banca = it }, "Banca", Modifier.fillMaxWidth())
             CampoTesto(iban, { iban = it.uppercase().replace(" ", "") }, "IBAN", Modifier.fillMaxWidth(),
                 errore = if (iban.length >= 15 && !ContoBanca.ibanValido(iban)) "IBAN: non sembra giusto" else null)
+            CampoTesto(bic, { bic = it.uppercase().replace(" ", "") }, "BIC/SWIFT", Modifier.fillMaxWidth())
+            CampoTesto(beneficiario, { beneficiario = it }, "Beneficiario", Modifier.fillMaxWidth())
             CampoTesto(soglia, { soglia = it }, "Soglia sotto cui avvisare", Modifier.fillMaxWidth(), tastiera = KeyboardType.Decimal, suffisso = "€", segnaposto = "quella delle impostazioni")
             RigaSiNo("Predefinito", predefinito) { predefinito = it }
             if (k != null) RigaSiNo("Aperto", attivo) { attivo = it }
@@ -644,6 +649,7 @@ private fun FoglioConto(dati: Dati, k: ContoBanca?, onChiudi: () -> Unit, onFatt
             if (nome.isBlank()) { errore = "Nome: scrivi il nome del conto"; return@PulsantePrincipale }
             if (iban.isNotBlank() && !ContoBanca.ibanValido(iban)) { errore = "IBAN: non sembra giusto"; return@PulsantePrincipale }
             val o = JSONObject().put("nome", nome.trim()).put("banca", banca.trim()).put("predefinito", predefinito).put("attivo", attivo)
+                .put("bic", bic.trim()).put("beneficiario", beneficiario.trim())
                 .put("soglia", if (soglia.isBlank()) JSONObject.NULL else (importoScritto(soglia) ?: run { errore = "Soglia: non è un numero"; return@PulsantePrincipale }))
             // L'IBAN si manda solo se si vede intero (chi ha banche in scrittura): mai "…3456" al posto di quello vero.
             if (iban.isNotBlank() || k == null) o.put("iban", iban)

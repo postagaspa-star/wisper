@@ -1137,14 +1137,18 @@ class DatiEsempio(oggi: LocalDate = LocalDate.now(), private val cartella: File?
 
     private val _listino = MutableStateFlow(
         listOf(
-            VoceListino("L1", "Sopralluogo e rilievo", "SOP", modo = ModoVoce.CORPO, prezzo = 350.0, ordine = 1),
-            VoceListino("L2", "Progetto preliminare", "PRE", modo = ModoVoce.CORPO, prezzo = 600.0, ordine = 2),
-            VoceListino("L3", "Progetto esecutivo", "ESE", modo = ModoVoce.CORPO, prezzo = 1900.0, ordine = 3),
-            VoceListino("L4", "Direzione lavori", "DL", modo = ModoVoce.ORE, unita = "ore", prezzo = 45.0, ordine = 4),
-            VoceListino("L5", "Dichiarazione di rispondenza (DiRi)", "DIRI", modo = ModoVoce.CORPO, prezzo = 450.0, ordine = 5),
+            VoceListino("L1", "Sopralluogo e rilievo", "SOP", modo = ModoVoce.CORPO, unita = "A corpo", prezzo = 350.0, ordine = 1),
+            VoceListino("L2", "Progetto preliminare", "PRE", modo = ModoVoce.CORPO, unita = "A corpo", prezzo = 600.0, ordine = 2),
+            VoceListino("L3", "Progetto esecutivo", "ESE", modo = ModoVoce.CORPO, unita = "A corpo", prezzo = 1900.0, ordine = 3),
+            VoceListino("L4", "Direzione lavori", "DL", modo = ModoVoce.ORE, unita = "Ore", prezzo = 45.0, ordine = 4),
+            VoceListino("L5", "Dichiarazione di rispondenza (DiRi)", "DIRI", modo = ModoVoce.CORPO, unita = "A corpo", prezzo = 450.0, ordine = 5, tag = listOf("diri")),
             VoceListino("L6", "Verifiche periodiche", "VER", modo = ModoVoce.CORPO, prezzo = null, ordine = 6),
-            VoceListino("L7", "Collaudo", "COL", modo = ModoVoce.CORPO, prezzo = 380.0, ordine = 7),
-            VoceListino("L8", "Ore di consulenza", "CON", modo = ModoVoce.ORE, unita = "ore", prezzo = 45.0, ordine = 8),
+            VoceListino("L7", "Collaudo", "COL", modo = ModoVoce.CORPO, unita = "A corpo", prezzo = 380.0, ordine = 7),
+            VoceListino("L8", "Ore di consulenza", "CON", modo = ModoVoce.ORE, unita = "Ore", prezzo = 45.0, ordine = 8),
+            // 1.4.0 (servizi.md §1-§2): servizi d'esempio per le indennità (i prezzi veri dello studio stanno solo sul NAS).
+            VoceListino("L9", "Indennità di trasferta giornaliera", "IND1", modo = ModoVoce.QUANTITA, unita = "Giorni", prezzo = 46.48, ordine = 9, tag = listOf("trasferta")),
+            VoceListino("L10", "Indennità di reperibilità", "IND2", modo = ModoVoce.QUANTITA, unita = "Nr", prezzo = 30.0, ordine = 10, tag = listOf("reperibilita")),
+            VoceListino("L11", "Rimborso chilometrico", "KM", modo = ModoVoce.QUANTITA, unita = "Km", prezzo = 0.5, ordine = 11, note = "Esempio: il prezzo vero lo decide lo studio"),
         )
     )
     override val listino: StateFlow<List<VoceListino>> = _listino.asStateFlow()
@@ -1251,7 +1255,7 @@ class DatiEsempio(oggi: LocalDate = LocalDate.now(), private val cartella: File?
     }
 
     override suspend fun salvaVoceListino(v: VoceListino): Result<VoceListino> {
-        if (v.nome.isBlank()) return errore("Nome: scrivi il nome della prestazione")
+        if (v.nome.isBlank()) return errore("Descrizione: scrivi la descrizione del servizio")
         if ((v.prezzo ?: 0.0) < 0) return errore("Prezzo: non può essere negativo")
         val nuova = if (v.id.isBlank()) v.copy(id = "L${System.nanoTime()}", ordine = _listino.value.size + 1) else v
         _listino.value = _listino.value.filterNot { it.id == nuova.id } + nuova
@@ -1259,10 +1263,14 @@ class DatiEsempio(oggi: LocalDate = LocalDate.now(), private val cartella: File?
         return Result.success(nuova)
     }
 
-    override suspend fun archiviaVoceListino(id: String): Result<Unit> {
-        _listino.value = _listino.value.filterNot { it.id == id }
+    override suspend fun archiviaVoceListino(id: String, archiviata: Boolean): Result<Unit> {
+        _listino.value = _listino.value.map { if (it.id == id) it.copy(attivo = !archiviata) else it }
         return Result.success(Unit)
     }
+
+    override fun aggiornaServizi() = Unit
+
+    override suspend fun caricaImmagineServizio(jpg: ByteArray, perIndennita: Boolean): Result<FileRemoto> = errore("Nella visita guidata è un esempio")
 
     private fun prossimoNumero(): String {
         val n = _tuttiPreventivi.value.mapNotNull { Regex("""^PR/$annoOggi/(\d+)$""").find(it.numero)?.groupValues?.get(1)?.toIntOrNull() }.maxOrNull() ?: 0

@@ -555,6 +555,7 @@ module.exports = {
         quantita: r.quantita, unita: r.unitaMisura, prezzo: r.prezzoUnitario, importo: centesimi(r.prezzoTotale), aliquota_iva: numero(r.aliquotaIva),
         natura: r.natura, soggetta_ritenuta: r.ritenuta ? 1 : 0, tributo_cliente: b ? b.tributo_cliente : 0, commessa_id: b ? b.commessa_id : (f.commessa_id || ''),
         periodo_da: r.periodoDa || '', periodo_a: r.periodoA || '', importo_sorgenti: b ? b.importo_sorgenti : null,
+        codice: r.codice || '', sconto: Number(r.sconto) || 0,
       });
     });
   },

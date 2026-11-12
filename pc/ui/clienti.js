@@ -143,6 +143,7 @@
         coppie.push(['Viaggio', c.pagaViaggio === true ? 'pagato' : 'non pagato']);
         coppie.push(['Km', c.kmRimborsati === false ? 'non rimborsati' : 'rimborsati']);
         if (c.costoFisso !== null && c.costoFisso !== undefined && c.costoFisso !== '') coppie.push(['Costo orario fisso', C.numero(c.costoFisso) + ' €/h']);
+        if (c.etichettaCommessa) coppie.push(['Nei documenti la commessa', c.etichettaCommessa]);
         if (puo('fatturazione')) {
           const auto = c.sostitutoImposta === null || c.sostitutoImposta === undefined;
           coppie.push(['Sostituto d\'imposta', auto ? (c.partitaIva ? 'sì (automatico: ha la partita IVA)' : 'no (automatico: è un privato)') : c.sostitutoImposta ? 'sì' : 'no']);
@@ -262,6 +263,8 @@
         tariffaFissa: numero('tariffaFissa'), ultimaTariffa: numero('ultimaTariffa'), costoFisso: numero('costoFisso'),
         pagamentoGiorni: h('input', { type: 'text', inputmode: 'numeric', value: c.pagamentoGiorni === null || c.pagamentoGiorni === undefined ? '' : String(c.pagamentoGiorni),
           placeholder: String((S.ana.impostazioni && S.ana.impostazioni.GIORNI_PAGAMENTO) || 30) }),
+        // 1.4.0 (servizi.md §3): "Commessa: 26ST003" o "JOB: 26ST045" sotto lo Spett.le di pre-parcella e parcella.
+        etichettaCommessa: h('input', { type: 'text', value: c.etichettaCommessa || '', placeholder: 'Commessa', maxlength: '30' }),
         note: h('textarea', { rows: 3 }),
       };
       v.note.value = c.note || '';
@@ -326,7 +329,8 @@
           tipoCliente && soldi() && W.puo('fatturazione') ? h('div', { class: 'gruppo-campi' }, h('h3', null, 'Fatture'),
             campo('Sostituto d\'imposta',segmenti([['auto', 'Automatico'], ['si', 'Sì'], ['no', 'No']], scelte.sostituto, x => { scelte.sostituto = x; disegna(); }, 'piccoli')),
             h('div', { class: 'riga-campi' }, campo('Pagamento a', conSuffisso(v.pagamentoGiorni, 'giorni')),
-              campo('Fine mese', segmenti([['auto', 'Come le impostazioni'], ['si', 'Sì'], ['no', 'No']], scelte.fineMese, x => { scelte.fineMese = x; disegna(); }, 'piccoli')))) : null,
+              campo('Fine mese', segmenti([['auto', 'Come le impostazioni'], ['si', 'Sì'], ['no', 'No']], scelte.fineMese, x => { scelte.fineMese = x; disegna(); }, 'piccoli'))),
+            h('div', { class: 'riga-campi' }, campo('Nei documenti la commessa si chiama', v.etichettaCommessa), h('span'))) : null,
           h('div', { class: 'gruppo-campi' }, h('h3', null, 'Note'), campo(null, v.note)),
           errori.doppione ? h('div', { class: 'doppione', role: 'alert' }, h('span', null, 'C\'è già ', h('b', null, errori.doppione.nome)),
             h('button', { type: 'button', class: 'btn', onclick: () => { chiudi(); W.vai('#clienti/' + encodeURIComponent(errori.doppione.id)); } }, 'Apri')) : null]);
@@ -369,6 +373,7 @@
               sostitutoImposta: scelte.sostituto === 'auto' ? null : scelte.sostituto === 'si',
               pagamentoGiorni: v.pagamentoGiorni.value.trim() === '' ? null : Number(v.pagamentoGiorni.value.trim()),
               pagamentoFineMese: scelte.fineMese === 'auto' ? null : scelte.fineMese === 'si',
+              etichettaCommessa: v.etichettaCommessa.value.trim(),
             });
           }
         }

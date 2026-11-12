@@ -55,6 +55,8 @@ const CAMPI_TESTO_SOGGETTO = {
   nome: 'nome', gruppo: 'gruppo', email: 'email', pec: 'pec', telefono: 'telefono', partitaIva: 'partita_iva',
   codiceFiscale: 'codice_fiscale', codiceSdi: 'codice_sdi', indirizzo: 'indirizzo', cap: 'cap', citta: 'citta',
   provincia: 'provincia', nazione: 'nazione', note: 'note',
+  // 1.4.0 (servizi.md §3): come il cliente chiama la commessa nei documenti ("JOB"); vuoto = Commessa.
+  etichettaCommessa: 'etichetta_commessa',
 };
 const CAMPI_NUMERO_SOGGETTO = { tariffaFissa: 'tariffa_fissa', costoFisso: 'costo_fisso', ultimaTariffa: 'ultima_tariffa', maggExtra: 'magg_extra' };
 const CAMPI_SINO_SOGGETTO = { pagaViaggio: 'paga_viaggio', kmRimborsati: 'km_rimborsati' };
@@ -83,6 +85,7 @@ function soggettoDaRiga(r) {
     pec: testo(r.pec),
     codiceFiscale: testo(r.codice_fiscale),
     codiceSdi: testo(r.codice_sdi),
+    etichettaCommessa: testo(r.etichetta_commessa),
     cap: testo(r.cap),
     citta: testo(r.citta),
     provincia: testo(r.provincia),

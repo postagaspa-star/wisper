@@ -229,7 +229,7 @@
   /** Una voce presa dal listino: nome, modo e prezzo dello studio, quantità 1. */
   function voceDaListino(l) {
     return {
-      id: idNuovo('v'), idListino: l.id, descrizione: l.nome || '', modo: l.modo || 'corpo', quantita: l.modo === 'ore' ? 1 : 1,
+      id: idNuovo('v'), idListino: l.id, codice: l.codice || '', descrizione: l.nome || '', modo: l.modo || 'corpo', quantita: l.modo === 'ore' ? 1 : 1,
       unita: l.unita || '', prezzo: l.prezzo === undefined ? null : l.prezzo, scontoPercentuale: 0, facoltativa: false, alternativa: '', scelta: false,
     };
   }

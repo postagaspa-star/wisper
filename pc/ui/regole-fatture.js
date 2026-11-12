@@ -27,12 +27,14 @@
   function importoRiga(r) {
     if (!vuoto(r.importo)) return centesimi(numero(r.importo));
     const q = vuoto(r.quantita) ? 1 : numero(r.quantita);
-    return centesimi(q * numero(r.prezzo));
+    // 12/11/2026: lo sconto della riga in percento, come in Flextaxa.
+    return centesimi(q * numero(r.prezzo) * (1 - numero(r.sconto) / 100));
   }
 
   /**
    * I conti di una fattura, come il server. Ogni pezzo arrotondato al centesimo prima di
-   * sommare. Una riga "bollo" si salta (la aggiunge il server).
+   * sommare. Una riga "bollo" si salta (la aggiunge il server). Dal 12/11/2026 l'IVA come Flextaxa:
+   * arrotondata riga per riga, più quella della rivalsa EPPI (servizi.md §3).
    * f = {regime, ivaPercentuale, eppiPercentuale, ritenutaPercentuale, ritenuta, bolloSoglia, bolloImporto, bolloRivalsa, righe}
    */
   function contiFattura(f) {
@@ -41,6 +43,8 @@
     let anticipazioni = 0;
     let perIlBollo = 0;
     const righe = [];
+    const aliquota = numero(f.ivaPercentuale) / 100;
+    let ivaRighe = 0;
     (f.righe || []).forEach(r => {
       if (r.tipo === 'bollo') return;
       const importo = importoRiga(r);
@@ -50,11 +54,12 @@
         if (!r.tributoCliente) perIlBollo = centesimi(perIlBollo + importo);
       } else {
         compenso = centesimi(compenso + importo);
+        ivaRighe = centesimi(ivaRighe + centesimi(importo * aliquota));
       }
     });
     const contributo = centesimi(compenso * numero(f.eppiPercentuale) / 100);
     const baseIva = forfettario ? 0 : centesimi(compenso + contributo);
-    const iva = forfettario ? 0 : centesimi(baseIva * numero(f.ivaPercentuale) / 100);
+    const iva = forfettario ? 0 : centesimi(ivaRighe + centesimi(contributo * aliquota));
     const parteSenzaIva = forfettario ? centesimi(compenso + contributo + perIlBollo) : perIlBollo;
     const bollo = parteSenzaIva > numero(f.bolloSoglia) ? centesimi(numero(f.bolloImporto)) : 0;
     const bolloAddebitato = f.bolloRivalsa ? bollo : 0;

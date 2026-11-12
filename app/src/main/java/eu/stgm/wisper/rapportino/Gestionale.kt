@@ -64,6 +64,13 @@ object Moduli {
 
     /** Fatturazione e Banche si vedono solo col modulo e col permesso dei soldi (§15.1). */
     val CON_SOLDI = setOf(FATTURAZIONE, BANCHE)
+
+    /**
+     * 1.4.0 (servizi.md §1): la voce Servizi del menu. Non e' un modulo del server (non ha permessi ne' funzione sua): la
+     * vede chi ha in lettura Preventivi, Rapportini o Fatture ([CHI_VEDE_SERVIZI]); li cambia chi ha Preventivi in scrittura.
+     */
+    const val SERVIZI = "servizi"
+    val CHI_VEDE_SERVIZI = listOf(PREVENTIVI, RAPPORTINI, FATTURAZIONE)
 }
 
 /** I quattro ruoli, con la frase che li spiega (docs/gestionale/fase1-schermate.md §7). */
@@ -145,6 +152,12 @@ data class Permessi(val livelli: Map<String, Int>) {
 
     /** Tariffe, totali, costi e margini: senza, il server non li manda e l'app non li mostra. */
     val costi: Boolean get() = vede(Moduli.COSTI)
+
+    /** 1.4.0: i Servizi si vedono con Preventivi, Rapportini o Fatture (servizi.md §1). */
+    val vedeServizi: Boolean get() = Moduli.CHI_VEDE_SERVIZI.any { vede(it) }
+
+    /** 1.4.0: i Servizi li cambia chi ha Preventivi in scrittura, come il listino di prima. */
+    val modificaServizi: Boolean get() = modifica(Moduli.PREVENTIVI)
 
     fun aJson(): JSONObject = JSONObject().apply { livelli.forEach { (k, v) -> put(k, v) } }
 

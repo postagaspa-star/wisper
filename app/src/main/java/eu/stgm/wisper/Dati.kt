@@ -311,7 +311,10 @@ interface Dati {
     /** I preventivi aperti per intero (sezioni, voci, conti, revisioni), gli ultimi letti, per id. */
     val dettagliPreventivi: StateFlow<Map<String, Preventivo>>
 
-    /** Il listino delle prestazioni dello studio. */
+    /**
+     * I servizi dello studio (fino alla 1.3 "il listino"), anche gli archiviati (attivo = false): i Servizi li mostrano
+     * a parte, preventivi e indennità prendono solo gli altri.
+     */
     val listino: StateFlow<List<VoceListino>>
 
     /** Rilegge elenco dei preventivi e listino; un errore va in [aggiornamento]. */
@@ -321,7 +324,21 @@ interface Dati {
     suspend fun preventivo(id: String): Result<Preventivo>
 
     suspend fun salvaVoceListino(v: VoceListino): Result<VoceListino>
-    suspend fun archiviaVoceListino(id: String): Result<Unit>
+
+    /** Archivia un servizio (resta fra gli archiviati) o, con [archiviata] falso, lo rimette fra i servizi. */
+    suspend fun archiviaVoceListino(id: String, archiviata: Boolean = true): Result<Unit>
+
+    /**
+     * 1.4.0 (servizi.md §1): rilegge i servizi anche per chi vede solo Rapportini o Fatture (servono per le indennità).
+     * Un errore va in [aggiornamento]; senza rete resta l'ultima lettura.
+     */
+    fun aggiornaServizi()
+
+    /**
+     * L'immagine di un servizio (JPG fino a 1 MB, già ridotta da chi chiama): torna il file sul server, da mettere nel
+     * servizio o nell'indennità. [perIndennita] vero quando si carica da un'indennità del rapportino (basta Rapportini).
+     */
+    suspend fun caricaImmagineServizio(jpg: ByteArray, perIndennita: Boolean = false): Result<FileRemoto>
 
     /** Crea (id vuoto) o aggiorna una bozza: testata, sezioni, voci e scadenze in una volta. */
     suspend fun salvaPreventivo(p: Preventivo): Result<Preventivo>

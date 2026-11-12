@@ -89,12 +89,16 @@ object Riepiloghi {
     fun ultimo(viste: List<Vista>, oggi: LocalDate = LocalDate.now()): Rapportino? =
         viste.map { it.rapportino }.filter { it.data < oggi && it.cliente.isNotBlank() }.maxByOrNull { it.data }
 
-    /** Il rapportino da ricopiare: stessi dati, data di oggi, niente numero, firma, foto né stato. */
+    /**
+     * Il rapportino da ricopiare: stessi dati, data di oggi, niente numero, firma, foto né stato. Le indennità (1.4.0) non
+     * si ricopiano: sono soldi legati a quel giorno (una seduta, una trasferta), si aggiungono a mano.
+     */
     fun comeIeri(r: Rapportino, oggi: LocalDate = LocalDate.now()): Rapportino = r.soloCompilato().copy(
         idLocale = Rapportino.nuovoIdLocale(),
         data = oggi,
         gruppo = r.gruppo,
         noteInterne = "",
+        indennita = null,
     )
 
     /** LIBERO (fase 6): un giorno di ferie, festa o chiusura dello studio, in grigio con la parola. */

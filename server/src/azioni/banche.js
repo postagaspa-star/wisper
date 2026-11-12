@@ -103,6 +103,8 @@ module.exports = {
     const o = {
       id: c.id, nome: c.nome, banca: c.banca, ultimeCifre: ultime(c.iban), predefinito: c.predefinito === 1,
       soglia: c.soglia === null ? null : c.soglia, attivo: c.attivo === 1, note: c.note,
+      // 1.4.0 (servizi.md §3): nella parcella, sotto l'IBAN.
+      bic: testo(c.bic), beneficiario: testo(c.beneficiario),
       saldo: s.saldo, saldoAl: s.saldoAl, saldoScritto: s.saldoScritto, movimentiDopo: s.movimentiDopo, verificatiDopo: s.verificatiDopo,
       collegamento: 'non_collegato', creato: dataOraIso(c.creato), modificato: dataOraIso(c.modificato),
     };
@@ -126,6 +128,11 @@ module.exports = {
       if (!v.nome) throw new Rifiuto('Nome: scrivi il nome del conto');
     }
     if (x.banca !== undefined) v.banca = testo(x.banca);
+    if (x.bic !== undefined) {
+      v.bic = testo(x.bic).replace(/\s/g, '').toUpperCase();
+      if (v.bic && !/^[A-Z]{6}[A-Z0-9]{2}([A-Z0-9]{3})?$/.test(v.bic)) throw new Rifiuto('BIC/SWIFT: sono 8 o 11 lettere e numeri');
+    }
+    if (x.beneficiario !== undefined) v.beneficiario = testo(x.beneficiario);
     if (x.iban !== undefined) {
       const iban = testo(x.iban).replace(/\s/g, '').toUpperCase();
       if (iban && !C.ibanValido(iban)) throw new Rifiuto('IBAN: non sembra giusto');
