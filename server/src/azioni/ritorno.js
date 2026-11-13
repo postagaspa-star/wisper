@@ -658,7 +658,7 @@ module.exports = {
       causale: doc.causale.join(' ').replace(/\s*Rif\. Wisper W-\d+/g, '').trim(),
       regime: doc.cedente.regimeFiscale === 'RF19' ? 'forfettario' : 'ordinario',
       iva_percentuale: iva ? numero(iva.aliquotaIva) : numero(imp.IVA), eppi_percentuale: cassa ? numero(cassa.aliquota) : 0,
-      ritenuta_percentuale: rit ? numero(rit.aliquota) : numero(imp.RITENUTA), ritenuta_applicata: doc.ritenute.length ? 1 : 0,
+      ritenuta_percentuale: rit ? numero(rit.aliquota) : this.percentualeRitenuta(), ritenuta_applicata: doc.ritenute.length ? 1 : 0,
     }));
     const fileId = this.salvaFileXml(doc, dati, 'fattura', id, null);
     this.aggiorna('fatture', id, Object.assign({

@@ -93,6 +93,9 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -383,6 +386,52 @@ class Archivio(private val ctx: Context) : Dati {
     override fun aggiornaStorico() {
         scope.launch { aggiornaOra(tutti = true) }
         programmaInvio()
+    }
+
+    // ------------------------------------------------------------- il collegamento, ogni minuto
+
+    /** L'impronta del server all'ultima lettura intera partita dal giro: finché è la stessa non si rilegge niente. */
+    @Volatile private var impronta: String? = null
+    private var giroVivo: Job? = null
+
+    /**
+     * 13/11/2026 (Andrea: "il collegamento [...] con il pallino verde si deve aggiornare ogni minuto"). Prima "Collegato ·
+     * letto alle 9:12" nel menu era l'ora in cui si era aperta l'app. Con l'app davanti ([acceso], da onResume a
+     * onPause) ogni minuto si chiede al server se è cambiato qualcosa: se risponde l'ora avanza, se qualcuno ha scritto si
+     * rilegge tutto come all'apertura, se non risponde il menu dice "Server non raggiunto" e torna "Collegato" al primo
+     * minuto buono. Ad app chiusa o dietro non gira niente.
+     */
+    fun tieniVivo(acceso: Boolean) {
+        giroVivo?.cancel()
+        giroVivo = null
+        if (!acceso) return
+        giroVivo = scope.launch {
+            while (isActive) {
+                delay(OGNI_MINUTO_MS)
+                giroDelMinuto()
+            }
+        }
+    }
+
+    internal suspend fun giroDelMinuto() {
+        if (!ponte.configurato || _aggiornamento.value.inCorso) return
+        try {
+            val adesso = ponte.novita()
+            if (adesso != impronta) {
+                aggiornaOra()
+                if (_aggiornamento.value.errore.isBlank()) impronta = adesso
+            } else {
+                _aggiornamento.update { it.copy(ultimo = LocalDateTime.now(), errore = "") }
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: PonteServer.AccessoScaduto) {
+            segnaUscito()
+        } catch (e: Exception) {
+            // Un server di prima della 0.15.2 non conosce la domanda: si rilegge tutto, come all'apertura.
+            if (e is PonteServer.Rifiutato && e.message.orEmpty().contains("sconosciuta", ignoreCase = true)) aggiornaOra()
+            else _aggiornamento.update { it.copy(inCorso = false, errore = spiega(e)) }
+        }
     }
 
     private suspend fun aggiornaOra(mese: YearMonth? = null, tutti: Boolean = false) {
@@ -2274,6 +2323,8 @@ class Archivio(private val ctx: Context) : Dati {
     }
 
     companion object {
+        /** Ogni quanto si ricontrolla il collegamento con l'app davanti (tieniVivo). */
+        private const val OGNI_MINUTO_MS = 60_000L
         private const val AVVISO_DOPO_TENTATIVI = 3
         private const val ID_NON_ANCORA = 3
         private const val ID_RIFIUTATO = 4

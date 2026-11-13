@@ -108,6 +108,16 @@ Spese, Fatture, Banche, Persone, Documenti, Ticket, Mezzi, WhatsApp, Portale cli
 da una riga sottile, Impostazioni. Nei Permessi e in Funzioni restano i nomi lunghi. Numerini neri; in fondo Collegato, chi
 è entrato ed Esci.
 
+**Collegato si ricontrolla ogni minuto** (13/11/2026, Andrea: "il collegamento [...] con il pallino verde si deve
+aggiornare ogni minuto"). Computer (`tieniVivo` in `pc/ui/app.js`) e telefono con l'app davanti (`Archivio.tieniVivo`)
+fanno al server una domanda sola, `novita`: risponde un'impronta che cambia quando qualcuno scrive, e non lascia righe
+negli accessi. Se il server risponde l'ora di "Collegato · letto alle" avanza; se l'impronta è cambiata si rileggono i
+dati, senza "Rileggo…"; se non risponde il pallino diventa rosso ("Server non raggiunto · Riprova") e torna verde da solo
+al primo minuto buono. Sul computer la pagina si rifà da sola solo se è la Casa o l'elenco dei Rapportini e non c'è
+niente di aperto (finestra, pannello, menu, campo col cursore, rapportini scelti); se si tocca qualcosa mentre legge, i
+dati arrivati si buttano e si riprova il minuto dopo. Ogni dieci minuti si rileggono comunque i numeri della Casa.
+Giro cliccato: `pc/prove/prova-collegamento.js`.
+
 ## 7. La spesa a tre passi (telefono)
 
 Quanto hai speso (importo con tastierino, tipo con le pillole Carburante, Pranzo, Materiale, Parcheggio, Altro) → Per quale

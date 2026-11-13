@@ -234,6 +234,18 @@ module.exports = {
     return { ok: true };
   },
 
+  /**
+   * 13/11/2026 (Andrea: "il collegamento [...] si deve aggiornare ogni minuto"): "e' cambiato qualcosa?" in una riga.
+   * Wisper Ufficio lo chiede ogni minuto: se il server risponde il menu dice "Collegato · letto alle ...", e i dati si
+   * rileggono solo quando l'impronta cambia. L'impronta e' l'ultima riga del registro delle modifiche piu' l'istante in
+   * cui e' partito il server: dei dati non dice niente. Non lascia righe negli accessi (richieste.js).
+   */
+  novita() {
+    if (!this.partitoIl) this.partitoIl = adessoMs().toString(36);
+    const r = this.db.riga('SELECT MAX(id) AS n FROM registro');
+    return { ok: true, impronta: this.partitoIl + '-' + (r && r.n ? r.n : 0) };
+  },
+
   /** Chi sono, cosa posso fare, e quello che serve all'interfaccia. */
   io(d) {
     const c = this.chi();

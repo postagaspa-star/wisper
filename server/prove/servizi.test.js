@@ -139,18 +139,19 @@ test('fatturando: una riga per indennità col codice, l\'importo della sorgente 
   const righe = f.righe.filter(x => x.tipo !== 'bollo').map(x => ({ id: x.id }));
   righe.push({ tipo: 'compenso', codice: 'CON', descrizione: 'Consulenza tecnica a ore', quantita: 37.5, prezzo: 48, sconto: 40, unita: 'Ore' });
   const f2 = ok(await manuel('salvaFattura', { fattura: { id: f.id, righe } })).fattura;
-  const sc = f2.righe.find(x => x.codice === 'CON');
+  // Anche la riga del rapportino ha il codice CON (il suo servizio, dal 13/11): quella aggiunta è l'altra, con lo sconto.
+  const sc = f2.righe.find(x => x.codice === 'CON' && x.sconto === 40);
   assert.deepEqual([sc.sconto, sc.importo], [40, 1080]);
   assert.equal(f2.conti.iva, Math.round((Math.round(50 * 22) + Math.round(280 * 22) + Math.round(1080 * 22) + Math.round(f2.conti.contributo * 22)) ) / 100);
   // L'XML col codice e lo sconto, e il lettore li ritrova.
   const p = ok(await manuel('pacchetto', { id: f.id }));
-  const riga = p.modello.righe.find(x => x.codice === 'CON');
+  const riga = p.modello.righe.find(x => x.codice === 'CON' && x.sconto === 40);
   assert.deepEqual([riga.sconto, riga.prezzoUnitario, riga.prezzoTotale], [40, 48, 1080]);
   const xml = Buffer.from(p.xml.base64, 'base64').toString('utf8').replace(/>\s+</g, '><');
   assert.match(xml, /<CodiceArticolo><CodiceTipo>INTERNO<\/CodiceTipo><CodiceValore>CON<\/CodiceValore><\/CodiceArticolo><Descrizione>Consulenza/);
   assert.match(xml, /<PrezzoUnitario>48\.00<\/PrezzoUnitario><ScontoMaggiorazione><Tipo>SC<\/Tipo><Percentuale>40\.00<\/Percentuale><\/ScontoMaggiorazione><PrezzoTotale>/);
   const letta = fatturapa.leggiFatturePA([{ nome: 'prova.xml', base64: p.xml.base64 }]);
-  const rl = letta.documenti[0].righe.find(x => x.codice === 'CON');
+  const rl = letta.documenti[0].righe.find(x => x.codice === 'CON' && x.sconto === 40);
   assert.deepEqual([rl.codice, rl.sconto, rl.prezzoTotale], ['CON', 40, 1080]);
 });
 

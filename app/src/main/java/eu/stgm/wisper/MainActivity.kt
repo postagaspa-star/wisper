@@ -281,6 +281,13 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         // Ogni volta che si torna nell'app si rilegge: magari dal computer e' cambiato qualcosa.
         (application as WisperApp).archivio.aggiorna()
+        // 13/11/2026: e finché l'app è davanti il collegamento si ricontrolla ogni minuto (Archivio.tieniVivo).
+        (application as WisperApp).archivio.tieniVivo(true)
+    }
+
+    override fun onPause() {
+        (application as WisperApp).archivio.tieniVivo(false)
+        super.onPause()
     }
 }
 

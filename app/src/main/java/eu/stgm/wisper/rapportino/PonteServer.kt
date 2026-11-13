@@ -136,6 +136,12 @@ class PonteServer(
         )
     }
 
+    /**
+     * 13/11/2026: "è cambiato qualcosa?" in una riga, la domanda di ogni minuto. L'impronta cambia quando qualcuno
+     * scrive sul server; dei dati non dice niente e non lascia righe negli accessi. Server dalla 0.15.2.
+     */
+    suspend fun novita(): String = withContext(Dispatchers.IO) { leggi("novita").testo("impronta") }
+
     /** Il token non vale più, su nessun dispositivo che lo conosca. */
     suspend fun esci(): Unit = withContext(Dispatchers.IO) { scrivi(JSONObject().put("azione", "esci")); Unit }
 

@@ -156,6 +156,23 @@ class ServerDiProvaTest {
         p.esci()
     }
 
+    /** 13/11/2026: la domanda di ogni minuto. La stessa impronta finché nessuno scrive, un'altra dopo una scrittura. */
+    @Test
+    fun `novita, la stessa impronta finche nessuno scrive`() = runBlocking {
+        val (_, p) = entra("manuel@esempio.it")
+        val prima = p.novita()
+        assertTrue(prima.isNotBlank())
+        p.anagrafiche()
+        assertEquals(prima, p.novita())
+        p.salvaSoggetto(Cliente("", "Prove Novita ${System.currentTimeMillis()} Srl", cliente = false, fornitore = true, citta = "Thiene", provincia = "VI"), nuovo = true, costi = true)
+        val dopo = p.novita()
+        assertTrue(dopo != prima)
+        assertEquals(dopo, p.novita())
+        // Senza accesso: come ogni altra lettura.
+        assertTrue(runCatching { ponte("inventato").novita() }.exceptionOrNull() is PonteServer.AccessoScaduto)
+        p.esci()
+    }
+
     @Test
     fun `password sbagliata e token inventato`() = runBlocking {
         val e = runCatching { ponte("").accedi("lettura@esempio.it", "sbagliata") }.exceptionOrNull()

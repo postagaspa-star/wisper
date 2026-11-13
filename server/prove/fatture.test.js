@@ -123,7 +123,10 @@ test('preparaFattura: i rapportini del mese in tre righe (raggruppamento A), le 
   assert.match(f.riferimento, /^W-\d+$/);
   assert.deepEqual([f.stato, f.statoVisto, f.etichetta, f.numero, f.tipoDocumento], ['bozza', 'Bozza', 'Bozza ' + f.riferimento, '', 'TD01']);
   const atteso = CASI.raggruppamenti[0].atteso;
-  assert.deepEqual(f.righe.map(x => ({ tipo: x.tipo, descrizione: x.descrizione, quantita: x.quantita, unita: x.unita, prezzo: x.prezzo, importo: x.importo })), atteso.righe);
+  // 13/11/2026: la riga delle ore nasce col suo servizio (codice, nome, unità "Ore"); i km no, il listino di prova non ne ha.
+  const righeAttese = atteso.righe.map((x, i) => (i ? x : Object.assign({}, x, { descrizione: 'Ore di consulenza | settembre 2026 (6 rapportini)', unita: 'Ore' })));
+  assert.deepEqual(f.righe.map(x => ({ tipo: x.tipo, descrizione: x.descrizione, quantita: x.quantita, unita: x.unita, prezzo: x.prezzo, importo: x.importo })), righeAttese);
+  assert.deepEqual(f.righe.map(x => x.codice), ['CON', '', '']);
   assert.ok(f.righe.every(x => x.gruppo === 'rapportini:C001:2026-09' && x.importoSorgenti === x.importo));
   assert.equal(f.sorgenti.filter(x => x.attiva).length, 8);
   const caso5 = CASI.casi[4].atteso;
@@ -522,7 +525,7 @@ test('nota di credito parziale: storna una parte, niente torna da fatturare; il 
   assert.deepEqual([nota.tipo, nota.tipoDocumento, nota.stato, nota.idFatturaCollegata, nota.fatturaCollegata.numero], ['nota', 'TD04', 'bozza', f.id, '52/2026']);
   for (const k of Object.keys(CASI.casi[11].atteso)) assert.deepEqual(nota.conti[k], CASI.casi[11].atteso[k], 'caso 12 · ' + k);
   assert.deepEqual(nota.tornanoDaFatturare, [], 'uno storno parziale non libera niente');
-  assert.equal(nota.righe[0].descrizione, 'Storno parziale: Prestazioni professionali di settembre 2026 (6 rapportini)');
+  assert.equal(nota.righe[0].descrizione, 'Storno parziale: Ore di consulenza | settembre 2026 (6 rapportini)');
   const p = await manuel('pacchetto', { id: nota.id });
   assert.deepEqual(p.modello.fattureCollegate, [{ idDocumento: '52/2026', data: '2026-10-23' }]);
   assert.equal(p.prospetto.sezioni[1].campi.find(c => c.etichetta === 'Tipo').valore, 'Nota di credito (TD04)');

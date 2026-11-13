@@ -91,7 +91,7 @@ test('un rapportino per riga (Rossi Impianti): Da fatturare, la riga e la causal
   // Una fattura per un rapportino: causale e riga col progetto.
   const f1 = await prepara('C002', [r1]);
   assert.equal(f1.causale, 'Rapportino ' + r1 + ', progetto RI-001');
-  assert.match(f1.righe[0].descrizione, new RegExp('^Rapportino ' + r1.replace(/\//g, '\\/') + ' del \\d{2}/\\d{2}/\\d{4}, progetto RI-001: Lavoro'));
+  assert.match(f1.righe[0].descrizione, new RegExp('^Ore di consulenza \\| Rapportino ' + r1.replace(/\//g, '\\/') + ' del \\d{2}/\\d{2}/\\d{4}, progetto RI-001: Lavoro'));
   // Due rapportini di due progetti: "progetti".
   const f2 = await prepara('C002', [r4, r2]);
   assert.equal(f2.causale, 'Prestazioni professionali, progetti RI-001, RI-002');
@@ -113,8 +113,8 @@ test('il mese (Elettrodinamica): la riga e la causale coi progetti; mescolati co
   const f = await prepara('C001', [a, b]);
   const mese = C.nomeMese(oggi().slice(0, 7));
   assert.equal(f.causale, 'Prestazioni di ' + mese + ', progetti ED-001, ED-002');
-  assert.equal(f.righe[0].descrizione, 'Prestazioni professionali di ' + mese + ', progetti ED-001, ED-002 (2 rapportini)');
+  assert.equal(f.righe[0].descrizione, 'Ore di consulenza | ' + mese + ', progetti ED-001, ED-002 (2 rapportini)');
   const g = await prepara('C001', [c, d]);
-  assert.equal(g.righe[0].descrizione, 'Prestazioni professionali di ' + mese + ' (2 rapportini)');
+  assert.equal(g.righe[0].descrizione, 'Ore di consulenza | ' + mese + ' (2 rapportini)');
   assert.equal(g.causale, 'Prestazioni di ' + mese + ', commessa 26ST001');
 });

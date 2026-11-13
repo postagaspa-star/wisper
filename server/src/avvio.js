@@ -118,6 +118,9 @@ function avvia(o) {
   if (env.WISPER_SPAZIO_FINTO_MB) wisper.spazioFintoMb = Number(env.WISPER_SPAZIO_FINTO_MB);
   if (o.prova) semina(wisper);
   const indirizzoPortale = !o.prova && scriviIndirizzoPortale(wisper, env.WISPER_PORTALE_INDIRIZZO);
+  // 13/11/2026: le bozze di fattura gia' fatte: la ritenuta "si'" rimasta a zero e le righe senza il codice del servizio.
+  let bozze = { ritenute: 0, codici: 0 };
+  try { bozze = wisper.sistemaBozze(); } catch (err) { console.error('Bozze di fattura: non sistemate (' + (err && err.message ? err.message : err) + ')'); }
   // La porta Google: parte da sola se c'e' l'indirizzo dello script col segreto (le prove la accendono loro).
   wisper.porta = new PortaGoogle(wisper, {
     url: env.WISPER_POSTINO_URL || '',
@@ -180,7 +183,7 @@ function avvia(o) {
   const portaIngresso = Number(o.portaIngresso || env.WISPER_PORTA_INGRESSO || 0);
   const ponteDaFuori = String(env.WISPER_PONTE_DA_FUORI || '').trim().toLowerCase() === 'si';
   const ingresso = portaIngresso ? creaServerIngresso(wisper, { segretoPonte: env.SEGRETO_SERVER || '', ponteDaFuori }) : null;
-  return { wisper, server, dati, condivisione, ingresso, portaIngresso, ponteDaFuori, portale, indirizzoPortale };
+  return { wisper, server, dati, condivisione, ingresso, portaIngresso, ponteDaFuori, portale, indirizzoPortale, bozze };
 }
 
 if (require.main === module) {
@@ -195,7 +198,7 @@ if (require.main === module) {
     console.log('Si usa: node server/src/avvio.js --dati <cartella> [--porta 8400] [--porta-condivisione 8401] [--porta-ingresso 8402] [--prova]');
     process.exit(a.aiuto ? 0 : 2);
   }
-  const { wisper, server, dati, condivisione, ingresso, portaIngresso, ponteDaFuori, portale, indirizzoPortale } = avvia(a);
+  const { wisper, server, dati, condivisione, ingresso, portaIngresso, ponteDaFuori, portale, indirizzoPortale, bozze } = avvia(a);
   if (portale) portale.listen(a.portaPortale, () => console.log('Portale clienti di prova sulla porta ' + a.portaPortale + ' (POST come lo script del portale, §0.2 di fase7.md; le email in ' + path.join(dati, 'posta-finta', 'email') + ')'));
   if (condivisione) condivisione.listen(a.portaCondivisione, () => console.log('Link per i clienti sulla porta ' + a.portaCondivisione + ' (solo /condiviso/<token>)'));
   if (ingresso) {
@@ -209,6 +212,8 @@ if (require.main === module) {
     console.log('Porta Google: ' + (wisper.porta.acceso ? 'il server va a prendere il lavoro dallo script del foglio' : wisper.porta.stato().frase));
     console.log('Portale clienti: ' + (wisper.portaPortale.acceso ? 'il server va a prendere le richieste dallo script del portale' : wisper.portaPortale.stato().frase));
     if (indirizzoPortale) console.log('Portale clienti: indirizzo della pagina scritto nelle impostazioni (da WISPER_PORTALE_INDIRIZZO)');
+    if (bozze.ritenute || bozze.codici) console.log('Bozze di fattura sistemate: ' + bozze.ritenute + ' con la ritenuta rimasta a zero, ' + bozze.codici + ' righe col codice del servizio');
+    else if (!a.prova) console.log('Bozze di fattura: niente da sistemare');
     console.log('Aggiornamenti: ' + (wisper.vedetta ? 'il NAS guarda le versioni ogni ' + wisper.vedetta.minuti + ' minuti e avvisa telefoni e computer' : 'spenti (nessun avviso alle app)'));
     if (orologioDiProva()) console.log('Orologio di prova: per il server oggi e\' ' + orologioDiProva() + ' (WISPER_OGGI_PROVA; le ore sono quelle vere)');
     // Il postino risponde? Lo si dice subito, invece di scoprirlo alla prima email o stanotte.

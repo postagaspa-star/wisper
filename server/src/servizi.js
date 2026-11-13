@@ -216,7 +216,95 @@ function serviziDaCsv(t) {
   }).filter(s => s.nome);
 }
 
+// ------------------------------------------------------------------ il servizio di una riga di fattura (13/11/2026)
+
+/** Maiuscolo, senza accenti, solo lettere e cifre: "Rimborso chilometrico" e "RIMBORSO CHILOMETRICO" sono uguali. */
+function piatto(s) {
+  return testo(s).normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/[^A-Z0-9]+/g, ' ').trim();
+}
+
+/** Di cosa parla un servizio dalla sua unita': 'ore', 'km' o '' (le voci di prima della 1.4.0: modo ore senza unita'). */
+function genereDiUnita(unita, modo) {
+  const u = piatto(unita);
+  if (u === 'ORE' || u === 'ORA' || u === 'H') return 'ore';
+  if (u === 'KM') return 'km';
+  return !u && modo === 'ore' ? 'ore' : '';
+}
+
+/** La parola che dice di chi e' un servizio: la prima del nome del cliente (almeno tre lettere). */
+function chiaveCliente(nome) {
+  const prima = piatto(nome).split(' ')[0] || '';
+  return prima.length >= 3 ? prima : '';
+}
+
+/** Le lettere con cui comincia il codice: "ENTE01" -> "ENTE", "KMA" -> "KMA". */
+function lettereCodice(codice) {
+  const m = /^[A-Z]+/.exec(piatto(codice).replace(/ /g, ''));
+  return m ? m[0] : '';
+}
+
+const NOME_ADATTO = { ore: /CONSULEN|PRESTAZION|VACAZION/, km: /CHILOMETR|KILOMETR|\bKM\b/ };
+
+/**
+ * 13/11/2026 (Andrea, col modello di Manuel: "il codice si deve mettere automaticamente quando prepari la bozza per la
+ * fattura, e deve essere preso dai Servizi"): il servizio di una riga che nasce dai rapportini, per le ore o per i km.
+ * Nel modello ogni riga e' un servizio (codice, nome, quantita', unita', prezzo), e lo stesso genere di riga ha servizi
+ * diversi da un cliente all'altro (i km di un ente hanno il loro codice).
+ *
+ * Si sceglie fra i servizi attivi col codice e con l'unita' giusta (Ore, Km), cosi':
+ *  1. quello usato l'ultima volta per questo cliente (anche corretto a mano, o tornato nell'XML emesso): si ricorda;
+ *  2. mai quello di un altro cliente (il codice comincia col nome di un altro cliente), se ce ne sono altri;
+ *  3. prima quello del cliente (il codice comincia col suo nome, o un tag e' l'inizio del suo nome), poi quello col prezzo
+ *     uguale alla tariffa o agli euro al km, poi quello col nome adatto (consulenza, rimborso chilometrico);
+ *  4. a parita', quello usato piu' di recente per gli altri clienti, poi l'ordine del listino.
+ * Senza servizi adatti torna null: la riga resta senza codice, col testo di prima.
+ *
+ * @param x.servizi        le righe del listino (id, codice, nome, unita, modo, prezzo, tag, attivo, ordine)
+ * @param x.genere         'ore' | 'km'
+ * @param x.prezzo         la tariffa o gli euro al km della riga
+ * @param x.cliente        il nome del cliente
+ * @param x.altriClienti   i nomi degli altri
+ * @param x.storicoCliente i codici gia' usati nelle fatture di questo cliente, dal piu' recente
+ * @param x.storicoTutti   i codici gia' usati nelle fatture di tutti, dal piu' recente
+ */
+function scegliServizio(x) {
+  const genere = x.genere;
+  if (genere !== 'ore' && genere !== 'km') return null;
+  const adatti = (x.servizi || []).filter(s => s && testo(s.codice) && (s.attivo === undefined || s.attivo === 1 || s.attivo === true) &&
+    genereDiUnita(s.unita, s.modo) === genere);
+  if (!adatti.length) return null;
+  const perCodice = c => adatti.find(s => piatto(s.codice) === piatto(c));
+  for (const c of x.storicoCliente || []) {
+    const s = perCodice(c);
+    if (s) return s;
+  }
+  const mio = chiaveCliente(x.cliente);
+  const altri = new Set((x.altriClienti || []).map(chiaveCliente).filter(k => k && k !== mio));
+  const diUnAltro = s => altri.has(lettereCodice(s.codice));
+  const liberi = adatti.filter(s => !diUnAltro(s));
+  const fra = liberi.length ? liberi : adatti;
+  const nomeIntero = piatto(x.cliente);
+  const punti = s => {
+    const tag = tagDa(s.tag).map(piatto);
+    // Un tag e' del cliente se e' il suo nome o l'inizio del suo nome ("Officine Esempio" per "Officine Esempio Spa").
+    const suo = !!mio && (lettereCodice(s.codice) === mio ||
+      tag.some(g => g.length >= 3 && (g === nomeIntero || nomeIntero.startsWith(g + ' '))));
+    const prezzo = !vuoto(s.prezzo) && !vuoto(x.prezzo) && centesimi(numero(s.prezzo)) === centesimi(numero(x.prezzo));
+    return (suo ? 4 : 0) + (prezzo ? 2 : 0) + (NOME_ADATTO[genere].test(piatto(s.nome)) ? 1 : 0);
+  };
+  const recenti = (x.storicoTutti || []).map(piatto);
+  const quando = s => { const i = recenti.indexOf(piatto(s.codice)); return i < 0 ? recenti.length : i; };
+  return fra.map(s => ({ s, p: punti(s), q: quando(s) }))
+    .sort((a, b) => b.p - a.p || a.q - b.q || numero(a.s.ordine) - numero(b.s.ordine) || numero(a.s.id) - numero(b.s.id))[0].s;
+}
+
+/** L'unita' da scrivere nella riga quando viene da un servizio: come in Flextaxa ("Ore", "Km"). */
+function unitaDiGenere(genere) {
+  return genere === 'ore' ? 'Ore' : genere === 'km' ? 'Km' : '';
+}
+
 module.exports = {
   UNITA, ALIQUOTE, TIPI, modoDaUnita, tagDa, aliquotaDa, servizioDaRiga, importoDi, importoIndennita, indennitaDi,
   indennitaInRisposta, pulisciIndennita, indennitaPerDb, righeCsv, euroDa, serviziDaCsv,
+  genereDiUnita, chiaveCliente, scegliServizio, unitaDiGenere,
 };

@@ -36,6 +36,9 @@ const AZIONI = {
   accedi: { pubblica: true, asincrona: true, soloPost: true, fn: (w, d) => w.accedi(d) },
   esci: { soloPost: true, libera: 'ognuno esce dal suo dispositivo', fn: w => w.esci() },
   io: { libera: 'ognuno legge chi e\' e cosa puo\' fare', fn: (w, d) => w.io(d) },
+  // 13/11/2026: la domanda di ogni minuto di Wisper Ufficio. Riuscita non lascia righe negli accessi (le riempirebbe:
+  // una al minuto per ogni computer acceso); rifiutata si', come tutte.
+  novita: { libera: 'ognuno chiede se e\' cambiato qualcosa: la risposta non porta dati', registra: r => !(r && r.ok), fn: w => w.novita() },
   cambiaPassword: { asincrona: true, soloPost: true, libera: 'ognuno la sua password', fn: (w, d) => w.cambiaPassword(d) },
 
   // --- collegare il computer col QR (docs/gestionale/collega-qr.md §4): ognuno collega un computer per se', coi suoi
@@ -473,7 +476,7 @@ const NOMI_FUNZIONI = require('./azioni/amministrazione8').NOMI_MODULI;
  * azioni qui filtrano a loro volta: solo le commesse dei suoi incarichi, le sue cose, la sua scheda.
  */
 const AZIONI_ESTERNO = new Set([
-  'io', 'esci', 'cambiaPassword', 'anagrafiche', 'dashboard', 'esporta',
+  'io', 'novita', 'esci', 'cambiaPassword', 'anagrafiche', 'dashboard', 'esporta',
   // Collegare il proprio computer col QR: come entrare con email e password, che un esterno puo' fare.
   'autorizzaComputer', 'statoComputer',
   'rapportini', 'file', 'documenti', 'salvaRapportino', 'caricaFile', 'togliFile', 'stato', 'inviaEmail', 'legaRapportino',

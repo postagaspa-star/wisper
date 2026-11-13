@@ -143,6 +143,11 @@ body.fuori .lato { display: none; }
 .stato-server.male { color: var(--rosso-testo); }
 .stato-server.male .pallino-stato { background: var(--rosso); }
 .stato-server .riprova { font-weight: 800; color: var(--collegamento); }
+/* 13/11/2026: "Server non raggiunto · Riprova" su una riga usciva dalla scheda (ora compare da solo, ogni minuto): due righe. */
+.stato-server.male { white-space: normal; align-items: flex-start; line-height: 1.3; }
+.stato-server.male .pallino-stato { margin-top: 5px; }
+.stato-server.male .sep { display: none; }
+.stato-server.male .riprova { display: block; }
 .lato.chiuso .stato-server { padding: 6px 20px; }
 .chi-entrato { display: flex; align-items: center; gap: 10px; border: none; background: none; padding: 4px 6px; border-radius: 12px; width: 100%; text-align: left; white-space: nowrap; }
 .chi-entrato:hover { background: var(--carta-sopra); }

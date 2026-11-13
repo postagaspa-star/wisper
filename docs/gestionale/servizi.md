@@ -148,3 +148,40 @@ queste.
 6. **Unità dei servizi di prima della 1.4.0** sul telefono: `Servizi.unitaDi` (come `unitaDi` del computer: a
    corpo senza unità = "A corpo", ore = "Ore"); un'indennità scritta a mano parte da "Nr". Prima il pulsante giallo
    chiedeva un'unità che stava in fondo alla pagina.
+
+## 6. Cambiamenti del 13/11/2026 sera (1.4.3, server 0.15.2)
+
+Andrea, guardando una bozza vera sul computer: "Il codice però si deve mettere automaticamente quando prepari la
+bozza per la fattura! Ed il codice deve essere preso dai Servizi, che sono quelli che vanno messi nei preventivi,
+parcelle e parcelle pro-forma"; "anche se c'è scritto sì alla ritenuta in basso, sopra nella ritenuta d'acconto
+viene segnato zero (e comunque la ritenuta è già segnata nelle impostazioni)".
+
+1. **Le righe che nascono dai rapportini sono servizi.** Nel modello ogni riga della parcella è un servizio: codice,
+   "nome del servizio | dettaglio", quantità, unità, prezzo. Quando `preparaFattura` fa le righe
+   (`righeRapportini` in `server/src/conti.js`) la riga delle ore e quella dei km prendono dal loro servizio il
+   **codice**, il **nome** (davanti al dettaglio: "Ore di consulenza | ottobre 2026 (2 rapportini)") e l'**unità**
+   ("Ore", "Km"). Quantità, prezzo e importo restano quelli dei rapportini: i conti non cambiano di un centesimo.
+   Le righe delle spese e delle anticipazioni restano senza codice (non c'è un servizio che le descriva); le
+   indennità avevano già il loro.
+2. **Quale servizio** (`scegliServizio` in `server/src/servizi.js`, casi in `server/prove/codici-righe.test.js`).
+   Fra i servizi attivi col codice e con l'unità giusta (Ore, Km):
+   1. quello usato l'ultima volta nelle fatture di questo cliente: un codice corretto a mano nella bozza, o tornato
+      nell'XML emesso, si ricorda;
+   2. mai quello di un altro cliente (un codice che comincia col nome di un altro cliente), se ce ne sono altri;
+   3. prima quello del cliente (il codice comincia col suo nome, o un tag è l'inizio del suo nome), poi quello col
+      prezzo uguale alla tariffa o agli euro al km, poi quello col nome adatto (consulenza, prestazioni; rimborso
+      chilometrico);
+   4. a parità, quello usato più di recente per gli altri clienti, poi l'ordine del listino.
+   Senza un servizio adatto la riga resta com'era prima (senza codice, "Prestazioni professionali di...").
+3. **Una riga per rapportino**: la riga è una sola e mette insieme ore, km e spese, quindi prende il servizio delle
+   ore (dei km se di ore non ce ne sono). Dividerla in una riga per servizio, come nel modello, è una scelta da fare
+   con Andrea.
+4. **Le bozze già fatte**: all'avvio il server (`sistemaBozze` in `fatture.js`, chiamato da `avvio.js`) mette il
+   codice nelle righe di compenso delle bozze che non l'hanno, guardando l'unità (o il rapportino della riga); il
+   testo scritto non si tocca, e ogni riga lo riceve una volta sola (se poi qualcuno toglie il codice apposta, non
+   torna). Lo dice nel registro di avvio: "Bozze di fattura sistemate: ...".
+5. **La ritenuta a zero col "sì"**. La bozza si ricorda la percentuale della ritenuta di quando è nata
+   (`ritenuta_percentuale`). Con l'impostazione "Ritenuta" vuota le app mostrano 20 lo stesso, ma il server
+   scriveva 0: la bozza diceva "sì" in basso e nei conti la ritenuta era zero. Ora la percentuale non è mai zero
+   (`percentualeRitenuta`: l'impostazione, o 20), una bozza col "sì" e la percentuale a zero la riprende a ogni
+   ricalcolo, e all'avvio il server rifà i conti delle bozze rimaste così. Le fatture pronte o emesse non si toccano.

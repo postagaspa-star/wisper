@@ -38,6 +38,8 @@ const VIVE = ['bozza', 'pronta'];
 // Fase 5: il ticket chiuso "una riga per l'intervento" (fase5.md §7.6) e' una sorgente come le altre, con lo stesso indice unico.
 const TIPI_SORGENTE = ['scadenza', 'rapportino', 'spesa', 'ore', 'ticket'];
 const RIFERIMENTO_N1 = 'Escluse ex art. 15 DPR 633/72';
+/** La nota nel registro delle modifiche quando il codice del servizio lo mette il server all'avvio (codiciNelleRighe). */
+const NOTA_CODICE_DA_SOLO = 'codice del servizio messo dal server';
 const RIFERIMENTO_FORFETTARIO = 'Operazione in franchigia da IVA (regime forfettario)';
 
 /** "…4521": le ultime quattro cifre di un IBAN (nelle schermate non si mostra intero). */
@@ -483,6 +485,8 @@ module.exports = {
     if (rapportini.length) {
       const sue = scelte.filter(x => x.tipo === 'spesa' && x.idRapportino);
       const r = C.righeRapportini({
+        // 13/11/2026: le righe delle ore e dei km prendono codice e nome dal loro servizio (Servizi e prodotti).
+        servizio: this.servizioPerRighe(cliente),
         raggruppa, cliente: { id: cliente.id, tariffaFissa: cliente.tariffa_fissa, pagaViaggio: cliente.paga_viaggio === 1 },
         rapportini: rapportini.map(v => ({
           id: v.id, data: dataIso(v.riga.data), descrizione: v.riga.descrizione, oreLavoro: v.riga.ore_lavoro, oreExtra: v.riga.ore_extra,
@@ -517,6 +521,80 @@ module.exports = {
     return gruppi;
   },
 
+  /**
+   * 13/11/2026 (Andrea: "il codice si deve mettere automaticamente quando prepari la bozza, e deve essere preso dai
+   * Servizi"): chi sceglie il servizio delle righe delle ore e dei km per questo cliente. Legge una volta il listino,
+   * i nomi degli altri clienti e i codici gia' usati nelle fatture (di questo cliente e di tutti, dal piu' recente:
+   * anche quelli corretti a mano in una bozza o tornati con l'XML emesso), poi risponde riga per riga con
+   * Servizi.scegliServizio. Senza servizi col codice e l'unita' Ore o Km non mette niente.
+   */
+  servizioPerRighe(cliente) {
+    const servizi = this.db.righe('SELECT * FROM listino WHERE attivo = 1 ORDER BY ordine, id');
+    if (!cliente || !servizi.some(s => testo(s.codice) && Servizi.genereDiUnita(s.unita, s.modo))) return () => null;
+    const altriClienti = this.db.righe('SELECT nome FROM soggetti WHERE id <> ?', cliente.id).map(r => r.nome);
+    const codici = q => this.db.righe(q.testo, ...q.con).map(r => r.codice);
+    const usati = "SELECT r.codice FROM fattura_righe r JOIN fatture f ON f.id = r.fattura_id WHERE r.codice <> '' AND f.stato <> 'scartata'";
+    const storicoCliente = codici({ testo: usati + ' AND f.cliente_id = ? ORDER BY f.id DESC, r.id DESC LIMIT 200', con: [cliente.id] });
+    const storicoTutti = codici({ testo: usati + ' ORDER BY f.id DESC, r.id DESC LIMIT 400', con: [] });
+    return (genere, prezzo) => Servizi.scegliServizio({ servizi, genere, prezzo, cliente: cliente.nome, altriClienti, storicoCliente, storicoTutti });
+  },
+
+  /**
+   * Il codice nelle righe di una bozza gia' fatta che non ce l'hanno (le bozze nate prima del 13/11/2026): solo il
+   * codice, il testo e i numeri della riga non si toccano. Le righe con l'unita' ore o km, e la riga unica di un
+   * rapportino (il servizio delle ore, o dei km se non ha ore). Una volta sola per riga (lo dice la nota nel registro
+   * delle modifiche): se poi qualcuno toglie il codice apposta, al prossimo avvio non torna. Torna quante righe ha cambiato.
+   */
+  codiciNelleRighe(f) {
+    const righe = this.db.righe("SELECT * FROM fattura_righe WHERE fattura_id = ? AND origine = 'bozza' AND tipo = 'compenso' AND codice = '' ORDER BY ordine, id", f.id);
+    if (!righe.length) return 0;
+    const cliente = this.db.riga('SELECT * FROM soggetti WHERE id = ?', f.cliente_id);
+    const scegli = this.servizioPerRighe(cliente);
+    let n = 0;
+    for (const r of righe) {
+      let genere = Servizi.genereDiUnita(r.unita, '');
+      let prezzo = r.prezzo;
+      if (!genere && /^rapportino:/.test(testo(r.gruppo))) {
+        const l = this.db.riga('SELECT compenso_ore, tariffa, km, rimborso_km, euro_km FROM rapportini WHERE id = ?', testo(r.gruppo).slice('rapportino:'.length));
+        if (l && numero(l.compenso_ore) > 0) { genere = 'ore'; prezzo = l.tariffa; } else if (l && numero(l.km) > 0 && numero(l.rimborso_km) > 0) { genere = 'km'; prezzo = l.euro_km; }
+      }
+      const s = genere ? scegli(genere, prezzo) : null;
+      if (!s) continue;
+      if (this.db.riga("SELECT id FROM registro WHERE tabella = 'fattura_righe' AND id_riga = ? AND nota = ? LIMIT 1", String(r.id), NOTA_CODICE_DA_SOLO)) continue;
+      this.aggiorna('fattura_righe', r.id, { codice: testo(s.codice) }, 'id', NOTA_CODICE_DA_SOLO);
+      n += 1;
+    }
+    return n;
+  },
+
+  /**
+   * La ritenuta d'acconto in percentuale: quella delle impostazioni, e 20 se e' vuota o zero. Le app, con
+   * l'impostazione vuota, mostrano gia' 20: prima il server metteva 0 nella bozza, e una bozza con la ritenuta "si'"
+   * aveva la ritenuta a zero (Andrea, 13/11/2026: "anche se c'e' scritto si' alla ritenuta, sopra viene segnato zero").
+   */
+  percentualeRitenuta() {
+    const p = numero(this.leggiImpostazioni().RITENUTA);
+    return p > 0 ? p : 20;
+  },
+
+  /**
+   * All'avvio (13/11/2026): le bozze di fattura gia' fatte. Quelle con la ritenuta "si'" e la percentuale a zero
+   * prendono la percentuale delle impostazioni e rifanno i conti; le righe delle ore e dei km senza codice prendono
+   * quello del loro servizio. Solo le bozze: una fattura passata al programma o emessa non si tocca. Si puo' rifare
+   * a ogni avvio: la seconda volta non trova niente.
+   */
+  sistemaBozze() {
+    let ritenute = 0;
+    let codici = 0;
+    this.db.transazione(() => {
+      for (const f of this.db.righe("SELECT * FROM fatture WHERE stato = 'bozza' AND tipo = 'fattura' ORDER BY id")) {
+        if (f.ritenuta_applicata === 1 && !(numero(f.ritenuta_percentuale) > 0)) { this.ricalcolaFattura(f.id); ritenute += 1; }
+        codici += this.codiciNelleRighe(f);
+      }
+    });
+    return { ritenute, codici };
+  },
+
   /** I parametri fiscali di oggi, congelati nella fattura che nasce. */
   parametriFiscali(cliente) {
     const imp = this.leggiImpostazioni();
@@ -526,7 +604,7 @@ module.exports = {
     return {
       regime: testo(imp.REGIME_FISCALE).toUpperCase() === 'RF19' ? 'forfettario' : 'ordinario',
       tipo_documento: testo(imp.TIPO_DOCUMENTO) || 'TD01',
-      iva_percentuale: numero(imp.IVA), eppi_percentuale: numero(imp.EPPI_INTEGRATIVO), ritenuta_percentuale: numero(imp.RITENUTA),
+      iva_percentuale: numero(imp.IVA), eppi_percentuale: numero(imp.EPPI_INTEGRATIVO), ritenuta_percentuale: this.percentualeRitenuta(),
       ritenuta_applicata: this.sostitutoDi(cliente) ? 1 : 0,
       bollo_soglia: numero(imp.BOLLO_SOGLIA), bollo_importo: numero(imp.BOLLO_IMPORTO), bollo_rivalsa: si(imp.BOLLO_RIVALSA) ? 1 : 0,
       giorni_pagamento: giorni, fine_mese: fine ? 1 : 0, modalita_pagamento: testo(imp.MODALITA_PAGAMENTO) || 'MP05',
@@ -730,8 +808,13 @@ module.exports = {
    * col netto nuovo).
    */
   ricalcolaFattura(id) {
-    const f = this.db.riga('SELECT * FROM fatture WHERE id = ?', id);
+    let f = this.db.riga('SELECT * FROM fatture WHERE id = ?', id);
     if (!f || VIVE.indexOf(f.stato) < 0) return;
+    // 13/11/2026: una bozza con la ritenuta "si'" non resta con la percentuale a zero (percentualeRitenuta).
+    if (f.stato === 'bozza' && f.ritenuta_applicata === 1 && !(numero(f.ritenuta_percentuale) > 0)) {
+      this.aggiorna('fatture', id, { ritenuta_percentuale: this.percentualeRitenuta() });
+      f = this.db.riga('SELECT * FROM fatture WHERE id = ?', id);
+    }
     const righe = this.db.righe("SELECT * FROM fattura_righe WHERE fattura_id = ? AND origine = 'bozza' ORDER BY ordine, id", id);
     const conti = this.contiDi(f, righe);
     const bolli = righe.filter(r => r.tipo === 'bollo');

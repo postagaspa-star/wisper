@@ -137,6 +137,18 @@ invoice has its PDF one click away. Quote, pro-forma, parcella and invoice all c
 Withholding tax: a draft used to freeze the choice when it was created; marking the client as a withholding agent
 afterwards now reaches that client's drafts, which are recalculated.
 
+Version 1.4.3 (13 November evening, server 0.15.2) fixes what the owner found on a real draft. **Draft lines created
+from reports are now services**: the hours line and the mileage line take code, name ("service name | detail") and
+unit from the matching entry of "Servizi e prodotti", chosen by the server (the code last used for that client first,
+then the client's own service, then matching price, then a fitting name); amounts do not change, a code corrected by
+hand is remembered, and existing drafts get their codes when the server starts. **Withholding tax at zero**: a draft
+stored the percentage at creation, and with the setting left blank the server stored 0 while the apps displayed 20,
+so the draft said "yes" and computed nothing; the percentage is now never zero (setting, or 20) and broken drafts are
+recalculated at start-up. **The connection status in the menu is rechecked every minute** on the computer and, with
+the app in the foreground, on the phone: one tiny request (`novita`, an imprint that changes when somebody writes,
+not logged in the access register); data are re-read silently only when it changes, the dot turns red by itself when
+the server is unreachable and green again at the first good minute.
+
 Phase 1 (October 2026) replaces the Google Sheet with a small server on
 the home NAS (`server/`: Node.js 24 with its built-in SQLite, no npm dependencies, in
 Docker). It speaks the same protocol as the sheet script, so the phone and the office

@@ -809,7 +809,7 @@
       if (!S.erroreLettura) { aggiungi(b, [h('span', { class: 'lab' }, 'Leggo…')]); return; }
       b.classList.add('male');
       b.setAttribute('data-nome', 'Server non raggiunto · Riprova');
-      aggiungi(b, [h('i', { class: 'pallino-stato' }), h('span', { class: 'lab' }, 'Server non raggiunto', h('span', { class: 'riprova' }, ' · Riprova'))]);
+      aggiungi(b, [h('i', { class: 'pallino-stato' }), h('span', { class: 'lab' }, 'Server non raggiunto', h('span', { class: 'sep' }, ' · '), h('span', { class: 'riprova' }, 'Riprova'))]);
       return;
     }
     const ora = S.ultimaLettura ? S.ultimaLettura.getHours() + ':' + String(S.ultimaLettura.getMinutes()).padStart(2, '0') : '';
@@ -901,12 +901,16 @@
   const FERMO_DA_MS = 3 * 60 * 1000;
   let ultimoGesto = Date.now();
   ['keydown', 'pointerdown', 'wheel'].forEach(t => document.addEventListener(t, () => { ultimoGesto = Date.now(); }, true));
+  /** Niente di aperto sopra la pagina: nessuna finestra, pannello, operazione o menu, nessun campo col cursore, niente visita. */
+  function nienteAperto() {
+    if ($('.velo') || $('.pannello') || $('.attesa') || $('.menu')) return false;
+    if (Visita.attiva) return false;
+    const el = document.activeElement;
+    return !(el && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName));
+  }
   function fermo(adesso) {
     if ((adesso || Date.now()) - ultimoGesto < FERMO_DA_MS) return false;
-    if ($('.velo') || $('.pannello') || $('.attesa') || $('.menu')) return false;
-    if (Visita.attiva || S.esempio) return false;
-    const el = document.activeElement;
-    if (el && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) return false;
+    if (!nienteAperto() || S.esempio) return false;
     if (Array.from(document.querySelectorAll('#principale button')).some(b => /^salva/i.test((b.textContent || '').trim()))) return false;
     return true;
   }
@@ -923,6 +927,128 @@
       Api.post('/locale/riavvia').catch(() => null);
     }, 20000);
   }
+
+  // ======================================================================= il collegamento, ogni minuto
+
+  /**
+   * 13/11/2026 (Andrea: "il collegamento, quello che si vede in basso a sinistra sul menù, con il pallino verde, si deve
+   * aggiornare ogni minuto"). Prima "Collegato · letto alle 9:12" restava quello dell'apertura finché non lo si premeva:
+   * un rapportino scritto dal telefono non arrivava sul computer, e un server spento restava "Collegato".
+   *
+   * Ora ogni minuto Wisper Ufficio chiede al server se è cambiato qualcosa (una domanda sola, leggera: "novita"), senza
+   * il "Rileggo…" e senza toccare quello che si sta facendo:
+   *  - il server risponde: l'ora nel menu avanza; non risponde: "Server non raggiunto · Riprova", e al primo minuto buono
+   *    torna "Collegato" da solo (anche se all'apertura il server era spento);
+   *  - se qualcuno ha scritto qualcosa si rileggono rapportini, clienti, commesse e i numeri della Casa e del menu; ogni
+   *    dieci minuti i soli numeri della Casa (cambiano anche col passare delle ore);
+   *  - la pagina si rifà da sola solo se è la Casa o l'elenco dei Rapportini e sopra non c'è niente di aperto né una
+   *    scelta in corso; le altre pagine leggono i loro dati quando ci si entra;
+   *  - se nel frattempo si è toccato qualcosa, quello che è arrivato si butta (potrebbe essere più vecchio di un
+   *    salvataggio appena fatto) e si riprova il minuto dopo.
+   */
+  const OGNI_MINUTO_MS = 60 * 1000;
+  const CASA_OGNI_MS = 10 * 60 * 1000;
+  const Vivo = { inCorso: false, impronta: null, senzaNovita: false, casaIl: 0, giroIl: 0, daRifare: false };
+  window.addEventListener('hashchange', () => { Vivo.daRifare = false; });
+
+  /** Le pagine disegnate dai dati tenuti qui: si rifanno senza chiedere altro al server (niente "Leggo…" che lampeggia). */
+  function paginaDaiDati() {
+    const [nome, a1] = percorso().split('/');
+    if (nome === 'dashboard') return !a1;
+    return nome === 'rapportini' && Ore.M.segmento === 'rapportini';
+  }
+
+  function rifaiSePuoi() {
+    if (!Vivo.daRifare || !paginaDaiDati() || !nienteAperto() || S.scelti.size) return;
+    Vivo.daRifare = false;
+    ridisegna();
+  }
+
+  async function tieniVivo() {
+    if (S.esempio || S.entrato !== true || Vivo.inCorso || $('.attesa')) return;
+    Vivo.inCorso = true;
+    Vivo.giroIl = Date.now();
+    const gesto = ultimoGesto;
+    try {
+      if (!S.caricato) {
+        // La prima lettura non era riuscita (server spento all'apertura): appena risponde si legge tutto.
+        if (!S.erroreLettura) return;
+        await Api.get('/server/io');
+        await leggiTutto(true);
+        return;
+      }
+      // Cosa rileggere: 'tutto' se qualcuno ha scritto, 'casa' ogni dieci minuti, '' se basta sapere che il server c'è.
+      let impronta = Vivo.impronta;
+      let cosa = 'tutto';
+      if (!Vivo.senzaNovita) {
+        try {
+          impronta = (await Api.get('/server/novita')).impronta || '';
+          cosa = impronta !== Vivo.impronta ? 'tutto' : (Date.now() - Vivo.casaIl > CASA_OGNI_MS ? 'casa' : '');
+        } catch (e) {
+          // Un server di prima della 0.15.2 non conosce la domanda: si rilegge tutto a ogni minuto.
+          if (e && e.accesso !== false && !e.rete && /sconosciuta/i.test(e.message || '')) Vivo.senzaNovita = true; else throw e;
+        }
+      }
+      // La Casa che non si carica non vuol dire server spento: restano i numeri di prima.
+      const leggiCasa = () => (puo('dashboard') ? Api.get('/server/dashboard').catch(() => null) : Promise.resolve(null));
+      let letto = null;
+      if (cosa === 'tutto') {
+        const voglioRapportini = puo('rapportini') || puo('fatturazione') || puo('commesse');
+        const [io, ana, rap, dash] = await Promise.all([Api.get('/server/io'), Api.get('/server/anagrafiche?archiviati=1'),
+          voglioRapportini ? Api.get('/server/rapportini') : Promise.resolve({ rapportini: [] }), leggiCasa()]);
+        letto = { io, ana, rap, dash };
+      } else if (cosa === 'casa') {
+        letto = { dash: await leggiCasa() };
+      }
+      // Il server ha risposto: il collegamento c'è, qualunque cosa si faccia dei dati.
+      S.erroreLettura = '';
+      S.ultimaLettura = new Date();
+      // Si è toccato qualcosa mentre si leggeva, o c'è un'operazione in corso: i dati arrivati non si usano.
+      if (letto && ultimoGesto === gesto && !$('.attesa')) {
+        const diverso = (a, b) => JSON.stringify(a) !== JSON.stringify(b);
+        let menu = false;
+        let dati = false;
+        if (letto.io) {
+          const nuovoIo = { utente: letto.io.utente || {}, permessi: letto.io.permessi || {}, titolare: letto.io.titolare || '', ragioneSociale: letto.io.ragioneSociale || '', interfaccia: letto.io.interfaccia || {} };
+          const nuovaAna = normalizzaAna(letto.ana);
+          const nuovi = letto.rap.rapportini || [];
+          menu = diverso(S.io, nuovoIo);
+          dati = menu || diverso(S.ana, nuovaAna) || diverso(S.rapportini, nuovi);
+          S.io = nuovoIo;
+          S.ana = nuovaAna;
+          S.rapportini = nuovi;
+          Vivo.impronta = impronta;
+        }
+        if (letto.dash) {
+          const nuovaDash = R.dashSenzaOre(letto.dash);
+          if (diverso(S.dash, nuovaDash)) { menu = true; dati = true; }
+          S.dash = nuovaDash;
+          S.dashErrore = '';
+        }
+        Vivo.casaIl = Date.now();
+        if (menu) disegnaLato();
+        if (dati) Vivo.daRifare = true;
+      }
+      aggiornaStatoServer();
+      rifaiSePuoi();
+    } catch (e) {
+      if (e && e.accesso === false) {
+        // L'accesso non vale più: alla pagina di accesso, ma non mentre si sta scrivendo qualcosa (lo dirà il salvataggio).
+        if (nienteAperto()) { try { errore(e, false); } catch (x) { /* è già alla pagina di accesso */ } }
+        return;
+      }
+      S.erroreLettura = (e && e.message) || String(e);
+      S.rete = !!(e && e.rete);
+      aggiornaStatoServer();
+    } finally {
+      Vivo.inCorso = false;
+    }
+  }
+  setInterval(tieniVivo, OGNI_MINUTO_MS);
+  // Il computer che si risveglia o la finestra che torna davanti: non si aspetta il minuto dopo.
+  window.addEventListener('focus', () => { if (Date.now() - Vivo.giroIl > OGNI_MINUTO_MS) tieniVivo(); });
+  // Per le prove (pc/prove/prova-collegamento.js): il giro senza aspettare il minuto, e lo stato da guardare.
+  window.WisperVivo = { giro: tieniVivo, S };
 
   async function cercaAggiornamenti() {
     const ris = await lavora('Controllo gli aggiornamenti', () => Api.post('/locale/aggiorna'));

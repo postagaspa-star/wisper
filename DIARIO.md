@@ -11,6 +11,7 @@ mai dati veri di clienti.
 
 | Data | Versione | In breve |
 |------|----------|----------|
+| 13/11/2026 | 1.4.3, server 0.15.2 | [Il codice dei Servizi da solo nelle righe della bozza, la ritenuta che non resta a zero, il collegamento ricontrollato ogni minuto](#v1-4-3) |
 | 13/11/2026 | 1.4.2, server 0.15.1 | [Un rapportino inviato si cambia liberamente, gli aggiornamenti arrivano, Servizi e prodotti, la parcella pro-forma](#v1-4-2) |
 | 13/11/2026 | 1.4.1 | [Un rapportino inviato si riporta da inviare da dove lo si corregge](#v1-4-1) |
 | 12/11/2026 | 1.4.0, server 0.15.0 | [Servizi, indennità nei rapportini, preventivi e parcelle col modello di Manuel](#v1-4-0) |
@@ -50,6 +51,70 @@ mai dati veri di clienti.
 | 26/09–14/10/2026 | 0.1 | [Un rapportino confermato non si perde più](#coda) |
 | 7–9/08/2026 | 0.1.0 | [Hackathon NGN Hacks: la versione a voce, senza mani](#v0-1-0) |
 | marzo–giugno 2026 | prima del repository | [Le prime versioni](#prima) |
+
+---
+
+<a id="v1-4-3"></a>
+## 13 novembre 2026 · 1.4.3 · server 0.15.2 · Il codice dei Servizi da solo nelle righe della bozza, la ritenuta che non resta a zero, il collegamento ricontrollato ogni minuto
+
+**Perché.** Andrea, la sera della 1.4.2, con una bozza di fattura davanti sul computer: "Il codice però si deve
+mettere automaticamente quando prepari la bozza per la fattura! Ed il codice deve essere preso dai Servizi, che sono
+quelli che vanno messi nei preventivi, parcelle e parcelle pro-forma. Avresti dovuto capirlo dal file che ti ho
+mandato." La 1.4.2 aveva messo nelle righe il campo Codice, ma vuoto: da scrivere a mano, riga per riga. Nel modello
+della parcella invece ogni riga è un servizio del listino. Poi: "il problema della ritenuta non è stato modificato:
+[...] anche se c'è scritto sì alla ritenuta in basso, sopra nella ritenuta d'acconto viene segnato zero! (e comunque
+la ritenuta è già segnata nelle impostazioni)". E: "il collegamento [...] (quello che si vede in basso a sinistra
+sul menù, con il pallino verde), si deve aggiornare ogni minuto".
+
+**Cosa cambia.**
+
+- **Le righe della bozza nascono come servizi.** Quando si prepara la bozza dai rapportini, la riga delle ore e
+  quella dei chilometri prendono da **Servizi e prodotti** il codice, il nome e l'unità: "Ore di consulenza |
+  ottobre 2026 (2 rapportini)", 10 Ore; "Rimborso chilometrico | ottobre 2026", 70 Km. Quantità, prezzi e importi
+  restano quelli dei rapportini: i conti non cambiano. Il servizio lo sceglie il server (0.15.2), così vale uguale
+  sul computer e sul telefono: prima quello usato l'ultima volta per quel cliente, poi quello del cliente (un codice
+  che comincia col suo nome, o un tag col suo nome), poi quello col prezzo uguale alla tariffa, poi quello col nome
+  adatto; mai il servizio di un altro cliente, se ce n'è un altro. Un codice corretto a mano nella bozza si ricorda:
+  la prossima bozza per quel cliente nasce con quello. Le righe delle spese restano senza codice (non c'è un
+  servizio che le descriva). Senza un servizio a Ore o a Km nel listino la riga resta com'era prima.
+- **Le bozze già fatte** prendono il codice quando il server riparte: solo il codice, il testo scritto non si tocca,
+  e una volta sola (se poi qualcuno lo toglie apposta, non torna).
+- **La ritenuta a zero col "sì".** La bozza si ricorda la percentuale della ritenuta del giorno in cui nasce. Con
+  l'impostazione Ritenuta rimasta vuota le app mostrano 20 lo stesso, ma il server nella bozza scriveva 0: in basso
+  "Ritenuta sì", nei conti zero. Ora la percentuale non è mai zero (quella delle impostazioni, o 20), e le bozze
+  rimaste così si rifanno i conti da sole quando il server riparte, o alla prima modifica.
+- **Il collegamento si ricontrolla ogni minuto.** "Collegato · letto alle 9:12" nel menu restava l'ora in cui si
+  era aperto il programma: un rapportino scritto dal telefono non arrivava sul computer finché non si premeva lì, e
+  un server spento restava "Collegato". Ora ogni minuto Wisper Ufficio fa al server una domanda sola ("è cambiato
+  qualcosa?"): se risponde l'ora avanza; se qualcuno ha scritto, i dati si rileggono senza il "Rileggo…" e senza
+  toccare quello che si sta facendo (la pagina si rifà da sola solo sulla Casa e nell'elenco dei Rapportini, e solo
+  se non c'è niente di aperto); se non risponde il pallino diventa rosso, "Server non raggiunto · Riprova", e torna
+  verde da solo al primo minuto buono. Lo stesso sul telefono finché l'app è davanti (nel suo menu c'è solo
+  "Collegato", senza l'ora). La domanda non lascia righe nel registro degli accessi (una al minuto per ogni computer
+  lo riempirebbe).
+
+<img src="docs/diario/2026-11-13-bozza-codici-da-soli-computer.png" width="620" alt="La bozza preparata dai rapportini di Rossi Impianti: la riga delle ore col codice CON e la riga dei chilometri col codice KM, messi da soli, e la ritenuta al 20% nei conti"> <img src="docs/diario/2026-11-13-bozza-codici-da-soli-telefono.png" width="240" alt="La stessa bozza sul telefono: CON e KM sopra le righe delle ore e dei chilometri">
+
+<img src="docs/diario/2026-11-13-collegamento-computer.png" width="620" alt="Un rapportino scritto dal telefono arrivato da solo nell'elenco del computer; in basso a sinistra Collegato, con l'ora dell'ultimo controllo"> <img src="docs/diario/2026-11-13-collegamento-telefono.png" width="240" alt="Il menu del telefono: in fondo Collegato col pallino verde, ricontrollato ogni minuto">
+
+<img src="docs/diario/2026-11-13-collegamento-non-raggiunto-computer.png" width="620" alt="Col server spento il pallino diventa rosso da solo: Server non raggiunto, Riprova">
+
+**Prove.** Server: 706 prove; le nuove sulla scelta del servizio (prezzo, nome, servizio del cliente e di un altro
+cliente, codice ricordato), sulle righe per mese e per rapportino, sulle bozze già fatte, sulla ritenuta e sulla
+domanda di ogni minuto. Computer: 369 prove dei conti e delle regole; undici giri cliccati, il nuovo sul
+collegamento in 7 passi (una domanda sola quando non cambia niente, il rapportino del telefono che arriva, la
+pagina che non si rifà sotto una finestra aperta, i dati buttati se si tocca qualcosa mentre legge, il rosso e il
+ritorno al verde). Telefono: 464 prove; sull'emulatore, contro un server di prova: due rapportini scritti da un
+altro dispositivo comparsi da soli entro il minuto, con la rete spenta "Server non raggiunto" da solo e poi di nuovo
+"Collegato", la bozza preparata dai rapportini coi codici sulle righe.
+
+**Non provato.** I telefoni veri di Manuel e Andrea e il computer di Manuel. La causa della ritenuta a zero l'ho
+ricavata dal codice e dai numeri della schermata di Andrea (con quei conti la percentuale nella bozza non può che
+essere zero), non guardando la bozza vera: quanti casi ha sistemato il server sul NAS lo dice il suo registro di
+avvio. La scelta del servizio è provata solo su servizi di esempio, non sul listino vero.
+
+**Versione:** [v1.4.3](https://github.com/postagaspa-star/wisper/releases/tag/v1.4.3) (telefono codice 21, computer
+1.4.3).
 
 ---
 

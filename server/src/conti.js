@@ -601,6 +601,12 @@ function righeRapportini(x) {
     const c = Array.from(new Set(lista.map(r => testo(r.idCommessa).toUpperCase())));
     return c.length === 1 ? testo(lista[0].idCommessa) : '';
   };
+  // 13/11/2026 (1.4.3): x.servizio(genere, prezzo) dice il servizio della riga ({codice, nome}) o null. Con un servizio
+  // la riga porta il suo codice e comincia col suo nome, come le scrive Flextaxa ("Consulenza tecnica | ottobre 2026").
+  const servizio = (genere, prezzo) => {
+    const s = typeof x.servizio === 'function' && genere ? x.servizio(genere, prezzo) : null;
+    return s && testo(s.codice) ? { codice: testo(s.codice), nome: testo(s.nome) } : null;
+  };
   const gruppi = [];
 
   if (x.raggruppa === 'rapportino') {
@@ -615,9 +621,13 @@ function righeRapportini(x) {
       if (nonAnticipate > 0) parti.push('spese ' + euroIt(nonAnticipate) + ' €');
       // 06/11/2026: col progetto, il suo codice ("Rapportino RAP/2026/0142 del 21/10/2026, progetto ED-003: ...").
       const progetto = testoProgetti(progettiDi([r]));
-      const descrizione = 'Rapportino ' + (testo(r.numero) || r.id) + ' del ' + dataIt(r.data) + (progetto ? ', ' + progetto : '') + (testo(r.descrizione) ? ': ' + testo(r.descrizione) : '') +
+      const testoRiga = 'Rapportino ' + (testo(r.numero) || r.id) + ' del ' + dataIt(r.data) + (progetto ? ', ' + progetto : '') + (testo(r.descrizione) ? ': ' + testo(r.descrizione) : '') +
         (parti.length ? ' (' + parti.join(', ') + ')' : '');
-      const righe = importo > 0 || !(r.indennita || []).length ? [{ tipo: 'compenso', descrizione, quantita: 1, unita: '', prezzo: importo, importo, idCommessa: testo(r.idCommessa), periodoDa: r.data, periodoA: r.data }] : [];
+      // La riga e' una sola (ore, km e spese insieme): prende il servizio delle ore, o dei km se non ci sono ore.
+      const s = ore > 0 && numero(r.compensoOre) > 0 ? servizio('ore', numero(r.tariffa))
+        : (numero(r.km) > 0 && numero(r.rimborsoKm) > 0 ? servizio('km', numero(r.euroKm)) : null);
+      const descrizione = s ? s.nome + ' | ' + testoRiga : testoRiga;
+      const righe = importo > 0 || !(r.indennita || []).length ? [{ tipo: 'compenso', codice: s ? s.codice : '', descrizione, quantita: 1, unita: '', prezzo: importo, importo, idCommessa: testo(r.idCommessa), periodoDa: r.data, periodoA: r.data }] : [];
       righe.push(...righeIndennita(r));
       sue.filter(s => s.anticipazione).forEach(s => righe.push(anticipazione(s)));
       gruppi.push({
@@ -657,12 +667,14 @@ function righeRapportini(x) {
       if (!(g.importo > 0) && !(g.ore > 0)) continue;
       // 06/11/2026: se tutti i rapportini della riga hanno il progetto, i codici ("di ottobre 2026, progetti ED-001, ED-002 (...)").
       const progetti = testoProgetti(progettiDi(g.rapportini));
-      const base = 'Prestazioni professionali di ' + quando + (progetti ? ', ' + progetti : '') + ' (' + g.n + (g.n === 1 ? ' rapportino' : ' rapportini');
+      const s = servizio('ore', tariffa);
+      const base = (s ? s.nome + ' | ' + quando : 'Prestazioni professionali di ' + quando) + (progetti ? ', ' + progetti : '') + ' (' + g.n + (g.n === 1 ? ' rapportino' : ' rapportini');
+      const codice = s ? s.codice : '';
       if (centesimi(g.ore * tariffa) === g.importo) {
-        righe.push({ tipo: 'compenso', descrizione: base + ')', quantita: g.ore, unita: 'ore', prezzo: tariffa, importo: g.importo, idCommessa: commessa, periodoDa, periodoA });
+        righe.push({ tipo: 'compenso', codice, descrizione: base + ')', quantita: g.ore, unita: s ? 'Ore' : 'ore', prezzo: tariffa, importo: g.importo, idCommessa: commessa, periodoDa, periodoA });
       } else {
         const dettaglio = ', ' + numeroIt(g.ore) + ' ore' + (g.extra > 0 ? ' di cui ' + numeroIt(g.extra) + ' straordinari' + (g.extra === 1 ? 'a' : 'e') : '');
-        righe.push({ tipo: 'compenso', descrizione: base + dettaglio + ')', quantita: 1, unita: '', prezzo: g.importo, importo: g.importo, idCommessa: commessa, periodoDa, periodoA });
+        righe.push({ tipo: 'compenso', codice, descrizione: base + dettaglio + ')', quantita: 1, unita: '', prezzo: g.importo, importo: g.importo, idCommessa: commessa, periodoDa, periodoA });
       }
     }
     // Km: una riga per euro al km (con l'euro al km nella descrizione se nel mese sono piu' d'uno).
@@ -677,11 +689,13 @@ function righeRapportini(x) {
     }
     const piuEuroKm = perEuroKm.size > 1;
     for (const [euroKm, g] of perEuroKm) {
-      const descrizione = 'Rimborso chilometrico di ' + quando + (piuEuroKm ? ' (' + numeroIt(euroKm, 2, 4) + ' €/km)' : '');
+      const s = servizio('km', euroKm);
+      const descrizione = (s ? s.nome + ' | ' + quando : 'Rimborso chilometrico di ' + quando) + (piuEuroKm ? ' (' + numeroIt(euroKm, 2, 4) + ' €/km)' : '');
+      const codice = s ? s.codice : '';
       if (centesimi(g.km * euroKm) === g.importo) {
-        righe.push({ tipo: 'compenso', descrizione, quantita: g.km, unita: 'km', prezzo: euroKm, importo: g.importo, idCommessa: commessa, periodoDa, periodoA });
+        righe.push({ tipo: 'compenso', codice, descrizione, quantita: g.km, unita: s ? 'Km' : 'km', prezzo: euroKm, importo: g.importo, idCommessa: commessa, periodoDa, periodoA });
       } else {
-        righe.push({ tipo: 'compenso', descrizione: descrizione + ' (' + numeroIt(g.km) + ' km)', quantita: 1, unita: '', prezzo: g.importo, importo: g.importo, idCommessa: commessa, periodoDa, periodoA });
+        righe.push({ tipo: 'compenso', codice, descrizione: descrizione + ' (' + numeroIt(g.km) + ' km)', quantita: 1, unita: '', prezzo: g.importo, importo: g.importo, idCommessa: commessa, periodoDa, periodoA });
       }
     }
     // Spese non anticipate (e quelle di prima della fase 3 rimaste solo nel rapportino).

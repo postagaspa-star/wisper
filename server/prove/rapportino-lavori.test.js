@@ -292,7 +292,7 @@ test('Da fatturare coi lavori Da inviare; la fattura dice "Rapportino <numero de
   assert.ok(voce && voce.pronta, 'il lavoro Da inviare si fattura');
   assert.equal(voce.titolo, 'Rapportino ' + r.id, 'senza descrizione: il numero del rapportino');
   const f = ok(await manuel('preparaFattura', { idCliente: 'C002', voci: [{ tipo: 'rapportino', id: r.id + '-1' }] })).fattura;
-  assert.match(f.righe[0].descrizione, new RegExp('^Rapportino ' + r.id.replace(/\//g, '\\/') + ' del 20\\/10\\/2026'));
+  assert.match(f.righe[0].descrizione, new RegExp('^Ore di consulenza \\| Rapportino ' + r.id.replace(/\//g, '\\/') + ' del 20\\/10\\/2026'));
   assert.ok(!f.righe.some(x => x.descrizione.indexOf(r.id + '-1') >= 0), 'mai il numero del lavoro nei testi');
   assert.equal(f.causale.indexOf(r.id + '-1'), -1);
   // Le commesse della fattura: nella fattura e nel modello del pacchetto (il PDF le scrive accanto al Mittente).
