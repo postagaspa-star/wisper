@@ -178,8 +178,19 @@ class ServiziTest {
         assertEquals(listOf("2", "4"), Servizi.elenco(voci, "indennita").map { it.id })
         assertEquals(listOf("2"), Servizi.elenco(voci, "VIAGGIO").map { it.id })
         assertEquals(listOf("1"), Servizi.elenco(voci, "col").map { it.id })
-        // Nella schermata Indennità prima quelle che si chiamano "Indennità…", poi gli altri; mai gli archiviati.
-        assertEquals(listOf("2", "4", "1"), Servizi.perIndennita(voci, "").map { it.id })
+        // 13/11/2026: nella scelta un elenco solo, nell'ordine dello studio (le indennità non vengono prima); mai gli archiviati.
+        assertEquals(listOf("1", "2", "4"), Servizi.perIndennita(voci, "").map { it.id })
+    }
+
+    @Test
+    fun `l'unita dei servizi di prima della 1_4_0 - a corpo senza unita, ore con h`() {
+        val v = VoceListino(id = "1", nome = "Sopralluogo")
+        assertEquals("A corpo", Servizi.unitaDi(v.copy(modo = ModoVoce.CORPO, unita = "")))
+        assertEquals("Ore", Servizi.unitaDi(v.copy(modo = ModoVoce.ORE, unita = "")))
+        assertEquals("Ore", Servizi.unitaDi(v.copy(modo = ModoVoce.ORE, unita = "h")))
+        assertEquals("Giorni", Servizi.unitaDi(v.copy(modo = ModoVoce.QUANTITA, unita = "giorni")))
+        assertEquals("m", Servizi.unitaDi(v.copy(modo = ModoVoce.QUANTITA, unita = " m ")))
+        assertEquals("", Servizi.unitaDi(v.copy(modo = ModoVoce.QUANTITA, unita = "")))
     }
 
     @Test

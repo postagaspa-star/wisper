@@ -123,7 +123,7 @@ async function main() {
     const voci = await valuta("[...document.querySelectorAll('#voci .voce')].map(x => x.dataset.nome)");
     // Dal 03/11/2026 (progetti.md §4) Commesse e Progetti sono due voci.
     // 1.4.0 (servizi.md §1): Servizi subito dopo Preventivi.
-    assert.deepEqual(voci.slice(0, 7), ['Casa', 'Clienti', 'Commesse', 'Progetti', 'Preventivi', 'Servizi', 'Calendario']);
+    assert.deepEqual(voci.slice(0, 7), ['Casa', 'Clienti', 'Commesse', 'Progetti', 'Preventivi', 'Servizi e prodotti', 'Calendario']);
     passo('menu: Preventivi e contratti e Attività e calendario al loro posto');
 
     // ------------------------------------------------------------ preventivo nuovo, dal listino
@@ -134,9 +134,9 @@ async function main() {
     await scrivi('Oggetto', OGGETTO, '.griglia-editor');
     await clicca('Media', '.griglia-editor', 300);
     // Dal listino: Sopralluogo e Direzione lavori.
-    await clicca('Dai servizi', '.griglia-editor', 400);
+    await clicca('Da Servizi e prodotti', '.griglia-editor', 400);
     await clicca('Sopralluogo e rilievo', '.listino-menu', 500);
-    await clicca('Dai servizi', '.griglia-editor', 400);
+    await clicca('Da Servizi e prodotti', '.griglia-editor', 400);
     await clicca('Direzione lavori', '.listino-menu', 500);
     // La direzione lavori a ore: 10 ore a 45 € (nel listino di prova non ha prezzo, lo si scrive).
     await valuta(`(() => {

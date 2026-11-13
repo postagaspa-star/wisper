@@ -31,7 +31,9 @@ const { diverso } = require('./ore');
 const urlFile = id => '/file/' + id;
 
 /** Nella forma nuova un lavoro Inviato o Fatturato non si cambia (il FIRMATO di prima e' Da inviare: si cambia). */
-const STATI_FERMI = ['INVIATO', 'FATTURATO'];
+// 13/11/2026 (Andrea: "anche dopo averlo inviato devi poterlo modificare liberamente, e nel caso tu lo faccia poi il sistema
+// te lo deve segnare come da Inviare"): un lavoro Inviato non e' piu' fermo. Fermo resta solo quello fatturato o in una fattura.
+const STATI_FERMI = ['FATTURATO'];
 const statoDi = r => testo(r.stato).toUpperCase() || 'BOZZA';
 /** Il numero del lavoro nel suo rapportino: RAP/2026/0153 -> 1 (il lavoro col numero del rapportino), RAP/2026/0153-2 -> 2. */
 function numeroNelRapportino(idLavoro, idGiornata) {
@@ -130,8 +132,9 @@ module.exports = {
    * salvaRapportino, forma nuova (06/11/2026): {idLocale, id?, data, tecnico?, lavori: [{idLocale, id?, ...i campi di un
    * rapportino della 1.1}]} -> {id, idLocale, data, tecnico, lavori, totale}. Lo stesso idLocale (del rapportino e dei
    * lavori) non fa doppioni. Un lavoro che c'era e non e' piu' nell'elenco si toglie (annullato, come Elimina), solo se e'
-   * Da inviare e fuori dalle fatture. Un lavoro Inviato o Fatturato, o in una fattura, non si cambia: rimandato uguale va
-   * bene. La data del rapportino vale per i suoi lavori che si possono cambiare. Ogni lavoro tiene le regole di oggi.
+   * fuori dalle fatture. Un lavoro Fatturato, o in una fattura, non si cambia: rimandato uguale va bene. Un lavoro Inviato
+   * si cambia (13/11/2026): se cambia davvero (o cambia la data del rapportino) torna Da inviare, perche' il cliente ha
+   * ricevuto quello di prima; rimandato uguale resta Inviato. Ogni lavoro tiene le regole di oggi.
    */
   salvaGiornata(g) {
     if (!testo(g.idLocale) && !testo(g.id)) throw new Rifiuto('Manca l\'identificativo del rapportino');
@@ -163,6 +166,9 @@ module.exports = {
       }
     });
     const data = testo(g.data) ? dataDaIso(g.data) : (giornata && giornata.data) || oggi();
+    // La data del rapportino cambia in questa richiesta? (Un Inviato uguale la segue e torna Da inviare solo allora: un
+    // lavoro inviato rimasto con la sua data di prima non si tocca per sbaglio salvando altro.)
+    const dataCambiata = !!giornata && dataIso(giornata.data) !== data;
     const tecnico = this.soloSuoi() ? c.utente.nome : (testo(g.tecnico) || (giornata ? testo(giornata.tecnico) : '') || testo(impostazioni.TECNICO));
     // Quelli tolti dall'elenco: si tolgono solo Da inviare e fuori dalle fatture (prima di scrivere qualunque cosa).
     const tenuti = new Set(trovati.filter(Boolean).map(r => r.id));
@@ -192,11 +198,11 @@ module.exports = {
           if (st === 'ANNULLATO') return;
           const fermo = STATI_FERMI.indexOf(st) >= 0 || !!this.sorgenteAttiva('rapportino', riga.id);
           const uguale = this.lavoroUguale(riga, l);
-          if (uguale && (fermo || (dataIso(riga.data) === data && testo(riga.tecnico) === tecnico))) {
+          if (uguale && (fermo || (st === 'INVIATO' && !dataCambiata) || (dataIso(riga.data) === data && testo(riga.tecnico) === tecnico))) {
             if (riga.posizione !== posizione) this.db.esegui('UPDATE rapportini SET posizione = ? WHERE id = ?', posizione, riga.id);
             return;
           }
-          if (STATI_FERMI.indexOf(st) >= 0) throw new Rifiuto('Il lavoro ' + riga.id + ' è già ' + (st === 'FATTURATO' ? 'fatturato' : 'inviato') + ': per modificarlo riportalo da inviare');
+          if (STATI_FERMI.indexOf(st) >= 0) throw new Rifiuto('Il lavoro ' + riga.id + ' è già ' + (st === 'FATTURATO' ? 'fatturato' : 'inviato') + ': non si cambia');
           if (fermo) this.controllaSorgenteLibera('rapportino', riga.id);
         } else {
           while (this.db.riga('SELECT id FROM rapportini WHERE id = ?', idG + '-' + prossimo)) prossimo++;
@@ -220,12 +226,11 @@ module.exports = {
     return r;
   },
 
-  /** Un lavoro si toglie solo Da inviare e fuori dalle fatture. */
+  /** Un lavoro si toglie se e' fuori dalle fatture (dal 13/11/2026 anche Inviato: resta nell'archivio come annullato). */
   controllaLavoroDaTogliere(r) {
     const st = statoDi(r);
     const nome = testo(r.cliente) || testo(r.id_cliente) || 'senza cliente';
     if (st === 'FATTURATO' || this.sorgenteAttiva('rapportino', r.id)) throw new Rifiuto('Il lavoro per ' + nome + ' è in una fattura: non si toglie', { idLavoro: r.id });
-    if (st === 'INVIATO') throw new Rifiuto('Il lavoro per ' + nome + ' è già inviato: non si toglie', { idLavoro: r.id });
   },
 
   /**
@@ -458,12 +463,17 @@ module.exports = {
       // 06/11/2026: nella forma nuova un FIRMATO di prima che cambia torna Da inviare, e la firma (di quello di prima) cade.
       const firmatoCambiato = !!o.formaNuova && cambiato && statoDi(esistente) === 'FIRMATO';
       if (firmatoCambiato) Object.assign(valori, { stato: 'BOZZA', firma: '', firmatario: '', firmato_il: '' });
+      // 13/11/2026: un Inviato che cambia torna Da inviare (il cliente ha ricevuto quello di prima: va mandato di nuovo).
+      const inviatoCambiato = !!o.formaNuova && cambiato && statoDi(esistente) === 'INVIATO';
+      if (inviatoCambiato) Object.assign(valori, { stato: 'BOZZA', inviato_il: '' });
       this.aggiorna('rapportini', id, Object.assign(valori, this.approvazioneRapportinoDopo(esistente, esistente.utente_id, cambiato)),
-        'id', firmatoCambiato ? 'cambiato: di nuovo da inviare, senza la firma di prima' : undefined);
+        'id', firmatoCambiato ? 'cambiato: di nuovo da inviare, senza la firma di prima' : inviatoCambiato ? 'cambiato dopo l\'invio: torna da inviare' : undefined);
       if (firmatoCambiato) {
         this.chiudiPubblicazioni('rapportino', id, 'annullato');
         this.db.esegui("UPDATE rapportini SET firma_modo = '', firma_prova = NULL, firma_referente_id = NULL WHERE id = ?", id);
       }
+      // Come "Riporta da inviare": esce dal portale (si ripubblica mandandolo di nuovo).
+      if (inviatoCambiato) this.chiudiPubblicazioni('rapportino', id, 'annullato');
       if (o.formaNuova && (esistente.posizione !== o.posizione || esistente.id_giornata !== o.idGiornata)) {
         this.db.esegui('UPDATE rapportini SET posizione = ?, id_giornata = ? WHERE id = ?', o.posizione, o.idGiornata, id);
       }

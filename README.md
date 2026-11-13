@@ -121,6 +121,22 @@ becomes editable in place, the window stays open), in the report panel under "In
 selected reports ("Cosa faccio" on the phone). On the computer a job marked invoiced by hand gets "Non ancora
 fatturato" and one sitting in a draft invoice gets "Apri la bozza".
 
+Version 1.4.2 (13 November, server 0.15.1) goes one step further on the owner's request: **a sent job is simply
+editable**. Its fields are open like a draft's, with one line on top ("Inviato · se lo cambi torna da inviare"); on
+save the server compares job by job, puts back to "Da inviare" only the ones that changed and leaves the others sent.
+Only invoiced jobs stay locked. A job with at least one allowance no longer needs hours; sending it to the client
+first asks to confirm ("Indennità senza ore"). **Updates are now visible**: a "Versione" card on top of Settings on
+both devices with "Controlla aggiornamenti"; the office program says plainly when a version is downloaded but the old
+one is still running, and restarts by itself after three idle minutes with nothing open, returning to the same page;
+the phone checks in the background every six hours, notifies when a version is ready and installs it when the app has
+been in the background for a minute (Android asks once for the "install unknown apps" permission). The price list is
+now called **Servizi e prodotti** and is one list: the allowance window no longer separates "allowances" from "other
+services". The **invoice draft** gets a code and a discount on every line, "Da Servizi e prodotti" to add a line from
+the price list, and a visible **Parcella pro-forma** button (the old "pre-parcella", renamed everywhere); an issued
+invoice has its PDF one click away. Quote, pro-forma, parcella and invoice all come out of the same model layout.
+Withholding tax: a draft used to freeze the choice when it was created; marking the client as a withholding agent
+afterwards now reaches that client's drafts, which are recalculated.
+
 Phase 1 (October 2026) replaces the Google Sheet with a small server on
 the home NAS (`server/`: Node.js 24 with its built-in SQLite, no npm dependencies, in
 Docker). It speaks the same protocol as the sheet script, so the phone and the office

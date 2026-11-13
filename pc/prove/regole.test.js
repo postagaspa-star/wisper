@@ -17,7 +17,7 @@ const ruolo = r => E.permessiDi(r);
 
 test('permessi: le voci del menu nell\'ordine delle specifiche, solo quelle del ruolo', () => {
   assert.deepEqual(R.vociMenu(ruolo('titolare')).map(v => v.nome),
-    ['Dashboard', 'Clienti e fornitori', 'Commesse', 'Progetti', 'Preventivi e contratti', 'Servizi', 'Attività e calendario', 'Rapportini', 'Spese e trasferte', 'Fatturazione', 'Banche e scadenze',
+    ['Dashboard', 'Clienti e fornitori', 'Commesse', 'Progetti', 'Preventivi e contratti', 'Servizi e prodotti', 'Attività e calendario', 'Rapportini', 'Spese e trasferte', 'Fatturazione', 'Banche e scadenze',
       'Persone e risorse umane', 'Documenti', 'Ticket e assistenza', 'Mezzi e attrezzature', 'WhatsApp e comunicazioni', 'Portale clienti', 'Collaboratori esterni', 'Integrazioni', 'Amministrazione']);
   // 1.4.0 (servizi.md §1): Servizi subito dopo Preventivi; non è un permesso, la vede chi ha Preventivi, Rapportini o Fatture.
   // 07/11/2026: "Ore e rapportini" è diventata Rapportini (le Ore sono state tolte).

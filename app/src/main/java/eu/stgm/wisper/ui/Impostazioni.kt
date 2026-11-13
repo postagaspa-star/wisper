@@ -231,9 +231,45 @@ fun PaginaTariffe(dati: Dati, puoCambiare: Boolean, onIndietro: () -> Unit) {
 }
 
 /**
- * Amministrazione › L'app: tema, visita guidata, versione e aggiornamenti, e il
- * collegamento col server. È di tutti: si apre anche dal foglio "Tu", per chi
- * non vede Amministrazione.
+ * La versione di Wisper su questo telefono, a che punto è l'aggiornamento e il suo pulsante: "Controlla aggiornamenti",
+ * oppure "Installa la 1.4.2" (giallo) quando una versione nuova è già scaricata. Sta in cima alla prima pagina delle
+ * Impostazioni e ad Aspetto (13/11/2026).
+ */
+@Composable
+fun SchedaVersione(modifier: Modifier = Modifier) {
+    val c = W.colori
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val versioni by NuoveVersioni.stato.collectAsStateWithLifecycle()
+    val pronta = versioni.pronta != null
+    Scheda(modifier.bersaglio("scheda-versione"), orizzontale = 20.dp, verticale = 18.dp, raggio = 24.dp, spazio = 12.dp) {
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text("Versione ${BuildConfig.VERSION_NAME}", style = Testi.forte, color = c.testo)
+            val quando = NuoveVersioni.quandoControllato(versioni.controllato)
+            Text(
+                when {
+                    versioni.inCorso -> if (versioni.messaggio.startsWith("Scarico")) versioni.messaggio + "…" else "Controllo…"
+                    pronta -> "La ${versioni.nome} è scaricata: manca solo installarla"
+                    versioni.messaggio.startsWith("Hai") -> listOf(versioni.messaggio, quando).filter { it.isNotBlank() }.joinToString(" · ")
+                    versioni.messaggio.isNotBlank() -> versioni.messaggio
+                    quando.isNotBlank() -> quando.replaceFirstChar { it.uppercase() }
+                    else -> "Si aggiorna da sola quando esce una versione nuova"
+                },
+                style = Testi.secondario, color = c.tenue,
+            )
+        }
+        if (pronta) PulsantePrincipale("Installa la ${versioni.nome}", { NuoveVersioni.installa(ctx, chiesto = true) }, Modifier.bersaglio("installa-versione"), altezza = 52.dp)
+        else PulsanteBordo(
+            if (versioni.inCorso) "Controllo…" else "Controlla aggiornamenti",
+            { if (!versioni.inCorso) scope.launch { NuoveVersioni.controlla(ctx) } },
+            Modifier.fillMaxWidth().bersaglio("controlla-aggiornamenti"),
+        )
+    }
+}
+
+/**
+ * Amministrazione › Aspetto: la versione col suo pulsante, il tema, la visita guidata e il collegamento col server. È
+ * di tutti: si apre anche dal foglio "Tu", per chi non vede Amministrazione.
  */
 @Composable
 fun PaginaApp(
@@ -262,28 +298,15 @@ fun PaginaApp(
     ) {
         Testata(onIndietro = onIndietro)
         TitoloPagina(titolo)
+        // 13/11/2026 (Andrea: "non c'è un tasto semplice e veloce nelle impostazioni per controllare se ci sono dei nuovi
+        // aggiornamenti"): la versione e il suo pulsante in cima, qui e nella prima pagina delle Impostazioni.
+        SchedaVersione()
         Scheda(orizzontale = 20.dp, verticale = 18.dp, raggio = 24.dp, spazio = 10.dp) {
             Text("Tema", style = Testi.forte, color = c.testo)
             Segmenti(listOf("auto" to "Automatico", "chiaro" to "Chiaro", "scuro" to "Scuro"), tema, onTema)
         }
         SchedaElenco {
             RigaVoce("Rifai la visita guidata", sotto = "Da capo, coi dati di esempio", onClick = onVisita)
-            LineaElenco()
-            // Si aggiorna da sola quando il NAS annuncia una versione nuova (dalla 1.1.0); qui si vede a che punto è e si può controllare subito.
-            RigaVoce(
-                "Versione ${BuildConfig.VERSION_NAME}",
-                sotto = when {
-                    versioni.inCorso -> "Controllo…"
-                    versioni.pronta != null -> "La ${versioni.nome} è pronta"
-                    versioni.messaggio.isNotBlank() -> versioni.messaggio
-                    else -> "Si aggiorna da sola"
-                },
-                fine = {
-                    if (versioni.pronta != null) PulsanteTesto("Installa", { NuoveVersioni.installa(ctx, chiesto = true) })
-                    else if (!versioni.inCorso) PulsanteTesto("Controlla", { scope.launch { NuoveVersioni.controlla(ctx) } })
-                },
-                freccia = false,
-            )
             LineaElenco()
             RigaVoce("Licenze", sotto = "Caratteri Plus Jakarta Sans e Figtree, SIL OFL 1.1", onClick = { licenza = true })
         }

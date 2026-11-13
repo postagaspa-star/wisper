@@ -436,7 +436,6 @@
         const altro = h('button', { type: 'button', class: 'btn grande', 'aria-label': 'Altre azioni', title: 'Altre azioni', style: { width: '52px', padding: '0' } }, icona('altro', 20));
         altro.addEventListener('click', () => apriMenu(altro, [
           { testo: 'Il prospetto (anteprima)', fn: () => apriPassaggio(f, { soloVedere: true }) },
-          !nota ? { testo: 'Pre-parcella per il cliente', fn: () => avvisoParcella(f) } : null,
           modificabile() ? '-' : null,
           modificabile() ? { testo: 'Scarta la bozza', pericolo: true, fn: () => scarta(f, () => W.vai('#fatturazione')) } : null,
         ]));
@@ -447,6 +446,10 @@
               h('div', { class: 'pillole-testa' }, pillStato('Bozza'), h('span', { class: 'sotto-titolo' }, 'Rif. ' + f.riferimento + ' · non è ancora una fattura')),
               h('h1', null, (nota ? 'Nota di credito per ' : 'Bozza per ') + f.cliente)),
             h('div', { class: 'azioni-testa' }, altro,
+              // 13/11/2026 (Andrea: "durante la bozza della fattura non c'è la possibilità di metterla come parcella
+              // pro-forma"): era nel menu ⋯, ora è in vista. Prima salva, così il PDF ha quello che si vede.
+              !nota && scrive() ? h('button', { type: 'button', class: 'btn grande', 'data-azione': 'pro-forma', onclick: async () => { if (sporca && !(await salva())) return; avvisoParcella(f); } },
+                icona('file', 18, 2.2), 'Parcella pro-forma') : null,
               scrive() ? h('button', { type: 'button', class: 'btn giallo grande', 'data-visita': 'passa-al-programma', onclick: passa }, 'Passa al programma') : null)),
           fasciaRegole(),
           zonaBanda,
@@ -459,8 +462,8 @@
       function colonnaRighe() {
         const colonne = '22px minmax(0, 1fr) 40px';
         const tab = h('div', { class: 'tab tab-bozza' }, h('div', { class: 'r testa', style: { gridTemplateColumns: colonne } },
-          h('span'), h('span', { class: 'numeri-riga testa-righe' }, h('span', null, 'Descrizione'), h('span', { class: 'gruppo-numeri' }, h('span', { class: 'num-fisso q' }, 'Quantità'), h('span', { class: 'num-fisso unita' }, 'Unità'),
-            h('span', { class: 'num-fisso p' }, 'Prezzo'), h('span', { class: 'importo-riga' }, 'Importo'))), h('span')));
+          h('span'), h('span', { class: 'numeri-riga testa-righe' }, h('span', null, 'Riga'), h('span', { class: 'gruppo-numeri' }, h('span', { class: 'num-fisso q' }, 'Quantità'), h('span', { class: 'num-fisso unita' }, 'Unità'),
+            h('span', { class: 'num-fisso p' }, 'Prezzo'), h('span', { class: 'num-fisso s' }, 'Sconto %'), h('span', { class: 'importo-riga' }, 'Importo'))), h('span')));
         const anteprima = RF.contiFattura(RF.parametriDi(f, imp(), righe));
         righe.forEach((r, i) => aggiungi(tab, [rigaBozza(r, i, colonne, anteprima.righe[i])]));
         const bollo = (f.righe || []).find(r => r.tipo === 'bollo');
@@ -468,13 +471,19 @@
           aggiungi(tab, [h('div', { class: 'r riga-bozza riga-bollo', style: { gridTemplateColumns: colonne } }, h('span'),
             h('span', { class: 'cella-desc' }, h('span', { class: 'desc-fissa' }, 'Imposta di bollo'),
               h('span', { class: 'numeri-riga' }, pillola('Senza IVA', 'grigio'), h('span', { class: 'segno-gruppo' }, 'la mette e la toglie Wisper'),
-                h('span', { class: 'gruppo-numeri' }, h('span', { class: 'num-fisso q' }, '1'), h('span', { class: 'num-fisso unita' }), h('span', { class: 'num-fisso p' }, euro(bollo.prezzo)), h('span', { class: 'importo-riga' }, euro(bollo.importo))))), h('span'))]);
+                h('span', { class: 'gruppo-numeri' }, h('span', { class: 'num-fisso q' }, '1'), h('span', { class: 'num-fisso unita' }), h('span', { class: 'num-fisso p' }, euro(bollo.prezzo)), h('span', { class: 'num-fisso s' }), h('span', { class: 'importo-riga' }, euro(bollo.importo))))), h('span'))]);
         }
         if (!righe.length) aggiungi(tab, [h('p', { class: 'vuoto' }, 'Nessuna riga.')]);
         return h('div', { class: 'sezione' }, tab,
           modificabile() ? h('div', { class: 'fila-azioni' },
-            h('button', { type: 'button', class: 'btn', onclick: () => { righe.push({ id: null, gruppo: '', tipo: 'compenso', descrizione: '', quantita: 1, unita: '', prezzo: 0, nuova: true }); sporca = true; disegna(); } },
-              icona('piu', 18, 2.6), 'Aggiungi una riga')) : null);
+            h('button', { type: 'button', class: 'btn', onclick: () => { righe.push({ id: null, gruppo: '', tipo: 'compenso', codice: '', descrizione: '', quantita: 1, unita: '', prezzo: 0, sconto: 0, nuova: true }); sporca = true; disegna(); } },
+              icona('piu', 18, 2.6), 'Aggiungi una riga'),
+            // Da Servizi e prodotti: la riga nasce col codice, la descrizione, l'unità e il prezzo del servizio.
+            h('button', { type: 'button', class: 'btn', 'data-azione': 'riga-da-servizio', onclick: e => W.Servizi.scegli(e.currentTarget, s => {
+              righe.push({ id: null, gruppo: '', tipo: 'compenso', codice: s.codice || '', descrizione: s.nome || '', quantita: 1, unita: radice.WisperRegoleServizi.unitaDi(s) || '',
+                prezzo: s.prezzo === null || s.prezzo === undefined ? 0 : s.prezzo, sconto: 0, nuova: true });
+              sporca = true; disegna();
+            }) }, icona('libro', 18, 2.2), 'Da Servizi e prodotti')) : null);
       }
 
       function rigaBozza(r, i, colonne, importoAnteprima) {
@@ -483,8 +492,12 @@
         const segna = () => { sporca = true; disegnaConti(); disegnaBanda(); };
         const desc = h('textarea', { rows: 2, class: 'desc-riga', 'aria-label': 'Descrizione della riga ' + (i + 1), disabled: sola, oninput: e => { r.descrizione = e.target.value; segna(); } });
         desc.value = r.descrizione || '';
-        const numeroIn = (valore, chiave, etichetta) => h('input', { type: 'text', inputmode: 'decimal', class: 'num-riga ' + (chiave === 'quantita' ? 'q' : 'p'), value: valore === null || valore === undefined ? '' : C.numero(valore), disabled: sola, 'aria-label': etichetta,
-          onchange: e => { const v = RF.leggiNumero(e.target.value); r[chiave] = v === null ? 0 : v; sporca = true; disegna(); } });
+        const numeroIn = (valore, chiave, etichetta) => h('input', { type: 'text', inputmode: 'decimal', class: 'num-riga ' + (chiave === 'quantita' ? 'q' : chiave === 'sconto' ? 's' : 'p'), value: valore === null || valore === undefined ? '' : C.numero(valore), disabled: sola, 'aria-label': etichetta,
+          onchange: e => { const v = RF.leggiNumero(e.target.value); r[chiave] = v === null ? 0 : (chiave === 'sconto' ? Math.max(0, Math.min(100, v)) : v); sporca = true; disegna(); } });
+        // 13/11/2026 (Andrea: "durante la bozza della fattura non vengono mostrati i codici dei servizi"): il codice
+        // della riga, come nella parcella (CODICE, DESCRIZIONE), si vede e si scrive; lo sconto in percento pure.
+        const codice = h('input', { type: 'text', class: 'codice-riga', value: r.codice || '', disabled: sola, placeholder: sola ? '' : 'Codice', 'aria-label': 'Codice della riga ' + (i + 1),
+          oninput: e => { r.codice = e.target.value; segna(); } });
         const unita = h('input', { type: 'text', class: 'unita-riga', value: r.unita || '', disabled: sola, 'aria-label': 'Unità di misura', oninput: e => { r.unita = e.target.value; segna(); } });
         const tipo = r.gruppo || sola
           ? pillola(r.tipo === 'anticipazione' ? 'Spesa anticipata, senza IVA' : 'Compenso', r.tipo === 'anticipazione' ? 'grigio' : 'blu')
@@ -492,10 +505,11 @@
             onclick: () => { r.tipo = r.tipo === 'anticipazione' ? 'compenso' : 'anticipazione'; sporca = true; disegna(); } }, r.tipo === 'anticipazione' ? 'Spesa anticipata, senza IVA' : 'Compenso');
         const el = h('div', { class: 'r riga-bozza' + (r.gruppo ? ' di-gruppo' : ''), style: { gridTemplateColumns: colonne }, 'data-indice': String(i) },
           sola ? h('span') : h('span', { class: 'maniglia', title: 'Trascina per spostare', draggable: 'true' }, icona('trascina', 18, 2)),
-          h('span', { class: 'cella-desc' }, desc, h('span', { class: 'numeri-riga' }, tipo,
+          h('span', { class: 'cella-desc' }, h('span', { class: 'codice-e-desc' }, codice, desc), h('span', { class: 'numeri-riga' }, tipo,
             r.gruppo ? h('span', { class: 'segno-gruppo', title: 'Nata dal lavoro da fatturare: toglierla lo fa tornare da fatturare' }, icona('graffetta', 13, 2.2), 'da fatturare') : null,
             cambiata ? h('span', { class: 'era' }, 'era ' + euro(r.importoSorgenti)) : null,
             h('span', { class: 'gruppo-numeri' }, numeroIn(r.quantita, 'quantita', 'Quantità'), unita, numeroIn(r.prezzo, 'prezzo', 'Prezzo'),
+              numeroIn(C.num(r.sconto) ? r.sconto : null, 'sconto', 'Sconto in percento'),
               h('span', { class: 'importo-riga' }, euro(importoAnteprima))))),
           sola ? h('span') : h('button', { type: 'button', class: 'tondo piccolo togli-riga', 'aria-label': 'Togli la riga', title: 'Togli dalla bozza', onclick: () => togliRiga(i) }, icona('chiudi', 16, 2.6)));
         if (!sola) trascinabile(el, i);
@@ -588,7 +602,7 @@
       function corpoSalva() {
         const x = { id: f.id, data: campi.data, idConto: campi.idConto || undefined, causale: campi.causale, noteInterne: campi.noteInterne, ritenuta: campi.ritenuta,
           righe: righe.map(r => {
-            const o = { tipo: r.tipo, descrizione: r.descrizione, quantita: r.quantita, unita: r.unita || '', prezzo: r.prezzo, tributoCliente: !!r.tributoCliente };
+            const o = { tipo: r.tipo, codice: String(r.codice || '').trim(), descrizione: r.descrizione, quantita: r.quantita, unita: r.unita || '', prezzo: r.prezzo, sconto: C.num(r.sconto), tributoCliente: !!r.tributoCliente };
             if (r.id) o.id = r.id;
             if (r.gruppo) o.gruppo = r.gruppo;
             return o;
@@ -662,8 +676,8 @@
         uscite.indexOf('prospetto') >= 0 ? h('button', { type: 'button', class: 'btn grande largo', onclick: () => pdfProspetto(f, modello) }, icona('scarica', 18, 2.2), 'Scarica il prospetto (PDF)') : null,
         uscite.indexOf('xml') >= 0 && p.xml ? h('button', { type: 'button', class: 'btn grande largo', onclick: () => salvaXml(p.xml) }, icona('file', 18, 2.2), 'Scarica l\'XML da completare') : null,
         tuttoBtn,
-        // La pre-parcella (era l'avviso di parcella, fase4.md §8.3, facoltativa): per chi fattura all'incasso. Non cambia lo stato.
-        scrive() && f.tipo !== 'nota' && (f.stato === 'bozza' || f.stato === 'pronta') ? h('button', { type: 'button', class: 'btn grande largo', onclick: () => avvisoParcella(f) }, icona('email', 18, 2.2), 'Pre-parcella per il cliente') : null,
+        // La parcella pro-forma (era l'avviso di parcella, fase4.md §8.3, facoltativa): per chi fattura all'incasso. Non cambia lo stato.
+        scrive() && f.tipo !== 'nota' && (f.stato === 'bozza' || f.stato === 'pronta') ? h('button', { type: 'button', class: 'btn grande largo', onclick: () => avvisoParcella(f) }, icona('email', 18, 2.2), 'Parcella pro-forma per il cliente') : null,
         h('div', { class: 'scheda totali-prospetto' },
           h('div', { class: 'rc' }, h('span', null, f.tipo === 'nota' ? 'Totale della nota' : 'Totale della fattura'), h('b', null, euro(modello.totaleDocumento !== undefined ? modello.totaleDocumento : k.totale))),
           h('div', { class: 'rc' }, h('span', null, f.tipo === 'nota' ? 'Netto stornato' : 'Netto da incassare'), h('b', null, euro(modello.nettoAPagare !== undefined ? modello.nettoAPagare : k.netto)))),
@@ -713,15 +727,15 @@
       if (ris && ris.ok) avviso('Salvato in ' + ris.percorso + ': completalo nel programma, non inviarlo così');
     }
 
-    /** La pre-parcella (era l'avviso di parcella): un PDF senza valore fiscale, per email al cliente (inviaAvviso) o solo il PDF. */
+    /** La parcella pro-forma (era l'avviso di parcella): un PDF senza valore fiscale, per email al cliente (inviaAvviso) o solo il PDF. */
     async function avvisoParcella(f) {
-      const p = await lavora('Preparo la pre-parcella', () => Rete.get('/server/pacchetto?id=' + f.id));
+      const p = await lavora('Preparo la parcella pro-forma', () => Rete.get('/server/pacchetto?id=' + f.id));
       if (!p) return;
       const c = W.cliente(f.idCliente) || {};
       const a = h('input', { type: 'email', value: c.email || '', placeholder: 'email di ' + f.cliente });
-      const oggetto = h('input', { type: 'text', value: 'Pre-parcella · ' + (imp().RAGIONE_SOCIALE || '') });
+      const oggetto = h('input', { type: 'text', value: 'Parcella pro-forma · ' + (imp().RAGIONE_SOCIALE || '') });
       const messaggio = h('textarea', { rows: 5 });
-      messaggio.value = 'Buongiorno,\nin allegato la pre-parcella. La fattura arriva al pagamento.\n\nCordiali saluti\n' + (imp().TECNICO || imp().RAGIONE_SOCIALE || '');
+      messaggio.value = 'Buongiorno,\nin allegato la parcella pro-forma. La fattura arriva al pagamento.\n\nCordiali saluti\n' + (imp().TECNICO || imp().RAGIONE_SOCIALE || '');
       const html = () => D.avvisoParcella(p.modello, { oggi: oggi(), logo: D.logoDi(S.ana.impostazioni), conNome: D.nomeAccantoAlLogo(S.ana.impostazioni), impostazioni: S.ana.impostazioni });
       let chiudi;
       const zonaA = h('div', null, campo('A', a));
@@ -730,22 +744,22 @@
       const manda = async () => {
         if (!a.value.trim()) { aggiungi(svuota(zonaA), [campo('A', a, 'Manca l\'indirizzo: scrivilo qui (lo puoi salvare in Clienti)')]); a.focus(); return; }
         if (S.esempio) { chiudi(); avviso('Avviso inviato (esempio: non è partito niente)'); return; }
-        const ris = await lavora('Mando la pre-parcella', async () => {
-          const pdf = await Rete.post('/locale/pdf', { html: html(), nome: W.nomeFile('Pre-parcella ' + f.riferimento, f.cliente), apri: false, base64: true });
+        const ris = await lavora('Mando la parcella pro-forma', async () => {
+          const pdf = await Rete.post('/locale/pdf', { html: html(), nome: W.nomeFile('Parcella pro-forma ' + f.riferimento, f.cliente), apri: false, base64: true });
           return Rete.post('/server/inviaAvviso', { id: f.id, a: a.value.trim(), oggetto: oggetto.value, messaggio: messaggio.value,
             allegati: pdf && pdf.base64 ? [{ nome: pdf.nome, mime: 'application/pdf', base64: pdf.base64 }] : [] });
         });
         if (!ris) return;
         chiudi();
-        avviso('Pre-parcella inviata a ' + a.value.trim());
+        avviso('Parcella pro-forma inviata a ' + a.value.trim());
         W.disegnaPagina();
       };
       chiudi = finestra({
-        titolo: 'Pre-parcella', corpo: [h('p', { class: 'sotto-titolo', style: { margin: 0 } }, f.cliente + ' · ' + euro((p.modello || {}).nettoAPagare) + ' da pagare · non è una fattura'), zonaA, campo('Oggetto', oggetto), campo('Messaggio', messaggio)],
+        titolo: 'Parcella pro-forma', corpo: [h('p', { class: 'sotto-titolo', style: { margin: 0 } }, f.cliente + ' · ' + euro((p.modello || {}).nettoAPagare) + ' da pagare · non è una fattura'), zonaA, campo('Oggetto', oggetto), campo('Messaggio', messaggio)],
         pulsanti: ['spazio', h('button', { type: 'button', class: 'btn testo grande', onclick: () => chiudi() }, 'Annulla'),
           h('button', { type: 'button', class: 'btn grande', onclick: async () => {
             if (S.esempio) { avviso('Nella visita il PDF non si crea'); return; }
-            const r = await lavora('Preparo il PDF', () => Rete.post('/locale/pdf', { html: html(), nome: W.nomeFile('Pre-parcella ' + f.riferimento, f.cliente), apri: true }));
+            const r = await lavora('Preparo il PDF', () => Rete.post('/locale/pdf', { html: html(), nome: W.nomeFile('Parcella pro-forma ' + f.riferimento, f.cliente), apri: true }));
             if (r) { chiudi(); avviso('PDF salvato in ' + r.percorso); }
           } }, 'Solo il PDF'),
           h('button', { type: 'button', class: 'btn giallo grande', onclick: manda }, 'Invia per email')],
@@ -916,7 +930,7 @@
           })) : h('div', { class: 'riga' }, h('span', { class: 'corpo' }, h('span', { class: 't2' }, 'Nessun incasso.'))),
           f.stato !== 'annullata' ? h('div', { class: 'riga' }, h('span', { class: 'corpo' }, h('span', { class: 't1' }, 'Restano')), h('span', { class: 'quanto' }, euro(f.residuo))) : null)) : null;
       const righe = h('div', { class: 'sezione' }, h('span', { class: 'etichetta' }, 'Righe'),
-        h('div', { class: 'scheda righe' }, (f.righe || []).map(r => h('div', { class: 'riga' }, h('span', { class: 'corpo' }, h('span', { class: 't1 piccolo-15' }, r.descrizione),
+        h('div', { class: 'scheda righe' }, (f.righe || []).map(r => h('div', { class: 'riga' }, h('span', { class: 'corpo' }, h('span', { class: 't1 piccolo-15' }, r.codice ? h('span', { class: 'codice' }, r.codice) : null, r.codice ? ' ' : null, r.descrizione),
           r.tipo === 'anticipazione' || r.tipo === 'bollo' ? h('span', { class: 't2' }, 'senza IVA') : null), h('span', { class: 'quanto' }, euro(r.importo))))));
       const sdi = h('div', { class: 'scheda righe' },
         h('div', { class: 'riga' }, h('span', { class: 'corpo' }, h('span', { class: 't1' }, 'Invio allo SDI'), h('span', { class: 't2' }, f.esitoSdi ? { consegnata: 'Consegnata', non_consegnata: 'Non consegnata: è nell\'area riservata del cliente', scartata: 'Scartata dallo SDI' }[f.esitoSdi] + (f.esitoIl ? ' il ' + C.data(f.esitoIl) : '') : 'Lo fa il tuo programma')), nonCollegato()),
@@ -932,9 +946,6 @@
         { testo: 'Prospetto (PDF)', fn: async () => { const p = await lavora('Preparo il prospetto', () => Rete.get('/server/pacchetto?id=' + f.id)); if (p) pdfProspetto(f, p.modello); } },
         f.stato === 'pronta' ? { testo: 'Rivedi il prospetto e l\'XML da completare', fn: () => apriPassaggio(f, { soloVedere: true }) } : null,
         f.file ? { testo: 'XML emesso', fn: () => W.apriFile({ id: f.file.id, nome: f.file.nome }) } : null,
-        scrive() && f.stato === 'pronta' && !nota ? { testo: 'Pre-parcella', fn: () => avvisoParcella(f) } : null,
-        // 1.4.0 (servizi.md §3): la parcella col numero dato dal programma, nella veste del modello (copia per il cliente).
-        f.stato === 'emessa' || f.stato === 'annullata' ? { testo: (nota ? 'Nota di credito' : f.tipoDocumento === 'TD01' ? 'Fattura' : 'Parcella') + ' in PDF', fn: () => pdfParcella(f) } : null,
         scriveBanche() && f.stato === 'pronta' && !nota && C.num(f.residuo) > 0.004 ? { testo: 'Segna un incasso (ha già pagato)', fn: () => W.Banche.segnaIncasso(f, ricarica) } : null,
         scrive() && f.stato === 'pronta' ? { testo: 'Torna in bozza', fn: () => tornaInBozza(f) } : null,
         scrive() && f.stato === 'pronta' ? { testo: 'Segna emessa senza XML', fn: () => segnaEmessa(f) } : null,
@@ -951,6 +962,13 @@
       if (voci[voci.length - 1] === '-') voci.pop();
       const altro = h('button', { type: 'button', class: 'tondo', 'aria-label': 'Altre azioni', title: 'Altre azioni' }, icona('altro', 20));
       altro.addEventListener('click', () => apriMenu(altro, voci));
+      // 13/11/2026: il documento per il cliente è un pulsante in vista, non una voce del menu ⋯. Passata al programma:
+      // la parcella pro-forma; emessa: la parcella (o fattura, o nota di credito) col numero. Tutte con la veste del modello.
+      const nomeDocumento = nota ? 'Nota di credito' : f.tipoDocumento === 'TD01' ? 'Fattura' : 'Parcella';
+      const documento = f.stato === 'emessa' || f.stato === 'annullata'
+        ? h('button', { type: 'button', class: 'btn grande largo', 'data-azione': 'pdf-documento', onclick: () => pdfParcella(f) }, icona('file', 18, 2.2), nomeDocumento + ' in PDF')
+        : scrive() && f.stato === 'pronta' && !nota
+          ? h('button', { type: 'button', class: 'btn grande largo', 'data-azione': 'pro-forma', onclick: () => avvisoParcella(f) }, icona('file', 18, 2.2), 'Parcella pro-forma') : null;
       const corpo = h('div', { class: 'corpo' },
         h('div', { class: 'alto' }, h('span', { class: 'dove spazio' }, nota ? 'Nota di credito' : 'Fattura'), altro, tondo('chiudi', 'Chiudi', chiudiPannello, 'piccolo')),
         h('div', { class: 'pillole-testa' }, pillStato(f.statoVisto), f.portale && W.Portale ? W.Portale.pillola(f.portale) : null, f.sollecitiNo ? h('span', { class: 'pill p-grigio', title: f.sollecitiNo }, 'Niente promemoria') : null),
@@ -959,6 +977,7 @@
         f.stato === 'pronta' && f.prontaIl ? h('div', { class: 'tenue' }, 'Passata al programma il ' + C.data(String(f.prontaIl).slice(0, 10))) : null,
         avvisi, nota ? null : passiFattura(f),
         h('div', { class: 'scheda' }, schedaConti(k, f)),
+        documento,
         incassi, righe, sdi);
       // Fase 7 (§12.6): scaduta, il bordo "Prepara un promemoria di pagamento" (con fatturazione 2 e costi; mai dopo "Non mandare promemoria").
       const promemoria = pagamenti7() && f.scaduta && !nota && f.stato === 'emessa' && !f.sollecitiNo && W.Comunicazioni

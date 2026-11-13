@@ -42,7 +42,7 @@
     // Fase 2 (docs/gestionale/fase2.md §5): voci 4 e 5 del menu.
     { modulo: 'preventivi', nome: 'Preventivi e contratti', spiega: 'Preventivi e incarichi', icona: 'preventivo' },
     // 1.4.0 (servizi.md §1): i Servizi subito dopo i Preventivi; non sono un permesso, si vedono con uno dei tre moduli che li usano.
-    { modulo: 'servizi', nome: 'Servizi', spiega: 'Servizi e prezzi, per preventivi, indennità e fatture', icona: 'libro' },
+    { modulo: 'servizi', nome: 'Servizi e prodotti', spiega: 'Il listino dello studio, per preventivi, rapportini e fatture', icona: 'libro' },
     { modulo: 'attivita', nome: 'Attività e calendario', spiega: 'Le attività di tutti o solo le sue', icona: 'calendario' },
     // 07/11/2026 (Manuel: "le Ore vanno tolte, non servono, metti solamente i Rapportini"): era "Ore e rapportini".
     { modulo: 'rapportini', nome: 'Rapportini', spiega: 'Rapportini e approvazioni', icona: 'rapportini' },

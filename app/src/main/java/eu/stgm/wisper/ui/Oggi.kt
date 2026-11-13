@@ -279,12 +279,14 @@ fun IlTuoGiorno(
 fun VersioneNuova(dati: Dati) {
     val c = W.colori
     val versioni by NuoveVersioni.stato.collectAsStateWithLifecycle()
-    if (dati.esempio || versioni.pronta == null || !versioni.attesaConferma) return
+    // 13/11/2026: sempre quando è pronta (prima solo se il telefono aveva già chiesto il tocco, e così non si vedeva mai).
+    if (dati.esempio || versioni.pronta == null) return
     val ctx = LocalContext.current
     Row(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(c.scheda)
             .border(1.dp, c.bordoScheda, RoundedCornerShape(20.dp))
             .clickable { NuoveVersioni.installa(ctx, chiesto = true) }
+            .bersaglio("versione-nuova")
             .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

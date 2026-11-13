@@ -122,3 +122,29 @@ differenza (gli importi veri del modello non vanno nel repository).
 9. **La qualifica** si scrive in Amministrazione › Studio sotto il nome breve; **BIC/SWIFT e Beneficiario** nel
    conto in Banche e scadenze › Conti (BIC controllato: 8 o 11 lettere e numeri); **"Nei documenti la commessa si
    chiama"** nella scheda del cliente, gruppo Fatture.
+
+## 5. Cambiamenti del 13/11/2026 (1.4.2, server 0.15.1)
+
+Richieste di Andrea col modello della parcella di Manuel in mano. Dove dicono il contrario dei punti sopra, valgono
+queste.
+
+1. **Si chiama "Servizi e prodotti"** (menu, pagina, pulsante dei Preventivi), scritto come le altre voci
+   dell'app. Nelle azioni del server e nel codice resta `servizi`.
+2. **Nessuna distinzione fra servizi e indennità** (sostituisce i punti 3 e 4 del §4): l'elenco è uno. Segmenti
+   Tutti, Servizi e Prodotti sul computer, Tutti e Archiviati sul telefono (il segmento Indennità non c'è più); la finestra dell'indennità ha un solo
+   "Da Servizi e prodotti" con tutto il listino nel suo ordine, senza i due gruppi e senza aprirsi sul primo che si
+   chiama "Indennità...". "Indennità" resta il nome della cosa che si aggiunge a un lavoro del rapportino.
+3. **"Pre-parcella" diventa "Parcella pro-forma"** in ogni schermata e nel PDF (le azioni del server restano
+   quelle). Nella bozza della fattura è un pulsante in vista accanto a Passa al programma (sul telefono sotto i
+   conti); prima salva la bozza, poi prepara il PDF. Lo stesso nel pannello di una fattura passata al programma.
+   Una fattura emessa ha in vista "Parcella in PDF" (o "Fattura", "Nota di credito", dal tipo documento).
+4. **Le righe della bozza** mostrano e fanno scrivere il Codice e lo Sconto %; "Da Servizi e prodotti" aggiunge una
+   riga dal listino (codice, descrizione, unità, prezzo). Computer: `W.Servizi.scegli`; telefono: nel foglio della
+   riga. I conti a schermo del computer tengono conto dello sconto (`parametriDi` in `regole-fatture.js`).
+5. **Ritenuta d'acconto**: `ritenuta_applicata` si fissava alla nascita della bozza da `sostitutoDi(cliente)`.
+   Ora `salvaSoggetto` chiama `ritenutaNelleBozze` (`server/src/azioni/fatture.js`): se il cliente diventa
+   sostituto d'imposta, o smette di esserlo, le sue bozze di fattura prendono la scelta nuova e si ricalcolano. Un
+   altro cambio alla scheda non tocca le bozze; le fatture pronte o emesse non si toccano mai.
+6. **Unità dei servizi di prima della 1.4.0** sul telefono: `Servizi.unitaDi` (come `unitaDi` del computer: a
+   corpo senza unità = "A corpo", ore = "Ore"); un'indennità scritta a mano parte da "Nr". Prima il pulsante giallo
+   chiedeva un'unità che stava in fondo alla pagina.

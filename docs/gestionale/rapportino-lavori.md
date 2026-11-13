@@ -145,3 +145,15 @@ cliente più lungo dei dati di esempio, sul telefono a 360 dp con caratteri gran
   (rapportino con 3 lavori di 2 clienti, invio diviso, elenco con caselle), schermate.
 - Telefono: test di Gradle per raggruppamento, divisione per destinatario e coda (un rapportino con più lavori senza rete
   che parte una volta sola), schermate sull'emulatore.
+
+## 7. Cambiamenti del 13/11/2026 (1.4.2, server 0.15.1)
+
+1. **Un lavoro Inviato si modifica come uno Da inviare** (Andrea: "anche dopo averlo inviato devi poterlo modificare
+   liberamente, e nel caso tu lo faccia poi il sistema te lo deve segnare come da inviare"). Restano fermi solo i
+   lavori fatturati o dentro una fattura. `salvaRapportino` confronta lavoro per lavoro: quello cambiato torna
+   `BOZZA`, quelli uguali restano `INVIATO`. In cima al lavoro: "Inviato · se lo cambi torna da inviare"; dopo il
+   salvataggio il computer propone "Invia di nuovo", il telefono scrive "Era già inviato: adesso torna da inviare".
+   "Riporta da inviare" resta nel pannello e nella barra dei rapportini scelti.
+2. **Indennità senza ore**: con almeno un'indennità le ore non sono obbligatorie. Prima di mandarlo al cliente
+   (Invia ai clienti, Segna inviati) compare la conferma "Indennità senza ore" con "Invia lo stesso" e Annulla. Il
+   salvataggio non chiede niente: la conferma sta all'invio, che è il "bottone per inviare" della richiesta.

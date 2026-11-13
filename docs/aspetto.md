@@ -229,10 +229,12 @@ rapportino a settembre".
   - *Tariffe*: la tariffa del cliente (fissa o libera), viaggio, km; rimborso km con l'auto. Solo da leggere
     (si cambiano da Wisper Ufficio): righe senza freccia, nessuna frase d'aiuto.
   - *App*: Tema (automatico, chiaro, scuro), **Rifai la visita guidata** ("Da capo, coi dati di esempio": riparte dal primo passo), Versione, Licenze.
-- **Versione** (in fondo alle Impostazioni): "Versione 0.3.0" e sotto "Si aggiorna da sola", "La 0.4.0 è
-  pronta" o l'esito dell'ultimo controllo; a destra **Controlla** o **Installa**. In Oggi, solo se il telefono
-  ha chiesto un tocco per installare, una riga col simbolo: "Versione nuova di Wisper · La X è pronta: tocca
-  per installarla". Di solito non si vede niente: si installa da sola ad app chiusa.
+- **Versione** (dal 13/11/2026, 1.4.2: una scheda **in cima** alle Impostazioni, non più in fondo): "Versione
+  1.4.2" e sotto "Si aggiorna da sola quando esce una versione nuova", "Hai l'ultima versione · controllato alle
+  HH:MM" o "La 1.4.3 è scaricata: manca solo installarla"; sotto **Controlla aggiornamenti** oppure, gialla,
+  **Installa la 1.4.3**. Il controllo si fa anche ad app chiusa (ogni sei ore); a versione scaricata arriva la
+  notifica "Versione nuova di Wisper · La X è pronta: tocca per installarla", e dopo l'installazione "Wisper
+  aggiornato". Se l'app resta dietro un minuto senza un rapportino a metà si installa da sola.
 - **Primo avvio / collegamento**: il simbolo grande, "Collega Wisper al tuo foglio", campi Indirizzo e Codice
   grandi, pulsante giallo "Collega". Collegato: parte la visita guidata.
 - **Stati**: senza rete tutto resta consultabile coi dati dell'ultima lettura, più la pillola grigia; errore
@@ -293,10 +295,13 @@ con spunta verde, oppure "Foglio non raggiunto · Riprova").
   fisse sotto i campi diventano la conferma dopo il salvataggio ("Vale per i rapportini nuovi: quelli già
   scritti tengono il rimborso con cui sono nati").
 - **Avvisi**: in basso al centro, scuri, 3 s; con un'azione 6 s; il tempo si ferma col mouse sopra.
-- **Versione nuova**: si scarica da sola; quando è pronta, sopra lo stato del foglio nella barra laterale
-  compare un riquadro giallo tenue "Versione X pronta · Parte alla prossima apertura, o subito:" con
-  **Riavvia Wisper Ufficio**. In Impostazioni › L'app la riga "Versione X" dice "Si aggiorna da solo ·
-  controllato alle HH:MM" con **Cerca aggiornamenti**.
+- **Versione nuova**: si scarica da sola; quando è scaricata, sopra lo stato nella barra laterale compare un
+  riquadro giallo tenue "Versione X scaricata · Stai ancora usando la Y. Per passare alla nuova:" con **Riavvia
+  Wisper Ufficio** (un pulsante tondo col menu richiuso). Dal 13/11/2026 (1.4.2) in cima alle Impostazioni c'è la
+  scheda "Versione Y" con "Hai l'ultima versione · controllato alle HH:MM" e **Controlla aggiornamenti**, oppure
+  "La X è scaricata, ma stai ancora usando la Y: riavvia per passare alla nuova" e **Riavvia adesso** (non giallo:
+  il giallo è già nel riquadro). Fermo da tre minuti, senza finestre, pannelli o cose da salvare, il programma si
+  riavvia da solo e torna alla pagina in cui era.
 
 ## 9. Visita guidata (al posto delle istruzioni scritte)
 Sulle **schermate vere**, con **dati di esempio** (stesse pagine e stesso codice, sorgente dati finta in

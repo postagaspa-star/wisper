@@ -354,9 +354,9 @@ data class RigaFattura(
         val o = JSONObject().put("tipo", tipo).put("descrizione", descrizione.trim())
             .put("quantita", quantita ?: JSONObject.NULL).put("unita", unita.trim())
             .put("prezzo", prezzo ?: JSONObject.NULL).put("tributoCliente", tributoCliente)
-        // 1.4.0: codice e sconto tornano come sono arrivati (il telefono non li cambia, ma salvando non si perdono).
-        if (codice.isNotBlank()) o.put("codice", codice.trim())
-        if (sconto != null) o.put("sconto", sconto)
+        // 13/11/2026: codice e sconto si scrivono anche dal telefono; vanno sempre (vuoti = tolti).
+        o.put("codice", codice.trim())
+        o.put("sconto", sconto ?: 0.0)
         if (id.isNotBlank() && !id.startsWith(PonteServer.NUOVO)) o.put("id", PonteServer.idJson(id))
         return o
     }

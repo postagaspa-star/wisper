@@ -82,7 +82,7 @@
       '@font-face { font-family: "Figtree"; src: url("/font/Figtree.ttf") format("truetype"); font-weight: 300 900; font-display: block; }' +
       '@page { size: A4; margin: 14mm 14mm 18mm 14mm;' +
       bassoSinistra +
-      // 1.4.0 (servizi.md §3): preventivo, pre-parcella e parcella hanno a destra "Parcella n. 24 · Pagina 1 / 1", senza il simbolo.
+      // 1.4.0 (servizi.md §3): preventivo, parcella pro-forma e parcella hanno a destra "Parcella n. 24 · Pagina 1 / 1", senza il simbolo.
       (destra
         ? '  @bottom-right { content: "' + escCss(destra) + ' · Pagina " counter(page) " / " counter(pages); font: 500 8.5px ' + carattere + '; color: #8A8A92; } }'
         : '  @bottom-right { content: url("' + SIMBOLO + '") "  Pagina " counter(page) " / " counter(pages); font: 500 8.5px ' + carattere + '; color: #8A8A92; } }') +
@@ -214,7 +214,7 @@
   // ======================================================================= 1.4.0: il modello della parcella
 
   /*
-   * Preventivo, pre-parcella e parcella (docs/gestionale/servizi.md §3): il linguaggio del riepilogo dei rapportini, come
+   * Preventivo, parcella pro-forma e parcella (docs/gestionale/servizi.md §3): il linguaggio del riepilogo dei rapportini, come
    * il "Modello parcella WISPER" di Manuel. Logo a sinistra, a destra tipo, numero e "data · Valuta EUR (€)", il filetto;
    * Mittente e Spett.le su due colonne senza riquadri; la tabella Codice, Descrizione, Q.tà, U.M., Unit. €, Sconto, IVA,
    * Totale € senza righe verticali (anche le righe a zero); in fondo a sinistra il Pagamento e a destra il riepilogo; le
@@ -967,7 +967,7 @@
   }
 
   /**
-   * 1.4.0 (servizi.md §3): il corpo di pre-parcella e parcella dal modello del server (lo stesso del prospetto e
+   * 1.4.0 (servizi.md §3): il corpo di parcella pro-forma e parcella dal modello del server (lo stesso del prospetto e
    * dell'XML): le parti, le righe col codice e lo sconto, pagamento e riepilogo, le note. I numeri sono quelli del
    * modello (della bozza, o dell'XML tornato da Flextaxa): qui non si ricalcola niente.
    */
@@ -1035,7 +1035,7 @@
   }
 
   /**
-   * La pre-parcella (prima "Avviso di parcella", fase4.md §8.3; 1.4.0 col modello della parcella): la bozza o la
+   * La parcella pro-forma (prima "Avviso di parcella", fase4.md §8.3; 1.4.0 col modello della parcella): la bozza o la
    * fattura pronta coi numeri di Wisper. Non è una fattura: lo dice nelle note.
    * opzioni: logo, conNome (come prima), impostazioni (per il piè: nome breve, riga in fondo).
    */
@@ -1043,9 +1043,9 @@
     const m = modello || {};
     const o = opzioni || {};
     const imp = impDaModello(m, o);
-    const testa = { etichetta: 'Pre-parcella', numero: 'Rif. ' + (m.riferimento || ''), sotto: dataIt(m.dataProposta || m.data) + ' · Valuta EUR (€)' };
+    const testa = { etichetta: 'Parcella pro-forma', numero: 'Rif. ' + (m.riferimento || ''), sotto: dataIt(m.dataProposta || m.data) + ' · Valuta EUR (€)' };
     const corpo = corpoDaModello(m, 'Documento senza valore fiscale: la fattura si emette al pagamento.');
-    return paginaDoc(imp, testa, corpo, 'Pre-parcella ' + (m.riferimento || ''), 'Pre-parcella ' + (m.riferimento || ''));
+    return paginaDoc(imp, testa, corpo, 'Parcella pro-forma ' + (m.riferimento || ''), 'Parcella pro-forma ' + (m.riferimento || ''));
   }
 
   /**

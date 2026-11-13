@@ -67,8 +67,9 @@ class WisperApp : Application() {
         NuoveVersioni.carica(this)
         NuoveVersioni.togliControlloOrario(this)
         AnnuncioVersioni.quandoArriva = { v -> NuoveVersioni.annunciata(this, v) }
-        // Una versione scaricata prima e non ancora installata: si installa al momento giusto.
-        NuoveVersioni.installaAlMomentoGiusto(this)
+        // Una versione scaricata e non ancora installata si installa quando l'app e' dietro da un minuto: l'attesa la
+        // tiene WorkManager (13/11/2026), e parte ogni volta che l'app va dietro.
+        ambito.launch { davanti.collect { d -> NuoveVersioni.davantiCambiato(this@WisperApp, d) } }
         // Il campanello: con l'app davanti e il server di casa resta aperto; dietro, o via Google, si ferma.
         ambito.launch {
             davanti.first { it }

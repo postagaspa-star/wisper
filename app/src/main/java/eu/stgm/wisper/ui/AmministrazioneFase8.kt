@@ -214,7 +214,11 @@ internal fun ElencoAmministrazione8(dati: Dati, nav: Navigatore) {
                     )
                 }
             }
-        } else gruppi.forEach { (nome, voci) ->
+        } else {
+            // 13/11/2026: la versione e "Controlla aggiornamenti" subito in vista, senza cercarli in Aspetto.
+            SchedaVersione()
+        }
+        if (cerca.isBlank()) gruppi.forEach { (nome, voci) ->
             if (voci.isNotEmpty()) Sezione5(nome) {
                 SchedaElenco {
                     voci.forEachIndexed { i, v ->

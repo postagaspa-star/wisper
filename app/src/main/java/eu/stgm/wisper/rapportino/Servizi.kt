@@ -34,6 +34,23 @@ object Servizi {
         }
     }
 
+    /**
+     * L'unità da mostrare e da proporre, anche per i servizi di prima della 1.4.0 (modo ore e unità "h", a corpo senza
+     * unità): come unitaDi di pc/ui/regole-servizi.js. Senza, un servizio vecchio scelto come indennità chiedeva l'unità.
+     */
+    fun unitaDi(v: VoceListino): String {
+        val u = v.unita.trim()
+        if (u.isNotEmpty()) {
+            UNITA.firstOrNull { it.equals(u, ignoreCase = true) }?.let { return it }
+            return if (u.equals("h", ignoreCase = true)) "Ore" else u
+        }
+        return when (v.modo) {
+            ModoVoce.ORE -> "Ore"
+            ModoVoce.CORPO -> "A corpo"
+            else -> ""
+        }
+    }
+
     /** I tag da "trasferta, cantiere": senza vuoti né doppioni (maiuscole a parte), come tagDa del server. */
     fun tagDa(testo: String): List<String> {
         val visti = HashSet<String>()
@@ -68,9 +85,9 @@ object Servizi {
     fun elenco(voci: List<VoceListino>, testo: String, attivi: Boolean = true): List<VoceListino> =
         voci.filter { it.attivo == attivi && trovato(it, testo) }.sortedWith(compareBy<VoceListino> { it.ordine }.thenBy { normalizza(it.nome) })
 
-    /** I servizi da scegliere per un'indennità: prima quelli che si chiamano "Indennità…", poi gli altri; solo i non archiviati. */
+    /** I servizi da scegliere (per un'indennità, per una riga della fattura): un elenco solo, i non archiviati (13/11/2026: niente più "prima le indennità"). */
     fun perIndennita(voci: List<VoceListino>, testo: String): List<VoceListino> =
-        elenco(voci, testo).sortedWith(compareBy<VoceListino> { if (eIndennita(it)) 0 else 1 })
+        elenco(voci, testo)
 
     /** Al centesimo, il mezzo verso l'alto (Math.round di JavaScript). */
     fun centesimi(n: Double): Double = Math.floor(n * 100 + 0.5) / 100.0

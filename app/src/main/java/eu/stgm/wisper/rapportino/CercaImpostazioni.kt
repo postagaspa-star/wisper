@@ -220,6 +220,7 @@ object CercaImpostazioni {
         add(VoceCercabile("Il cambio", "Lista di controllo", "controlli"))
         add(VoceCercabile("Tema chiaro o scuro", "Aspetto", "aspetto", altre = "colori notte"))
         add(VoceCercabile("Visita guidata", "Aspetto", "aspetto", altre = "tutorial"))
+        add(VoceCercabile("Controlla aggiornamenti", "Aspetto", "aspetto", altre = "versione nuova aggiorna installa"))
     }
 
     /** Le voci di Impostazioni generali, come le manda il server. */

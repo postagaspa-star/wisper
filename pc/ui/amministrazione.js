@@ -1279,8 +1279,8 @@
             h('button', { type: 'button', class: 'btn', onclick: W.mostraLicenza }, 'Leggi')),
           S.versione ? h('div', { class: 'voce-imp' }, h('span', { class: 'testi' }, h('b', null, 'Versione ' + S.versione), h('span', null, W.statoAggiornamenti())),
             a && a.stato === 'pronto'
-              ? h('button', { type: 'button', class: 'btn giallo', onclick: W.riavvia }, 'Riavvia')
-              : a && a.attivi ? h('button', { type: 'button', class: 'btn', onclick: W.cercaAggiornamenti }, 'Cerca aggiornamenti') : null) : null))]);
+              ? h('button', { type: 'button', class: 'btn giallo', onclick: W.riavvia }, 'Riavvia adesso')
+              : a && a.attivi ? h('button', { type: 'button', class: 'btn', onclick: W.cercaAggiornamenti }, 'Controlla aggiornamenti') : null) : null))]);
     }
 
     return { vista };

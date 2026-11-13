@@ -263,7 +263,7 @@
         tariffaFissa: numero('tariffaFissa'), ultimaTariffa: numero('ultimaTariffa'), costoFisso: numero('costoFisso'),
         pagamentoGiorni: h('input', { type: 'text', inputmode: 'numeric', value: c.pagamentoGiorni === null || c.pagamentoGiorni === undefined ? '' : String(c.pagamentoGiorni),
           placeholder: String((S.ana.impostazioni && S.ana.impostazioni.GIORNI_PAGAMENTO) || 30) }),
-        // 1.4.0 (servizi.md §3): "Commessa: 26ST003" o "JOB: 26ST045" sotto lo Spett.le di pre-parcella e parcella.
+        // 1.4.0 (servizi.md §3): "Commessa: 26ST003" o "JOB: 26ST045" sotto lo Spett.le di parcella pro-forma e parcella.
         etichettaCommessa: h('input', { type: 'text', value: c.etichettaCommessa || '', placeholder: 'Commessa', maxlength: '30' }),
         note: h('textarea', { rows: 3 }),
       };

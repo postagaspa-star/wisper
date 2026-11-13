@@ -897,11 +897,11 @@
         if (azione === 'inviaEmail' && b.aMe) return { ok: true, rapportini: [] };
         const st = azione === 'stato' ? b.stato : 'INVIATO';
         const ids = b.ids || [];
-        // 06/11/2026: con idGiornata (e ids vuoto) tutti i lavori del rapportino; i lavori inviati o fatturati non si annullano.
+        // 06/11/2026: con idGiornata (e ids vuoto) tutti i lavori del rapportino; i lavori fatturati non si annullano
+        // (dal 13/11/2026 quelli inviati sì).
         const delGiorno = r => !!b.idGiornata && !ids.length && (r.idGiornata || r.id) === b.idGiornata && r.stato !== 'ANNULLATO';
-        if (st === 'ANNULLATO' && b.idGiornata && dati.rapportini.some(r => delGiorno(r) && (r.stato === 'INVIATO' || r.stato === 'FATTURATO'))) {
-          return { ok: false, errore: 'Il rapportino ha lavori già inviati: non si elimina' };
-        }
+        const fatturato = st === 'ANNULLATO' && b.idGiornata ? dati.rapportini.find(r => delGiorno(r) && r.stato === 'FATTURATO') : null;
+        if (fatturato) return { ok: false, errore: 'Il lavoro per ' + fatturato.cliente + ' è in una fattura: non si toglie' };
         const cambiati = dati.rapportini.filter(r => (ids.indexOf(r.id) >= 0 || ids.indexOf(r.idLocale) >= 0 || delGiorno(r)) && !(azione === 'inviaEmail' && r.stato === 'FATTURATO')).map(r => {
           const prima = r.stato;
           if (st === 'ANNULLATO') r.statoPrima = r.stato;
@@ -925,12 +925,19 @@
         if (!g.lavori.length) return { ok: false, errore: 'Aggiungi almeno un lavoro' };
         const prima = g.id ? dati.rapportini.filter(r => (r.idGiornata || r.id) === g.id && r.stato !== 'ANNULLATO') : [];
         const idG = g.id || (() => { dati.contatori.r += 1; return 'RAP/' + String(g.data).slice(0, 4) + '/' + String(new Set(dati.rapportini.map(r => r.idGiornata || r.id)).size + 1).padStart(4, '0'); })();
-        // I lavori tolti: quelli inviati o in una fattura non si tolgono.
+        // I lavori tolti: quelli in una fattura non si tolgono (dal 13/11/2026 quelli inviati sì).
         const restano = new Set(g.lavori.map(l => l.id || l.idLocale));
         for (const r of prima) {
           if (restano.has(r.id) || restano.has(r.idLocale)) continue;
-          if (r.stato === 'INVIATO' || r.stato === 'FATTURATO') return { ok: false, errore: 'Il lavoro per ' + r.cliente + ' è già inviato: non si toglie' };
+          if (r.stato === 'FATTURATO') return { ok: false, errore: 'Il lavoro per ' + r.cliente + ' è in una fattura: non si toglie' };
         }
+        // 13/11/2026: un lavoro Inviato che cambia (o la data del rapportino) torna Da inviare, come sul server.
+        const dataCambiata = prima.length > 0 && String(prima[0].data).slice(0, 10) !== String(g.data).slice(0, 10);
+        const CAMPI = ['idCliente', 'cliente', 'idCommessa', 'idProgetto', 'descrizione', 'luogo', 'ticket', 'noteInterne', 'noteSpese'];
+        const NUMERI = ['oreLavoro', 'oreExtra', 'oreViaggio', 'km', 'spese'];
+        const diverso = (r, l) => CAMPI.some(k => String(r[k] === null || r[k] === undefined ? '' : r[k]) !== String(l[k] === null || l[k] === undefined ? '' : l[k])) ||
+          NUMERI.some(k => C.num(r[k]) !== C.num(l[k])) || (l.tariffa !== null && l.tariffa !== undefined && C.num(l.tariffa) !== C.num(r.tariffa)) ||
+          JSON.stringify((r.indennita || []).map(x => [x.descrizione, C.num(x.quantita), C.num(x.prezzo)])) !== JSON.stringify((l.indennita || []).map(x => [x.descrizione, C.num(x.quantita), C.num(x.prezzo)]));
         const fatti = [];
         let prossimo = prima.reduce((m, r) => Math.max(m, Number(String(r.id).split('-').pop()) || 0), 0);
         for (let k = 0; k < g.lavori.length; k += 1) {
@@ -938,11 +945,12 @@
           if (!l.cliente) return { ok: false, errore: 'Lavoro ' + (k + 1) + ': scegli il cliente', lavoro: k + 1 };
           if (!l.descrizione) return { ok: false, errore: 'Lavoro ' + (k + 1) + ': scrivi che lavoro hai fatto', lavoro: k + 1 };
           const esiste = prima.find(r => (l.id && r.id === l.id) || (l.idLocale && r.idLocale === l.idLocale));
-          if (esiste && (esiste.stato === 'INVIATO' || esiste.stato === 'FATTURATO')) { esiste.posizione = k + 1; fatti.push(esiste); continue; }
+          const eraInviato = !!esiste && esiste.stato === 'INVIATO';
+          if (esiste && (esiste.stato === 'FATTURATO' || (eraInviato && !dataCambiata && !diverso(esiste, l)))) { esiste.posizione = k + 1; fatti.push(esiste); continue; }
           if (!esiste) { prossimo += 1; l.id = idG + '-' + prossimo; }
           const x = salvaLavoro(dati, l, esiste || null);
           if (!x.ok) return Object.assign({}, x, { errore: 'Lavoro ' + (k + 1) + ': ' + x.errore, lavoro: k + 1 });
-          Object.assign(x.lavoro, { idGiornata: idG, numero: idG, posizione: k + 1, data: g.data });
+          Object.assign(x.lavoro, { idGiornata: idG, numero: idG, posizione: k + 1, data: g.data }, eraInviato ? { stato: 'BOZZA', inviatoIl: '' } : {});
           fatti.push(x.lavoro);
         }
         prima.forEach(r => { if (fatti.indexOf(r) < 0) { r.statoPrima = r.stato; r.stato = 'ANNULLATO'; } });

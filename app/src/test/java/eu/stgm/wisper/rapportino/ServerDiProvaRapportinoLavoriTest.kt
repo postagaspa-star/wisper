@@ -88,10 +88,16 @@ class ServerDiProvaRapportinoLavoriTest {
         assertEquals(2, senzaTerzo.lavori.size)
         assertEquals(2, p.rapportini(ServerDiProva.oggi, ServerDiProva.oggi).count { it.idGiornata == primo.id && it.stato != Stato.ANNULLATO })
 
-        // Il primo inviato: non si toglie, con la frase del server.
+        // Il primo inviato (13/11/2026): rimandato uguale resta Inviato; cambiato si scrive e torna Da inviare; e si toglie.
         p.stato(listOf(senzaTerzo.lavori[0].id), Stato.INVIATO)
-        val no = rifiutato("togliere un lavoro inviato") { p.salvaGiornata(senzaTerzo.copy(lavori = senzaTerzo.lavori.drop(1))) }
-        assertTrue(no.message!!, no.message!!.contains("già inviato: non si toglie"))
+        val uguale = p.salvaGiornata(senzaTerzo)
+        assertEquals(Stato.INVIATO, uguale.lavori[0].stato)
+        val corretto = p.salvaGiornata(uguale.copy(lavori = listOf(uguale.lavori[0].copy(oreLavoro = uguale.lavori[0].oreLavoro + 1.0), uguale.lavori[1])))
+        assertEquals(listOf(Stato.BOZZA, Stato.BOZZA), corretto.lavori.map { it.stato })
+        assertEquals(uguale.lavori[0].oreLavoro + 1.0, corretto.lavori[0].oreLavoro, 0.0)
+        p.stato(listOf(corretto.lavori[0].id), Stato.INVIATO)
+        val senzaPrimo = p.salvaGiornata(corretto.copy(lavori = corretto.lavori.drop(1)))
+        assertEquals(listOf(corretto.lavori[1].id), senzaPrimo.lavori.map { it.id })
 
         // Il no di un lavoro dice quale: il telefono lo mette sulla sua scheda.
         val senzaCliente = Giornata("G2-$unico", data = ServerDiProva.oggi, lavori = listOf(lavoro(4, a, 1.0), lavoro(5, b, 1.0).copy(idCliente = "", cliente = "")))

@@ -120,6 +120,10 @@ const PAGINE = [
   { nome: 'fatt-mese-aperto', hash: '#fatturazione', fai: "await new Promise(r => setTimeout(r, 900)); document.querySelector('.apri-mese').click(); await new Promise(r => setTimeout(r, 300)); const el = document.querySelector('.riga-mese'); document.querySelector('#principale').scrollTop = el.getBoundingClientRect().top + document.querySelector('#principale').scrollTop - 90" },
   { nome: 'bozza', hash: '#fatturazione/bozza/15' },
   { nome: 'bozza-modificata', hash: '#fatturazione/bozza/15', fai: "const i = document.querySelectorAll('.tab-bozza input.num-riga')[1]; i.value = '1400'; i.dispatchEvent(new Event('change', { bubbles: true }))" },
+  // 13/11/2026 (1.4.2): la bozza coi codici, lo sconto e Parcella pro-forma in vista; Servizi e prodotti; la versione in cima alle Impostazioni.
+  { nome: 'bozza-codici', hash: '#fatturazione/bozza/15', fai: "await new Promise(r => setTimeout(r, 1200)); document.querySelectorAll('.avviso').forEach(x => x.remove())" },
+  { nome: 'servizi-prodotti', hash: '#servizi', fai: "await new Promise(r => setTimeout(r, 1200)); document.querySelectorAll('.avviso').forEach(x => x.remove())" },
+  { nome: 'amministrazione-versione', hash: '#amministrazione', fai: "await new Promise(r => setTimeout(r, 1200)); document.querySelectorAll('.avviso').forEach(x => x.remove())" },
   { nome: 'passa', hash: '#fatturazione/bozza/15', fai: "[...document.querySelectorAll('.btn.giallo')].find(b => /Passa al programma/.test(b.textContent)).click()", dopo: "document.querySelectorAll('.velo').forEach(v => v.remove())" },
   { nome: 'fatture', hash: '#fatturazione/fatture' },
   { nome: 'fattura-scaduta', hash: '#fatturazione/fatture', fai: "document.querySelector('.tab .r[data-id=\"12\"]').click()", dopo: "document.querySelectorAll('.pannello').forEach(p => p.remove())" },

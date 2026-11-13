@@ -138,8 +138,14 @@
       };
       const campoCerca = B.cerca(M.trova || '', 'Cerca nelle impostazioni', t => { M.trova = t; mostra(); });
       campoCerca.querySelector('input').setAttribute('aria-label', 'Cerca nelle impostazioni');
-      aggiungi(pagina, [h('div', { class: 'testata' }, h('h1', null, 'Amministrazione')), h('div', { class: 'ricerca-amm stretta-1100' }, campoCerca), lista, risultati]);
-      mostra();
+      // 13/11/2026: la versione e "Controlla aggiornamenti" subito in vista (mentre si cerca si toglie di mezzo).
+      const versione = W.schedaVersione();
+      const zonaVersione = h('div', { class: 'stretta-1100 zona-versione' }, versione);
+      const mostraLista = mostra;
+      const mostraTutto = () => { mostraLista(); zonaVersione.hidden = !versione || !!String(M.trova || '').trim(); };
+      campoCerca.querySelector('input').addEventListener('input', () => setTimeout(() => { zonaVersione.hidden = !versione || !!String(M.trova || '').trim(); }, 0));
+      aggiungi(pagina, [h('div', { class: 'testata' }, h('h1', null, 'Amministrazione')), h('div', { class: 'ricerca-amm stretta-1100' }, campoCerca), zonaVersione, lista, risultati]);
+      mostraTutto();
       // Le righe di stato si completano quando il server risponde (una volta per apertura di Amministrazione).
       if (!amm) return;
       // Mentre si cerca non si ridisegna (si perderebbe il cursore): si rifanno solo i risultati.
@@ -780,8 +786,8 @@
               h('button', { type: 'button', class: 'btn', onclick: W.mostraLicenza }, 'Leggi')),
             S.versione ? h('div', { class: 'voce-imp' }, h('span', { class: 'testi' }, h('b', null, 'Versione ' + S.versione), h('span', null, W.statoAggiornamenti())),
               a && a.stato === 'pronto'
-                ? h('button', { type: 'button', class: 'btn giallo', onclick: W.riavvia }, 'Riavvia')
-                : a && a.attivi ? h('button', { type: 'button', class: 'btn', onclick: W.cercaAggiornamenti }, 'Cerca aggiornamenti') : null) : null))]);
+                ? h('button', { type: 'button', class: 'btn giallo', onclick: W.riavvia }, 'Riavvia adesso')
+                : a && a.attivi ? h('button', { type: 'button', class: 'btn', onclick: W.cercaAggiornamenti }, 'Controlla aggiornamenti') : null) : null))]);
     }
 
     return { elenco, studio, impostazioni, funzioni, numerazioni, formato, notifiche, aspetto, daRileggere, M, idFile, oraLocale };

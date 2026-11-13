@@ -47,7 +47,10 @@
     return '';
   }
 
-  /** Un servizio è un'indennità se il suo nome comincia con "Indennità" (anche senza accento). */
+  /**
+   * Un servizio col nome che comincia con "Indennità" (anche senza accento). Dal 13/11/2026 (Andrea: "non ci deve essere
+   * la distinzione tra servizi ed indennità") non decide più niente negli elenchi: resta solo per chi lo chiede.
+   */
   const eIndennita = s => /^indennit/.test(norm(s && s.nome));
 
   /** I tag scritti come "a, b c" o come elenco -> ['a', 'b c']. */
@@ -59,15 +62,14 @@
   }
 
   /**
-   * Il filtro dell'elenco: { segmento: 'tutti' | 'indennita' | 'servizi' | 'prodotti', testo }. Il testo cerca in
-   * codice, descrizione, tag, fornitore e note.
+   * Il filtro dell'elenco: { segmento: 'tutti' | 'servizi' | 'prodotti', testo }. Il testo cerca in
+   * codice, descrizione, tag, fornitore e note. Le indennità sono servizi come gli altri (13/11/2026).
    */
   function filtraServizi(lista, filtro) {
     const f = filtro || {};
     const t = norm(f.testo);
     return (lista || []).filter(s => {
-      if (f.segmento === 'indennita' && !eIndennita(s)) return false;
-      if (f.segmento === 'servizi' && (s.tipo === 'prodotto' || eIndennita(s))) return false;
+      if (f.segmento === 'servizi' && s.tipo === 'prodotto') return false;
       if (f.segmento === 'prodotti' && s.tipo !== 'prodotto') return false;
       if (!t) return true;
       return norm([s.codice, s.nome, s.descrizione, tagDa(s.tag).join(' '), s.fornitore, s.note].join(' ')).indexOf(t) >= 0;
@@ -76,16 +78,12 @@
 
   /** Quanti per segmento (per i numeri accanto ai segmenti). */
   function contaServizi(lista) {
-    const n = { tutti: 0, indennita: 0, servizi: 0, prodotti: 0 };
+    const n = { tutti: 0, servizi: 0, prodotti: 0 };
     (lista || []).forEach(s => {
       n.tutti += 1;
-      if (eIndennita(s)) n.indennita += 1;
-      else if (s.tipo === 'prodotto') n.prodotti += 1;
+      if (s.tipo === 'prodotto') n.prodotti += 1;
       else n.servizi += 1;
     });
-    // I segmenti vuoti non si mostrano (Prodotti di solito non c'è; Indennità prima dell'importazione).
-    if (n.prodotti === 0) delete n.prodotti;
-    if (n.indennita === 0) delete n.indennita;
     return n;
   }
 
@@ -100,10 +98,9 @@
     });
   }
 
-  /** Nella scelta di un'indennità: prima le indennità, poi il resto; dentro, l'ordine dell'elenco. Solo gli attivi. */
+  /** Nella scelta di un servizio (per un'indennità del rapportino, per una riga della fattura): gli attivi, nell'ordine dell'elenco. */
   function perIndennita(lista) {
-    const attivi = ordinaServizi((lista || []).filter(s => s.attivo !== false));
-    return attivi.filter(eIndennita).concat(attivi.filter(s => !eIndennita(s)));
+    return ordinaServizi((lista || []).filter(s => s.attivo !== false));
   }
 
   /** Un numero scritto (anche con la virgola): numero, null se vuoto, NaN se non è un numero. */

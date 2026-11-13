@@ -727,9 +727,11 @@ class DatiEsempio(oggi: LocalDate = LocalDate.now(), private val cartella: File?
             }
             usati += id
             val base = if (vecchio != null && vecchio.bloccato) vecchio else l
+            // 13/11/2026: un lavoro Inviato cambiato arriva gia' Da inviare (Giornate.dopoLaModifica) e resta cosi'.
+            val tornato = vecchio?.stato == Stato.INVIATO && l.stato == Stato.BOZZA
             conProgettoCreato(base.copy(id = id, idGiornata = numero, idLocaleGiornata = g.idLocale, posizione = l.posizione,
-                stato = vecchio?.stato?.let { if (it == Stato.FIRMATO) Stato.BOZZA else it } ?: Stato.BOZZA,
-                inviatoIl = vecchio?.inviatoIl.orEmpty(), fatturatoIl = vecchio?.fatturatoIl.orEmpty(), creato = vecchio?.creato ?: adesso(),
+                stato = if (tornato) Stato.BOZZA else vecchio?.stato?.let { if (it == Stato.FIRMATO) Stato.BOZZA else it } ?: Stato.BOZZA,
+                inviatoIl = if (tornato) "" else vecchio?.inviatoIl.orEmpty(), fatturatoIl = vecchio?.fatturatoIl.orEmpty(), creato = vecchio?.creato ?: adesso(),
                 costoOrario = vecchio?.costoOrario ?: l.costoOrario))
         }
         val tolti = prima.map { it.rapportino.idLocale }.toSet()

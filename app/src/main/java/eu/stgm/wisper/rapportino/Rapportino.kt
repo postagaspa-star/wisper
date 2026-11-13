@@ -154,10 +154,16 @@ data class Rapportino(
             else -> null
         }
 
-    /** Inviato o fatturato: il lavoro non si tocca piu', si riporta da inviare (dal 06/11/2026 il FIRMATO di prima si cambia). */
+    /**
+     * Fatturato: il lavoro non si tocca piu'. Dal 13/11/2026 (Andrea: "anche dopo averlo inviato devi poterlo modificare
+     * liberamente") un lavoro Inviato si cambia come gli altri: se cambia torna Da inviare ([Giornate.dopoLaModifica]).
+     */
     val bloccato: Boolean get() = stato in Stato.BLOCCATI
 
     val oreTotali: Double get() = oreLavoro + oreExtra + oreViaggio
+
+    /** 13/11/2026: un'indennita' e nessuna ora. Si salva (le ore non sono obbligatorie); prima dell'invio si chiede conferma. */
+    val indennitaSenzaOre: Boolean get() = !indennita.isNullOrEmpty() && oreTotali <= 0.0
 
     /** I campi che si compilano, senza quello che aggiunge il foglio: per capire se e' cambiato qualcosa. */
     fun soloCompilato(): Rapportino = Rapportino(
@@ -473,7 +479,7 @@ enum class Stato(val etichetta: String) {
     ANNULLATO("Annullato");
 
     companion object {
-        val BLOCCATI = setOf(INVIATO, FATTURATO)
+        val BLOCCATI = setOf(FATTURATO)
 
         fun da(testo: String?): Stato =
             entries.firstOrNull { it.name.equals(testo?.trim(), ignoreCase = true) } ?: BOZZA

@@ -153,7 +153,7 @@ object Parole7 {
         "libero" to "Messaggio libero",
         "messaggio" to "Messaggio", "domanda" to "Domanda", "segnalazione" to "Segnalazione",
         "rapportino" to "Rapportino", "riepilogo" to "Riepilogo", "preventivo" to "Preventivo", "documento" to "Documento",
-        "avviso_parcella" to "Pre-parcella", "invito_portale_email" to "Invito al portale",
+        "avviso_parcella" to "Parcella pro-forma", "invito_portale_email" to "Invito al portale",
         "avviso_portale" to "Avviso del portale", "conferma_portale" to "Conferma del portale",
     )
     val TIPI_PUBBLICAZIONE = mapOf("preventivo" to "Preventivo", "contratto" to "Contratto", "rapportino" to "Rapportino", "fattura" to "Fattura", "documento" to "Documento", "ticket" to "Richiesta")

@@ -109,18 +109,18 @@ fun SchermataServizi(dati: Dati, nav: Navigatore) {
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             Testata(onIndietro = { nav.indietro() })
-            TitoloPagina("Servizi")
+            TitoloPagina("Servizi e prodotti")
             Segmenti(
-                listOf(false to "Servizi · ${attivi.size}", true to "Archiviati · ${fermi.size}"),
+                listOf(false to "Tutti · ${attivi.size}", true to "Archiviati · ${fermi.size}"),
                 archiviati, { RicordoServizi.archiviati = it },
             )
             CampoCerca(RicordoServizi.cerca, { RicordoServizi.cerca = it }, "Descrizione, codice, tag")
             if (mostrati.isEmpty()) {
                 TestoVuoto(
                     when {
-                        RicordoServizi.cerca.isNotBlank() -> "Nessun servizio trovato"
-                        archiviati -> "Nessun servizio archiviato"
-                        else -> "Ancora nessun servizio"
+                        RicordoServizi.cerca.isNotBlank() -> "Niente con questo nome"
+                        archiviati -> "Niente di archiviato"
+                        else -> "Ancora nessun servizio o prodotto"
                     },
                 )
             } else {
@@ -134,7 +134,7 @@ fun SchermataServizi(dati: Dati, nav: Navigatore) {
         }
         if (puo) {
             FondoConPulsante(Modifier.align(Alignment.BottomCenter)) {
-                PulsantePrincipale("Nuovo servizio", { nav.vai("servizio-nuovo") }, Modifier.bersaglio("servizio-nuovo"), icona = Icone.piu)
+                PulsantePrincipale("Nuovo servizio o prodotto", { nav.vai("servizio-nuovo") }, Modifier.bersaglio("servizio-nuovo"), icona = Icone.piu)
             }
         }
     }
@@ -236,8 +236,8 @@ fun SchermataServizio(dati: Dati, nav: Navigatore, id: String?) {
         ) {
             Testata(onIndietro = { nav.indietro() }, chiudi = true)
             TitoloPagina(
-                if (nuovo) "Nuovo servizio" else esistente!!.nome.ifBlank { "Servizio" },
-                sopra = if (esistente != null && !esistente.attivo) "Archiviato" else esistente?.codice?.ifBlank { null },
+                if (nuovo) "Nuovo" else esistente!!.nome.ifBlank { "Servizio" },
+                sopra = if (nuovo) "Servizi e prodotti" else if (esistente != null && !esistente.attivo) "Archiviato" else esistente?.codice?.ifBlank { null },
             )
             if (puo) {
                 CampiServizio(dati, m, costi, perIndennita = false, conQuantita = false, titoloPrima = "Anagrafica prodotti/servizi")
@@ -365,7 +365,7 @@ internal class ModuloServizio(
 
     /** I campi riempiti da un servizio scelto (la schermata Indennità). Senza i soldi i prezzi restano quelli del server. */
     fun riempiDa(v: VoceListino) {
-        descrizione = v.nome; codice = v.codice; unita = unitaScelta(v.unita); tipo = v.tipo
+        descrizione = v.nome; codice = v.codice; unita = Servizi.unitaDi(v); tipo = v.tipo
         prezzo = prezzoNelCampo(v.prezzo); prezzoAcquisto = prezzoNelCampo(v.prezzoAcquisto)
         aliquotaIva = v.aliquotaIva; aliquotaAcquisto = v.aliquotaAcquisto
         fornitore = v.fornitore; tag = v.tag.joinToString(", "); note = v.note; immagine = v.immagine
@@ -398,7 +398,7 @@ internal class ModuloServizio(
         /** Un servizio nuovo parte da Servizio, 22% e Nr; uno di prima senza unità e "a corpo" diventa A corpo. */
         fun da(v: VoceListino?): ModuloServizio = if (v == null) ModuloServizio(unita = "Nr") else ModuloServizio(
             v.nome, v.prezzo, v.aliquotaIva, v.codice, v.prezzoAcquisto, v.aliquotaAcquisto, v.tipo,
-            v.unita.ifBlank { if (v.modo == eu.stgm.wisper.rapportino.ModoVoce.CORPO) "A corpo" else "" },
+            Servizi.unitaDi(v),
             v.fornitore, v.tag, v.immagine, v.note,
         )
 

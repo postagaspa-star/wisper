@@ -134,6 +134,7 @@ class MainActivity : ComponentActivity() {
         // Fase 7 (§3.16): il controllo delle notifiche ogni 15 minuti con la rete.
         ControlloNotifiche.canale(this)
         ControlloNotifiche.programma(this)
+        leggiInstalla(intent)
         leggiNotifica(intent)
         leggiPromemoria(intent)
         leggiFileCondivisi(intent)
@@ -141,8 +142,17 @@ class MainActivity : ComponentActivity() {
         setContent { Wisper(archivio, this) }
     }
 
+    /** Dalla notifica "Versione nuova di Wisper": parte l'installazione, con la persona davanti (Android chiede conferma). */
+    private fun leggiInstalla(intent: android.content.Intent?) {
+        val i = intent ?: return
+        if (!i.getBooleanExtra(NuoveVersioni.EXTRA_INSTALLA, false)) return
+        i.removeExtra(NuoveVersioni.EXTRA_INSTALLA)
+        NuoveVersioni.installa(this, chiesto = true)
+    }
+
     override fun onNewIntent(intent: android.content.Intent) {
         super.onNewIntent(intent)
+        leggiInstalla(intent)
         leggiNotifica(intent)
         leggiPromemoria(intent)
         leggiFileCondivisi(intent)

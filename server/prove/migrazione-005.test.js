@@ -149,7 +149,7 @@ test('i rapportini, i conti e i PDF di oggi sono identici a quelli del server 0.
   assert.deepEqual(Object.keys(ora.pdf).sort(), Object.keys(PRIMA.pdf).sort());
   // 06/11/2026 (il rapportino con piu' lavori, senza firma): il modello del PDF del rapportino e del riepilogo e' cambiato
   // apposta (pc/ui/documenti.js); gli altri PDF restano identici al byte.
-  // 12/11/2026 (1.4.0, servizi.md §3): anche preventivo e pre-parcella (l'avviso) hanno la veste nuova del modello della
+  // 12/11/2026 (1.4.0, servizi.md §3): anche preventivo e parcella pro-forma (l'avviso) hanno la veste nuova del modello della
   // parcella di Manuel, apposta. Restano da confrontare al byte i prospetti delle fatture.
   const cambiatiApposta = k => /^(rapportino|riepilogo|preventivo|avviso) /.test(k);
   assert.ok(Object.keys(PRIMA.pdf).some(k => !cambiatiApposta(k)), 'resta qualche PDF da confrontare');

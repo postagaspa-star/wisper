@@ -132,6 +132,26 @@ class GiornataStato(
     /** Il rapportino com'e' adesso, da mettere in coda. */
     fun giornata(): Giornata = Giornata(idLocale, id, data, tecnico, lavori.toList())
 
+    /** Dopo l'ultimo Salva rapportino: quanti lavori gia' inviati sono tornati Da inviare (lo dice il foglio "Rapportino salvato"). */
+    var tornatiDaInviare by mutableStateOf(0)
+
+    /**
+     * 13/11/2026: prima di salvare, i lavori Inviati cambiati qui (tutti, se e' cambiata la data) tornano Da inviare, come
+     * fara' il server: cosi' "Invia ai clienti" c'e' subito, anche senza rete.
+     */
+    fun riportaCambiati() {
+        val nuovi = Giornate.dopoLaModifica(lavori.toList(), base, data != dataBase)
+        var n = 0
+        nuovi.forEachIndexed { i, l ->
+            if (l.stato != lavori[i].stato) {
+                lavori[i] = l
+                moduli[l.idLocale]?.let { m -> m.base = m.base.copy(stato = l.stato, inviatoIl = "") }
+                n++
+            }
+        }
+        tornatiDaInviare = n
+    }
+
     /** Un lavoro aggiunto o cambiato dal suo modulo: al suo posto, o in fondo se e' nuovo. */
     fun metti(lavoro: Rapportino, foto: List<File>) {
         val i = lavori.indexOfFirst { it.idLocale == lavoro.idLocale }

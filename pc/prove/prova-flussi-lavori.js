@@ -489,49 +489,52 @@ async function main() {
     assert.equal(await valuta("document.querySelectorAll('.pannello .btn.giallo').length"), 0, 'niente più giallo');
     passo('Invia 2 email: i 3 lavori sono Inviati, il pannello lo dice, niente più giallo');
 
-    // ------------------------------------------------------------- modifica: i lavori inviati non si cambiano
-    // 13/11/2026: "Riporta da inviare" è in vista nel pannello, non più nel menu ⋯.
+    // ------------------------------------------------------------- 13/11/2026: un lavoro inviato si cambia liberamente
+    // "Riporta da inviare" resta in vista nel pannello, per tirarlo indietro senza toccarlo.
     assert.equal(await valuta("[...document.querySelectorAll('.pannello .piede .btn')].filter(b => b.textContent.trim() === 'Riporta da inviare').length"), 1, 'Riporta da inviare in vista nel pannello');
     await sta('il pannello del rapportino inviato');
     await foto('pannello-inviato');
     await clicca('Modifica', '.pannello', 1000);
     testo = await testoFinestra();
-    assert.match(testo, /Già inviato al cliente\. Per correggerlo riportalo da inviare/);
-    assert.ok(!(await valuta("[...document.querySelectorAll('.velo .finestra button')].some(b => b.textContent.trim() === 'Togli questo lavoro')")), 'un lavoro inviato non si toglie');
-    assert.ok(!(await valuta("[...document.querySelectorAll('.velo .finestra button')].some(b => b.textContent.trim() === 'Cambia' && b.closest('.data-rap'))")), 'la data non si cambia');
+    assert.ok(!(await valuta("!!document.querySelector('.velo .finestra .lavoro-fermo')")), 'un lavoro inviato non è fermo');
+    assert.match(testo, /Inviato · se lo cambi torna da inviare/);
+    assert.ok(await valuta("[...document.querySelectorAll('.velo .finestra button')].some(b => b.textContent.trim() === 'Togli questo lavoro')"), 'un lavoro inviato si toglie');
+    assert.ok(await valuta("[...document.querySelectorAll('.velo .finestra button')].some(b => b.textContent.trim() === 'Cambia' && b.closest('.data-rap'))"), 'la data si cambia');
     await sta('il lavoro inviato nella finestra');
     await foto('lavoro-inviato');
-    passo('Modifica: i lavori inviati si vedono e non si cambiano (né la data, né Togli); il pulsante Riporta da inviare è lì');
+    // Salvato senza toccare niente: resta tutto Inviato, nessun avviso di "torna da inviare".
+    await guardaAvvisi();
+    await clicca('Salva rapportino', finestra, 1800);
+    let avvisiSalva = await testoAvvisi();
+    assert.match(avvisiSalva, /Salvato: RAP\/\d{4}\/\d{4} · 3 lavori/);
+    assert.ok(!/torna da inviare|tornano da inviare/.test(avvisiSalva), 'niente cambiato, niente torna da inviare: ' + avvisiSalva);
+    assert.deepEqual((await server('rapportini')).rapportini.filter(r => r.idGiornata === ID).sort((a, b) => a.posizione - b.posizione).map(r => r.stato),
+      ['INVIATO', 'INVIATO', 'INVIATO'], 'salvato uguale: restano inviati');
+    passo('Modifica di un rapportino inviato: niente è fermo (data, Togli, campi), la nota dice "se lo cambi torna da inviare"; salvato uguale resta Inviato');
 
-    // ------------------------------------------------------------- 13/11/2026: un lavoro inviato si riporta da inviare da dove lo si corregge
-    // Prima una cosa scritta in un altro lavoro? No: sono tutti fermi. Si sblocca il lavoro 2 (il cliente lungo) e si corregge.
+    // Si corregge il lavoro 2 (il cliente lungo): salvando torna Da inviare da solo, gli altri due restano Inviati.
+    await clicca('Modifica', '.pannello', 1000);
     await valuta("document.querySelector('.velo .finestra .card-lavoro[data-lavoro=\"2\"]').click(); true");
     await aspetta(400);
-    await clicca('Riporta da inviare', '.velo .finestra .lavoro-fermo', 600);
-    assert.match(await testoFinestra(), /torna modificabile: dopo la correzione va mandato di nuovo/, 'la conferma dice cosa succede');
-    await togliAvvisi();
-    await clicca('Riporta da inviare', finestra, 1500);
-    assert.match(await testoAvvisi(), /Riportato da inviare: ora si può cambiare/);
-    testo = await testoFinestra();
-    assert.match(testo, /Rapportino RAP\//, 'la finestra del rapportino è rimasta aperta');
-    assert.equal(await valuta("document.querySelector('.velo .finestra .card-lavoro.scelta').dataset.lavoro"), '2', 'resta scelto il lavoro 2');
-    assert.ok(!(await valuta("!!document.querySelector('.velo .finestra .zona-lavoro .lavoro-fermo')")), 'il lavoro 2 non è più fermo');
-    assert.equal(await valuta("document.querySelectorAll('.velo .finestra .card-lavoro').length"), 3, 'gli altri lavori sono ancora lì');
-    assert.deepEqual((await server('rapportini')).rapportini.filter(r => r.idGiornata === ID).sort((a, b) => a.posizione - b.posizione).map(r => r.stato),
-      ['INVIATO', 'BOZZA', 'INVIATO'], 'solo il lavoro 2 è tornato da inviare');
+    assert.match(await testoFinestra(), /Inviato · se lo cambi torna da inviare/);
     await scrivi('Cosa hai fatto', 'Sopralluogo per il nuovo impianto di aspirazione, misure del capannone e schema corretto.');
-    await sta('il lavoro riportato da inviare, da correggere');
+    await sta('il lavoro inviato, corretto');
     await foto('lavoro-riportato');
-    await togliAvvisi();
+    await guardaAvvisi();
     await clicca('Salva rapportino', finestra, 1800);
-    assert.match(await testoAvvisi(), /Salvato: RAP\/\d{4}\/\d{4} · 3 lavori/);
+    avvisiSalva = await testoAvvisi();
+    assert.match(avvisiSalva, /Salvato: RAP\/\d{4}\/\d{4} · 3 lavori/);
+    assert.ok(avvisiSalva.indexOf('il lavoro per ' + LUNGO + ' torna da inviare') >= 0, 'l\'avviso dice quale lavoro torna da inviare: ' + avvisiSalva);
+    assert.match(avvisiSalva, /Invia di nuovo/, 'e offre di mandarlo di nuovo');
     let corretti = (await server('rapportini')).rapportini.filter(r => r.idGiornata === ID).sort((a, b) => a.posizione - b.posizione);
     assert.match(corretti[1].descrizione, /schema corretto/, 'la correzione è sul server');
-    assert.deepEqual(corretti.map(r => r.stato), ['INVIATO', 'BOZZA', 'INVIATO']);
+    assert.deepEqual(corretti.map(r => r.stato), ['INVIATO', 'BOZZA', 'INVIATO'], 'solo il lavoro cambiato torna da inviare');
     testo = await testoPannello();
     assert.match(testo, /1 da inviare · 2 inviati/);
     assert.equal(await valuta("[...document.querySelectorAll('.pannello .btn.giallo')].map(b => b.textContent).join('|')"), 'Invia ai clienti', 'torna il giallo: c\'è da mandare di nuovo');
-    passo('Riporta da inviare dentro la finestra: il lavoro 2 torna da scrivere al suo posto, corretto e salvato; il pannello dice 1 da inviare · 2 inviati');
+    await sta('il pannello dopo la correzione');
+    await foto('pannello-da-rimandare');
+    passo('Un lavoro inviato corretto e salvato: torna Da inviare da solo, l\'avviso lo dice e offre Invia di nuovo; il pannello dice 1 da inviare · 2 inviati');
 
     // Dal pannello: gli altri due inviati tornano da inviare insieme.
     assert.equal(await valuta("[...document.querySelectorAll('.pannello .piede .btn')].filter(b => b.textContent.trim() === 'Riporta da inviare i 2 inviati').length"), 1, 'il pulsante dice quanti');
@@ -658,6 +661,59 @@ async function main() {
     }
     passo('2 rapportini dello stesso cliente: 1 scheda, oggetto "' + p2.oggetto + ' · …", riepilogo con una riga per lavoro (N° ' + V1 + ', ' + V2 + ')' + extra);
     await meseLista(new Date().toISOString().slice(0, 7));
+
+    // ------------------------------------------------------------- 13/11/2026: un'indennità senza ore
+    // Le ore non sono obbligatorie se c'è un'indennità; prima di mandarlo al cliente si chiede conferma.
+    await valuta(`(document.querySelector('.pannello [aria-label="Chiudi"]') || { click() {} }).click(); true`);
+    await aspetta(400);
+    await clicca('Nuovo rapportino', '#principale', 1000);
+    await scegliCliente(LUNGO);
+    await pillola('Senza commessa');
+    await scrivi('Cosa hai fatto', 'Reperibilità nel fine settimana.');
+    await tariffa('40');
+    await guardaAvvisi();
+    await clicca('Salva rapportino', finestra, 1000);
+    assert.match((await testoFinestra()) + ' ' + (await testoAvvisi()), /Mancano le ore/i, 'senza ore e senza indennità non si salva');
+    await pillola('+ Indennità');
+    await aspetta(700);
+    assert.match(await testoFinestra(), /Aggiungi un'indennità/);
+    await scrivi('Da Servizi e prodotti', '');
+    await scrivi('Descrizione', 'Indennità di reperibilità');
+    await scrivi('Prezzo di vendita, IVA esclusa', '30');
+    await clicca('Aggiungi', finestra, 700);
+    assert.match(await testoFinestra(), /Indennità di reperibilità/, 'l\'indennità è nel lavoro');
+    await guardaAvvisi();
+    await clicca('Salva rapportino', finestra, 1800);
+    assert.match(await testoAvvisi(), /Salvato: RAP\/\d{4}\/\d{4}/, 'con un\'indennità le ore non servono');
+    const soloInd = (await server('rapportini')).rapportini.filter(r => r.cliente === LUNGO && /Reperibilità nel fine settimana/.test(r.descrizione) && r.stato !== 'ANNULLATO');
+    assert.equal(soloInd.length, 1, 'il lavoro con la sola indennità è sul server');
+    assert.equal((Number(soloInd[0].oreLavoro) || 0) + (Number(soloInd[0].oreViaggio) || 0) + (Number(soloInd[0].oreExtra) || 0), 0, 'senza ore');
+    assert.equal((soloInd[0].indennita || []).length, 1, 'con la sua indennità');
+    const IND = soloInd[0].idGiornata;
+    passo('Un lavoro con la sola indennità: senza indennità "Mancano le ore", con l\'indennità si salva senza ore (' + IND + ')');
+    await valuta(`(document.querySelector('.pannello [aria-label="Chiudi"]') || { click() {} }).click(); true`);
+    await aspetta(400);
+    await valuta(`document.querySelector('.tab .r.rap[data-giornata="${IND}"]').click(); true`);
+    await aspetta(700);
+    // Invia ai clienti: prima la conferma, Annulla non manda niente, "Invia lo stesso" apre l'invio.
+    await clicca('Invia ai clienti', '.pannello', 900);
+    testo = await testoFinestra();
+    assert.match(testo, /Indennità senza ore/);
+    assert.ok(testo.indexOf('Nel lavoro per ' + LUNGO + ' c\'è un\'indennità ma non sono segnate ore. Lo mando lo stesso?') >= 0, 'la domanda: ' + testo);
+    assert.equal(await valuta("document.querySelectorAll('.velo .finestra .dest').length"), 0, 'l\'invio non è ancora aperto');
+    await sta('la conferma dell\'indennità senza ore');
+    await foto('indennita-senza-ore');
+    await clicca('Annulla', finestra, 600);
+    assert.equal(await valuta("document.querySelectorAll('.velo .finestra').length"), 0, 'Annulla: non si apre niente');
+    await clicca('Invia ai clienti', '.pannello', 900);
+    await clicca('Invia lo stesso', finestra, 1200);
+    testo = await testoFinestra();
+    assert.match(testo, /Invio rapportino/, 'dopo la conferma si apre l\'invio');
+    assert.equal(await valuta("document.querySelectorAll('.velo .finestra .dest').length"), 1, 'una scheda per il cliente');
+    await clicca('Annulla', finestra, 600);
+    assert.equal((await server('rapportini')).rapportini.filter(r => r.idGiornata === IND)[0].stato, 'BOZZA', 'non è partito niente');
+    passo('Invia ai clienti con un\'indennità senza ore: prima la conferma (Annulla non manda), "Invia lo stesso" apre l\'invio');
+
 
     // ------------------------------------------------------------- la schermata scura
     await valuta(`(document.querySelector('.pannello [aria-label="Chiudi"]') || { click() {} }).click(); true`);

@@ -122,21 +122,22 @@ test('idempotenza: lo stesso rapportino rimandato dalla coda non fa doppioni; i 
   assert.equal(misto.errore, 'Lavoro 3: Il lavoro ' + altro.lavori[0].id + ' è del rapportino ' + altro.id);
 });
 
-test('togliere un lavoro: Da inviare si\'; inviato o in una fattura no, e allora non cambia niente', async () => {
+test('togliere un lavoro: Da inviare e Inviato si\' (13/11/2026); in una fattura no, e allora non cambia niente', async () => {
   const g = rapportino([ROSSI, ELETTRO, BIANCHI]);
   const r = ok(await salva(g)).rapportino;
   ok(await manuel('stato', { ids: [r.id + '-1'], stato: 'INVIATO' }));
-  // Togliere il lavoro inviato: no. Insieme cambiava anche la descrizione del secondo: non si scrive.
-  const cambiato = Object.assign({}, g.lavori[1], { descrizione: 'Scritto insieme al rifiuto' });
-  const no = await salva(Object.assign({}, g, { lavori: [cambiato, g.lavori[2]] }));
-  assert.deepEqual([no.errore, no.idLavoro], ['Il lavoro per Rossi Impianti Srl è già inviato: non si toglie', r.id + '-1']);
-  assert.equal(riga(r.id + '-2').descrizione, ELETTRO.descrizione);
-  assert.equal(riga(r.id + '-1').stato, 'INVIATO');
-  // In una fattura (la bozza): no.
+  // In una fattura (la bozza): no. Insieme cambiava anche la descrizione del secondo: non si scrive.
   const f = ok(await manuel('preparaFattura', { idCliente: 'C003', voci: [{ tipo: 'rapportino', id: r.id + '-3' }] })).fattura;
-  const inFattura = await salva(Object.assign({}, g, { lavori: [g.lavori[0], g.lavori[1]] }));
+  const cambiato = Object.assign({}, g.lavori[1], { descrizione: 'Scritto insieme al rifiuto' });
+  const inFattura = await salva(Object.assign({}, g, { lavori: [g.lavori[0], cambiato] }));
   assert.deepEqual([inFattura.errore, inFattura.idLavoro], ['Il lavoro per Mario Bianchi è in una fattura: non si toglie', r.id + '-3']);
+  assert.equal(riga(r.id + '-2').descrizione, ELETTRO.descrizione);
   ok(await manuel('scartaFattura', { id: f.id }));
+  // Il lavoro inviato si toglie (mandato per sbaglio): annullato, e ripristinato torna Inviato.
+  const senzaInviato = ok(await salva(Object.assign({}, g, { lavori: [g.lavori[1], g.lavori[2]] }))).rapportino;
+  assert.deepEqual(senzaInviato.lavori.map(l => l.id), [r.id + '-2', r.id + '-3']);
+  assert.deepEqual([riga(r.id + '-1').stato, riga(r.id + '-1').stato_prima], ['ANNULLATO', 'INVIATO']);
+  assert.equal(ok(await manuel('ripristinaRapportino', { id: r.id + '-1' })).rapportino.stato, 'INVIATO');
   // Da inviare: si toglie (annullato, si ripristina).
   const tolto = ok(await salva(Object.assign({}, g, { lavori: [g.lavori[0], g.lavori[1]] }))).rapportino;
   assert.deepEqual(tolto.lavori.map(l => l.id), [r.id + '-1', r.id + '-2']);
@@ -144,21 +145,36 @@ test('togliere un lavoro: Da inviare si\'; inviato o in una fattura no, e allora
   assert.equal(ok(await manuel('ripristinaRapportino', { id: r.id + '-3' })).rapportino.stato, 'BOZZA');
 });
 
-test('lavori bloccati: inviati o fatturati rimandati uguali vanno bene, cambiati no (la frase di oggi); la data vale per gli altri', async () => {
+test('13/11/2026: un lavoro inviato si cambia liberamente e torna Da inviare; rimandato uguale resta Inviato; il fatturato resta fermo', async () => {
   const g = rapportino([ROSSI, ELETTRO]);
   const r = ok(await salva(g)).rapportino;
   ok(await manuel('stato', { ids: [r.id + '-1'], stato: 'INVIATO' }));
-  // Rimandato uguale insieme a un cambio del secondo e a una data nuova: si'. La data cambia solo nel lavoro Da inviare.
+  assert.notEqual(riga(r.id + '-1').inviato_il, '');
+  // Rimandato uguale insieme a un cambio del secondo: l'inviato resta Inviato, non lo tocca nessuno.
   const due = Object.assign({}, g.lavori[1], { oreLavoro: 4 });
-  const dopo = ok(await salva(Object.assign({}, g, { data: '2026-10-21', lavori: [g.lavori[0], due] }))).rapportino;
-  assert.equal(dopo.data, '2026-10-21');
-  assert.deepEqual(dopo.lavori.map(l => [l.id, l.data, l.stato, l.oreLavoro]), [[r.id + '-1', '2026-10-20', 'INVIATO', 2], [r.id + '-2', '2026-10-21', 'BOZZA', 4]]);
+  const dopo = ok(await salva(Object.assign({}, g, { lavori: [g.lavori[0], due] }))).rapportino;
+  assert.deepEqual(dopo.lavori.map(l => [l.id, l.data, l.stato, l.oreLavoro]), [[r.id + '-1', '2026-10-20', 'INVIATO', 2], [r.id + '-2', '2026-10-20', 'BOZZA', 4]]);
+  // Cambiato (le ore): si scrive e torna Da inviare, senza la data dell'invio.
+  const cinque = Object.assign({}, g.lavori[0], { oreLavoro: 5 });
+  const corretto = ok(await salva(Object.assign({}, g, { lavori: [cinque, due] }))).rapportino;
+  assert.deepEqual(corretto.lavori.map(l => [l.stato, l.oreLavoro]), [['BOZZA', 5], ['BOZZA', 4]]);
+  assert.deepEqual([riga(r.id + '-1').ore_lavoro, riga(r.id + '-1').inviato_il], [5, '']);
+  // Mandato di nuovo e rimandato uguale: resta Inviato.
+  ok(await manuel('stato', { ids: [r.id + '-1'], stato: 'INVIATO' }));
+  assert.equal(ok(await salva(Object.assign({}, g, { lavori: [cinque, due] }))).rapportino.lavori[0].stato, 'INVIATO');
+  // La data del rapportino cambia: anche l'inviato la segue (il cliente aveva ricevuto l'altra) e torna Da inviare.
+  const spostato = ok(await salva(Object.assign({}, g, { data: '2026-10-21', lavori: [cinque, due] }))).rapportino;
+  assert.equal(spostato.data, '2026-10-21');
+  assert.deepEqual(spostato.lavori.map(l => [l.data, l.stato]), [['2026-10-21', 'BOZZA'], ['2026-10-21', 'BOZZA']]);
   assert.equal(giornata(r.id).data, '2026-10-21');
-  // Cambiato: no, con la frase di oggi e il numero del lavoro.
-  const no = await salva(Object.assign({}, g, { data: '2026-10-21', lavori: [Object.assign({}, g.lavori[0], { oreLavoro: 5 }), due] }));
-  assert.deepEqual([no.errore, no.lavoro], ['Lavoro 1: Il lavoro ' + r.id + '-1 è già inviato: per modificarlo riportalo da inviare', 1]);
-  assert.equal(riga(r.id + '-1').ore_lavoro, 2);
-  // Riporta da inviare (stato BOZZA): si cambia di nuovo.
+  // Un inviato rimasto con una data sua (i rapportini di prima del 13/11): salvando altro, senza cambiare la data, non si tocca.
+  ok(await manuel('stato', { ids: [r.id + '-1'], stato: 'INVIATO' }));
+  w.db.esegui('UPDATE rapportini SET data = ? WHERE id = ?', '2026-10-19', r.id + '-1');
+  const tre = Object.assign({}, due, { oreLavoro: 3 });
+  const fermo = ok(await salva(Object.assign({}, g, { data: '2026-10-21', lavori: [cinque, tre] }))).rapportino;
+  assert.deepEqual(fermo.lavori.map(l => [l.data, l.stato, l.oreLavoro]), [['2026-10-19', 'INVIATO', 5], ['2026-10-21', 'BOZZA', 3]]);
+  w.db.esegui('UPDATE rapportini SET data = ? WHERE id = ?', '2026-10-21', r.id + '-1');
+  // Riporta da inviare (stato BOZZA) c'e' ancora, per tirarlo indietro senza cambiarlo.
   ok(await manuel('stato', { ids: [r.id + '-1'], stato: 'BOZZA' }));
   assert.equal(riga(r.id + '-1').inviato_il, '');
   const ora = ok(await salva(Object.assign({}, g, { data: '2026-10-21', lavori: [Object.assign({}, g.lavori[0], { oreLavoro: 5 }), due] }))).rapportino;
@@ -168,7 +184,7 @@ test('lavori bloccati: inviati o fatturati rimandati uguali vanno bene, cambiati
   assert.equal(riga(r.id + '-2').stato, 'FATTURATO');
   ok(await salva(Object.assign({}, g, { data: '2026-10-21', lavori: [Object.assign({}, g.lavori[0], { oreLavoro: 5 }), due] })));
   const fatt = await salva(Object.assign({}, g, { data: '2026-10-21', lavori: [Object.assign({}, g.lavori[0], { oreLavoro: 5 }), Object.assign({}, due, { km: 99 })] }));
-  assert.equal(fatt.errore, 'Lavoro 2: Il lavoro ' + r.id + '-2 è già fatturato: per modificarlo riportalo da inviare');
+  assert.equal(fatt.errore, 'Lavoro 2: Il lavoro ' + r.id + '-2 è già fatturato: non si cambia');
 });
 
 test('un lavoro FIRMATO di prima: rimandato uguale resta firmato; cambiato torna Da inviare senza la firma di prima', async () => {
@@ -226,7 +242,7 @@ test('numerazione: conta i rapportini e i numeri di prima, non i -2 dei lavori; 
 
 // ------------------------------------------------------------------ stato, Elimina, ripristino
 
-test('Elimina il rapportino intero (stato con idGiornata): solo se tutti i lavori sono Da inviare; ripristina li riporta', async () => {
+test('Elimina il rapportino intero (stato con idGiornata): anche con un lavoro inviato, non con uno fatturato; ripristina li riporta', async () => {
   const r = ok(await salva(rapportino([ROSSI, ELETTRO]))).rapportino;
   const tolti = ok(await manuel('stato', { idGiornata: r.id, stato: 'ANNULLATO' })).rapportini;
   assert.deepEqual(tolti.map(x => [x.id, x.stato]), [[r.id + '-1', 'ANNULLATO'], [r.id + '-2', 'ANNULLATO']]);
@@ -236,11 +252,16 @@ test('Elimina il rapportino intero (stato con idGiornata): solo se tutti i lavor
   // Anche col numero del rapportino in ids (non e' il numero di un lavoro).
   assert.equal(ok(await manuel('stato', { ids: [r.id], stato: 'ANNULLATO' })).rapportini.length, 2);
   ok(await manuel('ripristinaRapportino', { id: r.id }));
-  // Con un lavoro inviato: no, e niente tolto.
+  // Con un lavoro inviato: si' (13/11/2026), e ripristinato torna Inviato.
   ok(await manuel('stato', { ids: [r.id + '-2'], stato: 'INVIATO' }));
-  const no = await manuel('stato', { idGiornata: r.id, stato: 'ANNULLATO' });
-  assert.equal(no.errore, 'Il lavoro per Elettrodinamica è già inviato: non si toglie');
+  assert.equal(ok(await manuel('stato', { idGiornata: r.id, stato: 'ANNULLATO' })).rapportini.length, 2);
+  ok(await manuel('ripristinaRapportino', { id: r.id }));
   assert.deepEqual(lavoriDi(r.id).map(x => x.stato), ['BOZZA', 'INVIATO']);
+  // Con un lavoro fatturato: no, e niente tolto.
+  ok(await manuel('segnaFatturataFuori', { voci: [{ tipo: 'rapportino', id: r.id + '-2' }] }));
+  const no = await manuel('stato', { idGiornata: r.id, stato: 'ANNULLATO' });
+  assert.equal(no.errore, 'Il lavoro per Elettrodinamica è in una fattura: non si toglie');
+  assert.deepEqual(lavoriDi(r.id).map(x => x.stato), ['BOZZA', 'FATTURATO']);
   // Un lavoro solo (il suo numero): come oggi.
   assert.deepEqual(ok(await manuel('stato', { ids: [r.id + '-1'], stato: 'ANNULLATO' })).rapportini.map(x => x.id), [r.id + '-1']);
   // Un rapportino di prima (numero del lavoro = numero del rapportino): e' il lavoro, come oggi.

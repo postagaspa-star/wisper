@@ -132,6 +132,45 @@ fun SchermataFattura(dati: Dati, nav: Navigatore, id: String) {
     val ops7 by dati.operazioni.collectAsStateWithLifecycle()
     val allegaCopia = rememberAllegaCopia(dati, x) { ricarica() }
     val modificabile = scrive && x.modificabile && x.bozza
+    val listino by dati.listino.collectAsStateWithLifecycle()
+
+    // 13/11/2026 (Andrea: "durante la bozza della fattura non c'è la possibilità di metterla come parcella pro-forma"):
+    // prima stava nel menu ⋯ col nome "Parcella pro-forma"; ora è un pulsante della pagina. Azioni del server invariate.
+    val proForma: () -> Unit = {
+        avvisi.mostra("Preparo la parcella pro-forma…")
+        scope.launch {
+            dati.fase4.pacchetto(x.id).fold(
+                { p -> runCatching { Stampa.documentoFase4(ctx, "avvisoParcella", p.modello, ProspettoPdf.avviso(p.modello, ana.ragioneSociale, regole), "Parcella pro-forma ${x.riferimento} ${x.cliente}",
+                    org.json.JSONObject().put("oggi", LocalDate.now().toString()).put("impostazioni", org.json.JSONObject(ana.impostazioni))) } },
+                { Result.failure(it) },
+            ).onSuccess { avviso = it }.onFailure { avvisi.mostra(spiegaErrore2(it, "La parcella pro-forma non si è preparata: riprova")) }
+        }
+    }
+    // La copia in PDF di una fattura emessa, col suo numero (1.4.0): dal 13/11/2026 è un pulsante della pagina.
+    val titoloPdf = when {
+        x.nota -> "Nota di credito"
+        x.tipoDocumento.equals("TD01", ignoreCase = true) -> "Fattura"
+        else -> "Parcella"
+    }
+    val pdfEmessa: () -> Unit = {
+        avvisi.mostra("Preparo il PDF…")
+        scope.launch {
+            dati.fase4.pacchetto(x.id).fold(
+                { p ->
+                    runCatching {
+                        Stampa.documentoFase4(
+                            ctx, "parcella", p.modello,
+                            ProspettoPdf.avviso(p.modello, ana.ragioneSociale, regole, titolo = titoloPdf, preParcella = false),
+                            "$titoloPdf ${x.numero.ifBlank { x.riferimento }} ${x.cliente}",
+                            org.json.JSONObject().put("oggi", LocalDate.now().toString()).put("titolo", titoloPdf).put("impostazioni", org.json.JSONObject(ana.impostazioni)),
+                        )
+                    }
+                },
+                { Result.failure(it) },
+            ).onSuccess { pdf -> if (!Stampa.apri(ctx, pdf)) Stampa.condividi(ctx, pdf, "$titoloPdf ${x.numero.ifBlank { x.riferimento }}") }
+                .onFailure { avvisi.mostra(spiegaErrore2(it, "Il PDF non si è preparato: riprova")) }
+        }
+    }
 
     Box(Modifier.fillMaxSize().background(c.fondo)) {
         Column(
@@ -205,6 +244,10 @@ fun SchermataFattura(dati: Dati, nav: Navigatore, id: String) {
                     if (x.totaleBozza != null && x.totaleBozza != k.totale) Text("La bozza diceva " + euro(x.totaleBozza), style = Testi.secondario, color = c.tenue)
                 }
             }
+            if (scrive && (x.bozza || x.pronta) && !x.nota) {
+                PulsanteBordo("Parcella pro-forma", proForma, Modifier.fillMaxWidth().bersaglio("pro-forma"), icona = Icone.pdf)
+            }
+            if (x.emessa) PulsanteBordo("$titoloPdf in PDF", pdfEmessa, Modifier.fillMaxWidth().bersaglio("pdf-documento"), icona = Icone.pdf)
 
             // Scadenza e conto: in bozza si cambiano (con data, causale e ritenuta).
             Scheda(orizzontale = 16.dp, verticale = 12.dp, spazio = 4.dp) {
@@ -283,47 +326,7 @@ fun SchermataFattura(dati: Dati, nav: Navigatore, id: String) {
         FoglioDalBasso({ menu = false }) {
             Text("Altre azioni", style = Testi.titoloScheda, color = c.testo)
             VoceMenu(Icone.pdf, "Prospetto (PDF)", { menu = false; nav.vai("fattura-passa/${x.id}") })
-            // 1.4.0: "Avviso di parcella" si chiama Pre-parcella (le azioni del server restano avvisoParcella e inviaAvviso).
-            if (scrive && (x.bozza || x.pronta) && !x.nota) VoceMenu(Icone.email, "Pre-parcella per il cliente", {
-                menu = false
-                avvisi.mostra("Preparo la pre-parcella…")
-                scope.launch {
-                    dati.fase4.pacchetto(x.id).fold(
-                        { p -> runCatching { Stampa.documentoFase4(ctx, "avvisoParcella", p.modello, ProspettoPdf.avviso(p.modello, ana.ragioneSociale, regole), "Pre-parcella ${x.riferimento} ${x.cliente}",
-                            org.json.JSONObject().put("oggi", LocalDate.now().toString()).put("impostazioni", org.json.JSONObject(ana.impostazioni))) } },
-                        { Result.failure(it) },
-                    ).onSuccess { avviso = it }.onFailure { avvisi.mostra(spiegaErrore2(it, "La pre-parcella non si è preparata: riprova")) }
-                }
-            })
-            // 1.4.0 (servizi.md §3): la copia in PDF di una fattura emessa, col suo numero. Dal modello parcella del
-            // computer; finché il telefono non l'ha, dalla pagina della pre-parcella col titolo giusto.
-            if (x.emessa) {
-                val titoloPdf = when {
-                    x.nota -> "Nota di credito"
-                    x.tipoDocumento.equals("TD01", ignoreCase = true) -> "Fattura"
-                    else -> "Parcella"
-                }
-                VoceMenu(Icone.pdf, "$titoloPdf in PDF", {
-                    menu = false
-                    avvisi.mostra("Preparo il PDF…")
-                    scope.launch {
-                        dati.fase4.pacchetto(x.id).fold(
-                            { p ->
-                                runCatching {
-                                    Stampa.documentoFase4(
-                                        ctx, "parcella", p.modello,
-                                        ProspettoPdf.avviso(p.modello, ana.ragioneSociale, regole, titolo = titoloPdf, preParcella = false),
-                                        "$titoloPdf ${x.numero.ifBlank { x.riferimento }} ${x.cliente}",
-                                        org.json.JSONObject().put("oggi", LocalDate.now().toString()).put("titolo", titoloPdf).put("impostazioni", org.json.JSONObject(ana.impostazioni)),
-                                    )
-                                }
-                            },
-                            { Result.failure(it) },
-                        ).onSuccess { pdf -> if (!Stampa.apri(ctx, pdf)) Stampa.condividi(ctx, pdf, "$titoloPdf ${x.numero.ifBlank { x.riferimento }}") }
-                            .onFailure { avvisi.mostra(spiegaErrore2(it, "Il PDF non si è preparato: riprova")) }
-                    }
-                })
-            }
+            // La parcella pro-forma e il PDF della fattura emessa sono pulsanti della pagina (13/11/2026), non più qui.
             if (scrive && x.pronta) {
                 VoceMenu(Icone.indietroStato, "Torna in bozza", {
                     menu = false
@@ -352,6 +355,7 @@ fun SchermataFattura(dati: Dati, nav: Navigatore, id: String) {
         val r = x.righe.getOrNull(i) ?: return@let
         FoglioRiga(
             riga = r, fattura = x, impostazioni = ana.impostazioni, posizione = x.righe.filter { !it.bollo }.indexOf(r), quante = x.righe.count { !it.bollo },
+            listino = listino,
             onChiudi = { riga = null },
             onSalva = { nuova -> riga = null; salva(JSONObject().put("righe", righeJson(x.righe.map { if (it === r) nuova else it })), "Riga salvata") },
             onSposta = { su ->
@@ -369,6 +373,7 @@ fun SchermataFattura(dati: Dati, nav: Navigatore, id: String) {
     }
     if (nuovaRiga) FoglioRiga(
         riga = RigaFattura(id = PonteServer.NUOVO + System.nanoTime(), quantita = 1.0), fattura = x, impostazioni = ana.impostazioni, posizione = -1, quante = 0,
+        listino = listino,
         onChiudi = { nuovaRiga = false },
         onSalva = { nuova -> nuovaRiga = false; salva(JSONObject().put("righe", righeJson(x.righe + nuova)), "Riga aggiunta") },
         onSposta = {}, onTogli = { nuovaRiga = false },
@@ -439,9 +444,12 @@ private fun RigaDellaFattura(r: RigaFattura, onClick: (() -> Unit)?) {
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            // 13/11/2026 (Andrea: "non vengono mostrati i codici dei servizi"): il codice della riga, come nella parcella.
+            if (r.codice.isNotBlank()) Text(r.codice, style = Testi.piccolo.copy(fontWeight = FontWeight.Bold), color = c.tenue)
             Text(r.descrizione, style = Testi.forte.copy(fontWeight = FontWeight.Bold), color = c.testo, maxLines = 3, overflow = TextOverflow.Ellipsis)
             val sotto = listOfNotNull(
                 if ((r.quantita ?: 1.0) != 1.0 || r.unita.isNotBlank()) Numeri.scrivi(r.quantita ?: 1.0) + (if (r.unita.isNotBlank()) " " + r.unita else "") + " × " + euro(r.prezzo) else null,
+                r.sconto?.takeIf { it != 0.0 }?.let { "sconto " + Numeri.scrivi(it) + "%" },
                 if (r.prezzo == null && !r.bollo) "senza prezzo" else null,
                 if (r.cambiata) "era " + euro(r.importoSorgenti).removeSuffix(" €") else null,
             ).joinToString(" · ")
@@ -466,6 +474,7 @@ private fun FoglioRiga(
     impostazioni: Map<String, String>,
     posizione: Int,
     quante: Int,
+    listino: List<eu.stgm.wisper.rapportino.VoceListino>,
     onChiudi: () -> Unit,
     onSalva: (RigaFattura) -> Unit,
     onSposta: (Boolean) -> Unit,
@@ -478,11 +487,19 @@ private fun FoglioRiga(
     var unita by remember { mutableStateOf(riga.unita) }
     var prezzo by remember { mutableStateOf(importoNelCampo(riga.prezzo)) }
     var tipo by remember { mutableStateOf(riga.tipo) }
+    var codice by remember { mutableStateOf(riga.codice) }
+    var sconto by remember { mutableStateOf(riga.sconto?.takeIf { it != 0.0 }?.let { Numeri.scrivi(it) } ?: "") }
+    var scegli by remember { mutableStateOf(false) }
+    var cerca by remember { mutableStateOf("") }
     var togli by remember { mutableStateOf(false) }
     var provato by remember { mutableStateOf(false) }
     val q = Numeri.leggi(quantita)
     val p = Numeri.leggi(prezzo)
-    val modificata = riga.copy(descrizione = descrizione.trim(), quantita = q, unita = unita.trim(), prezzo = p, tipo = tipo)
+    val sc = if (sconto.isBlank()) 0.0 else Numeri.leggi(sconto)
+    val scontoSbagliato = sc == null || sc < 0 || sc > 100
+    val scontoNuovo = sc?.takeIf { it != 0.0 && !scontoSbagliato }
+    val modificata = riga.copy(codice = codice.trim(), descrizione = descrizione.trim(), quantita = q, unita = unita.trim(), prezzo = p, tipo = tipo, sconto = scontoNuovo)
+    val costi = LocalPermessi.current.costi
     // L'anteprima: le righe con questa cambiata; quelle dei gruppi non toccate tengono il loro importo.
     val altre = fattura.righe.filter { !it.bollo && it !== riga }
     val conti = RegoleFattura.calcola(
@@ -490,19 +507,48 @@ private fun FoglioRiga(
             ivaPercentuale = fattura.parametri.ivaPercentuale, eppiPercentuale = fattura.parametri.eppiPercentuale,
             ritenutaPercentuale = fattura.parametri.ritenutaPercentuale, regime = fattura.parametri.regime, bolloRivalsa = fattura.parametri.bolloRivalsa,
         ),
-        altre.map { it.perConti(false) } + (if (q != riga.quantita || p != riga.prezzo || riga.gruppo.isBlank()) modificata.perConti(true) else modificata.perConti(false)),
+        altre.map { it.perConti(false) } + (if (q != riga.quantita || p != riga.prezzo || scontoNuovo != riga.sconto?.takeIf { it != 0.0 } || riga.gruppo.isBlank()) modificata.perConti(true) else modificata.perConti(false)),
     )
     val sorgenti = fattura.sorgenti.filter { it.attiva && riga.gruppo.isNotBlank() && it.gruppo == riga.gruppo }
     FoglioDalBasso(onChiudi) {
+        if (scegli) {
+            // Da Servizi e prodotti: la riga prende codice, descrizione, unità e prezzo del servizio.
+            Text("Servizi e prodotti", style = Testi.titoloScheda, color = c.testo)
+            CampoCerca(cerca, { cerca = it }, "Descrizione, codice, tag")
+            val voci = eu.stgm.wisper.rapportino.Servizi.perIndennita(listino, cerca)
+            if (voci.isEmpty()) TestoVuoto(if (cerca.isBlank()) "Ancora nessun servizio o prodotto" else "Niente con questo nome")
+            else Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
+                voci.forEachIndexed { n, v ->
+                    if (n > 0) LineaElenco()
+                    RigaServizio(v, costi, Modifier.bersaglio("riga-servizio-§n")) {
+                        codice = v.codice
+                        descrizione = v.nome
+                        unita = eu.stgm.wisper.rapportino.Servizi.unitaDi(v)
+                        if (v.prezzo != null) prezzo = importoNelCampo(v.prezzo)
+                        scegli = false
+                        cerca = ""
+                    }
+                }
+            }
+            PulsanteTesto("Torna alla riga", { scegli = false; cerca = "" }, Modifier.fillMaxWidth(), colore = c.testo)
+            return@FoglioDalBasso
+        }
         Text(if (nuova) "Riga nuova" else "La riga", style = Testi.titoloScheda, color = c.testo)
         Column(Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             if (riga.gruppo.isBlank()) Segmenti(listOf("compenso" to "Compenso", "anticipazione" to "Spesa anticipata"), tipo, { tipo = it })
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                CampoTesto(codice, { codice = it }, "Codice", Modifier.weight(1f).bersaglio("riga-codice"))
+                PulsanteBordo("Da Servizi e prodotti", { scegli = true }, Modifier.weight(1.4f).bersaglio("riga-da-servizio"), altezza = 56.dp)
+            }
             CampoTesto(descrizione, { descrizione = it }, "Descrizione", Modifier.fillMaxWidth(), righe = 2, errore = if (provato && descrizione.isBlank()) "Scrivi la descrizione" else null)
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 CampoTesto(quantita, { quantita = it }, "Quantità", Modifier.weight(1f), tastiera = KeyboardType.Decimal, errore = if (quantita.isNotBlank() && (q == null || q < 0)) "Non va" else null)
                 CampoTesto(unita, { unita = it }, "Unità", Modifier.weight(1f), segnaposto = "ore, km")
             }
-            CampoTesto(prezzo, { prezzo = it }, "Prezzo", Modifier.fillMaxWidth(), tastiera = KeyboardType.Decimal, suffisso = "€", errore = if (prezzo.isNotBlank() && (p == null || p < 0)) "Non è un prezzo" else null)
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                CampoTesto(prezzo, { prezzo = it }, "Prezzo", Modifier.weight(1.4f), tastiera = KeyboardType.Decimal, suffisso = "€", errore = if (prezzo.isNotBlank() && (p == null || p < 0)) "Non è un prezzo" else null)
+                CampoTesto(sconto, { sconto = it }, "Sconto", Modifier.weight(1f).bersaglio("riga-sconto"), tastiera = KeyboardType.Decimal, suffisso = "%", errore = if (scontoSbagliato) "Fra 0 e 100" else null)
+            }
             if (riga.importoSorgenti != null && riga.gruppo.isNotBlank()) Text("Nata da: " + euro(riga.importoSorgenti), style = Testi.secondario, color = c.tenue)
             Scheda(orizzontale = 14.dp, verticale = 10.dp, spazio = 2.dp) {
                 RigaDato("Totale della fattura", euro(conti.totale))
@@ -516,7 +562,7 @@ private fun FoglioRiga(
         }
         PulsantePrincipale(if (nuova) "Aggiungi la riga" else "Salva la riga", {
             provato = true
-            if (descrizione.isBlank() || (quantita.isNotBlank() && (q == null || q < 0)) || (prezzo.isNotBlank() && (p == null || p < 0))) return@PulsantePrincipale
+            if (descrizione.isBlank() || (quantita.isNotBlank() && (q == null || q < 0)) || (prezzo.isNotBlank() && (p == null || p < 0)) || scontoSbagliato) return@PulsantePrincipale
             onSalva(modificata)
         }, altezza = 56.dp)
         if (!nuova) PulsanteTesto("Togli dalla bozza", { togli = true }, Modifier.fillMaxWidth(), colore = c.rossoTesto)
@@ -660,7 +706,7 @@ private fun FoglioSegnaEmessa(dati: Dati, x: Fattura, onChiudi: () -> Unit, onFa
     }
 }
 
-/** La pre-parcella (fino alla 1.3 "avviso di parcella"): condividere il PDF o mandarlo dal postino (segna la data). */
+/** La parcella pro-forma (fino alla 1.3 "avviso di parcella"): condividere il PDF o mandarlo dal postino (segna la data). */
 @Composable
 private fun FoglioAvvisoParcella(dati: Dati, x: Fattura, pdf: File, email: String, onChiudi: () -> Unit, onMandato: () -> Unit) {
     val c = W.colori
@@ -673,18 +719,18 @@ private fun FoglioAvvisoParcella(dati: Dati, x: Fattura, pdf: File, email: Strin
     LaunchedEffect(Unit) { if (!dati.esempio) dati.aggiorna() }
     var inCorso by remember { mutableStateOf(false) }
     FoglioDalBasso(onChiudi) {
-        Text("Pre-parcella", style = Testi.titoloScheda, color = c.testo)
+        Text("Parcella pro-forma", style = Testi.titoloScheda, color = c.testo)
         Text("Documento senza valore fiscale: la fattura si emette al pagamento", style = Testi.secondarioGrande, color = c.tenue)
         PulsanteBordo("Apri il PDF", { Stampa.apri(ctx, pdf) }, Modifier.fillMaxWidth(), icona = Icone.pdf)
-        PulsanteBordo("Condividi il PDF", { Stampa.condividi(ctx, pdf, "Pre-parcella ${x.riferimento}") }, Modifier.fillMaxWidth(), icona = Icone.condividi)
+        PulsanteBordo("Condividi il PDF", { Stampa.condividi(ctx, pdf, "Parcella pro-forma ${x.riferimento}") }, Modifier.fillMaxWidth(), icona = Icone.condividi)
         CampoTesto(a, { aScritto = it.trim() }, "A", Modifier.fillMaxWidth(), tastiera = KeyboardType.Email)
         PulsantePrincipale(if (inCorso) "Mando…" else "Mandalo per email", {
             if (inCorso || !a.contains('@')) { if (!a.contains('@')) avvisi.mostra("Scrivi l'email del cliente"); return@PulsantePrincipale }
             inCorso = true
             scope.launch {
-                dati.fase4.inviaAvviso(x.id, a, "Pre-parcella", "Buongiorno,\nin allegato la pre-parcella. La fattura la emetto al pagamento.\n\nCordiali saluti", pdf)
-                    .onSuccess { avvisi.mostra("Pre-parcella mandata a $a"); onMandato() }
-                    .onFailure { avvisi.mostra(spiegaErrore2(it, "La pre-parcella non è partita: guarda la posta inviata prima di riprovare")) }
+                dati.fase4.inviaAvviso(x.id, a, "Parcella pro-forma", "Buongiorno,\nin allegato la parcella pro-forma. La fattura la emetto al pagamento.\n\nCordiali saluti", pdf)
+                    .onSuccess { avvisi.mostra("Parcella pro-forma mandata a $a"); onMandato() }
+                    .onFailure { avvisi.mostra(spiegaErrore2(it, "La parcella pro-forma non è partita: guarda la posta inviata prima di riprovare")) }
                 inCorso = false
             }
         }, altezza = 56.dp, abilitato = !inCorso)

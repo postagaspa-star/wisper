@@ -142,7 +142,8 @@ public sealed class Aggiornamenti
 
             VersioneNuova = nuova.ToString(3);
             Stato = "pronto";
-            Messaggio = "La versione " + VersioneNuova + " è pronta: parte alla prossima apertura";
+            // 13/11/2026: "pronta" sembrava "già in uso"; finché non si riavvia si usa ancora quella di prima.
+            Messaggio = "La versione " + VersioneNuova + " è scaricata: riavvia Wisper Ufficio per usarla";
             Log.Info("aggiornamento pronto: " + VersioneNuova);
             Pronta?.Invoke(VersioneNuova);
         }

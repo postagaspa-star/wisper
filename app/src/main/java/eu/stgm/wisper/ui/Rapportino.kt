@@ -149,7 +149,8 @@ internal fun ColumnScope.LavoroNellaPagina(
 
     // Senza il permesso dei soldi (il collaboratore) niente tariffa, totale e conto: ore, km e spese sì.
     val costi = perm.costi
-    // Chi vede i rapportini solo in lettura non cambia niente; un lavoro Inviato o Fatturato non si cambia.
+    // Chi vede i rapportini solo in lettura non cambia niente; un lavoro Fatturato non si cambia. Dal 13/11/2026 un lavoro
+    // Inviato si cambia come gli altri (se cambia torna Da inviare).
     val scrive = perm.modifica(eu.stgm.wisper.rapportino.Moduli.RAPPORTINI)
     val bloccato = stato.base.bloccato || !scrive
     val clienteScelto: Cliente? = ana.cliente(stato.idCliente, if (stato.idCliente.isBlank()) stato.cliente else "")
@@ -197,7 +198,6 @@ internal fun ColumnScope.LavoroNellaPagina(
     }
 
     var chiediTogli by remember { mutableStateOf(false) }
-    var chiediRiporta by remember { mutableStateOf(false) }
     var menu by remember { mutableStateOf(false) }
 
     // ---- foto ----
@@ -252,18 +252,14 @@ internal fun ColumnScope.LavoroNellaPagina(
         if (stato.base.nonSiFattura.isNotBlank()) Parola5(stato.base.nonSiFattura, colore = eu.stgm.wisper.rapportino.ColoreFase5.GRIGIO)
     }
 
+    // 13/11/2026: un lavoro già inviato si cambia come gli altri; qui dice, una volta, che cosa succede se lo si cambia.
+    if (!bloccato && stato.base.stato == Stato.INVIATO) {
+        Text("Se lo cambi torna da inviare.", style = Testi.secondario, color = c.tenue, modifier = Modifier.bersaglio("nota-inviato"))
+    }
+
     if (bloccato) {
-        // 13/11/2026 (Andrea: "una volta inviati i rapportini non si possono più modificare o tirare indietro"): il perché
-        // e il pulsante stanno qui, dove si prova a correggere, non solo nel menu ⋯ del rapportino.
         if (stato.base.bloccato) Scheda(verticale = 14.dp, spazio = 10.dp) {
-            Text(
-                if (stato.base.stato == Stato.FATTURATO) "Fatturato: non si cambia."
-                else "Già inviato al cliente. Per correggerlo riportalo da inviare: dopo va mandato di nuovo.",
-                style = Testi.testo, color = c.testo2,
-            )
-            if (scrive && stato.base.stato == Stato.INVIATO) {
-                PulsanteBordo("Riporta da inviare", { chiediRiporta = true }, Modifier.fillMaxWidth().bersaglio("riporta-da-inviare"), icona = Icone.indietroStato)
-            }
+            Text("Fatturato: non si cambia.", style = Testi.testo, color = c.testo2)
         }
         PassoRiepilogo(stato, vista, conto, regole, dati, solaLettura = true, commesseAccese = commesseAccese)
     } else {
@@ -317,19 +313,6 @@ internal fun ColumnScope.LavoroNellaPagina(
             },
             onAnnulla = { chiediTogli = false },
             pericolo = true,
-        )
-    }
-
-    if (chiediRiporta) {
-        FoglioConferma(
-            titolo = "Riportare da inviare questo lavoro?",
-            testo = "Torna da cambiare e da mandare di nuovo al cliente.",
-            azione = "Riporta da inviare",
-            onConferma = {
-                chiediRiporta = false
-                avvisaCambio(avvisi, dati, dati.cambiaStato(listOf(stato.base.idLocale), Stato.BOZZA), "Riportato da inviare: ora si può cambiare")
-            },
-            onAnnulla = { chiediRiporta = false },
         )
     }
 

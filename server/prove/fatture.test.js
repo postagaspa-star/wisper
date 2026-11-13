@@ -257,6 +257,30 @@ test('nuovaFattura e fattura a zero: righe senza prezzo e totale zero non passan
   await manuel('scartaFattura', { id: f.id });
 });
 
+test('13/11/2026: il cliente segnato sostituto d\'imposta porta la ritenuta nelle sue bozze, e la toglie; un altro cambio non le tocca', async () => {
+  // Un ente col solo codice fiscale: senza partita IVA la bozza nasce senza ritenuta. Prima, segnarlo sostituto dopo non
+  // cambiava la bozza gia' fatta ("anche se viene segnato che c'e' la ritenuta d'acconto il sistema non la considera").
+  const c = (await manuel('salvaSoggetto', { soggetto: { nome: 'Ente di Prova Ritenuta', cliente: true, codiceFiscale: '97000000001', indirizzo: 'Via Esempio 1', cap: '00100', comune: 'Roma', provincia: 'RM' } })).soggetto;
+  let f = (await manuel('nuovaFattura', { idCliente: c.id })).fattura;
+  assert.equal(f.ritenuta, false, 'senza partita IVA nasce senza ritenuta');
+  f = (await manuel('salvaFattura', { fattura: { id: f.id, righe: [{ tipo: 'compenso', codice: 'IND1', descrizione: 'Indennità di esempio', quantita: 1, unita: 'Nr', prezzo: 1000 }] } })).fattura;
+  assert.deepEqual([f.conti.totale, f.conti.ritenuta, f.conti.netto, f.righe[0].codice], [1281, 0, 1281, 'IND1']);
+  await manuel('salvaSoggetto', { soggetto: { id: c.id, sostitutoImposta: true } });
+  f = (await manuel('fattura', { id: f.id })).fattura;
+  assert.deepEqual([f.ritenuta, f.conti.totale, f.conti.ritenuta, f.conti.netto, (f.scadenze[0] || {}).importo], [true, 1281, 200, 1081, 1081], 'la bozza prende la ritenuta, la scadenza il netto nuovo');
+  const m = (await manuel('pacchetto', { id: f.id })).modello;
+  assert.deepEqual([m.ritenuta && m.ritenuta.importo, m.nettoAPagare, m.righe[0].codice], [200, 1081, 'IND1'], 'e il modello dei documenti la porta');
+  await manuel('salvaSoggetto', { soggetto: { id: c.id, sostitutoImposta: false } });
+  f = (await manuel('fattura', { id: f.id })).fattura;
+  assert.deepEqual([f.ritenuta, f.conti.ritenuta, f.conti.netto], [false, 0, 1281]);
+  // Scritta a mano sulla bozza resta, se del cliente cambia altro.
+  f = (await manuel('salvaFattura', { fattura: { id: f.id, ritenuta: true } })).fattura;
+  await manuel('salvaSoggetto', { soggetto: { id: c.id, telefono: '0424 000000' } });
+  f = (await manuel('fattura', { id: f.id })).fattura;
+  assert.deepEqual([f.ritenuta, f.conti.ritenuta], [true, 200], 'un cambio che non tocca il sostituto non tocca la bozza');
+  await manuel('scartaFattura', { id: f.id });
+});
+
 test('una bozza nata prima dei conti prende il conto predefinito scritto dopo; passando al programma lo tiene', async () => {
   // Il caso del 06/11 sul NAS: la bozza nasce quando in Banche non c'e' ancora nessun conto (conto_id vuoto), il conto
   // con l'IBAN arriva dopo. Prima la bozza diceva per sempre "manca l'IBAN".

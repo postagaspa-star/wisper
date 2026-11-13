@@ -542,6 +542,8 @@ module.exports = {
     }
     v.modificato = adesso();
     this.aggiorna('soggetti', prima.id, v);
+    // 13/11/2026: il cliente diventato (o non piu') sostituto d'imposta porta la ritenuta nelle sue bozze.
+    this.ritenutaNelleBozze(prima);
     return Object.assign({ giaEsisteva: false }, this.soggetto(prima.id));
   },
 

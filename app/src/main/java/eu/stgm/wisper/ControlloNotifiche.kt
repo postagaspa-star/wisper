@@ -85,6 +85,9 @@ object ControlloNotifiche {
 class LavoroNotifiche(ctx: Context, parametri: WorkerParameters) : CoroutineWorker(ctx, parametri) {
     override suspend fun doWork(): Result {
         val ctx = applicationContext
+        // 13/11/2026: le versioni nuove prima di tutto e per tutti (anche con "Avvisami sul telefono" spento): ad app
+        // chiusa nessuno le installava, e i telefoni restavano fermi.
+        runCatching { NuoveVersioni.inSottofondo(ctx) }
         if (!ControlloNotifiche.acceso(ctx)) return Result.success()
         val archivio = (ctx as WisperApp).archivio
         val sessione = archivio.sessione.value

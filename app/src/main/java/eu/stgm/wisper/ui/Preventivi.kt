@@ -175,7 +175,7 @@ fun SchermataPreventivi(dati: Dati, nav: Navigatore) {
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 // 1.4.0 (servizi.md §1): il listino sono i Servizi, con la loro voce nel menu.
-                PulsanteRiga("Servizi", { nav.sezione(Sezione.SERVIZI) })
+                PulsanteRiga("Servizi e prodotti", { nav.sezione(Sezione.SERVIZI) })
                 PulsanteRiga("Contratti", { nav.vai("contratti") })
             }
             CampoCerca(RicordoPreventivi.cerca, { RicordoPreventivi.cerca = it }, "Numero, oggetto, cliente")

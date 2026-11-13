@@ -123,7 +123,11 @@ object Giornate {
                 ?: if (ordinati.map(lavoro).all { it.idLocaleGiornata.isBlank() }) primo.id else ""
             val idLocale = ordinati.map(lavoro).firstNotNullOfOrNull { it.idLocaleGiornata.takeIf { g -> g.isNotBlank() } }
                 ?: if (id.isNotBlank()) "R-$id" else "R-" + primo.idLocale
-            Gruppo(chiave, id, idLocale, ordinati.map(lavoro).filterNot { it.bloccato }.firstOrNull()?.data ?: primo.data, primo.tecnico, ordinati)
+            // La data del rapportino: quella dei lavori da inviare; se no del primo che si puo' cambiare (un inviato di
+            // prima del 13/11/2026 puo' avere ancora una data sua).
+            val ls = ordinati.map(lavoro)
+            val data = (ls.firstOrNull { it.daInviare } ?: ls.firstOrNull { !it.bloccato } ?: primo).data
+            Gruppo(chiave, id, idLocale, data, primo.tecnico, ordinati)
         }
     }
 
@@ -173,11 +177,36 @@ object Giornate {
         return n to m.groupValues[2].trim().replaceFirstChar { it.uppercase() }
     }
 
-    /** Un lavoro si toglie dal rapportino solo se e' ancora da inviare (il server controlla anche le fatture). */
-    fun puoTogliere(r: Rapportino): Boolean = r.daInviare
+    /** Un lavoro si toglie dal rapportino se non e' fatturato (dal 13/11/2026 anche Inviato; il server controlla le fatture). */
+    fun puoTogliere(r: Rapportino): Boolean = r.daInviare || r.stato == Stato.INVIATO
 
-    /** Un rapportino si elimina solo se tutti i suoi lavori sono ancora da inviare. */
-    fun puoEliminare(lavori: List<Rapportino>): Boolean = lavori.isNotEmpty() && lavori.all { it.daInviare }
+    /** Un rapportino si elimina se nessuno dei suoi lavori e' fatturato. */
+    fun puoEliminare(lavori: List<Rapportino>): Boolean = lavori.isNotEmpty() && lavori.all(::puoTogliere)
+
+    /**
+     * 13/11/2026 (Andrea: "anche dopo averlo inviato devi poterlo modificare liberamente, e nel caso tu lo faccia poi il
+     * sistema te lo deve segnare come da inviare"): un lavoro Inviato che cambia torna Da inviare. Lo decide il server;
+     * qui la stessa regola, per vederlo subito anche senza rete. [prima] i lavori com'erano all'apertura; con
+     * [dataCambiata] (la data del rapportino) tornano Da inviare tutti gli inviati.
+     */
+    fun dopoLaModifica(lavori: List<Rapportino>, prima: List<Rapportino>, dataCambiata: Boolean): List<Rapportino> = lavori.map { l ->
+        if (l.stato != Stato.INVIATO) return@map l
+        val b = prima.firstOrNull { it.idLocale == l.idLocale }
+        val cambiato = b != null && b.soloCompilato().copy(data = l.data) != l.soloCompilato()
+        if (dataCambiata || cambiato) l.copy(stato = Stato.BOZZA, inviatoIl = "") else l
+    }
+
+    /**
+     * 13/11/2026 (Andrea): con un'indennita' le ore non sono obbligatorie, ma prima di mandare un lavoro con un'indennita'
+     * e senza ore si chiede conferma. La frase della conferma, null se non serve (uguale a quella del computer).
+     */
+    fun fraseSenzaOre(lavori: List<Rapportino>): String? {
+        val senza = lavori.filter { it.indennitaSenzaOre }
+        if (senza.isEmpty()) return null
+        if (senza.size == 1) return "Nel lavoro per ${senza[0].cliente.ifBlank { "questo cliente" }} c'è un'indennità ma non sono segnate ore."
+        val nomi = senza.map { it.cliente }.filter { it.isNotBlank() }.distinct()
+        return "In ${senza.size} lavori ci sono indennità ma non sono segnate ore" + (if (nomi.isEmpty()) "" else ": " + nomi.joinToString(", ")) + "."
+    }
 
     // ------------------------------------------------------------- a chi va l'email (§4)
 

@@ -44,7 +44,7 @@ const STAMPE = path.join(__dirname, 'stampe');
 const EDGE = 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';
 const daStampare = new Map();
 const aggiornamento = () => process.env.AGGIORNAMENTO === 'pronto'
-  ? { attivi: true, versione: '0.5.0', stato: 'pronto', nuova: '0.5.1', messaggio: 'La versione 0.5.1 è pronta: parte alla prossima apertura', controllato: '18:00' }
+  ? { attivi: true, versione: '0.5.0', stato: 'pronto', nuova: '0.5.1', messaggio: 'La versione 0.5.1 è scaricata: riavvia Wisper Ufficio per usarla', controllato: '18:00' }
   : { attivi: true, versione: '0.5.0', stato: 'nessuno', nuova: null, messaggio: 'Hai l’ultima versione', controllato: '18:00' };
 
 const TIPI = {

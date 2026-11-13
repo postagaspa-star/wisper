@@ -4,7 +4,7 @@ import org.json.JSONObject
 import java.time.LocalDate
 
 /**
- * Le pagine del prospetto e della pre-parcella fatte dal telefono (fase4.md
+ * Le pagine del prospetto e della parcella pro-forma fatte dal telefono (fase4.md
  * §8.3), finché pc/ui/documenti.js non ha prospettoFattura() e avvisoParcella():
  * stesso carattere, stessi grigi dei PDF di Wisper, niente giallo (si stampa in
  * bianco e nero). I dati sono solo quelli del pacchetto del server: il telefono
@@ -52,7 +52,7 @@ object ProspettoPdf {
     }
 
     /**
-     * La pre-parcella (fase4.md §8.3, fino alla 1.3 "avviso di parcella"): cliente, righe, totali, netto, IBAN, e il
+     * La parcella pro-forma (fase4.md §8.3, fino alla 1.3 "avviso di parcella"): cliente, righe, totali, netto, IBAN, e il
      * piede "Documento senza valore fiscale: la fattura si emette al pagamento".
      *
      * 1.4.0 (servizi.md §3): la stessa pagina fa da ripiego anche per la parcella di una fattura emessa ([titolo]
@@ -61,7 +61,7 @@ object ProspettoPdf {
      */
     fun avviso(
         modello: JSONObject, studio: String, regole: RegoleFiscali, oggi: LocalDate = LocalDate.now(),
-        titolo: String = "Pre-parcella", preParcella: Boolean = true,
+        titolo: String = "Parcella pro-forma", preParcella: Boolean = true,
     ): String {
         val cl = modello.optJSONObject("committente") ?: JSONObject()
         val nome = cl.testo("denominazione").ifBlank { listOf(cl.testo("nome"), cl.testo("cognome")).filter { it.isNotBlank() }.joinToString(" ") }

@@ -132,7 +132,8 @@ class ModuloStato(
     var indennitaAperta by mutableStateOf<IndennitaAperta?>(null)
 
     /** "+ Indennità": la schermata vuota, che si apre sulla scelta del servizio. */
-    fun nuovaIndennita() { indennitaAperta = IndennitaAperta(-1, Indennita()) }
+    // Scritta a mano parte da Nr, come sul computer (indennitaVuota): senza, il pulsante giallo chiedeva l'unità, che sta in fondo.
+    fun nuovaIndennita() { indennitaAperta = IndennitaAperta(-1, Indennita(unita = "Nr")) }
 
     /** Una riga toccata: la sua schermata, coi campi com'erano. */
     fun apriIndennita(posizione: Int) {
@@ -283,7 +284,8 @@ class ModuloStato(
                 if (testo.isNotBlank() && Numeri.leggi(testo) == null) e[campo] = "Non è un numero"
             }
         val ore = listOf(oreLavoro, oreExtra, oreViaggio).sumOf { Numeri.leggi(it) ?: 0.0 }
-        if (ore <= 0.0 && "oreLavoro" !in e) e["oreLavoro"] = "Mancano le ore"
+        // 13/11/2026 (Andrea): con un'indennità le ore non sono obbligatorie (prima dell'invio si chiede conferma).
+        if (ore <= 0.0 && "oreLavoro" !in e && indennita.isNullOrEmpty()) e["oreLavoro"] = "Mancano le ore"
         if (chiediTariffa && regole.tariffaFissa == null && (Numeri.leggi(tariffa) ?: 0.0) <= 0.0) {
             e["tariffa"] = "Scrivi la tariffa oraria"
         }

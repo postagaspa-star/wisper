@@ -130,7 +130,7 @@ body.fuori .lato { display: none; }
   margin-left: auto; min-width: 24px; height: 24px; border-radius: 12px; background: var(--testo); color: var(--fondo);
   font-size: 12px; font-weight: 800; display: flex; align-items: center; justify-content: center; padding: 0 8px;
 }
-.lato.chiuso .lab, .lato.chiuso .num-v, .lato.chiuso .marchio .nomi, .lato.chiuso .aggiornamento { display: none !important; }
+.lato.chiuso .lab, .lato.chiuso .num-v, .lato.chiuso .marchio .nomi { display: none !important; }
 .piede-lato { margin-top: auto; display: flex; flex-direction: column; gap: 10px; }
 .carta-chi { background: var(--scheda); border-radius: 20px; padding: 12px; display: flex; flex-direction: column; gap: 6px; }
 .lato.chiuso .carta-chi { background: none; padding: 0; }
@@ -166,6 +166,20 @@ body.fuori .lato { display: none; }
 .aggiornamento b { font-size: 14px; font-weight: 800; }
 .aggiornamento span { font-size: 13px; font-weight: 600; color: var(--testo2); }
 .aggiornamento .btn { height: 38px; }
+/* 13/11/2026: col menu chiuso il riquadro spariva (e nessuno riavviava): resta un tondo giallo, col nome al passaggio. */
+.aggiornamento .agg-corto { display: none; }
+.lato.chiuso .aggiornamento { padding: 0; background: none; align-items: center; }
+.lato.chiuso .aggiornamento > :not(.agg-corto) { display: none; }
+.lato.chiuso .aggiornamento .agg-corto {
+  display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border: 0; border-radius: 50%;
+  background: var(--giallo); color: var(--su-giallo); cursor: pointer;
+}
+.lato.chiuso .aggiornamento .agg-corto:focus-visible { outline: 3px solid var(--fuoco); outline-offset: 2px; }
+/* La versione col suo pulsante, in cima alle Impostazioni. */
+.zona-versione { margin-bottom: 18px; }
+.scheda-versione .voce-imp { gap: 16px; }
+/* Nell'editor del rapportino: un lavoro già inviato dice una volta che cosa succede se lo si cambia. */
+.testa-lavoro .nota-inviato { font-size: 13px; font-weight: 600; color: var(--testo2); white-space: nowrap; }
 
 /* ------------------------------------------------------------ pagina */
 .principale { flex: 1; min-width: 0; overflow: auto; padding: 32px 40px 64px; position: relative; }
@@ -446,6 +460,8 @@ select.scelta:focus, .campo input:focus, .campo select:focus, .campo textarea:fo
 @keyframes dalla-destra { from { transform: translateX(40px); opacity: 0; } to { transform: none; opacity: 1; } }
 @keyframes alla-destra { to { transform: translateX(40px); opacity: 0; } }
 .pannello .corpo { flex: 1; overflow: auto; padding: 22px 24px 24px; display: flex; flex-direction: column; gap: 14px; }
+/* 13/11/2026: un pulsante dentro il corpo (Parcella pro-forma, il PDF della fattura) non si schiaccia quando il pannello scorre. */
+.pannello .corpo > .btn { flex: none; }
 .pannello .alto { display: flex; align-items: center; gap: 10px; }
 .pannello .alto .numero { font-size: 22px; font-weight: 800; flex: 1; }
 .pannello .piede { padding: 16px 24px 22px; border-top: 1px solid var(--riga); display: flex; gap: 10px; }
@@ -1460,6 +1476,13 @@ button.cambia-tipo { border: none; cursor: pointer; }
 .numeri-riga input.num-riga.q, .numeri-riga .num-fisso.q { width: 84px; flex: none; }
 .numeri-riga input.num-riga.p, .numeri-riga .num-fisso.p { width: 112px; flex: none; }
 .numeri-riga input.unita-riga, .numeri-riga .num-fisso.unita { width: 64px; flex: none; }
+.numeri-riga input.num-riga.s, .numeri-riga .num-fisso.s { width: 72px; flex: none; }
+/* 13/11/2026: il codice della riga accanto alla descrizione, come nella parcella (Codice, Descrizione). */
+.codice-e-desc { display: flex; align-items: flex-start; gap: 8px; }
+.codice-e-desc textarea.desc-riga { flex: 1; min-width: 0; }
+input.codice-riga { width: 96px; flex: none; height: 40px; margin-top: 4px; border-radius: 10px; border: 1.5px solid var(--bordo-campo); background: var(--scheda); padding: 0 8px; font: inherit; font-weight: 700; color: var(--testo); }
+input.codice-riga:disabled { background: transparent; border-color: transparent; }
+input.codice-riga::placeholder { font-weight: 600; color: var(--testo2); }
 .numeri-riga .num-fisso { width: 84px; text-align: right; font-variant-numeric: tabular-nums; }
 .numeri-riga .num-fisso.unita { text-align: left; }
 .numeri-riga .importo-riga { width: 112px; flex: none; text-align: right; font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }

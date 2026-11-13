@@ -810,7 +810,7 @@ class Archivio(private val ctx: Context) : Dati {
         if (chi.isEmpty()) throw PonteServer.Rifiutato("Scrivi il nome di chi ha firmato")
         val v = compostiOra()[idLocale] ?: throw PonteServer.Rifiutato("Rapportino non trovato")
         // Lo script non sostituisce una firma che c'e' gia': terrebbe quella vecchia senza dirlo.
-        if (v.firmaInAttesa != null || (v.rapportino.firma != null && v.rapportino.bloccato)) {
+        if (v.firmaInAttesa != null || (v.rapportino.firma != null && (v.rapportino.stato == Stato.INVIATO || v.rapportino.stato == Stato.FATTURATO))) {
             throw PonteServer.Rifiutato("Il rapportino ha già una firma: riportalo in bozza per caricarne un'altra")
         }
         val tipo = ctx.contentResolver.getType(uri)
@@ -2153,7 +2153,11 @@ class Archivio(private val ctx: Context) : Dati {
                 }
                 lavori.forEach { scritto ->
                     val attuale = viste[scritto.idLocale]
-                    val unito = attuale?.rapportino?.let { b -> unisciScritto(scritto, b) } ?: scritto.copy(conto = null)
+                    // 13/11/2026: un lavoro Inviato cambiato qui parte gia' Da inviare (Giornate.dopoLaModifica): si vede
+                    // subito cosi', senza aspettare la risposta del server.
+                    val unito = attuale?.rapportino?.let { b ->
+                        unisciScritto(scritto, b).let { u -> if (b.stato == Stato.INVIATO && scritto.stato == Stato.BOZZA) u.copy(stato = Stato.BOZZA, inviatoIl = "") else u }
+                    } ?: scritto.copy(conto = null)
                     viste[scritto.idLocale] = (attuale ?: Vista(unito)).copy(
                         rapportino = unito.copy(idGiornata = unito.idGiornata.ifBlank { idNoto }, idLocaleGiornata = g.idLocale, posizione = scritto.posizione),
                         cambiatoQui = true, inCoda = true,

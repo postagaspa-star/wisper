@@ -76,14 +76,51 @@ class GiornateTest {
     }
 
     @Test
-    fun `si toglie un lavoro solo se è da inviare, si elimina un rapportino solo se lo sono tutti`() {
+    fun `si toglie un lavoro se non è fatturato (anche inviato), si elimina un rapportino se nessun lavoro lo è`() {
         assertTrue(Giornate.puoTogliere(l2))
         assertTrue(Giornate.puoTogliere(vecchio))
-        assertFalse(Giornate.puoTogliere(l1))
+        assertTrue("dal 13/11/2026 anche un inviato", Giornate.puoTogliere(l1))
         assertFalse(Giornate.puoTogliere(l2.copy(stato = Stato.FATTURATO)))
         assertTrue(Giornate.puoEliminare(listOf(l2, l3)))
-        assertFalse(Giornate.puoEliminare(listOf(l1, l2, l3)))
+        assertTrue(Giornate.puoEliminare(listOf(l1, l2, l3)))
+        assertFalse(Giornate.puoEliminare(listOf(l1, l2.copy(stato = Stato.FATTURATO))))
         assertFalse(Giornate.puoEliminare(emptyList()))
+        assertFalse("un inviato non è più bloccato", l1.bloccato)
+        assertTrue(l1.copy(stato = Stato.FATTURATO).bloccato)
+    }
+
+    @Test
+    fun `un lavoro inviato che cambia torna da inviare, quello rimasto uguale no`() {
+        val inviato2 = l2.copy(stato = Stato.INVIATO, inviatoIl = "2026-11-06T09:00:00")
+        val prima = listOf(l1, inviato2, l3)
+        // Niente è cambiato: restano com'erano.
+        assertEquals(listOf(Stato.INVIATO, Stato.INVIATO, Stato.BOZZA), Giornate.dopoLaModifica(prima, prima, false).map { it.stato })
+        // Cambia un inviato (le ore): torna da inviare lui solo, senza la data dell'invio.
+        val dopo = Giornate.dopoLaModifica(listOf(l1, inviato2.copy(oreLavoro = 3.5), l3), prima, false)
+        assertEquals(listOf(Stato.INVIATO, Stato.BOZZA, Stato.BOZZA), dopo.map { it.stato })
+        assertEquals("", dopo[1].inviatoIl)
+        assertEquals(3.5, dopo[1].oreLavoro, 0.0)
+        // Cambia la data del rapportino: tutti gli inviati tornano da inviare.
+        assertEquals(listOf(Stato.BOZZA, Stato.BOZZA, Stato.BOZZA), Giornate.dopoLaModifica(prima, prima, true).map { it.stato })
+        // Un fatturato non torna mai indietro da solo.
+        val fatturato = l1.copy(stato = Stato.FATTURATO)
+        assertEquals(Stato.FATTURATO, Giornate.dopoLaModifica(listOf(fatturato), listOf(fatturato), true).single().stato)
+    }
+
+    @Test
+    fun `con un'indennità le ore non servono, e prima dell'invio la frase lo dice`() {
+        val ind = listOf(Indennita(descrizione = "Indennità di trasferta", quantita = 1.0, prezzo = 30.0))
+        val senza = l2.copy(oreLavoro = 0.0, indennita = ind)
+        assertTrue(senza.indennitaSenzaOre)
+        assertFalse(l2.copy(indennita = ind).indennitaSenzaOre)
+        assertFalse(senza.copy(oreViaggio = 0.5).indennitaSenzaOre)
+        assertFalse(l2.copy(oreLavoro = 0.0).indennitaSenzaOre)
+        assertNull(Giornate.fraseSenzaOre(listOf(l1, l2, l3)))
+        assertEquals("Nel lavoro per Rossi Impianti Srl c'è un'indennità ma non sono segnate ore.", Giornate.fraseSenzaOre(listOf(l1, senza)))
+        assertEquals(
+            "In 2 lavori ci sono indennità ma non sono segnate ore: Rossi Impianti Srl, Elettrodinamica.",
+            Giornate.fraseSenzaOre(listOf(senza, l1.copy(oreLavoro = 0.0, indennita = ind), l3)),
+        )
     }
 
     @Test
@@ -145,7 +182,7 @@ class GiornateTest {
         val g = Giornata("G-uno", data = giorno, tecnico = "Manuel Gasparotto", lavori = listOf(
             lavoro("a", "C001", "Elettrodinamica", data = giorno.minusDays(3)),
             lavoro("b", "C002", "Rossi Impianti Srl"),
-            l1.copy(data = giorno.minusDays(5)),   // inviato: la sua data non cambia
+            l1.copy(stato = Stato.FATTURATO, data = giorno.minusDays(5)),   // fatturato: la sua data non cambia
         ))
         val allineati = g.lavoriAllineati()
         assertEquals(listOf(1, 2, 3), allineati.map { it.posizione })
@@ -170,7 +207,7 @@ class GiornateTest {
         assertEquals(2 to "Scegli il progetto", Giornate.erroreDelLavoro("Lavoro 2: scegli il progetto"))
         assertEquals(1 to "Manca il cliente", Giornate.erroreDelLavoro("Lavoro 1: Manca il cliente"))
         assertNull(Giornate.erroreDelLavoro("Aggiungi almeno un lavoro"))
-        assertNull(Giornate.erroreDelLavoro("Il lavoro per Rossi Impianti Srl è già inviato: non si toglie"))
+        assertNull(Giornate.erroreDelLavoro("Il lavoro per Rossi Impianti Srl è in una fattura: non si toglie"))
     }
 
     /** La cartella del progetto (le prove girano da app/). */

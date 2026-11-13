@@ -148,6 +148,7 @@ fun SchermataGiornata(
     var chiediUscita by remember { mutableStateOf(false) }
     var chiediElimina by remember { mutableStateOf(false) }
     var chiediDaInviare by remember { mutableStateOf(false) }
+    var chiediSenzaOre by remember { mutableStateOf<String?>(null) }
     var menu by remember { mutableStateOf(false) }
 
     fun esci() {
@@ -207,6 +208,8 @@ fun SchermataGiornata(
             )
             return
         }
+        // 13/11/2026: un lavoro gia' inviato che e' cambiato torna Da inviare.
+        stato.riportaCambiati()
         val g = stato.giornata()
         dati.salvaGiornata(g)
         // Le foto dopo il rapportino: il lavoro deve esistere sul server quando arriva la sua foto.
@@ -247,7 +250,8 @@ fun SchermataGiornata(
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     TitoloPagina("Rapportino", sopra = stato.id.takeIf { it.isNotBlank() }?.let { "N° $it" })
-                    // La data vale per tutti i lavori: con un lavoro gia' inviato non si cambia piu' (resterebbe divisa).
+                    // La data vale per tutti i lavori: con un lavoro fatturato non si cambia piu' (resterebbe divisa). Con uno
+                    // inviato si': cambia anche per lui, e torna da inviare.
                     RigaData(stato.data, abilitato = scrive && !tuttiBloccati) { stato.data = it }
                     if (lavori.isNotEmpty()) {
                         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -318,6 +322,15 @@ fun SchermataGiornata(
         FoglioDalBasso({ stato.salvato = false; onChiudi() }) {
             Text("Rapportino salvato", style = Testi.titoloScheda, color = c.testo)
             Text(Giornate.lavori(lavori.size) + " " + Giornate.perClienti(Giornate.quantiClienti(lavori)), style = Testi.testo, color = c.testo2)
+            // 13/11/2026: quello che era gia' partito ed e' cambiato va mandato di nuovo.
+            stato.tornatiDaInviare.takeIf { it > 0 }?.let { n ->
+                Text(
+                    if (lavori.size == 1) "Era già inviato: adesso torna da inviare."
+                    else if (n == 1) "Il lavoro già inviato che hai cambiato torna da inviare."
+                    else "$n lavori già inviati tornano da inviare.",
+                    style = Testi.testo, color = c.testo2,
+                )
+            }
             if (scrive && daInviare.isNotEmpty()) {
                 PulsantePrincipale("Invia ai clienti", { stato.salvato = false; onInvia(daInviare.map { it.idLocale }) }, Modifier.bersaglio("invia-clienti"), icona = Icone.invia)
             }
@@ -347,7 +360,10 @@ fun SchermataGiornata(
                 VoceMenu(Icone.invia, "Segna inviato senza email", {
                     menu = false
                     if (stato.cambiata) salva()
-                    avvisaCambio(avvisi, dati, dati.cambiaStato(daInviare.map { it.idLocale }, Stato.INVIATO))
+                    // 13/11/2026: un'indennità senza ore si segna inviata solo dopo una conferma.
+                    val frase = Giornate.fraseSenzaOre(daInviare)
+                    if (frase != null) chiediSenzaOre = frase
+                    else avvisaCambio(avvisi, dati, dati.cambiaStato(daInviare.map { it.idLocale }, Stato.INVIATO))
                 })
             }
             if (fattura && nonFatturati.isNotEmpty()) VoceMenu(Icone.spunta, "Segna fatturato", {
@@ -359,10 +375,22 @@ fun SchermataGiornata(
             if (Giornate.puoEliminare(lavori)) VoceMenu(Icone.cestino, "Elimina", { menu = false; chiediElimina = true }, pericolo = true)
         }
     }
+    chiediSenzaOre?.let { frase ->
+        FoglioConferma(
+            titolo = "Indennità senza ore",
+            testo = "$frase Lo segno inviato lo stesso?",
+            azione = "Segna inviato",
+            onConferma = {
+                chiediSenzaOre = null
+                avvisaCambio(avvisi, dati, dati.cambiaStato(stato.lavori.filter { it.daInviare }.map { it.idLocale }, Stato.INVIATO))
+            },
+            onAnnulla = { chiediSenzaOre = null },
+        )
+    }
     if (chiediDaInviare) {
         FoglioConferma(
             titolo = if (inviati.size == 1) "Riportare da inviare il lavoro inviato?" else "Riportare da inviare ${inviati.size} lavori inviati?",
-            testo = "Tornano da cambiare e da mandare.",
+            testo = "Come se non fosse partito: si manda di nuovo quando vuoi.",
             azione = "Riporta da inviare",
             onConferma = {
                 chiediDaInviare = false

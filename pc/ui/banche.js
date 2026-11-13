@@ -613,7 +613,7 @@
         nome: h('input', { type: 'text', value: c.nome || '', disabled: sola }),
         banca: h('input', { type: 'text', value: c.banca || '', disabled: sola }),
         iban: h('input', { type: 'text', value: c.iban ? RF.ibanAGruppi(c.iban) : '', disabled: sola, autocomplete: 'off', spellcheck: 'false', placeholder: c0 && !c.iban && c.ultimeCifre ? '…' + c.ultimeCifre : '' }),
-        // 1.4.0 (servizi.md §3): nel Pagamento di pre-parcella e parcella, sotto l'IBAN.
+        // 1.4.0 (servizi.md §3): nel Pagamento di parcella pro-forma e parcella, sotto l'IBAN.
         bic: h('input', { type: 'text', value: c.bic || '', disabled: sola, autocomplete: 'off', spellcheck: 'false', maxlength: '11' }),
         beneficiario: h('input', { type: 'text', value: c.beneficiario || '', disabled: sola, placeholder: S.ana.impostazioni.RAGIONE_SOCIALE || '' }),
         soglia: h('input', { type: 'text', inputmode: 'decimal', value: c.soglia === null || c.soglia === undefined ? '' : C.numero(c.soglia), placeholder: C.numero(S.ana.impostazioni.SOGLIA_CASSA || 3000) + ' (di tutti i conti)', disabled: sola }),

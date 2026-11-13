@@ -70,6 +70,28 @@ module.exports = {
     return !!chiavePiva(s.partita_iva);
   },
 
+  /**
+   * 13/11/2026 (Andrea: "anche se viene segnato che c'e' la ritenuta d'acconto il sistema non la considera"): la ritenuta
+   * di una bozza si decideva alla nascita e restava quella. Ora, quando il cliente cambia (sostituto d'imposta si'/no
+   * scritto a mano, partita IVA scritta o tolta), le sue bozze di fattura prendono la ritenuta di adesso e rifanno i
+   * conti. Solo le bozze: quelle gia' passate al programma restano com'erano. prima = la riga del cliente di prima.
+   * Torna quante bozze sono cambiate.
+   */
+  ritenutaNelleBozze(prima) {
+    if (!prima) return 0;
+    const era = this.sostitutoDi(prima);
+    const ora = this.sostitutoDi(this.db.riga('SELECT * FROM soggetti WHERE id = ?', prima.id));
+    if (era === ora) return 0;
+    let n = 0;
+    for (const f of this.db.righe("SELECT id, ritenuta_applicata FROM fatture WHERE cliente_id = ? AND stato = 'bozza' AND tipo = 'fattura'", prima.id)) {
+      if ((f.ritenuta_applicata === 1) === ora) continue;
+      this.aggiorna('fatture', f.id, { ritenuta_applicata: ora ? 1 : 0 });
+      this.ricalcolaFattura(f.id);
+      n += 1;
+    }
+    return n;
+  },
+
   /** Come si raggruppano i rapportini di un cliente: per mese i clienti a tariffa fissa, uno per riga gli altri. */
   raggruppaDi(s) {
     return s && s.tariffa_fissa !== null && s.tariffa_fissa !== undefined && s.tariffa_fissa !== '' ? 'mese' : 'rapportino';

@@ -88,7 +88,7 @@
       aggiungi(pagina, [
         h('div', { class: 'testata alta' },
           h('div', { class: 'titoli' }, h('span', { class: 'dove' }, 'Preventivi e contratti'), h('h1', null, 'Preventivi')),
-          h('button', { type: 'button', class: 'btn', onclick: () => W.vai('#servizi') }, icona('libro', 18, 2.2), 'Servizi'),
+          h('button', { type: 'button', class: 'btn', onclick: () => W.vai('#servizi') }, icona('libro', 18, 2.2), 'Servizi e prodotti'),
           h('button', { type: 'button', class: 'btn', onclick: () => W.vai('#preventivi/contratti') }, icona('contratto', 18, 2.2), 'Contratti'),
           daModello,
           scrive() ? h('button', { type: 'button', class: 'btn giallo', 'data-visita': 'nuovo-preventivo', onclick: () => W.vai('#preventivi/nuovo') }, icona('piu', 18, 2.6), 'Nuovo preventivo') : null),
@@ -731,7 +731,7 @@
         s.voci.forEach((v, vi) => aggiungi(corpo, [rigaVoce(b, s, v, vi, ricalcola, ridisegna)]));
         if (!s.voci.length) aggiungi(corpo, [h('div', { class: 'vuoto-sez' }, 'Prendi un servizio o scrivi una voce.')]);
         destinazioneVoci(corpo, b, s, ridisegna);
-        const dalListino = h('button', { type: 'button', class: 'btn piccolo', 'data-visita': si === 0 ? 'dal-listino' : null }, icona('libro', 16, 2.2), 'Dai servizi');
+        const dalListino = h('button', { type: 'button', class: 'btn piccolo', 'data-visita': si === 0 ? 'dal-listino' : null }, icona('libro', 16, 2.2), 'Da Servizi e prodotti');
         dalListino.addEventListener('click', () => sceltaListino(dalListino, v => { s.voci.push(v); ridisegna(); W.Visita.azione('dal-listino'); }));
         aggiungi(zona, [h('div', { class: 'scheda sez-editor' + (chiusa ? ' chiusa' : '') },
           h('div', { class: 'testa-sez-editor' },
@@ -859,7 +859,7 @@
       B.chiudiMenu();
       const lista = h('div', { class: 'lista-listino' });
       const input = h('input', { type: 'search', placeholder: 'Cerca nei servizi', 'aria-label': 'Cerca nei servizi' });
-      const m = h('div', { class: 'menu listino-menu', role: 'dialog', 'aria-label': 'Servizi' }, h('label', { class: 'cerca piccola' }, icona('cerca', 16), input), lista);
+      const m = h('div', { class: 'menu listino-menu', role: 'dialog', 'aria-label': 'Servizi e prodotti' }, h('label', { class: 'cerca piccola' }, icona('cerca', 16), input), lista);
       const chiudi = () => { m.remove(); document.removeEventListener('mousedown', fuori, true); document.removeEventListener('keydown', esc, true); };
       const fuori = e => { if (!m.contains(e.target) && e.target !== ancora) chiudi(); };
       const esc = e => { if (e.key === 'Escape') { e.stopPropagation(); chiudi(); } };

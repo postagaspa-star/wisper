@@ -121,7 +121,8 @@ internal fun SchermataIndennita(dati: Dati, stato: ModuloStato, aperta: Indennit
         }
         m.errori(costi, prezzoObbligatorio = costi, conQuantita = true)?.let { e ->
             avvisi.mostra(e)
-            scope.launch { scorri.animateScrollTo(0) }
+            // L'unità di misura sta in fondo (Dettagli): la pagina va lì, non in cima.
+            scope.launch { scorri.animateScrollTo(if (e == m.erroreUnita) scorri.maxValue else 0) }
             return
         }
         stato.mettiIndennita(aperta.posizione, m.indennita(base, costi))
@@ -138,7 +139,7 @@ internal fun SchermataIndennita(dati: Dati, stato: ModuloStato, aperta: Indennit
                 ) {
                     Testata(onIndietro = { chiudi() }, chiudi = true)
                     TitoloPagina("Indennità", sopra = if (aperta.nuova) "Nuova" else null)
-                    CampoScelta("Servizio", nomeServizio, vuoto = base.idServizio.isBlank() && m.descrizione.isBlank()) { scegli = true }
+                    CampoScelta("Da Servizi e prodotti", nomeServizio, vuoto = base.idServizio.isBlank() && m.descrizione.isBlank()) { scegli = true }
                     CampiServizio(dati, m, costi, perIndennita = true, conQuantita = true, titoloPrima = null, prezzoObbligatorio = costi)
                     if (!aperta.nuova) PulsanteTesto("Togli l'indennità", { chiediTogli = true }, Modifier.fillMaxWidth(), colore = c.rossoTesto)
                 }
@@ -168,10 +169,10 @@ internal fun SchermataIndennita(dati: Dati, stato: ModuloStato, aperta: Indennit
     }
 
     if (scegli) FoglioDalBasso({ scegli = false }) {
-        Text("Scegli un servizio", style = Testi.titoloScheda, color = c.testo)
+        Text("Servizi e prodotti", style = Testi.titoloScheda, color = c.testo)
         CampoCerca(cerca, { cerca = it }, "Descrizione, codice, tag")
         val voci = Servizi.perIndennita(listino, cerca)
-        if (voci.isEmpty()) TestoVuoto(if (cerca.isBlank()) "Ancora nessun servizio" else "Nessun servizio trovato")
+        if (voci.isEmpty()) TestoVuoto(if (cerca.isBlank()) "Ancora nessun servizio o prodotto" else "Niente con questo nome")
         else Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
             voci.forEachIndexed { n, v ->
                 if (n > 0) LineaElenco()

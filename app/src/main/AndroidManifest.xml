@@ -109,6 +109,12 @@
 
         <!-- Le risposte dell'installazione di una versione nuova. -->
         <receiver android:name=".EsitoInstallazione" android:exported="false" />
+        <!-- Dopo l'installazione: la notifica "Wisper aggiornato" (l'installazione chiude l'app). -->
+        <receiver android:name=".VersioneInstallata" android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
 
         <!-- I promemoria: la notifica all'ora scelta, e le sveglie rimesse dopo un riavvio. -->
         <receiver android:name=".AvvisoPromemoria" android:exported="false" />

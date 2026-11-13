@@ -1,4 +1,4 @@
-// Prove del computer per i Servizi, le indennità e la veste nuova di pre-parcella e parcella (docs/gestionale/servizi.md).
+// Prove del computer per i Servizi, le indennità e la veste nuova di parcella pro-forma e parcella (docs/gestionale/servizi.md).
 //   node --test "pc/prove/*.test.js"
 'use strict';
 
@@ -19,13 +19,14 @@ const SERVIZI = [
 ];
 
 test('servizi: filtro per segmento e testo, conteggi, unità di prima', () => {
-  assert.deepEqual(RS.filtraServizi(SERVIZI, { segmento: 'indennita' }).map(s => s.id), [3, 4], 'anche senza accento');
-  assert.deepEqual(RS.filtraServizi(SERVIZI, { segmento: 'servizi' }).map(s => s.id), [1, 2]);
+  // 13/11/2026 (Andrea: "non ci deve essere la distinzione tra servizi ed indennità"): le indennità stanno fra i servizi.
+  assert.deepEqual(RS.filtraServizi(SERVIZI, { segmento: 'indennita' }).map(s => s.id), [1, 2, 3, 4, 5], 'il segmento di prima non filtra più');
+  assert.deepEqual(RS.filtraServizi(SERVIZI, { segmento: 'servizi' }).map(s => s.id), [1, 2, 3, 4]);
   assert.deepEqual(RS.filtraServizi(SERVIZI, { segmento: 'prodotti' }).map(s => s.id), [5]);
   assert.deepEqual(RS.filtraServizi(SERVIZI, { testo: 'trasfer' }).map(s => s.id), [3], 'nei tag e nella descrizione');
   assert.deepEqual(RS.filtraServizi(SERVIZI, { testo: 'nessuno' }).map(s => s.id), [4], 'nel fornitore');
-  assert.deepEqual(RS.contaServizi(SERVIZI.filter(s => s.attivo)), { tutti: 4, indennita: 2, servizi: 2 }, 'Prodotti solo se ce ne sono');
-  assert.deepEqual(RS.contaServizi([SERVIZI[0]]), { tutti: 1, servizi: 1 }, 'Indennità solo se ce ne sono');
+  assert.deepEqual(RS.contaServizi(SERVIZI.filter(s => s.attivo)), { tutti: 4, servizi: 4, prodotti: 0 }, 'Servizi e Prodotti ci sono sempre');
+  assert.deepEqual(RS.contaServizi(SERVIZI), { tutti: 5, servizi: 4, prodotti: 1 });
   assert.equal(RS.unitaDi(SERVIZI[1]), 'Ore', 'la "h" di prima è Ore');
   assert.equal(RS.unitaDi({ modo: 'corpo' }), 'A corpo');
   assert.equal(RS.modoDaUnita('Giorni'), 'quantita');
@@ -33,8 +34,8 @@ test('servizi: filtro per segmento e testo, conteggi, unità di prima', () => {
   assert.deepEqual(RS.tagDa('a, b c,, a'), ['a', 'b c']);
 });
 
-test('servizi: nella scelta delle indennità prima le indennità, solo gli attivi, per codice', () => {
-  assert.deepEqual(RS.perIndennita(SERVIZI).map(s => s.id), [3, 4, 2, 1]);
+test('servizi: nella scelta un elenco solo, gli attivi per codice (le indennità non vengono prima)', () => {
+  assert.deepEqual(RS.perIndennita(SERVIZI).map(s => s.id), [2, 3, 1, 4]);
 });
 
 test('servizi: il modulo vuole descrizione, unità e (coi soldi) il prezzo, anche 0', () => {
@@ -107,14 +108,14 @@ test('parcella: la veste del modello, numero dell\'XML, JOB, sconto, riepilogo, 
   assert.ok(testo(D.parcella(Object.assign({}, MODELLO, { numero: '7/2026' }), {})).includes('N. 7 / 2026'));
 });
 
-test('pre-parcella: stesso corpo, "Rif. W-15", la frase senza valore fiscale nelle note, Commessa di base', () => {
+test('parcella pro-forma: stesso corpo, "Rif. W-15", la frase senza valore fiscale nelle note, Commessa di base', () => {
   const m = Object.assign({}, MODELLO, { data: '', numero: '', committente: Object.assign({}, MODELLO.committente, { etichettaCommessa: '' }) });
   const t = testo(D.avvisoParcella(m, {}));
-  for (const pezzo of ['Pre-parcella Rif. W-15 22/10/2026 · Valuta EUR (€)', 'Commessa: 26ST003', 'Importo dovuto 343,87 €',
+  for (const pezzo of ['Parcella pro-forma Rif. W-15 22/10/2026 · Valuta EUR (€)', 'Commessa: 26ST003', 'Importo dovuto 343,87 €',
     'Note Prestazioni di ottobre. Documento senza valore fiscale: la fattura si emette al pagamento.']) {
     assert.ok(t.includes(pezzo), 'manca: ' + pezzo);
   }
-  assert.ok(D.avvisoParcella(m, {}).includes('content: "Pre-parcella W-15 · Pagina "'));
+  assert.ok(D.avvisoParcella(m, {}).includes('content: "Parcella pro-forma W-15 · Pagina "'));
 });
 
 test('rapportino e riepilogo: le indennità sotto il lavoro e nel conto', () => {

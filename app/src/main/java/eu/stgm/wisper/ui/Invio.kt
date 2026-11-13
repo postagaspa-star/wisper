@@ -191,6 +191,10 @@ fun SchermataInvio(dati: Dati, nav: Navigatore, cosa: String) {
     var foglioMessaggio by remember { mutableStateOf<String?>(null) }
     var foglioPdf by remember { mutableStateOf(false) }
     var grande by remember { mutableStateOf<String?>(null) }
+    // 13/11/2026 (Andrea): un lavoro con un'indennità e senza ore si manda solo dopo una conferma (un passaggio in più,
+    // solo in quel caso). Annulla torna indietro.
+    val fraseSenzaOre = remember(lista) { Giornate.fraseSenzaOre(lista) }
+    var senzaOreVisto by rememberSaveable(cosa) { mutableStateOf(false) }
 
     // "invio", "copia", "apri", "condividi": cosa si sta aspettando. Un tocco alla volta.
     var occupato by remember { mutableStateOf<String?>(null) }
@@ -392,6 +396,16 @@ fun SchermataInvio(dati: Dati, nav: Navigatore, cosa: String) {
                 }
             }
         }
+    }
+
+    if (fraseSenzaOre != null && !senzaOreVisto) {
+        FoglioConferma(
+            titolo = "Indennità senza ore",
+            testo = "$fraseSenzaOre Lo mando lo stesso?",
+            azione = "Invia lo stesso",
+            onConferma = { senzaOreVisto = true },
+            onAnnulla = { nav.indietro() },
+        )
     }
 
     // ---------------------------------------------------------- il messaggio di un destinatario

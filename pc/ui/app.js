@@ -230,6 +230,12 @@
     S.versione = st.versione;
     S.aggiornamento = st.aggiornamento || null;
     mostraAggiornamento();
+    // 13/11/2026: dopo un aggiornamento lo si dice una volta ("ora hai la 1.4.2"), così si sa che è andato.
+    try {
+      const prima = localStorage.getItem('wisper-versione');
+      if (S.versione && prima && prima !== S.versione) avviso('Wisper Ufficio aggiornato: ora hai la versione ' + S.versione, false, 6000);
+      if (S.versione) localStorage.setItem('wisper-versione', S.versione);
+    } catch (e) { /* senza memoria non lo dice */ }
     if (st.appenaInstallato && !S.dettoInstallato) {
       S.dettoInstallato = true;
       avviso('Wisper Ufficio è installato: lo trovi in Start e sul Desktop. Il file scaricato si può cancellare.', false, 10000);
@@ -370,6 +376,13 @@
   }
 
   // ======================================================================= navigazione
+
+  // 13/11/2026: dopo un riavvio per una versione nuova si torna alla pagina in cui si era (ricordaDoveSono, due minuti).
+  try {
+    const r = JSON.parse(localStorage.getItem('wisper-riparti') || 'null');
+    localStorage.removeItem('wisper-riparti');
+    if (r && Date.now() - Number(r.quando) < 120000 && /^#[\w\-\/.%]+$/.test(r.da || '') && !location.hash) history.replaceState(null, '', r.da);
+  } catch (e) { /* si riparte dalla Casa */ }
 
   /** L'indirizzo della pagina: "commesse/26ST044", "amministrazione/utenti/3"... */
   function percorso() {
@@ -851,7 +864,8 @@
   /**
    * Il programma scarica da solo la versione nuova quando il server la annuncia (progetti.md §6:
    * "versioni" in ogni risposta e il campanello) e la mette al suo posto. Qui si mostra soltanto: un riquadro tranquillo nella
-   * barra laterale, "Riavvia" per aprirla subito, altrimenti parte alla prossima apertura.
+   * barra laterale con "Riavvia Wisper Ufficio"; se nessuno lo preme il programma si riapre da solo quando è fermo
+   * (riavviaDaFermo), e comunque la versione nuova parte alla prossima apertura.
    */
   function mostraAggiornamento() {
     const a = S.aggiornamento;
@@ -859,31 +873,92 @@
     const pronto = a && a.stato === 'pronto';
     zona.classList.toggle('nascosto', !pronto);
     if (!pronto) return;
-    aggiungi(zona, [h('b', null, 'Versione ' + a.nuova + ' pronta'), h('span', null, 'Parte alla prossima apertura, o subito:'),
-      h('button', { type: 'button', class: 'btn giallo', onclick: riavvia }, 'Riavvia Wisper Ufficio')]);
+    // 13/11/2026 (Andrea: "il pc di mio padre no, anche se è stato aggiornato all'ultima versione"): la versione nuova era
+    // scaricata ma il programma aperto restava quello di prima. "Pronta" lo faceva sembrare già fatto: ora dice che si sta
+    // ancora usando la vecchia. Col menu chiuso il riquadro spariva del tutto: resta un pulsante tondo ("agg-corto").
+    aggiungi(zona, [h('b', null, 'Versione ' + a.nuova + ' scaricata'), h('span', null, 'Stai ancora usando la ' + (S.versione || 'vecchia') + '. Per passare alla nuova:'),
+      h('button', { type: 'button', class: 'btn giallo', 'data-azione': 'riavvia-lato', onclick: riavvia }, 'Riavvia Wisper Ufficio'),
+      h('button', { type: 'button', class: 'agg-corto', 'data-nome': 'Versione ' + a.nuova + ' scaricata: riavvia', 'aria-label': 'Riavvia Wisper Ufficio per usare la versione ' + a.nuova, onclick: riavvia }, icona('aggiorna', 20, 2.4))]);
+    riavviaDaFermo();
   }
 
   async function riavvia() {
+    ricordaDoveSono();
     await lavora('Riapro Wisper Ufficio', () => Api.post('/locale/riavvia'));
   }
 
+  /** Prima di un riavvio: la pagina in cui si è, per tornarci (vale due minuti). */
+  function ricordaDoveSono() {
+    try { localStorage.setItem('wisper-riparti', JSON.stringify({ da: location.hash || '', quando: Date.now() })); } catch (e) { /* si riparte dalla Casa */ }
+  }
+
+  /**
+   * 13/11/2026: con la versione nuova scaricata Wisper Ufficio si riapre da solo quando è fermo, così nessun computer
+   * resta alla versione di prima perché nessuno ha premuto Riavvia. Fermo vuol dire: nessun tasto, clic o rotella da tre
+   * minuti, nessuna finestra, pannello o operazione aperti, nessun campo col cursore, nessuna pagina col suo "Salva"
+   * (un preventivo che si sta scrivendo), niente visita guidata. Si torna alla stessa pagina.
+   */
+  const FERMO_DA_MS = 3 * 60 * 1000;
+  let ultimoGesto = Date.now();
+  ['keydown', 'pointerdown', 'wheel'].forEach(t => document.addEventListener(t, () => { ultimoGesto = Date.now(); }, true));
+  function fermo(adesso) {
+    if ((adesso || Date.now()) - ultimoGesto < FERMO_DA_MS) return false;
+    if ($('.velo') || $('.pannello') || $('.attesa') || $('.menu')) return false;
+    if (Visita.attiva || S.esempio) return false;
+    const el = document.activeElement;
+    if (el && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) return false;
+    if (Array.from(document.querySelectorAll('#principale button')).some(b => /^salva/i.test((b.textContent || '').trim()))) return false;
+    return true;
+  }
+  let timerRiavvio = null;
+  function riavviaDaFermo() {
+    if (timerRiavvio) return;
+    timerRiavvio = setInterval(() => {
+      const a = S.aggiornamento;
+      if (!a || a.stato !== 'pronto') { clearInterval(timerRiavvio); timerRiavvio = null; return; }
+      if (!fermo()) return;
+      clearInterval(timerRiavvio);
+      timerRiavvio = null;
+      ricordaDoveSono();
+      Api.post('/locale/riavvia').catch(() => null);
+    }, 20000);
+  }
+
   async function cercaAggiornamenti() {
-    const ris = await lavora('Cerco aggiornamenti', () => Api.post('/locale/aggiorna'));
+    const ris = await lavora('Controllo gli aggiornamenti', () => Api.post('/locale/aggiorna'));
     if (!ris) return;
     S.aggiornamento = ris.aggiornamento || S.aggiornamento;
     mostraAggiornamento();
-    if (S.aggiornamento) avviso(S.aggiornamento.stato === 'errore' ? S.aggiornamento.messaggio : (S.aggiornamento.messaggio || 'Hai l’ultima versione'), S.aggiornamento.stato === 'errore');
-    if (percorso() === 'amministrazione/app') ridisegna();
+    const a = S.aggiornamento;
+    if (a && a.stato === 'pronto') avviso('Versione ' + a.nuova + ' scaricata: riavvia Wisper Ufficio per usarla', false, null, { testo: 'Riavvia', fn: riavvia });
+    else if (a) avviso(a.stato === 'errore' ? a.messaggio : (a.messaggio || 'Hai l’ultima versione'), a.stato === 'errore');
+    if (percorso() === 'amministrazione/app' || percorso() === 'amministrazione') ridisegna();
   }
 
-  // Il programma lo dice da solo quando la versione nuova è pronta.
+  /**
+   * La versione di Wisper Ufficio col suo pulsante: "Controlla aggiornamenti", o "Riavvia adesso" quando la
+   * versione nuova è scaricata. In cima alle Impostazioni (13/11/2026, Andrea: "non c'è un tasto semplice e veloce nelle
+   * impostazioni per controllare se ci sono dei nuovi aggiornamenti") e in Aspetto.
+   */
+  function schedaVersione() {
+    const a = S.aggiornamento;
+    if (!S.versione) return null;
+    const pronto = a && a.stato === 'pronto';
+    return h('div', { class: 'scheda scheda-versione', 'data-scheda': 'versione' }, h('div', { class: 'voce-imp' },
+      h('span', { class: 'testi' }, h('b', null, 'Versione ' + S.versione), h('span', null, statoAggiornamenti())),
+      // Non gialla: il giallo del riavvio è già nel riquadro della barra laterale (un solo giallo per schermata).
+      pronto ? h('button', { type: 'button', class: 'btn', 'data-azione': 'riavvia', onclick: riavvia }, 'Riavvia adesso')
+        : a && a.attivi ? h('button', { type: 'button', class: 'btn', 'data-azione': 'controlla-aggiornamenti', onclick: cercaAggiornamenti }, 'Controlla aggiornamenti') : null));
+  }
+
+  // Il programma lo dice da solo quando la versione nuova è scaricata.
   if (window.chrome && window.chrome.webview) {
     window.chrome.webview.addEventListener('message', e => {
       const m = e.data || {};
       if (m.tipo !== 'aggiornamento') return;
       S.aggiornamento = Object.assign({}, S.aggiornamento || {}, { stato: 'pronto', nuova: m.versione });
       mostraAggiornamento();
-      avviso('È pronta la versione ' + m.versione + ' di Wisper Ufficio');
+      avviso('Versione ' + m.versione + ' scaricata: riavvia Wisper Ufficio per usarla', false, null, { testo: 'Riavvia', fn: riavvia });
     });
   }
 
@@ -1796,9 +1871,9 @@
     const voci = [
       scrive && mandabili.length ? { testo: 'Segna inviato senza email', fn: () => cambiaStato(mandabili, 'INVIATO') } : null,
       fattura && fatturabili.length ? { testo: 'Segna fatturato', fn: () => segnaFatturatiAMano(fatturabili) } : null,
-      // Elimina: il rapportino coi suoi lavori, solo se sono tutti da inviare e fuori dalle fatture.
-      scrive && daInviare.length === g.lavori.length && !g.lavori.some(l => l.fattura) ? '-' : null,
-      scrive && daInviare.length === g.lavori.length && !g.lavori.some(l => l.fattura) ? { testo: 'Elimina', fn: () => eliminaRapportino(g), pericolo: true } : null,
+      // Elimina: il rapportino coi suoi lavori, se nessuno è fatturato o in una fattura (dal 13/11/2026 anche con lavori inviati).
+      scrive && !g.lavori.some(RL.fermo) ? '-' : null,
+      scrive && !g.lavori.some(RL.fermo) ? { testo: 'Elimina', fn: () => eliminaRapportino(g), pericolo: true } : null,
     ].filter(Boolean);
     if (voci[0] === '-') voci.shift();
     const altro = voci.length ? h('button', { type: 'button', class: 'btn grande', 'aria-label': 'Altre azioni', title: 'Altre azioni', style: { width: '52px', padding: '0' } }, icona('altro', 20)) : null;
@@ -1842,6 +1917,7 @@
   async function cambiaStato(lista, st) {
     if (!lista.length) { avviso('Niente da cambiare', true); return false; }
     if ((st === 'INVIATO' || st === 'FATTURATO') && !puoMandare(lista)) return false;
+    if (st === 'INVIATO' && !(await confermaSenzaOre(lista.filter(r => RL.statoVisto(r.stato) !== 'INVIATO')))) return false;
     const ids = lista.map(r => r.id || r.idLocale);
     const fatto = await lavora('Aggiorno', async () => {
       const ris = await Rete.post('/server/stato', { ids, stato: st });
@@ -1913,14 +1989,23 @@
     ridisegna();
   }
 
-  /** "Riporta da inviare": un lavoro inviato torna modificabile (va mandato di nuovo). */
+  /** "Riporta da inviare": un lavoro mandato per sbaglio torna Da inviare senza cambiarlo (per cambiarlo basta Modifica). */
   async function riportaDaInviare(lista) {
-    const ok = await conferma('Riportare da inviare?', (lista.length === 1 ? 'Il lavoro torna modificabile' : 'I ' + lista.length + ' lavori tornano modificabili') +
-      ': dopo la correzione va mandato di nuovo al cliente.', 'Riporta da inviare');
+    const ok = await conferma('Riportare da inviare?', (lista.length === 1 ? 'Il lavoro torna Da inviare' : 'I ' + lista.length + ' lavori tornano Da inviare') +
+      ', come se non fosse partito: si manda di nuovo quando vuoi.', 'Riporta da inviare');
     if (ok) cambiaStato(lista, 'BOZZA');
   }
 
-  /** Elimina il rapportino coi suoi lavori (tutti da inviare): restano nell'archivio come annullati, Annulla li rimette. */
+  /**
+   * 13/11/2026 (Andrea): le indennità non vogliono le ore; ma prima di mandare al cliente un lavoro con un'indennità e
+   * senza ore si chiede conferma (un passaggio in più, solo in quel caso).
+   */
+  async function confermaSenzaOre(lista) {
+    const frase = RL.fraseSenzaOre(lista);
+    return !frase || conferma('Indennità senza ore', frase + ' Lo mando lo stesso?', 'Invia lo stesso');
+  }
+
+  /** Elimina il rapportino coi suoi lavori (nessuno fatturato): restano nell'archivio come annullati, Annulla li rimette. */
   async function eliminaRapportino(g) {
     const ok = await conferma('Eliminare il rapportino?', (g.lavori.length === 1 ? 'Il rapportino sparisce' : 'Il rapportino e i suoi ' + g.lavori.length + ' lavori spariscono') +
       ' dagli elenchi. Restano nell\'archivio, segnati come annullati.', 'Elimina', true);
@@ -1985,12 +2070,13 @@
    * N del gg/mm/aaaa"), il PDF (un rapportino: il rapportino coi suoi lavori; più rapportini: il riepilogo; dal 12/11/2026
    * sono lo stesso foglio, una riga per lavoro). A sinistra l'anteprima della pagina del destinatario scelto; a destra una scheda per destinatario.
    */
-  function preparaInvio(lista0) {
+  async function preparaInvio(lista0) {
     // In ordine di giorno, poi di rapportino e di posizione: i destinatari nell'ordine in cui compaiono i loro lavori.
     const lista = (lista0 || []).filter(Boolean).map((l, i) => ({ l, i })).sort((a, b) => String(a.l.data).localeCompare(String(b.l.data)) ||
       RL.giornataDi(a.l).localeCompare(RL.giornataDi(b.l)) || ((Number(a.l.posizione) || 1) - (Number(b.l.posizione) || 1)) || a.i - b.i).map(x => x.l);
     if (!lista.length) { avviso('Non c\'è niente da mandare', true); return; }
     if (!puoMandare(lista)) return;
+    if (!(await confermaSenzaOre(lista))) return;
     const imp = S.ana.impostazioni;
     const firmaEmail = imp.TECNICO || imp.RAGIONE_SOCIALE || '';
     let chiudi;
@@ -2184,21 +2270,18 @@
   }
 
   /**
-   * Un lavoro inviato, fatturato o dentro una fattura: si vede, non si cambia. Al salvataggio parte uguale (il server lo
-   * lascia com'è).
+   * Un lavoro fatturato o dentro una fattura: si vede, non si cambia. Al salvataggio parte uguale (il server lo lascia
+   * com'è). Dal 13/11/2026 il lavoro Inviato NON passa di qui: si cambia come gli altri e, se cambia, torna Da inviare.
    */
   function formaFerma(l, ctx) {
     const st = RL.statoVisto(l.stato);
-    const perche = l.fattura ? 'È in ' + (l.fattura.etichetta || 'una fattura') + ': non si cambia.'
-      : st === 'FATTURATO' ? 'Fatturato: non si cambia.' : 'Già inviato al cliente. Per correggerlo riportalo da inviare: dopo va mandato di nuovo.';
-    // 13/11/2026 (Andrea: "una volta inviati i rapportini non si possono più modificare o tirare indietro"): il pulsante
-    // sta qui, dove si prova a correggere, non solo nel menu ⋯ del rapportino.
+    const perche = l.fattura ? 'È in ' + (l.fattura.etichetta || 'una fattura') + ': non si cambia.' : 'Fatturato: non si cambia.';
+    // Il pulsante che lo sblocca sta qui, dove si prova a correggere (regola del 13/11/2026).
     const scrive = puo('rapportini', 2);
     let f;
     const sblocca = !ctx || !scrive ? null
       : l.fattura ? (l.fattura.stato === 'bozza' && puo('fatturazione') ? h('button', { type: 'button', class: 'btn piccolo', 'data-azione': 'apri-bozza-lavoro', onclick: () => { ctx.chiudi(); apriSuaFattura(l); } }, 'Apri la bozza') : null)
-      : st === 'INVIATO' ? h('button', { type: 'button', class: 'btn piccolo', 'data-azione': 'riporta-da-inviare', onclick: () => ctx.riporta(f, 'BOZZA') }, 'Riporta da inviare')
-      : st === 'FATTURATO' && puo('fatturazione', 2) && soldi() ? h('button', { type: 'button', class: 'btn piccolo', 'data-azione': 'non-ancora-fatturato', onclick: () => ctx.riporta(f, 'INVIATO') }, 'Non ancora fatturato')
+      : st === 'FATTURATO' && puo('fatturazione', 2) && soldi() ? h('button', { type: 'button', class: 'btn piccolo', 'data-azione': 'non-ancora-fatturato', onclick: () => ctx.riporta(f) }, 'Non ancora fatturato')
       : null;
     const el = h('div', { class: 'lavoro-fermo' },
       h('div', { class: 'banda calma' }, icona('avviso', 20), h('span', { class: 'spazio' }, perche), sblocca),
@@ -2691,7 +2774,8 @@
           aperti: m.idCommessa ? progettiDellaCommessa().length : 0, puoCreare: puo('progetti', 2), titolare: titolare() });
         if (manca) e.progetto = manca;
       }
-      if (dati.oreLavoro + dati.oreExtra + dati.oreViaggio <= 0) e.oreLavoro = 'Mancano le ore';
+      // 13/11/2026 (Andrea): con un'indennità le ore non sono obbligatorie (prima dell'invio si chiede conferma).
+      if (dati.oreLavoro + dati.oreExtra + dati.oreViaggio <= 0 && !dati.indennita.length) e.oreLavoro = 'Mancano le ore';
       ['km', 'tariffa', 'spese'].forEach(k => {
         const t = v[k].value.trim();
         if (t && C.numONull(t) === null) e[k] = 'Non è un numero';
@@ -2766,16 +2850,14 @@
     const ctx = { data: () => dataInput.value || G.data, cambiato: () => { if (pronto) { disegnaElenco(); disegnaRiassunto(); } },
       kmPrima: idLocale => { const i = forme.findIndex(f => f.lavoro && f.lavoro.idLocale === idLocale); return (i < 0 ? forme : forme.slice(0, i)).some(f => C.num(f.riassunto().km) > 0); } };
     /**
-     * 13/11/2026: un lavoro fermo si sblocca da qui. "Riporta da inviare" (BOZZA) lo rende da scrivere al suo posto, senza
-     * chiudere la finestra né perdere quello che si è scritto negli altri lavori; "Non ancora fatturato" (INVIATO) toglie
-     * il segno messo a mano.
+     * Un lavoro fatturato a mano si sblocca da qui: "Non ancora fatturato" toglie il segno e il lavoro torna Inviato, da
+     * scrivere al suo posto, senza chiudere la finestra né perdere quello che si è scritto negli altri lavori.
      */
     ctx.chiudi = () => chiudi();
-    ctx.riporta = async (f, st) => {
+    ctx.riporta = async f => {
       const l = f.lavoro;
-      const ok = st === 'BOZZA'
-        ? await conferma('Riportare da inviare?', 'Il lavoro per ' + l.cliente + ' torna modificabile: dopo la correzione va mandato di nuovo al cliente.', 'Riporta da inviare')
-        : await conferma('Non ancora fatturato?', 'Il lavoro per ' + l.cliente + ' torna Inviato: il segno di fatturato era stato messo a mano.', 'Non ancora fatturato');
+      const st = 'INVIATO';
+      const ok = await conferma('Non ancora fatturato?', 'Il lavoro per ' + l.cliente + ' torna Inviato: il segno di fatturato era stato messo a mano.', 'Non ancora fatturato');
       if (!ok) return;
       const ris = await lavora('Aggiorno', () => Rete.post('/server/stato', { ids: [l.id || l.idLocale], stato: st }));
       if (!ris) return;
@@ -2789,7 +2871,7 @@
       disegnaRiassunto();
       // Dietro la finestra l'elenco e il pannello mostrano già lo stato nuovo.
       ridisegna();
-      avviso(st === 'BOZZA' ? 'Riportato da inviare: ora si può cambiare' : 'Non più fatturato: ora è Inviato');
+      avviso('Non più fatturato: ora si può cambiare');
       forme[i].fuoco();
     };
     if (g0) g0.lavori.forEach(l => forme.push(RL.fermo(l) ? formaFerma(l, ctx) : formaLavoro(l, null, ctx)));
@@ -2798,7 +2880,8 @@
       const i = forme.findIndex(f => chiaveLavoro(f.lavoro) === chiaveLavoro(esistente));
       scelto = i >= 0 ? i : Math.max(0, forme.findIndex(f => !f.fermo));
     }
-    // La data vale per tutti i lavori: con un lavoro già inviato o fatturato non si cambia più.
+    // La data vale per tutti i lavori: con un lavoro fatturato o in una fattura non si cambia più (con uno inviato sì:
+    // cambia anche per lui, e torna da inviare).
     const dataFissa = () => forme.some(f => f.fermo);
 
     function disegnaData() {
@@ -2848,8 +2931,11 @@
     function mostraLavoro() {
       const f = forme[scelto];
       disegnaDestra();
+      // Un lavoro già inviato si cambia come gli altri: lo dice qui, una volta, che cosa succede se lo si cambia.
+      const inviato = !f.fermo && RL.statoVisto(f.lavoro.stato) === 'INVIATO';
       aggiungi(svuota(zonaLavoro), [h('div', { class: 'testa-lavoro' },
         h('h3', null, 'Lavoro ' + (scelto + 1) + (forme.length > 1 ? ' di ' + forme.length : '')),
+        inviato ? h('span', { class: 'nota-inviato', 'data-nota': 'inviato' }, 'Inviato · se lo cambi torna da inviare') : null,
         !f.fermo && forme.length > 1 ? h('button', { type: 'button', class: 'btn collegamento rosso', 'data-azione': 'togli-lavoro', onclick: () => togli(scelto) }, 'Togli questo lavoro') : null),
       f.el]);
     }
@@ -2904,6 +2990,8 @@
         return;
       }
       const corpo = { idLocale: G.idLocale || undefined, id: G.id || undefined, data: dataInput.value, tecnico: G.tecnico, lavori: forme.map(f => f.leggi()) };
+      // 13/11/2026: i lavori Inviati di prima, per dire dopo quali il server ha riportato Da inviare.
+      const prima = forme.map(f => f.lavoro).filter(Boolean);
       const nuovaAnagrafica = corpo.lavori.some(l => !l.idCliente || (l.commessa && !l.idCommessa) || !!l.progettoNuovo);
       salvando = true;
       let lavoroSbagliato = 0;
@@ -2922,7 +3010,10 @@
       }
       chiudi();
       const lavori = (g && g.lavori) || [];
-      avviso('Salvato: ' + g.id + ' · ' + RL.nLavori(lavori.length) + (soldi() ? ' · ' + C.euro(g.totale) : ''));
+      const tornati = RL.tornatiDaInviare(prima, lavori, chiaveLavoro);
+      avviso('Salvato: ' + g.id + ' · ' + RL.nLavori(lavori.length) + (soldi() ? ' · ' + C.euro(g.totale) : '') +
+        (tornati.length ? ' · ' + (tornati.length === 1 ? (lavori.length === 1 ? 'torna da inviare' : 'il lavoro per ' + tornati[0].cliente + ' torna da inviare') : tornati.length + ' lavori tornano da inviare') : ''),
+      false, null, tornati.length ? { testo: 'Invia di nuovo', fn: () => preparaInvio(tornati) } : null);
       // Fase 5: il lavoro del ticket chiede "Il lavoro è finito?" (il ticket si rilegge col lavoro nuovo).
       const delTicket = !g0 && p.idTicket ? lavori.find(l => String(l.idTicket) === String(p.idTicket)) : null;
       if (delTicket) { Ticket.daRileggere(); Ticket.lavoroFinito(delTicket); if (W.percorso().indexOf('ticket') === 0) { ridisegna(); if (Ticket.M.tk) Ticket.apriPannello(delTicket.idTicket); return; } }
@@ -2983,7 +3074,7 @@
     puo, soldi, perm, cliente, commessa, utente, clientiAttivi, attivi, somma, nRapportini, dataBreve, meseMinuscolo,
     mostra, ridisegna, disegnaPagina, vai, vaiA, vaiARapportini, ricaricaAnagrafiche, caricaDashboard, accogli,
     riquadro, apriPannello, moduloRapportino, preparaInvio, cambiaStato, tabellaRapportini, apriFile, emailFresca,
-    iniziaVisita, cercaAggiornamenti, riavvia, statoAggiornamenti, mostraLicenza, esci, filtriCommesse, titolare,
+    iniziaVisita, cercaAggiornamenti, riavvia, statoAggiornamenti, schedaVersione, mostraLicenza, esci, filtriCommesse, titolare,
     // fase 2
     senzaPermesso, nomeFile, prossimoCodiceCommessa, attivitaLette, scriviConConferma,
     // fase 3
@@ -3118,9 +3209,9 @@
   function statoAggiornamenti() {
     const a = S.aggiornamento;
     if (!a || !a.attivi) return 'Wisper Ufficio';
-    if (a.stato === 'pronto') return 'La ' + a.nuova + ' è pronta: parte alla prossima apertura';
+    if (a.stato === 'pronto') return 'La ' + a.nuova + ' è scaricata, ma stai ancora usando la ' + S.versione + ': riavvia per passare alla nuova';
     if (a.stato === 'errore') return a.messaggio;
-    return 'Si aggiorna da solo' + (a.controllato ? ' · controllato alle ' + a.controllato : '');
+    return (/^Hai l.ultima versione/.test(a.messaggio || '') ? 'Hai l’ultima versione' : 'Si aggiorna da solo') + (a.controllato ? ' · controllato alle ' + a.controllato : '');
   }
 
   async function mostraLicenza() {

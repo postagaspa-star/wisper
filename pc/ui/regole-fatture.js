@@ -85,7 +85,7 @@
       bolloSoglia: vuoto(imp.BOLLO_SOGLIA) ? 77.47 : numero(imp.BOLLO_SOGLIA),
       bolloImporto: numero(k.bollo) > 0 ? numero(k.bollo) : (vuoto(imp.BOLLO_IMPORTO) ? 2 : numero(imp.BOLLO_IMPORTO)),
       bolloRivalsa: fattura.bolloRivalsa !== false,
-      righe: (righe || fattura.righe || []).filter(r => r.tipo !== 'bollo').map(r => ({ tipo: r.tipo, quantita: r.quantita, prezzo: r.prezzo, importo: r.importoFisso, tributoCliente: !!r.tributoCliente })),
+      righe: (righe || fattura.righe || []).filter(r => r.tipo !== 'bollo').map(r => ({ tipo: r.tipo, quantita: r.quantita, prezzo: r.prezzo, sconto: r.sconto, importo: r.importoFisso, tributoCliente: !!r.tributoCliente })),
     };
   }
 

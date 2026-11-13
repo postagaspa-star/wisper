@@ -325,7 +325,7 @@ fun SchermataRapportini(
         val n = inviatiScelti.size
         FoglioConferma(
             titolo = if (n == 1) "Riportare da inviare il lavoro inviato?" else "Riportare da inviare $n lavori inviati?",
-            testo = "Tornano da cambiare e da mandare di nuovo al cliente.",
+            testo = "Come se non fossero partiti: si mandano di nuovo quando vuoi.",
             azione = "Riporta da inviare",
             onConferma = {
                 chiediRiporta = false
@@ -343,7 +343,11 @@ fun SchermataRapportini(
         val parola = parolaStato(st, n)
         FoglioConferma(
             titolo = "Segnare ${Testo.quanti(n, "lavoro", "lavori")} come $parola?",
-            testo = if (costi) "${Numeri.euro(quali.sumOf { it.conto?.totale ?: 0.0 })} in tutto." else null,
+            // 13/11/2026: un'indennità senza ore si segna inviata sapendolo.
+            testo = listOfNotNull(
+                if (costi) "${Numeri.euro(quali.sumOf { it.conto?.totale ?: 0.0 })} in tutto." else null,
+                if (st == Stato.INVIATO) Giornate.fraseSenzaOre(quali.map { it.rapportino }) else null,
+            ).joinToString(" ").ifBlank { null },
             azione = "Segna $parola",
             onConferma = {
                 daSegnare = null

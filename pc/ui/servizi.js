@@ -2,7 +2,7 @@
  * Wisper Ufficio: Servizi (docs/gestionale/servizi.md §1-§2). È il listino dei preventivi della fase 2 coi campi
  * dell'anagrafica prodotti/servizi di Flextaxa, con la sua voce nel menu laterale subito dopo Preventivi.
  *
- *  - l'elenco con Tutti, Indennità, Servizi (e Prodotti se ce ne sono), la ricerca, gli archiviati;
+ *  - l'elenco con Tutti, Servizi e Prodotti (dal 13/11/2026 senza il segmento Indennità), la ricerca, gli archiviati;
  *  - la scheda del servizio coi campi della foto di Andrea: Descrizione, Prezzo di vendita, Aliquota IVA, poi i
  *    Dettagli (Codice articolo, Costo di acquisto, Aliquota IVA acquisto, Tipo, Unità di misura, Fornitore, Tag,
  *    Immagine) e le Note personali;
@@ -51,12 +51,12 @@
       const f = M.filtri;
       const n = RS.contaServizi((M.lista || []).filter(s => s.attivo !== false));
       const area = h('div', { class: 'sezione' });
-      const nomi = { tutti: 'Tutti', indennita: 'Indennità', servizi: 'Servizi', prodotti: 'Prodotti' };
-      if (!n[f.segmento] && f.segmento !== 'tutti') f.segmento = 'tutti';
+      const nomi = { tutti: 'Tutti', servizi: 'Servizi', prodotti: 'Prodotti' };
+      if (['tutti', 'servizi', 'prodotti'].indexOf(f.segmento) < 0) f.segmento = 'tutti';
       aggiungi(pagina, [
         h('div', { class: 'testata alta' },
-          h('div', { class: 'titoli' }, h('span', { class: 'dove' }, 'Servizi e prezzi'), h('h1', null, 'Servizi')),
-          scrive() ? h('button', { type: 'button', class: 'btn giallo', 'data-visita': 'nuovo-servizio', onclick: () => modulo(null) }, icona('piu', 18, 2.6), 'Nuovo servizio') : null),
+          h('div', { class: 'titoli' }, h('span', { class: 'dove' }, 'Il listino dello studio'), h('h1', null, 'Servizi e prodotti')),
+          scrive() ? h('button', { type: 'button', class: 'btn giallo', 'data-visita': 'nuovo-servizio', onclick: () => modulo(null) }, icona('piu', 18, 2.6), 'Nuovo') : null),
         h('div', { class: 'filtri' },
           segmenti(Object.keys(n).map(k => [k, nomi[k] + ' · ' + n[k]]), f.segmento, x => { f.segmento = x; W.disegnaPagina(); }),
           cerca(f.testo, 'Codice, descrizione, tag', x => { f.testo = x; tabella(area); }),
@@ -72,7 +72,7 @@
       const attivi = tutti.filter(s => s.attivo !== false);
       const archiviati = M.archiviati ? tutti.filter(s => s.attivo === false) : [];
       if (!attivi.length && !archiviati.length) {
-        aggiungi(area, [h('p', { class: 'vuoto' }, (M.lista || []).length ? 'Nessun servizio con questi filtri.' : 'Ancora nessun servizio.')]);
+        aggiungi(area, [h('p', { class: 'vuoto' }, (M.lista || []).length ? 'Niente con questi filtri.' : 'Ancora nessun servizio o prodotto.')]);
         return;
       }
       const conSoldi = soldi();
@@ -227,7 +227,7 @@
         W.disegnaPagina();
       };
       chiudi = finestra({
-        titolo: s ? s.nome : 'Nuovo servizio', corpo: campi.el, larghezza: 'media',
+        titolo: s ? s.nome : 'Nuovo servizio o prodotto', corpo: campi.el, larghezza: 'media',
         pulsanti: [s ? h('button', { type: 'button', class: 'btn testo grande pericolo', onclick: () => archivia(s.attivo !== false) }, s.attivo !== false ? 'Archivia' : 'Ripristina') : null,
           'spazio', h('button', { type: 'button', class: 'btn testo grande', onclick: () => chiudi() }, 'Annulla'),
           h('button', { type: 'button', class: 'btn giallo grande', onclick: salva }, 'Salva')].filter(Boolean),
@@ -246,19 +246,17 @@
       return new Promise(risolvi => {
         let detto = false;
         const rispondi = v => { if (!detto) { detto = true; risolvi(v); } };
-        const x0 = dentro ? Object.assign({}, dentro) : (lista.length && RS.eIndennita(lista[0]) ? RS.indennitaDaServizio(lista[0]) : RS.indennitaVuota());
+        // 13/11/2026: un elenco solo, senza "prima le indennità": si parte da niente e si sceglie.
+        const x0 = dentro ? Object.assign({}, dentro) : RS.indennitaVuota();
         const campi = campiServizio(x0, { conQuantita: true });
-        const indennita = lista.filter(RS.eIndennita);
-        const altri = lista.filter(s => !RS.eIndennita(s));
         const etichetta = s => [s.codice, s.nome].filter(Boolean).join(' · ') + (soldi() && s.prezzo !== null && s.prezzo !== undefined ? ' · ' + C.euro(s.prezzo) : '');
-        const scelta = h('select', { class: 'scelta', 'aria-label': 'Dal servizio', 'data-visita': 'scelta-servizio', onchange: e => {
+        const scelta = h('select', { class: 'scelta', 'aria-label': 'Da Servizi e prodotti', 'data-visita': 'scelta-servizio', onchange: e => {
           const s = lista.find(v => String(v.id) === e.target.value);
           campi.riempi(s ? Object.assign(RS.indennitaDaServizio(s), { quantita: campi.leggi().quantita || 1 }) : RS.indennitaVuota());
         } },
         h('option', { value: '' }, 'Nessuno, la scrivo io'),
-        indennita.length ? h('optgroup', { label: 'Indennità' }, indennita.map(s => h('option', { value: s.id, selected: String(x0.idServizio) === String(s.id) }, etichetta(s)))) : null,
-        altri.length ? h('optgroup', { label: 'Altri servizi' }, altri.map(s => h('option', { value: s.id, selected: String(x0.idServizio) === String(s.id) }, etichetta(s)))) : null);
-        const corpo = h('div', { class: 'fila' }, campo('Dal servizio', scelta), campi.el);
+        lista.map(s => h('option', { value: s.id, selected: String(x0.idServizio) === String(s.id) }, etichetta(s))));
+        const corpo = h('div', { class: 'fila' }, campo('Da Servizi e prodotti', scelta), campi.el);
         let chiudi;
         const salva = () => {
           const x = campi.leggi();
@@ -278,6 +276,36 @@
       });
     }
 
-    return { vista, M, leggi, finestraIndennita, campiServizio };
+    /**
+     * 13/11/2026: la scelta da Servizi e prodotti sotto un pulsante (per una riga della bozza della fattura): la ricerca
+     * per codice e descrizione, un clic sceglie. alScelto(servizio).
+     */
+    async function scegli(ancora, alScelto) {
+      B.chiudiMenu();
+      const tutti = RS.perIndennita(await attivi());
+      const lista = h('div', { class: 'lista-listino' });
+      const input = h('input', { type: 'search', placeholder: 'Codice o descrizione', 'aria-label': 'Cerca in Servizi e prodotti' });
+      const m = h('div', { class: 'menu listino-menu', role: 'dialog', 'aria-label': 'Servizi e prodotti' }, h('label', { class: 'cerca piccola' }, icona('cerca', 16), input), lista);
+      const chiudi = () => { m.remove(); document.removeEventListener('mousedown', fuori, true); document.removeEventListener('keydown', esc, true); };
+      const fuori = e => { if (!m.contains(e.target) && e.target !== ancora) chiudi(); };
+      const esc = e => { if (e.key === 'Escape') { e.stopPropagation(); chiudi(); } };
+      const disegna = () => {
+        const voci = RS.filtraServizi(tutti, { testo: input.value });
+        aggiungi(svuota(lista), voci.length ? voci.map(s => h('button', { type: 'button', role: 'menuitem', onclick: () => { chiudi(); alScelto(s); } },
+          h('span', { class: 'nome-listino' }, [s.codice, s.nome].filter(Boolean).join(' · ')),
+          h('span', { class: 'piccolo' }, [RS.unitaDi(s), soldi() ? (s.prezzo === null || s.prezzo === undefined ? 'senza prezzo' : C.euro(s.prezzo)) : ''].filter(Boolean).join(' · ')))) :
+          [h('div', { class: 'vuoto piccolo' }, tutti.length ? 'Niente con questo nome' : 'Ancora nessun servizio o prodotto')]);
+      };
+      input.addEventListener('input', disegna);
+      input.addEventListener('keydown', e => { if (e.key === 'Enter') { const p = lista.querySelector('button'); if (p) p.click(); } });
+      disegna();
+      document.body.append(m);
+      const r = ancora.getBoundingClientRect();
+      m.style.left = Math.max(12, Math.min(r.left, window.innerWidth - m.offsetWidth - 12)) + 'px';
+      m.style.top = (r.bottom + 6 + m.offsetHeight < window.innerHeight ? r.bottom + 6 : Math.max(8, r.top - m.offsetHeight - 6)) + 'px';
+      setTimeout(() => { document.addEventListener('mousedown', fuori, true); document.addEventListener('keydown', esc, true); input.focus(); }, 0);
+    }
+
+    return { vista, M, leggi, finestraIndennita, campiServizio, scegli };
   };
 }(typeof self !== 'undefined' ? self : this));

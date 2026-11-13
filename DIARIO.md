@@ -11,6 +11,7 @@ mai dati veri di clienti.
 
 | Data | Versione | In breve |
 |------|----------|----------|
+| 13/11/2026 | 1.4.2, server 0.15.1 | [Un rapportino inviato si cambia liberamente, gli aggiornamenti arrivano, Servizi e prodotti, la parcella pro-forma](#v1-4-2) |
 | 13/11/2026 | 1.4.1 | [Un rapportino inviato si riporta da inviare da dove lo si corregge](#v1-4-1) |
 | 12/11/2026 | 1.4.0, server 0.15.0 | [Servizi, indennità nei rapportini, preventivi e parcelle col modello di Manuel](#v1-4-0) |
 | 12/11/2026 | 1.3.3, server 0.14.0 | [Il rapportino nel formato del riepilogo, i km scritti da soli](#v1-3-3) |
@@ -49,6 +50,101 @@ mai dati veri di clienti.
 | 26/09–14/10/2026 | 0.1 | [Un rapportino confermato non si perde più](#coda) |
 | 7–9/08/2026 | 0.1.0 | [Hackathon NGN Hacks: la versione a voce, senza mani](#v0-1-0) |
 | marzo–giugno 2026 | prima del repository | [Le prime versioni](#prima) |
+
+---
+
+<a id="v1-4-2"></a>
+## 13 novembre 2026 · 1.4.2 · server 0.15.1 · Un rapportino inviato si cambia liberamente, gli aggiornamenti arrivano, Servizi e prodotti, la parcella pro-forma
+
+**Perché.** Andrea, lo stesso giorno della 1.4.1: "se tu invii un rapportino, anche dopo averlo inviato devi poterlo
+modificare liberamente, e nel caso tu lo faccia poi il sistema te lo deve segnare come da Inviar. Questo perché se tu
+l'hai inviato per sbaglio, devi poterlo modificare e reinviare." Il pulsante "Riporta da inviare" della 1.4.1 era un
+passo in più, da cercare. Poi: "non c'è un tasto semplice e veloce nelle impostazioni per controllare se ci sono dei
+nuovi aggiornamenti, e [...] da telefono non viene nemmeno la notifica di aggiornamento, e quindi i telefoni restano
+fermi"; e "il tasto per segnare il rapportino "da inviare" io lo vedo, ma il pc di mio padre no, anche se è stato
+aggiornato all'ultima versione": la versione nuova era scaricata, ma il programma aperto era ancora quello di prima,
+e niente lo diceva chiaro. Sulle indennità: "non c'è bisogno di segnare le ore (quindi non devono essere
+obbligatorie), ma se non sono inserite quando viene cliccato il bottone per inviare il rapportino deve apparire un
+secondo passaggio che chiede conferma". E, col modello della parcella di Manuel: "nei servizi devono essere chiamati
+Servizi e Prodotti, e non ci deve essere la distinzione tra servizi ed indennità; [...] durante la bozza della fattura
+non c'è la possibilità di metterla come parcella pro-forma (che deve avere lo stesso formato di preventivo e
+parcella), ed inoltre anche se viene segnato che c'è la ritenuta d'acconto il sistema non la considera; [...] non
+vengono mostrati i codici dei servizi; parcella, parcella pro-forma e fattura devono avere tutte quest'impostazione".
+
+**Cosa cambia.**
+
+- **Un lavoro inviato si cambia come uno da inviare.** Aprendo un rapportino inviato i campi sono tutti da scrivere,
+  con una riga sola in cima al lavoro: "Inviato · se lo cambi torna da inviare". Salvando, il server guarda lavoro
+  per lavoro: quello cambiato torna **Da inviare**, quelli non toccati restano Inviati. Il computer lo dice ("il
+  lavoro per Rossi Impianti torna da inviare") con **Invia di nuovo**; il telefono scrive "Era già inviato: adesso
+  torna da inviare" sopra Invia ai clienti. Restano fermi solo i lavori fatturati o dentro una fattura. "Riporta da
+  inviare" resta nel pannello e nella barra dei rapportini scelti, per chi vuole solo segnarlo.
+- **Indennità senza ore.** Un lavoro con almeno un'indennità si salva anche senza ore. Quando lo si manda al cliente
+  (Invia ai clienti, o Segna inviati) prima compare **Indennità senza ore**: "Nel lavoro per Mario Bianchi c'è
+  un'indennità ma non sono segnate ore. Lo mando lo stesso?", con **Invia lo stesso** e Annulla.
+- **Aggiornamenti sul computer.** In cima alle Impostazioni c'è la scheda **Versione**, con **Controlla
+  aggiornamenti**. Quando la versione nuova è scaricata lo dice senza giri: "La 1.4.3 è scaricata, ma stai ancora
+  usando la 1.4.2: riavvia per passare alla nuova", con **Riavvia adesso**; lo stesso nel riquadro giallo del menu
+  laterale (un pulsante tondo quando il menu è richiuso). E se il programma resta fermo tre minuti, senza finestre
+  aperte né niente da salvare, si riavvia da solo e torna alla pagina in cui era. Era questo il computer di Manuel:
+  aggiornato sul disco, vecchio sullo schermo.
+- **Aggiornamenti sul telefono.** La stessa scheda **Versione** in cima alle Impostazioni, con **Controlla
+  aggiornamenti** e, quando c'è, **Installa la 1.4.3**. Il controllo ora si fa anche ad app chiusa, ogni sei ore;
+  quando la versione è scaricata arriva la notifica "Versione nuova di Wisper" (toccarla la installa), e dopo "Wisper
+  aggiornato". Se l'app resta dietro per un minuto senza un rapportino a metà, si installa da sola. La prima volta
+  Android chiede, una volta sola, il permesso di installare app da Wisper.
+- **Servizi e prodotti.** La voce del menu e la pagina si chiamano così, sul computer e sul telefono. L'elenco è uno
+  solo: nella finestra dell'indennità non ci sono più i due gruppi "Indennità" e "Altri servizi", si sceglie **Da
+  Servizi e prodotti** fra tutti, nell'ordine del listino.
+- **La bozza della fattura.** Ogni riga ha il suo **Codice** e lo **Sconto %**; **Da Servizi e prodotti** aggiunge
+  una riga già scritta (codice, descrizione, unità, prezzo). Accanto a Passa al programma c'è **Parcella pro-forma**
+  (sul telefono sotto i conti): salva la bozza e prepara il PDF. Lo stesso pulsante è nel pannello di una fattura
+  passata al programma; una fattura emessa ha in vista **Parcella in PDF** (o Fattura, o Nota di credito). Prima
+  stavano tutti nel menu ⋯. "Pre-parcella" si chiama ovunque **Parcella pro-forma**.
+- **La stessa veste per tutti.** Preventivo, parcella pro-forma, parcella e fattura escono dalla stessa pagina del
+  modello: mittente e Spett.le, la tabella con Codice, Descrizione, Q.tà, U.M., Unit. €, Sconto, IVA e Totale €, il
+  pagamento, i totali con rivalsa e ritenuta d'acconto, l'importo dovuto.
+- **La ritenuta d'acconto.** La bozza decideva se c'era la ritenuta nel momento in cui nasceva, guardando il cliente
+  com'era allora. Segnando dopo il cliente come sostituto d'imposta (o togliendo il segno), le sue bozze restavano
+  com'erano: è il caso che non veniva considerato. Ora il server (0.15.1) porta la scelta nelle bozze del cliente e
+  rifà i conti. Sul computer, i conti a schermo della bozza tengono conto dello sconto di riga.
+- **Sul telefono, un servizio di prima della 1.4.0** (senza unità di misura) scelto come indennità fermava il
+  pulsante giallo chiedendo l'unità, che sta in fondo alla pagina: ora prende "A corpo" o "Ore" come sul computer.
+
+<img src="docs/diario/2026-11-13-inviato-modifica-computer.png" width="620" alt="Un lavoro inviato dentro la finestra del rapportino: i campi si scrivono, in cima la riga Inviato, se lo cambi torna da inviare"> <img src="docs/diario/2026-11-13-inviato-modifica-telefono.png" width="240" alt="Lo stesso sul telefono">
+
+<img src="docs/diario/2026-11-13-da-rimandare-computer.png" width="620" alt="Dopo il salvataggio: il lavoro cambiato è da inviare, gli altri due restano inviati">
+
+<img src="docs/diario/2026-11-13-indennita-senza-ore-computer.png" width="620" alt="La conferma Indennità senza ore prima dell'invio, sul computer"> <img src="docs/diario/2026-11-13-indennita-senza-ore-telefono.png" width="240" alt="La stessa conferma sul telefono">
+
+<img src="docs/diario/2026-11-13-versione-computer.png" width="620" alt="La scheda Versione in cima alle Impostazioni e il riquadro del menu, con una versione scaricata"> <img src="docs/diario/2026-11-13-versione-telefono.png" width="240" alt="La scheda Versione sul telefono, con Installa">
+
+<img src="docs/diario/2026-11-13-servizi-prodotti-computer.png" width="620" alt="La pagina Servizi e prodotti">
+
+<img src="docs/diario/2026-11-13-bozza-codici-computer.png" width="620" alt="La bozza della fattura: il codice e lo sconto delle righe, Da Servizi e prodotti, Parcella pro-forma accanto a Passa al programma"> <img src="docs/diario/2026-11-13-pro-forma-telefono.png" width="240" alt="La bozza sul telefono, con Parcella pro-forma sotto i conti">
+
+<img src="docs/diario/2026-11-13-parcella-pro-forma-pdf.png" width="240" alt="Il PDF della parcella pro-forma aperto dal telefono, con la veste del modello">
+
+**Prove.** Server: 696 prove, con la nuova sulla ritenuta portata nelle bozze. Computer: 369 prove dei conti e
+delle regole; dieci giri cliccati, quello dei rapportini con 18 passi (il lavoro inviato cambiato e tornato da
+inviare, gli altri rimasti inviati; il rapportino con la sola indennità salvato senza ore e la conferma prima
+dell'invio). Telefono: 463 prove; sull'emulatore, contro un server di prova: rapportino con la sola indennità
+salvato, conferma all'invio, email partita, rapportino riaperto, cambiato e tornato da inviare; riga della bozza
+scelta da Servizi e prodotti con lo sconto, parcella pro-forma aperta in PDF. L'aggiornamento del telefono è stato
+provato dall'inizio alla fine sull'emulatore con un elenco firmato di prova: scaricata, notifica, permesso di
+Android la prima volta, installata, "Wisper aggiornato", e la seconda senza chiedere niente.
+
+**Non provato.** I telefoni veri di Manuel e Andrea e il computer di Manuel. Il caso preciso della ritenuta che ha
+visto Manuel non l'ho potuto guardare sui dati veri: ho corretto quello che ho trovato (il cliente segnato dopo la
+bozza).
+
+**Da fare una volta sola.** I telefoni fermi a una versione di prima non hanno ancora il controllo ad app chiusa: la
+1.4.2 va presa a mano (Menu › Impostazioni › Aspetto › Versione › Controlla, poi Installa). Alla prima installazione
+da sola Android chiede il permesso "Installa app sconosciute" per Wisper: si dà una volta. Il computer di Manuel va
+chiuso e riaperto una volta (o Riavvia Wisper Ufficio nel riquadro giallo): dalla 1.4.2 lo fa da solo.
+
+**Versione:** [v1.4.2](https://github.com/postagaspa-star/wisper/releases/tag/v1.4.2) (telefono codice 20, computer
+1.4.2), server 0.15.1 sul NAS.
 
 ---
 

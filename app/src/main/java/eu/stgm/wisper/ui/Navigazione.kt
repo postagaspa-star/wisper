@@ -73,7 +73,7 @@ enum class Sezione(val nome: String, val fondo: Long, val tratto: Long, disegno:
     PREVENTIVI("Preventivi", 0xFFECE7FF, 0xFF5925DC, "M7 3h7l5 5v13H7zM14 3v5h5M10 13h6M10 17h4", Moduli.PREVENTIVI),
     // 1.4.0 (servizi.md §1): i Servizi subito dopo Preventivi; un'etichetta del prezzo, fucsia (un colore che il menu non aveva).
     // Non e' un modulo del server: si vede con Preventivi, Rapportini o Fatture ([accesa]).
-    SERVIZI("Servizi", 0xFFFBE8FF, 0xFF9F1AB1, "M4 4h7.2l9.3 9.3-7.2 7.2L4 11.2zM8.5 8.5h.01", Moduli.SERVIZI),
+    SERVIZI("Servizi e prodotti", 0xFFFBE8FF, 0xFF9F1AB1, "M4 4h7.2l9.3 9.3-7.2 7.2L4 11.2zM8.5 8.5h.01", Moduli.SERVIZI),
     ATTIVITA("Calendario", 0xFFDCE8FF, 0xFF1849A9, "M4 6h16v14H4zM4 10h16M8 3v4M16 3v4", Moduli.ATTIVITA),
     // 07/11/2026 (richiesta del titolare): le Ore non ci sono più, la voce è solo "Rapportini".
     RAPPORTINI("Rapportini", 0xFFFFF0C2, 0xFF7A5600, "M9 3h6v3H9zM7 4.5H5V21h14V4.5h-2M9 14l2 2 4-4", Moduli.RAPPORTINI),
