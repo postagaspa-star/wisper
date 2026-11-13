@@ -128,7 +128,9 @@ fun SchermataRapportini(
     var daSegnare by remember { mutableStateOf<Stato?>(null) }
     BackHandler(enabled = scelti.isNotEmpty()) { scelti = emptyList() }
 
+    var chiediRiporta by remember { mutableStateOf(false) }
     val selezionati = lista.filter { it.rapportino.idLocale in scelti }
+    val inviatiScelti = selezionati.filter { it.rapportino.stato == Stato.INVIATO }
     // 07/11/2026: si scelgono i rapportini interi, mai un lavoro da solo; la barra li conta.
     val rapportiniScelti = Giornate.raggruppa(selezionati) { it.rapportino }.size
     val conFiltri = filtro.quali != Quali.TUTTI || filtro.testo.isNotBlank() || filtro.idCliente != null || filtro.idCommessa != null || filtro.a != null
@@ -314,7 +316,25 @@ fun SchermataRapportini(
                 if (daCambiare(selezionati, Stato.FATTURATO).isEmpty()) avvisi.mostra("Niente da cambiare: sono già fatturati")
                 else daSegnare = Stato.FATTURATO
             })
+            // 13/11/2026: gli inviati scelti tornano da inviare anche da qui, tutti insieme.
+            if (inviatiScelti.isNotEmpty()) VoceMenu(Icone.indietroStato, "Riporta da inviare", { foglioAzioni = false; chiediRiporta = true })
         }
+    }
+
+    if (chiediRiporta) {
+        val n = inviatiScelti.size
+        FoglioConferma(
+            titolo = if (n == 1) "Riportare da inviare il lavoro inviato?" else "Riportare da inviare $n lavori inviati?",
+            testo = "Tornano da cambiare e da mandare di nuovo al cliente.",
+            azione = "Riporta da inviare",
+            onConferma = {
+                chiediRiporta = false
+                val ids = inviatiScelti.map { it.rapportino.idLocale }
+                scelti = emptyList()
+                avvisaCambio(avvisi, dati, dati.cambiaStato(ids, Stato.BOZZA), if (n == 1) "Riportato da inviare" else "$n lavori riportati da inviare")
+            },
+            onAnnulla = { chiediRiporta = false },
+        )
     }
 
     daSegnare?.let { st ->

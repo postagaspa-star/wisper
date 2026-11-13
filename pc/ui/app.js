@@ -1596,6 +1596,9 @@
         h('button', { type: 'button', class: 'btn piccolo', 'data-azione': 'da-inviare', onclick: () => preparaInvio(sel) }, 'Da inviare'),
         // I fatturati restano fatturati: "inviato" viene prima.
         h('button', { type: 'button', class: 'btn piccolo', onclick: () => cambiaStato(sel.filter(r => r.stato !== 'FATTURATO'), 'INVIATO') }, 'Segna inviati'),
+        // 13/11/2026: gli inviati scelti (fuori dalle fatture) tornano da inviare anche da qui, tutti insieme.
+        sel.some(r => RL.statoVisto(r.stato) === 'INVIATO' && !r.fattura) ? h('button', { type: 'button', class: 'btn piccolo', 'data-azione': 'riporta-scelti',
+          onclick: () => riportaDaInviare(sel.filter(r => RL.statoVisto(r.stato) === 'INVIATO' && !r.fattura)) }, 'Riporta da inviare') : null,
         fattura ? h('button', { type: 'button', class: 'btn piccolo', onclick: () => segnaFatturatiAMano(sel) }, 'Segna fatturati a mano') : null,
         h('button', { type: 'button', class: 'btn piccolo solo-icona', 'aria-label': 'Deseleziona', title: 'Deseleziona', onclick: () => { S.scelti.clear(); ridisegnaElenco(); } }, icona('chiudi', 16, 2.6)))]);
     }
@@ -1787,8 +1790,10 @@
       if (destinatari.length === 1) { pdfRapportino({ id: g.id, data: g.data, tecnico: g.tecnico, lavori: destinatari[0].lavori }, { apri: true }); return; }
       apriMenu(pdf, destinatari.map(d => ({ testo: 'PDF per ' + d.nome, fn: () => pdfRapportino({ id: g.id, data: g.data, tecnico: g.tecnico, lavori: d.lavori }, { apri: true }) })));
     });
+    // 13/11/2026: "Riporta da inviare" non sta più nel menu ⋯ ma in vista, sotto Invia ai clienti (Andrea non lo trovava).
+    const riporta = scrive && inviati.length ? h('button', { type: 'button', class: 'btn grande', 'data-azione': 'riporta-da-inviare', onclick: () => riportaDaInviare(inviati) },
+      inviati.length === g.lavori.length || inviati.length === 1 ? 'Riporta da inviare' : 'Riporta da inviare i ' + inviati.length + ' inviati') : null;
     const voci = [
-      scrive && inviati.length ? { testo: 'Riporta da inviare', fn: () => riportaDaInviare(inviati) } : null,
       scrive && mandabili.length ? { testo: 'Segna inviato senza email', fn: () => cambiaStato(mandabili, 'INVIATO') } : null,
       fattura && fatturabili.length ? { testo: 'Segna fatturato', fn: () => segnaFatturatiAMano(fatturabili) } : null,
       // Elimina: il rapportino coi suoi lavori, solo se sono tutti da inviare e fuori dalle fatture.
@@ -1803,7 +1808,7 @@
       onclick: () => preparaInvio(daInviare.length ? (mandabili.length ? mandabili : daInviare) : g.lavori) },
     'Invia ai clienti') : null;
     const modifica = scrive ? h('button', { type: 'button', class: 'btn grande', onclick: () => moduloRapportino(g.lavori.find(l => chiaveLavoro(l) === aperto) || g.lavori[0]) }, 'Modifica') : null;
-    const piede = h('div', { class: 'piede piede-rap' }, invia, h('div', { class: 'fila-piede' }, modifica, pdf, altro));
+    const piede = h('div', { class: 'piede piede-rap' }, invia, riporta, h('div', { class: 'fila-piede' }, modifica, pdf, altro));
 
     const p = h('aside', { class: 'pannello', 'aria-label': 'Il rapportino ' + g.id }, corpo, piede);
     if (vecchio) { p.style.animation = 'none'; vecchio.replaceWith(p); } else aggiungi($('#sovrapposti'), [p]);
@@ -2182,18 +2187,28 @@
    * Un lavoro inviato, fatturato o dentro una fattura: si vede, non si cambia. Al salvataggio parte uguale (il server lo
    * lascia com'è).
    */
-  function formaFerma(l) {
+  function formaFerma(l, ctx) {
     const st = RL.statoVisto(l.stato);
     const perche = l.fattura ? 'È in ' + (l.fattura.etichetta || 'una fattura') + ': non si cambia.'
-      : st === 'FATTURATO' ? 'Fatturato: non si cambia.' : 'Già inviato al cliente: non si cambia. Per correggerlo, riportalo da inviare dal rapportino.';
+      : st === 'FATTURATO' ? 'Fatturato: non si cambia.' : 'Già inviato al cliente. Per correggerlo riportalo da inviare: dopo va mandato di nuovo.';
+    // 13/11/2026 (Andrea: "una volta inviati i rapportini non si possono più modificare o tirare indietro"): il pulsante
+    // sta qui, dove si prova a correggere, non solo nel menu ⋯ del rapportino.
+    const scrive = puo('rapportini', 2);
+    let f;
+    const sblocca = !ctx || !scrive ? null
+      : l.fattura ? (l.fattura.stato === 'bozza' && puo('fatturazione') ? h('button', { type: 'button', class: 'btn piccolo', 'data-azione': 'apri-bozza-lavoro', onclick: () => { ctx.chiudi(); apriSuaFattura(l); } }, 'Apri la bozza') : null)
+      : st === 'INVIATO' ? h('button', { type: 'button', class: 'btn piccolo', 'data-azione': 'riporta-da-inviare', onclick: () => ctx.riporta(f, 'BOZZA') }, 'Riporta da inviare')
+      : st === 'FATTURATO' && puo('fatturazione', 2) && soldi() ? h('button', { type: 'button', class: 'btn piccolo', 'data-azione': 'non-ancora-fatturato', onclick: () => ctx.riporta(f, 'INVIATO') }, 'Non ancora fatturato')
+      : null;
     const el = h('div', { class: 'lavoro-fermo' },
-      h('div', { class: 'banda calma' }, icona('avviso', 20), h('span', { class: 'spazio' }, perche)),
+      h('div', { class: 'banda calma' }, icona('avviso', 20), h('span', { class: 'spazio' }, perche), sblocca),
       h('div', null, h('div', { style: { fontSize: '18px', fontWeight: '800' } }, l.cliente), h('div', { class: 't2' }, [commessaDi(l), progettoDi(l)].filter(Boolean).join(' · '))),
       dettagliFissi(l, true));
     // 11/11/2026: il conto del lavoro sta nella colonna a destra, come quello dei lavori da scrivere.
     const conto = soldi() ? h('div', { class: 'riassunto-lavoro' }, h('h3', null, 'Il conto'),
       h('div', { class: 'conto' }, righeDelConto(l), h('div', { class: 'tot' }, h('span', null, 'Totale del lavoro'), h('span', null, C.euro(l.totale))))) : null;
-    return { lavoro: l, fermo: true, el, conto, leggi: () => campiLavoro(l), valida: () => ({}), haErrori: () => false, riassunto: () => l, dataCambiata() {}, fuoco() {} };
+    f = { lavoro: l, fermo: true, el, conto, leggi: () => campiLavoro(l), valida: () => ({}), haErrori: () => false, riassunto: () => l, dataCambiata() {}, fuoco() {} };
+    return f;
   }
 
   /** Il dettaglio di un lavoro senza le azioni (per il lavoro fermo dentro il modulo); senzaConto: il conto è a parte. */
@@ -2750,19 +2765,46 @@
     // kmPrima: un lavoro prima di questo (o tutti, per uno che nasce adesso) ha gia' i km: allora i km non si scrivono da soli.
     const ctx = { data: () => dataInput.value || G.data, cambiato: () => { if (pronto) { disegnaElenco(); disegnaRiassunto(); } },
       kmPrima: idLocale => { const i = forme.findIndex(f => f.lavoro && f.lavoro.idLocale === idLocale); return (i < 0 ? forme : forme.slice(0, i)).some(f => C.num(f.riassunto().km) > 0); } };
-    if (g0) g0.lavori.forEach(l => forme.push(RL.fermo(l) ? formaFerma(l) : formaLavoro(l, null, ctx)));
+    /**
+     * 13/11/2026: un lavoro fermo si sblocca da qui. "Riporta da inviare" (BOZZA) lo rende da scrivere al suo posto, senza
+     * chiudere la finestra né perdere quello che si è scritto negli altri lavori; "Non ancora fatturato" (INVIATO) toglie
+     * il segno messo a mano.
+     */
+    ctx.chiudi = () => chiudi();
+    ctx.riporta = async (f, st) => {
+      const l = f.lavoro;
+      const ok = st === 'BOZZA'
+        ? await conferma('Riportare da inviare?', 'Il lavoro per ' + l.cliente + ' torna modificabile: dopo la correzione va mandato di nuovo al cliente.', 'Riporta da inviare')
+        : await conferma('Non ancora fatturato?', 'Il lavoro per ' + l.cliente + ' torna Inviato: il segno di fatturato era stato messo a mano.', 'Non ancora fatturato');
+      if (!ok) return;
+      const ris = await lavora('Aggiorno', () => Rete.post('/server/stato', { ids: [l.id || l.idLocale], stato: st }));
+      if (!ris) return;
+      accogli(ris.rapportini);
+      const nuovo = (ris.rapportini || []).find(x => chiaveLavoro(x) === chiaveLavoro(l)) || Object.assign({}, l, { stato: st });
+      const i = forme.indexOf(f);
+      if (i < 0) return;
+      forme[i] = RL.fermo(nuovo) ? formaFerma(nuovo, ctx) : formaLavoro(nuovo, null, ctx);
+      disegnaData();
+      scegli(i);
+      disegnaRiassunto();
+      // Dietro la finestra l'elenco e il pannello mostrano già lo stato nuovo.
+      ridisegna();
+      avviso(st === 'BOZZA' ? 'Riportato da inviare: ora si può cambiare' : 'Non più fatturato: ora è Inviato');
+      forme[i].fuoco();
+    };
+    if (g0) g0.lavori.forEach(l => forme.push(RL.fermo(l) ? formaFerma(l, ctx) : formaLavoro(l, null, ctx)));
     else forme.push(formaLavoro(null, p, ctx));
     if (g0) {
       const i = forme.findIndex(f => chiaveLavoro(f.lavoro) === chiaveLavoro(esistente));
       scelto = i >= 0 ? i : Math.max(0, forme.findIndex(f => !f.fermo));
     }
     // La data vale per tutti i lavori: con un lavoro già inviato o fatturato non si cambia più.
-    const dataFissa = forme.some(f => f.fermo);
+    const dataFissa = () => forme.some(f => f.fermo);
 
     function disegnaData() {
       const d = dataInput.value || G.data;
       aggiungi(svuota(zonaData), [h('span', { class: 'quando' }, d ? dataConAnno(d) : 'Scegli la data'),
-        dataAperta ? dataInput : dataFissa ? null : h('button', { type: 'button', class: 'btn collegamento', 'data-azione': 'cambia-data', onclick: () => {
+        dataAperta ? dataInput : dataFissa() ? null : h('button', { type: 'button', class: 'btn collegamento', 'data-azione': 'cambia-data', onclick: () => {
           dataAperta = true; disegnaData(); dataInput.focus(); try { dataInput.showPicker(); } catch (e) { /* non tutti i browser */ }
         } }, 'Cambia')]);
     }

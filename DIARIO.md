@@ -11,6 +11,7 @@ mai dati veri di clienti.
 
 | Data | Versione | In breve |
 |------|----------|----------|
+| 13/11/2026 | 1.4.1 | [Un rapportino inviato si riporta da inviare da dove lo si corregge](#v1-4-1) |
 | 12/11/2026 | 1.4.0, server 0.15.0 | [Servizi, indennità nei rapportini, preventivi e parcelle col modello di Manuel](#v1-4-0) |
 | 12/11/2026 | 1.3.3, server 0.14.0 | [Il rapportino nel formato del riepilogo, i km scritti da soli](#v1-3-3) |
 | 11/11/2026 | 1.3.2 | [Aggiungi un lavoro accanto a Salva, il rapportino del telefono su una pagina, Scegli tutti](#v1-3-2) |
@@ -48,6 +49,43 @@ mai dati veri di clienti.
 | 26/09–14/10/2026 | 0.1 | [Un rapportino confermato non si perde più](#coda) |
 | 7–9/08/2026 | 0.1.0 | [Hackathon NGN Hacks: la versione a voce, senza mani](#v0-1-0) |
 | marzo–giugno 2026 | prima del repository | [Le prime versioni](#prima) |
+
+---
+
+<a id="v1-4-1"></a>
+## 13 novembre 2026 · 1.4.1 · Un rapportino inviato si riporta da inviare da dove lo si corregge
+
+**Perché.** Andrea: "ho notato che una volta inviati i rapportini non si possono più modificare o tirare indietro".
+Si poteva, dalla 1.2.0: "Riporta da inviare". Ma stava solo nel menu ⋯ del rapportino, e chi apriva un lavoro inviato
+per correggerlo trovava i campi fermi: sul computer una frase che rimandava altrove, sul telefono nemmeno quella. Una
+funzione che non si trova è come se non ci fosse.
+
+**Cosa cambia.**
+
+- **Dentro il lavoro inviato.** Aprendo un rapportino con Modifica (computer) o toccandolo (telefono), il lavoro
+  inviato dice "Già inviato al cliente. Per correggerlo riportalo da inviare: dopo va mandato di nuovo." e accanto ha
+  il pulsante **Riporta da inviare**. Dopo la conferma il lavoro torna da scrivere lì dov'è: la finestra resta aperta,
+  gli altri lavori non si toccano, si corregge e si salva. Il rapportino torna "da inviare" e il giallo torna su Invia
+  ai clienti.
+- **Nel pannello del rapportino** (computer) **Riporta da inviare** è un pulsante in vista sotto Invia ai clienti, non
+  più una voce del menu ⋯; con più lavori dice quanti ("Riporta da inviare i 2 inviati").
+- **Con più rapportini scelti.** Nella barra in basso del computer e in "Cosa faccio" sul telefono c'è **Riporta da
+  inviare**, quando fra quelli scelti c'è almeno un lavoro inviato: tornano indietro tutti insieme.
+- **Sul computer, gli altri casi.** Un lavoro segnato fatturato a mano ha il pulsante **Non ancora fatturato**; uno che
+  sta in una bozza di fattura ha **Apri la bozza** (si toglie da lì). Un lavoro in una fattura emessa resta fermo: si
+  corregge con una nota di credito.
+
+<img src="docs/diario/2026-11-13-riporta-computer.png" width="620" alt="Il lavoro inviato dentro la finestra del rapportino, con la frase e il pulsante Riporta da inviare"> <img src="docs/diario/2026-11-13-riporta-telefono.png" width="240" alt="Lo stesso sul telefono">
+
+<img src="docs/diario/2026-11-13-riporta-pannello-computer.png" width="620" alt="Il pannello di un rapportino inviato: Riporta da inviare sotto Invia ai clienti">
+
+**Prove.** Computer: 368 prove dei conti e delle regole; il giro cliccato dei rapportini ha tre passi nuovi (il lavoro
+riportato da inviare dentro la finestra, corretto e salvato; i due inviati insieme dal pannello; i tre lavori dalla
+barra dei rapportini scelti), a 1024 e 1440 px, chiaro e scuro. Telefono: 460 prove; sull'emulatore, contro un server di
+prova: rapportino segnato inviato, "Riporta da inviare" comparso in Cosa faccio, il lavoro aperto con la frase e il
+pulsante, riportato e tornato da scrivere al suo posto. Il server non cambia (0.15.0).
+
+**Non provato.** I telefoni veri di Manuel e Andrea.
 
 ---
 

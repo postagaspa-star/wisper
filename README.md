@@ -114,6 +114,13 @@ and discount on invoice lines (also read from the returned XML). VAT is now roun
 the model invoices Wisper used to give one cent less VAT than Flextaxa; both model invoices now match to the cent
 (shared cases with made-up amounts in `server/prove/casi-fattura.json`).
 
+Version 1.4.1 (13 November, server unchanged) makes "Riporta da inviare" findable. A sent job could already be taken
+back to "Da inviare" since 1.2.0, but only from the report's ⋯ menu, and the owner concluded it could not be done. The
+button now sits where one tries to correct: inside the locked job in the report editor (computer and phone; the job
+becomes editable in place, the window stays open), in the report panel under "Invia ai clienti", and in the bar of the
+selected reports ("Cosa faccio" on the phone). On the computer a job marked invoiced by hand gets "Non ancora
+fatturato" and one sitting in a draft invoice gets "Apri la bozza".
+
 Phase 1 (October 2026) replaces the Google Sheet with a small server on
 the home NAS (`server/`: Node.js 24 with its built-in SQLite, no npm dependencies, in
 Docker). It speaks the same protocol as the sheet script, so the phone and the office

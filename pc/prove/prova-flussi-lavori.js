@@ -490,13 +490,78 @@ async function main() {
     passo('Invia 2 email: i 3 lavori sono Inviati, il pannello lo dice, niente più giallo');
 
     // ------------------------------------------------------------- modifica: i lavori inviati non si cambiano
+    // 13/11/2026: "Riporta da inviare" è in vista nel pannello, non più nel menu ⋯.
+    assert.equal(await valuta("[...document.querySelectorAll('.pannello .piede .btn')].filter(b => b.textContent.trim() === 'Riporta da inviare').length"), 1, 'Riporta da inviare in vista nel pannello');
+    await sta('il pannello del rapportino inviato');
+    await foto('pannello-inviato');
     await clicca('Modifica', '.pannello', 1000);
     testo = await testoFinestra();
-    assert.match(testo, /Già inviato al cliente: non si cambia/);
+    assert.match(testo, /Già inviato al cliente\. Per correggerlo riportalo da inviare/);
     assert.ok(!(await valuta("[...document.querySelectorAll('.velo .finestra button')].some(b => b.textContent.trim() === 'Togli questo lavoro')")), 'un lavoro inviato non si toglie');
     assert.ok(!(await valuta("[...document.querySelectorAll('.velo .finestra button')].some(b => b.textContent.trim() === 'Cambia' && b.closest('.data-rap'))")), 'la data non si cambia');
-    await clicca('Annulla', '.velo .finestra .piede-f', 500);
-    passo('Modifica: i lavori inviati si vedono e non si cambiano (né la data, né Togli)');
+    await sta('il lavoro inviato nella finestra');
+    await foto('lavoro-inviato');
+    passo('Modifica: i lavori inviati si vedono e non si cambiano (né la data, né Togli); il pulsante Riporta da inviare è lì');
+
+    // ------------------------------------------------------------- 13/11/2026: un lavoro inviato si riporta da inviare da dove lo si corregge
+    // Prima una cosa scritta in un altro lavoro? No: sono tutti fermi. Si sblocca il lavoro 2 (il cliente lungo) e si corregge.
+    await valuta("document.querySelector('.velo .finestra .card-lavoro[data-lavoro=\"2\"]').click(); true");
+    await aspetta(400);
+    await clicca('Riporta da inviare', '.velo .finestra .lavoro-fermo', 600);
+    assert.match(await testoFinestra(), /torna modificabile: dopo la correzione va mandato di nuovo/, 'la conferma dice cosa succede');
+    await togliAvvisi();
+    await clicca('Riporta da inviare', finestra, 1500);
+    assert.match(await testoAvvisi(), /Riportato da inviare: ora si può cambiare/);
+    testo = await testoFinestra();
+    assert.match(testo, /Rapportino RAP\//, 'la finestra del rapportino è rimasta aperta');
+    assert.equal(await valuta("document.querySelector('.velo .finestra .card-lavoro.scelta').dataset.lavoro"), '2', 'resta scelto il lavoro 2');
+    assert.ok(!(await valuta("!!document.querySelector('.velo .finestra .zona-lavoro .lavoro-fermo')")), 'il lavoro 2 non è più fermo');
+    assert.equal(await valuta("document.querySelectorAll('.velo .finestra .card-lavoro').length"), 3, 'gli altri lavori sono ancora lì');
+    assert.deepEqual((await server('rapportini')).rapportini.filter(r => r.idGiornata === ID).sort((a, b) => a.posizione - b.posizione).map(r => r.stato),
+      ['INVIATO', 'BOZZA', 'INVIATO'], 'solo il lavoro 2 è tornato da inviare');
+    await scrivi('Cosa hai fatto', 'Sopralluogo per il nuovo impianto di aspirazione, misure del capannone e schema corretto.');
+    await sta('il lavoro riportato da inviare, da correggere');
+    await foto('lavoro-riportato');
+    await togliAvvisi();
+    await clicca('Salva rapportino', finestra, 1800);
+    assert.match(await testoAvvisi(), /Salvato: RAP\/\d{4}\/\d{4} · 3 lavori/);
+    let corretti = (await server('rapportini')).rapportini.filter(r => r.idGiornata === ID).sort((a, b) => a.posizione - b.posizione);
+    assert.match(corretti[1].descrizione, /schema corretto/, 'la correzione è sul server');
+    assert.deepEqual(corretti.map(r => r.stato), ['INVIATO', 'BOZZA', 'INVIATO']);
+    testo = await testoPannello();
+    assert.match(testo, /1 da inviare · 2 inviati/);
+    assert.equal(await valuta("[...document.querySelectorAll('.pannello .btn.giallo')].map(b => b.textContent).join('|')"), 'Invia ai clienti', 'torna il giallo: c\'è da mandare di nuovo');
+    passo('Riporta da inviare dentro la finestra: il lavoro 2 torna da scrivere al suo posto, corretto e salvato; il pannello dice 1 da inviare · 2 inviati');
+
+    // Dal pannello: gli altri due inviati tornano da inviare insieme.
+    assert.equal(await valuta("[...document.querySelectorAll('.pannello .piede .btn')].filter(b => b.textContent.trim() === 'Riporta da inviare i 2 inviati').length"), 1, 'il pulsante dice quanti');
+    await clicca('Riporta da inviare i 2 inviati', '.pannello .piede', 600);
+    await togliAvvisi();
+    await clicca('Riporta da inviare', finestra, 1500);
+    assert.match(await testoAvvisi(), /2 lavori riportati da inviare/);
+    corretti = (await server('rapportini')).rapportini.filter(r => r.idGiornata === ID);
+    assert.deepEqual(corretti.map(r => r.stato), ['BOZZA', 'BOZZA', 'BOZZA'], 'tutti da inviare');
+    assert.equal(await valuta("[...document.querySelectorAll('.pannello .piede .btn')].filter(b => /^Riporta da inviare/.test(b.textContent.trim())).length"), 0, 'senza inviati il pulsante non c\'è');
+    // Dalla barra dei rapportini scelti: si segna inviato e si riporta, tutto il rapportino.
+    await valuta(`(document.querySelector('.pannello [aria-label="Chiudi"]') || { click() {} }).click(); true`);
+    await aspetta(400);
+    await clicca('Tutti', '#principale .filtri', 900);
+    await valuta(`document.querySelector('.tab .r.rap[data-giornata="${ID}"] input[type=checkbox]').click(); true`);
+    await aspetta(400);
+    assert.ok(!(await valuta("[...document.querySelectorAll('.barra-scelti .btn')].some(b => b.textContent.trim() === 'Riporta da inviare')")), 'niente inviati scelti: il pulsante non c\'è');
+    await clicca('Segna inviati', '.barra-scelti', 1500);
+    await valuta(`document.querySelector('.tab .r.rap[data-giornata="${ID}"] input[type=checkbox]').click(); true`);
+    await aspetta(400);
+    await sta('la barra dei rapportini scelti con Riporta da inviare');
+    await foto('barra-riporta');
+    await clicca('Riporta da inviare', '.barra-scelti', 600);
+    await togliAvvisi();
+    await clicca('Riporta da inviare', finestra, 1500);
+    assert.match(await testoAvvisi(), /3 lavori riportati da inviare/);
+    assert.deepEqual((await server('rapportini')).rapportini.filter(r => r.idGiornata === ID).map(r => r.stato), ['BOZZA', 'BOZZA', 'BOZZA'], 'tutti da inviare dalla barra');
+    passo('Riporta da inviare dal pannello (2 inviati insieme) e dalla barra dei rapportini scelti (3 lavori)');
+    await valuta(`document.querySelector('.tab .r.rap[data-giornata="${ID}"]').click(); true`);
+    await aspetta(700);
 
     // ------------------------------------------------------------- modifica di un rapportino Da inviare: un lavoro in più, poi tolto
     const [V1, V2] = VECCHI;

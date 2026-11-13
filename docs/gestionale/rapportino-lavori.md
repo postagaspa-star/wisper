@@ -124,6 +124,11 @@ Stile di oggi (`docs/aspetto.md`): il design "Fai" è in pausa.
 3. **Pannello del rapportino** (a destra): numero, data, i lavori con il loro stato e importo, totale; pulsanti: **Invia
    ai clienti** (giallo se c'è qualcosa da inviare), Modifica, PDF, ⋯ (Riporta da inviare, Segna inviato senza email,
    Segna fatturato, Elimina). Sparisce "Carica il foglio firmato".
+   **13/11/2026 (1.4.1)**: Andrea: "una volta inviati i rapportini non si possono più modificare o tirare indietro".
+   "Riporta da inviare" esce dal menu ⋯: è un pulsante in vista nel pannello (sotto Invia ai clienti), dentro il lavoro
+   fermo nella finestra del rapportino e nella pagina del telefono (il lavoro torna da scrivere al suo posto), e nella
+   barra dei rapportini scelti ("Cosa faccio" sul telefono). Sul computer, nel lavoro fermo: "Non ancora fatturato" per
+   quello segnato a mano, "Apri la bozza" per quello in una bozza di fattura.
 4. **Invio rapportini** (§4): a sinistra l'anteprima del PDF del destinatario scelto, a destra una scheda per destinatario.
 
 **Testi che stanno nei contenitori**: niente larghezze fisse per i contenitori di testo (pulsanti, pillole, schede, celle):

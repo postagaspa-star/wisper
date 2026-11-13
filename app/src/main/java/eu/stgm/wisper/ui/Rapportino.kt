@@ -197,6 +197,7 @@ internal fun ColumnScope.LavoroNellaPagina(
     }
 
     var chiediTogli by remember { mutableStateOf(false) }
+    var chiediRiporta by remember { mutableStateOf(false) }
     var menu by remember { mutableStateOf(false) }
 
     // ---- foto ----
@@ -252,6 +253,18 @@ internal fun ColumnScope.LavoroNellaPagina(
     }
 
     if (bloccato) {
+        // 13/11/2026 (Andrea: "una volta inviati i rapportini non si possono più modificare o tirare indietro"): il perché
+        // e il pulsante stanno qui, dove si prova a correggere, non solo nel menu ⋯ del rapportino.
+        if (stato.base.bloccato) Scheda(verticale = 14.dp, spazio = 10.dp) {
+            Text(
+                if (stato.base.stato == Stato.FATTURATO) "Fatturato: non si cambia."
+                else "Già inviato al cliente. Per correggerlo riportalo da inviare: dopo va mandato di nuovo.",
+                style = Testi.testo, color = c.testo2,
+            )
+            if (scrive && stato.base.stato == Stato.INVIATO) {
+                PulsanteBordo("Riporta da inviare", { chiediRiporta = true }, Modifier.fillMaxWidth().bersaglio("riporta-da-inviare"), icona = Icone.indietroStato)
+            }
+        }
         PassoRiepilogo(stato, vista, conto, regole, dati, solaLettura = true, commesseAccese = commesseAccese)
     } else {
         // ---------------------------------------------------------- Per chi
@@ -304,6 +317,19 @@ internal fun ColumnScope.LavoroNellaPagina(
             },
             onAnnulla = { chiediTogli = false },
             pericolo = true,
+        )
+    }
+
+    if (chiediRiporta) {
+        FoglioConferma(
+            titolo = "Riportare da inviare questo lavoro?",
+            testo = "Torna da cambiare e da mandare di nuovo al cliente.",
+            azione = "Riporta da inviare",
+            onConferma = {
+                chiediRiporta = false
+                avvisaCambio(avvisi, dati, dati.cambiaStato(listOf(stato.base.idLocale), Stato.BOZZA), "Riportato da inviare: ora si può cambiare")
+            },
+            onAnnulla = { chiediRiporta = false },
         )
     }
 
