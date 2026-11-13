@@ -87,6 +87,9 @@ pulsante, riportato e tornato da scrivere al suo posto. Il server non cambia (0.
 
 **Non provato.** I telefoni veri di Manuel e Andrea.
 
+**Versione:** [v1.4.1](https://github.com/postagaspa-star/wisper/releases/tag/v1.4.1) (telefono codice 19, computer
+1.4.1), pubblicata alle 14:01; il server resta 0.15.0 e la annuncia alle app entro dieci minuti.
+
 ---
 
 <a id="v1-4-0"></a>
