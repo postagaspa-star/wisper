@@ -110,11 +110,12 @@ altro dispositivo comparsi da soli entro il minuto, con la rete spenta "Server n
 
 **Non provato.** I telefoni veri di Manuel e Andrea e il computer di Manuel. La causa della ritenuta a zero l'ho
 ricavata dal codice e dai numeri della schermata di Andrea (con quei conti la percentuale nella bozza non può che
-essere zero), non guardando la bozza vera: quanti casi ha sistemato il server sul NAS lo dice il suo registro di
-avvio. La scelta del servizio è provata solo su servizi di esempio, non sul listino vero.
+essere zero), non guardando la bozza vera. Il server del NAS, ripartendo con la 0.15.2, l'ha confermato: ha scritto
+di aver sistemato una bozza con la ritenuta rimasta a zero e una riga col codice del servizio. La scelta del servizio
+è provata solo su servizi di esempio: quale codice ha preso la riga vera lo vede Manuel aprendo la bozza.
 
 **Versione:** [v1.4.3](https://github.com/postagaspa-star/wisper/releases/tag/v1.4.3) (telefono codice 21, computer
-1.4.3).
+1.4.3), pubblicata alle 19:42; il server 0.15.2 è sul NAS dalle 19:38 e annuncia la versione alle app dalle 19:48.
 
 ---
 
