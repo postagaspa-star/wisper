@@ -144,7 +144,7 @@ da sola Android chiede il permesso "Installa app sconosciute" per Wisper: si dà
 chiuso e riaperto una volta (o Riavvia Wisper Ufficio nel riquadro giallo): dalla 1.4.2 lo fa da solo.
 
 **Versione:** [v1.4.2](https://github.com/postagaspa-star/wisper/releases/tag/v1.4.2) (telefono codice 20, computer
-1.4.2), server 0.15.1 sul NAS.
+1.4.2), pubblicata alle 18:22; il server 0.15.1 è sul NAS dalle 18:05 e annuncia la versione alle app dalle 18:25.
 
 ---
 
