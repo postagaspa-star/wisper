@@ -119,7 +119,8 @@ function avvia(o) {
   if (o.prova) semina(wisper);
   const indirizzoPortale = !o.prova && scriviIndirizzoPortale(wisper, env.WISPER_PORTALE_INDIRIZZO);
   // 13/11/2026: le bozze di fattura gia' fatte: la ritenuta "si'" rimasta a zero e le righe senza il codice del servizio.
-  let bozze = { ritenute: 0, codici: 0 };
+  // 14/11/2026: anche le righe dei rapportini fatte col modo di prima, rifatte un servizio per riga.
+  let bozze = { ritenute: 0, codici: 0, rifatte: 0 };
   try { bozze = wisper.sistemaBozze(); } catch (err) { console.error('Bozze di fattura: non sistemate (' + (err && err.message ? err.message : err) + ')'); }
   // La porta Google: parte da sola se c'e' l'indirizzo dello script col segreto (le prove la accendono loro).
   wisper.porta = new PortaGoogle(wisper, {
@@ -212,7 +213,7 @@ if (require.main === module) {
     console.log('Porta Google: ' + (wisper.porta.acceso ? 'il server va a prendere il lavoro dallo script del foglio' : wisper.porta.stato().frase));
     console.log('Portale clienti: ' + (wisper.portaPortale.acceso ? 'il server va a prendere le richieste dallo script del portale' : wisper.portaPortale.stato().frase));
     if (indirizzoPortale) console.log('Portale clienti: indirizzo della pagina scritto nelle impostazioni (da WISPER_PORTALE_INDIRIZZO)');
-    if (bozze.ritenute || bozze.codici) console.log('Bozze di fattura sistemate: ' + bozze.ritenute + ' con la ritenuta rimasta a zero, ' + bozze.codici + ' righe col codice del servizio');
+    if (bozze.ritenute || bozze.codici || bozze.rifatte) console.log('Bozze di fattura sistemate: ' + bozze.rifatte + ' con le righe rifatte dai Servizi, ' + bozze.ritenute + ' con la ritenuta rimasta a zero, ' + bozze.codici + ' righe col codice del servizio');
     else if (!a.prova) console.log('Bozze di fattura: niente da sistemare');
     console.log('Aggiornamenti: ' + (wisper.vedetta ? 'il NAS guarda le versioni ogni ' + wisper.vedetta.minuti + ' minuti e avvisa telefoni e computer' : 'spenti (nessun avviso alle app)'));
     if (orologioDiProva()) console.log('Orologio di prova: per il server oggi e\' ' + orologioDiProva() + ' (WISPER_OGGI_PROVA; le ore sono quelle vere)');

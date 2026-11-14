@@ -284,7 +284,7 @@ test('Da inviare: inviaEmail e stato INVIATO accettano i lavori in BOZZA; Riport
 
 // ------------------------------------------------------------------ fatture
 
-test('Da fatturare coi lavori Da inviare; la fattura dice "Rapportino <numero del rapportino>"; le commesse della fattura; Segna fatturato', async () => {
+test('Da fatturare coi lavori Da inviare; nella fattura non c\'è niente del rapportino (un servizio per riga); le commesse della fattura; Segna fatturato', async () => {
   const r = ok(await salva(rapportino([Object.assign({}, ROSSI, { idCommessa: '26ST002', descrizione: '' }), ELETTRO]))).rapportino;
   const df = ok(await manuel('daFatturare', { idCliente: 'C002' }));
   assert.deepEqual(df.daFirmare, []);
@@ -292,9 +292,10 @@ test('Da fatturare coi lavori Da inviare; la fattura dice "Rapportino <numero de
   assert.ok(voce && voce.pronta, 'il lavoro Da inviare si fattura');
   assert.equal(voce.titolo, 'Rapportino ' + r.id, 'senza descrizione: il numero del rapportino');
   const f = ok(await manuel('preparaFattura', { idCliente: 'C002', voci: [{ tipo: 'rapportino', id: r.id + '-1' }] })).fattura;
-  assert.match(f.righe[0].descrizione, new RegExp('^Ore di consulenza \\| Rapportino ' + r.id.replace(/\//g, '\\/') + ' del 20\\/10\\/2026'));
-  assert.ok(!f.righe.some(x => x.descrizione.indexOf(r.id + '-1') >= 0), 'mai il numero del lavoro nei testi');
-  assert.equal(f.causale.indexOf(r.id + '-1'), -1);
+  // 14/11/2026 (il modello della parcella): la riga e' il servizio col mese; il numero del rapportino resta in Da fatturare.
+  assert.equal(f.righe[0].descrizione, 'Ore di consulenza | ottobre');
+  assert.ok(!f.righe.some(x => /rapportin|RAP\//i.test(x.descrizione)), 'niente dei rapportini nei testi delle righe');
+  assert.doesNotMatch(f.causale, /rapportin|RAP\//i);
   // Le commesse della fattura: nella fattura e nel modello del pacchetto (il PDF le scrive accanto al Mittente).
   assert.deepEqual(f.commesse, ['26ST002']);
   assert.deepEqual(ok(await manuel('fattura', { id: f.id })).fattura.commesse, ['26ST002']);

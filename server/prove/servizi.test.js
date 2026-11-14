@@ -155,6 +155,25 @@ test('fatturando: una riga per indennità col codice, l\'importo della sorgente 
   assert.deepEqual([rl.codice, rl.sconto, rl.prezzoTotale], ['CON', 40, 1080]);
 });
 
+test('fatturando: le indennità uguali del mese in una riga sola, la quantità dice quante volte; col nome del listino, il mese', async () => {
+  // Andrea, 14/11/2026 col modello della parcella: "la quantità non è sempre 1, cambia in base a quante volte si è fatto quel lavoro".
+  const serv = ok(await manuel('salvaVoceListino', { voce: { nome: 'Gettone di presenza', codice: 'GET', prezzo: 120, aliquotaIva: 22, unita: 'Nr', tipo: 'servizio' } })).voce;
+  const ids = [];
+  for (const indennita of [[{ idServizio: serv.id }], [{ idServizio: serv.id }], [{ idServizio: serv.id, quantita: 2 }],
+    [{ idServizio: serv.id, descrizione: 'Gettone di presenza | Seduta di esempio' }]]) {
+    ids.push(ok(await manuel('salvaRapportino', { rapportino: lavoro({ idCliente: 'C004', oreLavoro: 1, indennita }) })).rapportino.lavori[0].id);
+  }
+  const f = ok(await manuel('preparaFattura', { idCliente: 'C004', voci: ids.map(id => ({ tipo: 'rapportino', id })) })).fattura;
+  const mese = require('../src/conti').MESI[Number(oggi().slice(5, 7)) - 1];
+  const sue = f.righe.filter(x => x.codice === 'GET').map(x => [x.descrizione, x.quantita, x.unita, x.prezzo, x.importo]);
+  assert.deepEqual(sue, [['Gettone di presenza | ' + mese, 4, 'Nr', 120, 480], ['Gettone di presenza | Seduta di esempio', 1, 'Nr', 120, 120]]);
+  // Le ore dei quattro lavori in una riga; in nessuna riga c'è qualcosa dei rapportini.
+  const ore = f.righe.find(x => x.unita === 'Ore');
+  assert.deepEqual([ore.quantita, ore.importo], [4, 160]);
+  for (const r of f.righe) assert.doesNotMatch(r.descrizione, /rapportin|RAP\/|Riunione/i, r.descrizione);
+  assert.equal(f.conti.compenso, 160 + 480 + 120);
+});
+
 test('il modello per il PDF: qualifica, telefono e sito dello studio, BIC e beneficiario del conto, l\'etichetta della commessa, le note', async () => {
   ok(await manuel('salvaImpostazioni', { valori: { STUDIO_QUALIFICA: 'Perito Industriale' } }));
   const conti = ok(await manuel('conti', {})).conti;

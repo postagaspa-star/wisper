@@ -40,6 +40,7 @@ const TIPI_SORGENTE = ['scadenza', 'rapportino', 'spesa', 'ore', 'ticket'];
 const RIFERIMENTO_N1 = 'Escluse ex art. 15 DPR 633/72';
 /** La nota nel registro delle modifiche quando il codice del servizio lo mette il server all'avvio (codiciNelleRighe). */
 const NOTA_CODICE_DA_SOLO = 'codice del servizio messo dal server';
+const NOTA_RIGHE_RIFATTE = 'righe rifatte dai Servizi';
 const RIFERIMENTO_FORFETTARIO = 'Operazione in franchigia da IVA (regime forfettario)';
 
 /** "…4521": le ultime quattro cifre di un IBAN (nelle schermate non si mostra intero). */
@@ -94,9 +95,12 @@ module.exports = {
     return n;
   },
 
-  /** Come si raggruppano i rapportini di un cliente: per mese i clienti a tariffa fissa, uno per riga gli altri. */
-  raggruppaDi(s) {
-    return s && s.tariffa_fissa !== null && s.tariffa_fissa !== undefined && s.tariffa_fissa !== '' ? 'mese' : 'rapportino';
+  /**
+   * Come si raggruppano i rapportini di un cliente. Dal 14/11/2026 sempre per mese, un servizio per riga (il modello
+   * della parcella): "una riga per rapportino" non c'e' piu'. Resta per le app di prima della 1.4.4, che lo leggono.
+   */
+  raggruppaDi() {
+    return 'mese';
   },
 
   contoPredefinito() {
@@ -462,7 +466,7 @@ module.exports = {
    * Dalle voci scelte (gia' controllate, tutte dello stesso cliente) ai gruppi
    * di righe e sorgenti, nell'ordine di §11.1.
    */
-  gruppiDaVoci(scelte, cliente, raggruppa) {
+  gruppiDaVoci(scelte, cliente) {
     const gruppi = [];
     const scadenze = scelte.filter(v => v.tipo === 'scadenza');
     for (const v of scadenze) {
@@ -484,10 +488,13 @@ module.exports = {
     const rapportini = scelte.filter(x => x.tipo === 'rapportino');
     if (rapportini.length) {
       const sue = scelte.filter(x => x.tipo === 'spesa' && x.idRapportino);
+      const nomi = new Map(this.db.righe("SELECT codice, nome FROM listino WHERE codice <> ''").map(v => [testo(v.codice).toUpperCase(), testo(v.nome)]));
       const r = C.righeRapportini({
-        // 13/11/2026: le righe delle ore e dei km prendono codice e nome dal loro servizio (Servizi e prodotti).
+        nomeServizio: codice => nomi.get(testo(codice).toUpperCase()) || '',
+        // 13/11/2026: le righe delle ore e dei km prendono codice e nome dal loro servizio (Servizi e prodotti);
+        // 14/11/2026: anche l'unita' e il prezzo di listino, e nelle righe non c'e' piu' niente dei rapportini.
         servizio: this.servizioPerRighe(cliente),
-        raggruppa, cliente: { id: cliente.id, tariffaFissa: cliente.tariffa_fissa, pagaViaggio: cliente.paga_viaggio === 1 },
+        cliente: { id: cliente.id, tariffaFissa: cliente.tariffa_fissa, pagaViaggio: cliente.paga_viaggio === 1 },
         rapportini: rapportini.map(v => ({
           id: v.id, data: dataIso(v.riga.data), descrizione: v.riga.descrizione, oreLavoro: v.riga.ore_lavoro, oreExtra: v.riga.ore_extra,
           oreViaggio: v.riga.ore_viaggio, pagaViaggio: v.riga.paga_viaggio === 1, tariffa: v.riga.tariffa, maggExtra: v.riga.magg_extra,
@@ -530,13 +537,17 @@ module.exports = {
    */
   servizioPerRighe(cliente) {
     const servizi = this.db.righe('SELECT * FROM listino WHERE attivo = 1 ORDER BY ordine, id');
-    if (!cliente || !servizi.some(s => testo(s.codice) && Servizi.genereDiUnita(s.unita, s.modo))) return () => null;
+    if (!cliente || !servizi.some(s => testo(s.codice) && Servizi.genereDiUnita(s.unita, s.modo, s.nome))) return () => null;
     const altriClienti = this.db.righe('SELECT nome FROM soggetti WHERE id <> ?', cliente.id).map(r => r.nome);
     const codici = q => this.db.righe(q.testo, ...q.con).map(r => r.codice);
     const usati = "SELECT r.codice FROM fattura_righe r JOIN fatture f ON f.id = r.fattura_id WHERE r.codice <> '' AND f.stato <> 'scartata'";
     const storicoCliente = codici({ testo: usati + ' AND f.cliente_id = ? ORDER BY f.id DESC, r.id DESC LIMIT 200', con: [cliente.id] });
     const storicoTutti = codici({ testo: usati + ' ORDER BY f.id DESC, r.id DESC LIMIT 400', con: [] });
-    return (genere, prezzo) => Servizi.scegliServizio({ servizi, genere, prezzo, cliente: cliente.nome, altriClienti, storicoCliente, storicoTutti });
+    return (genere, prezzo) => {
+      const s = Servizi.scegliServizio({ servizi, genere, prezzo, cliente: cliente.nome, altriClienti, storicoCliente, storicoTutti });
+      // 14/11/2026: la riga prende dal servizio anche l'unita' (com'e' nel listino) e il prezzo di listino.
+      return s ? { codice: s.codice, nome: s.nome, unita: Servizi.unitaPerRiga(s, genere), prezzo: s.prezzo } : null;
+    };
   },
 
   /**
@@ -552,7 +563,7 @@ module.exports = {
     const scegli = this.servizioPerRighe(cliente);
     let n = 0;
     for (const r of righe) {
-      let genere = Servizi.genereDiUnita(r.unita, '');
+      let genere = Servizi.genereDiUnita(r.unita, '', r.descrizione);
       let prezzo = r.prezzo;
       if (!genere && /^rapportino:/.test(testo(r.gruppo))) {
         const l = this.db.riga('SELECT compenso_ore, tariffa, km, rimborso_km, euro_km FROM rapportini WHERE id = ?', testo(r.gruppo).slice('rapportino:'.length));
@@ -586,13 +597,72 @@ module.exports = {
   sistemaBozze() {
     let ritenute = 0;
     let codici = 0;
+    let rifatte = 0;
     this.db.transazione(() => {
       for (const f of this.db.righe("SELECT * FROM fatture WHERE stato = 'bozza' AND tipo = 'fattura' ORDER BY id")) {
+        // Una bozza che non si riesce a rifare resta com'era (la sua transazione torna indietro) e le altre vanno avanti.
+        try { rifatte += this.db.transazione(() => this.rifaiRigheDaiServizi(f)); } catch (err) { console.error('[bozze] la bozza ' + f.riferimento + ' resta com\'era: ' + (err && err.message)); }
         if (f.ritenuta_applicata === 1 && !(numero(f.ritenuta_percentuale) > 0)) { this.ricalcolaFattura(f.id); ritenute += 1; }
         codici += this.codiciNelleRighe(f);
       }
     });
-    return { ritenute, codici };
+    return { ritenute, codici, rifatte };
+  },
+
+  /**
+   * 14/11/2026: le righe dei rapportini di una bozza fatta prima (una riga per rapportino col numero, il giorno e il
+   * lavoro svolto, o una per mese con "(3 rapportini)" nel testo) rifatte come nascono oggi: un servizio per riga, per
+   * mese, senza niente dei rapportini. Gli importi non cambiano (sono la somma delle stesse sorgenti). Una volta sola
+   * per bozza, e solo se le righe sono ancora quelle nate dai rapportini: se qualcuno ha cambiato quantita' o prezzi a
+   * mano la somma non torna piu' e la bozza resta com'e'. Le righe scritte a mano, le scadenze e i ticket non si
+   * toccano. Torna 1 se l'ha rifatta.
+   */
+  rifaiRigheDaiServizi(f) {
+    const sorgenti = this.db.righe(
+      "SELECT * FROM fattura_sorgenti WHERE fattura_id = ? AND attiva = 1 AND (gruppo LIKE 'rapportino:%' OR gruppo LIKE 'rapportini:%') ORDER BY id", f.id);
+    if (!sorgenti.length) return 0;
+    const gruppi = new Set(sorgenti.map(s => s.gruppo));
+    const tutte = this.db.righe("SELECT * FROM fattura_righe WHERE fattura_id = ? AND origine = 'bozza' AND tipo <> 'bollo' ORDER BY ordine, id", f.id);
+    const vecchie = tutte.filter(r => gruppi.has(r.gruppo));
+    // Fatta col modo di prima: un gruppo per rapportino, o il numero dei rapportini scritto nella riga del mese.
+    const diPrima = vecchie.some(r => /^rapportino:/.test(r.gruppo) || /\(\d+ rapportin[oi]\b/.test(testo(r.descrizione)));
+    if (!diPrima) return 0;
+    if (this.db.riga("SELECT id FROM registro WHERE tabella = 'fatture' AND id_riga = ? AND nota = ? LIMIT 1", String(f.id), NOTA_RIGHE_RIFATTE)) return 0;
+    const cliente = this.db.riga('SELECT * FROM soggetti WHERE id = ?', f.cliente_id);
+    if (!cliente) return 0;
+    const somma = lista => centesimi(lista.reduce((t, x) => t + numero(x.importo), 0));
+    if (somma(vecchie) !== somma(sorgenti)) return 0;
+
+    const mie = new Set(sorgenti.map(s => s.tipo + '|' + s.sorgente_id));
+    for (const g of gruppi) this.liberaGruppo(f.id, g, NOTA_RIGHE_RIFATTE);
+    const voci = this.sorgentiDaFatturare({}).filter(v => mie.has(v.tipo + '|' + v.id));
+    if (voci.length !== mie.size) throw new Error('non ritrovo tutte le cose da fatturare (' + voci.length + ' su ' + mie.size + ')');
+    // Prima di togliere le righe: il codice corretto a mano in questa bozza conta ancora per scegliere il servizio.
+    const nuovi = this.gruppiDaVoci(voci, cliente);
+    if (somma([].concat(...nuovi.map(g => g.righe))) !== somma(vecchie)) throw new Error('la somma delle righe cambierebbe');
+    const primo = tutte.findIndex(r => gruppi.has(r.gruppo));
+    const prima = tutte.slice(0, primo);
+    const dopo = tutte.slice(primo).filter(r => !gruppi.has(r.gruppo));
+    for (const r of vecchie) this.togliRiga(r, NOTA_RIGHE_RIFATTE);
+    let ordine = 0;
+    for (const r of prima) this.db.esegui('UPDATE fattura_righe SET ordine = ? WHERE id = ?', ++ordine, r.id);
+    for (const g of nuovi) {
+      for (const r of g.righe) {
+        const riga = this.rigaPerDb(r, f, g.gruppo, ++ordine);
+        riga.importo_sorgenti = riga.importo;
+        this.inserisci('fattura_righe', Object.assign({ fattura_id: f.id }, riga));
+      }
+      this.legaSorgenti(f.id, g.gruppo, g.sorgenti);
+    }
+    for (const r of dopo) this.db.esegui('UPDATE fattura_righe SET ordine = ? WHERE id = ?', ++ordine, r.id);
+    // La causale proposta col numero del rapportino ("Rapportino RAP/2026/0153") diventa quella del mese.
+    const v = { modificato: adesso() };
+    if (/^Rapportino \S+/.test(testo(f.causale)) && !dopo.length && !prima.length) v.causale = this.causaleDa(nuovi, testo(f.commessa_id));
+    this.aggiorna('fatture', f.id, v, 'id', NOTA_RIGHE_RIFATTE);
+    // La riga nel registro che dice "gia' fatto" (aggiorna non ne scrive se cambia solo la data di modifica).
+    this.annota('fatture', f.id, { righe: vecchie.length }, { righe: [].concat(...nuovi.map(g => g.righe)).length }, NOTA_RIGHE_RIFATTE);
+    this.ricalcolaFattura(f.id);
+    return 1;
   },
 
   /** I parametri fiscali di oggi, congelati nella fattura che nasce. */
@@ -667,8 +737,7 @@ module.exports = {
     const idCliente = testo(d.idCliente);
     const cliente = this.db.riga('SELECT * FROM soggetti WHERE id = ?', idCliente);
     if (!cliente) throw new Rifiuto('Cliente ' + (idCliente || '') + ' non trovato');
-    const raggruppa = testo(d.raggruppa) || this.raggruppaDi(cliente);
-    if (['mese', 'rapportino'].indexOf(raggruppa) < 0) throw new Rifiuto('Raggruppa: mese o rapportino');
+    // 14/11/2026: d.raggruppa (mese o rapportino) lo mandano ancora le app di prima della 1.4.4: non si legge piu'.
     const tutte = this.sorgentiDaFatturare({});
     const perChiave = new Map(tutte.map(v => [v.tipo + '|' + v.id, v]));
     const scelte = new Map();
@@ -703,7 +772,7 @@ module.exports = {
       for (const s of tutte.filter(x => x.tipo === 'spesa' && x.idRapportino === idRap)) scelte.set('spesa|' + s.id, s);
     }
     const lista = Array.from(scelte.values());
-    const gruppi = this.gruppiDaVoci(lista, cliente, raggruppa);
+    const gruppi = this.gruppiDaVoci(lista, cliente);
     return this.scriviBozzaDaGruppi(cliente, gruppi, { data: d.data });
   },
 
@@ -745,11 +814,21 @@ module.exports = {
         const s = this.db.riga('SELECT descrizione FROM scadenze_pagamento WHERE id = ?', Number(g.slice(9)));
         return (s ? s.descrizione : 'Pagamento') + coda;
       }
-      if (g.indexOf('rapportini:') === 0) return 'Prestazioni di ' + C.nomeMese(g.slice(-7)) + coda;
-      if (g.indexOf('rapportino:') === 0) return 'Rapportino ' + this.numeroDelRapportino(g.slice(11)) + coda;
       if (g.indexOf('ticket:') === 0) return 'Intervento ' + g.slice(7) + coda;
     }
+    // 14/11/2026: solo rapportini, anche di piu' mesi: "Prestazioni di luglio e agosto 2026" (come le note del modello).
+    // Il numero di un rapportino nella causale non c'e' piu'.
+    const mesi = delCompenso.length && delCompenso.every(g => g.gruppo.indexOf('rapportini:') === 0)
+      ? Array.from(new Set(delCompenso.map(g => g.gruppo.slice(-7)))).sort() : [];
+    if (mesi.length) return 'Prestazioni di ' + this.elencoMesi(mesi) + coda;
     return 'Prestazioni professionali' + coda;
+  },
+
+  /** ["2026-07", "2026-08"] -> "luglio e agosto 2026"; a cavallo d'anno "dicembre 2026 e gennaio 2027". */
+  elencoMesi(mesi) {
+    const stessoAnno = mesi.every(m => m.slice(0, 4) === mesi[0].slice(0, 4));
+    const nomi = mesi.map((m, i) => (stessoAnno && i < mesi.length - 1 ? C.MESI[Number(m.slice(5, 7)) - 1] : C.nomeMese(m)));
+    return nomi.length === 1 ? nomi[0] : nomi.slice(0, -1).join(', ') + ' e ' + nomi[nomi.length - 1];
   },
 
   /** Il numero che si vede del rapportino di un lavoro (RAP/2026/0153 per il lavoro RAP/2026/0153-2). */

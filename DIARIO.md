@@ -11,6 +11,7 @@ mai dati veri di clienti.
 
 | Data | Versione | In breve |
 |------|----------|----------|
+| 14/11/2026 | 1.4.4, server 0.15.3 | [Nelle righe della parcella solo i Servizi, come nel modello](#v1-4-4) |
 | 13/11/2026 | 1.4.3, server 0.15.2 | [Il codice dei Servizi da solo nelle righe della bozza, la ritenuta che non resta a zero, il collegamento ricontrollato ogni minuto](#v1-4-3) |
 | 13/11/2026 | 1.4.2, server 0.15.1 | [Un rapportino inviato si cambia liberamente, gli aggiornamenti arrivano, Servizi e prodotti, la parcella pro-forma](#v1-4-2) |
 | 13/11/2026 | 1.4.1 | [Un rapportino inviato si riporta da inviare da dove lo si corregge](#v1-4-1) |
@@ -51,6 +52,62 @@ mai dati veri di clienti.
 | 26/09–14/10/2026 | 0.1 | [Un rapportino confermato non si perde più](#coda) |
 | 7–9/08/2026 | 0.1.0 | [Hackathon NGN Hacks: la versione a voce, senza mani](#v0-1-0) |
 | marzo–giugno 2026 | prima del repository | [Le prime versioni](#prima) |
+
+---
+
+<a id="v1-4-4"></a>
+## 14 novembre 2026 · 1.4.4 · server 0.15.3 · Nelle righe della parcella solo i Servizi, come nel modello
+
+**Perché.** La 1.4.3 metteva il codice del servizio nelle righe, ma le righe erano ancora quelle di prima: "Ore di
+consulenza | Rapportino RAP/2026/0016 del 12/10/2026: Verifica del quadro (4 ore, 38 km)", quantità 1. Andrea, col
+modello della parcella di Manuel davanti: "Hai sbagliato tutto. Basta guardare il file che ti ho allegato: per caso
+vedi qualche riferimento ai Rapportini? No. E cos'altro noti? Forse che ci si basa solamente sui Servizi; e magari
+anche che la quantità non è sempre 1, magari cambia anche in base a quante volte si è fatto quel lavoro, no? [...]
+Inoltre in fondo, nell'ultima pagina, ci sono anche delle indicazioni da seguire". Aveva ragione su tutto: nel modello
+ogni riga è un servizio del listino con la sua quantità, e dei rapportini non c'è traccia.
+
+**Cosa cambia.**
+
+- **Un servizio per riga.** Preparando la bozza dai rapportini nasce, per ogni mese, una riga per servizio: il codice,
+  il nome del servizio e il mese ("Consulenza tecnica a ore | luglio"), la quantità sommata (le ore del mese, i
+  chilometri del mese), l'unità scritta nel listino, il prezzo. Numero del rapportino, giorno, lavoro svolto, "3
+  rapportini" e codici dei progetti non ci sono più nelle righe. I progetti restano nelle note del documento
+  ("Prestazioni di luglio e agosto 2026, progetti ED-001, ED-002").
+- **La quantità dice quante volte.** Le indennità uguali dello stesso mese stanno in una riga sola: tre trasferte
+  sono una riga da 3, non tre righe da 1.
+- **Prezzo e sconto del listino.** Se il servizio costa 40 €/h e il cliente ne paga 30, la riga dice 40,00 con lo
+  sconto del 25%, come le parcelle di oggi. Lo sconto si scrive solo quando è tondo e il conto torna al centesimo;
+  altrimenti la riga porta la tariffa del cliente. L'importo non cambia mai: è la somma dei rapportini.
+- **I chilometri contati a numero.** Nel listino i rimborsi chilometrici hanno l'unità "Nr": prima il server non li
+  riconosceva e la riga dei km restava senza codice. Ora li riconosce dal nome.
+- **Via "Una riga per rapportino".** In Da fatturare non c'è più la scelta fra "Una riga per rapportino" e "Una riga
+  per il mese", né sul computer né sul telefono: la bozza nasce in un modo solo.
+- **Le bozze già fatte** si rifanno da sole quando il server riparte, con gli stessi importi. Restano com'erano solo
+  quelle in cui qualcuno ha cambiato quantità o prezzi a mano.
+- **La testata su ogni pagina.** Le indicazioni in fondo al modello chiedono che una parcella lunga prosegua "ripetendo
+  testata, intestazioni tabella e numero di pagina". La testata non si ripeteva: ora preventivo, parcella pro-forma e
+  parcella la ripetono in cima a ogni pagina. Le altre indicazioni (campi, righe a zero in vista, più scadenze,
+  beneficiario, note intere, misure) c'erano dalla 1.4.0; i conti dei due esempi del modello tornano al centesimo.
+
+**Dove guardare.** Fatturazione › Da fatturare › scegli i rapportini di un cliente › Prepara la bozza › Parcella
+pro-forma.
+
+![La parcella pro-forma fatta dai rapportini: un servizio per riga](docs/diario/2026-11-14-parcella-servizi-pdf.png)
+![La bozza sul computer, con le righe dei servizi](docs/diario/2026-11-14-bozza-servizi-computer.png)
+![Da fatturare sul computer, senza la scelta delle righe](docs/diario/2026-11-14-da-fatturare-computer.png)
+![La bozza sul telefono](docs/diario/2026-11-14-bozza-servizi-telefono.png)
+
+**Provato.** Le prove del server (713), del computer (369) e del telefono (464), gli undici giri cliccati di Wisper
+Ufficio, il telefono sull'emulatore (Da fatturare senza la scelta, la bozza con le righe dei servizi), documenti di
+due e tre pagine stampati per controllare che la testata e le intestazioni della tabella tornino su ogni pagina.
+
+**Non provato.** Sul listino vero dello studio (la regola è provata su servizi di esempio che ne copiano la forma), sui
+telefoni veri e sul computer di Manuel. Se nel listino manca il servizio adatto, la riga esce senza codice
+("Rimborso chilometrico di settembre 2026"): il codice si sceglie da "Da Servizi e prodotti". I ticket chiusi con
+"Una riga per l'intervento" fanno ancora una riga sola.
+
+**Versione:** [v1.4.4](https://github.com/postagaspa-star/wisper/releases/tag/v1.4.4) (telefono codice 22, computer
+1.4.4). Accordo: [docs/gestionale/servizi.md §7](docs/gestionale/servizi.md).
 
 ---
 

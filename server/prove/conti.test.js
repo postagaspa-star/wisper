@@ -8,6 +8,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const C = require('../src/conti');
+const Servizi = require('../src/servizi');
 const { schemaFormato, formatta, controllaFormato } = require('../src/formati');
 const { Wisper, SISTEMA } = require('../src/wisper');
 const { cartellaNuova } = require('./aiuto');
@@ -117,8 +118,8 @@ const CASI_FATTURA = require('./casi-fattura.json');
 test('casi-fattura.json: i 16 casi del contratto e i casi limite del server', () => {
   assert.ok(CASI_FATTURA.casi.length >= 30, 'i 16 del contratto piu\' i casi limite');
   assert.deepEqual(CASI_FATTURA.casi.slice(0, 16).map(c => Number(c.nome.split('.')[0])), Array.from({ length: 16 }, (_, i) => i + 1));
-  // I 4 della fase 4 (A-D) e il ticket della fase 5 (E, fase5.md §7.6).
-  assert.equal(CASI_FATTURA.raggruppamenti.length, 5);
+  // I 4 della fase 4 (A-D), il ticket della fase 5 (E, fase5.md §7.6) e i 3 del 14/11/2026 (F-H: un servizio per riga).
+  assert.equal(CASI_FATTURA.raggruppamenti.length, 8);
 });
 
 for (const c of CASI_FATTURA.casi) {
@@ -134,9 +135,19 @@ for (const g of CASI_FATTURA.raggruppamenti) {
   test('righe dai rapportini: ' + g.nome, () => {
     // Fase 5: un ticket chiuso "una riga per l'intervento" fa la sua riga con righeTicket (stessi rapportini e spese).
     const gruppi = g.ticket ? C.righeTicket({ ticket: g.ticket, cliente: g.cliente, rapportini: g.rapportini, spese: g.spese, ore: g.ore || [] })
-      : C.righeRapportini({ raggruppa: g.raggruppa, cliente: g.cliente, rapportini: g.rapportini, spese: g.spese });
-    const righe = [].concat(...gruppi.map(x => x.righe)).map(r => ({ tipo: r.tipo, descrizione: r.descrizione, quantita: r.quantita, unita: r.unita, prezzo: r.prezzo, importo: r.importo }));
+      : C.righeRapportini({
+        cliente: g.cliente, rapportini: g.rapportini, spese: g.spese,
+        nomeServizio: g.nomiServizi ? c => g.nomiServizi[c] || '' : undefined,
+        // 14/11/2026: col listino del caso, il servizio lo sceglie la regola del server (Servizi.scegliServizio).
+        servizio: g.servizi ? (genere, prezzo) => Servizi.scegliServizio({ servizi: g.servizi, genere, prezzo, cliente: g.clienteNome || '', altriClienti: [] }) : undefined,
+      });
+    // Di ogni riga si guardano i campi scritti nel caso (i casi A-E non hanno codice e sconto).
+    const tutte = [].concat(...gruppi.map(x => x.righe));
+    assert.equal(tutte.length, g.atteso.righe.length, 'quante righe: ' + tutte.map(r => r.descrizione).join(' / '));
+    const righe = tutte.map((r, i) => Object.fromEntries(Object.keys(g.atteso.righe[i]).map(k => [k, r[k] === undefined && (k === 'codice' || k === 'sconto') ? (k === 'sconto' ? 0 : '') : r[k]])));
     assert.deepEqual(righe, g.atteso.righe);
+    // Nelle righe non c'e' niente dei rapportini: ne' il numero, ne' il giorno, ne' quanti sono, ne' il lavoro svolto.
+    if (!g.ticket) for (const r of tutte.filter(x => x.tipo === 'compenso')) assert.doesNotMatch(r.descrizione, /rapportin|RAP\/|\d{2}\/\d{2}\/\d{4}/i, r.descrizione);
     assert.equal(gruppi.reduce((t, x) => t + x.sorgenti.length, 0), g.atteso.sorgenti, 'le sorgenti');
     if (g.atteso.gruppo) assert.equal(gruppi[0].gruppo, g.atteso.gruppo);
     // L'importo delle righe e' la somma delle sorgenti (gia' arrotondate e firmate).

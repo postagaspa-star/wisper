@@ -100,8 +100,8 @@
      "atteso": {"righe": [1633.5,242.44,567,108.68], "compenso": 2551.62, "contributo": 127.58, "baseIva": 2679.2, "iva": 589.43, "anticipazioni": 0, "parteSenzaIva": 0, "bollo": 0, "bolloAddebitato": 0, "totale": 3268.63, "ritenuta": 510.32, "netto": 2758.31}}
   ],
   "raggruppamenti": [
-    {"nome": "A. Elettrodinamica, settembre: una riga per il mese",
-     "raggruppa": "mese", "cliente": {"id": "C001", "tariffaFissa": 30, "pagaViaggio": false},
+    {"nome": "A. Elettrodinamica, settembre: ore, km e spese del mese (senza listino)",
+     "cliente": {"id": "C001", "tariffaFissa": 30, "pagaViaggio": false},
      "rapportini": [
        {"id": "RAP/2026/0118", "data": "2026-09-03", "oreLavoro": 6, "oreExtra": 0, "oreViaggio": 1, "tariffa": 30, "maggExtra": 0, "compensoOre": 180, "km": 52, "euroKm": 0.76, "rimborsoKm": 39.52},
        {"id": "RAP/2026/0121", "data": "2026-09-08", "oreLavoro": 7, "oreExtra": 0, "oreViaggio": 1, "tariffa": 30, "maggExtra": 0, "compensoOre": 210, "km": 52, "euroKm": 0.76, "rimborsoKm": 39.52},
@@ -113,40 +113,42 @@
        {"id": 11, "idRapportino": "RAP/2026/0118", "data": "2026-09-03", "descrizione": "Pedaggio", "importo": 8.4, "anticipazione": false},
        {"id": 14, "idRapportino": "RAP/2026/0124", "data": "2026-09-11", "descrizione": "Pedaggio", "importo": 8.4, "anticipazione": false}],
      "atteso": {"righe": [
-       {"tipo": "compenso", "descrizione": "Prestazioni professionali di settembre 2026 (6 rapportini)", "quantita": 38, "unita": "ore", "prezzo": 30, "importo": 1140},
+       {"tipo": "compenso", "descrizione": "Prestazioni professionali di settembre 2026", "quantita": 38, "unita": "ore", "prezzo": 30, "importo": 1140},
        {"tipo": "compenso", "descrizione": "Rimborso chilometrico di settembre 2026", "quantita": 312, "unita": "km", "prezzo": 0.76, "importo": 237.12},
        {"tipo": "compenso", "descrizione": "Spese di viaggio e materiale di settembre 2026", "quantita": 1, "unita": "", "prezzo": 16.8, "importo": 16.8}],
        "gruppo": "rapportini:C001:2026-09", "sorgenti": 8}},
-    {"nome": "B. Rossi Impianti, un rapportino in una riga e la sua spesa anticipata a parte",
-     "raggruppa": "rapportino", "cliente": {"id": "C002", "tariffaFissa": null, "pagaViaggio": false},
+    {"nome": "B. Rossi Impianti, un rapportino solo: le righe sono le stesse del mese, la spesa anticipata a parte",
+     "cliente": {"id": "C002", "tariffaFissa": null, "pagaViaggio": false},
      "rapportini": [
        {"id": "RAP/2026/0142", "data": "2026-10-21", "descrizione": "Collaudo quadro", "oreLavoro": 6.5, "oreExtra": 0, "oreViaggio": 1, "tariffa": 42, "maggExtra": 0, "compensoOre": 273, "km": 48, "euroKm": 0.76, "rimborsoKm": 36.48}],
      "spese": [
        {"id": 29, "idRapportino": "RAP/2026/0142", "data": "2026-10-21", "descrizione": "Pedaggio", "importo": 8.4, "anticipazione": false},
        {"id": 30, "idRapportino": "RAP/2026/0142", "data": "2026-10-21", "descrizione": "Corriere per i documenti", "importo": 12, "anticipazione": true}],
      "atteso": {"righe": [
-       {"tipo": "compenso", "descrizione": "Rapportino RAP/2026/0142 del 21/10/2026: Collaudo quadro (6,5 ore, 48 km, spese 8,40 €)", "quantita": 1, "unita": "", "prezzo": 317.88, "importo": 317.88},
+       {"tipo": "compenso", "descrizione": "Prestazioni professionali di ottobre 2026", "quantita": 6.5, "unita": "ore", "prezzo": 42, "importo": 273},
+       {"tipo": "compenso", "descrizione": "Rimborso chilometrico di ottobre 2026", "quantita": 48, "unita": "km", "prezzo": 0.76, "importo": 36.48},
+       {"tipo": "compenso", "descrizione": "Spese di viaggio e materiale di ottobre 2026", "quantita": 1, "unita": "", "prezzo": 8.4, "importo": 8.4},
        {"tipo": "anticipazione", "descrizione": "Spesa anticipata per conto del cliente: Corriere per i documenti del 21/10/2026", "quantita": 1, "unita": "", "prezzo": 12, "importo": 12}],
-       "sorgenti": 3}},
+       "gruppo": "rapportini:C002:2026-10", "sorgenti": 3}},
     {"nome": "C. due €/km nello stesso mese (le tabelle ACI cambiate): due righe di km",
-     "raggruppa": "mese", "cliente": {"id": "C001", "tariffaFissa": 30, "pagaViaggio": false},
+     "cliente": {"id": "C001", "tariffaFissa": 30, "pagaViaggio": false},
      "rapportini": [
        {"id": "RAP/2027/0002", "data": "2027-01-08", "oreLavoro": 6, "oreExtra": 0, "oreViaggio": 0, "tariffa": 30, "maggExtra": 0, "compensoOre": 180, "km": 52, "euroKm": 0.76, "rimborsoKm": 39.52},
        {"id": "RAP/2027/0005", "data": "2027-01-15", "oreLavoro": 6, "oreExtra": 0, "oreViaggio": 0, "tariffa": 30, "maggExtra": 0, "compensoOre": 180, "km": 52, "euroKm": 0.79, "rimborsoKm": 41.08}],
      "spese": [],
      "atteso": {"righe": [
-       {"tipo": "compenso", "descrizione": "Prestazioni professionali di gennaio 2027 (2 rapportini)", "quantita": 12, "unita": "ore", "prezzo": 30, "importo": 360},
+       {"tipo": "compenso", "descrizione": "Prestazioni professionali di gennaio 2027", "quantita": 12, "unita": "ore", "prezzo": 30, "importo": 360},
        {"tipo": "compenso", "descrizione": "Rimborso chilometrico di gennaio 2027 (0,76 €/km)", "quantita": 52, "unita": "km", "prezzo": 0.76, "importo": 39.52},
        {"tipo": "compenso", "descrizione": "Rimborso chilometrico di gennaio 2027 (0,79 €/km)", "quantita": 52, "unita": "km", "prezzo": 0.79, "importo": 41.08}],
        "sorgenti": 2}},
     {"nome": "D. straordinari maggiorati: la riga delle ore diventa a corpo",
-     "raggruppa": "mese", "cliente": {"id": "C002", "tariffaFissa": null, "pagaViaggio": false},
+     "cliente": {"id": "C002", "tariffaFissa": null, "pagaViaggio": false},
      "rapportini": [
        {"id": "RAP/2026/0150", "data": "2026-10-26", "oreLavoro": 6, "oreExtra": 2, "oreViaggio": 0, "tariffa": 42, "maggExtra": 25, "compensoOre": 357, "km": 0, "euroKm": 0.76, "rimborsoKm": 0},
        {"id": "RAP/2026/0153", "data": "2026-10-28", "oreLavoro": 4, "oreExtra": 0, "oreViaggio": 0, "tariffa": 42, "maggExtra": 25, "compensoOre": 168, "km": 0, "euroKm": 0.76, "rimborsoKm": 0}],
      "spese": [],
      "atteso": {"righe": [
-       {"tipo": "compenso", "descrizione": "Prestazioni professionali di ottobre 2026 (2 rapportini, 12 ore di cui 2 straordinarie)", "quantita": 1, "unita": "", "prezzo": 525, "importo": 525}],
+       {"tipo": "compenso", "descrizione": "Prestazioni professionali di ottobre 2026 (12 ore di cui 2 straordinarie)", "quantita": 1, "unita": "", "prezzo": 525, "importo": 525}],
        "sorgenti": 2}},
     {"nome": "E. ticket TK/2026/0012 (Mario Bianchi): un rapportino e il materiale in una riga",
      "ticket": {"numero": "TK/2026/0012", "titolo": "Inverter in errore di isolamento", "impianto": "Impianto fotovoltaico 6 kW", "risolto": "2026-10-21", "fatturazione": "ticket"},
@@ -154,6 +156,47 @@
      "rapportini": [{"id": "RAP/2026/0151", "data": "2026-10-21", "oreLavoro": 2, "oreExtra": 0, "oreViaggio": 0.5, "tariffa": 45, "maggExtra": 0, "compensoOre": 90, "km": 24, "euroKm": 0.76, "rimborsoKm": 18.24}],
      "spese": [{"id": 41, "idRapportino": "RAP/2026/0151", "data": "2026-10-21", "descrizione": "Fusibili e portafusibili", "categoria": "materiale", "importo": 18.5, "anticipazione": false}],
      "atteso": {"righe": [{"tipo": "compenso", "descrizione": "Intervento TK/2026/0012 del 21/10/2026: Inverter in errore di isolamento - Impianto fotovoltaico 6 kW (2 ore, 24 km, materiale e spese 18,50 €)", "quantita": 1, "unita": "", "prezzo": 126.74, "importo": 126.74}],
-       "gruppo": "ticket:TK/2026/0012", "sorgenti": 3}}
+       "gruppo": "ticket:TK/2026/0012", "sorgenti": 3}},
+    {"nome": "F. col listino, due mesi: ogni riga è un servizio (codice, nome | mese, unità e prezzo di listino con lo sconto che porta alla tariffa); i km si contano a numero",
+     "cliente": {"id": "C001", "tariffaFissa": 30, "pagaViaggio": false}, "clienteNome": "Elettrodinamica Srl",
+     "servizi": [
+       {"id": 1, "codice": "CT1", "nome": "Consulenza tecnica a ore", "unita": "Ore", "modo": "ore", "prezzo": 40, "attivo": 1, "ordine": 0},
+       {"id": 2, "codice": "KMA", "nome": "Rimborso chilometrico | Auto di esempio", "unita": "Nr", "modo": "quantita", "prezzo": 0.76, "attivo": 1, "ordine": 1}],
+     "rapportini": [
+       {"id": "RAP/2026/0201", "data": "2026-07-06", "descrizione": "Verifica del quadro", "oreLavoro": 8, "oreExtra": 0, "oreViaggio": 0, "tariffa": 30, "maggExtra": 0, "compensoOre": 240, "km": 52, "euroKm": 0.76, "rimborsoKm": 39.52},
+       {"id": "RAP/2026/0204", "data": "2026-07-20", "descrizione": "Collaudo", "oreLavoro": 6.5, "oreExtra": 0, "oreViaggio": 0, "tariffa": 30, "maggExtra": 0, "compensoOre": 195, "km": 52, "euroKm": 0.76, "rimborsoKm": 39.52},
+       {"id": "RAP/2026/0210", "data": "2026-08-03", "descrizione": "Schemi", "oreLavoro": 4, "oreExtra": 0, "oreViaggio": 0, "tariffa": 30, "maggExtra": 0, "compensoOre": 120, "km": 0, "euroKm": 0.76, "rimborsoKm": 0}],
+     "spese": [],
+     "atteso": {"righe": [
+       {"tipo": "compenso", "codice": "CT1", "descrizione": "Consulenza tecnica a ore | luglio", "quantita": 14.5, "unita": "Ore", "prezzo": 40, "sconto": 25, "importo": 435},
+       {"tipo": "compenso", "codice": "KMA", "descrizione": "Rimborso chilometrico | Auto di esempio | luglio", "quantita": 104, "unita": "Nr", "prezzo": 0.76, "sconto": 0, "importo": 79.04},
+       {"tipo": "compenso", "codice": "CT1", "descrizione": "Consulenza tecnica a ore | agosto", "quantita": 4, "unita": "Ore", "prezzo": 40, "sconto": 25, "importo": 120}],
+       "gruppo": "rapportini:C001:2026-07", "sorgenti": 3}},
+    {"nome": "G. le indennità uguali del mese in una riga sola: la quantità dice quante volte; quella a zero resta; col nome del listino prende il mese",
+     "cliente": {"id": "C002", "tariffaFissa": null, "pagaViaggio": false}, "nomiServizi": {"TRA": "Indennità di trasferta"},
+     "rapportini": [
+       {"id": "RAP/2026/0301", "data": "2026-10-05", "oreLavoro": 4, "oreExtra": 0, "oreViaggio": 0, "tariffa": 45, "maggExtra": 0, "compensoOre": 180, "km": 0, "euroKm": 0.76, "rimborsoKm": 0,
+        "indennita": [{"codice": "TRA", "descrizione": "Indennità di trasferta", "unita": "Giorni", "prezzo": 30, "quantita": 1}]},
+       {"id": "RAP/2026/0302", "data": "2026-10-12", "oreLavoro": 3, "oreExtra": 0, "oreViaggio": 0, "tariffa": 45, "maggExtra": 0, "compensoOre": 135, "km": 0, "euroKm": 0.76, "rimborsoKm": 0,
+        "indennita": [{"codice": "TRA", "descrizione": "Indennità di trasferta", "unita": "Giorni", "prezzo": 30, "quantita": 1}, {"codice": "PAR", "descrizione": "Parcheggio in cantiere", "unita": "Nr", "prezzo": 0, "quantita": 0}]},
+       {"id": "RAP/2026/0303", "data": "2026-10-19", "oreLavoro": 2, "oreExtra": 0, "oreViaggio": 0, "tariffa": 45, "maggExtra": 0, "compensoOre": 90, "km": 0, "euroKm": 0.76, "rimborsoKm": 0,
+        "indennita": [{"codice": "TRA", "descrizione": "Indennità di trasferta", "unita": "Giorni", "prezzo": 30, "quantita": 2}]}],
+     "spese": [],
+     "atteso": {"righe": [
+       {"tipo": "compenso", "codice": "", "descrizione": "Prestazioni professionali di ottobre 2026", "quantita": 9, "unita": "ore", "prezzo": 45, "sconto": 0, "importo": 405},
+       {"tipo": "compenso", "codice": "TRA", "descrizione": "Indennità di trasferta | ottobre", "quantita": 4, "unita": "Giorni", "prezzo": 30, "sconto": 0, "importo": 120},
+       {"tipo": "compenso", "codice": "PAR", "descrizione": "Parcheggio in cantiere", "quantita": 0, "unita": "Nr", "prezzo": 0, "sconto": 0, "importo": 0}],
+       "gruppo": "rapportini:C002:2026-10", "sorgenti": 3}},
+    {"nome": "H. col listino, ma lo sconto non torna al centesimo o la tariffa è più alta del listino: il prezzo è la tariffa, senza sconto",
+     "cliente": {"id": "C002", "tariffaFissa": null, "pagaViaggio": false}, "clienteNome": "Rossi Impianti Srl",
+     "servizi": [{"id": 1, "codice": "CT1", "nome": "Consulenza tecnica a ore", "unita": "Ore", "modo": "ore", "prezzo": 40, "attivo": 1, "ordine": 0}],
+     "rapportini": [
+       {"id": "RAP/2026/0401", "data": "2026-11-03", "oreLavoro": 3, "oreExtra": 0, "oreViaggio": 0, "tariffa": 33.33, "maggExtra": 0, "compensoOre": 99.99, "km": 0, "euroKm": 0.76, "rimborsoKm": 0},
+       {"id": "RAP/2026/0402", "data": "2026-11-10", "oreLavoro": 2, "oreExtra": 0, "oreViaggio": 0, "tariffa": 45, "maggExtra": 0, "compensoOre": 90, "km": 0, "euroKm": 0.76, "rimborsoKm": 0}],
+     "spese": [],
+     "atteso": {"righe": [
+       {"tipo": "compenso", "codice": "CT1", "descrizione": "Consulenza tecnica a ore | novembre", "quantita": 3, "unita": "Ore", "prezzo": 33.33, "sconto": 0, "importo": 99.99},
+       {"tipo": "compenso", "codice": "CT1", "descrizione": "Consulenza tecnica a ore | novembre", "quantita": 2, "unita": "Ore", "prezzo": 45, "sconto": 0, "importo": 90}],
+       "sorgenti": 2}}
   ]
 }

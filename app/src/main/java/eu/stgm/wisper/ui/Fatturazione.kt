@@ -95,7 +95,6 @@ fun SchermataFatturazione(dati: Dati, nav: Navigatore) {
     var menu by remember { mutableStateOf(false) }
     var lettura by remember { mutableStateOf<DaFatturare?>(null) }
     var scelte by remember { mutableStateOf(RicordoFatture.scelte) }
-    var raggruppa by remember { mutableStateOf<String?>(null) }
     var preparo by remember { mutableStateOf(false) }
     val ctx = LocalContext.current
     val esporta: (String, List<Pair<String, String>>, String) -> Unit = { cosa, p, titolo ->
@@ -118,7 +117,7 @@ fun SchermataFatturazione(dati: Dati, nav: Navigatore) {
                 seg, { RicordoFatture.segmento = it },
             )
             when (seg) {
-                SegmentoFatture.DA_FATTURARE -> PaginaDaFatturare(dati, nav, scrive, scelte, raggruppa, onLetto = { lettura = it }, onScelte = { s, a -> scelte = s; RicordoFatture.scelte = s; a?.let(avvisi::mostra) }, onRaggruppa = { raggruppa = it })
+                SegmentoFatture.DA_FATTURARE -> PaginaDaFatturare(dati, nav, scrive, scelte, onLetto = { lettura = it }, onScelte = { s, a -> scelte = s; RicordoFatture.scelte = s; a?.let(avvisi::mostra) })
                 SegmentoFatture.FATTURE -> PaginaElencoFatture(dati, nav)
                 SegmentoFatture.RICEVUTE -> PaginaRicevute(dati, nav)
                 SegmentoFatture.RIEPILOGO -> PaginaRiepilogo(dati, esporta)
@@ -139,10 +138,10 @@ fun SchermataFatturazione(dati: Dati, nav: Navigatore) {
                                 if (presenti.isEmpty() || idCliente == null) { avvisi.mostra("Scegli almeno una cosa da fatturare"); return@PulsantePrincipale }
                                 preparo = true
                                 scope.launch {
-                                    val rag = raggruppa ?: lettura?.raggruppa?.get(idCliente)
-                                    dati.fase4.preparaFattura(idCliente, tutte.filter { it.chiave in presenti }, rag)
+                                    // 14/11/2026: la bozza nasce sempre con un servizio per riga (niente piu' "una riga per rapportino").
+                                    dati.fase4.preparaFattura(idCliente, tutte.filter { it.chiave in presenti }, null)
                                         .onSuccess { f ->
-                                            scelte = emptySet(); RicordoFatture.scelte = emptySet(); raggruppa = null
+                                            scelte = emptySet(); RicordoFatture.scelte = emptySet()
                                             RicordoFatture.giro++
                                             avvisi.mostra("Bozza ${f.riferimento} pronta: controllala")
                                             nav.vai("fattura/${f.id}")
@@ -188,10 +187,8 @@ private fun PaginaDaFatturare(
     nav: Navigatore,
     scrive: Boolean,
     scelte: Set<String>,
-    raggruppa: String?,
     onLetto: (DaFatturare) -> Unit,
     onScelte: (Set<String>, String?) -> Unit,
-    onRaggruppa: (String?) -> Unit,
 ) {
     val c = W.colori
     var giro by remember { mutableIntStateOf(0) }
@@ -215,7 +212,7 @@ private fun PaginaDaFatturare(
             }
             if (d.gruppi.isEmpty()) Scheda(orizzontale = 18.dp, verticale = 16.dp) { RigaCalma("Niente di pronto da fatturare") }
             d.gruppi.forEach { g ->
-                SchedaCliente(g, d, scelte, scrive, tutte, nav, raggruppa, onScelte, onRaggruppa, onFuori = { fuori = it })
+                SchedaCliente(g, d, scelte, scrive, tutte, nav, onScelte, onFuori = { fuori = it })
             }
             if (d.piuAvanti.isNotEmpty()) {
                 TitoloSezione("Più avanti", Testo.quanti(d.piuAvanti.size, "cosa", "cose"), if (piuAvanti) "Chiudi" else "Apri") { piuAvanti = !piuAvanti }
@@ -280,9 +277,7 @@ private fun SchedaCliente(
     scrive: Boolean,
     tutte: List<VoceDaFatturare>,
     nav: Navigatore,
-    raggruppa: String?,
     onScelte: (Set<String>, String?) -> Unit,
-    onRaggruppa: (String?) -> Unit,
     onFuori: (VoceDaFatturare) -> Unit,
 ) {
     val c = W.colori
@@ -335,12 +330,6 @@ private fun SchedaCliente(
                 LineaElenco()
                 RigaVoceDaFatturare(v, v.chiave in scelte, scrive, onCambia = { cambia(listOf(v)) }, onLungo = { onFuori(v) })
             }
-        }
-        // Come si raggruppano i rapportini scelti di questo cliente: lo si cambia solo se ce ne sono.
-        val conRapportini = g.voci.any { it.tipo == "rapportino" && it.chiave in scelte }
-        if (scrive && conRapportini) {
-            val attuale = raggruppa ?: d.raggruppa[g.idCliente] ?: "rapportino"
-            Segmenti(listOf("rapportino" to "Una riga per rapportino", "mese" to "Una riga per il mese"), attuale, { onRaggruppa(it) })
         }
     }
 }

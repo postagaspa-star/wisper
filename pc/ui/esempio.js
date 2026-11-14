@@ -2274,7 +2274,7 @@
     const lista = Array.from(gruppi.values()).sort((a, b) => b.totale - a.totale);
     lista.forEach(x => x.voci.sort((a, b) => a.data.localeCompare(b.data)));
     const raggruppa = {};
-    lista.forEach(x => { const c = dati.ana.soggetti.find(s => s.id === x.idCliente) || {}; raggruppa[x.idCliente] = c.tariffaFissa ? 'mese' : 'rapportino'; });
+    lista.forEach(x => { raggruppa[x.idCliente] = 'mese'; });
     return {
       ok: true, oggi: dati.oggi, totale: Math.round(lista.reduce((a, x) => a + x.totale, 0) * 100) / 100, clienti: lista.length, gruppi: lista, piuAvanti: [],
       inBozza: F.fatture.filter(f => f.stato === 'bozza' || f.stato === 'pronta').map(f => ({ idFattura: f.id, riferimento: f.riferimento, idCliente: f.idCliente, cliente: f.cliente, stato: f.stato, voci: (f.sorgenti || []).length, totale: f.conti.totale })),
@@ -2369,23 +2369,26 @@
         const righe = [];
         const sorgenti = [];
         let n = 0;
-        if (b.raggruppa === 'mese') {
-          const mesi = {};
-          raps.forEach(r => { (mesi[r.data.slice(0, 7)] = mesi[r.data.slice(0, 7)] || []).push(r); });
-          Object.keys(mesi).sort().forEach(m => {
-            const gr = 'rapportini:' + b.idCliente + ':' + m;
-            const somma = Math.round(mesi[m].reduce((x, r) => x + C.num(r.totale), 0) * 100) / 100;
-            righe.push(Object.assign(rigaEsempio(id * 10 + (++n), gr, 'compenso', 'Prestazioni professionali di ' + C.nomeMese(m).toLowerCase() + ' (' + mesi[m].length + (mesi[m].length === 1 ? ' rapportino)' : ' rapportini)'), somma)));
-            mesi[m].forEach(r => sorgenti.push({ tipo: 'rapportino', id: r.id, gruppo: gr, descrizione: r.id + ' · ' + C.data(r.data).slice(0, 5), importo: C.num(r.totale), attiva: true }));
-          });
-        } else {
-          raps.forEach(r => {
-            const gr = 'rapportino:' + r.id;
-            righe.push(rigaEsempio(id * 10 + (++n), gr, 'compenso', 'Rapportino ' + r.id + ' del ' + C.data(r.data) + ': ' + (r.descrizione || ''), C.num(r.totale)));
-            sorgenti.push({ tipo: 'rapportino', id: r.id, gruppo: gr, descrizione: r.id + ' · ' + C.data(r.data).slice(0, 5), importo: C.num(r.totale), attiva: true });
-          });
-        }
-        const f = ricalcolaFattura(dati, { id, tipo: 'fattura', tipoDocumento: 'TD01', idCliente: b.idCliente, stato: 'bozza', numero: '', data: dati.oggi, causale: b.raggruppa === 'mese' ? 'Prestazioni professionali' : 'Rapportini',
+        // 14/11/2026: come il server, un servizio per riga e per mese (le ore, i km), senza niente dei rapportini.
+        const cent = x => Math.round(x * 100) / 100;
+        const mesi = {};
+        raps.forEach(r => { (mesi[r.data.slice(0, 7)] = mesi[r.data.slice(0, 7)] || []).push(r); });
+        Object.keys(mesi).sort().forEach(m => {
+          const gr = 'rapportini:' + b.idCliente + ':' + m;
+          const conAnno = C.nomeMese(m).toLowerCase();
+          const mese = conAnno.replace(/ \d{4}$/, '');
+          const somma = campo => cent(mesi[m].reduce((x, r) => x + C.num(r[campo]), 0));
+          const compenso = somma('compensoOre');
+          const rimborso = somma('rimborsoKm');
+          const altro = cent(somma('totale') - compenso - rimborso);
+          const conServizio = (codice, descrizione, quantita, unita, prezzo, importo) => Object.assign(rigaEsempio(id * 10 + (++n), gr, 'compenso', descrizione, importo),
+            { codice, sconto: 0 }, cent(quantita * prezzo) === importo ? { quantita, unita, prezzo } : {});
+          if (compenso > 0) righe.push(conServizio('CON', 'Ore di consulenza | ' + mese, cent(somma('oreLavoro') + somma('oreExtra')), 'Ore', C.num(mesi[m][0].tariffa), compenso));
+          if (rimborso > 0) righe.push(conServizio('KM', 'Rimborso chilometrico | ' + mese, cent(mesi[m].reduce((x, r) => x + (C.num(r.rimborsoKm) > 0 ? C.num(r.km) : 0), 0)), 'Km', C.num(mesi[m][0].euroKm), rimborso));
+          if (altro > 0) righe.push(rigaEsempio(id * 10 + (++n), gr, 'compenso', 'Spese di viaggio e materiale di ' + conAnno, altro));
+          mesi[m].forEach(r => sorgenti.push({ tipo: 'rapportino', id: r.id, gruppo: gr, descrizione: r.id + ' · ' + C.data(r.data).slice(0, 5), importo: C.num(r.totale), attiva: true }));
+        });
+        const f = ricalcolaFattura(dati, { id, tipo: 'fattura', tipoDocumento: 'TD01', idCliente: b.idCliente, stato: 'bozza', numero: '', data: dati.oggi, causale: 'Prestazioni professionali',
           righe, sorgenti, incassi: [], ritenuta: !!c.partitaIva, regime: 'ordinario', ivaPercentuale: 22, eppiPercentuale: 5, ritenutaPercentuale: 20, bolloRivalsa: true, idConto: 1, conto: 'Conto studio …3456',
           scadenzaGiorni: 30, idCommessa: '', idFatturaCollegata: null, noteInterne: '', prontaIl: '' });
         F.fatture.unshift(f);

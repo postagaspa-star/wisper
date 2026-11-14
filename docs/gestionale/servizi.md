@@ -185,3 +185,50 @@ viene segnato zero (e comunque la ritenuta è già segnata nelle impostazioni)".
    scriveva 0: la bozza diceva "sì" in basso e nei conti la ritenuta era zero. Ora la percentuale non è mai zero
    (`percentualeRitenuta`: l'impostazione, o 20), una bozza col "sì" e la percentuale a zero la riprende a ogni
    ricalcolo, e all'avvio il server rifà i conti delle bozze rimaste così. Le fatture pronte o emesse non si toccano.
+
+## 7. Cambiamenti del 14/11/2026 (1.4.4, server 0.15.3): nelle righe solo i Servizi
+
+Andrea, col modello della parcella davanti: "Per caso vedi qualche riferimento ai Rapportini? No. E cos'altro noti?
+Forse che ci si basa solamente sui Servizi; e magari anche che la quantità non è sempre 1, magari cambia anche in base
+a quante volte si è fatto quel lavoro, no? [...] Inoltre in fondo, nell'ultima pagina, ci sono anche delle indicazioni
+da seguire". Il punto 3 del §6 ("una riga per rapportino") e i testi del punto 1 erano sbagliati: il modello è il
+requisito, e nel modello ogni riga è un servizio.
+
+1. **Un servizio per riga, per mese** (`righeRapportini` in `server/src/conti.js`, casi A-H in
+   `server/prove/casi-fattura.json`). Dai rapportini scelti nascono, per ogni mese:
+   - una riga delle **ore** per tariffa: codice e nome del servizio, " | " e il mese senza l'anno ("Consulenza tecnica
+     a ore | luglio"), quantità = le ore del mese, unità del servizio;
+   - una riga dei **km** per euro al km, allo stesso modo ("Rimborso chilometrico | Auto di esempio | luglio");
+   - una riga per **indennità**: quelle uguali (codice, nome, unità e prezzo) stanno insieme e la quantità è la somma
+     (tre trasferte sono una riga da 3, non tre righe da 1). Se il testo è ancora il nome del servizio com'è nel
+     listino prende il mese; se chi l'ha aggiunta al lavoro ci ha scritto un dettaglio suo resta quello. Una indennità
+     a zero resta in vista;
+   - le spese non anticipate del mese in una riga, le anticipazioni una per spesa (come prima).
+   Nelle righe non c'è più niente dei rapportini: né il numero, né il giorno, né quanti sono, né il lavoro svolto, né i
+   codici dei progetti. I progetti (o la commessa) restano nella causale, cioè nelle Note del documento: "Prestazioni di
+   ottobre 2026, progetti ED-001, ED-002"; con più mesi "Prestazioni di luglio e agosto 2026".
+2. **"Una riga per rapportino" non c'è più**: tolta la scelta da Da fatturare, sul computer e sul telefono. Il server
+   non legge più `raggruppa` (le app di prima lo mandano ancora) e `daFatturare` risponde sempre `mese`.
+3. **Prezzo e sconto dal listino**. Il prezzo della riga è quello del servizio quando la tariffa dei rapportini ci
+   arriva con uno sconto tondo (intero o mezzo punto) e il conto torna al centesimo: 40,00 col 25% per chi paga 30.
+   Altrimenti il prezzo è la tariffa, senza sconto (45 di listino e 40 di tariffa non diventano "11,11%"). L'importo
+   della riga è sempre la somma dei rapportini e non cambia.
+4. **L'unità è quella del servizio** com'è nel listino. Nel listino venuto da Flextaxa i chilometri si contano a
+   numero ("Nr"): un servizio a numero che si chiama rimborso chilometrico ora è riconosciuto come servizio dei km
+   (`genereDiUnita`); prima la riga dei km restava senza codice.
+5. **Le bozze già fatte** col modo di prima (`rifaiRigheDaiServizi` in `fatture.js`, da `sistemaBozze` all'avvio): le
+   righe dei rapportini si rifanno con la regola nuova, una volta sola per bozza, con gli stessi importi e le stesse
+   cose riservate. Non si toccano le righe scritte a mano, le scadenze, i ticket, e le bozze in cui qualcuno ha
+   cambiato quantità o prezzi (la somma non torna più). Nel registro di avvio: "N con le righe rifatte dai Servizi".
+6. **Le indicazioni in fondo al modello**, ricontrollate una per una:
+   - *proseguire su altre pagine ripetendo testata, intestazioni tabella e numero di pagina*: la testata non si
+     ripeteva. Ora preventivo, parcella pro-forma e parcella stanno in una tabella con la testata nell'intestazione
+     (`paginaDoc` in `pc/ui/documenti.js`): chi stampa la ripete su ogni pagina. Provato con 9, 17 e 45 righe;
+   - *righe intere, riepilogo unito, pagamento e note senza coprire il piè*: c'erano (`break-inside: avoid`);
+   - *campi del mittente e del destinatario, etichetta Commessa/JOB, righe a zero e sconti a zero in vista, più
+     scadenze, beneficiario distinto, BIC, note intere, A4 con 14 mm, Figtree, corpi 8-9/14/12 pt*: c'erano dalla 1.4.0;
+   - *i conti come gli esempi, arrotondamenti compresi, e la ritenuta tolta una volta sola*: i due esempi rifatti col
+     motore dei conti danno gli stessi numeri al centesimo (la prova coi numeri veri si fa fuori dal repository; nel
+     repository ci sono i casi 31 e 32, inventati, con la stessa regola).
+7. **Cosa resta com'era**: un ticket chiuso con "Una riga per l'intervento" fa ancora una riga sola (è una scelta della
+   fase 5, e i ticket non sono in uso); le scadenze di pagamento di un contratto restano una riga per scadenza.

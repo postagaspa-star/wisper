@@ -223,6 +223,10 @@
   const STILE_DOC =
     'body { font-size: 11px; line-height: 1.5; color: #1F1F23; }' +
     '.testa { padding-bottom: 12px; margin-bottom: 20px; }' +
+    // Il foglio: una tabella con la testata nell'intestazione (si ripete a ogni pagina) e tutto il resto in una cella sola,
+    // che si spezza fra le pagine (le righe della tabella delle voci, il riepilogo e le note restano intere).
+    'table.foglio { margin: 0; } table.foglio > thead > tr > td, table.foglio > tbody > tr > td { padding: 0; border: none; }' +
+    'table.foglio > tbody > tr { break-inside: auto; }' +
     '.doc-parti { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; margin-bottom: 24px; }' +
     '.doc-parte .etichetta, .doc-blocco .etichetta, .doc-pagamento .etichetta { font-size: 8.5px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: #8A8A92; margin-bottom: 9px; }' +
     '.doc-parte .nome { font-weight: 800; font-size: 11.5px; margin-bottom: 2px; } .doc-parte div { line-height: 1.7; } .doc-parte .rif { margin-top: 7px; }' +
@@ -337,8 +341,13 @@
 
   /** La pagina intera: intestazione col logo, il corpo, il piè (studio a sinistra, "Parcella n. 24 · Pagina" a destra). */
   function paginaDoc(imp, testa, corpo, titolo, destra) {
+    // 14/11/2026 (le indicazioni in fondo al modello di Manuel: "al crescere delle righe, proseguire su altre pagine
+    // ripetendo testata, intestazioni tabella e numero di pagina"): la testata sta nell'intestazione di una tabella che
+    // tiene tutto il foglio, così chi stampa la ripete in cima a ogni pagina; le intestazioni delle colonne le ripete la
+    // tabella delle righe, il numero di pagina è nel piè.
     return '<!doctype html><html lang="it"><head><meta charset="utf-8"><title>' + esc(titolo) + '</title>' +
-      stile(imp, STILE_DOC, destra) + '</head><body>' + intestazione(imp, testa.etichetta, testa.numero, testa.sotto) + corpo + '</body></html>';
+      stile(imp, STILE_DOC, destra) + '</head><body><table class="foglio"><thead><tr><td>' + intestazione(imp, testa.etichetta, testa.numero, testa.sotto) +
+      '</td></tr></thead><tbody><tr><td>' + corpo + '</td></tr></tbody></table></body></html>';
   }
 
   /** "N. 24 / 2026": il numero dato dal programma (col suo anno, se non l'ha già). */

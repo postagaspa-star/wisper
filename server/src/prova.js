@@ -914,7 +914,7 @@ function seminaFase4(w, utenti, come) {
     // 38/2026: agosto di Elettrodinamica (4 rapportini fatturati prima di Wisper), pagata il 29/09.
     const f38 = w.nuovaFattura({ idCliente: 'C001' }).fattura.id;
     w.salvaFattura({ fattura: { id: f38, data: '2026-08-31', causale: 'Prestazioni di agosto 2026', righe: [
-      { tipo: 'compenso', descrizione: 'Prestazioni professionali di agosto 2026 (4 rapportini)', quantita: 26, unita: 'ore', prezzo: 30 },
+      { tipo: 'compenso', descrizione: 'Prestazioni professionali di agosto 2026', quantita: 26, unita: 'ore', prezzo: 30 },
       { tipo: 'compenso', descrizione: 'Rimborso chilometrico di agosto 2026', quantita: 208, unita: 'km', prezzo: 0.76 },
       { tipo: 'compenso', descrizione: 'Spese di viaggio e materiale di agosto 2026', quantita: 1, prezzo: 21.92 }] } });
     emetti(f38, '38/2026', '2026-08-31', 'IT00000000000_00038.xml');

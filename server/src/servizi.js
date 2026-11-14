@@ -223,11 +223,17 @@ function piatto(s) {
   return testo(s).normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/[^A-Z0-9]+/g, ' ').trim();
 }
 
-/** Di cosa parla un servizio dalla sua unita': 'ore', 'km' o '' (le voci di prima della 1.4.0: modo ore senza unita'). */
-function genereDiUnita(unita, modo) {
+/**
+ * Di cosa parla un servizio: 'ore', 'km' o ''. Lo dice l'unita' (le voci di prima della 1.4.0: modo ore senza unita').
+ * 14/11/2026: nel listino venuto da Flextaxa i chilometri hanno l'unita' "Nr" (cosi' anche nel modello della parcella):
+ * un servizio che si conta a numero e si chiama rimborso chilometrico e' dei km lo stesso.
+ * Prima non lo era, e la riga dei km restava senza codice.
+ */
+function genereDiUnita(unita, modo, nome) {
   const u = piatto(unita);
   if (u === 'ORE' || u === 'ORA' || u === 'H') return 'ore';
   if (u === 'KM') return 'km';
+  if ((u === 'NR' || u === 'N' || u === 'NUM' || u === 'PZ' || !u) && modo !== 'ore' && NOME_KM.test(piatto(nome))) return 'km';
   return !u && modo === 'ore' ? 'ore' : '';
 }
 
@@ -243,7 +249,8 @@ function lettereCodice(codice) {
   return m ? m[0] : '';
 }
 
-const NOME_ADATTO = { ore: /CONSULEN|PRESTAZION|VACAZION/, km: /CHILOMETR|KILOMETR|\bKM\b/ };
+const NOME_KM = /CHILOMETR|KILOMETR|\bKM\b/;
+const NOME_ADATTO = { ore: /CONSULEN|PRESTAZION|VACAZION/, km: NOME_KM };
 
 /**
  * 13/11/2026 (Andrea, col modello di Manuel: "il codice si deve mettere automaticamente quando prepari la bozza per la
@@ -271,7 +278,7 @@ function scegliServizio(x) {
   const genere = x.genere;
   if (genere !== 'ore' && genere !== 'km') return null;
   const adatti = (x.servizi || []).filter(s => s && testo(s.codice) && (s.attivo === undefined || s.attivo === 1 || s.attivo === true) &&
-    genereDiUnita(s.unita, s.modo) === genere);
+    genereDiUnita(s.unita, s.modo, s.nome) === genere);
   if (!adatti.length) return null;
   const perCodice = c => adatti.find(s => piatto(s.codice) === piatto(c));
   for (const c of x.storicoCliente || []) {
@@ -303,8 +310,19 @@ function unitaDiGenere(genere) {
   return genere === 'ore' ? 'Ore' : genere === 'km' ? 'Km' : '';
 }
 
+/**
+ * 14/11/2026: l'unita' della riga e' quella del servizio, come sta nel listino ("Nr" per i chilometri contati a numero);
+ * "ore", "h" e "km" si scrivono "Ore" e "Km", e un servizio senza unita' prende quella del suo genere.
+ */
+function unitaPerRiga(servizio, genere) {
+  const u = piatto(servizio && servizio.unita);
+  if (u === 'ORE' || u === 'ORA' || u === 'H') return 'Ore';
+  if (u === 'KM') return 'Km';
+  return testo(servizio && servizio.unita) || unitaDiGenere(genere);
+}
+
 module.exports = {
   UNITA, ALIQUOTE, TIPI, modoDaUnita, tagDa, aliquotaDa, servizioDaRiga, importoDi, importoIndennita, indennitaDi,
   indennitaInRisposta, pulisciIndennita, indennitaPerDb, righeCsv, euroDa, serviziDaCsv,
-  genereDiUnita, chiaveCliente, scegliServizio, unitaDiGenere,
+  genereDiUnita, chiaveCliente, scegliServizio, unitaDiGenere, unitaPerRiga,
 };

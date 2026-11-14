@@ -237,6 +237,10 @@ cliente è sostituto) o `anticipazione` (N1, fuori da tutto). Testi esatti (nume
 - **Scadenza**: `"{descrizione}: {descrizione della commessa} (commessa {id}, contratto {etichetta del preventivo})"`,
   quantità 1, prezzo = importo. Es. `"40% a fine progetto: Adeguamento impianto elettrico capannone (commessa 26ST003,
   contratto PR/2026/012 rev. 1)"` 1.520,00. Senza preventivo: `"(commessa {id})"`.
+- **Dal 14/11/2026 (1.4.4, `servizi.md` §7) i due modi qui sotto non ci sono più**: dai rapportini nasce sempre una
+  riga per servizio e per mese (codice, nome del servizio, " | " e il mese; quantità sommata; unità, prezzo e sconto dal
+  listino), senza niente dei rapportini nel testo. "Una riga per rapportino" è stata tolta dalle app; quello che segue
+  resta per la storia.
 - **Rapportini**, due modi (`raggruppa`):
   - `rapportino` (di base, tranne per i clienti a tariffa fissa): una riga per rapportino, importo = compenso ore + km +
     sue spese non anticipate: `"Rapportino {id} del {gg/mm/aaaa}: {descrizione} ({ore pagate} ore, {km} km, spese {x} €)"`

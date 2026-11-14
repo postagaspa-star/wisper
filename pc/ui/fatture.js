@@ -33,7 +33,7 @@
     const giornoBreve = iso => (iso ? W.dataBreve(iso) : '');
 
     const M = {
-      df: null, dfChiave: '', scelte: new Map(), cliente: null, raggruppa: {}, aperti: new Set(),
+      df: null, dfChiave: '', scelte: new Map(), cliente: null, aperti: new Set(),
       fatture: null, riepMese: null, filtri: { tipo: 'fattura', pill: 'tutte', testo: '' }, aperta: null,
       ricevute: null, scadenze: null, riep: null, anno: Number(oggi().slice(0, 4)), per: 'cliente', conti: null, preselezione: null,
     };
@@ -194,8 +194,8 @@
       async function preparaBozza() {
         const voci = Array.from(M.scelte.values());
         if (!voci.length || !M.cliente) { avviso('Scegli almeno una cosa da fatturare', true); return; }
+        // 14/11/2026: niente piu' scelta fra una riga per rapportino e una per il mese: la bozza nasce con un servizio per riga.
         const corpo = { idCliente: M.cliente, voci };
-        if (M.raggruppa[M.cliente]) corpo.raggruppa = M.raggruppa[M.cliente];
         const ris = await lavora('Preparo la bozza', () => Rete.post('/server/preparaFattura', corpo));
         if (!ris || !ris.fattura) return;
         M.scelte.clear();
@@ -245,8 +245,6 @@
         const chiavi = [];
         righe.forEach(r => { if (r.tipo === 'mese') r.rapportini.forEach(x => chiavi.push(['rapportino:' + x.voce.id, x.voce])); else chiavi.push([r.chiave, r.voce]); });
         const tutte = chiavi.length && chiavi.every(([k]) => M.scelte.has(k));
-        const haRapportini = righe.some(r => r.tipo === 'mese');
-        const ragg = M.raggruppa[g.idCliente] || (df.raggruppa || {})[g.idCliente] || 'rapportino';
         const altro = scrive() ? h('button', { type: 'button', class: 'tondo piccolo', 'aria-label': 'Altre azioni', title: 'Altre azioni' }, icona('altro', 18)) : null;
         if (altro) altro.addEventListener('click', () => apriMenu(altro, [
           { testo: 'Le scelte sono già fatturate fuori da Wisper', fn: () => fatturateFuori(g) },
@@ -272,8 +270,7 @@
               }
               if (!M.scelte.size) M.cliente = null;
               ridisegna();
-            } }, tutte ? 'Togli la scelta' : 'Scegli tutto') : h('span'),
-            haRapportini && scrive() ? segmenti([['rapportino', 'Una riga per rapportino'], ['mese', 'Una riga per il mese']], ragg, x => { M.raggruppa[g.idCliente] = x; ridisegna(); }, 'piccoli') : null),
+            } }, tutte ? 'Togli la scelta' : 'Scegli tutto') : h('span')),
           tab);
       }
 

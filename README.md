@@ -149,6 +149,19 @@ the app in the foreground, on the phone: one tiny request (`novita`, an imprint 
 not logged in the access register); data are re-read silently only when it changes, the dot turns red by itself when
 the server is unreachable and green again at the first good minute.
 
+Version 1.4.4 (14 November, server 0.15.3) makes invoice drafts follow the owner's invoice template to the letter:
+**every line created from reports is a service, and nothing about the reports appears in the document**. For each
+month there is one line per service: code and name from "Servizi e prodotti", then the month ("Consulenza tecnica a ore
+| luglio"), the quantity is the month's total (hours, kilometres, or how many times an allowance was added to a job),
+the unit is the one in the price list (kilometres counted as "Nr" are recognised as mileage), and the price is the
+list price with the discount that leads to the client's rate when that discount is a round one (40.00 with 25% for a
+client paying 30); otherwise the rate itself. Amounts never change. Report numbers, dates, job descriptions and project
+codes are gone from the lines (projects stay in the invoice notes); the "one line per report / one line per month"
+choice is removed from both apps, and drafts made the old way are rebuilt once when the server starts, unless
+somebody changed their amounts by hand. Following the template's instructions for long documents, quotes, pro-forma
+invoices and invoices now **repeat the header on every printed page**, together with the column headings and the page
+number.
+
 Phase 1 (October 2026) replaces the Google Sheet with a small server on
 the home NAS (`server/`: Node.js 24 with its built-in SQLite, no npm dependencies, in
 Docker). It speaks the same protocol as the sheet script, so the phone and the office

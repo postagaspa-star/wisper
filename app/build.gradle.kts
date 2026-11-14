@@ -26,8 +26,8 @@ android {
         targetSdk = 35
         // Il codice decide gli aggiornamenti: quello pubblicato deve essere più alto di quello installato.
         // (-PcodiceVersione=4 -PnomeVersione=0.4.0 solo per provare gli aggiornamenti sull'emulatore.)
-        versionCode = (project.findProperty("codiceVersione") as String?)?.toInt() ?: 21
-        versionName = (project.findProperty("nomeVersione") as String?) ?: "1.4.3"
+        versionCode = (project.findProperty("codiceVersione") as String?)?.toInt() ?: 22
+        versionName = (project.findProperty("nomeVersione") as String?) ?: "1.4.4"
 
         // Indirizzo dell'Apps Script che fa da ponte col foglio Google, e il
         // codice senza il quale lo script non risponde (lo crea preparaFoglio()).

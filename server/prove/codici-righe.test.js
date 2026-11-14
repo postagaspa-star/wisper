@@ -104,7 +104,8 @@ test('per mese: la riga delle ore e quella dei km nascono col codice, il nome e 
   const f = await prepara('C002', 'mese', [a, b]);
   const [ore, km] = normali(f);
   assert.equal(ore.codice, 'CON');
-  assert.match(ore.descrizione, /^Ore di consulenza \| .+ \(2 rapportini\)$/);
+  // 14/11/2026: il nome del servizio e il mese, come nel modello ("Consulenza tecnica | luglio"); niente dei rapportini.
+  assert.match(ore.descrizione, /^Ore di consulenza \| [a-z]+$/);
   assert.deepEqual([ore.quantita, ore.unita, ore.prezzo, ore.importo], [5, 'Ore', 40, 200]);
   assert.equal(km.codice, 'KMA');
   assert.match(km.descrizione, /^Rimborso chilometrico \| Auto di esempio \| /);
@@ -121,16 +122,91 @@ test('per mese: la riga delle ore e quella dei km nascono col codice, il nome e 
   assert.equal(normali(f2)[1].codice, 'KMA');
 });
 
-test('i km di un cliente col suo servizio; una riga per rapportino prende il servizio delle ore', async () => {
+test('i km di un cliente col suo servizio; "una riga per rapportino" delle app di prima non c\'è più: le stesse righe', async () => {
   const a = await salvaLavoro('C004');
   const mese = await prepara('C004', 'mese', [a]);
   assert.deepEqual(normali(mese).map(r => r.codice), ['CON', 'BATOKYO01']);
-  const b = await salvaLavoro('C003');
-  const una = await prepara('C003', 'rapportino', [b]);
-  const riga = normali(una)[0];
-  assert.equal(riga.codice, 'CON');
-  assert.match(riga.descrizione, /^Ore di consulenza \| Rapportino RAP\/\d{4}\/\d+ del .+\(2 ore, 10 km\)$/);
-  assert.deepEqual([riga.quantita, riga.unita, riga.importo], [1, '', 87.6]);
+  // Le app di prima della 1.4.4 mandano ancora raggruppa: 'rapportino'. Il server non lo legge: un servizio per riga.
+  const b = await salvaLavoro('C003', { descrizione: 'Collaudo del quadro QG2' });
+  const c = await salvaLavoro('C003', { oreLavoro: 1.5 });
+  const una = await prepara('C003', 'rapportino', [b, c]);
+  assert.deepEqual(normali(una).map(r => [r.codice, r.quantita, r.unita, r.prezzo, r.importo]), [['CON', 3.5, 'Ore', 40, 140], ['KMA', 20, 'Km', 0.76, 15.2]]);
+  // Andrea, 14/11/2026: "per caso vedi qualche riferimento ai Rapportini? No." Né il numero, né il giorno, né il lavoro.
+  for (const r of normali(una)) assert.doesNotMatch(r.descrizione, /rapportin|RAP\/|Collaudo|\d{2}\/\d{2}\/\d{4}/i, r.descrizione);
+  assert.match(una.causale, /^Prestazioni di [a-z]+ \d{4}$/);
+  assert.equal(ok(await manuel('daFatturare', {})).raggruppa.C003 || 'mese', 'mese');
+});
+
+test('il prezzo è quello del listino: se il cliente paga meno, lo sconto che porta alla sua tariffa (40 col 25% = 30)', async () => {
+  // Un cliente nuovo (nessuna fattura prima) e un servizio suo (il codice comincia col suo nome) a 40 €/h; lui paga 30.
+  const nuovo = ok(await manuel('salvaSoggetto', { soggetto: { nome: 'Officine Esempio Spa', cap: '36016', citta: 'Thiene', provincia: 'VI' } })).soggetto;
+  assert.equal(nuovo.nome, 'Officine Esempio Spa');
+  const cliente = nuovo.id;
+  ok(await manuel('salvaVoceListino', { voce: { nome: 'Consulenza tecnica a ore', codice: 'OFFICINE01', prezzo: 40, aliquotaIva: 22, unita: 'Ore', tipo: 'servizio' } }));
+  const a = await salvaLavoro(cliente, { tariffa: 30, oreLavoro: 6.5, km: 0 });
+  const b = await salvaLavoro(cliente, { tariffa: 30, oreLavoro: 8, km: 0 });
+  const f = await prepara(cliente, 'mese', [a, b]);
+  const [ore] = normali(f);
+  assert.deepEqual([ore.codice, ore.quantita, ore.unita, ore.prezzo, ore.sconto, ore.importo], ['OFFICINE01', 14.5, 'Ore', 40, 25, 435]);
+  assert.match(ore.descrizione, /^Consulenza tecnica a ore \| [a-z]+$/);
+  // L'importo è la somma dei rapportini e non cambia: 14,5 ore a 30.
+  assert.equal(f.conti.compenso, 435);
+  // Uno sconto che non è tondo non si scrive: con 33,33 di tariffa su 40 di listino verrebbe "16,68%". Resta la tariffa.
+  const c = await salvaLavoro(cliente, { tariffa: 33.33, oreLavoro: 3, km: 0 });
+  const [strana] = normali(await prepara(cliente, 'mese', [c]));
+  assert.deepEqual([strana.codice, strana.quantita, strana.prezzo, strana.sconto, strana.importo], ['OFFICINE01', 3, 33.33, 0, 99.99]);
+});
+
+test('un servizio dei km che si conta a numero ("Nr", come nel listino venuto da Flextaxa) è dei km lo stesso', async () => {
+  assert.equal(S.genereDiUnita('Nr', 'quantita', 'Rimborso kilometrico | Auto di esempio'), 'km');
+  assert.equal(S.genereDiUnita('Nr', 'quantita', 'Indennità di trasferta'), '');
+  assert.equal(S.genereDiUnita('A corpo', 'corpo', 'Rimborso chilometrico forfettario'), '');
+  const servizi = [{ id: 1, codice: 'KMN', nome: 'Rimborso kilometrico | Auto di esempio', unita: 'Nr', modo: 'quantita', prezzo: 0.76, attivo: 1, ordine: 0 }];
+  assert.equal(S.scegliServizio({ servizi, genere: 'km', prezzo: 0.76, cliente: 'Rossi Impianti Srl', altriClienti: [] }).codice, 'KMN');
+  assert.equal(S.scegliServizio({ servizi, genere: 'ore', prezzo: 40, cliente: 'Rossi Impianti Srl', altriClienti: [] }), null);
+});
+
+test('le bozze fatte col modo di prima si rifanno da sole all\'avvio: un servizio per riga, stessi importi, una volta sola', async () => {
+  const a = await salvaLavoro('C003', { descrizione: 'Verifica del quadro' });
+  const b = await salvaLavoro('C003', { oreLavoro: 3 });
+  const f = await prepara('C003', 'mese', [a, b]);
+  const totale = f.conti.totale;
+  // Com'era una bozza "una riga per rapportino": un gruppo per rapportino, una riga sola con tutto dentro.
+  const vecchia = id => {
+    const righe = w.db.righe("SELECT * FROM fattura_righe WHERE fattura_id = ? AND tipo <> 'bollo' ORDER BY ordine, id", id);
+    const sorgenti = w.db.righe('SELECT * FROM fattura_sorgenti WHERE fattura_id = ? AND attiva = 1 ORDER BY id', id);
+    assert.equal(righe.length, sorgenti.length, 'una riga per sorgente, per la prova');
+    sorgenti.forEach((s, i) => {
+      w.db.esegui("UPDATE fattura_righe SET gruppo = ?, descrizione = ?, quantita = 1, unita = '', prezzo = ?, importo = ?, importo_sorgenti = ?, sconto = 0 WHERE id = ?",
+        'rapportino:' + s.sorgente_id, 'Ore di consulenza | Rapportino ' + s.sorgente_id + ' del 22/10/2026: Verifica del quadro (2 ore, 10 km)', s.importo, s.importo, s.importo, righe[i].id);
+      w.db.esegui('UPDATE fattura_sorgenti SET gruppo = ? WHERE id = ?', 'rapportino:' + s.sorgente_id, s.id);
+    });
+    w.db.esegui("UPDATE fatture SET causale = 'Prestazioni professionali' WHERE id = ?", id);
+  };
+  vecchia(f.id);
+  const prima = normali(ok(await manuel('fattura', { id: f.id })).fattura);
+  assert.match(prima[0].descrizione, /Rapportino RAP\//);
+  assert.equal(w.sistemaBozze().rifatte, 1);
+  const dopo = ok(await manuel('fattura', { id: f.id })).fattura;
+  assert.deepEqual(normali(dopo).map(r => [r.codice, r.quantita, r.unita, r.prezzo, r.importo]), [['CON', 5, 'Ore', 40, 200], ['KMA', 20, 'Km', 0.76, 15.2]]);
+  for (const r of normali(dopo)) assert.doesNotMatch(r.descrizione, /rapportin|RAP\//i, r.descrizione);
+  assert.equal(dopo.conti.totale, totale);
+  // Le stesse cose restano riservate a questa bozza, e non tornano da fatturare.
+  assert.equal(w.db.riga('SELECT COUNT(*) n FROM fattura_sorgenti WHERE fattura_id = ? AND attiva = 1', f.id).n, 2);
+  // La seconda volta non trova niente; e una bozza nuova, anche se qualcuno riscrive la riga a mano, non si tocca.
+  assert.equal(w.sistemaBozze().rifatte, 0);
+  ok(await manuel('salvaFattura', { fattura: { id: f.id, righe: normali(dopo).map((r, i) => (i === 0 ? { id: r.id, descrizione: 'Consulenza sul quadro (3 rapportini di ottobre)' } : { id: r.id })) } }));
+  assert.equal(w.sistemaBozze().rifatte, 0);
+  assert.equal(normali(ok(await manuel('fattura', { id: f.id })).fattura)[0].descrizione, 'Consulenza sul quadro (3 rapportini di ottobre)');
+
+  // Una bozza di prima a cui qualcuno ha cambiato un importo a mano resta com'è.
+  const c = await salvaLavoro('C003');
+  const d = await salvaLavoro('C003');
+  const g = await prepara('C003', 'mese', [c, d]);
+  vecchia(g.id);
+  w.db.esegui("UPDATE fattura_righe SET prezzo = 50, importo = 50 WHERE id = (SELECT MIN(id) FROM fattura_righe WHERE fattura_id = ? AND tipo <> 'bollo')", g.id);
+  assert.equal(w.sistemaBozze().rifatte, 0);
+  assert.match(normali(ok(await manuel('fattura', { id: g.id })).fattura)[0].descrizione, /Rapportino RAP\//);
 });
 
 test('le bozze già fatte: all\'avvio le righe senza codice lo prendono, il testo non si tocca', async () => {
@@ -144,10 +220,10 @@ test('le bozze già fatte: all\'avvio le righe senza codice lo prendono, il test
   assert.deepEqual(dopo.map(r => r.codice), ['CON', 'KMA']);
   assert.deepEqual(dopo.map(r => r.descrizione), prima);
   // La seconda volta non trova niente.
-  assert.deepEqual(w.sistemaBozze(), { ritenute: 0, codici: 0 });
+  assert.deepEqual(w.sistemaBozze(), { ritenute: 0, codici: 0, rifatte: 0 });
   // Una volta sola per riga: se poi qualcuno toglie il codice apposta, al prossimo avvio non torna.
   w.db.esegui("UPDATE fattura_righe SET codice = '' WHERE fattura_id = ? AND unita = 'Ore'", f.id);
-  assert.deepEqual(w.sistemaBozze(), { ritenute: 0, codici: 0 });
+  assert.deepEqual(w.sistemaBozze(), { ritenute: 0, codici: 0, rifatte: 0 });
   assert.deepEqual(normali(ok(await manuel('fattura', { id: f.id })).fattura).map(r => r.codice), ['', 'KMA']);
 });
 
