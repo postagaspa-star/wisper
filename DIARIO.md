@@ -107,7 +107,9 @@ telefoni veri e sul computer di Manuel. Se nel listino manca il servizio adatto,
 "Una riga per l'intervento" fanno ancora una riga sola.
 
 **Versione:** [v1.4.4](https://github.com/postagaspa-star/wisper/releases/tag/v1.4.4) (telefono codice 22, computer
-1.4.4). Accordo: [docs/gestionale/servizi.md §7](docs/gestionale/servizi.md).
+1.4.4), pubblicata alle 11:29; il server 0.15.3 è sul NAS dalle 11:25 e annuncia la versione alle app dalle 11:34.
+Ripartendo, il server del NAS ha scritto di aver rifatto dai Servizi le righe di una bozza. Accordo:
+[docs/gestionale/servizi.md §7](docs/gestionale/servizi.md).
 
 ---
 
