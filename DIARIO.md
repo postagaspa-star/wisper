@@ -88,7 +88,9 @@ e rapportini, i tre documenti stampati e guardati uno per uno.
 **Non provato.** I telefoni veri e il computer di Manuel.
 
 **Versione:** [v1.4.5](https://github.com/postagaspa-star/wisper/releases/tag/v1.4.5) (telefono codice 23, computer
-1.4.5); il server resta 0.15.3. Accordo: [docs/gestionale/servizi.md §8](docs/gestionale/servizi.md).
+1.4.5), pubblicata alle 15:38; il NAS la annuncia alle app dalle 15:44. Il server resta 0.15.3. Il PDF fatto dal
+telefono dell'emulatore è stato letto riga per riga: ha la stessa forma di quello del computer. Accordo:
+[docs/gestionale/servizi.md §8](docs/gestionale/servizi.md).
 
 ---
 
