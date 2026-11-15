@@ -11,6 +11,7 @@ mai dati veri di clienti.
 
 | Data | Versione | In breve |
 |------|----------|----------|
+| 15/11/2026 | 1.4.5 | [La parcella con Fornitore, Cliente e la Causale sopra la tabella](#v1-4-5) |
 | 14/11/2026 | 1.4.4, server 0.15.3 | [Nelle righe della parcella solo i Servizi, come nel modello](#v1-4-4) |
 | 13/11/2026 | 1.4.3, server 0.15.2 | [Il codice dei Servizi da solo nelle righe della bozza, la ritenuta che non resta a zero, il collegamento ricontrollato ogni minuto](#v1-4-3) |
 | 13/11/2026 | 1.4.2, server 0.15.1 | [Un rapportino inviato si cambia liberamente, gli aggiornamenti arrivano, Servizi e prodotti, la parcella pro-forma](#v1-4-2) |
@@ -52,6 +53,42 @@ mai dati veri di clienti.
 | 26/09–14/10/2026 | 0.1 | [Un rapportino confermato non si perde più](#coda) |
 | 7–9/08/2026 | 0.1.0 | [Hackathon NGN Hacks: la versione a voce, senza mani](#v0-1-0) |
 | marzo–giugno 2026 | prima del repository | [Le prime versioni](#prima) |
+
+---
+
+<a id="v1-4-5"></a>
+## 15 novembre 2026 · 1.4.5 · La parcella con Fornitore, Cliente e la Causale sopra la tabella
+
+**Perché.** Andrea, con la parcella pro-forma della 1.4.4 davanti: "Quasi perfetto: in cima i caratteri, la grandezza
+ed il colore di 'PARCELLA PRO-FORMA' e 'Rif. W-16' devono essere invertiti; il SPETT.LE va chiamato CLIENTE, ed il
+MITTENTE va chiamato FORNITORE; la valuta va spostata sulle Note, che però va chiamato Causale, e va spostata tra la
+sezione di Fornitore-Cliente e la tabella".
+
+**Cosa cambia** (nei PDF di parcella pro-forma, parcella e preventivo, sul telefono e sul computer).
+
+- **In cima a destra** il tipo del documento ("Parcella pro-forma") è la scritta grande e scura; il numero ("Rif. W-16")
+  è quella piccola, maiuscola e grigia. Prima era il contrario. Sotto resta solo la data.
+- **Fornitore** e **Cliente** al posto di Mittente e Spett.le.
+- **Causale**: quello che era "Note", in fondo al foglio, ora si chiama Causale e sta fra Fornitore-Cliente e la
+  tabella. Porta il testo della causale della bozza e, per ultima, la riga "Valuta: EUR (€)", che prima stava in cima
+  accanto alla data. Dopo il riepilogo non c'è più niente.
+- **Nel preventivo**, che non ha una causale ma l'Oggetto, la valuta va nella riga grigia sotto l'oggetto; oneri,
+  polizza, condizioni e validità restano in fondo, dove li chiede la legge.
+
+Rapportino e riepilogo dei rapportini non cambiano (tengono Mittente e Spett.le).
+
+**Dove guardare.** Fatturazione › una bozza › Parcella pro-forma; Preventivi › un preventivo › PDF.
+
+![La parcella pro-forma: il tipo in grande, Fornitore e Cliente, la Causale sopra la tabella](docs/diario/2026-11-15-parcella-causale-pdf.png)
+![Il preventivo con la stessa testata](docs/diario/2026-11-15-preventivo-pdf.png)
+
+**Provato.** Le prove del computer (369), del server (713) e del telefono (464), i giri cliccati di preventivi, fatture
+e rapportini, i tre documenti stampati e guardati uno per uno.
+
+**Non provato.** I telefoni veri e il computer di Manuel.
+
+**Versione:** [v1.4.5](https://github.com/postagaspa-star/wisper/releases/tag/v1.4.5) (telefono codice 23, computer
+1.4.5); il server resta 0.15.3. Accordo: [docs/gestionale/servizi.md §8](docs/gestionale/servizi.md).
 
 ---
 

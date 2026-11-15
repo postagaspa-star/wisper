@@ -232,3 +232,31 @@ requisito, e nel modello ogni riga è un servizio.
      repository ci sono i casi 31 e 32, inventati, con la stessa regola).
 7. **Cosa resta com'era**: un ticket chiuso con "Una riga per l'intervento" fa ancora una riga sola (è una scelta della
    fase 5, e i ticket non sono in uso); le scadenze di pagamento di un contratto restano una riga per scadenza.
+
+## 8. Cambiamenti del 15/11/2026 (1.4.5): la testata, Fornitore e Cliente, la Causale
+
+Andrea, guardando la parcella pro-forma della 1.4.4: "Quasi perfetto: in cima i caratteri, la grandezza ed il colore di
+'PARCELLA PRO-FORMA' e 'Rif. W-16' devono essere invertiti; il SPETT.LE va chiamato CLIENTE, ed il MITTENTE va chiamato
+FORNITORE; la valuta va spostata sulle Note, che però va chiamato Causale, e va spostata tra la sezione di
+Fornitore-Cliente e la tabella".
+
+1. **In cima a destra**: il tipo del documento ("Parcella pro-forma", "Parcella", "Preventivo") è la scritta grande e
+   scura; il numero ("Rif. W-16", "N. 24 / 2026") è quella piccola, maiuscola e grigia; sotto resta solo la data (nel
+   preventivo anche "valido fino al …"). Le due regole stanno nello stile del foglio (`table.foglio .tipo …` in
+   `STILE_DOC`): gli altri PDF (rapportino, riepilogo, lettere) non cambiano.
+2. **Fornitore e Cliente** al posto di Mittente e Spett.le (`mittenteDoc`, `destinatarioDoc`).
+3. **Causale**: quello che era "Note", in fondo, ora sta fra Fornitore-Cliente e la tabella (`causaleDoc`): il testo
+   della causale della bozza (lo stesso campo che nell'app si chiama già Causale), nella parcella pro-forma la frase
+   "Documento senza valore fiscale…", e per ultima la riga "Valuta: EUR (€)", che prima stava in cima accanto alla data.
+   Il blocco c'è sempre, anche senza testo (porta la valuta). In fondo, dopo pagamento e riepilogo, non c'è più niente.
+
+Decisioni prese senza chiedere:
+
+- vale per tutti e tre i documenti del modello (preventivo, parcella pro-forma, parcella), perché hanno la stessa veste;
+- il **preventivo** non ha una causale: ha l'Oggetto, che sta già fra le parti e la tabella. La valuta lì va nella riga
+  grigia sotto l'oggetto ("Grado di complessità: media · Valuta: EUR (€)"); le sue parti in fondo (oneri, polizza,
+  condizioni, validità, firme) restano dove sono, perché le chiede la legge e non sono una causale;
+- **rapportino e riepilogo** dei rapportini tengono "Mittente" e "Spett.le" e la loro testata: Andrea ha parlato della
+  parcella, e quei due li aveva approvati così.
+
+Solo telefono e computer (i PDF li fanno loro dallo stesso `pc/ui/documenti.js`); il server non cambia.

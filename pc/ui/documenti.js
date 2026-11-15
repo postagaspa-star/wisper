@@ -219,6 +219,10 @@
    * Mittente e Spett.le su due colonne senza riquadri; la tabella Codice, Descrizione, Q.tà, U.M., Unit. €, Sconto, IVA,
    * Totale € senza righe verticali (anche le righe a zero); in fondo a sinistra il Pagamento e a destra il riepilogo; le
    * Note; il piè con lo studio a sinistra e "Parcella n. 24 · Pagina 1 / 1" a destra. I numeri arrivano già fatti.
+   *
+   * 15/11/2026 (Andrea, guardando la parcella pro-forma della 1.4.4): in cima il tipo del documento è la scritta grande e
+   * scura e il numero ("Rif. W-16") quella piccola e grigia, al contrario di prima; sotto resta solo la data. Le parti si
+   * chiamano Fornitore e Cliente. Le Note si chiamano Causale, stanno fra le parti e la tabella e portano la valuta.
    */
   const STILE_DOC =
     'body { font-size: 11px; line-height: 1.5; color: #1F1F23; }' +
@@ -227,8 +231,13 @@
     // che si spezza fra le pagine (le righe della tabella delle voci, il riepilogo e le note restano intere).
     'table.foglio { margin: 0; } table.foglio > thead > tr > td, table.foglio > tbody > tr > td { padding: 0; border: none; }' +
     'table.foglio > tbody > tr { break-inside: auto; }' +
+    // In cima a destra: il tipo del documento grande e scuro, il numero piccolo, maiuscolo e grigio (15/11/2026).
+    'table.foglio .tipo .etichetta { font-size: 19px; font-weight: 800; letter-spacing: -0.3px; text-transform: none; color: #1F1F23; line-height: 1.25; }' +
+    'table.foglio .tipo .numero { font-size: 8.5px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #5F5F67; margin-top: 3px; }' +
     '.doc-parti { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; margin-bottom: 24px; }' +
-    '.doc-parte .etichetta, .doc-blocco .etichetta, .doc-pagamento .etichetta { font-size: 8.5px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: #8A8A92; margin-bottom: 9px; }' +
+    '.doc-parte .etichetta, .doc-blocco .etichetta, .doc-pagamento .etichetta, .doc-causale .etichetta { font-size: 8.5px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: #8A8A92; margin-bottom: 9px; }' +
+    // La Causale: fra le parti e la tabella, col testo intero (non si taglia) e la valuta per ultima.
+    '.doc-causale { margin-bottom: 24px; break-inside: avoid; } .doc-causale div { line-height: 1.7; } .doc-causale .testo { white-space: pre-wrap; }' +
     '.doc-parte .nome { font-weight: 800; font-size: 11.5px; margin-bottom: 2px; } .doc-parte div { line-height: 1.7; } .doc-parte .rif { margin-top: 7px; }' +
     '.doc-oggetto { font-weight: 800; font-size: 12px; margin: 0 0 4px; } .doc-intro { white-space: pre-wrap; margin: 0 0 6px; } .doc-sotto { color: #5F5F67; margin: 0 0 16px; }' +
     'table.doc-righe { margin-bottom: 0; } table.doc-righe th { font-size: 8px; font-weight: 600; letter-spacing: .04em; color: #3F3F46; border-bottom: 1.5px solid #1B1B1F; padding: 0 6px 9px; }' +
@@ -270,7 +279,7 @@
       s.pec ? 'PEC: ' + s.pec : '',
       [s.telefono ? 'Telefono: ' + s.telefono : '', s.sito ? 'Web: ' + s.sito : ''].filter(Boolean).join(' | '),
     ].filter(Boolean);
-    return '<div class="doc-parte"><div class="etichetta">Mittente</div><div class="nome">' + esc(s.denominazione || '') + '</div>' +
+    return '<div class="doc-parte"><div class="etichetta">Fornitore</div><div class="nome">' + esc(s.denominazione || '') + '</div>' +
       righe.map(r => '<div>' + esc(r) + '</div>').join('') + '</div>';
   }
 
@@ -293,7 +302,7 @@
   function destinatarioDoc(c) {
     const luogo = ([c.cap, c.comune].filter(Boolean).join(' ') + (c.provincia ? ' (' + c.provincia + ')' : '') + (c.comune ? ' ' + (c.nazione || 'IT') : '')).trim();
     const righe = [c.indirizzo, luogo, c.partitaIva ? 'P.IVA: ' + c.partitaIva : '', c.codiceFiscale ? 'C.F.: ' + c.codiceFiscale : ''].concat(c.altre || []).filter(Boolean);
-    return '<div class="doc-parte"><div class="etichetta">Spett.le</div><div class="nome">' + esc(c.nome || '') + '</div>' +
+    return '<div class="doc-parte"><div class="etichetta">Cliente</div><div class="nome">' + esc(c.nome || '') + '</div>' +
       righe.map(r => '<div>' + esc(r) + '</div>').join('') + (c.riferimento ? '<div class="rif">' + esc(c.riferimento) + '</div>' : '') + '</div>';
   }
 
@@ -337,6 +346,18 @@
   /** Un blocco col titolo piccolo e il testo intero (le note non si tagliano). */
   function bloccoDoc(etichetta, testo) {
     return String(testo || '').trim() ? '<div class="doc-blocco"><div class="etichetta">' + esc(etichetta) + '</div><div class="testo">' + esc(String(testo).trim()) + '</div></div>' : '';
+  }
+
+  const VALUTA_DOC = 'Valuta: EUR (€)';
+
+  /**
+   * 15/11/2026: la Causale (prima "Note", in fondo al foglio) fra Fornitore-Cliente e la tabella. Il testo intero, su più
+   * righe se serve, e per ultima la valuta (prima stava in cima, accanto alla data). C'è sempre: la valuta c'è sempre.
+   */
+  function causaleDoc(testo) {
+    const t = String(testo || '').trim();
+    return '<div class="doc-causale"><div class="etichetta">Causale</div>' + (t ? '<div class="testo">' + esc(t) + '</div>' : '') +
+      '<div class="valuta">' + esc(VALUTA_DOC) + '</div></div>';
   }
 
   /** La pagina intera: intestazione col logo, il corpo, il piè (studio a sinistra, "Parcella n. 24 · Pagina" a destra). */
@@ -752,7 +773,7 @@
     const accettato = p.stato === 'ACCETTATO';
     // 1.4.0 (servizi.md §3): la veste del modello della parcella; restano tutte le parti che chiede la legge.
     const testa = { etichetta: 'Preventivo', numero: 'N. ' + numeroPreventivo(p),
-      sotto: [C.data(p.data), p.scadenza ? 'valido fino al ' + C.data(p.scadenza) : '', 'Valuta EUR (€)'].filter(Boolean).join(' · ') };
+      sotto: [C.data(p.data), p.scadenza ? 'valido fino al ' + C.data(p.scadenza) : ''].filter(Boolean).join(' · ') };
     const sede = (ana.sedi || []).find(s => String(s.id) === String(p.idSede !== undefined ? p.idSede : p.sedeId));
     const referente = (ana.referenti || []).find(r => String(r.id) === String(p.idReferente !== undefined ? p.idReferente : p.referenteId));
     let corpo = '<div class="doc-parti">' + mittenteDoc(studioDaImpostazioni(imp)) + destinatarioDoc({
@@ -763,7 +784,8 @@
     }) + '</div>';
     corpo += '<div class="doc-oggetto">Oggetto: ' + esc(p.oggetto || '') + '</div>';
     if (p.introduzione) corpo += '<div class="doc-intro">' + esc(p.introduzione) + '</div>';
-    corpo += '<div class="doc-sotto">' + esc('Grado di complessità: ' + (COMPLESSITA[p.complessita] || '—').toLowerCase() + (p.complessitaNota ? ' · ' + p.complessitaNota : '')) + '</div>';
+    // 15/11/2026: la valuta non sta più in cima; il preventivo non ha la Causale (ha l'Oggetto), e la porta qui.
+    corpo += '<div class="doc-sotto">' + esc('Grado di complessità: ' + (COMPLESSITA[p.complessita] || '—').toLowerCase() + (p.complessitaNota ? ' · ' + p.complessitaNota : '') + ' · ' + VALUTA_DOC) + '</div>';
     const contano = C.vociCheContano(tutte);
     const contaDi = v => contano[tutte.indexOf(v)];
     const nelPortale = rigaAccettatoNelPortale(p);
@@ -992,6 +1014,7 @@
       nome: c.denominazione || [c.nome, c.cognome].filter(Boolean).join(' '), indirizzo: sc.indirizzo, cap: sc.cap, comune: sc.comune, provincia: sc.provincia, nazione: sc.nazione,
       partitaIva: c.partitaIva, codiceFiscale: c.codiceFiscale, riferimento: riferimentoCommesse(m.commesse, c.etichettaCommessa),
     }) + '</div>';
+    corpo += causaleDoc([m.note || '', nota || ''].filter(Boolean).join('\n'));
     const righe = (m.righe || []);
     corpo += tabellaDoc(righe.map(r => ({
       codice: r.codice || '', descrizione: r.descrizione, quantita: r.quantita === null || r.quantita === undefined || r.quantita === '' ? 1 : r.quantita,
@@ -1027,7 +1050,6 @@
       if (primo.bic) pagamento.push('BIC/SWIFT: ' + primo.bic);
     }
     corpo += fondoDoc(pagamento, riepilogo);
-    corpo += bloccoDoc('Note', [m.note || '', nota || ''].filter(Boolean).join('\n'));
     return corpo;
   }
 
@@ -1052,7 +1074,7 @@
     const m = modello || {};
     const o = opzioni || {};
     const imp = impDaModello(m, o);
-    const testa = { etichetta: 'Parcella pro-forma', numero: 'Rif. ' + (m.riferimento || ''), sotto: dataIt(m.dataProposta || m.data) + ' · Valuta EUR (€)' };
+    const testa = { etichetta: 'Parcella pro-forma', numero: 'Rif. ' + (m.riferimento || ''), sotto: dataIt(m.dataProposta || m.data) };
     const corpo = corpoDaModello(m, 'Documento senza valore fiscale: la fattura si emette al pagamento.');
     return paginaDoc(imp, testa, corpo, 'Parcella pro-forma ' + (m.riferimento || ''), 'Parcella pro-forma ' + (m.riferimento || ''));
   }
@@ -1067,7 +1089,7 @@
     const imp = impDaModello(m, o);
     const tipo = TIPI_DOCUMENTO[m.tipoDocumento] || 'Fattura';
     const numero = numeroFiscale(m.numero, m.data || m.dataProposta) || 'Rif. ' + (m.riferimento || '');
-    const testa = { etichetta: tipo, numero, sotto: dataIt(m.data || m.dataProposta) + ' · Valuta EUR (€)' };
+    const testa = { etichetta: tipo, numero, sotto: dataIt(m.data || m.dataProposta) };
     const breve = tipo + ' n. ' + (String(m.numero || '').trim() || m.riferimento || '');
     return paginaDoc(imp, testa, corpoDaModello(m, ''), breve, breve);
   }

@@ -365,7 +365,7 @@ test('stampa: il preventivo accettato nel portale, con la riga dell\'accettazion
   assert.deepEqual(d.opzioni, {}, 'accettato: valgono le scelte salvate, non quelle della pagina');
   const html = D.preventivo(d.preventivo, d.ana, d.opzioni);
   for (const pezzo of ['PR/2026/012 rev. 1', 'Rossi Impianti Srl', 'Accettato nel portale da Roberto Ferretti il 22/10/2026 alle 10:07', 'non inclusa',
-    'Collaudo con laboratorio esterno', 'Perito industriale', 'Compagnia Esempio', '30% alla firma', '1.005,00 €', 'Media']) {
+    'Collaudo con laboratorio esterno', 'Perito industriale', 'Compagnia Esempio', '30% alla firma', '1.005,00 €', 'Grado di complessità: media', 'Fornitore', 'Cliente', 'Valuta: EUR (€)']) {
     assert.ok(html.includes(pezzo), 'manca: ' + pezzo);
   }
   assert.ok(!/undefined|NaN/.test(html));

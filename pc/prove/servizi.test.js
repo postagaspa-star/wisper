@@ -90,17 +90,26 @@ const MODELLO = {
 };
 const testo = html => html.replace(/<style>[\s\S]*?<\/style>/, '').replace(/<[^>]+>/g, ' ').replace(/&#39;/g, '\'').replace(/\s+/g, ' ');
 
-test('parcella: la veste del modello, numero dell\'XML, JOB, sconto, riepilogo, pagamento, note, piè', () => {
+// 15/11/2026 (Andrea): in cima il tipo e poi il numero e la data, senza valuta; Fornitore e Cliente; la Causale (prima
+// "Note", in fondo) fra le parti e la tabella, con la valuta per ultima.
+test('parcella: la veste del modello, numero dell\'XML, JOB, sconto, riepilogo, pagamento, causale, piè', () => {
   const html = D.parcella(MODELLO, { impostazioni: { RAGIONE_SOCIALE: 'Studio Tecnico GM', PARTITA_IVA: '03123456786' } });
   const t = testo(html);
-  for (const pezzo of ['Parcella N. 24 / 2026 24/10/2026 · Valuta EUR (€)', 'Mittente Studio Tecnico GM Perito industriale Via Roma 1 - 36063 Marostica (VI) - Italia',
-    'P.IVA: IT03123456786 | C.F.: 03123456786', 'PEO: studio@esempio.it', 'Telefono: 0424 000 000 | Web: www.esempio.it', 'Spett.le Rossi Impianti Srl', 'JOB: 26ST003',
+  for (const pezzo of ['Parcella N. 24 / 2026 24/10/2026 Fornitore Studio Tecnico GM Perito industriale Via Roma 1 - 36063 Marostica (VI) - Italia',
+    'P.IVA: IT03123456786 | C.F.: 03123456786', 'PEO: studio@esempio.it', 'Telefono: 0424 000 000 | Web: www.esempio.it', 'Cliente Rossi Impianti Srl', 'JOB: 26ST003',
+    'JOB: 26ST003 Causale Prestazioni di ottobre. Valuta: EUR (€) Codice Descrizione',
     'Codice Descrizione Q.tà U.M. Unit. € Sconto IVA Totale €', 'DL Direzione lavori 10,00 Ore 45,00 40,00% 22,00% 270,00', 'SOPR Sopralluogo (compreso) 1,00 Nr 0,00 0,00% 22,00% 0,00',
     'Spese anticipate 1,00 52,00 0,00% N1 52,00', 'Modalità: BONIFICO', 'Scadenza: 21/11/2026', 'Importo in scadenza: 343,87 €', 'Beneficiario: Studio Tecnico GM', 'BIC/SWIFT: BPMOIT22XXX',
     'Imponibile 270,00 €', 'Totale rivalsa (5% EPPI) 13,50 €', 'Spese 52,00 €', 'Totale IVA 62,37 €', 'Totale documento 397,87 €', 'Ritenuta d\'acconto (RT01) -54,00 €',
-    'Totale ritenute -54,00 €', 'Importo dovuto 343,87 €', 'Note Prestazioni di ottobre.']) {
+    'Totale ritenute -54,00 €', 'Importo dovuto 343,87 €']) {
     assert.ok(t.includes(pezzo), 'manca: ' + pezzo);
   }
+  for (const via of ['Mittente', 'Spett.le', 'Valuta EUR', ' Note ']) assert.ok(!t.includes(via), 'non deve più esserci: ' + via);
+  assert.ok(t.trim().endsWith('Importo dovuto 343,87 €'), 'dopo il riepilogo non c\'è più niente');
+  // Senza testo la Causale c'è lo stesso, con la sola valuta.
+  assert.ok(testo(D.parcella(Object.assign({}, MODELLO, { note: '' }), {})).includes('Causale Valuta: EUR (€) Codice'));
+  // In cima: il tipo è la scritta grande, il numero quella piccola (le due regole stanno nello stile del foglio).
+  assert.ok(/table\.foglio \.tipo \.etichetta \{ font-size: 19px;[^}]*text-transform: none/.test(html) && /table\.foglio \.tipo \.numero \{ font-size: 8\.5px;[^}]*text-transform: uppercase/.test(html), 'tipo grande, numero piccolo');
   assert.ok(html.includes('@bottom-right { content: "Parcella n. 24 · Pagina " counter(page) " / " counter(pages)'), 'il piè a destra');
   assert.ok(html.includes('@bottom-left { content: "Studio Tecnico GM · P.IVA 03123456786"'), 'il piè a sinistra');
   assert.ok(!t.includes('senza valore fiscale'));
@@ -108,11 +117,11 @@ test('parcella: la veste del modello, numero dell\'XML, JOB, sconto, riepilogo, 
   assert.ok(testo(D.parcella(Object.assign({}, MODELLO, { numero: '7/2026' }), {})).includes('N. 7 / 2026'));
 });
 
-test('parcella pro-forma: stesso corpo, "Rif. W-15", la frase senza valore fiscale nelle note, Commessa di base', () => {
+test('parcella pro-forma: stesso corpo, "Rif. W-15", la frase senza valore fiscale nella causale, Commessa di base', () => {
   const m = Object.assign({}, MODELLO, { data: '', numero: '', committente: Object.assign({}, MODELLO.committente, { etichettaCommessa: '' }) });
   const t = testo(D.avvisoParcella(m, {}));
-  for (const pezzo of ['Parcella pro-forma Rif. W-15 22/10/2026 · Valuta EUR (€)', 'Commessa: 26ST003', 'Importo dovuto 343,87 €',
-    'Note Prestazioni di ottobre. Documento senza valore fiscale: la fattura si emette al pagamento.']) {
+  for (const pezzo of ['Parcella pro-forma Rif. W-15 22/10/2026 Fornitore', 'Commessa: 26ST003', 'Importo dovuto 343,87 €',
+    'Causale Prestazioni di ottobre. Documento senza valore fiscale: la fattura si emette al pagamento. Valuta: EUR (€) Codice']) {
     assert.ok(t.includes(pezzo), 'manca: ' + pezzo);
   }
   assert.ok(D.avvisoParcella(m, {}).includes('content: "Parcella pro-forma W-15 · Pagina "'));

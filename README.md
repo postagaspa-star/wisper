@@ -162,6 +162,12 @@ somebody changed their amounts by hand. Following the template's instructions fo
 invoices and invoices now **repeat the header on every printed page**, together with the column headings and the page
 number.
 
+Version 1.4.5 (15 November) adjusts the same three documents after the first real pro-forma was read: the document
+type is the large dark title and the reference number the small grey line under it; the two parties are called
+**Fornitore** and **Cliente**; what used to be the notes at the bottom is now the **Causale**, placed between the
+parties and the table, and it carries the currency line that used to sit next to the date. In the quote, which has a
+subject instead of a causale, the currency goes on the grey line under the subject.
+
 Phase 1 (October 2026) replaces the Google Sheet with a small server on
 the home NAS (`server/`: Node.js 24 with its built-in SQLite, no npm dependencies, in
 Docker). It speaks the same protocol as the sheet script, so the phone and the office

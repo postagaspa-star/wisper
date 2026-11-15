@@ -496,16 +496,18 @@ const DOCUMENTI = imp => ({
 // 13/11/2026: la pre-parcella si chiama "Parcella pro-forma" (Andrea): cambia solo l'impronta dell'avviso.
 // 14/11/2026 (le indicazioni del modello: la testata si ripete su ogni pagina): preventivo e parcella pro-forma stanno in
 // una tabella con la testata nell'intestazione; cambiano le loro due impronte.
-const PRIMA = { rapportino: 'c1fccb2c2be9a4e2', riepilogo: 'cf87fde41e96cf5e', preventivo: '80e00a71c8afadfe', contratto: '4607a1d8c85d8aaa', prospetto: 'c2a63b5dccb85821', avviso: 'e8a7b261ab6159f1' };
+// 15/11/2026 (Andrea): in cima il tipo grande e il numero piccolo, Fornitore e Cliente, la Causale con la valuta fra le parti
+// e la tabella: cambiano ancora le due impronte di preventivo e parcella pro-forma.
+const PRIMA = { rapportino: 'c1fccb2c2be9a4e2', riepilogo: 'cf87fde41e96cf5e', preventivo: '181c6676040fca9a', contratto: '4607a1d8c85d8aaa', prospetto: 'c2a63b5dccb85821', avviso: 'c627f2299d23595b' };
 
 test('PDF senza logo identici a prima della fase 8, carattere per carattere (§9.3, §16, M18.3)', () => {
   const senza = [IMP, Object.assign({}, IMP, { STUDIO_LOGO: '', PDF_PIEDE: '', PDF_LOGO: true, STUDIO_NOME_BREVE: 'GM', STUDIO_SITO: 'www.esempio.it' }),
     Object.assign({}, IMP, { STUDIO_LOGO: 'logoDiProva123', PDF_LOGO: false }), Object.assign({}, IMP, { PDF_NOME: false })];
   senza.forEach((imp, i) => {
     const docs = DOCUMENTI(imp);
-    // 1.4.0: il preventivo ha la veste della parcella, col sito dello studio nel Mittente ("Telefono: … | Web: …").
+    // 1.4.0: il preventivo ha la veste della parcella, col sito dello studio nel Fornitore ("Telefono: … | Web: …").
     Object.keys(docs).forEach(k => { if (!(k === 'preventivo' && i === 1)) assert.equal(impronta(docs[k]()), PRIMA[k], k + ' (caso ' + i + ')'); });
-    if (i === 1) assert.ok(docs.preventivo().indexOf('<div>PEO: studio@esempio.it</div><div>Web: www.esempio.it</div>') > 0, 'il sito nel Mittente');
+    if (i === 1) assert.ok(docs.preventivo().indexOf('<div>PEO: studio@esempio.it</div><div>Web: www.esempio.it</div>') > 0, 'il sito nel Fornitore');
   });
   const prospetto = { prestatore: { denominazione: 'Studio' }, riferimento: 'W-1', tipoDocumento: 'TD01', dataProposta: '2026-10-22', righe: [] };
   assert.equal(impronta(D.prospettoFattura(prospetto, { oggi: '2026-10-22' })), PRIMA.prospetto);
