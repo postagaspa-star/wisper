@@ -105,7 +105,7 @@ WebView vecchia, la 124: serve la 131, come già per il numero di pagina): il co
 non l'ho potuto leggere lì.
 
 **Versione:** [v1.5.0](https://github.com/postagaspa-star/wisper/releases/tag/v1.5.0) (telefono codice 24, computer
-1.5.0). Il server resta 0.15.3. Accordo: [docs/gestionale/modelli.md](docs/gestionale/modelli.md); prototipo
+1.5.0), pubblicata alle 21:26; il NAS la annuncia alle app dalle 21:34. Il server resta 0.15.3. Accordo: [docs/gestionale/modelli.md](docs/gestionale/modelli.md); prototipo
 `docs/prototipo/Modelli.html`.
 
 ---
