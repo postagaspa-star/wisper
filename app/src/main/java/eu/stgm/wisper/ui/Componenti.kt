@@ -147,6 +147,8 @@ fun PulsanteBordo(
     altezza: Dp = 52.dp,
     stile: TextStyle = Testi.pulsanteSecondario,
     tratteggiato: Boolean = false,
+    // 1.5.0 (modelli.md): "Mod. FAT-01" accanto al nome, per i pulsanti che creano un documento.
+    nota: String? = null,
 ) {
     val c = W.colori
     val premi = remember { MutableInteractionSource() }
@@ -167,7 +169,11 @@ fun PulsanteBordo(
             Icon(icona, null, tint = c.testo, modifier = Modifier.size(20.dp))
             Spacer(Modifier.width(8.dp))
         }
-        Text(testo, style = stile, color = c.testo, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(testo, style = stile, color = c.testo, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+        if (nota != null) {
+            Spacer(Modifier.width(8.dp))
+            Text(nota, style = Testi.piccolo.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.ExtraBold), color = c.tenue, maxLines = 1)
+        }
     }
 }
 

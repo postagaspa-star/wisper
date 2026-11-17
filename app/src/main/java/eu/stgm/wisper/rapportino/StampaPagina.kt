@@ -62,7 +62,7 @@ internal class StampaPagina private constructor(private val vista: WebView, priv
 
         // La pagina che fa scrivere il documento a documenti.js, come il programma del computer.
         private const val PAGINA_MOTORE = "<!doctype html><html lang=\"it\"><head><meta charset=\"utf-8\">" +
-            "<script src=\"/conti.js\"></script><script src=\"/documenti.js\"></script></head><body></body></html>"
+            "<script src=\"/conti.js\"></script><script src=\"/documenti.js\"></script><script src=\"/modelli-esempi.js\"></script></head><body></body></html>"
 
         @SuppressLint("SetJavaScriptEnabled")
         fun crea(ctx: Context): StampaPagina {

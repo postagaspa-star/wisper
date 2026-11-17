@@ -569,6 +569,7 @@
     else if (nome === 'amministrazione') Amministrazione.vista(pagina, a1 || '', a2 ? decodeURIComponent(a2) : '');
     else if (nome === 'preventivi') Preventivi.vista(pagina, a1 ? decodeURIComponent(a1) : '', a2 || '');
     else if (nome === 'servizi') Servizi.vista(pagina);
+    else if (nome === 'modelli') Modelli.vista(pagina, a1 ? decodeURIComponent(a1) : '');
     else if (nome === 'attivita' && a1 === 'altreapp') Integrazioni.calendarioAltre(pagina);
     else if (nome === 'attivita') { const f = S.filtroAttivita; S.filtroAttivita = null; Attivita.vista(pagina, a1 ? decodeURIComponent(a1) : '', f); }
     // Fase 5: Documenti e Ticket e assistenza.
@@ -1977,8 +1978,12 @@
         espanso ? dettagliLavoro(l) : null);
     };
 
+    // 1.5.0: il modello del PDF (uno per destinatario: RAP-01 con una commessa sola, RAP-02 con più commesse).
+    const modelliRap = [];
+    destinatariDi(g.lavori).forEach(d => { const m = D.modelloRapportino(d.lavori, g.data); if (modelliRap.indexOf(m) < 0) modelliRap.push(m); });
+    const sigleRap = h('span', { class: 'sigle-rap' }, modelliRap.sort().map(m => W.Modelli.sigla(m)));
     const corpo = h('div', { class: 'corpo' },
-      h('div', { class: 'alto' }, h('span', { class: 'numero' }, g.id), tondo('chiudi', 'Chiudi', () => chiudiPannello(), 'piccolo')),
+      h('div', { class: 'alto' }, h('span', { class: 'numero' }, g.id), sigleRap, tondo('chiudi', 'Chiudi', () => chiudiPannello(), 'piccolo')),
       h('div', { class: 'testa-rap' }, h('b', null, dataConAnno(g.data)), h('span', null, [g.tecnico, RL.lavoriEClienti(g.lavori)].filter(Boolean).join(' · ')),
         h('span', null, RL.riassuntoStati(g.lavori))),
       h('div', { class: 'lavori-p' }, g.lavori.map(scheda)),
@@ -1989,7 +1994,7 @@
     const pdf = h('button', { type: 'button', class: 'btn grande' }, 'PDF');
     pdf.addEventListener('click', () => {
       if (destinatari.length === 1) { pdfRapportino({ id: g.id, data: g.data, tecnico: g.tecnico, lavori: destinatari[0].lavori }, { apri: true }); return; }
-      apriMenu(pdf, destinatari.map(d => ({ testo: 'PDF per ' + d.nome, fn: () => pdfRapportino({ id: g.id, data: g.data, tecnico: g.tecnico, lavori: d.lavori }, { apri: true }) })));
+      apriMenu(pdf, destinatari.map(d => ({ testo: 'PDF per ' + d.nome, modello: D.modelloRapportino(d.lavori, g.data), fn: () => pdfRapportino({ id: g.id, data: g.data, tecnico: g.tecnico, lavori: d.lavori }, { apri: true }) })));
     });
     // 13/11/2026: "Riporta da inviare" non sta più nel menu ⋯ ma in vista, sotto Invia ai clienti (Andrea non lo trovava).
     const riporta = scrive && inviati.length ? h('button', { type: 'button', class: 'btn grande', 'data-azione': 'riporta-da-inviare', onclick: () => riportaDaInviare(inviati) },
@@ -2264,7 +2269,7 @@
             h('span', { class: 'testi' }, h('b', null, x.nome), h('span', null, RL.nLavori(x.lavori.length) + (soldi() ? ' · ' + C.euro(t.totale) : ''))),
             x.inviata ? h('span', { class: 'pill p-verde' }, 'Inviata') : null),
           x.inviata ? null : campo('A', x.a, x.errore || null),
-          h('div', { class: 'allegato' }, icona('graffetta', 16, 2.2), h('span', null, allegato(x))),
+          h('div', { class: 'allegato' }, icona('graffetta', 16, 2.2), h('span', null, allegato(x)), W.Modelli.sigla(x.numero ? D.modelloRapportino(x.lavori, x.lavori[0].data) : 'RAP-03')),
           x.inviata ? null : x.aperto ? h('div', { class: 'fila', style: { display: 'flex', flexDirection: 'column', gap: '12px' } },
             campo('Oggetto', x.oggetto), campo('Copia anche a', x.cc), campo('Messaggio', x.messaggio))
             : h('div', { class: 'oggetto-dest' }, h('span', { class: 'tenue' }, x.oggetto.value),
@@ -3225,6 +3230,9 @@
   // 1.4.0 (servizi.md): i Servizi hanno la loro voce; la finestra Indennità del rapportino sta lì.
   const Servizi = window.WisperServizi(W);
   W.Servizi = Servizi;
+  // 1.5.0 (modelli.md): i modelli dei documenti coi loro codici; le altre pagine ne usano la sigla ("Mod. RAP-01").
+  const Modelli = window.WisperModelli(W);
+  W.Modelli = Modelli;
   const Attivita = window.WisperAttivita(W);
   const Ore = window.WisperOre(W);
   const Spese = window.WisperSpese(W);

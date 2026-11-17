@@ -1140,7 +1140,7 @@
         const m = M.modelli;
         aggiungi(pagina, [h('div', { class: 'sezione stretta-900' }, h('span', { class: 'etichetta' }, 'Modelli di Wisper'),
           h('div', { class: 'scheda righe' }, (m.wisper || []).map(x => riga({
-            sinistra: quadrato('file'), titolo: x.nome,
+            sinistra: quadrato('file'), titolo: nomeModello(x), destra: sigleModello(x),
             sotto: ['impaginazione fissa'].concat((x.testi || []).length ? [(x.testi || []).map(t => nomeBreveTesto(t.nome)).filter((y, i, a) => a.indexOf(y) === i).join(', ')] : []).join(' · '),
             onclick: (x.testi || []).length ? () => testiModello(x) : null, freccia: (x.testi || []).length > 0,
           }))))]);
@@ -1152,6 +1152,25 @@
           }))) : h('p', { class: 'vuoto sinistra' }, 'Nessun modello dello studio: si mettono nell\'archivio, nella categoria Modelli dello studio.'))]);
         if (apriChiave) { const x = (m.wisper || []).find(y => y.chiave === apriChiave); if (x) testiModello(x); }
       });
+    }
+
+    /**
+     * 1.5.0: i codici dei modelli (pagina Modelli) accanto alle righe di qui. Una riga può valere per più modelli (il
+     * rapportino: RAP-01 e RAP-02); i due senza testi da cambiare non hanno la chiave nell'elenco di documenti.js.
+     */
+    const SENZA_TESTI = { avviso: 'FAT-01', prospetto: 'FAT-03' };
+    function codiciModello(x) {
+      const c = D.MODELLI.filter(m => m.testi && m.testi === x.chiave).map(m => m.codice);
+      return c.length ? c : SENZA_TESTI[x.chiave] ? [SENZA_TESTI[x.chiave]] : [];
+    }
+    /** Il nome è quello della pagina Modelli quando la riga vale per un modello solo ("Parcella pro-forma", non più "Avviso di parcella"). */
+    function nomeModello(x) {
+      const c = codiciModello(x);
+      return c.length === 1 ? D.trovaModello(c[0]).nome : x.nome;
+    }
+    function sigleModello(x) {
+      const c = codiciModello(x);
+      return c.length && W.Modelli ? h('span', { class: 'sigle-riga' }, c.map(k => W.Modelli.sigla(k))) : null;
     }
 
     function nomeBreveTesto(nome) {
@@ -1279,7 +1298,7 @@
       };
       disegna();
       if (x.idCliente || x.chiave === 'LETTERA_LIBERA') componi();
-      chiudi = finestra({ titolo: 'Nuova lettera', larghezza: 'media', corpo: zona, fuoco: false,
+      chiudi = finestra({ titolo: 'Nuova lettera', larghezza: 'media', corpo: zona, fuoco: false, testaExtra: W.Modelli.sigla('LET-01'),
         pulsanti: ['spazio', scrive() ? h('button', { type: 'button', class: 'btn grande', onclick: salvaArchivio }, 'Salva nell\'archivio') : null,
           h('button', { type: 'button', class: 'btn giallo grande', onclick: creaPdf }, 'Crea il PDF')].filter(Boolean) });
     }

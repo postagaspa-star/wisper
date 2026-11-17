@@ -854,6 +854,7 @@ private fun PaginaSezione(
             Sezione.FATTURAZIONE -> eu.stgm.wisper.ui.SchermataFatturazione(dati, nav)
             Sezione.BANCHE -> eu.stgm.wisper.ui.SchermataBanche(dati, nav)
             Sezione.DOCUMENTI -> eu.stgm.wisper.ui.SchermataDocumenti(dati, nav)
+            Sezione.MODELLI -> eu.stgm.wisper.ui.SchermataModelliDocumenti(dati, nav)
             Sezione.TICKET -> eu.stgm.wisper.ui.SchermataTicket(dati, nav)
             Sezione.PERSONE -> eu.stgm.wisper.ui.SchermataPersone(dati, nav)
             Sezione.MEZZI -> eu.stgm.wisper.ui.SchermataMezzi(dati, nav)
@@ -920,6 +921,8 @@ private fun PaginaSezione(
         rotta.startsWith("preventivo-nuovo") || rotta.startsWith("preventivo-modifica/") -> SchermataEditorPreventivo(dati, nav, rotta)
         // 1.4.0 (servizi.md §1): il listino sono i Servizi; la scheda di un servizio, nuovo o da cambiare.
         rotta == "listino" || rotta == "servizi" -> eu.stgm.wisper.ui.SchermataServizi(dati, nav)
+        // 1.5.0: un modello di documento col suo esempio (docs/gestionale/modelli.md)
+        rotta.startsWith("modelli/") -> eu.stgm.wisper.ui.SchermataModelloDocumento(dati, nav, rotta.removePrefix("modelli/"))
         rotta == "servizio-nuovo" -> eu.stgm.wisper.ui.SchermataServizio(dati, nav, null)
         rotta.startsWith("servizio/") -> eu.stgm.wisper.ui.SchermataServizio(dati, nav, rotta.removePrefix("servizio/"))
         rotta == "contratti" -> SchermataContratti(dati, nav)
@@ -967,6 +970,8 @@ private fun PaginaSezione(
  */
 private fun vociVere(s: eu.stgm.wisper.rapportino.Sessione): List<Sezione> =
     Sezione.entries.filter { it.accesa(s.permessi, s.interfaccia.funzioniSpente) }
+        // 1.5.0: i Modelli dei documenti sono dello studio, non dell'esterno (come sul computer: non sono nel suo menu).
+        .filter { it != Sezione.MODELLI || s.utente.ruolo != eu.stgm.wisper.rapportino.Ruoli.ESTERNO }
 
 /** Le voci del menu: quelle vere, piu' Amministrazione per il titolare quando e' spenta (con la sola pagina Funzioni). */
 private fun vociMenu(s: eu.stgm.wisper.rapportino.Sessione): List<Sezione> {

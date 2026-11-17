@@ -168,6 +168,20 @@ type is the large dark title and the reference number the small grey line under 
 parties and the table, and it carries the currency line that used to sit next to the date. In the quote, which has a
 subject instead of a causale, the currency goes on the grey line under the subject.
 
+Version 1.5.0 (17 November, `docs/gestionale/modelli.md`) takes a census of the **document templates** Wisper can
+produce and gives each a permanent code: `RAP-01` daily report on one job order, `RAP-02` daily report on several job
+orders, `RAP-03` monthly summary, `RAP-04` single-job card (client portal), `PRE-01` quote, `PRE-02` engagement
+letter, `FAT-01` pro-forma invoice, `FAT-02` invoice, `FAT-03` data sheet for the invoicing program, `LET-01` letter,
+`LET-02` collaborator engagement letter, `ASS-01` service contract. The code is printed in the footer of every page
+("Mod. RAP-01 · Pagina 1 / 2") and shown in the apps wherever a document is prepared (send dialogs, PDF buttons, menus,
+the template texts page). A new read-only **Modelli** page, on the computer and on the phone, lists the twelve
+templates by family, each with a live example rendered by the real template from invented data under the studio's own
+header; templates cannot be created there. The catalogue and the rule that picks the report template live in
+`pc/ui/documenti.js` and are mirrored in Kotlin with shared cases (`pc/prove/casi-modelli.json`). The same release
+changes the **daily report on a single job order**: the table drops the date and report number (they stay in the
+header) and shows the project description after the project's addressee; reports spanning several job orders and the
+monthly summary are unchanged.
+
 Phase 1 (October 2026) replaces the Google Sheet with a small server on
 the home NAS (`server/`: Node.js 24 with its built-in SQLite, no npm dependencies, in
 Docker). It speaks the same protocol as the sheet script, so the phone and the office

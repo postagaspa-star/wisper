@@ -70,9 +70,11 @@
    * Il formato: A4, Figtree, i grigi di docs/aspetto.md. Niente giallo pieno:
    * si stampa anche in bianco e nero.
    */
-  function stile(imp, extra, destra) {
+  function stile(imp, extra, destra, modello) {
     const piede = [imp.RAGIONE_SOCIALE, imp.PARTITA_IVA ? 'P.IVA ' + imp.PARTITA_IVA : ''].filter(Boolean).join(' · ');
     const carattere = '"Figtree", "Segoe UI", Arial, sans-serif';
+    // 17/11/2026 (modelli.md): il codice del modello in fondo a ogni pagina, prima del numero di pagina ("Mod. RAP-01 · Pagina 1 / 2").
+    const mod = modello ? 'Mod. ' + modello + ' · ' : '';
     // Fase 8: con la riga in fondo ai PDF il piè ha due righe; senza, la regola di prima com'era.
     const sotto = pieDi(imp);
     const bassoSinistra = sotto
@@ -84,8 +86,8 @@
       bassoSinistra +
       // 1.4.0 (servizi.md §3): preventivo, parcella pro-forma e parcella hanno a destra "Parcella n. 24 · Pagina 1 / 1", senza il simbolo.
       (destra
-        ? '  @bottom-right { content: "' + escCss(destra) + ' · Pagina " counter(page) " / " counter(pages); font: 500 8.5px ' + carattere + '; color: #8A8A92; } }'
-        : '  @bottom-right { content: url("' + SIMBOLO + '") "  Pagina " counter(page) " / " counter(pages); font: 500 8.5px ' + carattere + '; color: #8A8A92; } }') +
+        ? '  @bottom-right { content: "' + escCss(mod + destra) + ' · Pagina " counter(page) " / " counter(pages); font: 500 8.5px ' + carattere + '; color: #8A8A92; } }'
+        : '  @bottom-right { content: url("' + SIMBOLO + '") "  ' + escCss(mod) + 'Pagina " counter(page) " / " counter(pages); font: 500 8.5px ' + carattere + '; color: #8A8A92; } }') +
       '* { box-sizing: border-box; }' +
       'body { margin: 0; font: 500 10.5px/1.45 ' + carattere + '; color: #1B1B1F; }' +
       '.testa { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #1B1B1F; padding-bottom: 10px; margin-bottom: 14px; }' +
@@ -206,9 +208,86 @@
     return '<div class="cella"><div class="etichetta">' + esc(etichetta) + '</div><div class="valore">' + esc(valore) + '</div></div>';
   }
 
-  function pagina(imp, titolo, corpo, extra) {
-    return '<!doctype html><html lang="it"><head><meta charset="utf-8"><title>' + esc(titolo) + '</title>' +
-      stile(imp, extra) + '</head><body>' + corpo + '</body></html>';
+  /** Il codice del modello scritto nella pagina (lo legge modelloDi): chi ha l'HTML sa quale modello è, senza rifare la regola. */
+  const metaModello = modello => (modello ? '<meta name="wisper-modello" content="' + esc(modello) + '">' : '');
+
+  function pagina(imp, titolo, corpo, extra, modello) {
+    return '<!doctype html><html lang="it"><head><meta charset="utf-8">' + metaModello(modello) + '<title>' + esc(titolo) + '</title>' +
+      stile(imp, extra, '', modello) + '</head><body>' + corpo + '</body></html>';
+  }
+
+  // ======================================================================= 17/11/2026: i modelli e i loro codici
+
+  /*
+   * Il censimento dei modelli (docs/gestionale/modelli.md). Ogni documento che Wisper sa creare ha un codice: la
+   * famiglia e un numero ("RAP-01"). Un codice dato non cambia più e non passa a un altro modello: un modello nuovo
+   * prende il numero dopo. Il codice sta in fondo a ogni pagina del PDF ("Mod. RAP-01"), nella pagina Modelli e dove il
+   * documento si prepara. Qui non se ne creano: l'elenco è questo, fisso nel codice come l'impaginazione.
+   *   famiglia: il gruppo nella pagina Modelli;  quando: quando esce questo modello;  dove: da dove si crea;
+   *   testi: la chiave del modello in Documenti › Modelli (i testi che si cambiano), se ne ha.
+   * Telefono: rapportino/ModelliDocumenti.kt, con gli stessi casi (pc/prove/casi-modelli.json).
+   */
+  const MODELLI = [
+    { codice: 'RAP-01', famiglia: 'Rapportini', nome: 'Rapportino giornaliero, una commessa',
+      quando: 'Un rapportino con tutti i lavori sulla stessa commessa. In tabella c\'è la descrizione del progetto, senza data e numero.',
+      dove: 'Rapportini › Invia, oppure il PDF del rapportino', testi: 'rapportino' },
+    { codice: 'RAP-02', famiglia: 'Rapportini', nome: 'Rapportino giornaliero, più commesse',
+      quando: 'Un rapportino con lavori su commesse diverse. In tabella ogni riga ha la data e il numero.',
+      dove: 'Rapportini › Invia, oppure il PDF del rapportino', testi: 'rapportino' },
+    { codice: 'RAP-03', famiglia: 'Rapportini', nome: 'Riepilogo dei rapportini del mese',
+      quando: 'Più rapportini dello stesso cliente, di solito quelli del mese: una riga per lavoro e i totali per la fattura.',
+      dove: 'Rapportini › Invia, con più rapportini scelti', testi: 'riepilogo' },
+    { codice: 'RAP-04', famiglia: 'Rapportini', nome: 'Rapportino di un lavoro, a scheda',
+      quando: 'Un lavoro solo, a riquadri invece che a tabella. Oggi lo usa solo il portale clienti.',
+      dove: 'Portale clienti', testi: '' },
+    { codice: 'PRE-01', famiglia: 'Preventivi', nome: 'Preventivo',
+      quando: 'L\'offerta al cliente: le voci divise in sezioni, i conti e le condizioni.',
+      dove: 'Preventivi › PDF o Invia', testi: 'preventivo' },
+    { codice: 'PRE-02', famiglia: 'Preventivi', nome: 'Incarico professionale',
+      quando: 'L\'incarico da far firmare al cliente, da un preventivo accettato.',
+      dove: 'Preventivi › Incarico', testi: '' },
+    { codice: 'FAT-01', famiglia: 'Fatture', nome: 'Parcella pro-forma',
+      quando: 'La bozza della fattura da mandare al cliente prima di emetterla. Non ha valore fiscale.',
+      dove: 'Fatture › Parcella pro-forma', testi: '' },
+    { codice: 'FAT-02', famiglia: 'Fatture', nome: 'Parcella o fattura',
+      quando: 'La copia per il cliente della fattura emessa, col numero dato dal programma. Vale anche per la nota di credito.',
+      dove: 'Fatture › PDF della fattura emessa', testi: '' },
+    { codice: 'FAT-03', famiglia: 'Fatture', nome: 'Prospetto per il programma delle fatture',
+      quando: 'I dati della fattura da copiare nel programma che la emette. Resta in studio, non va al cliente.',
+      dove: 'Fatture › Prospetto', testi: '' },
+    { codice: 'LET-01', famiglia: 'Lettere e contratti', nome: 'Lettera',
+      quando: 'Una lettera al cliente da un testo già pronto, per esempio la verifica dell\'impianto di terra.',
+      dove: 'Documenti › Modelli › Nuova lettera', testi: 'lettera' },
+    { codice: 'LET-02', famiglia: 'Lettere e contratti', nome: 'Lettera d\'incarico al collaboratore',
+      quando: 'La lettera con cui lo studio affida un incarico a un collaboratore esterno.',
+      dove: 'Collaboratori › Incarico › Lettera d\'incarico', testi: 'incarico' },
+    { codice: 'ASS-01', famiglia: 'Lettere e contratti', nome: 'Contratto di assistenza',
+      quando: 'Il contratto di assistenza: impianti, visite, tempi d\'intervento e condizioni.',
+      dove: 'Ticket › Assistenza › PDF del contratto', testi: 'contratto' },
+  ];
+
+  /** Il modello con quel codice, o null. */
+  const trovaModello = codice => MODELLI.find(m => m.codice === codice) || null;
+
+  /** "Mod. RAP-01": il codice com'è scritto ovunque (in fondo ai PDF e nell'app). */
+  const siglaModello = codice => (codice ? 'Mod. ' + codice : '');
+
+  /**
+   * Il modello del rapportino di un giorno coi suoi lavori (17/11/2026, Andrea: "di un solo giorno con stessa data e
+   * stessa commessa, altrimenti lasciali così come sono"): RAP-01 se tutti i lavori hanno lo stesso giorno e la stessa
+   * commessa (anche nessuna per tutti), altrimenti RAP-02. data: il giorno del rapportino, per i lavori che non lo portano.
+   */
+  function modelloRapportino(lavori, data) {
+    const l = Array.isArray(lavori) ? lavori.filter(Boolean) : [];
+    const giorno = x => String(x.data || data || '').slice(0, 10);
+    const commessa = x => String(x.idCommessa === null || x.idCommessa === undefined ? '' : x.idCommessa).trim();
+    return l.every(x => giorno(x) === giorno(l[0]) && commessa(x) === commessa(l[0])) ? 'RAP-01' : 'RAP-02';
+  }
+
+  /** Il codice del modello di una pagina già fatta ('' se non lo porta). */
+  function modelloDi(html) {
+    const m = /<meta name="wisper-modello" content="([A-Z]{3}-\d{2})">/.exec(String(html || ''));
+    return m ? m[1] : '';
   }
 
   // ======================================================================= 1.4.0: il modello della parcella
@@ -361,13 +440,13 @@
   }
 
   /** La pagina intera: intestazione col logo, il corpo, il piè (studio a sinistra, "Parcella n. 24 · Pagina" a destra). */
-  function paginaDoc(imp, testa, corpo, titolo, destra) {
+  function paginaDoc(imp, testa, corpo, titolo, destra, modello) {
     // 14/11/2026 (le indicazioni in fondo al modello di Manuel: "al crescere delle righe, proseguire su altre pagine
     // ripetendo testata, intestazioni tabella e numero di pagina"): la testata sta nell'intestazione di una tabella che
     // tiene tutto il foglio, così chi stampa la ripete in cima a ogni pagina; le intestazioni delle colonne le ripete la
     // tabella delle righe, il numero di pagina è nel piè.
-    return '<!doctype html><html lang="it"><head><meta charset="utf-8"><title>' + esc(titolo) + '</title>' +
-      stile(imp, STILE_DOC, destra) + '</head><body><table class="foglio"><thead><tr><td>' + intestazione(imp, testa.etichetta, testa.numero, testa.sotto) +
+    return '<!doctype html><html lang="it"><head><meta charset="utf-8">' + metaModello(modello) + '<title>' + esc(titolo) + '</title>' +
+      stile(imp, STILE_DOC, destra, modello) + '</head><body><table class="foglio"><thead><tr><td>' + intestazione(imp, testa.etichetta, testa.numero, testa.sotto) +
       '</td></tr></thead><tbody><tr><td>' + corpo + '</td></tr></tbody></table></body></html>';
   }
 
@@ -442,7 +521,7 @@
     const fondo = vecchio ? '<div class="firme"><div class="firma"></div><div class="firma"><div class="spazio">' + immagine(vecchio.firma.id, 'sig') + '</div>' +
       '<div class="chi">Firma per accettazione' + (vecchio.firmatario ? ' · ' + esc(vecchio.firmatario) : '') +
       (vecchio.firmatoIl ? ' · firmato il ' + esc(C.data(vecchio.firmatoIl)) : '') + '</div></div></div>' : '';
-    return foglioLavori(imp, ana, lavori, testa, chi, () => numero, o, 'Rapportino ' + numero, fondo);
+    return foglioLavori(imp, ana, lavori, testa, chi, () => numero, o, 'Rapportino ' + numero, fondo, modelloRapportino(lavori, data));
   }
 
   /**
@@ -517,12 +596,14 @@
           (r.noteSpese ? ' · ' + esc(r.noteSpese) : '') + '</figcaption></figure>').join('') +
         '</div></div>';
     }
-    return pagina(imp, 'Rapportino ' + (r.id || ''), corpo, progetto ? STILE_PROGETTO : '');
+    return pagina(imp, 'Rapportino ' + (r.id || ''), corpo, progetto ? STILE_PROGETTO : '', 'RAP-04');
   }
 
   // 11/11/2026: la data su una riga sola, la descrizione col posto più largo. 12/11/2026: anche il N° (RAP/2026/0027
   // andava su tre righe).
-  const STILE_RIEPILOGO = 'table.riepilogo th, table.riepilogo td.data, table.riepilogo td.num { white-space: nowrap; } table.riepilogo td.int { width: 15%; } table.riepilogo td.desc { width: 30%; }';
+  // 17/11/2026: nel rapportino di un giorno e di una commessa (RAP-01) al posto di Data e N° c'è la descrizione del progetto.
+  const STILE_RIEPILOGO = 'table.riepilogo th, table.riepilogo td.data, table.riepilogo td.num { white-space: nowrap; } table.riepilogo td.int { width: 15%; } table.riepilogo td.desc { width: 30%; }' +
+    ' table.riepilogo td.prog { width: 19%; }';
 
   /** "Via Arrigo Boito 2, 36031 Dueville (VI)": come indirizzoCompleto di pc/ui/regole.js (lo Spett.le del riepilogo). */
   function indirizzoCompleto(x) {
@@ -550,7 +631,10 @@
     });
   }
 
-  function foglioLavori(imp, ana, lista, testa, chi, numeroDi, o, titolo, fondo) {
+  function foglioLavori(imp, ana, lista, testa, chi, numeroDi, o, titolo, fondo, modello) {
+    // 17/11/2026 (Andrea): nel rapportino giornaliero di una sola commessa (RAP-01) la data e il numero stanno già in alto;
+    // nella tabella, al loro posto, la descrizione del progetto dopo "Intestato a". Gli altri fogli restano com'erano.
+    const giornaliero = modello === 'RAP-01';
     // In ordine di giorno, poi di rapportino e di posizione (prima, a parità di giorno, i lavori di un rapportino uscivano al contrario).
     const righe = lista.map((r, i) => ({ r, i })).sort((a, b) => String(a.r.data || '').slice(0, 10).localeCompare(String(b.r.data || '').slice(0, 10)) ||
       String(numeroDi(a.r)).localeCompare(String(numeroDi(b.r))) || ((Number(a.r.posizione) || 1) - (Number(b.r.posizione) || 1)) || a.i - b.i).map(x => x.r);
@@ -562,7 +646,8 @@
     const conImporti = !!o.conImporti;
     // 11/11/2026 (Andrea): dopo il progetto, il cliente a cui si riferisce (il suo "Intestato a"); la data corta (05/11/26) per fare spazio.
     const dataCorta = r => C.data(r.data).replace(/\/\d{2}(\d{2})$/, '/$1');
-    corpo += '<table class="riepilogo"><thead><tr><th>Data</th><th>N°</th><th>Progetto</th><th>Intestato a</th><th>Lavoro svolto</th>' +
+    corpo += '<table class="riepilogo"><thead><tr>' +
+      (giornaliero ? '<th>Progetto</th><th>Intestato a</th><th>Descrizione progetto</th>' : '<th>Data</th><th>N°</th><th>Progetto</th><th>Intestato a</th>') + '<th>Lavoro svolto</th>' +
       '<th class="n">Lavoro</th><th class="n">Extra</th><th class="n">Viaggio</th><th class="n">Km</th><th class="n">Spese</th>' +
       (conImporti ? '<th class="n">Importo</th>' : '') + '</tr></thead><tbody>';
     righe.forEach(r => {
@@ -572,17 +657,18 @@
         rigaStrumenti(r.strumenti) ? 'Strumenti: ' + rigaStrumenti(r.strumenti) : '',
         r.ticket ? 'Ticket ' + r.ticket : '',
       ].concat(righeIndennita(r)).filter(Boolean);
-      corpo += '<tr><td class="data">' + esc(dataCorta(r)) + '</td><td class="num">' + esc(numeroDi(r)) + '</td>' +
+      corpo += '<tr>' + (giornaliero ? '' : '<td class="data">' + esc(dataCorta(r)) + '</td><td class="num">' + esc(numeroDi(r)) + '</td>') +
         '<td>' + esc((progetto && progetto.codice) || '—') +
         (chi.mostraCliente ? '<div class="sotto-riga">' + esc(r.cliente) + '</div>' : '') + '</td>' +
         '<td class="int">' + esc((progetto && progetto.intestatoA) || '—') + '</td>' +
+        (giornaliero ? '<td class="prog">' + esc((progetto && progetto.descrizione) || '—') + '</td>' : '') +
         '<td class="desc">' + esc(r.descrizione || '') + sotto.map(x => '<div class="sotto-riga">' + esc(x) + '</div>').join('') + '</td>' +
         '<td class="n">' + esc(C.numero(r.oreLavoro)) + '</td><td class="n">' + esc(C.numero(r.oreExtra)) + '</td>' +
         '<td class="n">' + esc(C.numero(r.oreViaggio)) + '</td><td class="n">' + esc(C.numero(r.km)) + '</td>' +
         '<td class="n">' + esc(C.num(r.spese) ? C.euro(r.spese) : '') + (r.noteSpese && C.num(r.spese) ? '<div class="sotto-riga">' + esc(r.noteSpese) + '</div>' : '') + '</td>' +
         (conImporti ? '<td class="n">' + esc(C.euro(r.totale)) + '</td>' : '') + '</tr>';
     });
-    corpo += '</tbody><tfoot><tr><td colspan="5">Totale</td>' +
+    corpo += '</tbody><tfoot><tr><td colspan="' + (giornaliero ? 4 : 5) + '">Totale</td>' +
       '<td class="n">' + esc(C.numero(t.oreLavoro)) + '</td><td class="n">' + esc(C.numero(t.oreExtra)) + '</td>' +
       '<td class="n">' + esc(C.numero(t.oreViaggio)) + '</td><td class="n">' + esc(C.numero(t.km)) + '</td>' +
       '<td class="n">' + esc(C.euro(t.spese)) + '</td>' + (conImporti ? '<td class="n">' + esc(C.euro(t.totale)) + '</td>' : '') +
@@ -610,7 +696,7 @@
           '</div></div>';
       }
     }
-    return pagina(imp, titolo, corpo, STILE_RIEPILOGO);
+    return pagina(imp, titolo, corpo, STILE_RIEPILOGO, modello);
   }
 
   /**
@@ -627,7 +713,7 @@
     const nr = new Set(lista.map(numeroDi)).size;
     const testa = { etichetta: 'Riepilogo rapportini', numero: periodo || '', sotto: intestatario.nome + ' · ' +
       (nr === t.n ? (t.n === 1 ? '1 rapportino' : t.n + ' rapportini') : t.n + ' lavori in ' + (nr === 1 ? '1 rapportino' : nr + ' rapportini')) };
-    return foglioLavori(imp, ana, lista, testa, intestatario, numeroDi, o, 'Riepilogo ' + (periodo || ''), '');
+    return foglioLavori(imp, ana, lista, testa, intestatario, numeroDi, o, 'Riepilogo ' + (periodo || ''), '', 'RAP-03');
   }
 
   // ======================================================================= preventivo e incarico (fase 2)
@@ -829,7 +915,7 @@
     corpo += bloccoDoc('Condizioni', p.condizioni);
     if (p.scadenza) corpo += bloccoDoc('Validità dell\'offerta', 'Questa offerta vale fino al ' + C.data(p.scadenza) + '. Dopo l\'accettazione i prezzi non cambiano.');
     corpo += firmeDocumento(p, imp, 'Per lo studio', nelPortale);
-    return paginaDoc(imp, testa, corpo, 'Preventivo ' + numeroPreventivo(p), 'Preventivo ' + numeroPreventivo(p));
+    return paginaDoc(imp, testa, corpo, 'Preventivo ' + numeroPreventivo(p), 'Preventivo ' + numeroPreventivo(p), 'PRE-01');
   }
 
   /**
@@ -869,7 +955,7 @@
     corpo += '<div class="sotto-riga">L\'incarico riprende il preventivo ' + esc(numeroPreventivo(p)) +
       (p.accettazioneModo ? ', ' + esc(MODI[p.accettazioneModo] || '') : '') + (p.accettatoDa ? ' da ' + esc(p.accettatoDa) : '') + '.</div>';
     corpo += firmeDocumento(p, imp, 'Il professionista');
-    return pagina(imp, 'Incarico ' + numeroPreventivo(p), corpo);
+    return pagina(imp, 'Incarico ' + numeroPreventivo(p), corpo, '', 'PRE-02');
   }
 
   // ======================================================================= fase 4: il prospetto e l'avviso di parcella
@@ -993,8 +1079,8 @@
       corpo += '<div class="sez-p"><h3>' + esc(s.titolo) + '</h3><table><tbody>' +
         s.campi.map(x => '<tr><td class="k">' + esc(x.etichetta) + '</td><td class="v">' + esc(x.valore) + '</td></tr>').join('') + '</tbody></table></div>';
     });
-    return '<!doctype html><html lang="it"><head><meta charset="utf-8"><title>' + esc('Prospetto ' + (m.riferimento || '')) + '</title>' +
-      stile(o.logo ? { RAGIONE_SOCIALE: piedeProspetto(m, o), STUDIO_LOGO: o.logo } : { RAGIONE_SOCIALE: piedeProspetto(m, o) }) + STILE_PROSPETTO + '</head><body>' + corpo + '</body></html>';
+    return '<!doctype html><html lang="it"><head><meta charset="utf-8">' + metaModello('FAT-03') + '<title>' + esc('Prospetto ' + (m.riferimento || '')) + '</title>' +
+      stile(o.logo ? { RAGIONE_SOCIALE: piedeProspetto(m, o), STUDIO_LOGO: o.logo } : { RAGIONE_SOCIALE: piedeProspetto(m, o) }, '', '', 'FAT-03') + STILE_PROSPETTO + '</head><body>' + corpo + '</body></html>';
   }
 
   /**
@@ -1076,7 +1162,7 @@
     const imp = impDaModello(m, o);
     const testa = { etichetta: 'Parcella pro-forma', numero: 'Rif. ' + (m.riferimento || ''), sotto: dataIt(m.dataProposta || m.data) };
     const corpo = corpoDaModello(m, 'Documento senza valore fiscale: la fattura si emette al pagamento.');
-    return paginaDoc(imp, testa, corpo, 'Parcella pro-forma ' + (m.riferimento || ''), 'Parcella pro-forma ' + (m.riferimento || ''));
+    return paginaDoc(imp, testa, corpo, 'Parcella pro-forma ' + (m.riferimento || ''), 'Parcella pro-forma ' + (m.riferimento || ''), 'FAT-01');
   }
 
   /**
@@ -1091,7 +1177,7 @@
     const numero = numeroFiscale(m.numero, m.data || m.dataProposta) || 'Rif. ' + (m.riferimento || '');
     const testa = { etichetta: tipo, numero, sotto: dataIt(m.data || m.dataProposta) };
     const breve = tipo + ' n. ' + (String(m.numero || '').trim() || m.riferimento || '');
-    return paginaDoc(imp, testa, corpoDaModello(m, ''), breve, breve);
+    return paginaDoc(imp, testa, corpoDaModello(m, ''), breve, breve, 'FAT-02');
   }
 
   /**
@@ -1113,7 +1199,8 @@
     corpo += '<div class="lettera-testo">' + esc(o.testo || '') + '</div>';
     corpo += '<div class="firme"><div class="firma"></div><div class="firma"><div class="spazio">' + immagine(idDaUrl(imp.FIRMA_TECNICO), 'sig') + '</div>' +
       '<div class="chi">' + esc(imp.TECNICO || imp.RAGIONE_SOCIALE || '') + '</div></div></div>';
-    return pagina(imp, o.titolo || 'Lettera', corpo).replace('</style>', '.lettera-testo { white-space: pre-wrap; font-size: 11.5px; line-height: 1.6; margin: 18px 2px 8px; }</style>');
+    // 17/11/2026: la lettera d'incarico al collaboratore è un modello suo (x.modello = 'LET-02'); le altre sono LET-01.
+    return pagina(imp, o.titolo || 'Lettera', corpo, '', o.modello === 'LET-02' ? 'LET-02' : 'LET-01').replace('</style>', '.lettera-testo { white-space: pre-wrap; font-size: 11.5px; line-height: 1.6; margin: 18px 2px 8px; }</style>');
   }
 
   /**
@@ -1148,10 +1235,11 @@
     }
     if (k.condizioni) corpo += '<div class="blocco"><div class="etichetta">Condizioni</div><div class="testo">' + esc(k.condizioni) + '</div></div>';
     corpo += firmeDocumento({}, imp, 'Per lo studio');
-    return pagina(imp, 'Contratto di assistenza ' + (k.numero || ''), corpo);
+    return pagina(imp, 'Contratto di assistenza ' + (k.numero || ''), corpo, '', 'ASS-01');
   }
 
-  const Documenti = { rapportino, rigaStrumenti, riepilogo, preventivo, incarico, numeroPreventivo, esc, idDaUrl, sezioniProspetto, prospettoFattura, avvisoParcella, parcella, lettera, contrattoAssistenza, logoDi, nomeAccantoAlLogo, rigaCommesse };
+  const Documenti = { rapportino, rigaStrumenti, riepilogo, preventivo, incarico, numeroPreventivo, esc, idDaUrl, sezioniProspetto, prospettoFattura, avvisoParcella, parcella, lettera, contrattoAssistenza, logoDi, nomeAccantoAlLogo, rigaCommesse,
+    MODELLI, trovaModello, siglaModello, modelloRapportino, modelloDi, studioDaImpostazioni };
   if (typeof module !== 'undefined' && module.exports) module.exports = Documenti;
   else radice.WisperDocumenti = Documenti;
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -44,7 +44,11 @@ function uscite(w) {
   // Del testo (HTML con lo stile, decine di KB ciascuno) si tiene l'impronta: se cambia anche una lettera, cambia.
   // L'11/11/2026 (1.3.1) lo stile di tutti i PDF ha una regola in piu', apposta: il totale (<tfoot>) non si ripete in fondo a
   // ogni pagina. Si toglie prima dell'impronta, cosi' il resto si confronta ancora al byte (col codice di prima non c'e').
-  const senzaRegola = s => s.split('tfoot { display: table-row-group; }').join('');
+  // Il 17/11/2026 (1.5.0) ogni PDF porta il codice del suo modello (nella pagina e in fondo, "Mod. RAP-04 · ") e lo stile del
+  // riepilogo ha la colonna della descrizione del progetto: si tolgono allo stesso modo.
+  const senzaRegola = s => s.split('tfoot { display: table-row-group; }').join('')
+    .replace(/<meta name="wisper-modello" content="[A-Z]{3}-\d{2}">/, '').replace(/Mod\. [A-Z]{3}-\d{2} · /, '')
+    .split(' table.riepilogo td.prog { width: 19%; }').join('');
   const impronte = {};
   for (const k of Object.keys(pdf)) { const t = senzaRegola(pdf[k]); impronte[k] = { sha256: crypto.createHash('sha256').update(t).digest('hex'), caratteri: t.length }; }
   return { rapportini, documenti, pdf: impronte, conti };

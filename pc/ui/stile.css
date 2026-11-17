@@ -2431,3 +2431,53 @@ button.casa-riga:hover { background: var(--carta-sopra); }
   .tab.tab-servizi .r > :nth-child(4) { display: none; }
   .tab.tab-servizi.con-soldi .r { grid-template-columns: 110px minmax(0, 1fr) 80px 100px; }
 }
+
+/* ======================================================================= 1.5.0: Modelli dei documenti (modelli.md) */
+.conta-modelli { color: var(--tenue); font-weight: 600; }
+.famiglia-modelli { display: flex; flex-direction: column; gap: 12px; }
+.griglia-modelli { display: grid; grid-template-columns: repeat(auto-fill, minmax(215px, 1fr)); gap: 14px; }
+/* la scheda di un modello: l'esempio in miniatura, il codice, il nome, quando esce */
+.mod-carta { appearance: none; border: 0; margin: 0; font: inherit; color: inherit; text-align: left; cursor: pointer; background: var(--carta); border-radius: 22px;
+  padding: 14px 14px 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; transition: background .15s ease, transform .15s ease; }
+.mod-carta:hover { background: var(--carta-sopra); }
+.mod-carta:active { transform: scale(.985); }
+.mod-mini { position: relative; display: block; width: 100%; aspect-ratio: 210 / 150; overflow: hidden; border-radius: 10px; background: #fff; box-shadow: 0 6px 20px rgba(0, 0, 0, .10); }
+.mod-mini iframe { position: absolute; left: 0; top: 0; width: 794px; height: 1123px; border: 0; transform-origin: 0 0; pointer-events: none; background: #fff; }
+.mod-mini::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 34px; background: linear-gradient(rgba(255, 255, 255, 0), #fff); }
+.mod-testi { display: flex; flex-direction: column; gap: 5px; padding: 0 4px; align-items: flex-start; min-width: 0; }
+.mod-testi b { font-size: 16px; font-weight: 800; letter-spacing: -0.2px; line-height: 1.25; }
+.mod-quando { font-size: 13.5px; line-height: 1.4; color: var(--tenue); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+/* il codice col colore della famiglia (quello della sua voce nel menu) */
+.cod-modello { display: inline-flex; align-items: center; height: 24px; padding: 0 9px; border-radius: 8px; font-size: 12.5px; font-weight: 800; letter-spacing: .03em;
+  font-variant-numeric: tabular-nums; white-space: nowrap; flex: none;
+  background: color-mix(in srgb, color-mix(in srgb, var(--v-t) 30%, var(--carta)) var(--mix-voce), var(--v-f));
+  color: color-mix(in srgb, color-mix(in srgb, var(--v-t) 40%, #FFFFFF) var(--mix-voce), var(--v-t)); }
+/* la sigla dove un documento si prepara: "Mod. RAP-01", apre il modello */
+.sigla-modello { appearance: none; border: 0; margin: 0; font: inherit; display: inline-flex; align-items: center; height: 24px; padding: 0 9px; border-radius: 8px; font-size: 12.5px;
+  font-weight: 800; letter-spacing: .02em; white-space: nowrap; flex: none; background: var(--carta-sopra); color: var(--testo2); cursor: pointer; }
+.scheda .sigla-modello { background: var(--scheda); }
+.sigla-modello:hover { color: var(--testo); box-shadow: inset 0 0 0 1.5px var(--bordo-campo); }
+.sigla-modello.ferma { cursor: default; box-shadow: none; }
+/* la stessa scritta dentro un pulsante o una voce di menu che crea il documento: non si tocca, sta a destra */
+.mod-nota { margin-left: auto; padding-left: 14px; font-size: 12.5px; font-weight: 700; letter-spacing: .02em; color: var(--tenue); white-space: nowrap; flex: none; }
+.btn .mod-nota { margin-left: 4px; padding-left: 0; }
+
+/* dove stanno le sigle: accanto al numero del rapportino, nelle righe di Documenti › Modelli, accanto a un'etichetta, sotto l'indirizzo */
+.sigle-rap, .sigle-riga { display: inline-flex; align-items: center; gap: 6px; flex: none; }
+.etichetta.con-sigla { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.etichetta.con-sigla .sigla-modello { text-transform: none; }
+.riepilogo-f .allegato { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; color: var(--testo2); overflow-wrap: anywhere; }
+.riepilogo-f .allegato svg { stroke: currentColor; flex: none; }
+.allegato .sigla-modello { margin-left: auto; }
+.finestra .testa-f > .sigla-modello { margin-right: 4px; }
+/* la finestra del modello */
+.finestra.modello .testa-f .cod-modello { order: -1; }
+.corpo-modello { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 26px; align-items: start; }
+.mod-grande { background: var(--carta); border-radius: 18px; padding: 18px; max-height: calc(100vh - 300px); min-height: 300px; overflow: auto; }
+.mod-foglio { position: relative; width: 100%; min-height: 240px; background: #fff; box-shadow: 0 6px 20px rgba(0, 0, 0, .10); border-radius: 4px; overflow: hidden; }
+.mod-foglio iframe { position: absolute; left: 0; top: 0; width: 794px; height: 1123px; border: 0; transform-origin: 0 0; background: #fff; }
+.scheda-modello { display: flex; flex-direction: column; gap: 18px; }
+.scheda-modello .voce-m { display: flex; flex-direction: column; gap: 5px; align-items: flex-start; }
+.scheda-modello p { margin: 0; font-size: 15px; color: var(--testo2); }
+@media (max-width: 900px) { .corpo-modello { grid-template-columns: 1fr; } }
+@media (prefers-reduced-motion: reduce) { .mod-carta { transition: none; } .mod-carta:active { transform: none; } }

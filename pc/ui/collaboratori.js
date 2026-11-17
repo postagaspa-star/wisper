@@ -544,7 +544,7 @@
         const cats = await F().categorie().catch(() => []);
         const r = await lavora('Salvo nell\'archivio', async () => {
           if (S.esempio) throw new Error('Nella visita non si salva niente');
-          const html = W.D.lettera({ titolo, testo: area.value, cliente: { nome: i.collaboratore, righe: [] } }, S.ana.impostazioni);
+          const html = W.D.lettera({ titolo, testo: area.value, cliente: { nome: i.collaboratore, righe: [] }, modello: 'LET-02' }, S.ana.impostazioni);
           const pdf = await Rete.post('/locale/pdf', { html, nome: W.nomeFile('Lettera d\'incarico', i.numero), base64: true });
           if (!pdf || !pdf.base64) throw new Error('Il PDF non si è fatto');
           const byte = Uint8Array.from(atob(pdf.base64), ch => ch.charCodeAt(0));
@@ -555,7 +555,7 @@
         chiudi();
         dopoIncarico('Lettera salvata nell\'archivio', i.id);
       };
-      chiudi = finestra({ titolo: 'Lettera d\'incarico ' + i.numero, larghezza: 'media', corpo: area, fuoco: false,
+      chiudi = finestra({ titolo: 'Lettera d\'incarico ' + i.numero, larghezza: 'media', corpo: area, fuoco: false, testaExtra: W.Modelli.sigla('LET-02'),
         pulsanti: ['spazio', h('button', { type: 'button', class: 'btn testo grande', onclick: () => chiudi() }, 'Annulla'), h('button', { type: 'button', class: 'btn giallo grande', onclick: salva }, 'Salva nell\'archivio')] });
     }
 

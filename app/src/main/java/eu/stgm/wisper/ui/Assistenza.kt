@@ -269,7 +269,7 @@ fun SchermataContratto(dati: Dati, nav: Navigatore, id: String) {
                 if (d != null) chiudiConferma = d.message else fatto(r, "Contratto chiuso")
             }
         }, pericolo = true)
-        VoceMenu(Icone.pdf, "Contratto in PDF", {
+        VoceMenu(Icone.pdf, "Contratto in PDF", nota = eu.stgm.wisper.rapportino.ModelliDocumenti.sigla("ASS-01"), onClick = {
             menu = false
             scope.launch {
                 runCatching {

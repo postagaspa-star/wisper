@@ -147,7 +147,7 @@
       const k = C.contiPreventivo(p, voci);
       const giallo = RP.azioneGialla(p, W.perm());
       const altro = h('button', { type: 'button', class: 'tondo', 'aria-label': 'Altre azioni', title: 'Altre azioni' }, icona('altro', 20));
-      altro.addEventListener('click', () => apriMenu(altro, RP.vociMenu(p, W.perm()).map(v => ({ testo: v.testo, pericolo: v.pericolo, fn: () => azione(v.chiave, p) })).concat(vociPortale(p))));
+      altro.addEventListener('click', () => apriMenu(altro, RP.vociMenu(p, W.perm()).map(v => ({ testo: v.testo, pericolo: v.pericolo, modello: { pdf: 'PRE-01', incarico: 'PRE-02' }[v.chiave], fn: () => azione(v.chiave, p) })).concat(vociPortale(p))));
       const pulsanteGiallo = giallo ? h('button', { type: 'button', class: 'btn giallo', 'data-visita': 'azione-preventivo', onclick: () => azione(giallo.chiave, p) }, giallo.testo) : null;
 
       aggiungi(pagina, [
@@ -465,7 +465,9 @@
         h('div', { class: 'scelte' },
           h('div', { class: 'titolo-r' }, h('div', null, h('span', { class: 'secondario' }, 'Preventivo ' + RP.numeroConRevisione(p)), h('b', null, (c.nome || '') + (soldi() ? ' · ' + C.euro(k.totale) : ''))),
             altro, tondo('chiudi', 'Chiudi', () => chiudi(), 'piccolo')),
-          campoA, cambia, zonaMessaggio,
+          campoA,
+          h('div', { class: 'allegato' }, icona('graffetta', 16, 2.2), h('span', null, 'Preventivo ' + RP.numeroConRevisione(p)), W.Modelli.sigla('PRE-01')),
+          cambia, zonaMessaggio,
           h('div', { class: 'bottoni' },
             h('button', { type: 'button', class: 'btn testo grande', onclick: () => chiudi() }, 'Annulla'),
             h('button', { type: 'button', class: 'btn grande', onclick: async () => { const r = await pdf(p, false); if (r) chiudi(); } }, 'Solo il PDF'),
@@ -946,7 +948,7 @@
             h('span', { class: 't2' }, p.accettatoIl ? C.data(p.accettatoIl) : '—'),
             h('span', null, p.idCommessa ? h('span', { class: 'codice' }, p.idCommessa) : h('span', { class: 'da-scegliere' }, 'da creare')),
             soldi() ? h('span', { class: 'n forte' }, p.imponibile !== undefined ? C.euro(p.imponibile) : '') : null,
-            h('span', { class: 'n' }, h('button', { type: 'button', class: 'btn piccolo', onclick: async () => { const x = await leggiPreventivo(p.id).catch(e => { avviso(e.message, true); return null; }); if (x) pdf(x, true); } }, 'PDF dell\'incarico')))))]);
+            h('span', { class: 'n' }, h('button', { type: 'button', class: 'btn piccolo', onclick: async () => { const x = await leggiPreventivo(p.id).catch(e => { avviso(e.message, true); return null; }); if (x) pdf(x, true); } }, 'PDF dell\'incarico', W.Modelli.nota('PRE-02'))))))]);
     }
 
     return { vista, M };

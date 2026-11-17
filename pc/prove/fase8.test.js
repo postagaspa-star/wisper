@@ -498,7 +498,12 @@ const DOCUMENTI = imp => ({
 // una tabella con la testata nell'intestazione; cambiano le loro due impronte.
 // 15/11/2026 (Andrea): in cima il tipo grande e il numero piccolo, Fornitore e Cliente, la Causale con la valuta fra le parti
 // e la tabella: cambiano ancora le due impronte di preventivo e parcella pro-forma.
-const PRIMA = { rapportino: 'c1fccb2c2be9a4e2', riepilogo: 'cf87fde41e96cf5e', preventivo: '181c6676040fca9a', contratto: '4607a1d8c85d8aaa', prospetto: 'c2a63b5dccb85821', avviso: 'c627f2299d23595b' };
+// 17/11/2026 (1.5.0, modelli.md): ogni PDF porta il codice del suo modello, nella pagina e in fondo ("Mod. RAP-04 · Pagina");
+// lo stile del riepilogo ha in più la colonna della descrizione del progetto. Cambiano tutte e sei; tolto il codice,
+// rapportino, preventivo, contratto, prospetto e parcella pro-forma tornano quelli di prima (la prova qui sotto).
+const PRIMA = { rapportino: '6b33dae1cb020341', riepilogo: '691b0c8d8cb9482c', preventivo: '2e92b7f02a24cdb8', contratto: '71d7507bc06e4bee', prospetto: 'e0c6ee428fb57569', avviso: '775beccddcc1ddc3' };
+const SENZA_CODICE = { rapportino: 'c1fccb2c2be9a4e2', preventivo: '181c6676040fca9a', contratto: '4607a1d8c85d8aaa', prospetto: 'c2a63b5dccb85821', avviso: 'c627f2299d23595b' };
+const senzaCodice = s => s.replace(/<meta name="wisper-modello" content="[A-Z]{3}-\d{2}">/, '').replace(/Mod\. [A-Z]{3}-\d{2} · /, '');
 
 test('PDF senza logo identici a prima della fase 8, carattere per carattere (§9.3, §16, M18.3)', () => {
   const senza = [IMP, Object.assign({}, IMP, { STUDIO_LOGO: '', PDF_PIEDE: '', PDF_LOGO: true, STUDIO_NOME_BREVE: 'GM', STUDIO_SITO: 'www.esempio.it' }),
@@ -514,6 +519,14 @@ test('PDF senza logo identici a prima della fase 8, carattere per carattere (§9
   assert.equal(impronta(D.prospettoFattura(prospetto, { oggi: '2026-10-22', logo: '' })), PRIMA.prospetto);
   const avviso = { prestatore: { denominazione: 'Studio' }, committente: { denominazione: 'Rossi' }, riferimento: 'W-1', righe: [], riepilogo: [] };
   assert.equal(impronta(D.avvisoParcella(avviso, { oggi: '2026-10-22' })), PRIMA.avviso);
+  // Il codice del modello è l'unica cosa nuova: tolto quello, i documenti sono quelli della 1.4.5 carattere per carattere.
+  const docs = DOCUMENTI(IMP);
+  ['rapportino', 'preventivo', 'contratto'].forEach(k => assert.equal(impronta(senzaCodice(docs[k]())), SENZA_CODICE[k], k + ' senza il codice'));
+  assert.equal(impronta(senzaCodice(D.prospettoFattura(prospetto, { oggi: '2026-10-22' }))), SENZA_CODICE.prospetto);
+  assert.equal(impronta(senzaCodice(D.avvisoParcella(avviso, { oggi: '2026-10-22' }))), SENZA_CODICE.avviso);
+  assert.deepEqual(['rapportino', 'riepilogo', 'preventivo', 'contratto'].map(k => D.modelloDi(docs[k]())), ['RAP-04', 'RAP-03', 'PRE-01', 'ASS-01']);
+  assert.equal(D.modelloDi(D.prospettoFattura(prospetto, {})), 'FAT-03');
+  assert.equal(D.modelloDi(D.avvisoParcella(avviso, {})), 'FAT-01');
 });
 
 test('PDF col logo: in cima a sinistra, alto 14 mm, accanto alla ragione sociale; la riga in fondo sotto quella di sempre', () => {

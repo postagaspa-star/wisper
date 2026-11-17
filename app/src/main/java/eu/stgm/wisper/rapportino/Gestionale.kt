@@ -71,6 +71,13 @@ object Moduli {
      */
     const val SERVIZI = "servizi"
     val CHI_VEDE_SERVIZI = listOf(PREVENTIVI, RAPPORTINI, FATTURAZIONE)
+
+    /**
+     * 1.5.0 (modelli.md): la voce Modelli del menu, i documenti che Wisper crea coi loro codici e un esempio. Come i
+     * Servizi non e' un modulo del server: la vede chi vede almeno una delle parti che creano documenti.
+     */
+    const val MODELLI = "modelli"
+    val CHI_VEDE_MODELLI = listOf(RAPPORTINI, PREVENTIVI, FATTURAZIONE, DOCUMENTI, TICKET, COLLABORATORI)
 }
 
 /** I quattro ruoli, con la frase che li spiega (docs/gestionale/fase1-schermate.md §7). */
@@ -155,6 +162,9 @@ data class Permessi(val livelli: Map<String, Int>) {
 
     /** 1.4.0: i Servizi si vedono con Preventivi, Rapportini o Fatture (servizi.md §1). */
     val vedeServizi: Boolean get() = Moduli.CHI_VEDE_SERVIZI.any { vede(it) }
+
+    /** 1.5.0: i Modelli dei documenti si vedono con almeno una delle parti che creano documenti (modelli.md). */
+    val vedeModelli: Boolean get() = Moduli.CHI_VEDE_MODELLI.any { vede(it) }
 
     /** 1.4.0: i Servizi li cambia chi ha Preventivi in scrittura, come il listino di prima. */
     val modificaServizi: Boolean get() = modifica(Moduli.PREVENTIVI)

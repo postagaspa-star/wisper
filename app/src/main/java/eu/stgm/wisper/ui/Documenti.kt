@@ -415,7 +415,10 @@ private fun PaginaModelli(dati: Dati, nav: Navigatore) {
                 SchedaElenco {
                     m.wisper.forEachIndexed { i, x ->
                         if (i > 0) LineaElenco()
-                        RigaVoce(x.nome, sotto = "impaginazione fissa" + if (x.testi.isNotEmpty()) " · " + Testo.quanti(x.testi.size, "testo", "testi") else "", icona = Icone.documento,
+                        RigaVoce(eu.stgm.wisper.rapportino.ModelliDocumenti.nomeDiRiga(x.chiave, x.nome),
+                            // 1.5.0: i codici dei modelli (voce Modelli del menu) accanto ai loro testi.
+                            sotto = listOf(eu.stgm.wisper.rapportino.ModelliDocumenti.codiciDiRiga(x.chiave).joinToString(", ") { "Mod. " + it }, "impaginazione fissa",
+                                if (x.testi.isNotEmpty()) Testo.quanti(x.testi.size, "testo", "testi") else "").filter { it.isNotBlank() }.joinToString(" · "), icona = Icone.documento,
                             onClick = { if (amm) nav.vai("modello-testi/${x.chiave}") else avvisi.mostra("I testi li cambia chi ha Amministrazione") })
                     }
                 }

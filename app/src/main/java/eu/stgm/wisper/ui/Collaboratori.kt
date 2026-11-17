@@ -674,12 +674,14 @@ fun SchermataLetteraIncarico(dati: Dati, nav: Navigatore, id: String) {
         val x = i ?: throw IllegalStateException("L'incarico non si è letto: riprova")
         val t = titolo.ifBlank { "Lettera d'incarico " + x.numero }
         val modello = JSONObject().put("titolo", t).put("testo", testo).put("cliente", JSONObject().put("nome", x.collaboratore).put("righe", JSONArray()))
+            // 1.5.0: e' il modello LET-02 (il codice in fondo alla pagina lo scrive documenti.js).
+            .put("modello", "LET-02")
         return Stampa.documentoFase4(ctx, "lettera", modello, paginaLettera(t, testo, ana.ragioneSociale), Stampa.nomeFile("Lettera d'incarico", x.numero), JSONObject(ana.impostazioni))
     }
     Box(Modifier.fillMaxSize().background(c.fondo)) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(MarginePagina).padding(bottom = 150.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Testata(onIndietro = { nav.indietro() }, chiudi = true)
-            TitoloPagina("Lettera d'incarico", sopra = i?.let { it.numero + " · " + it.collaboratore })
+            TitoloPagina("Lettera d'incarico", sopra = listOfNotNull(i?.let { it.numero + " · " + it.collaboratore }, eu.stgm.wisper.rapportino.ModelliDocumenti.sigla("LET-02")).joinToString(" · "))
             CampoTesto(titolo, { titolo = it }, "Titolo")
             CampoTesto(testo, { testo = it }, "Testo", righe = 12)
             val ancora = mancano.filter { testo.contains(it) }

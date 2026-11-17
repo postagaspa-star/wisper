@@ -446,7 +446,7 @@
               // 13/11/2026 (Andrea: "durante la bozza della fattura non c'è la possibilità di metterla come parcella
               // pro-forma"): era nel menu ⋯, ora è in vista. Prima salva, così il PDF ha quello che si vede.
               !nota && scrive() ? h('button', { type: 'button', class: 'btn grande', 'data-azione': 'pro-forma', onclick: async () => { if (sporca && !(await salva())) return; avvisoParcella(f); } },
-                icona('file', 18, 2.2), 'Parcella pro-forma') : null,
+                icona('file', 18, 2.2), 'Parcella pro-forma', W.Modelli.nota('FAT-01')) : null,
               scrive() ? h('button', { type: 'button', class: 'btn giallo grande', 'data-visita': 'passa-al-programma', onclick: passa }, 'Passa al programma') : null)),
           fasciaRegole(),
           zonaBanda,
@@ -669,7 +669,7 @@
       const k = f.conti || {};
       const passabile = scrive() && !o.soloVedere && (f.stato === 'bozza') && !mancano.length;
       const destra = h('div', { class: 'prospetto-azioni' },
-        h('span', { class: 'etichetta' }, 'Prospetto per il programma'),
+        h('span', { class: 'etichetta con-sigla' }, 'Prospetto per il programma', W.Modelli.sigla('FAT-03')),
         uscite.indexOf('prospetto') >= 0 ? h('button', { type: 'button', class: 'btn grande largo', onclick: () => pdfProspetto(f, modello) }, icona('scarica', 18, 2.2), 'Scarica il prospetto (PDF)') : null,
         uscite.indexOf('xml') >= 0 && p.xml ? h('button', { type: 'button', class: 'btn grande largo', onclick: () => salvaXml(p.xml) }, icona('file', 18, 2.2), 'Scarica l\'XML da completare') : null,
         tuttoBtn,
@@ -752,7 +752,7 @@
         W.disegnaPagina();
       };
       chiudi = finestra({
-        titolo: 'Parcella pro-forma', corpo: [h('p', { class: 'sotto-titolo', style: { margin: 0 } }, f.cliente + ' · ' + euro((p.modello || {}).nettoAPagare) + ' da pagare · non è una fattura'), zonaA, campo('Oggetto', oggetto), campo('Messaggio', messaggio)],
+        titolo: 'Parcella pro-forma', testaExtra: W.Modelli.sigla('FAT-01'), corpo: [h('p', { class: 'sotto-titolo', style: { margin: 0 } }, f.cliente + ' · ' + euro((p.modello || {}).nettoAPagare) + ' da pagare · non è una fattura'), zonaA, campo('Oggetto', oggetto), campo('Messaggio', messaggio)],
         pulsanti: ['spazio', h('button', { type: 'button', class: 'btn testo grande', onclick: () => chiudi() }, 'Annulla'),
           h('button', { type: 'button', class: 'btn grande', onclick: async () => {
             if (S.esempio) { avviso('Nella visita il PDF non si crea'); return; }
@@ -940,7 +940,7 @@
       if (scrive() && f.stato === 'pronta') principale = h('button', { type: 'button', class: 'btn grande giallo', onclick: () => importaXml() }, icona('importa', 18, 2.4), 'Importa l\'XML emesso');
       else if (scriveBanche() && !nota && f.stato === 'emessa' && C.num(f.residuo) > 0.004) principale = h('button', { type: 'button', class: 'btn grande giallo', onclick: () => W.Banche.segnaIncasso(f, ricarica) }, 'Segna un incasso');
       const voci = [
-        { testo: 'Prospetto (PDF)', fn: async () => { const p = await lavora('Preparo il prospetto', () => Rete.get('/server/pacchetto?id=' + f.id)); if (p) pdfProspetto(f, p.modello); } },
+        { testo: 'Prospetto (PDF)', modello: 'FAT-03', fn: async () => { const p = await lavora('Preparo il prospetto', () => Rete.get('/server/pacchetto?id=' + f.id)); if (p) pdfProspetto(f, p.modello); } },
         f.stato === 'pronta' ? { testo: 'Rivedi il prospetto e l\'XML da completare', fn: () => apriPassaggio(f, { soloVedere: true }) } : null,
         f.file ? { testo: 'XML emesso', fn: () => W.apriFile({ id: f.file.id, nome: f.file.nome }) } : null,
         scriveBanche() && f.stato === 'pronta' && !nota && C.num(f.residuo) > 0.004 ? { testo: 'Segna un incasso (ha già pagato)', fn: () => W.Banche.segnaIncasso(f, ricarica) } : null,
@@ -963,9 +963,9 @@
       // la parcella pro-forma; emessa: la parcella (o fattura, o nota di credito) col numero. Tutte con la veste del modello.
       const nomeDocumento = nota ? 'Nota di credito' : f.tipoDocumento === 'TD01' ? 'Fattura' : 'Parcella';
       const documento = f.stato === 'emessa' || f.stato === 'annullata'
-        ? h('button', { type: 'button', class: 'btn grande largo', 'data-azione': 'pdf-documento', onclick: () => pdfParcella(f) }, icona('file', 18, 2.2), nomeDocumento + ' in PDF')
+        ? h('button', { type: 'button', class: 'btn grande largo', 'data-azione': 'pdf-documento', onclick: () => pdfParcella(f) }, icona('file', 18, 2.2), nomeDocumento + ' in PDF', W.Modelli.nota('FAT-02'))
         : scrive() && f.stato === 'pronta' && !nota
-          ? h('button', { type: 'button', class: 'btn grande largo', 'data-azione': 'pro-forma', onclick: () => avvisoParcella(f) }, icona('file', 18, 2.2), 'Parcella pro-forma') : null;
+          ? h('button', { type: 'button', class: 'btn grande largo', 'data-azione': 'pro-forma', onclick: () => avvisoParcella(f) }, icona('file', 18, 2.2), 'Parcella pro-forma', W.Modelli.nota('FAT-01')) : null;
       const corpo = h('div', { class: 'corpo' },
         h('div', { class: 'alto' }, h('span', { class: 'dove spazio' }, nota ? 'Nota di credito' : 'Fattura'), altro, tondo('chiudi', 'Chiudi', chiudiPannello, 'piccolo')),
         h('div', { class: 'pillole-testa' }, pillStato(f.statoVisto), f.portale && W.Portale ? W.Portale.pillola(f.portale) : null, f.sollecitiNo ? h('span', { class: 'pill p-grigio', title: f.sollecitiNo }, 'Niente promemoria') : null),

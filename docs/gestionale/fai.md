@@ -73,7 +73,7 @@ Le 19 voci del menu (fondo · tratto, chiaro; nello scuro il fondo è il tratto 
 
 Casa `#16171B`·`#FFC53D` · Clienti `#DDF5E8`·`#067647` · Commesse `#FFEBD1`·`#B54708` · Progetti `#FFF0E6`·`#C4320A` ·
 Preventivi `#ECE7FF`·`#5925DC` · Calendario `#DCE8FF`·`#1849A9` · Rapportini `#FFF0C2`·`#7A5600` · Spese `#FFE4DE`·`#B93815` ·
-Fatture `#D9F4FA`·`#0E7090` · Banche `#DDF3EF`·`#107569` · Persone `#FCE7F6`·`#C11574` · Documenti `#EAECF0`·`#344054` ·
+Fatture `#D9F4FA`·`#0E7090` · Banche `#DDF3EF`·`#107569` · Persone `#FCE7F6`·`#C11574` · Documenti `#EAECF0`·`#344054` · Modelli `#F5E8FB`·`#7E22A8` (dalla 1.5.0) ·
 Ticket `#E0E7FF`·`#3538CD` · Mezzi `#F4EBDD`·`#8A5A12` · WhatsApp `#DCF8E7`·`#087443` · Portale clienti `#E0F2FE`·`#026AA2` ·
 Collaboratori `#EAF8D7`·`#3B7C0F` · Integrazioni `#F2F4F7`·`#475467` · Impostazioni `#F2F4F7`·`#16171B`.
 
@@ -104,7 +104,8 @@ pulsante che dice cosa fa. Regola e casi condivisi: `pc/ui/regole-casa.js`, `pc/
 ## 6. Il menu
 
 Voci corte di una parola, come nel prototipo: Casa, Clienti, Commesse, Progetti, Preventivi, Calendario, Rapportini,
-Spese, Fatture, Banche, Persone, Documenti, Ticket, Mezzi, WhatsApp, Portale clienti, Collaboratori, Integrazioni e, staccata
+Spese, Fatture, Banche, Persone, Documenti, Modelli (dalla 1.5.0: i modelli dei documenti coi loro codici,
+`docs/gestionale/modelli.md`), Ticket, Mezzi, WhatsApp, Portale clienti, Collaboratori, Integrazioni e, staccata
 da una riga sottile, Impostazioni. Nei Permessi e in Funzioni restano i nomi lunghi. Numerini neri; in fondo Collegato, chi
 è entrato ed Esci.
 

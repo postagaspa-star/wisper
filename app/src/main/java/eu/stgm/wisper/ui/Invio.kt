@@ -537,7 +537,9 @@ private fun SchedaDestinatario(
                     }
                     file != null -> {
                         Text(file.name, style = Testi.secondarioGrande.copy(fontWeight = FontWeight.Bold), color = c.testo)
-                        Text(if (d.unSoloRapportino) "Il rapportino" else "Il riepilogo", style = Testi.secondario, color = c.tenue)
+                        // 1.5.0 (modelli.md): il modello del PDF che parte, accanto a cosa è.
+                        val modello = eu.stgm.wisper.rapportino.ModelliDocumenti.invio(d.unSoloRapportino, d.lavori.map { eu.stgm.wisper.rapportino.ModelliDocumenti.Lavoro(it.data.toString(), it.idCommessa) }, primo.data.toString())
+                        Text((if (d.unSoloRapportino) "Il rapportino" else "Il riepilogo") + " · " + eu.stgm.wisper.rapportino.ModelliDocumenti.sigla(modello), style = Testi.secondario, color = c.tenue)
                     }
                     else -> Text("Preparo il PDF…", style = Testi.secondario, color = c.tenue)
                 }

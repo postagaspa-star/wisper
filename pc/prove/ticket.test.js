@@ -166,10 +166,12 @@ test('menu: Documenti e Ticket e assistenza dopo Banche e scadenze, solo col lor
   // Fase 6: Persone fra Banche e Documenti, Mezzi e Collaboratori esterni dopo Ticket (l'ordine delle specifiche).
   // Fase 7: WhatsApp e comunicazioni e Portale clienti fra Mezzi e Collaboratori esterni.
   // Fase 8: Integrazioni fra Collaboratori esterni e Amministrazione.
-  assert.deepEqual(R.vociMenu(E.permessiDi('titolare')).map(v => v.modulo).slice(-10), ['banche', 'persone', 'documenti', 'ticket', 'mezzi', 'comunicazioni', 'portale', 'collaboratori', 'integrazioni', 'amministrazione']);
+  assert.deepEqual(R.vociMenu(E.permessiDi('titolare')).map(v => v.modulo).slice(-11), ['banche', 'persone', 'documenti', 'modelli', 'ticket', 'mezzi', 'comunicazioni', 'portale', 'collaboratori', 'integrazioni', 'amministrazione']);
   const nomi = R.vociMenu(E.permessiDi('titolare')).map(v => v.nome);
   assert.ok(nomi.indexOf('Documenti') === nomi.indexOf('Persone e risorse umane') + 1);
-  assert.ok(nomi.indexOf('Ticket e assistenza') === nomi.indexOf('Documenti') + 1);
+  // 1.5.0 (modelli.md): fra Documenti e Ticket ci sono i Modelli dei documenti.
+  assert.ok(nomi.indexOf('Modelli dei documenti') === nomi.indexOf('Documenti') + 1);
+  assert.ok(nomi.indexOf('Ticket e assistenza') === nomi.indexOf('Documenti') + 2);
   // Il collaboratore li vede tutti e due (documenti 1, ticket 2); senza permesso niente.
   const coll = R.vociMenu(E.permessiDi('collaboratore')).map(v => v.modulo);
   assert.ok(coll.indexOf('documenti') >= 0 && coll.indexOf('ticket') >= 0);

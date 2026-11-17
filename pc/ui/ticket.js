@@ -1076,7 +1076,7 @@
         scriveQui && k.stato === 'attivo' ? { testo: 'Rinnova', fn: () => rinnova(k) } : null,
         scriveQui && k.stato === 'attivo' ? { testo: 'Disdici', fn: () => disdici(k) } : null,
         scriveQui && (k.stato === 'attivo' || k.stato === 'disdetto') ? { testo: 'Chiudi adesso', fn: () => chiudiContratto(k), pericolo: true } : null,
-        { testo: 'Contratto in PDF', fn: () => pdfContratto(k) },
+        { testo: 'Contratto in PDF', modello: 'ASS-01', fn: () => pdfContratto(k) },
       ].filter(Boolean);
       const b = h('button', { type: 'button', class: 'tondo piccolo', 'aria-label': 'Altre azioni', title: 'Altre azioni' }, icona('altro', 18));
       b.addEventListener('click', () => apriMenu(b, voci));

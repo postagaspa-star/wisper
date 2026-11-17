@@ -453,7 +453,7 @@ fun FoglioDalBasso(onChiudi: () -> Unit, contenuto: @Composable ColumnScope.() -
 
 /** Una voce di un menu ⋯ (rossa solo per Elimina). */
 @Composable
-fun VoceMenu(icona: ImageVector, testo: String, onClick: () -> Unit, pericolo: Boolean = false) {
+fun VoceMenu(icona: ImageVector, testo: String, onClick: () -> Unit, pericolo: Boolean = false, nota: String? = null) {
     val c = W.colori
     Row(
         Modifier.fillMaxWidth().heightIn(min = 56.dp).clip(RoundedCornerShape(12.dp)).clickable(onClick = onClick).padding(horizontal = 4.dp),
@@ -461,7 +461,9 @@ fun VoceMenu(icona: ImageVector, testo: String, onClick: () -> Unit, pericolo: B
         horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         Icon(icona, null, tint = if (pericolo) c.rossoTesto else c.testo, modifier = Modifier.size(20.dp))
-        Text(testo, style = Testi.forteGrande, color = if (pericolo) c.rossoTesto else c.testo)
+        Text(testo, style = Testi.forteGrande, color = if (pericolo) c.rossoTesto else c.testo, modifier = Modifier.weight(1f))
+        // 1.5.0 (modelli.md): "Mod. PRE-01" a destra, per le voci che creano un documento.
+        if (nota != null) Text(nota, style = Testi.piccolo.copy(fontWeight = FontWeight.ExtraBold), color = c.tenue, maxLines = 1, modifier = Modifier.padding(end = 6.dp))
     }
 }
 

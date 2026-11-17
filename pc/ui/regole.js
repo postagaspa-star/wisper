@@ -55,6 +55,9 @@
     { modulo: 'persone', nome: 'Persone e risorse umane', spiega: 'Organico, ferie e permessi, presenze, formazione', icona: 'persona' },
     // Fase 5 (docs/gestionale/fase5.md §12): voci 11 e 12, dopo Banche e scadenze.
     { modulo: 'documenti', nome: 'Documenti', spiega: 'Archivio, revisioni, scadenze, modelli', icona: 'file' },
+    // 17/11/2026 (modelli.md): i modelli dei documenti che Wisper crea, coi loro codici e un esempio; non è un permesso,
+    // si vede con uno dei moduli che fanno documenti. Qui non se ne creano.
+    { modulo: 'modelli', nome: 'Modelli dei documenti', spiega: 'I documenti che Wisper crea: il codice di ognuno e un esempio', icona: 'file' },
     { modulo: 'ticket', nome: 'Ticket e assistenza', spiega: "Richieste d'intervento, contratti, statistiche", icona: 'chiaveInglese' },
     // Fase 6: voce 13 dopo Ticket, voce 16 dopo Mezzi.
     { modulo: 'mezzi', nome: 'Mezzi e attrezzature', spiega: 'Mezzi, strumenti e tarature, DPI, prestiti, guasti', icona: 'furgone' },
@@ -71,7 +74,7 @@
    * 1.4.0: le voci del menu che non sono un permesso, ma si vedono con uno di questi moduli (il server legge il listino
    * con preventivi, rapportini o fatturazione: richieste.js).
    */
-  const VEDE_CON = { servizi: ['preventivi', 'rapportini', 'fatturazione'] };
+  const VEDE_CON = { servizi: ['preventivi', 'rapportini', 'fatturazione'], modelli: ['rapportini', 'preventivi', 'fatturazione', 'documenti', 'ticket', 'collaboratori'] };
 
   /** Le righe di Ruoli e permessi: i moduli del menu più i soldi. */
   const RIGHE_PERMESSI = VOCI_MENU.filter(v => !VEDE_CON[v.modulo]).map(v => ({ modulo: v.modulo, nome: v.nome, spiega: v.spiega }))

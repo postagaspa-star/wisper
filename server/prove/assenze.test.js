@@ -51,7 +51,8 @@ test('la richiesta di Marco tra le cose da approvare: dettaglio, saldo che resta
   // Il saldo dal cedolino della fine del mese scorso (104 ore) meno le 40 della richiesta: 8 giorni. L'ultimo giorno del mese
   // matura anche il mese che finisce oggi (208 ore l'anno: 17,33 in piu', 81,33 ore = 10,2 giorni).
   const restano = piuGiorni(T, 1).slice(8) === '01' ? '10,2' : '8';
-  assert.match(v.dettaglio, new RegExp('^Da lunedì \\d+ a venerdì \\d+ \\w+ · 5 giorni · restano ' + restano + ' giorni$'));
+  // 17/11/2026: la settimana di prova può stare a cavallo di due mesi ("Da lunedì 30 novembre a venerdì 4 dicembre").
+  assert.match(v.dettaglio, new RegExp('^Da lunedì \\d+(?: \\w+)? a venerdì \\d+ \\w+ · 5 giorni · restano ' + restano + ' giorni$'));
   assert.ok(voceDi(ok(await laura('daApprovare')), richiesta.id), 'amministrazione (persone 2) le approva');
   assert.equal((await marco('approva', { voci: [{ tipo: 'assenza', id: richiesta.id }] })).permesso, false);
   assert.equal((await lettura('approva', { voci: [{ tipo: 'assenza', id: richiesta.id }] })).permesso, false);

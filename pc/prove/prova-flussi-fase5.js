@@ -144,10 +144,11 @@ async function main() {
     await vai('#dashboard/tutto');
     let testo = await testoPagina();
     assert.match(testo, /ticket aperti/, 'la Dashboard ha i riquadri dei ticket');
-    // Dalla fase 6 fra Banche e scadenze e Documenti c'è Persone e risorse umane (l'ordine delle specifiche).
+    // Dalla fase 6 fra Banche e scadenze e Documenti c'è Persone e risorse umane (l'ordine delle specifiche);
+    // dalla 1.5.0 dopo Documenti c'è Modelli (i modelli dei documenti coi loro codici), poi Ticket.
     const menu = await valuta("[...document.querySelectorAll('#voci .voce')].map(v => v.dataset.nome)");
-    assert.ok(menu.indexOf('Documenti') > menu.indexOf('Banche') && menu.indexOf('Ticket') === menu.indexOf('Documenti') + 1, 'menu nell\'ordine delle specifiche: ' + menu.join(', '));
-    passo('Dashboard coi riquadri dei ticket; menu: Banche e scadenze, Documenti, Ticket e assistenza');
+    assert.ok(menu.indexOf('Documenti') > menu.indexOf('Banche') && menu.indexOf('Modelli') === menu.indexOf('Documenti') + 1 && menu.indexOf('Ticket') === menu.indexOf('Modelli') + 1, 'menu nell\'ordine delle specifiche: ' + menu.join(', '));
+    passo('Dashboard coi riquadri dei ticket; menu: Banche, Documenti, Modelli, Ticket');
 
     await vai('#ticket');
     await unGiallo('Ticket aperti');

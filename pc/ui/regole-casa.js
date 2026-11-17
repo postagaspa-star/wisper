@@ -26,6 +26,8 @@
     banche: { breve: 'Banche', f: '#DDF3EF', t: '#107569', d: 'M3 10l9-6 9 6M5 10v8M9.5 10v8M14.5 10v8M19 10v8M3 20h18' },
     persone: { breve: 'Persone', f: '#FCE7F6', t: '#C11574', d: 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8M5 20a7 7 0 0 1 14 0' },
     documenti: { breve: 'Documenti', f: '#EAECF0', t: '#344054', d: 'M3 6h6l2 2h10v11H3z' },
+    // 1.5.0: i Modelli dei documenti, il foglio con l'intestazione e il riquadro.
+    modelli: { breve: 'Modelli', f: '#F5E8FB', t: '#7E22A8', d: 'M6 3h9l3 3v15H6zM9 8h6M9 12h6v5H9z' },
     ticket: { breve: 'Ticket', f: '#E0E7FF', t: '#3538CD', d: 'M14.7 6.3a4 4 0 0 0-5.4 5.4L4 17l3 3 5.3-5.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.5-.5-.5-2.5z' },
     mezzi: { breve: 'Mezzi', f: '#F4EBDD', t: '#8A5A12', d: 'M3 7h11v9H3zM14 10h4l3 3v3h-7M7 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4M17 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4' },
     comunicazioni: { breve: 'WhatsApp', f: '#DCF8E7', t: '#087443', d: 'M21 11.5a8.5 8.5 0 0 1-12.4 7.6L3 21l1.9-5.4A8.5 8.5 0 1 1 21 11.5z' },

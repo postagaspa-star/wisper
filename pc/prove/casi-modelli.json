@@ -1,0 +1,275 @@
+{
+  "nota": "I modelli di documento e i loro codici (docs/gestionale/modelli.md): lo stesso elenco e la stessa regola in pc/ui/documenti.js e in rapportino/ModelliDocumenti.kt.",
+  "modelli": [
+    {
+      "codice": "RAP-01",
+      "famiglia": "Rapportini",
+      "nome": "Rapportino giornaliero, una commessa",
+      "quando": "Un rapportino con tutti i lavori sulla stessa commessa. In tabella c'è la descrizione del progetto, senza data e numero.",
+      "dove": "Rapportini › Invia, oppure il PDF del rapportino",
+      "testi": "rapportino"
+    },
+    {
+      "codice": "RAP-02",
+      "famiglia": "Rapportini",
+      "nome": "Rapportino giornaliero, più commesse",
+      "quando": "Un rapportino con lavori su commesse diverse. In tabella ogni riga ha la data e il numero.",
+      "dove": "Rapportini › Invia, oppure il PDF del rapportino",
+      "testi": "rapportino"
+    },
+    {
+      "codice": "RAP-03",
+      "famiglia": "Rapportini",
+      "nome": "Riepilogo dei rapportini del mese",
+      "quando": "Più rapportini dello stesso cliente, di solito quelli del mese: una riga per lavoro e i totali per la fattura.",
+      "dove": "Rapportini › Invia, con più rapportini scelti",
+      "testi": "riepilogo"
+    },
+    {
+      "codice": "RAP-04",
+      "famiglia": "Rapportini",
+      "nome": "Rapportino di un lavoro, a scheda",
+      "quando": "Un lavoro solo, a riquadri invece che a tabella. Oggi lo usa solo il portale clienti.",
+      "dove": "Portale clienti",
+      "testi": ""
+    },
+    {
+      "codice": "PRE-01",
+      "famiglia": "Preventivi",
+      "nome": "Preventivo",
+      "quando": "L'offerta al cliente: le voci divise in sezioni, i conti e le condizioni.",
+      "dove": "Preventivi › PDF o Invia",
+      "testi": "preventivo"
+    },
+    {
+      "codice": "PRE-02",
+      "famiglia": "Preventivi",
+      "nome": "Incarico professionale",
+      "quando": "L'incarico da far firmare al cliente, da un preventivo accettato.",
+      "dove": "Preventivi › Incarico",
+      "testi": ""
+    },
+    {
+      "codice": "FAT-01",
+      "famiglia": "Fatture",
+      "nome": "Parcella pro-forma",
+      "quando": "La bozza della fattura da mandare al cliente prima di emetterla. Non ha valore fiscale.",
+      "dove": "Fatture › Parcella pro-forma",
+      "testi": ""
+    },
+    {
+      "codice": "FAT-02",
+      "famiglia": "Fatture",
+      "nome": "Parcella o fattura",
+      "quando": "La copia per il cliente della fattura emessa, col numero dato dal programma. Vale anche per la nota di credito.",
+      "dove": "Fatture › PDF della fattura emessa",
+      "testi": ""
+    },
+    {
+      "codice": "FAT-03",
+      "famiglia": "Fatture",
+      "nome": "Prospetto per il programma delle fatture",
+      "quando": "I dati della fattura da copiare nel programma che la emette. Resta in studio, non va al cliente.",
+      "dove": "Fatture › Prospetto",
+      "testi": ""
+    },
+    {
+      "codice": "LET-01",
+      "famiglia": "Lettere e contratti",
+      "nome": "Lettera",
+      "quando": "Una lettera al cliente da un testo già pronto, per esempio la verifica dell'impianto di terra.",
+      "dove": "Documenti › Modelli › Nuova lettera",
+      "testi": "lettera"
+    },
+    {
+      "codice": "LET-02",
+      "famiglia": "Lettere e contratti",
+      "nome": "Lettera d'incarico al collaboratore",
+      "quando": "La lettera con cui lo studio affida un incarico a un collaboratore esterno.",
+      "dove": "Collaboratori › Incarico › Lettera d'incarico",
+      "testi": "incarico"
+    },
+    {
+      "codice": "ASS-01",
+      "famiglia": "Lettere e contratti",
+      "nome": "Contratto di assistenza",
+      "quando": "Il contratto di assistenza: impianti, visite, tempi d'intervento e condizioni.",
+      "dove": "Ticket › Assistenza › PDF del contratto",
+      "testi": "contratto"
+    }
+  ],
+  "rapportino": [
+    {
+      "nome": "un lavoro solo",
+      "data": "2026-11-05",
+      "lavori": [
+        {
+          "data": "2026-11-05",
+          "idCommessa": "26ST014"
+        }
+      ],
+      "modello": "RAP-01"
+    },
+    {
+      "nome": "tre lavori, stesso giorno e stessa commessa",
+      "data": "2026-11-05",
+      "lavori": [
+        {
+          "data": "2026-11-05",
+          "idCommessa": "26ST014"
+        },
+        {
+          "data": "2026-11-05",
+          "idCommessa": "26ST014"
+        },
+        {
+          "data": "2026-11-05",
+          "idCommessa": "26ST014"
+        }
+      ],
+      "modello": "RAP-01"
+    },
+    {
+      "nome": "due commesse nello stesso giorno",
+      "data": "2026-11-06",
+      "lavori": [
+        {
+          "data": "2026-11-06",
+          "idCommessa": "26ST014"
+        },
+        {
+          "data": "2026-11-06",
+          "idCommessa": "26ST009"
+        }
+      ],
+      "modello": "RAP-02"
+    },
+    {
+      "nome": "nessuna commessa per tutti",
+      "data": "2026-11-06",
+      "lavori": [
+        {
+          "data": "2026-11-06",
+          "idCommessa": ""
+        },
+        {
+          "data": "2026-11-06",
+          "idCommessa": null
+        },
+        {
+          "data": "2026-11-06"
+        }
+      ],
+      "modello": "RAP-01"
+    },
+    {
+      "nome": "uno con la commessa e uno senza",
+      "data": "2026-11-06",
+      "lavori": [
+        {
+          "data": "2026-11-06",
+          "idCommessa": "26ST014"
+        },
+        {
+          "data": "2026-11-06",
+          "idCommessa": ""
+        }
+      ],
+      "modello": "RAP-02"
+    },
+    {
+      "nome": "stessa commessa ma giorni diversi",
+      "data": "2026-11-06",
+      "lavori": [
+        {
+          "data": "2026-11-06",
+          "idCommessa": "26ST014"
+        },
+        {
+          "data": "2026-11-07",
+          "idCommessa": "26ST014"
+        }
+      ],
+      "modello": "RAP-02"
+    },
+    {
+      "nome": "i lavori senza giorno prendono quello del rapportino",
+      "data": "2026-11-06",
+      "lavori": [
+        {
+          "idCommessa": "26ST014"
+        },
+        {
+          "data": "2026-11-06",
+          "idCommessa": "26ST014"
+        }
+      ],
+      "modello": "RAP-01"
+    },
+    {
+      "nome": "un lavoro col suo giorno diverso da quello del rapportino",
+      "data": "2026-11-06",
+      "lavori": [
+        {
+          "idCommessa": "26ST014"
+        },
+        {
+          "data": "2026-11-05",
+          "idCommessa": "26ST014"
+        }
+      ],
+      "modello": "RAP-02"
+    },
+    {
+      "nome": "il giorno con l'ora dietro conta come il giorno",
+      "data": "2026-11-06",
+      "lavori": [
+        {
+          "data": "2026-11-06T08:30:00",
+          "idCommessa": "26ST014"
+        },
+        {
+          "data": "2026-11-06",
+          "idCommessa": "26ST014"
+        }
+      ],
+      "modello": "RAP-01"
+    },
+    {
+      "nome": "gli spazi intorno al codice non contano",
+      "data": "2026-11-06",
+      "lavori": [
+        {
+          "data": "2026-11-06",
+          "idCommessa": " 26ST014 "
+        },
+        {
+          "data": "2026-11-06",
+          "idCommessa": "26ST014"
+        }
+      ],
+      "modello": "RAP-01"
+    },
+    {
+      "nome": "maiuscole e minuscole contano: sono due codici",
+      "data": "2026-11-06",
+      "lavori": [
+        {
+          "data": "2026-11-06",
+          "idCommessa": "26st014"
+        },
+        {
+          "data": "2026-11-06",
+          "idCommessa": "26ST014"
+        }
+      ],
+      "modello": "RAP-02"
+    },
+    {
+      "nome": "nessun lavoro",
+      "data": "2026-11-06",
+      "lavori": [],
+      "modello": "RAP-01"
+    }
+  ]
+}

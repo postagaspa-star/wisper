@@ -83,6 +83,9 @@ enum class Sezione(val nome: String, val fondo: Long, val tratto: Long, disegno:
     // Fase 6 (fase6.md §12): Persone dopo Banche, Mezzi dopo Ticket, Collaboratori dopo Mezzi.
     PERSONE("Persone", 0xFFFCE7F6, 0xFFC11574, "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8M5 20a7 7 0 0 1 14 0", Moduli.PERSONE),
     DOCUMENTI("Documenti", 0xFFEAECF0, 0xFF344054, "M3 6h6l2 2h10v11H3z", Moduli.DOCUMENTI),
+    // 1.5.0 (modelli.md): i modelli dei documenti coi loro codici, subito dopo Documenti; un foglio col riquadro, viola.
+    // Non e' un modulo del server: si vede con una delle parti che creano documenti ([accesa]).
+    MODELLI("Modelli", 0xFFF5E8FB, 0xFF7E22A8, "M6 3h9l3 3v15H6zM9 8h6M9 12h6v5H9z", Moduli.MODELLI),
     TICKET("Ticket", 0xFFE0E7FF, 0xFF3538CD, "M14.7 6.3a4 4 0 0 0-5.4 5.4L4 17l3 3 5.3-5.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.5-.5-.5-2.5z", Moduli.TICKET),
     MEZZI("Mezzi", 0xFFF4EBDD, 0xFF8A5A12, "M3 7h11v9H3zM14 10h4l3 3v3h-7M7 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4M17 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4", Moduli.MEZZI),
     // Fase 7 (fase7.md §12): dopo Mezzi, prima di Collaboratori.
@@ -101,11 +104,14 @@ enum class Sezione(val nome: String, val fondo: Long, val tratto: Long, disegno:
      * se il ruolo vede Preventivi, Rapportini o Fatture e almeno una di quelle funzioni e' accesa.
      */
     fun accesa(p: Permessi, spente: Collection<String>): Boolean =
-        if (this == SERVIZI) Moduli.CHI_VEDE_SERVIZI.any { p.vede(it) && it !in spente }
-        else p.vede(modulo) && modulo !in spente
+        when (this) {
+            SERVIZI -> Moduli.CHI_VEDE_SERVIZI.any { p.vede(it) && it !in spente }
+            MODELLI -> Moduli.CHI_VEDE_MODELLI.any { p.vede(it) && it !in spente }
+            else -> p.vede(modulo) && modulo !in spente
+        }
 
     /** Il ruolo puo' aprire le pagine della voce (senza guardare le funzioni spente). */
-    fun vista(p: Permessi): Boolean = if (this == SERVIZI) p.vedeServizi else p.vede(modulo)
+    fun vista(p: Permessi): Boolean = when (this) { SERVIZI -> p.vedeServizi; MODELLI -> p.vedeModelli; else -> p.vede(modulo) }
 }
 
 /** I segmenti della sezione Rapportini, come sul computer. */
@@ -198,6 +204,8 @@ fun sezioneDiRotta(rotta: String?, base: Sezione): Sezione = when {
     rotta.startsWith("commess") -> Sezione.COMMESSE
     rotta.startsWith("progett") -> Sezione.PROGETTI
     rotta.startsWith("preventiv") || rotta == "contratti" || rotta.startsWith("invio/preventivo") -> Sezione.PREVENTIVI
+    // 1.5.0: la pagina di un modello ("modelli/RAP-01"); i testi dei modelli ("modello-testi") restano dei Documenti.
+    rotta.startsWith("modelli/") -> Sezione.MODELLI
     // 1.4.0: il listino sono i Servizi (anche la rotta "listino" rimasta in una pila di prima).
     rotta.startsWith("servizi") || rotta == "listino" -> Sezione.SERVIZI
     rotta.startsWith("attivita") || rotta.startsWith("calendario") -> Sezione.ATTIVITA

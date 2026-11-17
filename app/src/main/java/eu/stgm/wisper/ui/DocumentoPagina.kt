@@ -674,7 +674,7 @@ fun SchermataLettera(dati: Dati, nav: Navigatore, idScadenza: String) {
     Box(Modifier.fillMaxSize().background(c.fondo)) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(MarginePagina).padding(bottom = 150.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Testata(onIndietro = { nav.indietro() }, chiudi = true)
-            TitoloPagina("Nuova lettera")
+            TitoloPagina("Nuova lettera", sopra = eu.stgm.wisper.rapportino.ModelliDocumenti.sigla("LET-01"))
             (modelli as? Lettura.Pronta)?.dato?.lettere?.let { l -> SceltePillole(l.map { it.first to it.second.replace("Lettera ", "").replace("\"", "").replaceFirstChar { ch -> ch.uppercase() } }, chiave, { chiave = it }) }
             CampoDaScegliere("Cliente", ana.cliente(idCliente)?.nome ?: "Scegli il cliente", idCliente.isBlank(), { sceltaCliente = true })
             if (idCliente.isNotBlank()) SceltePillole(ana.sediDi(idCliente).filter { it.impianto }.map { it.id to it.nome } + ("" to "Nessun impianto"), idSede, { idSede = it })

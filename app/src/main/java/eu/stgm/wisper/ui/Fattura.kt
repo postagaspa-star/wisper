@@ -245,9 +245,9 @@ fun SchermataFattura(dati: Dati, nav: Navigatore, id: String) {
                 }
             }
             if (scrive && (x.bozza || x.pronta) && !x.nota) {
-                PulsanteBordo("Parcella pro-forma", proForma, Modifier.fillMaxWidth().bersaglio("pro-forma"), icona = Icone.pdf)
+                PulsanteBordo("Parcella pro-forma", proForma, Modifier.fillMaxWidth().bersaglio("pro-forma"), icona = Icone.pdf, nota = eu.stgm.wisper.rapportino.ModelliDocumenti.sigla("FAT-01"))
             }
-            if (x.emessa) PulsanteBordo("$titoloPdf in PDF", pdfEmessa, Modifier.fillMaxWidth().bersaglio("pdf-documento"), icona = Icone.pdf)
+            if (x.emessa) PulsanteBordo("$titoloPdf in PDF", pdfEmessa, Modifier.fillMaxWidth().bersaglio("pdf-documento"), icona = Icone.pdf, nota = eu.stgm.wisper.rapportino.ModelliDocumenti.sigla("FAT-02"))
 
             // Scadenza e conto: in bozza si cambiano (con data, causale e ritenuta).
             Scheda(orizzontale = 16.dp, verticale = 12.dp, spazio = 4.dp) {
@@ -814,7 +814,7 @@ fun SchermataPassa(dati: Dati, nav: Navigatore, id: String) {
                                     org.json.JSONObject().put("oggi", LocalDate.now().toString()).put("confermateIl", regole.confermateIl))
                             }.onSuccess { Stampa.condividi(ctx, it, "Prospetto ${f.riferimento} · non è una fattura") }.onFailure { avvisi.mostra(spiegaErrore2(it, "Il PDF non si è creato: riprova")) }
                         }
-                    }, Modifier.fillMaxWidth(), icona = Icone.pdf)
+                    }, Modifier.fillMaxWidth(), icona = Icone.pdf, nota = eu.stgm.wisper.rapportino.ModelliDocumenti.sigla("FAT-03"))
                     if (p.conXml) {
                         PulsanteBordo("Condividi l'XML da completare", {
                             dati.fase4.fileXml(p, f.riferimento).onSuccess { condividiFile(ctx, it, it.name, "application/xml") }.onFailure { avvisi.mostra(spiegaErrore2(it, "L'XML non si è preparato")) }

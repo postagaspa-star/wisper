@@ -26,8 +26,8 @@ android {
         targetSdk = 35
         // Il codice decide gli aggiornamenti: quello pubblicato deve essere più alto di quello installato.
         // (-PcodiceVersione=4 -PnomeVersione=0.4.0 solo per provare gli aggiornamenti sull'emulatore.)
-        versionCode = (project.findProperty("codiceVersione") as String?)?.toInt() ?: 23
-        versionName = (project.findProperty("nomeVersione") as String?) ?: "1.4.5"
+        versionCode = (project.findProperty("codiceVersione") as String?)?.toInt() ?: 24
+        versionName = (project.findProperty("nomeVersione") as String?) ?: "1.5.0"
 
         // Indirizzo dell'Apps Script che fa da ponte col foglio Google, e il
         // codice senza il quale lo script non risponde (lo crea preparaFoglio()).
@@ -109,6 +109,8 @@ android {
 abstract class CopiaModelliPdf : DefaultTask() {
     @get:InputFile @get:PathSensitive(PathSensitivity.NONE) abstract val documenti: RegularFileProperty
     @get:InputFile @get:PathSensitive(PathSensitivity.NONE) abstract val conti: RegularFileProperty
+    // 1.5.0: gli esempi dei modelli (pagina Modelli), fatti dal modello vero coi dati di esempio.
+    @get:InputFile @get:PathSensitive(PathSensitivity.NONE) abstract val esempi: RegularFileProperty
     @get:InputFile @get:PathSensitive(PathSensitivity.NONE) abstract val carattere: RegularFileProperty
     @get:OutputDirectory abstract val cartella: DirectoryProperty
 
@@ -117,6 +119,7 @@ abstract class CopiaModelliPdf : DefaultTask() {
         val ufficio = cartella.get().asFile.resolve("ufficio")
         documenti.get().asFile.copyTo(ufficio.resolve("documenti.js"), overwrite = true)
         conti.get().asFile.copyTo(ufficio.resolve("conti.js"), overwrite = true)
+        esempi.get().asFile.copyTo(ufficio.resolve("modelli-esempi.js"), overwrite = true)
         carattere.get().asFile.copyTo(ufficio.resolve("font/Figtree.ttf"), overwrite = true)
     }
 }
@@ -127,6 +130,7 @@ androidComponents {
         val copia = tasks.register<CopiaModelliPdf>("copiaModelliPdf" + variant.name.replaceFirstChar { it.uppercase() }) {
             documenti.set(ui.file("documenti.js"))
             conti.set(ui.file("conti.js"))
+            esempi.set(ui.file("modelli-esempi.js"))
             carattere.set(ui.file("font/Figtree.ttf"))
         }
         variant.sources.assets?.addGeneratedSourceDirectory(copia, CopiaModelliPdf::cartella)

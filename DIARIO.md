@@ -11,6 +11,7 @@ mai dati veri di clienti.
 
 | Data | Versione | In breve |
 |------|----------|----------|
+| 17/11/2026 | 1.5.0 | [I modelli dei documenti coi loro codici; il rapportino di una commessa con la descrizione del progetto](#v1-5-0) |
 | 15/11/2026 | 1.4.5 | [La parcella con Fornitore, Cliente e la Causale sopra la tabella](#v1-4-5) |
 | 14/11/2026 | 1.4.4, server 0.15.3 | [Nelle righe della parcella solo i Servizi, come nel modello](#v1-4-4) |
 | 13/11/2026 | 1.4.3, server 0.15.2 | [Il codice dei Servizi da solo nelle righe della bozza, la ritenuta che non resta a zero, il collegamento ricontrollato ogni minuto](#v1-4-3) |
@@ -53,6 +54,59 @@ mai dati veri di clienti.
 | 26/09–14/10/2026 | 0.1 | [Un rapportino confermato non si perde più](#coda) |
 | 7–9/08/2026 | 0.1.0 | [Hackathon NGN Hacks: la versione a voce, senza mani](#v0-1-0) |
 | marzo–giugno 2026 | prima del repository | [Le prime versioni](#prima) |
+
+---
+
+<a id="v1-5-0"></a>
+## 17 novembre 2026 · 1.5.0 · I modelli dei documenti coi loro codici; il rapportino di una commessa con la descrizione del progetto
+
+**Perché.** Andrea: "nei rapportini giornalieri (di un solo giorno con stessa data e stessa commessa, altrimenti lasciali
+così come sono) bisogna togliere la data ed il numero del rapportino dalla tabella (non dall'intestazione), e sostituirli
+con la descrizione del progetto, che andrà dopo l'intestatario del progetto. Inoltre censisci i modelli che Wisper può
+creare [...] e ad ognuno dai un codice, che deve apparire nei posti opportuni di Wisper, oltre ad avere anche una sua
+pagina dove poterli vedere tutti con relativi esempi, senza però poterne creare di nuovi".
+
+**Cosa cambia.**
+
+- **Il rapportino di un giorno con una commessa sola** ha una tabella nuova: Progetto, Intestato a, **Descrizione
+  progetto**, Lavoro svolto e i numeri. La data e il numero del rapportino restano in cima al foglio, non si ripetono più
+  a ogni riga. Se i lavori sono su commesse diverse il rapportino resta com'era, con data e numero in ogni riga; il
+  riepilogo del mese non cambia.
+- **Dodici modelli, ognuno col suo codice**: RAP-01 rapportino giornaliero con una commessa, RAP-02 con più commesse,
+  RAP-03 riepilogo del mese, RAP-04 rapportino a scheda (portale clienti); PRE-01 preventivo, PRE-02 incarico
+  professionale; FAT-01 parcella pro-forma, FAT-02 parcella o fattura, FAT-03 prospetto per il programma; LET-01 lettera,
+  LET-02 lettera d'incarico al collaboratore; ASS-01 contratto di assistenza. Il codice non cambia mai: un modello nuovo
+  prende il numero dopo.
+- **Il codice è su ogni documento**, in fondo a ogni pagina accanto al numero di pagina: "Mod. RAP-01 · Pagina 1 / 2".
+- **Il codice è nell'app dove il documento si prepara**: accanto all'allegato quando si inviano i rapportini e il
+  preventivo, accanto al numero nel pannello del rapportino, sui pulsanti della parcella pro-forma, della fattura in PDF
+  e del prospetto, nel menu del preventivo e del contratto di assistenza, nelle lettere, e in Documenti › Modelli accanto
+  ai testi di ogni modello. Sul computer la sigla si clicca e apre il modello.
+- **La pagina Modelli** (voce nuova del menu, dopo Documenti): i dodici modelli divisi per famiglia, ognuno con
+  l'esempio in piccolo, il codice, il nome e quando esce. Aprendone uno si vede l'esempio grande, dove si crea e il
+  pulsante "Apri l'esempio in PDF". Gli esempi sono fatti in quel momento dal modello vero con dati inventati e in cima
+  lo studio di chi guarda. Si guarda soltanto: non c'è modo di creare un modello.
+
+**Dove guardare.** Menu › Modelli. Rapportini › un rapportino con tutti i lavori sulla stessa commessa › PDF.
+
+![Il rapportino di una commessa: la descrizione del progetto al posto di data e numero](docs/diario/2026-11-17-rapportino-una-commessa-pdf.png)
+![La pagina Modelli sul computer](docs/diario/2026-11-17-modelli-computer.png)
+![Un modello aperto: l'esempio, quando esce, dove si crea](docs/diario/2026-11-17-modello-computer.png)
+![La sigla del modello accanto all'allegato, nell'invio del rapportino](docs/diario/2026-11-17-sigla-invio-computer.png)
+![La pagina Modelli sul telefono](docs/diario/2026-11-17-modelli-telefono.png)
+![Un modello sul telefono](docs/diario/2026-11-17-modello-telefono.png)
+
+**Provato.** Le prove del computer (376), del server (713), del portale (22), dello script (93) e del telefono (467);
+i giri cliccati del computer; la pagina Modelli guardata sul computer e sull'emulatore, in chiaro e in scuro; i dodici
+esempi stampati e il codice letto in fondo alle pagine dei PDF del computer.
+
+**Non provato.** I telefoni veri e il computer di Manuel. Sull'emulatore il fondo pagina dei PDF non si stampa (ha una
+WebView vecchia, la 124: serve la 131, come già per il numero di pagina): il codice in fondo ai PDF fatti dal telefono
+non l'ho potuto leggere lì.
+
+**Versione:** [v1.5.0](https://github.com/postagaspa-star/wisper/releases/tag/v1.5.0) (telefono codice 24, computer
+1.5.0). Il server resta 0.15.3. Accordo: [docs/gestionale/modelli.md](docs/gestionale/modelli.md); prototipo
+`docs/prototipo/Modelli.html`.
 
 ---
 

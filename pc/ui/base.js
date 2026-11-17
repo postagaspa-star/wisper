@@ -284,7 +284,7 @@
     chiudiMenu();
     const m = h('div', { class: 'menu', role: 'menu' }, voci.filter(Boolean).map(v => v === '-' ? h('hr') :
       h('button', { type: 'button', role: 'menuitem', class: (v.pericolo ? 'pericolo' : '') + (v.scelta ? ' scelta' : ''), onclick: () => { chiudiMenu(); v.fn(); } },
-        v.scelta ? icona('spunta', 16, 2.8) : null, v.testo)));
+        v.scelta ? icona('spunta', 16, 2.8) : null, v.testo, v.modello ? h('span', { class: 'mod-nota' }, 'Mod. ' + v.modello) : null)));
     aggiungi(document.body, [m]);
     const r = ancora.getBoundingClientRect();
     const alto = m.offsetHeight;

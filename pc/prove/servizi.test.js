@@ -110,7 +110,7 @@ test('parcella: la veste del modello, numero dell\'XML, JOB, sconto, riepilogo, 
   assert.ok(testo(D.parcella(Object.assign({}, MODELLO, { note: '' }), {})).includes('Causale Valuta: EUR (€) Codice'));
   // In cima: il tipo è la scritta grande, il numero quella piccola (le due regole stanno nello stile del foglio).
   assert.ok(/table\.foglio \.tipo \.etichetta \{ font-size: 19px;[^}]*text-transform: none/.test(html) && /table\.foglio \.tipo \.numero \{ font-size: 8\.5px;[^}]*text-transform: uppercase/.test(html), 'tipo grande, numero piccolo');
-  assert.ok(html.includes('@bottom-right { content: "Parcella n. 24 · Pagina " counter(page) " / " counter(pages)'), 'il piè a destra');
+  assert.ok(html.includes('@bottom-right { content: "Mod. FAT-02 · Parcella n. 24 · Pagina " counter(page) " / " counter(pages)'), 'il piè a destra, col codice del modello');
   assert.ok(html.includes('@bottom-left { content: "Studio Tecnico GM · P.IVA 03123456786"'), 'il piè a sinistra');
   assert.ok(!t.includes('senza valore fiscale'));
   assert.ok(testo(D.parcella(Object.assign({}, MODELLO, { tipoDocumento: 'TD01' }), {})).includes('Fattura N. 24 / 2026'));
@@ -124,7 +124,7 @@ test('parcella pro-forma: stesso corpo, "Rif. W-15", la frase senza valore fisca
     'Causale Prestazioni di ottobre. Documento senza valore fiscale: la fattura si emette al pagamento. Valuta: EUR (€) Codice']) {
     assert.ok(t.includes(pezzo), 'manca: ' + pezzo);
   }
-  assert.ok(D.avvisoParcella(m, {}).includes('content: "Parcella pro-forma W-15 · Pagina "'));
+  assert.ok(D.avvisoParcella(m, {}).includes('content: "Mod. FAT-01 · Parcella pro-forma W-15 · Pagina "'));
 });
 
 test('rapportino e riepilogo: le indennità sotto il lavoro e nel conto', () => {

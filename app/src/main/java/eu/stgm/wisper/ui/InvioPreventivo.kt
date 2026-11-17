@@ -205,7 +205,7 @@ fun SchermataInvioPreventivo(dati: Dati, nav: Navigatore, id: String) {
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     PulsanteBordo("Apri il PDF", {
                         pronto?.file?.let { if (!Stampa.apri(ctx, it)) avvisi.mostra("Sul telefono non c'è un'app per i PDF: usa Condividi") }
-                    }, Modifier.weight(1f), icona = Icone.pdf)
+                    }, Modifier.weight(1f), icona = Icone.pdf, nota = eu.stgm.wisper.rapportino.ModelliDocumenti.sigla("PRE-01"))
                     PulsanteBordo("Condividi", { pronto?.file?.let { Stampa.condividi(ctx, it, oggetto) } }, Modifier.weight(1f), icona = Icone.condividi)
                 }
                 if (p.bozza) PulsanteTesto("Segna come inviato senza email", { segnaSenzaEmail() }, Modifier.fillMaxWidth().height(48.dp), colore = c.tenue)

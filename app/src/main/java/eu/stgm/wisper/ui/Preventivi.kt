@@ -436,10 +436,10 @@ fun SchermataPreventivo(dati: Dati, nav: Navigatore, id: String) {
 
             // ---- il PDF e le revisioni
             SchedaElenco {
-                RigaVoce("PDF del preventivo", sotto = "Come lo riceve il cliente", icona = Icone.pdf, onClick = { pdf(incarico = false, condividi = false) })
+                RigaVoce("PDF del preventivo", sotto = "Come lo riceve il cliente · " + eu.stgm.wisper.rapportino.ModelliDocumenti.sigla("PRE-01"), icona = Icone.pdf, onClick = { pdf(incarico = false, condividi = false) })
                 if (p.stato == StatoPreventivo.ACCETTATO) {
                     LineaElenco()
-                    RigaVoce("Incarico professionale", sotto = "Dal preventivo accettato, con le condizioni e la firma", icona = Icone.firma, onClick = { pdf(incarico = true, condividi = false) })
+                    RigaVoce("Incarico professionale", sotto = "Dal preventivo accettato, con le condizioni e la firma · " + eu.stgm.wisper.rapportino.ModelliDocumenti.sigla("PRE-02"), icona = Icone.firma, onClick = { pdf(incarico = true, condividi = false) })
                 }
             }
             if (p.revisioni.size > 1) {
@@ -526,9 +526,9 @@ fun SchermataPreventivo(dati: Dati, nav: Navigatore, id: String) {
                 VociPortale(dati, info, InCoda7.portaleInCoda("preventivo", p.id, info?.id.orEmpty(), ops),
                     puoPubblicare = p.stato in setOf(StatoPreventivo.INVIATO, StatoPreventivo.ACCETTATO, StatoPreventivo.RIFIUTATO), onPubblica = { pubblica = true }, onFatto = { menu = false })
             }
-            VoceMenu(Icone.pdf, "PDF", { menu = false; pdf(incarico = false, condividi = false) })
+            VoceMenu(Icone.pdf, "PDF", { menu = false; pdf(incarico = false, condividi = false) }, nota = eu.stgm.wisper.rapportino.ModelliDocumenti.sigla("PRE-01"))
             VoceMenu(Icone.condividi, "Condividi il PDF", { menu = false; pdf(incarico = false, condividi = true) })
-            if (p.stato == StatoPreventivo.ACCETTATO) VoceMenu(Icone.firma, "PDF dell'incarico", { menu = false; pdf(incarico = true, condividi = false) })
+            if (p.stato == StatoPreventivo.ACCETTATO) VoceMenu(Icone.firma, "PDF dell'incarico", { menu = false; pdf(incarico = true, condividi = false) }, nota = eu.stgm.wisper.rapportino.ModelliDocumenti.sigla("PRE-02"))
         }
     }
     FoglioPubblicaSe(dati, pubblica, "preventivo", p.id, p.idCliente, nomeClienteDi(p, ana)) { pubblica = false; giro++ }

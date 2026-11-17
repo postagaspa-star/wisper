@@ -165,6 +165,25 @@ object Stampa {
         nome,
     ) { null }
 
+    /**
+     * 1.5.0 (modelli.md): l'esempio di un modello, per la pagina Modelli. Lo fa il modello vero coi dati di esempio di
+     * pc/ui/modelli-esempi.js; in cima lo studio di chi guarda ([impostazioni], vuote = lo studio di esempio). Il file si
+     * chiama come sul computer: "Esempio RAP-01 Rapportino giornaliero, una commessa".
+     */
+    suspend fun esempio(
+        ctx: Context,
+        codice: String,
+        impostazioni: JSONObject?,
+        immagine: suspend (String) -> Pair<ByteArray, String>?,
+    ): File {
+        val m = ModelliDocumenti.trova(codice) ?: throw ErroreStampa("Questo modello non c'è")
+        return stampa(
+            ctx,
+            "(typeof WisperModelliEsempi === 'object' ? WisperModelliEsempi.esempio(${JSONObject.quote(m.codice)},${impostazioni ?: "null"}) : '')",
+            nomeFile("Esempio " + m.codice, m.nome), immagine,
+        )
+    }
+
     /** "Preventivo PR-2026-012 rev. 1 Rossi Impianti Srl". */
     fun nomePreventivo(prefisso: String, p: JSONObject, anagrafiche: JSONObject): String {
         val numero = testo(p, "numero").ifEmpty { "bozza" } + (testo(p, "revisione").toIntOrNull()?.takeIf { it > 0 }?.let { " rev. $it" } ?: "")
