@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Wisper, work reports by voice for field technicians</title>
-<meta name="description" content="An Android app that lets industrial technicians dictate their daily work report without ever touching the phone. Built for NGN Hacks 2026.">
+<title>Wisper, the management system of a one-person technical studio</title>
+<meta name="description" content="Work reports, jobs, quotes, invoices and documents for a self-employed technician: an Android app, a Windows program and a small server at home. It started as a voice app at NGN Hacks 2026.">
 <style>
   :root{
     --nero:#07080A; --carta:#0E1014; --bordo:#1D212A;
@@ -18,20 +18,21 @@
     -webkit-font-smoothing:antialiased;
   }
   .wrap{max-width:720px;margin:0 auto;padding:0 24px}
+  .largo{max-width:1040px}
   section{padding:56px 0;border-bottom:1px solid var(--bordo)}
   section:last-of-type{border-bottom:none}
 
-  /* --- palla di puntini, la stessa dell'app --- */
+  /* --- palla di puntini, il segno di Wisper dalla prima versione --- */
   .palla{display:block;margin:0 auto 28px;width:132px;height:132px}
   .palla circle{fill:var(--giallo)}
 
   h1{font-size:clamp(34px,7vw,52px);line-height:1.08;letter-spacing:-.02em;font-weight:800}
-  h1 em{font-style:normal;color:var(--giallo)}
+  em{font-style:normal;color:var(--giallo)}
   .occhiello{
     text-transform:uppercase;letter-spacing:.18em;font-size:11px;
     color:var(--grigio);font-weight:700;margin-bottom:14px
   }
-  .sottotitolo{color:var(--grigio);font-size:19px;margin-top:18px;max-width:34em}
+  .sottotitolo{color:var(--grigio);font-size:19px;margin:18px auto 0;max-width:34em}
   h2{font-size:13px;text-transform:uppercase;letter-spacing:.16em;color:var(--grigio);margin-bottom:22px;font-weight:700}
   h3{font-size:17px;margin-bottom:6px;font-weight:650}
   p+p{margin-top:12px}
@@ -48,6 +49,21 @@
   .scarica:hover{transform:translateY(-2px)}
   .sotto-bottone{font-size:13px;color:var(--grigio);margin-top:12px}
 
+  /* --- schermate (dati di esempio) --- */
+  figure{margin:0}
+  figure img{
+    display:block;width:100%;height:auto;
+    border:1px solid var(--bordo);border-radius:12px;background:#fff
+  }
+  figcaption{font-size:14px;color:var(--grigio);margin-top:10px}
+  .prima{margin-top:44px}
+  .coppia{display:grid;grid-template-columns:1fr 1fr;gap:28px;margin-top:28px;align-items:start}
+  .coppia.stretta{grid-template-columns:5fr 3fr}
+  .tel{max-width:300px;margin:0 auto}
+  @media (max-width:720px){
+    .coppia,.coppia.stretta{grid-template-columns:1fr}
+  }
+
   ol.passi{list-style:none;counter-reset:p}
   ol.passi li{
     counter-increment:p;position:relative;padding-left:46px;margin-bottom:24px
@@ -58,18 +74,6 @@
     border:1px solid var(--bordo);color:var(--giallo);
     display:grid;place-items:center;font-size:13px;font-weight:700
   }
-
-  .parlato{
-    border-left:2px solid var(--bordo);padding-left:18px;margin:22px 0;
-  }
-  .parlato p{margin:0 0 10px}
-  .chi{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--grigio)}
-  .tecnico .chi{color:var(--grigio)}
-  .wisper .chi{color:var(--blu)}
-  .parlato .frase{font-size:17px}
-  /* La traduzione sta sotto e piu' in piccolo: chi legge l'italiano non la
-     vede, chi non lo legge non resta fuori. */
-  .reso{font-size:14px;color:var(--grigio);font-style:italic;margin-top:2px}
 
   .avvisi li{
     list-style:none;padding:16px 0;border-bottom:1px solid var(--bordo)
@@ -92,7 +96,6 @@
 
 <header>
   <div class="wrap">
-    <!-- la stessa palla dell'app, ferma -->
     <svg class="palla" viewBox="0 0 100 100" aria-hidden="true">
       <circle cx="50" cy="14" r="2.6"/><circle cx="68" cy="19" r="2.9"/>
       <circle cx="80" cy="33" r="3.1"/><circle cx="85" cy="50" r="3.2"/>
@@ -106,191 +109,208 @@
       <circle cx="50" cy="50" r="3.4" fill="#F2F4F7"/>
     </svg>
 
-    <p class="occhiello">NGN Hacks 2026 · one person, two days, sixteen years old</p>
+    <p class="occhiello">In daily use since 3 November 2026</p>
     <h1>Wisper</h1>
-    <p class="sottotitolo" style="margin-left:auto;margin-right:auto">
-      An Android app that lets an industrial field technician file the daily
-      work report <em>without ever touching the phone</em>.
+    <p class="sottotitolo">
+      The management system of a <em>one-person technical studio</em>: work
+      reports, jobs, quotes, invoices and documents, on the phone at the
+      client's and on the computer at the office.
     </p>
 
-    <a class="scarica" id="download" href="https://github.com/postagaspa-star/wisper">See the source on GitHub</a>
-    <p class="sotto-bottone">Kotlin, native Android 8 or newer · there is no APK to download, and the reason is further down</p>
+    <a class="scarica" href="https://github.com/postagaspa-star/wisper">See the source on GitHub</a>
+    <p class="sotto-bottone">Android app in Kotlin · Windows program · a small Node server at home · interface in Italian</p>
+  </div>
+  <div class="wrap largo">
+    <figure class="prima">
+      <img src="diario/2026-11-09-fai-pc-casa-chiaro.png" width="1280" height="1000"
+           alt="The home page of the office program: the most important thing of the day, six actions under 'Cosa vuoi fare?', the things to fix and the agenda.">
+      <figcaption>The home page on the computer. Every screenshot on this page shows example data.</figcaption>
+    </figure>
   </div>
 </header>
 
 <section>
   <div class="wrap">
-    <h2>The problem</h2>
+    <h2>Who it is for</h2>
     <p>
-      A heating and photovoltaic technician spends the day on site with gloves on
-      and both hands busy. Then the report has to be filed: client, job,
-      description, hours, kilometres, expenses.
+      My father is a self-employed industrial surveyor: electrical design and
+      automation, a handful of clients, nobody else in the office. Every month
+      he sends each client the list of the days he worked for them, then the
+      invoice. He did it with a spreadsheet and by memory.
     </p>
     <p>
-      The interesting part is <em>when</em> it happens. Back at the office, near
-      closing time, at the end of a day that started at seven, by someone who is
-      tired and wants to go home. It is a form, filled in by hand, one field
-      after another, and nothing about it is automatic. So it gets rushed, or
-      written from memory two days later, or forgotten, and the office spends the
-      next morning chasing it.
+      He wrote down what a complete system for his studio should do, eighteen
+      modules, and Wisper grew into it phase by phase. It is built for one
+      person, so everything a big suite needs for a team was cut or made
+      optional: every module can be switched off.
     </p>
     <p class="grigio">
-      This is not a hypothetical user. It is the daily routine at my father's
-      technical firm, where I build software for industrial clients, and where I
-      have been watching this problem from close up for the past few months.
+      He decides what it should do and tries it at work; I build it, and each
+      version starts from something he said. The reasons are written down,
+      version by version, in the
+      <a href="https://github.com/postagaspa-star/wisper/blob/main/DIARIO.md">diary</a>
+      (in Italian).
     </p>
   </div>
 </section>
 
 <section>
   <div class="wrap">
-    <h2>How it works</h2>
+    <h2>What it does</h2>
     <ol class="passi">
       <li>
-        <h3>Say “Wisper”</h3>
+        <h3>The day's work report</h3>
         <p class="grigio">
-          The wake word runs entirely on the phone. Until it is heard,
-          no audio leaves the device and no connection is needed.
+          One report per day with several jobs inside, each with its client,
+          job code, project, hours, kilometres and expenses. It is written on
+          the phone, also with no signal: it waits in a queue and leaves when
+          the connection is back.
         </p>
       </li>
       <li>
-        <h3>Just talk</h3>
+        <h3>Clients, jobs and projects</h3>
         <p class="grigio">
-          The fields fill themselves in on screen while you speak. Correct
-          anything out loud, “no, three hours”, and it updates.
+          Client, then jobs, then projects. A job has a budget in hours and a
+          margin. Project codes are typed by hand the first times; then Wisper
+          finds the pattern and proposes the next one.
         </p>
       </li>
       <li>
-        <h3>Say “confermo”</h3>
+        <h3>Quotes and invoices</h3>
         <p class="grigio">
-          Wisper reads the report back, you confirm, and the row lands in the
-          company Google Sheet. The phone is never touched.
+          The month's reports become the rows of a draft invoice, one row per
+          service from the price list, with the Italian rules for a
+          professional (pension fund, withholding tax, VAT). Wisper prepares
+          the invoice; it is issued by the program he already uses.
+        </p>
+      </li>
+      <li>
+        <h3>Documents with a code</h3>
+        <p class="grigio">
+          Twelve document models, from the daily report to the fee note, each
+          with its own code printed at the bottom of every page. The phone and
+          the computer make the same PDF from the same template.
+        </p>
+      </li>
+      <li>
+        <h3>The rest of the office</h3>
+        <p class="grigio">
+          Expenses and mileage, deadlines and bank due dates, tickets and
+          service contracts, a document archive, tasks and a calendar, people
+          and vehicles.
         </p>
       </li>
     </ol>
+  </div>
 
-    <div class="parlato">
-      <div class="tecnico">
-        <p class="chi">Technician</p>
-        <p class="frase">“Sono andato da Rossi per la manutenzione della caldaia, quattro ore e trenta chilometri.”</p>
-        <p class="reso">I was at Rossi's for the boiler service, four hours and thirty kilometres.</p>
-      </div>
-      <div class="wisper">
-        <p class="chi">Wisper</p>
-        <p class="frase">“Segnato Rossi Impianti, quattro ore e trenta chilometri. Altro, o salvo?”</p>
-        <p class="reso">Rossi Impianti, four hours and thirty kilometres, noted. Anything else, or shall I save?</p>
-      </div>
-      <div class="tecnico">
-        <p class="chi">Technician</p>
-        <p class="frase">“No aspetta, scusa, erano tre ore non quattro.”</p>
-        <p class="reso">No wait, sorry, it was three hours not four.</p>
-      </div>
-      <div class="wisper">
-        <p class="chi">Wisper</p>
-        <p class="frase">“Corretto, tre ore segnate.”</p>
-        <p class="reso">Corrected, three hours noted.</p>
-      </div>
+  <div class="wrap largo">
+    <div class="coppia stretta">
+      <figure>
+        <img src="diario/2026-11-11-rapportino-tre-colonne.png" width="1440" height="900" loading="lazy"
+             alt="The work report editor on the computer: the day's jobs on the left, the fields of the chosen job in the middle, the bill on the right.">
+        <figcaption>A day's report on the computer: the jobs, the chosen job, the bill.</figcaption>
+      </figure>
+      <figure class="tel">
+        <img src="diario/2026-11-11-pagina-unica-telefono.png" width="540" height="1200" loading="lazy"
+             alt="The same work report on the phone, as one page.">
+        <figcaption>The same report on the phone.</figcaption>
+      </figure>
     </div>
-    <p class="grigio" style="font-size:15px">
-      The app speaks Italian, because that is who it was built for. The English
-      under each line is a translation, not something the app says.
-    </p>
+    <div class="coppia">
+      <figure>
+        <img src="diario/2026-11-17-modelli-computer.png" width="1280" height="800" loading="lazy"
+             alt="The Modelli page: the document models by family, each with a small example, its code and its name.">
+        <figcaption>The document models, each with its code and a live example.</figcaption>
+      </figure>
+      <figure>
+        <img src="diario/2026-11-15-parcella-causale-pdf.png" width="1376" height="1722" loading="lazy"
+             alt="A pro-forma fee note made by Wisper, with supplier, client, reason and the table of services.">
+        <figcaption>A pro-forma fee note, as the client receives it.</figcaption>
+      </figure>
+    </div>
   </div>
 </section>
 
 <section>
   <div class="wrap">
-    <h2>On site, it goes first</h2>
-    <ol class="passi">
+    <h2>How it is built</h2>
+    <ul class="avvisi">
       <li>
-        <h3>It knows where you are</h3>
-        <p class="grigio">
-          Open it standing in a client's yard and it opens the conversation
-          itself: “I see you are at Rossi's, and the only job open here is the
-          Fara Vicentino photovoltaic. Is that right?” It proposes, it never
-          assumes; you might be at the office writing up yesterday.
-        </p>
+        <strong>A server at home.</strong>
+        <span>
+          Node 24 with its built-in SQLite and no npm dependency, in a
+          container on a home NAS. One login per person; roles and permissions
+          are decided by the server, which removes the money fields for who
+          must not see them. Every change is logged and a copy is made every night.
+        </span>
       </li>
       <li>
-        <h3>It tells jobs apart the way you do</h3>
-        <p class="grigio">
-          Ask what is open for a client and it answers by place, not by code,
-          because a technician says “the one in via Roma” and never “M004”.
-        </p>
+        <strong>An Android app.</strong>
+        <span>
+          Kotlin and Jetpack Compose. What is written goes to disk first and
+          is sent when there is a connection, even with the app closed.
+        </span>
       </li>
       <li>
-        <h3>It knows when to shut up</h3>
-        <p class="grigio">
-          A wake word means holding the microphone open forever, and on Android
-          the microphone belongs to whoever grabbed it. So Wisper listens when
-          the screen is off, or when it is the app you are looking at. Use the
-          phone for anything else, or take a call, and it steps aside on its own.
-        </p>
+        <strong>A Windows program.</strong>
+        <span>
+          One file that installs itself: C# with WebView2, interface in plain
+          HTML and JavaScript, no framework.
+        </span>
       </li>
       <li>
-        <h3>It keeps the sheet tidy</h3>
-        <p class="grigio">
-          New clients and new jobs get created by voice, and it says out loud
-          when it does it. Say the work is finished and the job closes in the
-          company sheet, so tomorrow it is not offered again.
-        </p>
+        <strong>The sums are written once.</strong>
+        <span>
+          Bills, quotes and invoices are computed by one set of rules, ported
+          to the phone and the computer with the same shared test cases, so
+          the three always agree to the cent.
+        </span>
       </li>
-    </ol>
+      <li>
+        <strong>Updates arrive by themselves.</strong>
+        <span>
+          Each release carries a signed list; the server announces it and the
+          phone and the computer download and install it.
+        </span>
+      </li>
+    </ul>
     <div class="nota">
-      <b>Source code:</b> the whole project is public on GitHub, including the
-      Google Apps Script that writes to the spreadsheet.
+      <b>Trying it:</b> the app and the program need a Wisper server to talk
+      to, so the files in the
+      <a href="https://github.com/postagaspa-star/wisper/releases/latest">latest release</a>
+      are not a demo. The server is in the <code>server</code> folder of the
+      repository and starts with example data in test mode; the
+      <a href="https://github.com/postagaspa-star/wisper#readme">README</a>
+      tells how the pieces fit together.
     </div>
   </div>
 </section>
 
 <section>
   <div class="wrap">
-    <h2>What it is not, yet</h2>
-    <p class="grigio" style="margin-bottom:18px">
-      This was built in a weekend hackathon. These limits are real and known,
-      and are listed here rather than discovered later.
-    </p>
+    <h2>What it is not</h2>
     <ul class="avvisi">
       <li>
-        <strong>Single user.</strong>
+        <strong>Not a product.</strong>
         <span>
-          There is no login and no accounts: the app writes to one spreadsheet,
-          the owner's. A production version needs authentication, one workspace
-          per company, and permissions for each technician.
+          It is made for one studio, in Italian, around the way one person
+          works. The code is public to be read, not sold or supported.
         </span>
       </li>
       <li>
-        <strong>The spreadsheet endpoint is unprotected.</strong>
+        <strong>Android and Windows only.</strong>
+        <span>No iPhone, no tablet layout, no web version.</span>
+      </li>
+      <li>
+        <strong>It does not issue invoices.</strong>
         <span>
-          The bridge to Google Sheets is a public Apps Script URL. Anyone
-          holding it could write a row. In production it needs a real token.
+          It prepares them and reads back the XML of the issued ones. Nothing
+          is sent to the tax authority's exchange system from here.
         </span>
       </li>
       <li>
-        <strong>It needs a connection to understand you.</strong>
-        <span>
-          The wake word is fully offline, but the reasoning and the save are
-          not. On a site with no signal, Wisper wakes up but cannot yet queue
-          the report for later. That queue is the next thing to build.
-        </span>
-      </li>
-      <li>
-        <strong>Noise degrades accuracy.</strong>
-        <span>
-          Published Italian speech recognition benchmarks, around 3% word error,
-          are measured on clean studio audio. On a real building site, expect
-          meaningfully worse. This is the honest weak point of the whole idea.
-        </span>
-      </li>
-      <li>
-        <strong>There is no APK to download, on purpose.</strong>
-        <span>
-          The model key would travel inside it and anyone could pull it back
-          out. Gemini keys cannot be locked to an Android package the way Maps
-          keys can, so the only real fix is a server holding the key and the app
-          asking that server. That server is not built yet, so the project is
-          source only and you build it with your own key.
-        </span>
+        <strong>The client portal is built, and switched off.</strong>
+        <span>It stays off until the studio decides to open it to clients.</span>
       </li>
     </ul>
   </div>
@@ -298,44 +318,26 @@
 
 <section>
   <div class="wrap">
-    <h2>Where it goes</h2>
+    <h2>Where it started</h2>
     <p>
-      A spreadsheet is where this starts, not where it ends. The next step is
-      writing into the system a firm already runs, an ERP like Odoo, so the
-      report lands as a timesheet entry against the right job instead of a row
-      somebody copies over by hand.
+      Wisper was born in August 2026 at
+      <a href="https://ngn-hacks-2026.devpost.com/">NGN Hacks 2026</a> as a
+      voice app: a technician said "Wisper", dictated the day's report and the
+      row landed in the company spreadsheet, without touching the phone. The
+      name and the ball of dots come from there.
     </p>
-    <ul class="avvisi">
-      <li>
-        <strong>Signatures.</strong>
-        <span>
-          The surveyor's is signed once and kept in Drive. The client signs on
-          the phone there and then, offered only when the job is being closed,
-          because a signature on unfinished work means nothing.
-        </span>
-      </li>
-      <li>
-        <strong>Receipts, read by the phone.</strong>
-        <span>
-          Photograph it, OCR it, attach it to the expense. Right now an expense
-          is a number somebody said out loud and the accountant takes it on
-          trust.
-        </span>
-      </li>
-      <li>
-        <strong>Then the plumbing.</strong>
-        <span>
-          Offline queue with automatic retry, one account per technician, a real
-          token on the spreadsheet endpoint, a server holding the model key.
-        </span>
-      </li>
-    </ul>
+    <p class="grigio">
+      After using it for a while my father was clear: leave the voice, let's
+      do it by hand. In October 2026 the voice part was removed, all of it,
+      and what he needed turned out to be everything that comes after the
+      row. That first version is still in the repository's history.
+    </p>
   </div>
 </section>
 
 <footer>
   <div class="wrap">
-    <p>Built for <a href="https://ngn-hacks-2026.devpost.com/">NGN Hacks 2026</a> · Andrea Gasparotto</p>
+    <p>Andrea Gasparotto · <a href="https://github.com/postagaspa-star/wisper">github.com/postagaspa-star/wisper</a></p>
   </div>
 </footer>
 
