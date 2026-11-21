@@ -136,7 +136,8 @@ creano documenti (Rapportini, Preventivi, Fatture, Documenti, Ticket, Collaborat
 
 - Il codice sta anche sui documenti che vanno ai clienti (in piccolo, nel piè di pagina): serve a dire "questo è il
   Mod. FAT-01" al telefono con un cliente o col commercialista. Non c'è un'impostazione per toglierlo: se non lo si
-  vuole è una riga di `stile()`.
+  vuole è una riga di `stile()`. **Confermato da Andrea il 21/11/2026** ("Sì, resta"): il codice resta anche sui
+  documenti per i clienti.
 - RAP-04 (la scheda di un lavoro solo) è censito perché esiste ancora: lo usa il portale clienti per i rapportini di
   prima della 1.2.
 - Le impronte dei PDF nelle prove cambiano solo per il codice: `pc/prove/fase8.test.js` lo dimostra togliendo il codice
