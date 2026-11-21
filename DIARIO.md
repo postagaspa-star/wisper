@@ -101,7 +101,8 @@ chiaro e in scuro.
 **Non provato.** I telefoni veri e il computer di Manuel.
 
 **Versione:** [v1.5.1](https://github.com/postagaspa-star/wisper/releases/tag/v1.5.1) (telefono codice 25, computer
-1.5.1) con il server 0.15.4. Accordo: [docs/gestionale/rapportino-lavori.md](docs/gestionale/rapportino-lavori.md) §8.
+1.5.1), pubblicata alle 12:33; il NAS la annuncia alle app dalle 12:41. Il server 0.15.4 è sul NAS dalle 12:31. Accordo:
+[docs/gestionale/rapportino-lavori.md](docs/gestionale/rapportino-lavori.md) §8.
 
 ---
 
