@@ -108,19 +108,27 @@ class GiornateTest {
     }
 
     @Test
-    fun `con un'indennità le ore non servono, e prima dell'invio la frase lo dice`() {
+    fun `le ore non sono obbligatorie, e la frase dice quali lavori non le hanno`() {
         val ind = listOf(Indennita(descrizione = "Indennità di trasferta", quantita = 1.0, prezzo = 30.0))
         val senza = l2.copy(oreLavoro = 0.0, indennita = ind)
-        assertTrue(senza.indennitaSenzaOre)
-        assertFalse(l2.copy(indennita = ind).indennitaSenzaOre)
-        assertFalse(senza.copy(oreViaggio = 0.5).indennitaSenzaOre)
-        assertFalse(l2.copy(oreLavoro = 0.0).indennitaSenzaOre)
+        assertTrue(senza.senzaOre)
+        assertFalse(l2.copy(indennita = ind).senzaOre)
+        assertFalse(senza.copy(oreViaggio = 0.5).senzaOre)
+        // Dal 21/11/2026 anche senza indennità: le ore non sono mai obbligatorie.
+        assertTrue(l2.copy(oreLavoro = 0.0).senzaOre)
         assertNull(Giornate.fraseSenzaOre(listOf(l1, l2, l3)))
-        assertEquals("Nel lavoro per Rossi Impianti Srl c'è un'indennità ma non sono segnate ore.", Giornate.fraseSenzaOre(listOf(l1, senza)))
+        assertEquals("Nel lavoro per Rossi Impianti Srl non sono segnate ore.", Giornate.fraseSenzaOre(listOf(l1, senza)))
         assertEquals(
-            "In 2 lavori ci sono indennità ma non sono segnate ore: Rossi Impianti Srl, Elettrodinamica.",
-            Giornate.fraseSenzaOre(listOf(senza, l1.copy(oreLavoro = 0.0, indennita = ind), l3)),
+            "In 2 lavori non sono segnate ore: Rossi Impianti Srl, Elettrodinamica.",
+            Giornate.fraseSenzaOre(listOf(senza, l1.copy(oreLavoro = 0.0), l3)),
         )
+        // Al salvataggio si avvisa per i lavori nuovi e per quelli che le ore le avevano; uno già senza ore non si chiede di nuovo.
+        val nuovo = l3.copy(idLocale = "nuovo-senza-ore", oreLavoro = 0.0, oreExtra = 0.0, oreViaggio = 0.0)
+        assertEquals(
+            listOf(l1.idLocale, nuovo.idLocale),
+            Giornate.nuoviSenzaOre(listOf(l1.copy(oreLavoro = 0.0, oreExtra = 0.0, oreViaggio = 0.0), senza, nuovo, l3), listOf(l1, senza, l3)).map { it.idLocale },
+        )
+        assertTrue(Giornate.nuoviSenzaOre(listOf(l1, l3), emptyList()).isEmpty())
     }
 
     @Test

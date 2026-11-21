@@ -647,7 +647,9 @@ function righeRapportini(x) {
       g.importo = centesimi(g.importo + numero(r.compensoOre));
     }
     for (const [tariffa, g] of perTariffa) {
-      if (!(g.importo > 0) && !(g.ore > 0)) continue;
+      // 21/11/2026: le ore a tariffa zero non fanno una riga da 0,00 € (restano nei rapportini; nella fattura le righe
+      // sono quelle che valgono qualcosa: le indennità, i chilometri, le spese).
+      if (!(g.importo > 0)) continue;
       const s = servizio('ore', tariffa);
       const descrizione = s ? s.nome + ' | ' + soloMese : 'Prestazioni professionali di ' + quando;
       const codice = s ? s.codice : '';

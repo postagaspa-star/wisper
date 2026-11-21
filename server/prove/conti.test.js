@@ -156,6 +156,19 @@ for (const g of CASI_FATTURA.raggruppamenti) {
   });
 }
 
+test('21/11/2026: la tariffa a zero non fa una riga da 0 € nella fattura; i km dello stesso lavoro sì', () => {
+  const lavoro = { id: 'RAP/2026/0301-1', data: '2026-11-04', oreLavoro: 3, oreExtra: 0, oreViaggio: 0, tariffa: 0, maggExtra: 0, compensoOre: 0, km: 20, euroKm: 0.5, rimborsoKm: 10 };
+  const pagato = { id: 'RAP/2026/0302-1', data: '2026-11-05', oreLavoro: 2, oreExtra: 0, oreViaggio: 0, tariffa: 40, maggExtra: 0, compensoOre: 80, km: 0, euroKm: 0.5, rimborsoKm: 0 };
+  const cliente = { id: 'C002', tariffaFissa: null, pagaViaggio: true };
+  const righe = l => [].concat(...C.righeRapportini({ cliente, rapportini: l, spese: [] }).map(x => x.righe));
+  assert.deepEqual(righe([lavoro]).map(r => [r.descrizione, r.quantita, r.importo]), [['Rimborso chilometrico di novembre 2026', 20, 10]]);
+  assert.deepEqual(righe([lavoro, pagato]).map(r => [r.descrizione, r.quantita, r.prezzo, r.importo]),
+    [['Prestazioni professionali di novembre 2026', 2, 40, 80], ['Rimborso chilometrico di novembre 2026', 20, 0.5, 10]]);
+  // Il lavoro a zero resta fra le sorgenti: con la fattura diventa fatturato anche lui.
+  const gruppi = C.righeRapportini({ cliente, rapportini: [lavoro, pagato], spese: [] });
+  assert.ok(gruppi[0].sorgenti.some(s => s.id === lavoro.id), JSON.stringify(gruppi[0].sorgenti));
+});
+
 test('righe: scadenza, spesa, anticipazione e ore coi testi dell\'accordo', () => {
   assert.deepEqual(C.rigaScadenza({ descrizione: '40% a fine progetto', importo: 1520 }, { id: '26ST003', descrizione: 'Adeguamento impianto elettrico capannone' }, 'PR/2026/012 rev. 1'),
     { tipo: 'compenso', descrizione: '40% a fine progetto: Adeguamento impianto elettrico capannone (commessa 26ST003, contratto PR/2026/012 rev. 1)', quantita: 1,

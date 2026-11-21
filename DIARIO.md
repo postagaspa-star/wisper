@@ -11,6 +11,7 @@ mai dati veri di clienti.
 
 | Data | Versione | In breve |
 |------|----------|----------|
+| 21/11/2026 | 1.5.1, server 0.15.4 | [Le ore non sono più obbligatorie, la tariffa può essere zero, il progetto si sceglie come la commessa](#v1-5-1) |
 | 17/11/2026 | 1.5.0 | [I modelli dei documenti coi loro codici; il rapportino di una commessa con la descrizione del progetto](#v1-5-0) |
 | 15/11/2026 | 1.4.5 | [La parcella con Fornitore, Cliente e la Causale sopra la tabella](#v1-4-5) |
 | 14/11/2026 | 1.4.4, server 0.15.3 | [Nelle righe della parcella solo i Servizi, come nel modello](#v1-4-4) |
@@ -54,6 +55,53 @@ mai dati veri di clienti.
 | 26/09–14/10/2026 | 0.1 | [Un rapportino confermato non si perde più](#coda) |
 | 7–9/08/2026 | 0.1.0 | [Hackathon NGN Hacks: la versione a voce, senza mani](#v0-1-0) |
 | marzo–giugno 2026 | prima del repository | [Le prime versioni](#prima) |
+
+---
+
+<a id="v1-5-1"></a>
+## 21 novembre 2026 · 1.5.1, server 0.15.4 · Le ore non sono più obbligatorie, la tariffa può essere zero, il progetto si sceglie come la commessa
+
+**Perché.** Andrea: "Abbiamo nuove modifiche: tutte da fare nei rapportini. Non bisogna mettere le ore come obbligatore,
+ma se non sono messe deve apparire un avviso prima di confermare del tutto; la tariffa orario può essere zero; nella
+selezione dei progetti essa deve essere come quella delle commesse: prima i vari progetti, poi la barra di ricerca, e
+sotto il tasto per creare un nuovo progetto, e ci devi anche mettere il tasto per farlo senza progetto nella stessa
+posizione di quello per le commesse".
+
+**Cosa cambia.**
+
+- **Le ore non sono più obbligatorie.** Un lavoro senza ore si salva e si invia. Prima però Wisper lo dice: a Salva
+  rapportino compare "Mancano le ore · Nel lavoro per Rossi Impianti Srl non sono segnate ore. Salvo lo stesso?", con
+  Salva lo stesso e Annulla (Annulla riporta al lavoro senza ore). Lo stesso avviso torna prima di inviare ai clienti
+  ("Lo mando lo stesso?"). Al salvataggio l'avviso riguarda solo i lavori nuovi e quelli a cui le ore sono state
+  tolte: riaprendo un rapportino già salvato senza ore per correggere altro non lo si rivede ogni volta. Vale anche per
+  i lavori con un'indennità, che dal 13/11 avevano l'avviso solo all'invio.
+- **La tariffa oraria può essere zero.** Il campo va scritto (vuoto resta un errore: "Scrivi la tariffa"), ma 0 è
+  accettato sul computer, sul telefono e dal server. Uno zero non diventa la tariffa proposta la volta dopo per quel
+  cliente. Le ore a tariffa zero non fanno una riga da 0 € nella fattura; i chilometri dello stesso lavoro sì.
+- **Il progetto si sceglie come la commessa.** Prima i progetti della commessa, per ultimo **Senza progetto** (dov'è
+  Senza commessa; non c'è dove il progetto è obbligatorio), poi la barra **Cerca un progetto** (cerca nel codice, nella
+  descrizione e nell'Intestato a) e sotto **Nuovo progetto**. Quello che si è scritto nella barra senza trovare niente
+  è già la descrizione del progetto nuovo. Sul telefono, mentre si scrive, la pagina tiene in vista i progetti trovati
+  sopra la barra.
+
+**Dove guardare.** Rapportini › Nuovo rapportino › un cliente e una commessa: la sezione Progetto. Poi Salva
+rapportino senza scrivere le ore.
+
+![Il progetto si sceglie come la commessa: i progetti, la barra di ricerca, Nuovo progetto](docs/diario/2026-11-21-progetto-computer.png)
+![Senza progetto nella stessa posizione di Senza commessa](docs/diario/2026-11-21-senza-progetto-computer.png)
+![L'avviso prima di salvare un lavoro senza ore](docs/diario/2026-11-21-mancano-le-ore-computer.png)
+![La scelta del progetto sul telefono](docs/diario/2026-11-21-progetto-telefono.png)
+![L'avviso sul telefono, con la tariffa a zero](docs/diario/2026-11-21-mancano-le-ore-telefono.png)
+
+**Provato.** Le prove del server (715), del computer (376), del telefono (469), dello script (93) e del portale (22);
+gli undici giri cliccati del computer, con i passi nuovi nei giri dei rapportini e dei progetti; sull'emulatore la
+scelta del progetto con la ricerca, un lavoro salvato senza ore e con la tariffa a zero, l'avviso prima dell'invio, in
+chiaro e in scuro.
+
+**Non provato.** I telefoni veri e il computer di Manuel.
+
+**Versione:** [v1.5.1](https://github.com/postagaspa-star/wisper/releases/tag/v1.5.1) (telefono codice 25, computer
+1.5.1) con il server 0.15.4. Accordo: [docs/gestionale/rapportino-lavori.md](docs/gestionale/rapportino-lavori.md) §8.
 
 ---
 

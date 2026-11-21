@@ -197,15 +197,24 @@ object Giornate {
     }
 
     /**
-     * 13/11/2026 (Andrea): con un'indennita' le ore non sono obbligatorie, ma prima di mandare un lavoro con un'indennita'
-     * e senza ore si chiede conferma. La frase della conferma, null se non serve (uguale a quella del computer).
+     * 21/11/2026 (Andrea: "Non bisogna mettere le ore come obbligatorie, ma se non sono messe deve apparire un avviso prima
+     * di confermare del tutto"): la frase dell'avviso per i lavori senza ore, null se non serve (uguale a quella del
+     * computer, regole-lavori.js). Si dice al salvataggio ([nuoviSenzaOre]) e prima dell'invio.
      */
     fun fraseSenzaOre(lavori: List<Rapportino>): String? {
-        val senza = lavori.filter { it.indennitaSenzaOre }
+        val senza = lavori.filter { it.senzaOre }
         if (senza.isEmpty()) return null
-        if (senza.size == 1) return "Nel lavoro per ${senza[0].cliente.ifBlank { "questo cliente" }} c'è un'indennità ma non sono segnate ore."
+        if (senza.size == 1) return "Nel lavoro per ${senza[0].cliente.ifBlank { "questo cliente" }} non sono segnate ore."
         val nomi = senza.map { it.cliente }.filter { it.isNotBlank() }.distinct()
-        return "In ${senza.size} lavori ci sono indennità ma non sono segnate ore" + (if (nomi.isEmpty()) "" else ": " + nomi.joinToString(", ")) + "."
+        return "In ${senza.size} lavori non sono segnate ore" + (if (nomi.isEmpty()) "" else ": " + nomi.joinToString(", ")) + "."
+    }
+
+    /**
+     * Al salvataggio: i lavori senza ore di cui avvisare, cioe' quelli nuovi e quelli che le ore le avevano ([prima] = i
+     * lavori com'erano salvati). Uno gia' senza ore non si chiede di nuovo a ogni correzione: torna prima dell'invio.
+     */
+    fun nuoviSenzaOre(lavori: List<Rapportino>, prima: List<Rapportino>): List<Rapportino> = lavori.filter { l ->
+        l.senzaOre && prima.firstOrNull { it.idLocale == l.idLocale }?.senzaOre != true
     }
 
     // ------------------------------------------------------------- a chi va l'email (§4)

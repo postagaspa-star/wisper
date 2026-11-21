@@ -2127,6 +2127,9 @@ button.imp-riga.collegamento-imp:hover .lab { text-decoration: underline; text-u
 .modulo.modulo-lavoro { display: flex; flex-direction: column; gap: 28px; max-width: 760px; }
 .modulo-lavoro section { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
 .modulo-lavoro section > h3 { font-size: 18px; }
+/* 21/11/2026: la barra del progetto nasconde le pillole che non c'entrano con quello che si cerca. */
+.modulo-lavoro .pillola[hidden], .modulo-lavoro .vuoto[hidden] { display: none; }
+.modulo-lavoro .vuoto.sinistra { padding: 0; }
 /* Il totale del conto nella colonna stretta: la cifra resta intera, al massimo va sotto l'etichetta. */
 .col-riassunto .conto .tot { flex-wrap: wrap; gap: 0 10px; }
 .col-riassunto .conto .tot span:last-child { font-size: 26px; white-space: nowrap; }

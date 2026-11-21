@@ -225,6 +225,43 @@ class ProgettiTest {
     }
 
     @Test
+    fun `21 novembre, la barra dei progetti cerca nel codice, nella descrizione e in Intestato a`() {
+        val p = listOf(
+            Progetto("1", idCommessa = "26ST044", idCliente = "C001", codice = "ED-001", descrizione = "Quadro QL1", intestatoA = "Batokyo Srl"),
+            Progetto("2", idCommessa = "26ST044", idCliente = "C001", codice = "ED-002", descrizione = "Linea nastri"),
+            Progetto("3", idCommessa = "26ST044", idCliente = "C001", codice = "ED-010", descrizione = "Cabina di trasformazione", intestatoA = "Città Verde Spa"),
+        )
+        assertEquals(p, RegoleProgetti.cerca(p, ""))
+        assertEquals(p, RegoleProgetti.cerca(p, "   "))
+        assertEquals(listOf("2"), RegoleProgetti.cerca(p, "nastri").map { it.id })
+        assertEquals(listOf("1", "2"), RegoleProgetti.cerca(p, "ed-00").map { it.id })
+        assertEquals(listOf("1", "2"), RegoleProgetti.cerca(p, "ED 00").map { it.id })
+        assertEquals(listOf("1"), RegoleProgetti.cerca(p, "batokyo").map { it.id })
+        assertEquals(listOf("3"), RegoleProgetti.cerca(p, "CABINA").map { it.id })
+        assertTrue(RegoleProgetti.cerca(p, "zzz").isEmpty())
+    }
+
+    @Test
+    fun `21 novembre, le ore non sono obbligatorie e la tariffa puo' essere zero ma va scritta`() {
+        val libera = Regole(tariffaFissa = null)
+        val m = ModuloStato(rapportino().copy(idCliente = "C002", cliente = "Rossi Impianti Srl", idCommessa = "", commessa = "", oreLavoro = 0.0, oreExtra = 0.0, oreViaggio = 0.0, tariffa = null), nuovo = true)
+        m.descrizione = "Sopralluogo"
+        m.tariffa = ""
+        assertFalse(m.valida(libera))
+        assertEquals(setOf("tariffa"), m.errori.keys)
+        assertEquals("Scrivi la tariffa oraria", m.errori["tariffa"])
+        m.tariffa = "0"
+        assertTrue("senza ore e a tariffa zero si salva: l'avviso delle ore lo dà Salva rapportino", m.valida(libera))
+        assertTrue(m.rapportino().senzaOre)
+        assertEquals(0.0, m.rapportino().tariffa!!, 0.0)
+        m.tariffa = "40"
+        assertTrue(m.valida(libera))
+        // Chi non vede i soldi non scrive la tariffa: non gli si chiede.
+        m.tariffa = ""
+        assertTrue(m.valida(libera, chiediTariffa = false))
+    }
+
+    @Test
     fun `coi progetti accesi un cliente qualunque si salva senza progetto e senza commessa, Elettrodinamica no`() {
         val regole = Regole(tariffaFissa = 30.0)
         val m = ModuloStato(rapportino().copy(idCliente = "C002", cliente = "Rossi Impianti Srl", idCommessa = "26ST045", commessa = "Capannone"), nuovo = true)

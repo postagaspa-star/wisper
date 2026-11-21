@@ -258,7 +258,8 @@ module.exports = {
     }
     if (testo(l.ticket) && testo(l.ticket) !== testo(riga.ticket)) return false;
     if (l.idTicket !== undefined && l.idTicket !== null && testo(l.idTicket) !== '' && this.idTicketDa(l.idTicket) !== riga.ticket_id) return false;
-    if (this.vedeCosti() && numero(l.tariffa) > 0 && !n(l.tariffa, riga.tariffa)) {
+    // 21/11/2026: anche zero è una tariffa scritta (prima si guardava solo quella sopra zero: portarla a zero non contava).
+    if (this.vedeCosti() && numeroONull(l.tariffa) !== null && !n(l.tariffa, riga.tariffa)) {
       const s = this.db.riga('SELECT tariffa_fissa FROM soggetti WHERE id = ?', riga.id_cliente);
       if (!s || s.tariffa_fissa === null || s.tariffa_fissa === undefined || s.tariffa_fissa === '') return false;
     }
@@ -345,16 +346,18 @@ module.exports = {
     if (!this.vedeCosti() && regole.tariffaFissa === null) {
       const stessa = esistente && cliente && esistente.id_cliente === cliente.id &&
         testo(esistente.id_commessa).toUpperCase() === (commessa ? commessa.id.toUpperCase() : '');
-      const t = stessa && numero(esistente.tariffa) > 0 ? numero(esistente.tariffa)
-        : tariffaProposta(cliente, this.tariffeDelCliente(cliente), commessa);
-      r = Object.assign({}, r, { tariffa: t });
-      if (!(numero(t) > 0)) {
+      // 21/11/2026: sullo stesso cliente e sulla stessa commessa resta quella scritta, anche zero (l'ha messa chi vede i prezzi).
+      const t = stessa ? numero(esistente.tariffa) : tariffaProposta(cliente, this.tariffeDelCliente(cliente), commessa);
+      r = Object.assign({}, r, { tariffa: numero(t) });
+      if (!stessa && !(numero(t) > 0)) {
         throw new Rifiuto('Manca la tariffa oraria per ' + (cliente ? cliente.nome : testo(r.cliente)) +
           ': chiedi al titolare di scriverla nella commessa o nel cliente');
       }
     }
-    if (regole.tariffaFissa === null && !(numero(r.tariffa) > 0)) {
-      throw new Rifiuto('Manca la tariffa oraria per ' + (cliente ? cliente.nome : testo(r.cliente)));
+    // 21/11/2026 (Andrea: "la tariffa oraria può essere zero"): si rifiuta solo quella non scritta, o sotto zero.
+    if (regole.tariffaFissa === null) {
+      const scritta = numeroONull(r.tariffa);
+      if (scritta === null || scritta < 0) throw new Rifiuto('Manca la tariffa oraria per ' + (cliente ? cliente.nome : testo(r.cliente)));
     }
     const data = r.data ? dataDaIso(r.data) : oggi();
 

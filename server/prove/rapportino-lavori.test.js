@@ -187,6 +187,43 @@ test('13/11/2026: un lavoro inviato si cambia liberamente e torna Da inviare; ri
   assert.equal(fatt.errore, 'Lavoro 2: Il lavoro ' + r.id + '-2 è già fatturato: non si cambia');
 });
 
+test('21/11/2026: la tariffa può essere zero (non scritta no); portarla a zero è un cambio; il collaboratore non la tocca', async () => {
+  const ultima = async () => (await manuel('anagrafiche')).clienti.find(c => c.id === 'C002').ultimaTariffa;
+  ok(await salva(rapportino([ROSSI])));
+  const prima = await ultima();
+  assert.equal(prima, 40);
+  // Zero scritto: si salva, le ore restano e non valgono soldi; la tariffa da proporre la prossima volta resta quella di prima.
+  const r = ok(await salva(rapportino([Object.assign({}, ROSSI, { tariffa: 0 })]))).rapportino;
+  assert.deepEqual([r.lavori[0].tariffa, r.lavori[0].compensoOre, r.lavori[0].oreLavoro, r.lavori[0].totale], [0, 0, 2, 0]);
+  assert.equal(await ultima(), prima, 'zero non diventa la tariffa da proporre');
+  // Anche scritto come testo, e senza ore (le ore le chiedono le app, con un avviso: il server non le ha mai volute).
+  const senzaOre = ok(await salva(rapportino([Object.assign({}, ROSSI, { tariffa: '0', oreLavoro: 0 })]))).rapportino;
+  assert.deepEqual([senzaOre.lavori[0].tariffa, senzaOre.lavori[0].oreTotali], [0, 0]);
+  // Non scritta, o sotto zero: no.
+  for (const t of [undefined, null, '', -5]) {
+    const no = await salva(rapportino([Object.assign({}, ROSSI, { tariffa: t })]));
+    assert.match(String(no.errore), /^Manca la tariffa oraria per Rossi Impianti/, 'tariffa ' + JSON.stringify(t));
+  }
+  // Portarla a zero su un lavoro inviato è un cambio: si scrive e torna Da inviare (prima lo zero non si guardava).
+  const g = rapportino([ROSSI]);
+  const s1 = ok(await salva(g)).rapportino;
+  ok(await manuel('stato', { ids: [s1.id + '-1'], stato: 'INVIATO' }));
+  const aZero = Object.assign({}, g.lavori[0], { tariffa: 0 });
+  const zero = ok(await salva(Object.assign({}, g, { lavori: [aZero] }))).rapportino;
+  assert.deepEqual([zero.lavori[0].stato, zero.lavori[0].tariffa, riga(s1.id + '-1').compenso_ore], ['BOZZA', 0, 0]);
+  // Rimandato uguale (a zero) resta com'è.
+  ok(await manuel('stato', { ids: [s1.id + '-1'], stato: 'INVIATO' }));
+  assert.equal(ok(await salva(Object.assign({}, g, { lavori: [aZero] }))).rapportino.lavori[0].stato, 'INVIATO');
+  // Il collaboratore non vede i prezzi: un suo lavoro che il titolare ha messo a zero resta a zero quando lui lo corregge.
+  const suo = rapportino([{ idCliente: 'C002', descrizione: 'Posa canaline', oreLavoro: 3 }]);
+  const nato = ok(await marco('salvaRapportino', { rapportino: suo })).rapportino;
+  assert.equal(riga(nato.id + '-1').tariffa, 40, 'nasce con la tariffa del cliente');
+  ok(await salva(Object.assign({}, suo, { tecnico: riga(nato.id + '-1').tecnico, lavori: [Object.assign({}, suo.lavori[0], { tariffa: 0 })] })));
+  assert.equal(riga(nato.id + '-1').tariffa, 0);
+  ok(await marco('salvaRapportino', { rapportino: Object.assign({}, suo, { lavori: [Object.assign({}, suo.lavori[0], { descrizione: 'Posa canaline e passerelle' })] }) }));
+  assert.deepEqual([riga(nato.id + '-1').tariffa, riga(nato.id + '-1').descrizione], [0, 'Posa canaline e passerelle']);
+});
+
 test('un lavoro FIRMATO di prima: rimandato uguale resta firmato; cambiato torna Da inviare senza la firma di prima', async () => {
   const vecchio = ok(await salva({ idLocale: 'firmato-prima', data: '2026-10-19', tecnico: 'Manuel Gasparotto', cliente: 'Rossi Impianti Srl', tariffa: 40, oreLavoro: 1, descrizione: 'Di prima' })).rapportino;
   ok(await manuel('caricaFile', { tipo: 'firma', id: vecchio.id, base64: PNG.toString('base64'), mime: 'image/png', idFile: 'firma-rl-1', firmatario: 'Il cliente' }));

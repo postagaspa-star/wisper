@@ -44,18 +44,25 @@ test('stati: le parole (il FIRMATO di prima è Da inviare) e il riassunto del ra
   assert.equal(RL.fermo({ stato: 'FIRMATO' }), false, 'il FIRMATO di prima si cambia');
 });
 
-test('13/11/2026: indennità senza ore (conferma prima dell\'invio) e lavori tornati da inviare dopo un salvataggio', () => {
+test('21/11/2026: le ore non sono obbligatorie; i lavori senza ore (avviso al salvataggio e prima dell\'invio) e quelli tornati da inviare', () => {
   const ind = [{ descrizione: 'Indennità di trasferta', quantita: 1, prezzo: 30 }];
-  assert.equal(RL.indennitaSenzaOre({ indennita: ind, oreLavoro: 0 }), true);
-  assert.equal(RL.indennitaSenzaOre({ indennita: ind, oreLavoro: 0, oreViaggio: 0.5 }), false, 'anche le ore di viaggio sono ore');
-  assert.equal(RL.indennitaSenzaOre({ indennita: ind, oreLavoro: '1,5' }), false);
-  assert.equal(RL.indennitaSenzaOre({ indennita: [], oreLavoro: 0 }), false, 'senza indennità le ore restano obbligatorie: non è questo caso');
-  assert.equal(RL.indennitaSenzaOre({ oreLavoro: 0 }), false);
+  assert.equal(RL.senzaOre({ indennita: ind, oreLavoro: 0 }), true);
+  assert.equal(RL.senzaOre({ oreLavoro: 0, oreViaggio: 0.5 }), false, 'anche le ore di viaggio sono ore');
+  assert.equal(RL.senzaOre({ oreLavoro: '1,5' }), false);
+  assert.equal(RL.senzaOre({ indennita: [], oreLavoro: 0 }), true, 'dal 21/11 anche senza indennità: le ore non sono mai obbligatorie');
+  assert.equal(RL.senzaOre({}), true);
   assert.equal(RL.fraseSenzaOre([{ cliente: 'Rossi Impianti', indennita: ind, oreLavoro: 2 }]), '');
   assert.equal(RL.fraseSenzaOre([{ cliente: 'Rossi Impianti', indennita: ind }, { cliente: 'Bianchi', oreLavoro: 1 }]),
-    'Nel lavoro per Rossi Impianti c\'è un\'indennità ma non sono segnate ore.');
-  assert.equal(RL.fraseSenzaOre([{ cliente: 'Rossi Impianti', indennita: ind }, { cliente: 'Bianchi', indennita: ind }, { cliente: 'Rossi Impianti', indennita: ind }]),
-    'In 3 lavori ci sono indennità ma non sono segnate ore: Rossi Impianti, Bianchi.');
+    'Nel lavoro per Rossi Impianti non sono segnate ore.');
+  assert.equal(RL.fraseSenzaOre([{ cliente: 'Rossi Impianti' }, { cliente: 'Bianchi', indennita: ind }, { cliente: 'Rossi Impianti', oreLavoro: 0 }]),
+    'In 3 lavori non sono segnate ore: Rossi Impianti, Bianchi.');
+  assert.equal(RL.fraseSenzaOre([{ cliente: '' }]), 'Nel lavoro per questo cliente non sono segnate ore.');
+  // Al salvataggio si avvisa per i lavori nuovi o che le ore le avevano; uno già senza ore non si chiede di nuovo.
+  const salvati = { a: { id: 'a', oreLavoro: 2 }, b: { id: 'b', oreLavoro: 0 } };
+  const primaDi = l => salvati[l.id] || null;
+  assert.deepEqual(RL.nuoviSenzaOre([{ id: 'a', oreLavoro: 0 }, { id: 'b', oreLavoro: 0 }, { id: 'c', oreLavoro: 0 }, { id: 'd', oreLavoro: 1 }], primaDi).map(l => l.id), ['a', 'c']);
+  assert.deepEqual(RL.nuoviSenzaOre([{ oreLavoro: 0 }]), [{ oreLavoro: 0 }], 'senza "prima" sono tutti nuovi');
+  assert.deepEqual(RL.nuoviSenzaOre([{ id: 'a', oreLavoro: 3 }], primaDi), []);
   const k = l => l.id;
   const prima = [{ id: 'a', stato: 'INVIATO' }, { id: 'b', stato: 'INVIATO' }, { id: 'c', stato: 'BOZZA' }];
   const dopo = [{ id: 'a', stato: 'BOZZA' }, { id: 'b', stato: 'INVIATO' }, { id: 'c', stato: 'BOZZA' }, { id: 'd', stato: 'BOZZA' }];

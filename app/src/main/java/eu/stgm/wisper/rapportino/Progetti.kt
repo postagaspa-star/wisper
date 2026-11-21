@@ -342,6 +342,16 @@ object RegoleProgetti {
         else tutti(ana, rapportini).filter { it.aperto && it.idCommessa.equals(idCommessa, ignoreCase = true) }
             .sortedWith(compareByDescending<Progetto> { it.creato }.thenByDescending { it.id.toLongOrNull() ?: Long.MAX_VALUE })
 
+    /**
+     * 21/11/2026: la barra sotto i progetti del rapportino. Cerca nel codice, nella descrizione e in "Intestato a", senza
+     * badare a maiuscole, spazi e segni (come il computer, `testoProgetto` in app.js); vuota = tutti.
+     */
+    fun cerca(progetti: List<Progetto>, testo: String): List<Progetto> {
+        val t = Anagrafiche.normalizza(testo)
+        return if (t.isEmpty()) progetti
+        else progetti.filter { Anagrafiche.normalizza(listOf(it.codice, it.descrizione, it.intestatoA).joinToString(" ")).contains(t) }
+    }
+
     /** Il codice che il telefono propone per un progetto nuovo della commessa (vuoto se Wisper non ha ancora imparato la forma). */
     fun codiceProposto(ana: Anagrafiche, rapportini: List<Rapportino>, idCommessa: String, idCliente: String, oggi: LocalDate = LocalDate.now()): String =
         CodiciProgetto.proponi(tutti(ana, rapportini).map { it.perCodice() }, idCommessa, idCliente, oggi.year).codice

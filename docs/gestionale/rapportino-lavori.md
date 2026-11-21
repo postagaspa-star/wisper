@@ -157,3 +157,48 @@ cliente più lungo dei dati di esempio, sul telefono a 360 dp con caratteri gran
 2. **Indennità senza ore**: con almeno un'indennità le ore non sono obbligatorie. Prima di mandarlo al cliente
    (Invia ai clienti, Segna inviati) compare la conferma "Indennità senza ore" con "Invia lo stesso" e Annulla. Il
    salvataggio non chiede niente: la conferma sta all'invio, che è il "bottone per inviare" della richiesta.
+   (Cambiato il 21/11/2026: vedi §8.)
+
+## 8. Cambiamenti del 21/11/2026 (1.5.1, server 0.15.4)
+
+Richiesta di Andrea: "tutte da fare nei rapportini. Non bisogna mettere le ore come obbligatorie, ma se non sono messe
+deve apparire un avviso prima di confermare del tutto; la tariffa orario può essere zero; nella selezione dei progetti
+essa deve essere come quella delle commesse: prima i vari progetti, poi la barra di ricerca, e sotto il tasto per creare
+un nuovo progetto, e ci devi anche mettere il tasto per farlo senza progetto nella stessa posizione di quello per le
+commesse".
+
+1. **Le ore non sono mai obbligatorie.** Dal 13/11 lo erano solo senza indennità; ora un lavoro senza ore si salva
+   sempre. Prima però lo dice un avviso, **Mancano le ore**: "Nel lavoro per Rossi Impianti non sono segnate ore.
+   Salvo lo stesso?", con **Salva lo stesso** e Annulla (Annulla lascia il rapportino aperto sul lavoro senza ore).
+   L'avviso esce a Salva rapportino per i lavori nuovi e per quelli che le ore le avevano; un lavoro già salvato senza
+   ore non lo richiede a ogni correzione. Torna prima di mandarlo al cliente (Invia ai clienti, Segna inviati): "… Lo
+   mando lo stesso?", com'era per le indennità. Regola: `RL.senzaOre`, `RL.nuoviSenzaOre`, `RL.fraseSenzaOre` in
+   `pc/ui/regole-lavori.js` = `Rapportino.senzaOre`, `Giornate.nuoviSenzaOre`, `Giornate.fraseSenzaOre` sul telefono.
+   Il server le ore non le ha mai volute.
+2. **La tariffa oraria può essere zero.** Va scritta (il campo vuoto resta "Scrivi la tariffa": un lavoro salvato a
+   zero per dimenticanza non si vedrebbe), ma zero vale. Server: `salvaLavoro` rifiuta solo la tariffa non scritta o
+   sotto zero; `lavoroUguale` guarda anche lo zero (portare a zero la tariffa di un lavoro inviato è un cambio: torna
+   da inviare); chi non vede i prezzi e corregge un suo lavoro messo a zero dal titolare lo lascia a zero. Zero non
+   diventa "l'ultima tariffa" del cliente: la volta dopo si propone quella di prima. Riaprendo il lavoro lo zero è
+   scritto nel campo. Nella fattura le ore a tariffa zero non fanno una riga da 0,00 € (`righeRapportini`): il lavoro
+   resta fra le sorgenti e diventa fatturato con gli altri.
+3. **La scelta del progetto è come quella della commessa.** Nell'ordine: i progetti aperti della commessa; per
+   ultimo **Senza progetto** (prima era "Nessun progetto", per primo), nello stesso posto di "Senza commessa" e solo
+   per chi non è Elettrodinamica; la barra **Cerca un progetto**; sotto, **Nuovo progetto**. La barra cerca nel
+   codice, nella descrizione e in "Intestato a" (`testoProgetto` in `app.js`, `RegoleProgetti.cerca` sul telefono) e
+   lascia in vista solo i progetti che c'entrano (quello scelto resta sempre). Quello che si è scritto senza trovare
+   niente è già nella Descrizione del progetto nuovo, come il nome scritto per la commessa nuova. Sul computer barra
+   e pulsante sono lo stesso blocco di "Come la chiami tu" e "Commessa nuova"; sul telefono "Senza progetto" è un
+   pulsante col bordo come "Senza commessa". Sul telefono la barra sta sotto l'elenco: mentre si scrive l'elenco si
+   accorcia e il progetto trovato finirebbe sopra, fuori dalla vista; la pagina scorre quel tanto che serve per tenere
+   insieme i progetti trovati e la barra, quanti ne stanno sopra la tastiera (`SceltaProgetto` in `ui/Rapportino.kt`).
+
+Decisioni prese costruendo: l'avviso delle ore c'è sia al salvataggio sia prima dell'invio ("prima di confermare del
+tutto" può voler dire l'uno o l'altro); la barra della commessa resta com'è (ci si scrive il nome di quella nuova, non
+cerca); le ore a tariffa zero non vanno in fattura come riga a zero.
+
+Prove: `server/prove/rapportino-lavori.test.js` e `conti.test.js` (21/11/2026), `pc/prove/rapportino-lavori.test.js`,
+i giri `prova-flussi-lavori.js` (avviso, Annulla, Salva lo stesso, tariffa zero, conferma prima dell'invio) e
+`prova-flussi-progetti.js` (ordine dei pezzi, la barra che cerca, la descrizione dalla barra, Senza progetto per
+ultimo), `GiornateTest` e `ProgettiTest` sul telefono. Schermate: `rapportino-progetto`, `rapportino-progetto-cerca`,
+`rapportino-senza-progetto`, `rapportino-senza-ore` in `pc/prove/schermate.js`.

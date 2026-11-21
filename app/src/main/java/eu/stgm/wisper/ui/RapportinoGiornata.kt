@@ -149,6 +149,8 @@ fun SchermataGiornata(
     var chiediElimina by remember { mutableStateOf(false) }
     var chiediDaInviare by remember { mutableStateOf(false) }
     var chiediSenzaOre by remember { mutableStateOf<String?>(null) }
+    // 21/11/2026: salvando un lavoro senza ore, prima l'avviso (la frase che dice quale).
+    var chiediSalvaSenzaOre by remember { mutableStateOf<String?>(null) }
     var menu by remember { mutableStateOf(false) }
 
     fun esci() {
@@ -186,10 +188,11 @@ fun SchermataGiornata(
         return m.valida(ana.regoleDi(cl, ana.commessa(m.idCommessa)), costi)
     }
 
-    fun salva() {
+    /** Salva il rapportino; falso se non l'ha salvato (manca qualcosa, o prima c'e' da confermare un lavoro senza ore). */
+    fun salva(senzaOreConfermato: Boolean = false): Boolean {
         // Un lavoro aggiunto e lasciato vuoto non si salva (se ce n'e' almeno uno scritto).
         if (stato.lavori.any { !stato.vuoto(it) }) stato.togliVuoti()
-        if (stato.lavori.isEmpty()) { avvisi.mostra("Aggiungi almeno un lavoro"); return }
+        if (stato.lavori.isEmpty()) { avvisi.mostra("Aggiungi almeno un lavoro"); return false }
         if (stato.aperto == null) stato.preparaPagina(scrive)
         // I controlli lavoro per lavoro, come il computer: il primo con un errore si sceglie e l'avviso dice quale.
         val sbagliati = stato.lavori.mapIndexedNotNull { i, l -> i.takeIf { !l.bloccato && stato.daControllare(l) && !valido(stato.moduloDi(l)) } }
@@ -206,7 +209,12 @@ fun SchermataGiornata(
                 (if (stato.lavori.size > 1) "Lavoro ${i + 1}: " + frase.replaceFirstChar { it.lowercase() } else frase) +
                     (if (altri.isEmpty()) "" else " (anche " + (if (altri.size == 1) "il lavoro " else "i lavori ") + altri.joinToString(", ") + ")"),
             )
-            return
+            return false
+        }
+        // 21/11/2026 (Andrea): le ore non sono obbligatorie, ma senza ore prima di salvare lo si dice (una volta per lavoro:
+        // uno che era gia' senza ore non lo richiede). Nella visita guidata no.
+        if (!senzaOreConfermato && !dati.esempio) {
+            Giornate.fraseSenzaOre(Giornate.nuoviSenzaOre(stato.lavori.filter { !it.bloccato }, stato.base))?.let { chiediSalvaSenzaOre = it; return false }
         }
         // 13/11/2026: un lavoro gia' inviato che e' cambiato torna Da inviare.
         stato.riportaCambiati()
@@ -219,6 +227,7 @@ fun SchermataGiornata(
         visita?.azione("salva-rapportino")
         onSalvata(g)
         stato.salvato = true
+        return true
     }
 
     val lavori = stato.lavori.toList()
@@ -354,13 +363,13 @@ fun SchermataGiornata(
             if (daInviare.isNotEmpty()) {
                 VoceMenu(Icone.invia, "Invia ai clienti", {
                     menu = false
-                    if (stato.cambiata) salva()
-                    onInvia(daInviare.map { it.idLocale })
+                    // Se c'e' da salvare e non si salva (manca qualcosa, o c'e' l'avviso delle ore) ci si ferma li'.
+                    if (!stato.cambiata || salva()) onInvia(daInviare.map { it.idLocale })
                 })
                 VoceMenu(Icone.invia, "Segna inviato senza email", {
                     menu = false
-                    if (stato.cambiata) salva()
-                    // 13/11/2026: un'indennità senza ore si segna inviata solo dopo una conferma.
+                    if (stato.cambiata && !salva()) return@VoceMenu
+                    // Un lavoro senza ore si segna inviato solo dopo una conferma.
                     val frase = Giornate.fraseSenzaOre(daInviare)
                     if (frase != null) chiediSenzaOre = frase
                     else avvisaCambio(avvisi, dati, dati.cambiaStato(daInviare.map { it.idLocale }, Stato.INVIATO))
@@ -368,16 +377,29 @@ fun SchermataGiornata(
             }
             if (fattura && nonFatturati.isNotEmpty()) VoceMenu(Icone.spunta, "Segna fatturato", {
                 menu = false
-                if (stato.cambiata) salva()
+                if (stato.cambiata && !salva()) return@VoceMenu
                 avvisaCambio(avvisi, dati, dati.cambiaStato(nonFatturati.map { it.idLocale }, Stato.FATTURATO))
             })
             if (inviati.isNotEmpty()) VoceMenu(Icone.indietroStato, "Riporta da inviare", { menu = false; chiediDaInviare = true })
             if (Giornate.puoEliminare(lavori)) VoceMenu(Icone.cestino, "Elimina", { menu = false; chiediElimina = true }, pericolo = true)
         }
     }
+    chiediSalvaSenzaOre?.let { frase ->
+        FoglioConferma(
+            titolo = "Mancano le ore",
+            testo = "$frase Salvo lo stesso?",
+            azione = "Salva lo stesso",
+            onConferma = { chiediSalvaSenzaOre = null; salva(senzaOreConfermato = true) },
+            // Annulla: si resta nel rapportino, sul primo lavoro senza ore.
+            onAnnulla = {
+                chiediSalvaSenzaOre = null
+                Giornate.nuoviSenzaOre(stato.lavori.filter { !it.bloccato }, stato.base).firstOrNull()?.let { stato.scegli(it) }
+            },
+        )
+    }
     chiediSenzaOre?.let { frase ->
         FoglioConferma(
-            titolo = "Indennità senza ore",
+            titolo = "Mancano le ore",
             testo = "$frase Lo segno inviato lo stesso?",
             azione = "Segna inviato",
             onConferma = {

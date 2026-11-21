@@ -182,6 +182,15 @@ changes the **daily report on a single job order**: the table drops the date and
 header) and shows the project description after the project's addressee; reports spanning several job orders and the
 monthly summary are unchanged.
 
+Version 1.5.1 with server 0.15.4 (21 November, `docs/gestionale/rapportino-lavori.md` §8) relaxes three rules of the
+work report. **Hours are no longer mandatory**: a job without hours can be saved and sent, but a "Mancano le ore"
+confirmation comes first, on save only for new jobs or jobs whose hours were removed, and again before sending to the
+client. **The hourly rate may be zero**: it must still be written, but zero is accepted by both apps and by the server,
+is not remembered as the client's last rate, and produces no 0 € line on the invoice. **The project is picked like the
+job order**: the order's projects first, "Senza progetto" last (where "Senza commessa" sits, and only where a project
+is optional), then a search bar over code, description and addressee, and "Nuovo progetto" below it; text typed in the
+bar with no match becomes the description of the new project.
+
 Phase 1 (October 2026) replaces the Google Sheet with a small server on
 the home NAS (`server/`: Node.js 24 with its built-in SQLite, no npm dependencies, in
 Docker). It speaks the same protocol as the sheet script, so the phone and the office

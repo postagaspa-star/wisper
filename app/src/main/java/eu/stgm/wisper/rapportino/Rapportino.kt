@@ -162,8 +162,11 @@ data class Rapportino(
 
     val oreTotali: Double get() = oreLavoro + oreExtra + oreViaggio
 
-    /** 13/11/2026: un'indennita' e nessuna ora. Si salva (le ore non sono obbligatorie); prima dell'invio si chiede conferma. */
-    val indennitaSenzaOre: Boolean get() = !indennita.isNullOrEmpty() && oreTotali <= 0.0
+    /**
+     * 21/11/2026 (Andrea): le ore non sono mai obbligatorie (dal 13/11 lo erano solo senza indennita'). Un lavoro senza ore
+     * si salva e si manda, ma prima lo dice un avviso ([Giornate.nuoviSenzaOre], [Giornate.fraseSenzaOre]).
+     */
+    val senzaOre: Boolean get() = oreTotali <= 0.0
 
     /** I campi che si compilano, senza quello che aggiunge il foglio: per capire se e' cambiato qualcosa. */
     fun soloCompilato(): Rapportino = Rapportino(
@@ -325,7 +328,8 @@ data class Rapportino(
                 noteSpese = o.testo("noteSpese"),
                 // Dal foglio la tariffa e' sempre quella applicata: riaprendo un
                 // rapportino privato la si ritrova scritta nel campo.
-                tariffa = if (dalFoglio) tariffaApplicata?.takeIf { it > 0 } else o.numero("tariffa"),
+                // 21/11/2026: anche zero (la tariffa puo' essere zero); senza il permesso dei soldi il server non la manda (null).
+                tariffa = if (dalFoglio) tariffaApplicata?.takeIf { it >= 0 } else o.numero("tariffa"),
                 noteInterne = o.testo("noteInterne"),
                 id = id,
                 gruppo = o.testo("gruppo"),

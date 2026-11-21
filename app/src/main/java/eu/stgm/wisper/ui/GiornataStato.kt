@@ -70,7 +70,7 @@ class GiornataStato(
         aperto?.takeIf { it.base.idLocale == l.idLocale } ?: run {
             val nuovo = base.none { it.idLocale == l.idLocale }
             // Un lavoro nuovo ritrovato (dalla copia su disco) che ha gia' la sua tariffa non se la vede riproporre.
-            ModuloStato(l, nuovo, tariffaToccata = !nuovo || (l.tariffa ?: 0.0) > 0).also { m -> fotoNuove[l.idLocale]?.let { m.fotoNuove.addAll(it) } }
+            ModuloStato(l, nuovo, tariffaToccata = !nuovo || l.tariffa != null).also { m -> fotoNuove[l.idLocale]?.let { m.fotoNuove.addAll(it) } }
         }
     }
 

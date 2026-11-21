@@ -400,7 +400,7 @@ fun SchermataInvio(dati: Dati, nav: Navigatore, cosa: String) {
 
     if (fraseSenzaOre != null && !senzaOreVisto) {
         FoglioConferma(
-            titolo = "Indennità senza ore",
+            titolo = "Mancano le ore",
             testo = "$fraseSenzaOre Lo mando lo stesso?",
             azione = "Invia lo stesso",
             onConferma = { senzaOreVisto = true },

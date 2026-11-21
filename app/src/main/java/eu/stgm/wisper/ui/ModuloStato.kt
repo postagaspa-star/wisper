@@ -283,10 +283,9 @@ class ModuloStato(
             .forEach { (campo, testo) ->
                 if (testo.isNotBlank() && Numeri.leggi(testo) == null) e[campo] = "Non è un numero"
             }
-        val ore = listOf(oreLavoro, oreExtra, oreViaggio).sumOf { Numeri.leggi(it) ?: 0.0 }
-        // 13/11/2026 (Andrea): con un'indennità le ore non sono obbligatorie (prima dell'invio si chiede conferma).
-        if (ore <= 0.0 && "oreLavoro" !in e && indennita.isNullOrEmpty()) e["oreLavoro"] = "Mancano le ore"
-        if (chiediTariffa && regole.tariffaFissa == null && (Numeri.leggi(tariffa) ?: 0.0) <= 0.0) {
+        // 21/11/2026 (Andrea): le ore non sono obbligatorie: senza ore il lavoro si salva, dopo un avviso (Salva rapportino).
+        // E "la tariffa oraria può essere zero": va scritta, ma zero vale.
+        if (chiediTariffa && regole.tariffaFissa == null && (Numeri.leggi(tariffa) ?: -1.0) < 0.0) {
             e["tariffa"] = "Scrivi la tariffa oraria"
         }
         errori = e

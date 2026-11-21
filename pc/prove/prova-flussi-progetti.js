@@ -137,7 +137,11 @@ async function main() {
       await valuta(`(() => { const s = [...document.querySelectorAll('.finestra')].pop().querySelector('select'); s.value = ${JSON.stringify(id)}; s.dispatchEvent(new Event('change', { bubbles: true })); return true; })()`);
       await aspetta(900);
     };
-    const pilloleProgetto = () => valuta("[...[...document.querySelectorAll('.finestra')].pop().querySelectorAll('[data-campo=progetto] .pillola')].map(b => b.textContent.trim() + (b.classList.contains('scelta') ? ' *' : ''))");
+    // Le pillole del progetto che si vedono (la barra nasconde quelle che non c'entrano).
+    const pilloleProgetto = () => valuta("[...[...document.querySelectorAll('.finestra')].pop().querySelectorAll('[data-campo=progetto] .pillola')].filter(b => !b.hidden).map(b => b.textContent.trim() + (b.classList.contains('scelta') ? ' *' : ''))");
+    /** L'ordine, dall'alto, dei pezzi della scelta del progetto: le pillole, la barra che cerca, "Nuovo progetto". */
+    const ordineProgetto = () => valuta("(() => { const f = [...document.querySelectorAll('.finestra')].pop(); const pezzi = [['pillole', f.querySelector('[data-campo=progetto]')], ['cerca', f.querySelector('[data-campo=cerca-progetto]')], ['Nuovo progetto', f.querySelector('[data-azione=nuovo-progetto]')]]; return pezzi.filter(p => p[1] && p[1].offsetParent !== null).sort((a, b) => a[1].getBoundingClientRect().top - b[1].getBoundingClientRect().top).map(p => p[0]); })()");
+    const cercaProgetto = async t => { await valuta("(() => { const i = [...document.querySelectorAll('.finestra')].pop().querySelector('[data-campo=cerca-progetto] input'); i.value = " + JSON.stringify(t) + "; i.dispatchEvent(new Event('input', { bubbles: true })); return true; })()"); await aspetta(200); };
     const interruttore = async modulo => { await valuta(`document.querySelector('[data-modulo="${modulo}"] .interruttore').click(); true`); await aspetta(700); };
     /** Il pulsante che conferma, in fondo alla finestra in cima (non la x in alto, che si chiama Chiudi). */
     const confermaFinestra = async attesa => { await valuta("[...[...document.querySelectorAll('.velo .finestra')].pop().querySelectorAll('.piede-f .btn')].pop().click(); true"); await aspetta(attesa || 1500); };
@@ -178,8 +182,8 @@ async function main() {
       await clicca('Elettrodinamica', '.finestra', 500);
       await valuta(`(() => { const i = [...[...document.querySelectorAll('.finestra')].pop().querySelectorAll('input')].find(x => x.placeholder === 'Come la chiami tu'); i.value = ${JSON.stringify(nome)}; return true; })()`);
       await clicca('Commessa nuova', '.finestra', 600);
-      assert.deepEqual(await pilloleProgetto(), ['+ Nuovo progetto'], 'commessa nuova: solo Nuovo progetto');
-      await clicca('+ Nuovo progetto', '.finestra', 1200);
+      assert.deepEqual(await pilloleProgetto(), [], 'commessa nuova: nessun progetto da scegliere');
+      await clicca('Nuovo progetto', '.finestra', 1200);
     };
     await nuovaCommessaNelRapportino('Ampliamento uffici');
     assert.equal(await valoreCampo('Codice'), '', 'nessuna proposta senza codici');
@@ -277,7 +281,7 @@ async function main() {
     await unGiallo('Scheda progetto');
     await clicca('Nuovo rapportino', '#principale', 900);
     let pill = await pilloleProgetto();
-    assert.deepEqual(pill, ['ED-001 · Quadro QE1', 'ED-002 · Linea nastri', 'ED-003 · Quadro QE2 *', '+ Nuovo progetto'], 'il progetto già scelto, fra gli aperti della commessa: ' + pill.join(' | '));
+    assert.deepEqual(pill, ['ED-001 · Quadro QE1', 'ED-002 · Linea nastri', 'ED-003 · Quadro QE2 *'], 'il progetto già scelto, fra gli aperti della commessa: ' + pill.join(' | '));
     testo = await testoFinestra();
     assert.ok(!/Senza commessa/.test(testo), 'coi progetti accesi niente "Senza commessa"');
     await clicca('4 h', '.finestra', 300);
@@ -304,7 +308,17 @@ async function main() {
     await clicca('Elettrodinamica', '.finestra', 500);
     await clicca('26ST001 · ', '.finestra', 500);
     pill = await pilloleProgetto();
-    assert.ok(pill.length === 4 && pill.every(t => !t.endsWith('*')), 'tre aperti, nessuno scelto: ' + pill.join(' | '));
+    assert.ok(pill.length === 3 && pill.every(t => !t.endsWith('*')), 'tre aperti, nessuno scelto: ' + pill.join(' | '));
+    // 21/11/2026: come la commessa: i progetti, la barra che cerca fra loro e sotto "Nuovo progetto" (per Elettrodinamica
+    // niente "Senza progetto").
+    assert.deepEqual(await ordineProgetto(), ['pillole', 'cerca', 'Nuovo progetto'], 'progetti, barra, Nuovo progetto');
+    await cercaProgetto('nastri');
+    assert.deepEqual(await pilloleProgetto(), ['ED-002 · Linea nastri'], 'la barra lascia solo quello che c\'entra');
+    await cercaProgetto('zzz');
+    assert.deepEqual(await pilloleProgetto(), [], 'niente trovato');
+    assert.match(await testoFinestra(), /Nessun progetto con questo testo/);
+    await cercaProgetto('');
+    assert.equal((await pilloleProgetto()).length, 3, 'barra vuota: tutti');
     await clicca('4 h', '.finestra', 300);
     await scrivi('Cosa hai fatto', 'Prove del quadro QE1');
     await clicca('Salva', '.finestra', 900);
@@ -322,16 +336,20 @@ async function main() {
     await clicca('26ST002 · ', '.finestra', 500);
     pill = await pilloleProgetto();
     // 06/11/2026: il progetto è obbligatorio solo per Elettrodinamica; per gli altri c'è "Nessun progetto" (e "Senza commessa").
-    assert.deepEqual(pill, ['Nessun progetto *', '+ Nuovo progetto'], 'Rossi: il progetto si può lasciare (Nessun progetto, già scelto), c\'è Nuovo progetto: ' + pill.join(' | '));
+    assert.deepEqual(pill, ['Senza progetto *'], 'Rossi: il progetto si può lasciare (Senza progetto, già scelto): ' + pill.join(' | '));
+    assert.deepEqual(await ordineProgetto(), ['pillole', 'cerca', 'Nuovo progetto'], 'Senza progetto fra le pillole (come Senza commessa), poi la barra e Nuovo progetto');
+    // Quello che si scrive nella barra senza trovare niente è la descrizione del progetto nuovo.
+    await cercaProgetto('Quadro generale capannone');
     assert.match(await testoFinestra(), /Senza commessa/, 'per Rossi c\'è di nuovo "Senza commessa"');
-    await clicca('+ Nuovo progetto', '.finestra', 1200);
+    await clicca('Nuovo progetto', '.finestra', 1200);
     assert.equal(await valuta("[...document.querySelectorAll('.finestra')].pop().querySelector('select').disabled"), true, 'dal rapportino la commessa è fissa');
+    assert.equal(await valoreCampo('Descrizione'), 'Quadro generale capannone', 'la descrizione viene dalla barra');
     const propostoRossi = (await server('codiceProgetto?idCommessa=26ST002')).codice;
     assert.equal(await valoreCampo('Codice'), propostoRossi, 'il codice proposto dal server (' + propostoRossi + ')');
-    await scrivi('Descrizione', 'Quadro generale capannone');
     await clicca('Salva', '.finestra', 2000);
     pill = await pilloleProgetto();
     assert.ok(pill.some(t => /Quadro generale capannone \*$/.test(t)), 'il progetto nuovo è già scelto nel rapportino: ' + pill.join(' | '));
+    assert.equal(pill[pill.length - 1], 'Senza progetto', 'Senza progetto per ultimo, dopo i progetti: ' + pill.join(' | '));
     await clicca('4 h', '.finestra', 300);
     await scrivi('Cosa hai fatto', 'Rilievo del quadro generale');
     await clicca('Salva', '.finestra', 2200);
@@ -344,15 +362,15 @@ async function main() {
     await aspetta(400);
     await clicca('Rossi Impianti Srl', '.finestra', 500);
     await clicca('26ST002 · ', '.finestra', 500);
-    await clicca('Nessun progetto', '.finestra', 300);
+    await clicca('Senza progetto', '.finestra', 300);
     pill = await pilloleProgetto();
-    assert.equal(pill[0], 'Nessun progetto *', 'Nessun progetto scelto: ' + pill.join(' | '));
+    assert.equal(pill[pill.length - 1], 'Senza progetto *', 'Senza progetto scelto: ' + pill.join(' | '));
     await clicca('4 h', '.finestra', 300);
     await scrivi('Cosa hai fatto', 'Sopralluogo senza progetto');
     await clicca('Salva', '.finestra', 2200);
     rap = (await server('rapportini')).rapportini.find(r => r.descrizione === 'Sopralluogo senza progetto');
     assert.ok(rap && !rap.idProgetto, 'il rapportino di Rossi si salva senza progetto');
-    passo('Elettrodinamica: senza progetto non si salva ("Scegli il progetto"); "Nuovo progetto" dentro il rapportino crea ' + pRossi.codice + ' e lo sceglie; Rossi: "Nessun progetto" e si salva');
+    passo('Elettrodinamica: senza progetto non si salva ("Scegli il progetto"); "Nuovo progetto" dentro il rapportino crea ' + pRossi.codice + ' e lo sceglie; Rossi: "Senza progetto" e si salva; la barra cerca fra i progetti');
 
     // ------------------------------------------------------------- 7. Elenco: colonne, conti, ricerca; elenco rapportini col progetto
     await vai('#progetti');

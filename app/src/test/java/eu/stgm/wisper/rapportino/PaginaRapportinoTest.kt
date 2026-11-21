@@ -123,10 +123,16 @@ class PaginaRapportinoTest {
         val m = g.aperto!!
         m.cliente = "Rossi Impianti Srl"; m.km = "abc"
         assertFalse(m.valida(Regole(), chiediTariffa = false))
-        assertEquals("oreLavoro", m.primoErrore)
-        m.oreLavoro = "6"
-        assertFalse(m.valida(Regole(), chiediTariffa = false))
+        // 21/11/2026: le ore non sono obbligatorie; il primo che manca, nell'ordine della pagina, è il lavoro svolto.
         assertEquals("descrizione", m.primoErrore)
+        assertFalse("oreLavoro" in m.errori)
+        m.descrizione = "Sopralluogo"
+        assertFalse(m.valida(Regole(), chiediTariffa = false))
+        assertEquals("km", m.primoErrore)
+        // Un numero scritto male nelle ore resta un errore, e viene prima dei chilometri.
+        m.oreLavoro = "sei"
+        assertFalse(m.valida(Regole(), chiediTariffa = false))
+        assertEquals("oreLavoro", m.primoErrore)
         assertTrue(g.erroriDi(m.base.idLocale))
     }
 

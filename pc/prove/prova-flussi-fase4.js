@@ -217,7 +217,12 @@ async function main() {
     // L'XML di prova è del 21/10/2026: la data si porta a oggi, perché il server propone l'abbinamento solo con la data
     // dell'XML vicina al giorno in cui la fattura è diventata pronta (qui oggi), e la prova deve passare in ogni giorno.
     const oggiIso = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
-    const b64 = Buffer.from(fs.readFileSync(path.join(XML, 'IT00000000000_00047.xml'), 'utf8').replace(/<Data>2026-10-21<\/Data>/g, '<Data>' + oggiIso + '</Data>'), 'utf8').toString('base64');
+    // Lo stesso per la scadenza (nell'XML è il 20/11/2026: dal 21/11 la fattura risultava "Scaduta" e non "Pagata in
+    // parte"): si porta a trenta giorni da oggi.
+    const fra30Iso = new Date(Date.now() - new Date().getTimezoneOffset() * 60000 + 30 * 86400000).toISOString().slice(0, 10);
+    const b64 = Buffer.from(fs.readFileSync(path.join(XML, 'IT00000000000_00047.xml'), 'utf8')
+      .replace(/<Data>2026-10-21<\/Data>/g, '<Data>' + oggiIso + '</Data>')
+      .replace(/<DataScadenzaPagamento>2026-11-20<\/DataScadenzaPagamento>/g, '<DataScadenzaPagamento>' + fra30Iso + '</DataScadenzaPagamento>'), 'utf8').toString('base64');
     await valuta(`(() => { const bin = atob(${JSON.stringify(b64)}); const a = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i);
       const dt = new DataTransfer(); dt.items.add(new File([a], 'IT00000000000_00047.xml', { type: 'application/xml' }));
       document.querySelector('.zona-xml').dispatchEvent(new DragEvent('drop', { dataTransfer: dt, bubbles: true, cancelable: true })); return true; })()`);

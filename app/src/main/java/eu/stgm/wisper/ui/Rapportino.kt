@@ -21,6 +21,8 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -56,9 +58,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -370,7 +375,7 @@ private fun PerChiScelto(stato: ModuloStato, regole: eu.stgm.wisper.rapportino.R
         if (r.conProgetto || (stato.progettiAttivi && (stato.progettoRichiesto || conCommessa))) {
             Box(Modifier.fillMaxWidth().height(1.dp).background(c.riga))
             RigaRiepilogo(
-                r.etichettaProgetto.ifBlank { if (stato.progettoRichiesto) "Manca il progetto" else "Nessun progetto" },
+                r.etichettaProgetto.ifBlank { if (stato.progettoRichiesto) "Manca il progetto" else "Senza progetto" },
                 r.progettoIntestatoA.takeIf { it.isNotBlank() }?.let { "Intestato a $it" } ?: "Progetto",
                 !stato.progettiAttivi,
             ) { if (conCommessa || stato.progettoRichiesto) stato.apriPerChi(commessa = true, progetto = true) else stato.apriPerChi(commessa = false, progetto = false) }
@@ -910,7 +915,7 @@ private fun ColumnScope.PassoRiepilogo(
         val conCommessa = r.idCommessa.isNotBlank() || r.codiceProposto.isNotBlank()
         if (r.conProgetto || (stato.progettiAttivi && (stato.progettoRichiesto || conCommessa))) {
             RigaRiepilogo(
-                r.etichettaProgetto.ifBlank { if (stato.progettoRichiesto) "Manca il progetto" else "Nessun progetto" },
+                r.etichettaProgetto.ifBlank { if (stato.progettoRichiesto) "Manca il progetto" else "Senza progetto" },
                 r.progettoIntestatoA.takeIf { it.isNotBlank() }?.let { "Intestato a $it" } ?: "Progetto",
                 bloccato || !stato.progettiAttivi,
             ) { onCambia(if (conCommessa || stato.progettoRichiesto) PASSO_PROGETTO else 1) }
@@ -1010,6 +1015,7 @@ private const val PASSO_PROGETTO = 11
  * telefono e ancora in coda) e, per chi puo' crearli, **Nuovo progetto** dentro il rapportino stesso: codice gia'
  * proposto (cambiabile), intestato a, descrizione. Il progetto nuovo parte col rapportino, anche senza rete.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun ColumnScope.SceltaProgetto(
     stato: ModuloStato,
@@ -1035,19 +1041,33 @@ private fun ColumnScope.SceltaProgetto(
         }
         PulsanteTesto("Cambia", onIndietro)
     }
-    Etichetta("Progetto", Modifier.padding(top = 6.dp))
-    stato.errori["progetto"]?.let { Text(it, style = Testi.secondario, color = c.rossoTesto) }
-    // Per i clienti che non lo vogliono (06/11/2026) il progetto si puo' lasciare: "Nessun progetto" per primo.
-    if (!stato.progettoRichiesto) {
-        SchedaScelta(
-            nome = "", titolo = "Nessun progetto", sotto = "", piccolo = "", compatta = true, icona = Icone.chiudi,
-            modifier = Modifier.bersaglio("progetto-nessuno"),
-        ) {
-            stato.togliProgetto()
-            onScelto()
+    // Sul telefono la barra sta sotto l'elenco: mentre si scrive l'elenco si accorcia e il progetto trovato finirebbe
+    // sopra, fuori dalla vista. La pagina scorre quel tanto che serve per tenere insieme i progetti trovati e la barra
+    // (quanti ne stanno sopra la tastiera).
+    val richiesta = remember { BringIntoViewRequester() }
+    val misure = remember { FloatArray(3) } // dove comincia "Progetto", dove comincia la barra, quanto e' alta
+    var scritto by remember(commessa) { mutableStateOf(0) }
+    val densita = LocalDensity.current
+    val tastiera = WindowInsets.ime
+    val finestra = LocalView.current
+    LaunchedEffect(scritto) {
+        if (scritto > 0) {
+            delay(120)
+            val libero = finestra.rootView.height - tastiera.getBottom(densita) - with(densita) { 150.dp.toPx() } - misure[2]
+            val sopra = (misure[1] - misure[0]).coerceIn(0f, libero.coerceAtLeast(0f))
+            richiesta.bringIntoView(Rect(0f, -sopra, 1f, misure[2]))
         }
     }
-    aperti.forEachIndexed { i, p ->
+    Etichetta("Progetto", Modifier.padding(top = 6.dp).onGloballyPositioned { misure[0] = it.positionInRoot().y })
+    stato.errori["progetto"]?.let { Text(it, style = Testi.secondario, color = c.rossoTesto) }
+    // 21/11/2026 (Andrea: "deve essere come quella delle commesse: prima i vari progetti, poi la barra di ricerca, e sotto
+    // il tasto per creare un nuovo progetto, e [...] il tasto per farlo senza progetto nella stessa posizione di quello
+    // per le commesse"): i progetti, "Senza progetto" (dov'e' "Senza commessa"), la barra che cerca fra i progetti della
+    // commessa e sotto "Nuovo progetto".
+    var cerca by remember(commessa) { mutableStateOf("") }
+    val trovati = RegoleProgetti.cerca(aperti, cerca)
+    trovati.forEach { p ->
+        val i = aperti.indexOf(p)
         SchedaScelta(
             nome = p.codice, titolo = p.etichetta,
             sotto = p.intestatoA.takeIf { it.isNotBlank() }?.let { "Intestato a $it" } ?: "",
@@ -1061,7 +1081,21 @@ private fun ColumnScope.SceltaProgetto(
     if (aperti.isEmpty() && !puoCrearlo && stato.progettoRichiesto) {
         Text("Questa commessa non ha progetti aperti. Chiedi all'ufficio di aprirne uno.", style = Testi.testo, color = c.testo2)
     }
-    if (puoCrearlo) NuovoProgettoNelRapportino(stato, dati, ana, altri, commessa, idCliente, onScelto)
+    if (aperti.isNotEmpty() && trovati.isEmpty()) Text("Nessun progetto con questo testo.", style = Testi.testo, color = c.testo2)
+    // Per i clienti che non lo vogliono (06/11/2026) il progetto si puo' lasciare.
+    if (!stato.progettoRichiesto) {
+        PulsanteBordo("Senza progetto", { stato.togliProgetto(); onScelto() }, Modifier.fillMaxWidth().bersaglio("progetto-nessuno"))
+    }
+    if (aperti.isNotEmpty() || puoCrearlo) {
+        CampoTesto(
+            cerca, { cerca = it; scritto++ }, "Cerca un progetto", segnaposto = "Codice, descrizione o intestatario", iconaInizio = Icone.cerca,
+            modifier = Modifier.bersaglio("progetto-cerca").bringIntoViewRequester(richiesta)
+                .onGloballyPositioned { misure[1] = it.positionInRoot().y; misure[2] = it.size.height.toFloat() },
+        )
+    }
+    // Quello che si e' scritto nella barra senza trovare niente e' la descrizione del progetto nuovo (come il nome scritto
+    // per la commessa nuova).
+    if (puoCrearlo) NuovoProgettoNelRapportino(stato, dati, ana, altri, commessa, idCliente, descrizioneDaBarra = cerca.trim().takeIf { it.isNotEmpty() && trovati.isEmpty() }.orEmpty(), onScelto = onScelto)
 }
 
 @Composable
@@ -1072,6 +1106,8 @@ private fun NuovoProgettoNelRapportino(
     altri: List<eu.stgm.wisper.rapportino.Rapportino>,
     commessa: String,
     idCliente: String,
+    /** Quello che si e' cercato senza trovarlo: all'apertura e' gia' nella Descrizione. */
+    descrizioneDaBarra: String = "",
     onScelto: () -> Unit,
 ) {
     var aperto by remember(commessa) { mutableStateOf(false) }
@@ -1100,7 +1136,7 @@ private fun NuovoProgettoNelRapportino(
     var errori by remember(commessa) { mutableStateOf(emptyMap<String, String>()) }
 
     if (!aperto) {
-        PulsanteBordo("Nuovo progetto", { aperto = true; codice = proposto }, Modifier.fillMaxWidth().bersaglio("progetto-nuovo"), icona = Icone.piu, tratteggiato = true)
+        PulsanteBordo("Nuovo progetto", { aperto = true; codice = proposto; if (descrizione.isBlank()) descrizione = descrizioneDaBarra }, Modifier.fillMaxWidth().bersaglio("progetto-nuovo"), icona = Icone.piu, tratteggiato = true)
         return
     }
     Scheda {

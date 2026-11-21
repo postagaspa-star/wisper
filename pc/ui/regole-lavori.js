@@ -40,18 +40,25 @@
 
   const numero = v => { const n = Number(String(v === null || v === undefined ? '' : v).replace(',', '.')); return isFinite(n) ? n : 0; };
   /**
-   * 13/11/2026 (Andrea): con un'indennità le ore non sono obbligatorie; un lavoro con indennità e senza ore si salva, e
-   * prima di mandarlo al cliente si chiede conferma.
+   * 21/11/2026 (Andrea: "Non bisogna mettere le ore come obbligatorie, ma se non sono messe deve apparire un avviso prima
+   * di confermare del tutto"): le ore non sono mai obbligatorie (dal 13/11 lo erano solo senza indennità). Un lavoro senza
+   * ore si salva e si manda, ma prima lo si dice: al salvataggio quando è nuovo o le ore le aveva, e prima dell'invio.
    */
-  const indennitaSenzaOre = l => !!l && Array.isArray(l.indennita) && l.indennita.length > 0 &&
-    numero(l.oreLavoro) + numero(l.oreExtra) + numero(l.oreViaggio) <= 0;
-  /** La frase della conferma prima dell'invio ('' se non serve). */
+  const senzaOre = l => !!l && numero(l.oreLavoro) + numero(l.oreExtra) + numero(l.oreViaggio) <= 0;
+  /** La frase dell'avviso ('' se non serve): quali lavori non hanno ore. */
   function fraseSenzaOre(lavori) {
-    const senza = (lavori || []).filter(indennitaSenzaOre);
+    const senza = (lavori || []).filter(senzaOre);
     if (!senza.length) return '';
-    if (senza.length === 1) return 'Nel lavoro per ' + (senza[0].cliente || 'questo cliente') + ' c\'è un\'indennità ma non sono segnate ore.';
+    if (senza.length === 1) return 'Nel lavoro per ' + (senza[0].cliente || 'questo cliente') + ' non sono segnate ore.';
     const nomi = Array.from(new Set(senza.map(l => l.cliente).filter(Boolean)));
-    return 'In ' + senza.length + ' lavori ci sono indennità ma non sono segnate ore' + (nomi.length ? ': ' + nomi.join(', ') : '') + '.';
+    return 'In ' + senza.length + ' lavori non sono segnate ore' + (nomi.length ? ': ' + nomi.join(', ') : '') + '.';
+  }
+  /**
+   * Al salvataggio: i lavori senza ore di cui avvisare. primaDi(lavoro) = com'era salvato (null se è nuovo). Uno che era
+   * già senza ore non si chiede di nuovo a ogni correzione: l'avviso c'è stato, e torna prima dell'invio.
+   */
+  function nuoviSenzaOre(lavori, primaDi) {
+    return (lavori || []).filter(l => { if (!senzaOre(l)) return false; const p = primaDi ? primaDi(l) : null; return !p || !senzaOre(p); });
   }
   /** Salvato un rapportino: i lavori che erano Inviati e ora sono Da inviare (cambiati dopo l'invio). chiaveDi(lavoro). */
   function tornatiDaInviare(prima, dopo, chiaveDi) {
@@ -152,7 +159,7 @@
   }
 
   const Regole = {
-    statoVisto, parolaStato, daInviare, daFatturare, fermo, indennitaSenzaOre, fraseSenzaOre, tornatiDaInviare, giornataDi, chiaveCliente, raggruppa, contaClienti, nLavori, nClienti,
+    statoVisto, parolaStato, daInviare, daFatturare, fermo, senzaOre, fraseSenzaOre, nuoviSenzaOre, tornatiDaInviare, giornataDi, chiaveCliente, raggruppa, contaClienti, nLavori, nClienti,
     lavoriEClienti, riassuntoStati, perDestinatario, unRapportino, oggettoInvio, casellaRapportino,
   };
   radice.WisperRegoleLavori = Regole;

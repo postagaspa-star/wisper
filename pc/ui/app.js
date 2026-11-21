@@ -2133,7 +2133,7 @@
    */
   async function confermaSenzaOre(lista) {
     const frase = RL.fraseSenzaOre(lista);
-    return !frase || conferma('Indennità senza ore', frase + ' Lo mando lo stesso?', 'Invia lo stesso');
+    return !frase || conferma('Mancano le ore', frase + ' Lo mando lo stesso?', 'Invia lo stesso');
   }
 
   /** Elimina il rapportino coi suoi lavori (nessuno fatturato): restano nell'archivio come annullati, Annulla li rimette. */
@@ -2445,12 +2445,14 @@
   function formaLavoro(esistente, predefiniti, ctx) {
     const p = predefiniti || {};
     const c0 = p.copiaDa || null;
+    // 21/11/2026: la tariffa può essere zero; "scritta" vuol dire che c'è, anche zero.
+    const tariffaScritta = t => t !== null && t !== undefined && t !== '';
     const r = esistente ? Object.assign({}, esistente) : {
       idLocale: 'U-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
       idCliente: c0 ? c0.idCliente || '' : p.idCliente || '', cliente: c0 ? c0.cliente || '' : '',
       idCommessa: c0 ? c0.idCommessa || '' : p.idCommessa || '', commessa: c0 && c0.idCommessa ? c0.commessa || '' : '',
       oreLavoro: 0, oreExtra: 0, oreViaggio: 0, km: '', spese: '',
-      tariffa: c0 && c0.tariffa ? c0.tariffa : null, descrizione: '', luogo: c0 ? c0.luogo || '' : p.luogo || '', ticket: '', noteSpese: '', noteInterne: '',
+      tariffa: c0 && tariffaScritta(c0.tariffa) ? c0.tariffa : null, descrizione: '', luogo: c0 ? c0.luogo || '' : p.luogo || '', ticket: '', noteSpese: '', noteInterne: '',
       // Fase 5 (§3.3): dal ticket il lavoro nasce già con cliente, commessa e luogo; il numero lo scrive il server.
       idTicket: p.idTicket || null, numeroTicket: p.numeroTicket || '',
       // 03/11/2026: dal progetto il lavoro nasce già con cliente, commessa e progetto (copiato: lo stesso del lavoro scelto).
@@ -2463,7 +2465,7 @@
       idCliente: r.idCliente, cliente: r.cliente, idCommessa: r.idCommessa, commessa: r.commessa, codiceProposto: '',
       sceltaFatta: !!r.cliente, commessaFatta: !!esistente || !!r.idCommessa || !!r.idTicket,
       oreLavoro: C.num(r.oreLavoro), oreExtra: C.num(r.oreExtra), oreViaggio: C.num(r.oreViaggio),
-      extraAperto: C.num(r.oreExtra) > 0, tariffaToccata: !!esistente || !!(c0 && c0.tariffa), nuovoCliente: false,
+      extraAperto: C.num(r.oreExtra) > 0, tariffaToccata: !!esistente || !!(c0 && tariffaScritta(c0.tariffa)), nuovoCliente: false,
       // 03/11/2026 (progetti.md §4.6): il progetto della commessa, scelto (idProgetto) o nuovo (progettoNuovo, per una commessa nuova).
       idProgetto: r.idProgetto !== undefined && r.idProgetto !== null && r.idProgetto !== '' ? r.idProgetto : null, progettoNuovo: null,
     };
@@ -2488,9 +2490,11 @@
     const v = {
       ricerca: h('input', { type: 'search', placeholder: 'Scrivi il nome', 'aria-label': 'Cerca il cliente' }),
       nuovaCommessa: h('input', { type: 'text', placeholder: 'Come la chiami tu', 'aria-label': 'Il nome della commessa nuova' }),
+      cercaProgetto: h('input', { type: 'search', placeholder: 'Cerca un progetto', 'aria-label': 'Cerca un progetto' }),
       km: h('input', { type: 'text', inputmode: 'decimal', value: r.km !== '' && r.km !== null && r.km !== undefined && (esistente || C.num(r.km)) ? R.numeroCampo(r.km) : '' }),
       // (kmAuto, qui sotto: il valore scritto da Wisper nel campo, finché la persona non lo cambia.)
-      tariffa: h('input', { type: 'text', inputmode: 'decimal', value: r.tariffa ? R.numeroCampo(r.tariffa) : '', 'aria-label': 'Tariffa oraria' }),
+      // Lo zero di un lavoro già scritto (o copiato) si vede: è una tariffa, non un campo vuoto.
+      tariffa: h('input', { type: 'text', inputmode: 'decimal', value: tariffaScritta(r.tariffa) && (C.num(r.tariffa) || esistente || c0) ? R.numeroCampo(r.tariffa) : '', 'aria-label': 'Tariffa oraria' }),
       descrizione: h('textarea', { rows: 5 }),
       spese: h('input', { type: 'text', inputmode: 'decimal', value: C.num(r.spese) ? R.numeroCampo(r.spese) : '' }),
       noteSpese: h('input', { type: 'text', value: r.noteSpese || '' }),
@@ -2501,6 +2505,7 @@
     v.descrizione.value = r.descrizione || '';
     v.noteInterne.value = r.noteInterne || '';
     let kmAuto = null;
+    let commessaDellaBarra = null;
 
     const clienteScelto = () => (m.idCliente && cliente(m.idCliente)) || null;
     const regoleAttuali = () => C.regoleDi(clienteScelto(), S.ana.gruppi, S.ana.impostazioni, commessa(m.idCommessa));
@@ -2618,22 +2623,46 @@
         if (errori.progetto) aggiungi(zonaPerChi, [h('div', { class: 'campo' }, h('div', { class: 'errore' }, errori.progetto))]);
         return;
       }
-      // Il progetto (progetti.md §4.6): gli aperti della commessa e "Nuovo progetto"; uno solo aperto è già scelto.
-      // Per chi non è Elettrodinamica c'è anche "Nessun progetto" (06/11/2026).
+      // Il progetto (progetti.md §4.6): gli aperti della commessa; uno solo aperto è già scelto.
+      // 21/11/2026 (Andrea: "deve essere come quella delle commesse: prima i vari progetti, poi la barra di ricerca, e
+      // sotto il tasto per creare un nuovo progetto, e [...] il tasto per farlo senza progetto nella stessa posizione di
+      // quello per le commesse"): i progetti, per ultimo "Senza progetto" (dov'è "Senza commessa"; solo per chi non è
+      // Elettrodinamica), poi la barra, che cerca fra i progetti della commessa, e sotto "Nuovo progetto".
       const scelti = commessaNuova ? [] : progettiDellaCommessa();
       const puoCreare = puo('progetti', 2);
       const nuovo = m.progettoNuovo;
       const facoltativo = !obbligatorio();
+      // Cambiata la commessa, quello che si cercava nell'altra non vale più.
+      const commessaOra = m.idCommessa || (m.codiceProposto || '') + '' + (m.commessa || '');
+      if (commessaOra !== commessaDellaBarra) { v.cercaProgetto.value = ''; commessaDellaBarra = commessaOra; }
+      const pillole = scelti.map(x => ({ x, el: pill(RP.etichetta(x), String(m.idProgetto) === String(x.id), () => { m.idProgetto = x.id; m.progettoNuovo = null; v.cercaProgetto.value = ''; delete errori.progetto; disegnaPerChi(); },
+        { title: x.intestatoA ? 'Intestato a ' + x.intestatoA : '' }) }));
+      const nienteTrovato = h('p', { class: 'vuoto sinistra' }, 'Nessun progetto con questo testo.');
+      nienteTrovato.hidden = true;
+      // La barra nasconde le pillole che non c'entrano, senza ridisegnare (il cursore resta dov'è); quella scelta si vede sempre.
+      const filtra = () => {
+        const t = C.normalizza(v.cercaProgetto.value.trim());
+        let viste = 0;
+        pillole.forEach(p => { const si = !t || String(m.idProgetto) === String(p.x.id) || testoProgetto(p.x).indexOf(t) >= 0; p.el.hidden = !si; if (si) viste++; });
+        nienteTrovato.hidden = !(t && pillole.length && !viste);
+      };
+      v.cercaProgetto.oninput = filtra;
       aggiungi(zonaPerChi, [h('div', { class: 'etichetta' }, 'Progetto'),
         h('div', { class: 'pillole', 'data-campo': 'progetto' },
-          facoltativo ? pill('Nessun progetto', !m.idProgetto && !nuovo, () => { m.idProgetto = null; m.progettoNuovo = null; delete errori.progetto; disegnaPerChi(); }) : null,
-          scelti.map(x => pill(RP.etichetta(x), String(m.idProgetto) === String(x.id), () => { m.idProgetto = x.id; m.progettoNuovo = null; delete errori.progetto; disegnaPerChi(); },
-            { title: x.intestatoA ? 'Intestato a ' + x.intestatoA : '' })),
+          pillole.map(p => p.el),
           nuovo ? pill((nuovo.codice || nuovo.codiceVisto ? (nuovo.codice || nuovo.codiceVisto) + ' · ' : '') + (nuovo.descrizione || 'Progetto') + ' (nuovo)', true, () => nuovoProgetto()) : null,
-          puoCreare && !nuovo ? h('button', { type: 'button', class: 'pillola tratteggiata', onclick: () => nuovoProgetto() }, '+ Nuovo progetto') : null),
+          facoltativo ? pill('Senza progetto', !m.idProgetto && !nuovo, () => { m.idProgetto = null; m.progettoNuovo = null; v.cercaProgetto.value = ''; delete errori.progetto; disegnaPerChi(); }) : null),
+        nienteTrovato,
+        // La barra e, sotto, il pulsante: lo stesso blocco di "Come la chiami tu" e "Commessa nuova".
+        scelti.length || puoCreare ? h('div', { class: 'riga-nuova-commessa' },
+          h('label', { class: 'cerca', 'data-campo': 'cerca-progetto' }, icona('cerca', 18), v.cercaProgetto),
+          puoCreare && !nuovo ? h('button', { type: 'button', class: 'btn', 'data-azione': 'nuovo-progetto', onclick: () => nuovoProgetto() }, 'Nuovo progetto') : null) : null,
         !scelti.length && !nuovo && !puoCreare && !facoltativo ? h('p', { class: 'vuoto sinistra' }, 'Nessun progetto aperto in questa commessa.') : null,
         errori.progetto ? h('div', { class: 'campo' }, h('div', { class: 'errore' }, errori.progetto)) : null]);
+      filtra();
     }
+    /** Il testo in cui la barra del progetto cerca: codice, descrizione e a chi è intestato. */
+    const testoProgetto = x => C.normalizza([x.codice, x.descrizione, x.intestatoA].filter(Boolean).join(' '));
 
     /**
      * "Nuovo progetto" dal lavoro. Su una commessa che c'è già: il modulo dei progetti col codice proposto, il progetto
@@ -2641,12 +2670,18 @@
      * il server crea commessa e progetto insieme al rapportino (il codice, se vuoto, lo propone lui).
      */
     function nuovoProgetto() {
+      // Quello che si è scritto nella barra senza trovare niente è la descrizione del progetto nuovo (come il nome scritto
+      // per la commessa nuova): nel modulo è già lì, e si cambia.
+      const scritto = v.cercaProgetto.value.trim();
+      const trovato = scritto && m.idCommessa && progettiDellaCommessa().some(x => testoProgetto(x).indexOf(C.normalizza(scritto)) >= 0);
+      const daBarra = scritto && !trovato ? { descrizione: scritto } : null;
       if (m.idCommessa) {
-        Progetti.modulo(null, { idCommessa: m.idCommessa, fissa: true, dopo: x => { m.idProgetto = x.id; m.progettoNuovo = null; delete errori.progetto; disegnaPerChi(); } });
+        Progetti.modulo(null, { idCommessa: m.idCommessa, fissa: true, dati: daBarra, dopo: x => { m.idProgetto = x.id; m.progettoNuovo = null; v.cercaProgetto.value = ''; delete errori.progetto; disegnaPerChi(); } });
         return;
       }
-      Progetti.modulo(null, { senzaServer: true, nomeCommessa: (m.codiceProposto ? m.codiceProposto + ' · ' : '') + m.commessa + ' (nuova)', idCliente: m.idCliente, codiceCommessa: m.codiceProposto, dati: m.progettoNuovo,
+      Progetti.modulo(null, { senzaServer: true, nomeCommessa: (m.codiceProposto ? m.codiceProposto + ' · ' : '') + m.commessa + ' (nuova)', idCliente: m.idCliente, codiceCommessa: m.codiceProposto, dati: m.progettoNuovo || daBarra,
         dopo: d => {
+          v.cercaProgetto.value = '';
           // Il codice proposto e non toccato va vuoto: il server lo propone di nuovo con la commessa vera.
           m.progettoNuovo = { idLocale: (m.progettoNuovo && m.progettoNuovo.idLocale) || 'P-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), codice: d.proposto ? '' : d.codice, codiceVisto: d.codice, codiceProposto: false, intestatoA: d.intestatoA, dove: d.dove || '', descrizione: d.descrizione };
           m.idProgetto = null; delete errori.progetto; disegnaPerChi();
@@ -2905,13 +2940,14 @@
           aperti: m.idCommessa ? progettiDellaCommessa().length : 0, puoCreare: puo('progetti', 2), titolare: titolare() });
         if (manca) e.progetto = manca;
       }
-      // 13/11/2026 (Andrea): con un'indennità le ore non sono obbligatorie (prima dell'invio si chiede conferma).
-      if (dati.oreLavoro + dati.oreExtra + dati.oreViaggio <= 0 && !dati.indennita.length) e.oreLavoro = 'Mancano le ore';
+      // 21/11/2026 (Andrea): le ore non sono obbligatorie. Senza ore il lavoro si salva: prima però lo dice un avviso
+      // (salva(), RL.nuoviSenzaOre), e di nuovo prima dell'invio.
       ['km', 'tariffa', 'spese'].forEach(k => {
         const t = v[k].value.trim();
         if (t && C.numONull(t) === null) e[k] = 'Non è un numero';
       });
-      if (soldi() && regoleAttuali().tariffaFissa === null && !(dati.tariffa > 0) && !e.tariffa) e.tariffa = 'Scrivi la tariffa';
+      // 21/11/2026 (Andrea: "la tariffa oraria può essere zero"): va scritta, ma zero vale.
+      if (soldi() && regoleAttuali().tariffaFissa === null && dati.tariffa === null && !e.tariffa) e.tariffa = 'Scrivi la tariffa';
       if (!dati.descrizione) e.descrizione = 'Scrivi che lavoro hai fatto';
       return e;
     }
@@ -3118,6 +3154,14 @@
         const altri = sbagliati.slice(1).map(x => x.i + 1);
         avviso((forme.length > 1 ? 'Lavoro ' + (primo.i + 1) + ': ' + frase.charAt(0).toLowerCase() + frase.slice(1) : frase) +
           (altri.length ? ' (anche ' + (altri.length === 1 ? 'il lavoro ' : 'i lavori ') + altri.join(', ') + ')' : ''), true);
+        return;
+      }
+      // 21/11/2026 (Andrea: "se non sono messe deve apparire un avviso prima di confermare del tutto"): senza ore si salva,
+      // ma prima lo si dice. Vale per i lavori nuovi e per quelli che le ore le avevano (RL.nuoviSenzaOre).
+      const senzaOre = [];
+      forme.forEach((f, i) => { if (!f.fermo && RL.nuoviSenzaOre([f.leggi()], () => (f.lavoro && f.lavoro.id ? f.lavoro : null)).length) senzaOre.push(i); });
+      if (senzaOre.length && !(await conferma('Mancano le ore', RL.fraseSenzaOre(senzaOre.map(i => forme[i].leggi())) + ' Salvo lo stesso?', 'Salva lo stesso'))) {
+        scegli(senzaOre[0]);
         return;
       }
       const corpo = { idLocale: G.idLocale || undefined, id: G.id || undefined, data: dataInput.value, tecnico: G.tecnico, lavori: forme.map(f => f.leggi()) };

@@ -662,18 +662,27 @@ async function main() {
     passo('2 rapportini dello stesso cliente: 1 scheda, oggetto "' + p2.oggetto + ' · …", riepilogo con una riga per lavoro (N° ' + V1 + ', ' + V2 + ')' + extra);
     await meseLista(new Date().toISOString().slice(0, 7));
 
-    // ------------------------------------------------------------- 13/11/2026: un'indennità senza ore
-    // Le ore non sono obbligatorie se c'è un'indennità; prima di mandarlo al cliente si chiede conferma.
+    // ------------------------------------------------------------- 21/11/2026: un lavoro senza ore e a tariffa zero
+    // Le ore non sono obbligatorie (dal 13/11 solo con un'indennità): senza ore un avviso prima di salvare, e di nuovo
+    // prima di mandarlo al cliente. La tariffa può essere zero.
     await valuta(`(document.querySelector('.pannello [aria-label="Chiudi"]') || { click() {} }).click(); true`);
     await aspetta(400);
     await clicca('Nuovo rapportino', '#principale', 1000);
     await scegliCliente(LUNGO);
     await pillola('Senza commessa');
     await scrivi('Cosa hai fatto', 'Reperibilità nel fine settimana.');
-    await tariffa('40');
+    await scrivi('Tariffa oraria', '0');
     await guardaAvvisi();
     await clicca('Salva rapportino', finestra, 1000);
-    assert.match((await testoFinestra()) + ' ' + (await testoAvvisi()), /Mancano le ore/i, 'senza ore e senza indennità non si salva');
+    testo = await testoFinestra();
+    assert.match(testo, /Mancano le ore/, 'senza ore: prima l\'avviso');
+    assert.ok(testo.indexOf('Nel lavoro per ' + LUNGO + ' non sono segnate ore. Salvo lo stesso?') >= 0, 'la domanda prima di salvare: ' + testo);
+    assert.doesNotMatch(await testoAvvisi(), /Scrivi la tariffa/, 'la tariffa a zero vale');
+    await sta('l\'avviso del lavoro senza ore');
+    await foto('senza-ore-avviso');
+    await clicca('Annulla', finestra, 600);
+    assert.match(await testoFinestra(), /Cosa hai fatto/, 'Annulla: si torna al rapportino, ancora aperto');
+    assert.equal((await server('rapportini')).rapportini.filter(r => r.cliente === LUNGO && /Reperibilità nel fine settimana/.test(r.descrizione)).length, 0, 'e niente è salvato');
     await pillola('+ Indennità');
     await aspetta(700);
     assert.match(await testoFinestra(), /Aggiungi un'indennità/);
@@ -683,14 +692,17 @@ async function main() {
     await clicca('Aggiungi', finestra, 700);
     assert.match(await testoFinestra(), /Indennità di reperibilità/, 'l\'indennità è nel lavoro');
     await guardaAvvisi();
-    await clicca('Salva rapportino', finestra, 1800);
-    assert.match(await testoAvvisi(), /Salvato: RAP\/\d{4}\/\d{4}/, 'con un\'indennità le ore non servono');
+    await clicca('Salva rapportino', finestra, 1000);
+    assert.match(await testoFinestra(), /Mancano le ore/, 'anche con l\'indennità l\'avviso c\'è');
+    await clicca('Salva lo stesso', finestra, 1800);
+    assert.match(await testoAvvisi(), /Salvato: RAP\/\d{4}\/\d{4}/, 'dopo la conferma si salva senza ore');
     const soloInd = (await server('rapportini')).rapportini.filter(r => r.cliente === LUNGO && /Reperibilità nel fine settimana/.test(r.descrizione) && r.stato !== 'ANNULLATO');
     assert.equal(soloInd.length, 1, 'il lavoro con la sola indennità è sul server');
     assert.equal((Number(soloInd[0].oreLavoro) || 0) + (Number(soloInd[0].oreViaggio) || 0) + (Number(soloInd[0].oreExtra) || 0), 0, 'senza ore');
     assert.equal((soloInd[0].indennita || []).length, 1, 'con la sua indennità');
+    assert.equal(Number(soloInd[0].tariffa), 0, 'a tariffa zero');
     const IND = soloInd[0].idGiornata;
-    passo('Un lavoro con la sola indennità: senza indennità "Mancano le ore", con l\'indennità si salva senza ore (' + IND + ')');
+    passo('Un lavoro senza ore e a tariffa zero: l\'avviso "Mancano le ore" (Annulla torna al rapportino), "Salva lo stesso" lo salva (' + IND + ')');
     await valuta(`(document.querySelector('.pannello [aria-label="Chiudi"]') || { click() {} }).click(); true`);
     await aspetta(400);
     await valuta(`document.querySelector('.tab .r.rap[data-giornata="${IND}"]').click(); true`);
@@ -698,10 +710,10 @@ async function main() {
     // Invia ai clienti: prima la conferma, Annulla non manda niente, "Invia lo stesso" apre l'invio.
     await clicca('Invia ai clienti', '.pannello', 900);
     testo = await testoFinestra();
-    assert.match(testo, /Indennità senza ore/);
-    assert.ok(testo.indexOf('Nel lavoro per ' + LUNGO + ' c\'è un\'indennità ma non sono segnate ore. Lo mando lo stesso?') >= 0, 'la domanda: ' + testo);
+    assert.match(testo, /Mancano le ore/);
+    assert.ok(testo.indexOf('Nel lavoro per ' + LUNGO + ' non sono segnate ore. Lo mando lo stesso?') >= 0, 'la domanda: ' + testo);
     assert.equal(await valuta("document.querySelectorAll('.velo .finestra .dest').length"), 0, 'l\'invio non è ancora aperto');
-    await sta('la conferma dell\'indennità senza ore');
+    await sta('la conferma del lavoro senza ore prima dell\'invio');
     await foto('indennita-senza-ore');
     await clicca('Annulla', finestra, 600);
     assert.equal(await valuta("document.querySelectorAll('.velo .finestra').length"), 0, 'Annulla: non si apre niente');
@@ -712,7 +724,7 @@ async function main() {
     assert.equal(await valuta("document.querySelectorAll('.velo .finestra .dest').length"), 1, 'una scheda per il cliente');
     await clicca('Annulla', finestra, 600);
     assert.equal((await server('rapportini')).rapportini.filter(r => r.idGiornata === IND)[0].stato, 'BOZZA', 'non è partito niente');
-    passo('Invia ai clienti con un\'indennità senza ore: prima la conferma (Annulla non manda), "Invia lo stesso" apre l\'invio');
+    passo('Invia ai clienti con un lavoro senza ore: prima la conferma (Annulla non manda), "Invia lo stesso" apre l\'invio');
 
 
     // ------------------------------------------------------------- la schermata scura
